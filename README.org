@@ -1,0 +1,7 @@
+* Byte Machine
+
+State machine generator in the manner of [[https://github.com/nodejs/llparse][llparse]]
+-----
+
+© Kiyomi Computation Systems LLC, all rights reserved.
+
