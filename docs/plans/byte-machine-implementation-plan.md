@@ -197,9 +197,18 @@ graph <- verify <- compile
   ^         ^          ^
   |         |          |
 interpret   +----------+
-
+  |
+  v
 runtime  (independent of graph/verify/compile; owns runtime result singletons)
 ```
+
+`runtime` depends on nothing above it, but `interpret` depends on `runtime`:
+`make-interpreted-machine` returns a runtime-compatible compiled-machine, and
+interpreted callbacks must return the runtime's own singleton outcome values.
+Were they distinct objects, interpreter and generated execution would disagree
+about callback results while both looking correct in isolation — which is
+precisely the class of defect the differential tests exist to catch, so it must
+not be reachable through the library structure.
 
 Implementation libraries may use their implementation's include facility inside the thin wrapper; shared bodies themselves contain no library or include form.
 
@@ -413,6 +422,8 @@ These are closed v0.1 enumerations. The verifier enforces exact arity, declared-
 
 (make-interpreted-machine verification)     ; -> compiled-machine
 ```
+
+`compile-machine` accepts a machine, while `make-interpreted-machine` accepts a *verification*. That asymmetry is deliberate and has a consequence worth stating outright: a verification result carries the machine it verified, not merely its diagnostics. It is the evidence that a particular machine passed, so it must identify that machine. `compile-machine` re-verifies internally rather than accepting a verification, so that no caller can pair a verification of one machine with a different machine.
 
 `compile-machine` is a pure ahead-of-time transformation from source IR to an emission-ready value. It does not invoke Scheme compilation, load generated code, use `eval`, or write a file. It always performs verification and refuses to expose an emission-ready normalized graph on failure. v0.1 accepts only the empty option list and rejects unknown options; optimization toggles are not hidden in the initial API.
 
@@ -1495,6 +1506,8 @@ Scope:
 - minimal direct-code emitter and runtime;
 - deterministic output;
 - the required Chez and Gambit end-to-end examples from Section 9.6;
+
+EOF is declared but not executed in this milestone. `make-machine` requires a machine-wide `default-eof-error` and §16.2 requires the verifier to check EOF targets, so Milestone 1 must construct and verify those declarations — but `parser-finish!` and EOF execution belong to Milestone 2. Keeping that line explicit stops the slice from absorbing EOF semantics along with the declarations that mention them.
 
 First proving machine: accept one exact byte and stop; reject every other byte at the correct position.
 

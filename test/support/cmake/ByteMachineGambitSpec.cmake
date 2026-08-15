@@ -49,6 +49,17 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
     byte_machine_gambit_compiler_beside("gsi" out)
   elseif(c STREQUAL "beside-wrong-name")
     byte_machine_gambit_compiler_beside("/opt/bin/scheme" out)
+  elseif(c STREQUAL "no-floor")
+    set(BYTE_MACHINE_GAMBIT_MINIMUM_VERSION "")
+    byte_machine_gambit_identity("${good_output}" "/usr/bin/gsi" v t s)
+  elseif(c STREQUAL "disagree-version")
+    byte_machine_gambit_require_agreement(
+      "4.9.8" "aarch64-apple-darwin25.6.0" "20260809131432"
+      "4.9.9" "aarch64-apple-darwin25.6.0" "20260809131432")
+  elseif(c STREQUAL "disagree-target")
+    byte_machine_gambit_require_agreement(
+      "4.9.8" "aarch64-apple-darwin25.6.0" "20260809131432"
+      "4.9.8" "x86_64-pc-linux-gnu" "20260809131432")
   elseif(c STREQUAL "disagree")
     byte_machine_gambit_require_agreement(
       "4.9.8" "aarch64-apple-darwin25.6.0" "20260809131432"
@@ -93,21 +104,45 @@ byte_machine_gambit_require_agreement(
   "4.9.8" "aarch64-apple-darwin25.6.0" "20260809131432"
   "4.9.8" "aarch64-apple-darwin25.6.0" "20260809131432")
 
+# Every case below seeds `from` with a sentinel first. Asserting that an output
+# is empty proves nothing when an unset variable is also empty: the assertion
+# would pass against a function that never wrote the output at all.
+set(SENTINEL "<<unset>>")
+
+# A fresh cache derives. This is the path every first configure takes, and the
+# `if(NOT cached)` guard is load-bearing for it.
+set(from "${SENTINEL}")
+byte_machine_gambit_compiler_for("/opt/a/bin/gsi" "" "" path from)
+spec_check_equal("${path}" "/opt/a/bin/gsc" "an empty cache derives")
+spec_check_equal("${from}" "/opt/a/bin/gsi" "a fresh derivation records its source")
+
 # A hand-set compiler is never silently replaced by a derived one: the user has
 # stated an intent, and an override that quietly stopped applying would be worse
 # than a stale one.
+set(from "${SENTINEL}")
 byte_machine_gambit_compiler_for("/opt/a/bin/gsi" "/custom/gsc" "" path from)
 spec_check_equal("${path}" "/custom/gsc" "a hand-set compiler is preserved")
 spec_check_equal("${from}" "" "a hand-set compiler records no derivation")
 
+# The case that matters most, and the one identity-matching got wrong: the user
+# overrides the compiler *and* repoints the interpreter in the same configure.
+# The recorded derivation no longer matches what is cached, so the cached value
+# was set by hand and must survive.
+set(from "${SENTINEL}")
+byte_machine_gambit_compiler_for("/opt/b/bin/gsi" "/custom/gsc" "/opt/a/bin/gsi" path from)
+spec_check_equal("${path}" "/custom/gsc" "an override survives the interpreter changing too")
+spec_check_equal("${from}" "" "an override stops being recorded as derived")
+
 # A cached derivation belonging to a *different* interpreter is discarded. This
 # is how an interpreter and compiler come to belong to two installations: the
 # interpreter is repointed on a later configure and the cached compiler is not.
+set(from "${SENTINEL}")
 byte_machine_gambit_compiler_for("/opt/b/bin/gsi" "/opt/a/bin/gsc" "/opt/a/bin/gsi" path from)
 spec_check_equal("${path}" "/opt/b/bin/gsc" "a stale derivation is refreshed")
 spec_check_equal("${from}" "/opt/b/bin/gsi" "the refreshed derivation records its source")
 
 # A cached derivation from the same interpreter is reused unchanged.
+set(from "${SENTINEL}")
 byte_machine_gambit_compiler_for("/opt/a/bin/gsi" "/opt/a/bin/gsc" "/opt/a/bin/gsi" path from)
 spec_check_equal("${path}" "/opt/a/bin/gsc" "a current derivation is reused")
 
@@ -119,8 +154,11 @@ set(negative_cases
   "missing-stamp|byte-machine: the gambit probe of '/usr/bin/gsi' produced no 'stamp' field"
   "beside-relative|byte-machine: cannot derive the Gambit compiler from 'gsi'"
   "beside-wrong-name|byte-machine: cannot derive the Gambit compiler from '/opt/bin/scheme'"
-  "disagree|byte-machine: the Gambit interpreter and compiler disagree")
+  "disagree|byte-machine: the Gambit interpreter and compiler disagree"
+  "disagree-version|byte-machine: the Gambit interpreter and compiler disagree"
+  "disagree-target|byte-machine: the Gambit interpreter and compiler disagree"
+  "no-floor|byte-machine: BYTE_MACHINE_GAMBIT_MINIMUM_VERSION is")
 
 spec_expect_all_rejected("${SPEC_SELF}" ${negative_cases})
 
-message(STATUS "byte-machine-spec: ByteMachineGambit verified")
+spec_finish("ByteMachineGambit")

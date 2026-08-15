@@ -29,8 +29,10 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
   elseif(c STREQUAL "incompatible-mode")
     # Chez has no .o1 lane; the mode exists but not for this backend.
     byte_machine_test_name_parse("byte-machine.unit.graph.chez.o1" l f b m)
-  elseif(c STREQUAL "feature-hyphen-edge")
+  elseif(c STREQUAL "feature-leading-hyphen")
     byte_machine_test_name_parse("byte-machine.unit.-graph.chez.source" l f b m)
+  elseif(c STREQUAL "feature-trailing-hyphen")
+    byte_machine_test_name_parse("byte-machine.unit.graph-.chez.source" l f b m)
   elseif(c STREQUAL "unknown-label")
     byte_machine_test_validate_labels(unit bogus)
   elseif(c STREQUAL "duplicate-name")
@@ -82,7 +84,8 @@ set(negative_cases
   "unknown-layer|byte-machine: unknown test layer 'smoke'"
   "unknown-backend|byte-machine: unknown test backend 'guile'"
   "incompatible-mode|byte-machine: incompatible backend/mode"
-  "feature-hyphen-edge|byte-machine: malformed test name"
+  "feature-leading-hyphen|Feature segment '-graph' must not begin or end with a hyphen"
+  "feature-trailing-hyphen|Feature segment 'graph-' must not begin or end with a hyphen"
   "unknown-label|byte-machine: unknown test label 'bogus'"
   "duplicate-name|byte-machine: duplicate test name"
   "missing-timeout|byte-machine: TIMEOUT is required"
@@ -91,4 +94,4 @@ set(negative_cases
 
 spec_expect_all_rejected("${SPEC_SELF}" ${negative_cases})
 
-message(STATUS "byte-machine-spec: ByteMachineTesting verified")
+spec_finish("ByteMachineTesting")

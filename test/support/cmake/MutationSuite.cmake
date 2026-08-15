@@ -82,7 +82,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE cmake/ByteMachineChez.cmake SPEC ByteMachineChezSpec.cmake
   LABEL "chez: unreadable version accepted"
-  FIND [[if(NOT full_version MATCHES "([0-9]+\\.[0-9]+\\.[0-9]+)")]]
+  FIND [[if(NOT full_version MATCHES "Version ([0-9]+\\.[0-9]+\\.[0-9]+)")]]
   REPLACE [[set(CMAKE_MATCH_1 "99.0.0")
   if(FALSE)]])
 
@@ -137,9 +137,26 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
-  LABEL "gambit: a derivation belonging to another interpreter is reused"
-  FIND [[if(cached AND derived_from STREQUAL "${interpreter}")]]
-  REPLACE [[if(cached)]])
+  LABEL "gambit: a hand-set compiler is overwritten by a derivation"
+  FIND [[  if(NOT cached STREQUAL recorded_derivation)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
+  LABEL "gambit: a stale derivation is reused instead of following the interpreter"
+  FIND [[  byte_machine_gambit_compiler_beside("${interpreter}" fresh)
+  set(${out_path} "${fresh}" PARENT_SCOPE)
+  set(${out_derived_from} "${interpreter}" PARENT_SCOPE)
+endfunction()]]
+  REPLACE [[  set(${out_path} "${cached}" PARENT_SCOPE)
+  set(${out_derived_from} "${derived_from}" PARENT_SCOPE)
+endfunction()]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
+  LABEL "gambit: an empty cache is treated as a hand-set compiler"
+  FIND [[  if(NOT cached)]]
+  REPLACE [[  if(FALSE)]])
 
 # --- ByteMachineTesting ----------------------------------------------------
 
@@ -243,6 +260,37 @@ byte_machine_mutation(
   FILE cmake/ByteMachineChez.cmake SPEC ByteMachineChezSpec.cmake
   LABEL "chez: identity stops raising what the classifier rejected"
   FIND [[  if(NOT status STREQUAL "ok")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineChez.cmake SPEC ByteMachineChezSpec.cmake
+  LABEL "chez: absent version floor no longer refused, so the guard fails open"
+  FIND [[  if(NOT BYTE_MACHINE_CHEZ_MINIMUM_VERSION MATCHES "^[0-9]+\\.[0-9]+")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
+  LABEL "gambit: absent version floor no longer refused, so the guard fails open"
+  FIND [[  if(NOT BYTE_MACHINE_GAMBIT_MINIMUM_VERSION MATCHES "^[0-9]+\\.[0-9]+")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE test/support/cmake/SpecSupport.cmake SPEC SpecSupportSpec.cmake
+  LABEL "spec-support: a failed specification still signs off as verified"
+  FIND [[  if(n EQUAL 0)]]
+  REPLACE [[  if(TRUE)]])
+
+byte_machine_mutation(
+  FILE test/support/cmake/SpecSupport.cmake SPEC SpecSupportSpec.cmake
+  LABEL "spec-support: failures are not counted, so the banner cannot tell"
+  FIND [[    spec_record_failure()
+    message(SEND_ERROR "byte-machine-spec: ${what}: expected '${expected}', got '${actual}'")]]
+  REPLACE [[    message(SEND_ERROR "byte-machine-spec: ${what}: expected '${expected}', got '${actual}'")]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
+  LABEL "testing: hyphen-edge features accepted"
+  FIND [[  if(feature MATCHES "^-|-$")]]
   REPLACE [[  if(FALSE)]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")

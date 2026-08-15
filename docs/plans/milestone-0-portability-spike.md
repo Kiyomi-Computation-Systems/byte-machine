@@ -166,9 +166,10 @@ Mapped from parent plan §30. Answers land in `docs/decisions/`, backed by tests
 
 Questions 5–7 may be answered as "deferred, with rationale" if Milestone 0 cannot reach them without implementing semantics; 1–4 are hard requirements.
 
-## 10. Parent-plan corrections to fold in
+## 10. Parent-plan corrections (folded in)
 
-Found while reading; small, but worth fixing before code depends on them.
+Found while reading; small, but worth fixing before code depends on them. All
+three have been applied to the implementation plan.
 
 - **§7.2 dependency diagram is missing an edge.** `make-interpreted-machine` returns a runtime-compatible compiled-machine, and callbacks must return the runtime's singletons, so `interpret` depends on `runtime`. The diagram shows `runtime` with no incoming edge.
 - **§9.2 API asymmetry.** `compile-machine` takes a *machine*; `make-interpreted-machine` takes a *verification*. That means a verification result must carry its machine, not just diagnostics. Worth stating explicitly in §9 rather than leaving it implied.

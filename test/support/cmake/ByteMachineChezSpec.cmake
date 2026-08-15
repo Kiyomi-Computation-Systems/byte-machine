@@ -133,6 +133,25 @@ byte_machine_chez_classify("nothing useful" "/usr/bin/scheme" st msg fv v mt th)
 spec_check_equal("${v}" "" "a rejected candidate does not retain the previous version")
 spec_check_equal("${fv}" "" "a rejected candidate does not retain the previous banner")
 
+# The floor is only a floor while it is present. `if(x VERSION_LESS "")` is
+# FALSE in CMake, so an unset minimum would wave every release through -- the
+# single guard behind this project's version claim, failing open and silently.
+set(saved_floor "${BYTE_MACHINE_CHEZ_MINIMUM_VERSION}")
+set(BYTE_MACHINE_CHEZ_MINIMUM_VERSION "")
+byte_machine_chez_classify(
+  "full-version=Chez Scheme Version 1.0.0\nmachine-type=x\nthreaded=no"
+  "/usr/bin/scheme" st msg fv v mt th)
+spec_check_equal("${st}" "no-floor" "an absent floor is refused, not ignored")
+set(BYTE_MACHINE_CHEZ_MINIMUM_VERSION "${saved_floor}")
+
+# A banner mentioning some other dotted number before its own must not have that
+# number read as the release.
+byte_machine_chez_classify(
+  "full-version=Chez Scheme 1.2.3 build, Version 10.4.1\nmachine-type=x\nthreaded=no"
+  "/usr/bin/scheme" st msg fv v mt th)
+spec_check_equal("${st}" "ok" "a banner with a leading unrelated number is still read")
+spec_check_equal("${v}" "10.4.1" "the version after the Version keyword wins")
+
 # --- Negative cases --------------------------------------------------------
 
 set(negative_cases
@@ -144,4 +163,4 @@ set(negative_cases
 
 spec_expect_all_rejected("${SPEC_SELF}" ${negative_cases})
 
-message(STATUS "byte-machine-spec: ByteMachineChez verified")
+spec_finish("ByteMachineChez")

@@ -108,7 +108,11 @@ function(byte_machine_chez_classify output path
   endif()
 
   # Read over the banner rather than a probe field, so it is checked in place.
-  if(NOT full_version MATCHES "([0-9]+\\.[0-9]+\\.[0-9]+)")
+  # Anchored to the banner's "Version" keyword rather than taking the first
+  # dotted number anywhere in the string: a banner that mentioned any other
+  # version first -- a build identifier, a bundled library -- would otherwise be
+  # compared against the floor as if it were the release.
+  if(NOT full_version MATCHES "Version ([0-9]+\\.[0-9]+\\.[0-9]+)")
     set(${out_status} "unreadable-version" PARENT_SCOPE)
     set(${out_message}
       "could not read a version number out of Chez's banner '${full_version}'. Portability evidence compares exact versions, so an unreadable one is a configuration failure rather than a blank field."
@@ -120,6 +124,18 @@ function(byte_machine_chez_classify output path
   # A floor, not an equality: the parent plan's Tier 2 matrix explicitly
   # includes additional implementation versions, so exact-matching would
   # contradict it.
+  # The floor must be present before it can be enforced. `if(x VERSION_LESS "")`
+  # evaluates FALSE in CMake, so an unset or out-of-scope minimum would accept
+  # every version silently -- the one guard behind this project's portability
+  # claim, failing open. Checked rather than assumed.
+  if(NOT BYTE_MACHINE_CHEZ_MINIMUM_VERSION MATCHES "^[0-9]+\\.[0-9]+")
+    set(${out_status} "no-floor" PARENT_SCOPE)
+    set(${out_message}
+      "BYTE_MACHINE_CHEZ_MINIMUM_VERSION is '${BYTE_MACHINE_CHEZ_MINIMUM_VERSION}', which is not a version. The floor cannot be enforced, and comparing against an empty value would accept every release."
+      PARENT_SCOPE)
+    return()
+  endif()
+
   if(version VERSION_LESS BYTE_MACHINE_CHEZ_MINIMUM_VERSION)
     set(${out_status} "too-old" PARENT_SCOPE)
     set(${out_message}

@@ -2,8 +2,13 @@
 # Chez and Gambit Scheme.
 #
 # CMake is the canonical build frontend on every platform, with a thin Makefile
-# over it for the usual Unix entry points. The 3.26 floor is what lets CTest
-# emit JUnit and fail an empty test selection without another dependency.
+# over it for the usual Unix entry points.
+#
+# The 3.26 floor is set by the preset schema this project uses -- version 6,
+# which requires 3.25 -- plus a margin. It is not what enables JUnit output or
+# refusing an empty test selection; both of those arrive earlier, in 3.21. Only
+# 4.3.3 has actually been exercised, so 3.26 is a declared floor rather than a
+# tested one (docs/decisions/0001-toolchain-discovery.md).
 #
 # LANGUAGES NONE is deliberate: byte-machine has no C of its own. Gambit's `gsc`
 # shells out to a C compiler for its native lanes, but that toolchain belongs to

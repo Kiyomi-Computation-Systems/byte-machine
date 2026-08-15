@@ -12,9 +12,39 @@
 
 include_guard(GLOBAL)
 
+# WHY FAILURES ARE COUNTED
+#
+# message(SEND_ERROR) records a failure and keeps going, which is what lets a
+# specification report every broken assertion in one run instead of stopping at
+# the first. The cost is that execution reaches the end of the file either way,
+# so an unconditional closing "verified" banner is printed by a run that failed.
+# The exit status is still correct and CTest still goes red, but the transcript
+# says the opposite of the truth, and transcripts are what people read. The
+# counter exists so spec_finish can tell the two apart.
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_FAILURES 0)
+
+function(spec_record_failure)
+  get_property(n GLOBAL PROPERTY BYTE_MACHINE_SPEC_FAILURES)
+  math(EXPR n "${n} + 1")
+  set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_FAILURES "${n}")
+endfunction()
+
+# spec_finish(<subject>)
+#
+# Close a specification. Prints the success banner only when nothing failed.
+function(spec_finish subject)
+  get_property(n GLOBAL PROPERTY BYTE_MACHINE_SPEC_FAILURES)
+  if(n EQUAL 0)
+    message(STATUS "byte-machine-spec: ${subject} verified")
+  else()
+    message(STATUS "byte-machine-spec: ${subject} FAILED ${n} assertion(s)")
+  endif()
+endfunction()
+
 # spec_check_equal(<actual> <expected> <what>)
 function(spec_check_equal actual expected what)
   if(NOT actual STREQUAL expected)
+    spec_record_failure()
     message(SEND_ERROR "byte-machine-spec: ${what}: expected '${expected}', got '${actual}'")
   endif()
 endfunction()
@@ -43,6 +73,7 @@ function(spec_expect_rejected spec_file case expected_message)
     ERROR_VARIABLE err)
 
   if(rc EQUAL 0)
+    spec_record_failure()
     message(SEND_ERROR "byte-machine-spec: case '${case}' exited 0 but must be rejected")
     return()
   endif()
@@ -51,6 +82,7 @@ function(spec_expect_rejected spec_file case expected_message)
   spec_flatten("${expected_message}" flat_expected)
 
   if(NOT flat_err MATCHES "${flat_expected}")
+    spec_record_failure()
     message(SEND_ERROR
       "byte-machine-spec: case '${case}' failed for the wrong reason. "
       "Expected a diagnostic containing:\n  ${flat_expected}\n"

@@ -63,6 +63,13 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
     spec_expect_rejected("${SPEC_SELF}" "victim-succeeds" "byte-machine: the known failure")
   elseif(c STREQUAL "rejected-complains-on-wrong-message")
     spec_expect_rejected("${SPEC_SELF}" "victim-fails-otherwise" "byte-machine: the known failure")
+  elseif(c STREQUAL "banner-after-failure")
+    # One failed assertion, then a close. The banner must not claim success.
+    spec_check_equal("a" "b" "a deliberately failed assertion")
+    spec_finish("SomeSubject")
+  elseif(c STREQUAL "banner-after-success")
+    spec_check_equal("a" "a" "a passing assertion")
+    spec_finish("SomeSubject")
   elseif(c STREQUAL "rejected-tolerates-wrapped-message")
     spec_expect_rejected("${SPEC_SELF}" "victim-fails-wrapped" "${LONG_MESSAGE}")
 
@@ -145,5 +152,26 @@ must_exit(rejected-complains-on-wrong-message  nonzero
 # literally would pass or fail depending on how long an interpolated path
 # happened to be, so the flattening must absorb the wrapping.
 must_exit(rejected-tolerates-wrapped-message zero "spec_expect_rejected tolerates CMake's line wrapping")
+
+# A specification that failed must not sign off as verified. SEND_ERROR keeps
+# executing, so the closing banner is reached either way; the exit status is
+# correct but the transcript is what people actually read.
+function(must_say case wanted unwanted what)
+  execute_process(
+    COMMAND "${CMAKE_COMMAND}" "-DBYTE_MACHINE_SPEC_CASE=${case}" -P "${SPEC_SELF}"
+    OUTPUT_VARIABLE out ERROR_VARIABLE err RESULT_VARIABLE rc)
+  set(all "${out}${err}")
+  if(NOT wanted STREQUAL "" AND NOT all MATCHES "${wanted}")
+    message(SEND_ERROR "byte-machine-spec: ${what}: expected output containing '${wanted}'.\n${all}")
+  endif()
+  if(NOT unwanted STREQUAL "" AND all MATCHES "${unwanted}")
+    message(SEND_ERROR "byte-machine-spec: ${what}: output must not contain '${unwanted}'.\n${all}")
+  endif()
+endfunction()
+
+must_say(banner-after-failure "FAILED 1 assertion" "SomeSubject verified"
+  "a failed specification does not sign off as verified")
+must_say(banner-after-success "SomeSubject verified" "FAILED"
+  "a passing specification still signs off")
 
 message(STATUS "byte-machine-spec: SpecSupport verified")

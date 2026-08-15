@@ -5,8 +5,11 @@
 # presets, never the only way in: `cmake --preset dev` and `ctest --preset pr`
 # work identically everywhere (parent plan section 24.1).
 #
-# --no-tests=error is passed here rather than in the presets because CTest has
-# no preset field for it. An empty selection is a failure, never a silent pass.
+# An empty selection is a failure, never a silent pass. That rule lives in the
+# test presets themselves (execution.noTestsAction), not only here, or the
+# preset path documented above would quietly accept what this path rejects --
+# and the whole point of the paragraph above is that the two are equivalent.
+# CTEST_FLAGS keeps --no-tests=error as well so an older CTest still refuses.
 
 CMAKE ?= cmake
 CTEST ?= ctest

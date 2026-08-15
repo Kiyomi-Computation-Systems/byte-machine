@@ -36,3 +36,19 @@ what this milestone delivers.
 - Chez discovery now probes each candidate name in turn instead of committing to
   the first one `find_program` returns. A host with an unrelated `scheme` earlier
   on PATH than its Chez previously failed to configure.
+- Version floors are checked for presence before use. `if(x VERSION_LESS "")` is
+  false in CMake, so an absent floor accepted every release silently.
+- The Chez version is read from after the banner's `Version` keyword rather than
+  from the first dotted number anywhere in it.
+- Gambit's interpreter is interrogated before its compiler is derived, so a
+  Ghostscript `gsi` reports that it is not Gambit instead of complaining about a
+  derived path that was never the problem.
+- An explicitly set `BYTE_MACHINE_GAMBIT_COMPILER` now survives the interpreter
+  changing in the same configure. Provenance is decided by comparing the cached
+  value against the recorded derivation, not by interpreter identity.
+- Test presets declare a configuration and refuse an empty selection, so the
+  documented preset entry point behaves like `make` — on Windows' default
+  multi-config generator every test previously reported "Not Run".
+- Specifications print their success banner only when nothing failed.
+- The `expected-red` test layer is withdrawn until slice 2 provides a
+  registration helper that can express it.

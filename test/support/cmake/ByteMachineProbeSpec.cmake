@@ -99,6 +99,12 @@ spec_check_equal("${CMAKE_MATCH_2}" "tarm64osx" "precondition: CMAKE_MATCH_2 is 
 byte_machine_probe_field_optional("${good_output}" "architecture" absent)
 spec_check_equal("${absent}" "" "an absent optional field yields empty, not the stale match")
 
+# Anchoring belongs to the optional accessor too. Without this, a 'version'
+# lookup satisfied by the 'full-version' line would be caught in one accessor
+# and silently wrong in the other.
+byte_machine_probe_field_optional("${good_output}" "version" suffix_only)
+spec_check_equal("${suffix_only}" "" "an optional lookup is not satisfied by a longer key")
+
 byte_machine_probe_field_optional("${good_output}" "threaded" present)
 spec_check_equal("${present}" "yes" "a present optional field still yields its value")
 
@@ -113,4 +119,4 @@ set(negative_cases
 
 spec_expect_all_rejected("${SPEC_SELF}" ${negative_cases})
 
-message(STATUS "byte-machine-spec: ByteMachineProbe verified")
+spec_finish("ByteMachineProbe")

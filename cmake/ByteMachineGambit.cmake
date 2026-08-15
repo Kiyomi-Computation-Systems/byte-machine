@@ -79,6 +79,16 @@ function(byte_machine_gambit_identity output path out_version out_target out_sta
     set(version "${raw_version}")
   endif()
 
+  # See the matching guard in ByteMachineChez.cmake: an absent floor compares
+  # FALSE and would accept every release.
+  if(NOT BYTE_MACHINE_GAMBIT_MINIMUM_VERSION MATCHES "^[0-9]+\\.[0-9]+")
+    message(FATAL_ERROR
+      "byte-machine: BYTE_MACHINE_GAMBIT_MINIMUM_VERSION is "
+      "'${BYTE_MACHINE_GAMBIT_MINIMUM_VERSION}', which is not a version. The "
+      "floor cannot be enforced, and comparing against an empty value would "
+      "accept every release.")
+  endif()
+
   if(version VERSION_LESS BYTE_MACHINE_GAMBIT_MINIMUM_VERSION)
     message(FATAL_ERROR
       "byte-machine: Gambit ${version} is older than the verified floor "
@@ -143,18 +153,41 @@ endfunction()
 # one, because the user has stated an intent.
 function(byte_machine_gambit_compiler_for interpreter cached derived_from
          out_path out_derived_from)
-  if(cached AND derived_from STREQUAL "")
+  if(NOT cached)
+    byte_machine_gambit_compiler_beside("${interpreter}" fresh)
+    set(${out_path} "${fresh}" PARENT_SCOPE)
+    set(${out_derived_from} "${interpreter}" PARENT_SCOPE)
+    return()
+  endif()
+
+  if(derived_from STREQUAL "")
     set(${out_path} "${cached}" PARENT_SCOPE)
     set(${out_derived_from} "" PARENT_SCOPE)
     return()
   endif()
 
-  if(cached AND derived_from STREQUAL "${interpreter}")
+  # The cache says this value was derived from some interpreter. Whether that is
+  # still true decides everything, and comparing the recorded interpreter to the
+  # current one is not the same question.
+  #
+  # Matching on interpreter identity alone -- the previous implementation -- got
+  # this wrong whenever both changed in one configure: a user passing
+  # -DBYTE_MACHINE_GAMBIT_COMPILER while also repointing the interpreter had
+  # their value silently overwritten by a derivation, which is exactly the
+  # "override that quietly stopped applying" this function's comment calls the
+  # worse failure. Recomputing the recorded derivation and comparing it to what
+  # is actually cached separates "still derived" from "since overridden",
+  # regardless of which interpreter is current.
+  byte_machine_gambit_compiler_beside("${derived_from}" recorded_derivation)
+  if(NOT cached STREQUAL recorded_derivation)
     set(${out_path} "${cached}" PARENT_SCOPE)
-    set(${out_derived_from} "${derived_from}" PARENT_SCOPE)
+    set(${out_derived_from} "" PARENT_SCOPE)
     return()
   endif()
 
+  # Genuinely derived, so it follows the interpreter. When the interpreter has
+  # not changed this reproduces the cached value, which is why there is no
+  # separate reuse branch.
   byte_machine_gambit_compiler_beside("${interpreter}" fresh)
   set(${out_path} "${fresh}" PARENT_SCOPE)
   set(${out_derived_from} "${interpreter}" PARENT_SCOPE)
@@ -197,11 +230,11 @@ function(byte_machine_gambit_probe binary extra_args out_output)
 
   if(NOT result MATCHES "^[0-9]+$")
     message(FATAL_ERROR
-      "byte-machine: '${binary}' did not answer the Gambit probe within "
-      "${BYTE_MACHINE_GAMBIT_PROBE_TIMEOUT}s (${result}). Ghostscript's 'gsc' "
-      "waits for input on standard input instead of reading the file, which "
-      "looks exactly like this. Set BYTE_MACHINE_GAMBIT_EXECUTABLE to an "
-      "absolute path to Gambit's 'gsi'.")
+      "byte-machine: '${binary}' did not answer the Gambit probe (${result}). "
+      "It either aborted, or waited for input instead of reading the file and "
+      "hit the ${BYTE_MACHINE_GAMBIT_PROBE_TIMEOUT}s timeout -- execute_process "
+      "reports both the same way. Ghostscript's 'gsc' does the latter. Set "
+      "BYTE_MACHINE_GAMBIT_EXECUTABLE to an absolute path to Gambit's 'gsi'.")
   endif()
 
   # Deliberately not gated on the exit status: Ghostscript exits 0 here. The
@@ -240,6 +273,16 @@ macro(byte_machine_gambit_discover)
       "to 'gsi'.")
   endif()
 
+  # The interpreter is interrogated before anything is derived from it. Deriving
+  # first meant a Ghostscript 'gsi' produced "the Gambit compiler ... does not
+  # exist", sending the reader after a path that was never the problem; decision
+  # record 0001 says identity is decided on probe content, so that has to happen
+  # before the derivation it justifies.
+  byte_machine_gambit_probe("${BYTE_MACHINE_GAMBIT_EXECUTABLE}" "" _byte_machine_gsi_output)
+  byte_machine_gambit_identity(
+    "${_byte_machine_gsi_output}" "${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
+    BYTE_MACHINE_GAMBIT_VERSION BYTE_MACHINE_GAMBIT_TARGET BYTE_MACHINE_GAMBIT_STAMP)
+
   byte_machine_gambit_compiler_for(
     "${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
     "${BYTE_MACHINE_GAMBIT_COMPILER}"
@@ -251,17 +294,17 @@ macro(byte_machine_gambit_discover)
     "The interpreter BYTE_MACHINE_GAMBIT_COMPILER was derived from; empty when it was set by hand.")
 
   if(NOT EXISTS "${BYTE_MACHINE_GAMBIT_COMPILER}")
+    if(_byte_machine_gsc_source)
+      set(_byte_machine_gsc_origin
+        "It was derived from the interpreter at '${_byte_machine_gsc_source}'. Set BYTE_MACHINE_GAMBIT_COMPILER explicitly if the two live in different directories.")
+    else()
+      set(_byte_machine_gsc_origin
+        "It was set explicitly rather than derived, so this is the path that was supplied.")
+    endif()
     message(FATAL_ERROR
       "byte-machine: the Gambit compiler '${BYTE_MACHINE_GAMBIT_COMPILER}' does "
-      "not exist. It was derived from the interpreter at "
-      "'${BYTE_MACHINE_GAMBIT_EXECUTABLE}'. Set BYTE_MACHINE_GAMBIT_COMPILER "
-      "explicitly if the two live in different directories.")
+      "not exist. ${_byte_machine_gsc_origin}")
   endif()
-
-  byte_machine_gambit_probe("${BYTE_MACHINE_GAMBIT_EXECUTABLE}" "" _byte_machine_gsi_output)
-  byte_machine_gambit_identity(
-    "${_byte_machine_gsi_output}" "${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
-    BYTE_MACHINE_GAMBIT_VERSION BYTE_MACHINE_GAMBIT_TARGET BYTE_MACHINE_GAMBIT_STAMP)
 
   # `-i` makes the compiler process the rest of its command line the way the
   # interpreter does, which is the only way to ask it what it is.

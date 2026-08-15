@@ -1,6 +1,12 @@
-# Build trees. All generated objects and binaries live here, partitioned by
-# runtime, runtime version, OS, and architecture; they never share source
-# directories and are never shared between runtimes (parent plan section 8).
+# Build trees. All generated objects and binaries live here and never share a
+# source directory.
+#
+# Parent plan section 8 additionally requires that artifacts never be shared
+# between runtimes, runtime versions, operating systems, or architectures. The
+# presets do not yet partition that way -- they are one tree per configuration --
+# because nothing here compiles Scheme yet. The partitioning arrives with the
+# execution lanes in slice 5, which is the first point at which two runtimes
+# could collide.
 /build/
 /build-*/
 
