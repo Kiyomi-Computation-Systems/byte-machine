@@ -1,0 +1,1796 @@
+# Byte Machine Implementation Plan
+
+Status: architecture decisions approved; implementation roadmap ready for review
+
+Date: 2026-08-15
+
+Target release: `0.1.0`
+
+Related architecture: [`chez-http-server-architecture.md`](./chez-http-server-architecture.md)
+
+## 1. Purpose
+
+Build a small, byte-oriented deterministic state-machine generator suitable for generating an incremental HTTP/1 request parser.
+
+`byte-machine` is a library and offline source generator. It is not itself the production HTTP parser. A separate project will use this library to define and generate that parser.
+
+This repository will contain a private HTTP request fixture only to prove that the machine model is sufficient for realistic request framing. That fixture is test infrastructure, not a supported HTTP API.
+
+## 2. Approved Decisions
+
+The following decisions are fixed for the initial implementation. Changing one requires an explicit plan update.
+
+1. Machine specifications are built with ordinary Scheme procedures into an immutable, inspectable source IR.
+2. A pure verifier/compiler transforms the source IR and an offline generator emits deterministic portable Scheme.
+3. Generated parsers depend only on the small runtime library, never on the builder, verifier, compiler, or reference interpreter.
+4. A reference interpreter is the semantic oracle for generated code.
+5. `define-machine` or other macro sugar is deferred until the procedural API is stable.
+6. The source IR is closed and serializable. It cannot contain opaque Scheme procedures.
+7. Runtime extension points are declared named callbacks bound when a parser is constructed.
+8. The initial production backend emits direct Scheme control flow, not a generic opcode interpreter.
+9. One portable backend targets both Chez and Gambit. Thin implementation-specific library wrappers isolate module and compatibility differences.
+10. Implementation-specific backends are permitted only when reproducible compiled benchmarks demonstrate a material need.
+11. Portable alternative layouts such as transition tables, trie specialization, or unrolling are also admitted only when benchmarks justify their complexity.
+12. Structural verification is mandatory before source emission.
+13. Parser fields are fixed-width unsigned integers and bitfields with checked operations.
+14. At most one span may be active at a time in v0.1.
+15. Parsers never retain an input bytevector after a feed call returns.
+16. Message completion is an event. It does not stop a feed; an HTTP-shaped machine loops and continues through pipelined input.
+17. Offline generation is library-first. A general-purpose CLI is not part of v0.1.
+18. `byte-machine` tests do not vendor or run llhttp. The future HTTP-parser project owns llhttp corpus and differential integration.
+19. v0.1 is released only after the private HTTP fixture proves request lines, headers, fixed-length bodies, chunked bodies, trailers, errors, fragmentation, and pipelining.
+20. Platform support uses the tiered matrix in this plan.
+
+## 3. Goals
+
+### 3.1 Functional goals
+
+- Define deterministic state machines over byte values `0..255`.
+- Consume arbitrary half-open bytevector slices `[start,end)`.
+- Resume correctly across every input boundary.
+- Preserve exact consumed and error positions.
+- Support same-byte reexecution without backtracking.
+- Support exact byte, byte-set/class, and exact sequence matching.
+- Support named callbacks, fragmented spans, and callback-directed pauses.
+- Support fixed-width fields, checked numeric accumulation, flags, and field branches.
+- Support efficient counted consumption for fixed-length and chunked bodies.
+- Support explicit EOF behavior, successful stopping, sticky errors, reset, pause, and resume.
+- Verify graph structure before interpretation or source generation.
+- Emit deterministic wrapper-free portable Scheme source.
+- Produce behavior equivalent to the reference interpreter.
+
+### 3.2 Quality goals
+
+- Functional core / imperative shell architecture.
+- TDD for every vertical slice.
+- No deliberate per-byte structural allocation in the generated dispatch loop except work performed by callbacks. Exact-integer promotion beyond an implementation's fixnum range is an acknowledged portable-runtime exception and must be measured.
+- No dependency on sockets, HTTP, libuv, operating-system APIs, or an event loop.
+- No hidden environment or filesystem reads in the functional core.
+- Clear, structured, stable diagnostics.
+- Reproducible source generation.
+- Portable behavior across the supported Chez/Gambit and OS/architecture matrix.
+
+## 4. Non-goals for v0.1
+
+- A universal parser-generator framework.
+- A production HTTP parser or public HTTP request API.
+- HTTP response parsing.
+- llhttp behavioral compatibility or corpus integration in this repository.
+- Regex syntax, context-free grammars, backtracking, lookbehind, or arbitrary lookahead.
+- Arbitrary Scheme expressions embedded in a machine.
+- More than one concurrently active span.
+- Nested or overlapping spans.
+- Runtime compilation or `eval`.
+- A general-purpose generator CLI.
+- A stable macro DSL.
+- Graph visualization tooling.
+- SIMD, unsafe Scheme primitives, native-endian tables, or architecture-specific code.
+- Chez- or Gambit-specific emitters without benchmark evidence.
+- Resource policies such as maximum header count or body size. Those belong to a parser consumer; fixed-width overflow safety remains a machine concern.
+
+## 5. Architectural Model
+
+```text
+ordinary Scheme builder procedures
+              |
+              v
+      immutable source IR
+              |
+              v
+   mandatory structural verifier
+              |
+              v
+       verified source IR
+          /             \
+         v               v
+reference interpreter   deterministic normalizer
+                              |
+                              v
+                     normalized private IR
+                              |
+                              v
+                    portable direct-code emitter
+                              |
+                              v
+                     generated .scm body
+                              |
+                              v
+                     byte-machine runtime
+                              |
+                              v
+                        parser instance
+```
+
+The builder, verifier, normalizer, interpreter transition core, and source-rendering core are functional. They accept values and return values without consulting global mutable state, environment variables, the clock, randomness, or the filesystem.
+
+The imperative shells are limited to:
+
+- parser-instance mutation during `feed!`, `finish!`, `resume!`, and `reset!`;
+- binding user callbacks and context;
+- reading grammar/build inputs in a consuming project;
+- the thin `emit-machine` shell that writes pure rendered bytes through a caller-provided binary port;
+- process exit and test-runner integration.
+
+## 6. Terminology
+
+- **Source IR**: immutable public graph descriptors constructed by the builder API.
+- **Normalized IR**: private lowered graph used by the emitter after names and high-level matchers are resolved.
+- **Machine**: an immutable graph plus declarations for fields, callbacks, spans, entry, and EOF policy.
+- **Compiled machine**: opaque runtime descriptor containing an executor and immutable metadata. Production values come from generated code; the reference interpreter provides a contract-compatible test adapter.
+- **Parser**: mutable instance of a compiled machine, including state, fields, callback bindings, offsets, and lifecycle status.
+- **Cursor**: current index in the bytevector supplied to the active feed.
+- **Stream offset**: nonnegative exact-integer count of bytes committed as consumed since the last full reset. It is not width-limited by a machine field.
+- **Advance edge**: transition that commits the byte examined by its source input node.
+- **Reexecute edge**: transition that leaves the cursor unchanged so the target observes the same byte.
+- **Zero-progress edge**: transition from a non-input operation or a reexecute edge; it consumes no byte.
+- **Span**: a logical range whose data is delivered as zero or more contiguous input fragments followed by one completion event.
+
+## 7. Portability Contract
+
+### 7.1 Shared implementation subset
+
+The functional core, runtime body, generated body, and shared tests live in wrapper-free `.scm` files using a conservative common subset.
+
+Use:
+
+- ordinary procedures, lexical bindings, lists, vectors, strings, symbols, exact integers, and ports;
+- `make-bytevector`, `bytevector?`, `bytevector-length`, `bytevector-u8-ref`, and `bytevector-u8-set!` through a small compatibility surface;
+- numeric byte constants rather than characters in the IR and hot path;
+- tagged vectors hidden behind accessors for records shared across implementations;
+- `dynamic-wind` where parser cleanup must survive a callback escape.
+
+The common arithmetic layer provides specified unsigned `and`, `or`, and `xor` operations without assuming a Scheme-standard bitwise library. The initial shared implementation may use exact-integer arithmetic; any wrapper-specific primitive replacement is an optimization subject to semantic equivalence tests and the benchmark admission policy. Test every operation at all declared widths.
+
+Avoid in shared code:
+
+- R6RS or R7RS library forms;
+- implementation record systems;
+- hash tables;
+- mutable pairs;
+- keyword arguments;
+- `syntax-case`, identifier synthesis, `gensym`, runtime compilation, and `eval`;
+- bytevector literals (`#vu8` versus `#u8` differs by language mode);
+- direct `bytevector-copy!` calls because signatures differ;
+- native-endian integer accessors;
+- Chez fixnum operations, Gambit `##` primitives, unsafe declarations, and assumptions about word size;
+- relying on unspecified argument evaluation order;
+- implementation exception text in behavioral contracts.
+
+### 7.2 Library wrappers
+
+Expose equivalent public library names through thin wrappers:
+
+- Chez: R6RS `.sls` libraries;
+- Gambit: R7RS `.sld` libraries.
+
+Wrappers provide imports, includes, condition construction, bounded bytevector copying if needed, canonical byte-output operations for generated source, and process/test-runner adapters. They must contain no independent machine semantics.
+
+Each shared body is included by exactly one corresponding implementation library. Other libraries import that owner; they do not include the same body again. This prevents tagged-vector type tags and allocation-free singleton callback outcomes from acquiring different identities across libraries.
+
+The internal dependency direction is:
+
+```text
+private model/result/diagnostic
+          ^
+          |
+graph <- verify <- compile
+  ^         ^          ^
+  |         |          |
+interpret   +----------+
+
+runtime  (independent of graph/verify/compile; owns runtime result singletons)
+```
+
+Implementation libraries may use their implementation's include facility inside the thin wrapper; shared bodies themselves contain no library or include form.
+
+### 7.3 Supported platform tiers
+
+Tier 1 release gates:
+
+- Chez and Gambit on Linux amd64;
+- Chez and Gambit on Linux arm64;
+- Chez and Gambit on macOS arm64;
+- Chez and Gambit on Windows amd64;
+- source execution and native compilation wherever the implementation supports both.
+
+Tier 2 portability checks:
+
+- macOS amd64;
+- Windows arm64;
+- additional supported implementation versions;
+- less common compiler configurations.
+
+Tier 2 failures are tracked and must not be knowingly introduced, but unavailable runners or unsupported upstream toolchains do not block v0.1.
+
+This is a coverage-based portability claim, not a claim that every OS and architecture pair is release-certified. Tier 1 covers each required operating-system family and both architectures; Tier 2 covers the remaining cross-product cells.
+
+An initial portability spike must pin minimum Chez and Gambit versions and record exact invocation, library-search, include-path, and compiled-artifact behavior on Tier 1 systems.
+
+Every Tier 1 cell is a real release gate. If an upstream toolchain or runner makes one infeasible, the tier must be changed through an explicit update to this plan before release; it cannot be silently waived in release notes.
+
+## 8. Proposed Repository Layout
+
+The precise split may be adjusted during the portability spike, but responsibility boundaries must remain intact.
+
+```text
+src/
+  common/
+    byte-machine/
+      model.scm
+      builder.scm
+      verify.scm
+      normalize.scm
+      interpret.scm
+      emit-scheme.scm
+      runtime.scm
+      result.scm
+      diagnostic.scm
+  chez/
+    byte-machine/
+      graph.sls
+      verify.sls
+      compile.sls
+      interpret.sls
+      runtime.sls
+  gambit/
+    byte-machine/
+      graph.sld
+      verify.sld
+      compile.sld
+      interpret.sld
+      runtime.sld
+test/
+  common/
+  chez/
+  gambit/
+  fixtures/
+    http-request-machine.scm
+bench/
+  fixtures/
+  runner/
+examples/
+  generate-simple-machine/
+docs/
+  plans/
+  reference/
+  decisions/
+build/
+  chez/
+  gambit/
+```
+
+`build/` is ignored. Chez and Gambit native artifacts must never be shared between runtimes, runtime versions, operating systems, or architectures.
+
+If cross-library `include` behavior is unreliable, begin with fewer shared files and split them only after the wrapper strategy is proven. Do not duplicate semantic implementations to preserve the proposed directory shape.
+
+## 9. Public Library Surface
+
+The names below are normative for v0.1 unless a failing portability spike forces a documented plan change. Optional arguments use explicit `#f` or option alists; the shared API does not use keywords.
+
+### `(byte-machine graph)`
+
+- Machine, field, callback, span, node, matcher, edge, and EOF-policy constructors.
+- Read-only predicates and accessors for source IR.
+- ASCII convenience conversion that rejects non-ASCII source strings.
+- No mutation API and no exposure of tagged-vector layout.
+
+### `(byte-machine verify)`
+
+- `verify-machine`
+- Structured verification result and diagnostic accessors.
+- Verification never depends on generated source or the runtime parser.
+
+### `(byte-machine compile)`
+
+- `compile-machine`
+- `render-machine`
+- `emit-machine`
+- Compilation options and result accessors.
+- Emission accepts an explicit binary output port and writes canonical UTF-8/LF bytes.
+- Expected invalid graphs return diagnostics rather than implementation exceptions.
+
+### `(byte-machine interpret)`
+
+- Reference parser construction and execution directly from verified source IR.
+- `make-interpreted-machine`, producing a runtime-compatible compiled-machine value backed by the independent interpreter executor.
+- Debug/test API; public enough for grammar authors but not a performance API.
+- Same feed-result, callback, field, span, and lifecycle contracts as generated execution.
+
+### `(byte-machine runtime)`
+
+- Compiled-machine and parser constructors.
+- `parser-feed!`, `parser-finish!`, `parser-resume!`, and `parser-reset!`.
+- Parser/result/error/field accessors.
+- Callback binding validation.
+- This is the only byte-machine library required by emitted parsers.
+
+No umbrella library is required for v0.1. Avoid forcing runtime consumers to load compiler code.
+
+### 9.1 Normative construction calls
+
+```scheme
+(make-machine name entry fields callbacks spans errors nodes
+              default-eof-error source-label)
+(make-uint-field name width initial source-label)
+(make-callback-declaration name kind required? branch-keys
+                           default-branch source-label)
+(make-span-declaration name data-callback complete-callback source-label)
+(make-error-declaration name code reason source-label)
+
+(make-byte-dispatch-node name cases fallback eof-target source-label)
+(make-byte-case matcher edge source-label)
+(make-exact-byte-matcher byte)
+(make-byte-set-matcher bytes)
+(make-byte-range-matcher low high)
+(make-byte-complement-matcher matcher)      ; complement within 0..255
+(make-edge target mode)                    ; mode: advance | reexecute
+
+(make-sequence-dispatch-node name cases mismatch eof-target source-label)
+(make-sequence-case bytes target source-label)
+(ascii-bytes string)                       ; rejects non-ASCII
+
+(make-field-action-node name operation arguments next error source-label)
+(make-integer-accumulate-node name field base digit-target
+                              nondigit-edge overflow-error eof-target
+                              source-label)
+(make-field-branch-node name predicate arguments true-target false-target
+                        source-label)
+(make-callback-node name callback continue-target branch-targets
+                    pause-continuation source-label)
+(make-span-start-node name span next source-label)
+(make-span-end-node name span next source-label)
+(make-counted-consume-node name field next eof-target source-label)
+(make-pause-node name continuation source-label)
+(make-stop-node name source-label)
+(make-finish-node name source-label)
+(make-error-node name error-declaration source-label)
+```
+
+`bytes`, declaration collections, case collections, argument collections, and branch maps are proper lists in deterministic caller order. Branch maps contain two-element lists `(key target)`, not implementation hash tables. `#f` as an input node's `eof-target` means the machine default EOF error.
+
+`make-machine` stamps the current public source-IR format version; v0.1 callers do not supply or override that version. A future deserializer may expose explicit version handling, but ordinary construction cannot manufacture an unsupported-version descriptor through the public API.
+
+Constructors validate only local shape and return immutable-by-API descriptors. Cross-reference, graph, and semantic checks belong to `verify-machine` so callers can accumulate structured diagnostics.
+
+Field-action operations and their exact `arguments` schemas are:
+
+| Operation | Arguments |
+| --- | --- |
+| `store` | `(field constant)` |
+| `clear` | `(field)` |
+| `increment` | `(field)` |
+| `decrement` | `(field)` |
+| `add` | `(field constant)` |
+| `set-mask` | `(field mask)` |
+| `clear-mask` | `(field mask)` |
+
+Field-branch predicates and their exact `arguments` schemas are:
+
+| Predicate | Arguments |
+| --- | --- |
+| `equal` | `(field constant)` |
+| `zero` | `(field)` |
+| `nonzero` | `(field)` |
+| `range` | `(field low high)` |
+| `mask-any` | `(field mask)` |
+| `mask-all` | `(field mask)` |
+| `mask-none` | `(field mask)` |
+
+These are closed v0.1 enumerations. The verifier enforces exact arity, declared-field references, operand range, and `low <= high`; it rejects arbitrary operation names or extra arguments.
+
+### 9.2 Normative compile and emission calls
+
+```scheme
+(verify-machine machine)                    ; -> verification-result
+(verification-ok? verification)
+(verification-diagnostics verification)
+
+(compile-machine machine options)           ; -> compilation-result
+(compilation-ok? compilation)
+(compilation-diagnostics compilation)
+(render-machine compilation binding)        ; -> canonical bytevector
+(emit-machine compilation binding binary-output-port)
+
+(make-interpreted-machine verification)     ; -> compiled-machine
+```
+
+`compile-machine` is a pure ahead-of-time transformation from source IR to an emission-ready value. It does not invoke Scheme compilation, load generated code, use `eval`, or write a file. It always performs verification and refuses to expose an emission-ready normalized graph on failure. v0.1 accepts only the empty option list and rejects unknown options; optimization toggles are not hidden in the initial API.
+
+`render-machine` is pure and returns the complete canonical source bytevector. `emit-machine` is a thin imperative convenience that writes exactly that bytevector to the supplied binary port and returns emission metadata containing the fingerprint and byte count.
+
+`binding` is a symbol and is the single top-level compiled-machine binding defined by the generated wrapper-free body. It must satisfy the portable name grammar and must not collide with the canonical reserved-output-binding set. That set contains:
+
+- every Scheme syntax or declaration identifier reserved by either supported R6RS or R7RS source mode, including library/include forms;
+- every identifier exported by `(byte-machine runtime)`, including the generated ABI binding;
+- every top-level or lexical identifier emitted by the canonical source template.
+
+The compiler owns this explicit, deterministically ordered set next to the emitter template. Thin runtime wrappers' export lists and the set are checked together by tests so they cannot silently drift. `render-machine` and `emit-machine` validate the binding before producing or writing any bytes and raise an `invalid-output-binding` API-contract condition on failure.
+
+### 9.3 Normative runtime calls
+
+```scheme
+(make-parser compiled-machine callback-bindings user-context)
+(parser-feed! parser bytevector start end)  ; -> parser-result
+(parser-finish! parser)                     ; -> parser-result
+(parser-resume! parser)                     ; -> feed-ready | finish-ready
+(parser-reset! parser)                      ; -> parser
+
+(parser-result-status result)
+(parser-result-next result)                 ; feed-originated results only
+(parser-result-consumed result)             ; feed-originated results only
+(parser-result-stream-offset result)
+(parser-result-error result)                ; #f unless error
+
+(parser-error? object)
+(parser-error-domain error)                 ; machine | callback
+(parser-error-code error)
+(parser-error-reason error)
+(parser-error-detail error)                 ; #f for machine errors
+(parser-error-node-name error)              ; public source node
+(parser-error-state-id error)               ; generated/internal state ID
+(parser-error-offset error)                 ; absolute stream offset
+(parser-error-position-kind error)          ; byte | boundary | eof
+
+(parser-lifecycle parser)
+(parser-state-name parser)
+(parser-stream-offset parser)
+(parser-field-ref parser field-name)
+(parser-user-context parser)
+
+callback-continue                          ; allocation-free singleton
+callback-pause                             ; allocation-free singleton
+(make-callback-failure code detail)
+(callback-failure? object)
+```
+
+`callback-bindings` is a proper list of two-element lists `(name procedure)`. Parser construction resolves it to indexed slots, rejects duplicates and unknown names, rejects missing required callbacks, and installs no-op/default behavior only where declared. An optional decision callback must declare `default-branch`; other optional callbacks default to `continue`.
+
+The symbols `continue` and `pause` are reserved and may not be callback decision branch keys. Callbacks return the exported singleton objects rather than constructing lookalike symbols or vectors.
+
+`make-callback-failure` requires a symbolic code satisfying the same portable ASCII name grammar. Its detail is opaque application data.
+
+Result and parser representations are opaque. Accessors enforce where fields such as `next` are meaningful.
+
+### 9.4 Conditions
+
+Portable API-contract conditions are tagged byte-machine values raised non-continuably with Scheme `raise`. Export:
+
+```scheme
+(byte-machine-contract-condition? object)
+(byte-machine-contract-condition-code object)
+(byte-machine-contract-condition-who object)
+(byte-machine-contract-condition-detail object)
+```
+
+Codes include invalid argument, invalid slice, invalid output binding, lifecycle violation, reentrancy, poisoned parser, callback binding error, generated-runtime ABI mismatch, and accessor misuse. Tests compare predicates, codes, and payloads across runtimes, never rendered exception prose.
+
+### 9.5 Generated runtime ABI
+
+`(byte-machine runtime)` exports the reserved generated-code ABI binding `byte-machine-make-compiled-machine/v1`. Emitted bodies call that binding and embed the required runtime ABI and IR/emitter versions. This export exists so a generated wrapper-free body works when its consumer imports only `(byte-machine runtime)`; it is not an API for handwritten grammar or application code. Loading or constructing against a mismatched runtime raises the portable ABI-mismatch condition.
+
+The generated ABI is distinct from the user-facing parser API and is documented only in this ABI section and generated-code maintenance notes. It may change before `1.0.0` only with a generated-ABI version bump, deterministic regeneration, and a changelog entry.
+
+### 9.6 Required end-to-end examples
+
+Milestone 1 must add two executable examples—one Chez program and one Gambit program—that use the same shared grammar body and demonstrate:
+
+1. constructing a one-byte machine only through `(byte-machine graph)`;
+2. verifying it;
+3. compiling it without runtime evaluation;
+4. emitting a generated body to a binary file port;
+5. including that generated body from a consumer library wrapper;
+6. importing only `(byte-machine runtime)` in the consumer;
+7. constructing a parser, feeding the exact `[0,1)` slice, and inspecting the result;
+8. compiling and running the consumer natively.
+
+The exact tool commands and include-path setup come from Milestone 0 and are copied verbatim into these examples.
+
+## 10. Source IR
+
+### 10.1 Machine descriptor
+
+A machine declares, in deterministic order:
+
+- format version;
+- symbolic machine name;
+- symbolic entry state;
+- fields;
+- callbacks;
+- zero or more named spans;
+- declared machine errors;
+- nodes;
+- a machine-wide default EOF error;
+- optional stable source labels for diagnostics.
+
+Node and declaration names are symbols. Target references are symbolic, which permits forward references and cycles without mutable node objects.
+
+For v0.1, machine names, declaration names, error codes, and callback branch keys must match the portable ASCII grammar `[a-z][a-z0-9-]*`. Human-readable static labels and reasons embedded in generated output are restricted to printable ASCII plus LF. This keeps symbol and string emission independent of reader extensions and Unicode-version differences. Runtime callback error detail remains opaque application data and is never emitted.
+
+Declaration order has no semantic priority. It provides stable IDs, generated order, and diagnostics after verification has established determinism.
+
+### 10.2 Field declarations
+
+Each field declares:
+
+- symbolic name;
+- unsigned width: 8, 16, 32, or 64 bits;
+- initial exact-integer value within range;
+- optional diagnostic label.
+
+Booleans use `u8` values `0` and `1`. Enums use a width sufficient for their declared constants. Flags use unsigned bitfields.
+
+Parser bookkeeping such as current state, lifecycle, callback vector, user context, cursor, stream offset, and span markers is not exposed as machine fields.
+
+### 10.3 Callback declarations
+
+Each callback declares:
+
+- symbolic name;
+- kind: event, decision, span-data, or span-complete;
+- whether it is required or has a no-op default;
+- allowed branch keys for decision callbacks;
+- the default branch for an optional decision callback;
+- optional diagnostic label.
+
+Callbacks are resolved once into indexed slots when the parser is constructed. Generated hot paths never perform symbolic or alist lookup.
+
+### 10.4 Span declarations
+
+Each span declares:
+
+- symbolic name;
+- span-data callback;
+- optional span-complete callback;
+- optional diagnostic label.
+
+Only one span may be active on any reachable execution path in v0.1. The verifier rejects nested, overlapping, re-entered, or inconsistently closed spans.
+
+### 10.5 Error declarations
+
+Each machine error declares:
+
+- symbolic declaration name;
+- stable symbolic error code;
+- static printable-ASCII reason;
+- optional diagnostic label.
+
+Error nodes and the machine default EOF policy reference these declarations. Callback application failures occupy a separate runtime error domain and do not need source-IR declarations.
+
+### 10.6 Node kinds
+
+The source IR supports the following closed set.
+
+#### Byte dispatch
+
+Examines the current byte and selects among disjoint exact-byte, byte-set, range, or complement transitions plus one explicit fallback. Matchers denote subsets of the closed byte universe `0..255`; complements are canonicalized against that universe before overlap analysis.
+
+Each transition explicitly states `advance` or `reexecute`.
+
+#### Sequence dispatch
+
+Matches one of a finite set of exact byte sequences without backtracking. Sequences may share nonterminal prefixes. Ambiguous terminal prefixes are rejected unless the grammar expresses the distinction through explicit states.
+
+The compiler lowers sequence alternatives into resumable prefix states. A successful sequence consumes every byte in that sequence; sequence dispatch is not a lookahead operation. On a mismatch, already consumed prefix bytes remain consumed and the declared mismatch edge controls whether the mismatching byte advances or is reexecuted. Peeking at a delimiter is expressed with a one-byte dispatch and a reexecute edge.
+
+#### Field action
+
+Performs one declared built-in operation and continues without consuming input.
+
+Initial operations:
+
+- store constant;
+- clear to zero;
+- checked increment or decrement;
+- checked add;
+- bitwise set and clear mask.
+
+Underflow, overflow, or an out-of-range result takes an explicit error edge.
+
+#### Integer accumulate
+
+Examines the current byte, converts an ASCII digit for declared base 10 or 16, and performs a checked multiply-add into one unsigned field.
+
+- A valid digit updates the field and takes an explicit advance edge.
+- A non-digit takes an explicit fallback edge, normally reexecuting the delimiter.
+- Overflow takes an explicit error edge and leaves the previous field value unchanged.
+- EOF uses the node's declared EOF edge or the machine default.
+
+This is an input-reading node, not a zero-width field action. It provides numeric scanning without passing an implicit current byte into a later action.
+
+#### Field branch
+
+Selects a transition without consuming input using one of:
+
+- equality to constant;
+- zero/nonzero;
+- inclusive range;
+- bit-mask any/all/none.
+
+Every possible result must have an explicit target.
+
+#### Callback invocation
+
+Invokes one named event or decision callback without consuming input. Decision results select only among statically declared branch keys. Every invocation declares a continue target and a pause continuation. Unknown results are runtime callback-contract errors. A decision that must both select a branch and pause routes that branch to an explicit pause node.
+
+#### Span start
+
+Opens the declared span at the current cursor without consuming input.
+
+#### Span end
+
+Closes the active span at the current cursor without consuming input. It emits a remaining nonempty data fragment, then the completion callback. Internal continuation states ensure a pause never repeats an already delivered fragment or completion event.
+
+#### Counted consume
+
+Consumes up to the remaining value of one declared unsigned field in bulk, subtracting exactly the committed count.
+
+- A zero count transitions immediately without consuming input.
+- If input ends first, available bytes are consumed and the parser returns `need-input`.
+- If the count reaches zero first, execution continues at the target with any remaining input.
+- When available input exactly equals the remaining count, count completion wins: the field reaches zero and execution continues through zero-width/span/message-complete work in the same feed before any `need-input` result.
+- When enclosed in a span, normal span fragment rules apply.
+
+#### Pause
+
+Returns `paused` with an explicit continuation node and the first unconsumed input index.
+
+#### Stop
+
+Enters a successful sticky one-shot terminal and returns `stopped`.
+
+#### Finish
+
+Enters the successful sticky EOF terminal and returns `finished`. A finish node may be reached only while processing `parser-finish!`; the verifier rejects ordinary byte or non-EOF control flow into it.
+
+#### Error
+
+Enters a sticky terminal carrying a declared code and reason.
+
+No arbitrary custom node, embedded lambda, or backend code escape hatch exists in v0.1.
+
+## 11. Transition and Cursor Semantics
+
+### 11.1 Input slice
+
+`parser-feed!` accepts `(parser bytevector start end)` with a half-open slice `[start,end)`.
+
+Valid inputs satisfy:
+
+```text
+0 <= start <= end <= bytevector-length(bytevector)
+```
+
+Invalid arguments raise an API-contract condition before parser mutation.
+
+An empty slice is a valid feed. It may advance already-pending zero-width continuations, but it never represents EOF and never consumes a byte. It returns `need-input` once execution reaches an input-dependent state unless a callback, stop, or error is encountered first.
+
+### 11.2 Advance
+
+An advance edge from a byte-reading node commits the examined byte, increments the cursor by one, increments the stream offset by one, and then enters its target.
+
+### 11.3 Reexecute
+
+A reexecute edge enters its target without changing the cursor or stream offset. The target observes the same current byte. This is used for delimiter handling and span exclusion without pushback.
+
+There is no general rewind or backtracking.
+
+### 11.4 Non-input nodes
+
+Field operations, field branches, callback invocations, and span operations do not consume input. Byte dispatch, sequence-prefix states, integer accumulation, and counted consumption are input-dependent. The executor continues through zero-width nodes until it reaches an input-dependent node, pauses, stops, errors, or finishes.
+
+Any reachable cycle that can run indefinitely without consuming input is invalid.
+
+### 11.5 Result position
+
+Every feed result contains:
+
+- `next`: the first unconsumed index in the supplied bytevector;
+- `consumed`: `next - start`;
+- absolute stream offset after committed consumption.
+
+For an offending byte reached through a reexecute error edge, `next` points at that byte. Machine authors may deliberately use an advance error edge when the offending byte is considered consumed; tests must make that choice explicit.
+
+## 12. Parser Lifecycle and Results
+
+### 12.1 Lifecycle
+
+```text
+ready --feed--> ready | paused-feed | stopped | error
+ready --finish-> paused-finish | finished | error
+paused-feed --resume-> ready
+paused-finish --resume-> finish-ready
+finish-ready --finish-> paused-finish | finished | error
+any non-busy state --reset-> ready
+```
+
+`busy` is an internal guard while feed, finish, or a callback is executing.
+
+A pause records both its exact continuation and whether it occurred while processing input or EOF. `parser-resume!` changes lifecycle state only; it invokes no callback and consumes no input. It returns `feed-ready` for a feed pause and `finish-ready` for an EOF pause.
+
+`parser-resume!` returns the symbol `feed-ready` or `finish-ready`. These are resume acknowledgements; `finish-ready` is also the lifecycle state awaiting the caller's next `parser-finish!`. Neither is a `parser-result` status. In particular, `parser-finish!` never returns `finish-ready`: once invoked from that state, it continues EOF execution until it returns `paused`, `finished`, or `error`.
+
+After `feed-ready`, the caller supplies the unconsumed suffix beginning at the prior feed result's `next` index. It may use the same bytevector or an equivalent copied suffix. After `finish-ready`, the caller calls `parser-finish!` again; feeding bytes is prohibited.
+
+### 12.2 Operation matrix
+
+| Lifecycle | `feed!` | `finish!` | `resume!` | `reset!` |
+| --- | --- | --- | --- | --- |
+| `ready` | Execute input | Begin EOF processing | Contract condition | Reset and remain ready |
+| `paused-feed` | Contract condition | Contract condition | Install continuation; return `feed-ready` | Reset |
+| `paused-finish` | Contract condition | Contract condition | Install continuation; return `finish-ready` | Reset |
+| `finish-ready` | Contract condition | Continue EOF processing | Contract condition | Reset |
+| `stopped` | Return `stopped`, consuming zero | Return `stopped` | Contract condition | Reset |
+| `error` | Return stored error, consuming zero | Return stored error | Contract condition | Reset |
+| `finished` | Return `finished`, consuming zero | Return `finished` | Contract condition | Reset |
+| `poisoned` | Raise `parser-poisoned` | Raise `parser-poisoned` | Raise `parser-poisoned` | Reset |
+| `busy` | Raise reentrancy condition | Raise reentrancy condition | Raise reentrancy condition | Raise reentrancy condition |
+
+For repeated `feed!` calls in a sticky state, `next` equals the new call's `start`, `consumed` is zero, and the stored absolute terminal/error offset remains unchanged.
+
+### 12.3 Feed statuses
+
+#### `need-input`
+
+The complete supplied slice was consumed and the machine is waiting for more input. It does not imply that a logical message completed.
+
+#### `paused`
+
+Execution stopped at a callback or explicit pause point. For a feed-originated `paused-feed` result, `next` identifies the first unconsumed byte. A `paused-finish` result has no input slice, so `next` and `consumed` are inapplicable and only the absolute stream offset is exposed. `parser-resume!` must be called before feeding more input or continuing EOF processing.
+
+#### `stopped`
+
+The machine entered a successful explicit terminal. The status is sticky until reset.
+
+#### `error`
+
+The machine entered a declared machine error or callback application error. The status is sticky until reset. Repeated feed attempts return the same error without consuming input.
+
+### 12.4 EOF
+
+`parser-finish!` is distinct from an empty feed.
+
+Every input-dependent state uses either a state-specific EOF edge or the machine's explicitly declared default EOF error. A stream-idle entry state may route EOF to successful `finished`; a partially parsed request routes EOF to a truncation error.
+
+Lowered states inside a sequence inherit the source sequence state's EOF edge. EOF after a nonempty matched prefix therefore reports the source state's EOF policy at the current between-byte stream offset. EOF edges participate in a separate zero-progress-cycle check; EOF processing may not loop indefinitely.
+
+EOF processing may invoke callbacks and may pause. A pause during EOF produces `paused-finish`; after resume, a subsequent `parser-finish!` continues the saved EOF path. EOF processing never admits new bytes and must terminate in `finished` or `error` after a finite number of resumes.
+
+`finished` is sticky until reset.
+
+### 12.5 Reset
+
+Full reset:
+
+- restores the entry state;
+- restores all declared field initial values;
+- clears span state, pause continuation, error, stop, finish, and poison state;
+- resets stream offset to zero;
+- retains the compiled machine, callback bindings, and user context.
+
+HTTP-shaped message loops use explicit field actions to reset message-local values. They do not call full reset and do not reset the stream offset.
+
+### 12.6 Misuse and poisoning
+
+Prohibited lifecycle operations and reentrant parser operations raise API-contract conditions before further mutation.
+
+Expected callback failures must use callback result values. If a callback raises an unexpected condition or performs a nonlocal escape, the condition/escape propagates and `dynamic-wind` marks the parser poisoned. Only full reset may reuse it.
+
+### 12.7 Runtime error structure
+
+A sticky runtime error records:
+
+- domain: machine or callback;
+- stable symbolic code;
+- static reason and optional callback-provided detail;
+- public source-node name and internal state ID;
+- absolute error offset;
+- position kind: offending byte, between-byte boundary, or EOF boundary.
+
+The originating feed result also carries its slice-relative `next`. The persistent error does not store a reusable relative index because later calls may supply different slices.
+
+Position conventions:
+
+| Error source | Stored position |
+| --- | --- |
+| Reexecute mismatch or rejected current digit | `byte` at the current stream offset |
+| Error edge after an advance | `boundary` after the committed byte |
+| Zero-width machine action or callback failure | `boundary` at the current stream offset |
+| Truncated input during `finish!` | `eof` at the final stream offset |
+
+Integer-overflow nodes reject and do not consume the overflowing digit, so their position is the offending byte. Error nodes reached through other byte edges retain the author's explicit advance/reexecute choice.
+
+Expected malformed input is reported through a feed/finish result, not by raising. API-contract conditions and unexpected callback conditions remain distinct from parser data errors.
+
+The source-node name, domain, code, offset, and position kind are semantic and must match between interpreted and generated execution. The internal state ID is an executor-local debugging aid: generated IDs are deterministic for a given normalized graph, but an independently interpreted machine need not report the same ID. Differential tests do not compare that accessor across executor kinds.
+
+## 13. Callback Contract
+
+Event and decision callbacks receive:
+
+```scheme
+(callback parser user-context)
+```
+
+Span-data callbacks receive:
+
+```scheme
+(callback parser user-context bytevector start end)
+```
+
+Span-complete callbacks receive:
+
+```scheme
+(callback parser user-context)
+```
+
+The input range is valid only for the dynamic extent of the span-data callback. The byte-machine runtime stores no feed bytevector or slice after return. Application-owned opaque values—including callback closures, user context, and callback error detail—may retain data by their own policy and are outside that guarantee.
+
+Machine-field access from a callback is read-only. Allowing callbacks to mutate fields would bypass the closed IR and invalidate interpreter/generated equivalence. User context remains application-owned and may be mutable.
+
+Callback outcomes are:
+
+- `continue`;
+- `pause`;
+- one declared decision branch key;
+- an explicit callback failure containing an application code and optional detail.
+
+The common successful outcomes must use allocation-free singleton values. Error detail allocation is allowed on the exceptional path.
+
+Event and span callbacks accept only `continue`, `pause`, or failure. Decision callbacks may additionally return their declared branch keys. A plain decision-callback pause resumes at that invocation's declared pause continuation; branch-and-pause behavior uses a branch leading to an explicit pause node.
+
+A callback-requested pause occurs after the callback's delivered event has been committed. Resume continues after that event; it is never delivered twice. A span-data callback accepts or rejects its complete supplied range atomically; partial acceptance is not a v0.1 result. Callers that need finer backpressure feed bounded slices and retain ownership of every unconsumed suffix.
+
+At callback entry, the interpreter and generated executor expose identical committed parser state:
+
+- fields include every operation completed before the callback and are read-only through public accessors;
+- stream offset and cursor include every byte committed before the callback;
+- public parser state names the source callback/span node, not a generated internal continuation; an automatic feed-boundary fragment reports the current source input node together with the active span name;
+- lifecycle is `busy`, so parser operations are rejected;
+- a span-data callback sees its named span active with the delivered mark already advanced to the fragment end;
+- a span-complete callback sees that span inactive;
+- no error is installed until a callback returns failure.
+
+An explicit pause node or event/decision callback invocation is invalid on any reachable path where a span is active. Only the active span's own data callback may pause before the span closes. The verifier enforces this restriction, which makes the no-retention contract possible without invoking unrelated callbacks after a pause request.
+
+## 14. Span Semantics
+
+1. Starting a span records the current cursor.
+2. Ending a span emits `[mark,cursor)` if nonempty.
+3. Ending then emits the span-complete callback if declared.
+4. At a feed boundary, an open span emits `[mark,end)` if nonempty, remains logically open, and begins its next possible fragment at the next feed's `start`.
+5. Empty span-data fragments are suppressed.
+6. A logical span may therefore produce zero or more data fragments followed by exactly one completion event.
+7. Fragment boundaries reflect feed boundaries and pauses; consumers must not treat them as semantic token boundaries.
+8. If a span-data callback pauses during boundary flushing, the fragment is committed, the span remains open, and resume begins with the next supplied input.
+9. If a span-end data or completion callback pauses, generated internal continuation states resume at the next undelivered substep.
+10. Errors do not flush a final partial fragment or synthesize a span-complete event. Fragments successfully emitted at earlier feed boundaries remain observable.
+
+During span end, the data callback sees the span active and its mark advanced to the current cursor. Before invoking the completion callback, execution makes the span inactive. A pause after the data fragment retains only an internal `completion-pending` continuation, never the input bytevector.
+
+The verifier proves that no reachable path starts a second span while one is active, ends the wrong span, ends with no active span, or reaches successful stop/finish with a span active.
+
+## 15. Fixed-width Field Semantics
+
+Widths have mathematical ranges:
+
+```text
+u8   0 .. 2^8  - 1
+u16  0 .. 2^16 - 1
+u32  0 .. 2^32 - 1
+u64  0 .. 2^64 - 1
+```
+
+Shared code uses exact Scheme integers but checks the declared bound before committing every operation. It must not rely on host fixnum width or silent wrapping.
+
+For the integer-accumulate node's checked multiply-add:
+
+```text
+next = current * base + digit
+```
+
+The implementation checks before multiplication/addition, conceptually:
+
+```text
+current <= floor((maximum - digit) / base)
+```
+
+Failure takes the node's explicit error edge and leaves the previous field value unchanged.
+
+Counted consume performs exact subtraction after determining the number of bytes it can commit.
+
+## 16. Verification and Diagnostics
+
+### 16.1 Verification is a generation gate
+
+Neither compilation nor emission proceeds when any error diagnostic exists. The reference interpreter also refuses an unverified source machine.
+
+### 16.2 Required checks
+
+The verifier rejects:
+
+- invalid descriptor shapes and unsupported IR versions;
+- duplicate machine declaration names;
+- nonportable names, codes, branch keys, labels, or reasons;
+- missing entry or transition targets;
+- missing or invalid machine error declarations and references;
+- invalid field widths, initial values, constants, masks, and operations;
+- missing or incompatible callbacks;
+- optional decision callbacks without a valid declared default branch;
+- invalid span callback declarations;
+- duplicate or overlapping exact-byte and byte-set transitions;
+- sequence ambiguities after prefix analysis;
+- missing explicit fallback on every byte/sequence dispatch;
+- invalid transition advancement modes;
+- unreachable nodes;
+- reachable zero-progress cycles;
+- span re-entry, overlap, wrong end, unmatched end, and inconsistent successful exits;
+- explicit pauses or event/decision callback invocations reachable while a span is active;
+- callback decision branches that are missing, duplicated, or undeclared;
+- callback decision keys that collide with reserved control outcomes;
+- counted consume using an incompatible field;
+- integer accumulation using an incompatible field or unsupported base;
+- malformed pause continuations;
+- terminal nodes with outgoing transitions;
+- invalid EOF targets or successful EOF with an active span;
+- EOF-only zero-progress cycles and non-EOF control flow into a finish terminal;
+- EOF-reachable stop terminals: every EOF path must reach finish or error after finitely many explicit pauses;
+- generated identifier collisions;
+- backend limits that would make emission incorrect.
+
+Normal consuming cycles, including the main HTTP message loop, are valid.
+
+### 16.3 Verification passes
+
+Implement verification as independent pure passes where practical:
+
+1. Descriptor/schema validation.
+2. Symbol table construction and name resolution.
+3. Matcher canonicalization and byte-set overlap analysis.
+4. Reachability.
+5. Zero-progress strongly connected component analysis.
+6. Field and callback type checking.
+7. Span-state dataflow.
+8. EOF and terminal validation.
+9. Generated-name validation.
+
+Each pass receives an immutable value and returns diagnostics plus any derived immutable analysis.
+
+Normalization is followed by private invariant validation. Compiler bugs that produce malformed normalized IR are internal failures, never user diagnostics and never input to the emitter.
+
+### 16.4 Diagnostic structure
+
+Diagnostics contain:
+
+- stable symbolic code;
+- severity (`error`; warnings may be added later);
+- machine name;
+- node and edge/source label where applicable;
+- concise message;
+- relevant declaration names;
+- a representative graph path when useful.
+
+Tests compare diagnostic structure and codes, not implementation-specific rendered text.
+
+Unreachable nodes are errors in v0.1. Warning or fragment-composition policies are deferred.
+
+## 17. Normalization
+
+Normalization runs only after source verification and is deterministic.
+
+Responsibilities:
+
+- resolve symbolic names to stable numeric IDs;
+- lower byte ranges and classes to canonical byte sets;
+- lower sequence alternatives into resumable prefix states;
+- make cursor advancement explicit on every input edge;
+- lower multi-step span endings into resumable internal states;
+- lower callback outcomes into total numeric/symbolic dispatches;
+- lower integer accumulation into explicit digit, fallback, overflow, and EOF control flow;
+- assign field, callback, and span slots;
+- retain a state-ID-to-source-name debug map;
+- preserve enough metadata for interpreter traces and diagnostics.
+
+Normalization must not perform speculative performance transformations in v0.1. It should produce the simplest correct execution graph. Optimization passes remain separate and disabled unless admitted through the benchmark policy.
+
+## 18. Reference Interpreter
+
+The interpreter executes verified source IR directly and shares the public runtime contract. It must not call the normalizer or execute normalized IR. This independence is intentional: interpreter/generated comparison must be able to catch incorrect sequence lowering, slot assignment, internal continuation construction, and other normalization defects.
+
+Interpreter-private state may track progress inside a high-level source node, such as a sequence prefix or a pending span-end substep, but that representation must be derived independently from the production normalizer.
+
+It prioritizes clarity and observability over speed. It should expose an optional trace hook for tests containing:
+
+- node entry;
+- cursor and stream offset;
+- examined byte when applicable;
+- selected edge;
+- field changes;
+- callback invocation and result;
+- span start/fragment/end;
+- lifecycle result.
+
+The trace hook is not invoked unless explicitly enabled. Normal interpreter execution must not alter semantic callback ordering.
+
+The interpreter is the authoritative oracle for generated code. It is not an oracle for whether the IR itself correctly models HTTP.
+
+## 19. Portable Direct-code Backend
+
+### 19.1 Initial strategy
+
+Emit a wrapper-free Scheme body containing:
+
+- one compiled-machine binding chosen explicitly by the caller;
+- immutable field/callback/debug metadata;
+- a direct resumable executor procedure;
+- a dispatch loop over stable numeric node IDs;
+- a `case` arm or equivalent direct code for each normalized node;
+- calls only to the small runtime surface.
+
+The generated executor must not traverse source/normalized graph objects or dispatch through a generic opcode VM.
+
+Parser state is kept in local variables while executing and committed to the parser object at observable return/callback boundaries as required for callback access and exception safety.
+
+### 19.2 Initial lowering choices
+
+- Byte dispatch: portable `case`/conditional code over numeric bytes.
+- Byte sets: canonical membership code selected for simplicity, not speculative density optimization.
+- Sequences: explicit resumable prefix states.
+- Field operations: generic exact arithmetic with declared-bound checks.
+- Callbacks: direct indexed vector lookup.
+- Counted consume: bulk cursor movement using available/count minimum.
+
+### 19.3 Runtime dependency
+
+Generated code may call stable runtime helpers for:
+
+- parser storage/access;
+- result construction/access;
+- callback outcomes and callback lookup;
+- lifecycle transitions;
+- contract conditions;
+- span boundary flushing;
+- poison cleanup.
+
+It may not call builder, verifier, normalizer, interpreter, or emitter code.
+
+## 20. Deterministic Generation
+
+For the same verified machine, compilation options, output binding, and generator version, Chez and Gambit must emit byte-identical UTF-8/LF source.
+
+Requirements:
+
+- declaration-derived stable ordering;
+- deterministic internal state numbering;
+- a project-owned canonical source writer;
+- no dependence on hash iteration, object identity, `gensym`, or implementation `write` formatting;
+- ASCII-safe emitted identifiers and explicit escaping;
+- rejection of output bindings that collide with portable Scheme syntax, runtime exports, or emitted internal identifiers;
+- no timestamps, hostnames, usernames, absolute paths, random data, or native details;
+- embedded IR format version and generator version;
+- embedded deterministic non-cryptographic fingerprint of canonical normalized IR and emission options;
+- a final newline and fixed LF line endings.
+
+The initial fingerprint may use a specified 64-bit FNV-1a calculation over the canonical encoding. It is an identity/debugging aid, not a security primitive.
+
+`emit-machine` writes only to the supplied binary output port through a portability shim (`put-u8` versus `write-u8`). Generated source is canonical UTF-8 with LF bytes even on Windows. Atomic temporary-file creation and replacement belong to the caller's imperative build shell.
+
+## 21. Private HTTP Request Fixture
+
+### 21.1 Purpose
+
+The fixture proves the machine primitives against realistic HTTP-shaped control flow. It does not promise RFC completeness, llhttp compatibility, security suitability as a production parser, or API stability.
+
+### 21.2 Exact fixture grammar
+
+The fixture uses this deliberately reduced byte grammar. It is not labeled RFC ABNF.
+
+```text
+request         = request-line header-section body
+request-line    = method SP request-target SP version CRLF
+method          = 1*tchar
+request-target  = 1*target-byte
+version         = "HTTP/1.0" / "HTTP/1.1"
+
+header-section  = *header-field CRLF
+header-field    = field-name ":" OWS field-value CRLF
+field-name      = 1*tchar
+field-value     = *field-value-byte
+OWS             = *(SP / HTAB)
+
+content-length  = 1*DIGIT *OWS
+transfer-value  = case-insensitive("chunked") *OWS
+
+body            = fixed-body / chunked-body / empty
+fixed-body      = exactly content-length octets
+chunked-body    = *nonzero-chunk last-chunk trailer-section CRLF
+nonzero-chunk   = 1*HEXDIG chunk-ext CRLF chunk-data CRLF
+last-chunk      = 1*HEXDIG-with-value-zero chunk-ext CRLF
+chunk-data      = exactly decoded chunk-size octets
+chunk-ext       = *(";" token ["=" token])
+token           = 1*tchar
+trailer-section = *trailer-field
+trailer-field   = header-field
+
+tchar           = ALPHA / DIGIT / "!" / "#" / "$" / "%" / "&" /
+                  "'" / "*" / "+" / "-" / "." / "^" / "_" /
+                  "`" / "|" / "~"
+target-byte     = %x21-7E
+field-value-byte= HTAB / SP / %x21-7E / %x80-FF
+SP              = %x20
+HTAB            = %x09
+CRLF            = %x0D %x0A
+```
+
+After the colon, the fixture consumes all leading OWS before opening the header-value span. The span includes any trailing SP/HTAB because v0.1 has no lookbehind/trailing-marker primitive. An all-OWS value therefore produces an empty value span followed by completion.
+
+Framing rules are intentionally strict:
+
+- `Content-Length` and `Transfer-Encoding` names are recognized case-insensitively; ordinary header names remain opaque spans.
+- Any second `Content-Length` is rejected, even if numerically identical.
+- `Content-Length` permits only the grammar above and uses checked u64 decimal accumulation.
+- Any second `Transfer-Encoding` is rejected.
+- The only accepted transfer value is case-insensitive `chunked` followed by optional trailing OWS.
+- Any request containing both recognized framing headers is rejected when the later header line completes.
+- A request with neither framing header has an empty body.
+- Chunk sizes use checked u64 hexadecimal accumulation and may contain leading zeroes.
+- Chunk extensions support only token names and optional token values; quoted values and escapes are excluded.
+- Trailer fields reuse the header grammar, but `Content-Length` and `Transfer-Encoding` are forbidden as trailer names.
+
+### 21.3 Required event contract
+
+The fixture trace contains these events in order where applicable:
+
+```text
+message-begin
+method-data* method-complete
+target-data* target-complete
+version-complete
+(header-name-data* header-name-complete
+ header-value-data* header-value-complete)*
+headers-complete
+(nonzero chunks:
+ (chunk-extension-name-data* chunk-extension-name-complete
+  [chunk-extension-value-data* chunk-extension-value-complete])*
+ chunk-header body-data* chunk-complete)*
+(zero chunk, when chunked:
+ (chunk-extension-name-data* chunk-extension-name-complete
+  [chunk-extension-value-data* chunk-extension-value-complete])*
+ chunk-header)
+(trailer-name-data* trailer-name-complete
+ trailer-value-data* trailer-value-complete)*
+message-complete
+```
+
+Rules:
+
+- `message-begin` occurs only when the first method byte is available, before that byte is consumed. Empty feeds and clean idle EOF do not start a message.
+- Method and target spans end before their delimiter SP is consumed.
+- Header/trailer name spans end before the colon is consumed.
+- Header/trailer value spans exclude leading OWS, include trailing OWS, and end before CR is consumed.
+- Completion callbacks occur after all data fragments for that logical span and before its delimiter is consumed unless stated otherwise.
+- `headers-complete` occurs after the empty-line CRLF is consumed.
+- Fixed-length body data uses one span with no span-complete callback. Each nonempty chunk payload uses a separate body span with no span-complete callback. Chunk framing octets are never body data.
+- `chunk-header` occurs after every chunk-size line CRLF, including the zero chunk, and exposes the checked size field.
+- Chunk-extension name/value spans exclude their `;`/`=` delimiters and complete before the next delimiter or CR is consumed.
+- `chunk-complete` occurs for each nonzero chunk after the data-terminating CRLF is consumed. The zero chunk proceeds directly to trailers.
+- `message-complete` occurs after the fixed body, the empty-body header terminator, or the final trailer-section CRLF has been consumed.
+- Completion automatically resets explicit message fields and returns to request start without resetting the absolute stream offset.
+
+### 21.4 Fixture errors and precedence
+
+Stable fixture error codes include:
+
+- `invalid-method`;
+- `invalid-target`;
+- `invalid-version`;
+- `invalid-line-ending`;
+- `invalid-header-name`;
+- `invalid-header-value`;
+- `duplicate-content-length`;
+- `invalid-content-length`;
+- `content-length-overflow`;
+- `duplicate-transfer-encoding`;
+- `unsupported-transfer-encoding`;
+- `framing-conflict`;
+- `invalid-chunk-size`;
+- `chunk-size-overflow`;
+- `invalid-chunk-extension`;
+- `invalid-chunk-ending`;
+- `forbidden-trailer`;
+- `unexpected-eof`.
+
+Lexical errors win at the first offending unconsumed byte. Numeric overflow points at the digit that would overflow and leaves it unconsumed. Duplicate/conflicting framing errors occur at the between-byte boundary after the later header line's LF. A forbidden trailer is reported at the colon following the completed forbidden name. EOF in any non-idle state reports `unexpected-eof` at the final stream boundary.
+
+Before Milestone 8 implementation begins, tests must expand this catalog into a table mapping every fixture state family to its expected byte, boundary, or EOF error. The table is fixture-owned and does not become a generic byte-machine error catalog.
+
+### 21.5 Fixture implementation constraint
+
+The fixture must use only public graph, verification, compile, interpreter, and runtime APIs. All accept/reject choices, framing recognition, counters, and message-loop decisions live in declared graph nodes and fields.
+
+Fixture callbacks may only:
+
+- record observable events and copy span data for tests;
+- inspect read-only fields;
+- inject `continue`, `pause`, or explicit callback failure outcomes for lifecycle tests.
+
+Callbacks may not parse header contents, select body framing, mutate machine fields, or repair invalid input. Private normalized-IR constructors and emitter/runtime internals are prohibited.
+
+### 21.6 Required behavior summary
+
+The final v0.1 fixture demonstrates request lines, strict headers, checked fixed-length framing, the reduced chunk grammar and trailers, automatic message looping, multiple requests in one feed, arbitrary feed division, clean EOF only while idle, and stable error categories/positions.
+
+### 21.7 Intentional fixture exclusions
+
+- responses and status lines;
+- upgrades and CONNECT tunnel transition behavior;
+- lenient modes;
+- obsolete line folding;
+- complete RFC request-target validation;
+- all transfer-coding combinations;
+- production-grade duplicate `Content-Length` normalization;
+- keep-alive/connection policy;
+- configurable server limits;
+- request object construction;
+- public HTTP names or packages.
+
+Fixture files stay under `test/fixtures` and are never re-exported by a public byte-machine library.
+
+## 22. Testing Strategy
+
+### 22.1 TDD rule
+
+Each behavior begins with a failing test. Valid executable semantics are not complete until equivalent tests pass through:
+
+1. source-IR construction and verification;
+2. independent verified-source-IR interpretation;
+3. source emission;
+4. generated parser execution;
+5. interpreter/generated differential comparison.
+
+Refactoring follows green tests. No optimization is mixed into initial semantic implementation.
+
+Tests follow an ownership matrix:
+
+- invalid source graphs stop after structured verification failure and are never interpreted or emitted;
+- valid semantic features traverse verification, independent source interpretation, normalization, emission, generated execution, and differential comparison;
+- emitter formatting and ABI tests exercise compilation/emission without pretending to be parser-semantic tests;
+- runtime API/lifecycle misuse tests exercise the interpreter and generated runtime contracts at their owning layer;
+- portability wrapper tests exercise values across library boundaries.
+
+### 22.2 Dependency-free harness
+
+Vendor a small portable test harness rather than rely on SRFI-64 or an implementation package manager.
+
+Shared tests contain assertions and structured results. Thin Chez/Gambit runners provide imports, process exit, and implementation compilation steps.
+
+Fixtures construct bytes numerically or from an ASCII helper. Never rely on checkout line endings to preserve HTTP CRLF.
+
+### 22.3 Unit tests
+
+Cover:
+
+- every public constructor and accessor;
+- descriptor immutability by API;
+- verification pass successes and failures;
+- structured diagnostic codes and paths;
+- exact cursor advancement/reexecution;
+- sequence prefix resumption and mismatch;
+- field boundaries and overflow/underflow;
+- callback result validation;
+- span boundary, completion, pause, and error behavior;
+- counted consume with zero, partial, exact, and surplus input;
+- lifecycle transitions and sticky states;
+- reset and message-local field reset;
+- clean and truncated EOF;
+- deterministic normalization and emission.
+
+### 22.4 Interpreter/generated differential tests
+
+For the same machine and feed schedule compare:
+
+- result status;
+- per-feed `next` and consumed count;
+- absolute stream offset;
+- final state and fields;
+- callback order and results;
+- exact span fragment ranges/content;
+- pause continuations;
+- error domain, code, public source-node name, absolute position, and position kind;
+- stop/finish/reset behavior.
+
+### 22.5 Fragmentation tests
+
+For representative byte strings:
+
+- test every single split point;
+- include leading, trailing, and intermediate empty feeds;
+- feed through nonzero bytevector start/end indices;
+- reuse larger bytevectors containing unrelated prefix/suffix bytes;
+- test selected pairs of split points for short messages;
+- test deterministic random multi-split schedules.
+
+Interpreter and generated execution must have identical fragment boundaries for the same schedule.
+
+Across different feed schedules, compare a normalized semantic trace that coalesces fragments belonging to the same logical span. Fragment boundaries themselves are intentionally schedule-dependent.
+
+For malformed inputs, cross-schedule assertions compare acceptance, error category, and absolute error position. A partial span may have been flushed by an earlier feed boundary in one schedule but not another, so invalid-input callback prefixes are compared exactly only between interpreter and generated execution using the same schedule.
+
+### 22.6 Property tests
+
+Use a deterministic in-tree pseudo-random generator and print the seed on failure.
+
+Generate bounded small verified machines and inputs to compare interpreter/generated behavior. Include byte dispatches, reexecution, fields, callbacks, pauses, spans, EOF, and terminals as each feature becomes available.
+
+Generate invalid graphs separately to exercise verifier rejection. Never use an invalid graph to test executor behavior.
+
+### 22.7 All-byte tests
+
+Exercise all 256 byte values for byte classes, complements, exact transitions, ASCII helpers, and emitted literal handling.
+
+### 22.8 HTTP fixture tests
+
+Cover positive and negative examples for each fixture feature, exact events and positions, every split point for representative messages, and pipelined combinations.
+
+These expected HTTP traces are curated test expectations, not copied from or compared to llhttp.
+
+### 22.9 Determinism tests
+
+- Generate the same machine repeatedly in one process.
+- Generate under separate processes.
+- Generate under Chez and Gambit.
+- Generate in every Tier 1 OS cell and compare output byte for byte across implementations and operating systems.
+- Compile and execute each generated output.
+- Exercise every permitted identifier character plus rejected punctuation, uppercase, non-ASCII names, and non-ASCII static labels.
+- Reject every canonical reserved output binding under both Chez and Gambit, including portable syntax names, runtime exports, and emitter-template identifiers.
+
+### 22.10 Test exclusions
+
+- Do not compare implementation exception prose.
+- Do not use benchmark thresholds as correctness assertions in v0.1.
+- Do not make network access part of the normal test suite.
+- Do not require llhttp, Node.js, direct C bindings, or the future HTTP project. Native Gambit compilation may use the compiler toolchain required by Gambit itself.
+
+## 23. Benchmark and Optimization Policy
+
+### 23.1 v0.1 baseline
+
+v0.1 records compiled baselines but has no noisy CI performance gate.
+
+Measure where supported:
+
+- bytes per second;
+- fixture requests per second;
+- allocations or GC activity;
+- generated source size;
+- native compiled artifact size;
+- Scheme compile time;
+- generation time.
+
+Record:
+
+- Chez/Gambit version;
+- source or compiled mode;
+- compiler options;
+- OS and architecture;
+- CPU information when available;
+- fixture and input size;
+- warmup method, repetitions, median, and dispersion.
+
+The committed baseline artifact includes canonical workload bytes, deterministic seeds, harness version, exact commands, raw samples, summarized statistics, and a distinction between required metrics and metrics unavailable on a runtime.
+
+### 23.2 Workloads
+
+- short normal requests;
+- many small headers;
+- long method/target/header spans;
+- byte-at-a-time fragmentation;
+- fixed-length bodies;
+- chunked bodies;
+- pipelined requests;
+- early and late errors;
+- dense byte dispatch and sparse byte dispatch microbenchmarks;
+- long exact-sequence matching.
+
+### 23.3 Admission rule
+
+Transition tables, byte-class tables, trie specialization, sequence unrolling, peephole passes, unsafe primitives, or implementation-specific backends require:
+
+1. a reproducible compiled benchmark showing a repeatable material improvement on representative workloads or remedying a demonstrated performance problem;
+2. results on both Chez and Gambit where the change is portable;
+3. results showing no significant regression on another supported runtime/architecture;
+4. unchanged public and observable parser semantics;
+5. complete interpreter equivalence and conformance-suite success;
+6. documented complexity and maintenance cost.
+
+Do not set a percentage threshold until the v0.1 baselines establish normal variance. A single favorable microbenchmark is insufficient.
+
+Before admitting the first optimization, add a decision record that derives working definitions of “material improvement” and “significant regression” from observed baseline variance. Revisit those definitions when the harness or supported runtime set changes.
+
+## 24. CI and Build Strategy
+
+### 24.1 Portable entry points
+
+- Scheme test/generation programs are the source of truth.
+- `make` may provide developer convenience on Unix-like systems.
+- Windows must have native PowerShell or direct executable invocations; POSIX shell cannot be the only entry point.
+- No network access is required after supported Scheme implementations are installed.
+
+### 24.2 CI stages
+
+1. Source formatting/static repository checks.
+2. In every Tier 1 cell, assert the expected runtime, OS, and architecture.
+3. In every Tier 1 cell, load values across the graph/verify/compile/runtime library boundaries.
+4. In every Tier 1 cell, run shared source/interpreter unit tests.
+5. In every Tier 1 cell, generate the fixture parser and retain its bytes for cross-cell comparison.
+6. In every Tier 1 cell, perform applicable native compilation and run generated conformance/property tests.
+7. Compare generated output across every Tier 1 implementation/OS cell.
+8. Run benchmark smoke checks without pass/fail thresholds.
+9. Build and execute documentation examples.
+
+Tier 1 Gambit native jobs install and pin the C compiler, linker, SDK, and flags required by the selected Gambit release. The dependency-free source suite remains separately runnable without native compilation.
+
+### 24.3 Artifact discipline
+
+- Never commit native compiler output.
+- Keep implementation/version/OS/architecture outputs in distinct build directories.
+- Commit generated fixture source only if a later workflow demonstrates that review value outweighs stale-artifact risk. v0.1 should generate it during tests by default.
+- CI may retain generated source and diagnostics as failure artifacts.
+
+## 25. TDD Implementation Milestones
+
+Every milestone is a vertical slice with failing tests first. Later sessions should implement only one milestone or a clearly bounded subset at a time.
+
+### Milestone 0: Portability and harness spike
+
+Deliver:
+
+- pinned minimum Chez and Gambit versions;
+- confirmed R6RS/R7RS wrapper and include strategy;
+- shared hello-library body loaded through both wrappers;
+- a cross-library smoke path where one provisional owner wrapper constructs a placeholder tagged value, another wrapper recognizes it, and runtime singleton identity is retained across both imports;
+- tiny portable test harness and runners;
+- Scheme source-mode and native compile invocations;
+- Tier 1 CI feasibility notes;
+- deterministic text emission proof across Chez and Gambit;
+- identifier repertoire and binary LF emission proof across available operating systems;
+- documented Windows path and LF behavior.
+
+Exit criteria:
+
+- the same shared test body passes on both local/runtime environments available to the milestone;
+- CI design covers unavailable local platforms;
+- no semantic implementation is duplicated in wrappers.
+
+### Milestone 1: Minimal executable machine
+
+Scope:
+
+- immutable machine/node/edge/error descriptors;
+- symbolic name resolution;
+- exact-byte dispatch with explicit fallback;
+- advance/reexecute;
+- stop and sticky error;
+- minimal verification including reachability, zero-progress-cycle rejection, and generated-name safety for every construct present;
+- minimal reference interpreter;
+- minimal direct-code emitter and runtime;
+- deterministic output;
+- the required Chez and Gambit end-to-end examples from Section 9.6;
+
+First proving machine: accept one exact byte and stop; reject every other byte at the correct position.
+
+Exit criteria:
+
+- all 256 byte values tested;
+- interpreter/generated results match;
+- a graph descriptor can be constructed, verified, compiled, emitted, loaded, and run across the public library boundaries on both implementations;
+- invalid names, targets, overlap, fallback, and terminals are rejected.
+
+### Milestone 2: Incremental execution and lifecycle
+
+Scope:
+
+- arbitrary slices;
+- extend the Section 9.6 examples and their tests to feed a nonzero-offset slice;
+- `need-input`;
+- exact next/consumed/stream offsets;
+- explicit pause node and continuation;
+- resume;
+- reset;
+- finish and EOF edges;
+- sticky stopped/error/finished states;
+- API misuse and lifecycle conditions.
+
+Exit criteria:
+
+- every split point of short machines passes;
+- empty and nonzero-offset slices pass;
+- EOF distinguishes idle completion from truncation;
+- lifecycle transition table is fully tested.
+
+### Milestone 3: Byte classes and sequences
+
+Scope:
+
+- canonical byte sets, ranges, complements, and ASCII helper;
+- byte-class overlap verification;
+- exact sequence alternatives;
+- prefix normalization and resumable internal states;
+- mismatch positioning;
+- ambiguous-prefix rejection;
+- extension of zero-progress and EOF-cycle analysis to lowered sequence-prefix states.
+
+Exit criteria:
+
+- all-byte class tests pass;
+- every sequence split and mismatch position passes;
+- normalized output is deterministic;
+- consuming cycles pass and zero-progress cycles fail verification.
+
+### Milestone 4: Fields, actions, and branches
+
+Scope:
+
+- u8/u16/u32/u64 declarations and storage;
+- store/clear/inc/dec/add;
+- input-reading integer-accumulate nodes with digit, delimiter, overflow, and EOF paths;
+- flag set/clear;
+- equality, zero, range, and mask branches;
+- field diagnostics and callback-visible field accessors.
+
+Exit criteria:
+
+- boundary, overflow, and underflow tests for every width;
+- failed operations leave prior values unchanged;
+- interpreter/generated fields and traces match.
+
+### Milestone 5: Callbacks, poisoning, and spans
+
+Scope:
+
+- callback declarations and indexed binding;
+- event and decision callbacks;
+- continue/pause/branch/failure outcomes;
+- unexpected escape poisoning;
+- busy/reentrancy guards and callback-visible committed state;
+- one active named span;
+- boundary flush and completion;
+- pause-safe span internal continuations;
+- span dataflow verification.
+
+Exit criteria:
+
+- callback order and exact-once delivery tests pass;
+- fragment tests cover boundaries, pause, completion, error, EOF, and reset;
+- every invalid span topology is rejected;
+- parser input-retention tests demonstrate no bytevector reference is stored by the runtime after return.
+
+### Milestone 6: Counted consumption
+
+Scope:
+
+- bulk count-driven cursor movement;
+- partial/exact/surplus feeds;
+- span interaction;
+- pause at body fragment boundaries;
+- zero count;
+- EOF truncation;
+- counter type verification.
+
+Exit criteria:
+
+- counted consume does not dispatch once per body byte;
+- field, cursor, fragment, and offset results match the interpreter for every case;
+- surplus bytes continue immediately into the next node/message.
+
+### Milestone 7: Verification and generative hardening
+
+Scope:
+
+- generative and diagnostic hardening of all mandatory verification passes already introduced with their owning constructs;
+- structured graph paths in diagnostics;
+- generated-identifier collision checks;
+- bounded valid-machine generator;
+- bounded invalid-machine generator;
+- differential property suite;
+- deterministic failure seed reporting.
+
+Exit criteria:
+
+- every required diagnostic has positive and negative tests;
+- property suite runs under both implementations;
+- minimized/reproducible failure fixtures can be saved without external tooling.
+
+### Milestone 8: Private HTTP fixture
+
+Implement incrementally:
+
+1. request method and target spans;
+2. HTTP version and strict request-line CRLF;
+3. general header name/value spans;
+4. headers-complete and no-body message loop;
+5. case-insensitive fixture recognition of framing headers;
+6. checked `Content-Length` and fixed body;
+7. chunk size and chunk data;
+8. chunk extensions, zero chunk, and trailers;
+9. framing conflicts and malformed inputs;
+10. pipelined requests and clean idle EOF.
+
+Exit criteria:
+
+- the complete fixture behavior in Section 21 passes;
+- representative messages pass every split point;
+- interpreter and generated traces match;
+- the fixture remains private and no HTTP API leaks into public libraries.
+
+### Milestone 9: Cross-platform hardening and v0.1 release
+
+Scope:
+
+- complete Tier 1 CI;
+- source generation equality across implementations;
+- documentation and examples;
+- baseline benchmarks;
+- generated source readability review;
+- generated hot-path allocation audit and fixnum-sized allocation baseline;
+- changelog and release notes;
+- license/header review;
+- clean checkout build and test instructions.
+
+Exit criteria: all criteria in Section 26 are satisfied.
+
+## 26. v0.1 Release Criteria
+
+Release `0.1.0` only when:
+
+- every approved IR node has documented semantics;
+- mandatory verification is complete and emission cannot bypass it through the public API;
+- interpreter/generated differential tests pass;
+- lifecycle, callbacks, spans, fields, offsets, errors, EOF, and counted consumption meet this plan;
+- the private HTTP fixture meets its required behavior;
+- representative fixture inputs pass every split point;
+- deterministic generation passes between Chez and Gambit;
+- every Tier 1 matrix cell passes its required source, generation, native-compilation, and execution checks;
+- compiled benchmark baselines are recorded without speculative optimization;
+- generated per-byte paths contain no deliberate list/vector/string/result construction, and fixnum-sized allocation measurements are recorded with callbacks disabled;
+- public libraries and generated-runtime dependency boundaries are documented;
+- examples generate, compile, and run from a clean checkout;
+- `README.org` explains scope and quick start;
+- `CHANGELOG.md` contains the `0.1.0` entry;
+- no native build artifacts or unrelated HTTP/server code are committed.
+
+## 27. Documentation Deliverables
+
+Before v0.1, add:
+
+- concise README quick start;
+- source IR and builder reference;
+- transition/cursor semantics reference;
+- callback/span lifetime reference;
+- field and overflow reference;
+- verifier diagnostic catalog;
+- generated-code integration guide for Chez and Gambit;
+- grammar-author testing guide;
+- benchmark methodology and baseline report;
+- portability matrix and pinned runtime versions;
+- changelog.
+
+Examples must use the public procedural API, not private tagged-vector constructors.
+
+## 28. Risks and Mitigations
+
+### R6RS/R7RS module incompatibility
+
+Mitigation: wrapper-free shared bodies, thin wrappers, and Milestone 0 before substantive code.
+
+### Direct `case` performance differs between compilers
+
+Mitigation: correctness-first portable emitter, compiled baselines, and benchmark-gated transition-table or specialized backends.
+
+### Generated code becomes too large
+
+Mitigation: measure source/native size, keep normalization simple, and admit compact tables only with representative evidence.
+
+### u64 becomes a bignum on some runtimes
+
+Mitigation: exact portable semantics first, explicit preflight overflow checks, compiled benchmarks, and no word-size assumptions.
+
+### Pause repeats callbacks or loses bytes
+
+Mitigation: normalize callback/span substeps into explicit continuation states and assert exact event traces and offsets.
+
+### Span lifetime encourages accidental buffer retention
+
+Mitigation: dynamic-extent contract, no bytevector field in parser storage, retention tests, and explicit consumer documentation.
+
+### Sequence matching accidentally introduces backtracking
+
+Mitigation: deterministic prefix lowering, no rewind operation, explicit mismatch semantics, and split/mismatch tests.
+
+### Verification becomes monolithic
+
+Mitigation: independent pure passes returning structured analyses and diagnostics.
+
+### HTTP fixture turns into a second HTTP project
+
+Mitigation: keep it private, retain the explicit exclusions, and move llhttp/RFC compatibility work to the separate parser repository.
+
+### Cross-platform CI availability is incomplete
+
+Mitigation: tiered support, document missing runners/toolchains, use portable test entry points, and avoid claiming untested combinations as release-gated.
+
+### Determinism differs across Scheme writers
+
+Mitigation: canonical project-owned encoding and emitter; never use implementation object rendering for generated source.
+
+## 29. Deferred Extensions
+
+The following require evidence from the separate HTTP project or benchmarks:
+
+- thin `syntax-rules` grammar sugar;
+- multiple concurrent or nested spans;
+- reusable graph-fragment namespacing/composition;
+- additional field types or opaque machine fields;
+- custom action extension mechanism;
+- transition tables or class tables;
+- sequence/trie specialization and peephole optimization;
+- Chez-specific or Gambit-specific emitters;
+- unsafe arithmetic or bytevector operations;
+- graph/DOT visualization;
+- a serialized IR format;
+- a general-purpose CLI;
+- stable generated-source ABI beyond the runtime/IR version contract;
+- warning policies for unreachable fragment nodes;
+- a production HTTP grammar.
+
+Every deferred performance feature is subject to Section 23. Every deferred semantic feature requires interpreter semantics, verification rules, generated parity, documentation, and tests before admission.
+
+## 30. Early Spike Questions
+
+These are implementation facts to resolve in Milestone 0, not open architecture decisions:
+
+1. Which minimum Chez and Gambit releases reliably provide the selected module/include and bytevector surface?
+2. What exact source and native compiler commands work consistently on each Tier 1 platform?
+3. How should relative includes and library search paths be arranged on Windows?
+4. Which portable condition construction is exposed by the wrappers?
+5. Which allocation/GC metrics can the benchmark harness collect consistently?
+6. What identifier length and source-size limits appear in supported compilers?
+7. Does the initial direct `case` layout reveal a correctness-neutral compiler issue requiring an early portable layout adjustment?
+
+Answers must be recorded in documentation and tests. They do not authorize implementation-specific semantics or backends.
+
+## 31. Handoff Rules for Later Sessions
+
+Before implementing a milestone, a later session should:
+
+1. Read this plan and the parent HTTP server architecture.
+2. Confirm the previous milestone's exit criteria.
+3. Select one bounded vertical slice.
+4. Add failing tests first.
+5. Implement reference semantics before or alongside generated semantics.
+6. Run the shared suite in every locally available implementation mode.
+7. Record unavailable matrix coverage rather than assuming it passed.
+8. Avoid deferred features unless their admission criteria have been satisfied.
+9. Update documentation when a public contract becomes executable.
+10. Add the appropriate `CHANGELOG.md` entry for a release.
+
+The plan favors a small, explicit machine whose correctness is easy to inspect. Generality and specialization are earned by the real HTTP parser and measured performance, not anticipated in advance.
