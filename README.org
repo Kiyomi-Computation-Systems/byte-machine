@@ -19,7 +19,7 @@ architecture, and milestones.
 
 ** Requirements
 
-- CMake 3.26 or newer
+- CMake 3.26 or newer (only 4.3.3 has been exercised so far)
 - Chez Scheme 10.4.1 or newer, full system rather than Petite
 - Gambit 4.9.8 or newer
 

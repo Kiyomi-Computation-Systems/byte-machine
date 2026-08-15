@@ -66,9 +66,15 @@ Measured on Darwin 25.5.0 arm64, 2026-08-15:
   to Ghostscript's binary — the state a host would be in if Gambit's keg *were*
   linked — and refused with a nonzero exit and the Ghostscript-specific
   diagnostic.
+- Discovery was run with a non-Chez `scheme` earlier on PATH than a working
+  `chez`, and selected the `chez`. With all three candidate names unusable — a
+  non-Chez `scheme`, a `chez` that exits nonzero, and a `chezscheme` that aborts
+  — it failed once, naming each candidate and its own reason.
 - The functional core of each module is specified under `cmake -P` with no
-  runtime present, and a 15-mutation suite confirmed the specifications catch
-  removal of every identity, version, and derivation check.
+  runtime present, and `test/support/cmake/MutationSuite.cmake` breaks each
+  decision in turn on a staged copy and requires the owning specification to
+  notice. It runs in CI as
+  `byte-machine.harness.cmake-mutation.cmake.direct`.
 
 ## Consequences
 
@@ -76,11 +82,24 @@ Measured on Darwin 25.5.0 arm64, 2026-08-15:
   Gambit 4.9.8) rather than to a guess. Parent plan section 30 question 1 asks
   what the real floors are; lowering these pins is that question's answer and
   needs CI evidence from the older release.
-- One mutation is knowingly uncaught. CMake 4.3.3 clears `CMAKE_MATCH_<n>` when
-  a match fails, so on this version the stale-capture hazard the probe accessor
-  guards against cannot be provoked. The guard stays because the declared CMake
-  floor is 3.26, where older behaviour is in range. This is recorded in the
-  specification next to the assertion rather than left as a silent gap.
+- One mutation is knowingly uncaught, and is declared as such in the suite with
+  `EXPECT_SURVIVES`. CMake 4.3.3 clears `CMAKE_MATCH_<n>` when a match fails, so
+  on this version the stale-capture hazard the probe accessor guards against
+  cannot be provoked. The guard stays because the declared CMake floor is 3.26,
+  where older behaviour is in range. Declaring it rather than omitting it means
+  the suite fails if it ever *starts* being caught, which is the signal that this
+  paragraph has gone stale.
+- **The 3.26 floor is declared, not exercised.** Only CMake 4.3.3 has ever run
+  this build, and the paragraph above depends on 3.26-era behaviour differing.
+  Until CI runs the declared floor, that is an argument, not evidence. Raising
+  the floor to a version known to clear match variables would let the guard and
+  its mutation be deleted outright.
+- The mutation suite is the reason this record can be trusted at all. An earlier
+  revision of this file cited a hand-run mutation check as evidence; that check
+  lived only in a terminal, could not be rerun, and could not fail when the code
+  changed. It had also missed its most important case, because it mutated only
+  the modules and never the assertion helper every specification depends on --
+  breaking that helper left all four specifications green.
 - A `no-scheme` preset configures and runs the CMake-layer specifications with
   neither runtime installed, so build-layer logic stays testable in environments
   that have no Scheme at all.

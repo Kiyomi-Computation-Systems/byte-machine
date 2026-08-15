@@ -83,6 +83,56 @@ byte_machine_chez_identity(
 spec_check_equal("${th}" "no" "a nonthreaded build is accepted and reported")
 spec_check_equal("${v}" "10.4.1" "a nonthreaded build still yields its version")
 
+# --- The classifier is non-fatal -------------------------------------------
+#
+# Discovery tries candidate names in turn, so a rejection has to be a returned
+# verdict rather than a raised error. If any of these fataled, the spec would
+# abort here rather than fail an assertion -- so their running to completion at
+# all is part of what is being checked.
+#
+# These also pin the status symbols, which is what the search branches on.
+# Asserting only the message would let a status typo route a rejected candidate
+# into the accepted path.
+
+byte_machine_chez_classify("${good_output}" "/opt/homebrew/bin/chez"
+  st msg fv v mt th)
+spec_check_equal("${st}" "ok" "a usable runtime classifies ok")
+spec_check_equal("${msg}" "" "an accepted runtime carries no rejection message")
+spec_check_equal("${v}" "10.4.1" "an accepted runtime still yields its version")
+
+byte_machine_chez_classify(
+  "full-version=guile (GNU Guile) 3.0.10\nmachine-type=unknown\nthreaded=yes"
+  "/usr/bin/scheme" st msg fv v mt th)
+spec_check_equal("${st}" "not-chez" "an unrelated implementation classifies not-chez")
+
+byte_machine_chez_classify(
+  "full-version=Petite Chez Scheme Version 10.4.1\nmachine-type=tarm64osx\nthreaded=yes"
+  "/opt/homebrew/bin/petite" st msg fv v mt th)
+spec_check_equal("${st}" "petite" "Petite classifies petite")
+
+byte_machine_chez_classify(
+  "full-version=Chez Scheme Version 9.5.8\nmachine-type=ta6osx\nthreaded=yes"
+  "/usr/bin/scheme" st msg fv v mt th)
+spec_check_equal("${st}" "too-old" "an old release classifies too-old")
+
+byte_machine_chez_classify("GPL Ghostscript 10.07.1" "/opt/homebrew/bin/gsc"
+  st msg fv v mt th)
+spec_check_equal("${st}" "missing-field" "output with no fields classifies missing-field")
+
+# A runtime that answers the banner but not the rest is not usable, and must not
+# be reported as ok with empty fields.
+byte_machine_chez_classify(
+  "full-version=Chez Scheme Version 10.4.1\nmachine-type=tarm64osx"
+  "/usr/bin/scheme" st msg fv v mt th)
+spec_check_equal("${st}" "missing-field" "a truncated probe answer classifies missing-field")
+
+# Outputs are cleared on rejection, so a caller looping over candidates cannot
+# read the previous candidate's version as if it belonged to this one.
+byte_machine_chez_classify("${good_output}" "/opt/homebrew/bin/chez" st msg fv v mt th)
+byte_machine_chez_classify("nothing useful" "/usr/bin/scheme" st msg fv v mt th)
+spec_check_equal("${v}" "" "a rejected candidate does not retain the previous version")
+spec_check_equal("${fv}" "" "a rejected candidate does not retain the previous banner")
+
 # --- Negative cases --------------------------------------------------------
 
 set(negative_cases

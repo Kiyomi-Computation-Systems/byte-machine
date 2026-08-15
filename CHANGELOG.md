@@ -22,3 +22,17 @@ what this milestone delivers.
   duplicate-name rejection, and mandatory timeouts at configure time.
 - Specifications for the functional core of every build-layer module, runnable
   under `cmake -P` with no Scheme runtime present.
+- A mutation suite that breaks each decision in each module on a staged copy and
+  requires the owning specification to notice, so "the specifications pass" is a
+  claim the repository can check rather than one it merely asserts.
+- A specification for the shared assertion helper itself, which every other
+  specification depends on and none of them could have caught breaking.
+- `.gitattributes` normalizing the repository to LF and marking fixture trees
+  binary, since generated-source comparison and CRLF-framed HTTP fixtures both
+  depend on exact bytes.
+
+### Changed
+
+- Chez discovery now probes each candidate name in turn instead of committing to
+  the first one `find_program` returns. A host with an unrelated `scheme` earlier
+  on PATH than its Chez previously failed to configure.
