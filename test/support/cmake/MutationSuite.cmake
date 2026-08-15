@@ -293,6 +293,22 @@ byte_machine_mutation(
   FIND [[  if(feature MATCHES "^-|-$")]]
   REPLACE [[  if(FALSE)]])
 
+byte_machine_mutation(
+  FILE cmake/ByteMachineProbe.cmake SPEC ByteMachineProbeSpec.cmake
+  LABEL "probe: the optional accessor's clearing branch is deleted, leaving the output untouched"
+  FIND [[  else()
+    set(${out_var} "" PARENT_SCOPE)
+  endif()]]
+  REPLACE [[  endif()]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
+  LABEL "gambit: unset GAMBIT_HOME contributes a bare /bin hint outranking PATH"
+  FIND [[  if(DEFINED ENV{GAMBIT_HOME} AND NOT "$ENV{GAMBIT_HOME}" STREQUAL "")]]
+  REPLACE [[  if(TRUE)]]
+  EXPECT_SURVIVES
+    "lives in the discovery macro, which runs processes and reads the real environment; it is covered by configure-time behaviour, not by the cmake -P specifications")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 message(STATUS "byte-machine-spec: mutation suite complete")

@@ -41,6 +41,16 @@ probe script that prints `key=value` lines, and identity is decided on the
    version, target triple, **and** build stamp.
 3. Both probes carry a 20-second timeout, because a binary that waits for input
    is one of the failure modes.
+3b. **A candidate is cached only once it has passed.** `find_program` writes its
+   result to the cache on sight, and CMake writes `CMakeCache.txt` even for a
+   configure that failed — so caching before validating means a rejected path
+   outlives the failure, the search is skipped next time, and a user who has
+   since fixed their environment still sees a stale error about a binary they no
+   longer have. Both modules search with `NO_CACHE` and write the cache entry
+   only after the probe validates the candidate.
+3c. **Search hints are guarded.** Hints are searched before `PATH`, so each one
+   asserts that a location outranks the user's own environment. An unset
+   `GAMBIT_HOME` would otherwise contribute the literal hint `/bin`.
 4. Version pins are **floors**, not equalities, since the parent plan's Tier 2
    matrix explicitly includes additional implementation versions.
 
@@ -82,10 +92,18 @@ Measured on Darwin 25.5.0 arm64, 2026-08-15:
   Gambit 4.9.8) rather than to a guess. Parent plan section 30 question 1 asks
   what the real floors are; lowering these pins is that question's answer and
   needs CI evidence from the older release.
-- One mutation is knowingly uncaught, and is declared as such in the suite with
-  `EXPECT_SURVIVES`. CMake 4.3.3 clears `CMAKE_MATCH_<n>` when a match fails, so
-  on this version the stale-capture hazard the probe accessor guards against
-  cannot be provoked. The guard stays because the declared CMake floor is 3.26,
+- Two mutations are knowingly uncaught, and both are declared in the suite with
+  `EXPECT_SURVIVES` rather than omitted. The first: CMake 4.3.3 clears
+  `CMAKE_MATCH_<n>` when a match fails, so on this version an accessor returning
+  the stale capture is indistinguishable from one returning empty. That
+  exemption covers only *what value* the clearing branch writes — not whether it
+  runs at all, which is version-independent and is caught. Stating it loosely
+  would have concealed a real defect: the assertion originally compared an
+  output against `""` without seeding it, so deleting the branch outright left
+  the spec green. The second: the `GAMBIT_HOME` hint guard lives in the
+  discovery macro, which reads the real environment and runs processes, so it is
+  covered by configure-time behaviour rather than by the `cmake -P`
+  specifications. The guard stays because the declared CMake floor is 3.26,
   where older behaviour is in range. Declaring it rather than omitting it means
   the suite fails if it ever *starts* being caught, which is the signal that this
   paragraph has gone stale.

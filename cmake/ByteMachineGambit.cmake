@@ -244,19 +244,36 @@ function(byte_machine_gambit_probe binary extra_args out_output)
 endfunction()
 
 macro(byte_machine_gambit_discover)
-  if(NOT BYTE_MACHINE_GAMBIT_EXECUTABLE)
-    find_program(BYTE_MACHINE_GAMBIT_EXECUTABLE
-      NAMES gsi
-      HINTS
-        /opt/homebrew/opt/gambit-scheme/bin
-        /usr/local/opt/gambit-scheme/bin
-        /opt/gambit/bin
-        /usr/local/Gambit/bin
-        "$ENV{GAMBIT_HOME}/bin"
-      DOC "Gambit Scheme interpreter (gsi). Must be ${BYTE_MACHINE_GAMBIT_MINIMUM_VERSION} or newer.")
+  # Hints are searched before PATH, so each one is a claim that a path is more
+  # authoritative than the user's own environment. An unset GAMBIT_HOME would
+  # otherwise contribute the literal hint "/bin", quietly outranking PATH for
+  # anything named gsi that happens to live there.
+  set(_byte_machine_gambit_hints
+    /opt/homebrew/opt/gambit-scheme/bin
+    /usr/local/opt/gambit-scheme/bin
+    /opt/gambit/bin
+    /usr/local/Gambit/bin)
+  if(DEFINED ENV{GAMBIT_HOME} AND NOT "$ENV{GAMBIT_HOME}" STREQUAL "")
+    list(INSERT _byte_machine_gambit_hints 0 "$ENV{GAMBIT_HOME}/bin")
   endif()
 
-  if(NOT BYTE_MACHINE_GAMBIT_EXECUTABLE)
+  if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
+    set(_byte_machine_gsi "${BYTE_MACHINE_GAMBIT_EXECUTABLE}")
+    set(_byte_machine_gsi_searched FALSE)
+  else()
+    # NO_CACHE, and the cache entry is written only after the candidate passes.
+    # find_program caches on sight, and CMake writes CMakeCache.txt even for a
+    # configure that failed -- so caching first means a rejected path outlives
+    # the failure, the search is skipped on the next run, and a user who has
+    # since fixed their environment still sees a stale error about a binary they
+    # no longer have. ByteMachineChez.cmake had the same defect and this mirrors
+    # its fix.
+    unset(_byte_machine_gsi)
+    find_program(_byte_machine_gsi NAMES gsi HINTS ${_byte_machine_gambit_hints} NO_CACHE)
+    set(_byte_machine_gsi_searched TRUE)
+  endif()
+
+  if(NOT _byte_machine_gsi)
     message(FATAL_ERROR
       "byte-machine: no Gambit interpreter found. Looked for 'gsi' on PATH and "
       "in the usual package prefixes. Install Gambit "
@@ -266,22 +283,27 @@ macro(byte_machine_gambit_discover)
       "Ghostscript installed that name resolves to a PostScript interpreter.")
   endif()
 
-  if(NOT EXISTS "${BYTE_MACHINE_GAMBIT_EXECUTABLE}")
+  if(NOT EXISTS "${_byte_machine_gsi}")
     message(FATAL_ERROR
-      "byte-machine: the Gambit interpreter '${BYTE_MACHINE_GAMBIT_EXECUTABLE}' "
+      "byte-machine: the Gambit interpreter '${_byte_machine_gsi}' "
       "does not exist. BYTE_MACHINE_GAMBIT_EXECUTABLE must be an absolute path "
       "to 'gsi'.")
   endif()
 
-  # The interpreter is interrogated before anything is derived from it. Deriving
-  # first meant a Ghostscript 'gsi' produced "the Gambit compiler ... does not
-  # exist", sending the reader after a path that was never the problem; decision
-  # record 0001 says identity is decided on probe content, so that has to happen
-  # before the derivation it justifies.
-  byte_machine_gambit_probe("${BYTE_MACHINE_GAMBIT_EXECUTABLE}" "" _byte_machine_gsi_output)
+  # The interpreter is interrogated before anything is derived from it, and
+  # before it is cached. Deriving first meant a Ghostscript 'gsi' produced "the
+  # Gambit compiler ... does not exist", sending the reader after a path that was
+  # never the problem; decision record 0001 says identity is decided on probe
+  # content, so that has to happen before the derivation it justifies.
+  byte_machine_gambit_probe("${_byte_machine_gsi}" "" _byte_machine_gsi_output)
   byte_machine_gambit_identity(
-    "${_byte_machine_gsi_output}" "${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
+    "${_byte_machine_gsi_output}" "${_byte_machine_gsi}"
     BYTE_MACHINE_GAMBIT_VERSION BYTE_MACHINE_GAMBIT_TARGET BYTE_MACHINE_GAMBIT_STAMP)
+
+  if(_byte_machine_gsi_searched)
+    set(BYTE_MACHINE_GAMBIT_EXECUTABLE "${_byte_machine_gsi}" CACHE FILEPATH
+      "Gambit Scheme interpreter (gsi). Must be ${BYTE_MACHINE_GAMBIT_MINIMUM_VERSION} or newer.")
+  endif()
 
   byte_machine_gambit_compiler_for(
     "${BYTE_MACHINE_GAMBIT_EXECUTABLE}"

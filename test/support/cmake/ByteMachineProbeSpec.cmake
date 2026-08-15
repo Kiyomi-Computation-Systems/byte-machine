@@ -86,16 +86,26 @@ spec_check_equal("${v}" "CC=gcc-16" "value containing an equals sign")
 #
 # MEASURED LIMIT OF THIS ASSERTION
 #
-# CMake 4.3.3 clears CMAKE_MATCH_<n> when a match fails, so on this version the
-# stale-capture hazard cannot occur and this case cannot distinguish an accessor
-# that clears explicitly from one that does not -- a mutation removing the
-# explicit clear survives here. The clear stays because the project's declared
-# floor is CMake 3.26, where older behaviour is in range; it is defensive code
-# for versions this host cannot exercise, not dead code. If the floor is ever
-# raised past the version that changed this, revisit both the clear and this
-# comment.
+# CMake 4.3.3 clears CMAKE_MATCH_<n> when a match fails, so on this version an
+# accessor that returned CMAKE_MATCH_2 instead of "" is indistinguishable from
+# one that returns "": that specific mutation survives, and is declared as
+# EXPECT_SURVIVES in the mutation suite. The clear stays because the project's
+# declared floor is CMake 3.26, where older behaviour is in range; it is
+# defensive code for versions this host cannot exercise, not dead code.
+#
+# The exemption is narrow, and it is worth being precise about why. It covers
+# only *what value* the branch writes. It does not cover whether the branch runs
+# at all: deleting it leaves the output variable untouched, which is a
+# version-independent defect and is caught here by the seeding above. Widening
+# the recorded limitation to "the clear cannot be tested" would have hidden
+# that.
 string(REGEX MATCH "(machine-type)=(tarm64osx)" _ "${good_output}")
 spec_check_equal("${CMAKE_MATCH_2}" "tarm64osx" "precondition: CMAKE_MATCH_2 is dirty")
+# Seeded first. Asserting that an output is empty proves nothing when an unset
+# variable is also empty: without this, an accessor that simply never writes the
+# output satisfies the assertion exactly as well as one that clears it, and
+# deleting the clearing branch outright leaves this spec green.
+set(absent "<<unwritten>>")
 byte_machine_probe_field_optional("${good_output}" "architecture" absent)
 spec_check_equal("${absent}" "" "an absent optional field yields empty, not the stale match")
 
