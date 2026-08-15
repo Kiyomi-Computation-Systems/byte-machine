@@ -1,0 +1,81 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 26, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "dev",
+      "displayName": "Development (tests on)",
+      "binaryDir": "${sourceDir}/build/dev",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BYTE_MACHINE_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "prod",
+      "displayName": "Production (tests on)",
+      "binaryDir": "${sourceDir}/build/prod",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BYTE_MACHINE_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "no-scheme",
+      "displayName": "CMake-layer specifications only (no Scheme runtime required)",
+      "binaryDir": "${sourceDir}/build/no-scheme",
+      "cacheVariables": {
+        "BYTE_MACHINE_BUILD_TESTS": "ON",
+        "BYTE_MACHINE_REQUIRE_CHEZ": "OFF",
+        "BYTE_MACHINE_REQUIRE_GAMBIT": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "dev", "configurePreset": "dev" },
+    { "name": "prod", "configurePreset": "prod" },
+    { "name": "no-scheme", "configurePreset": "no-scheme" }
+  ],
+  "testPresets": [
+    {
+      "name": "harness",
+      "displayName": "Harness and build-layer self-tests only",
+      "configurePreset": "dev",
+      "filter": { "include": { "label": "^harness$" } },
+      "output": {
+        "outputOnFailure": true,
+        "outputJUnitFile": "${sourceDir}/build/dev/test-results/harness.xml"
+      }
+    },
+    {
+      "name": "pr",
+      "displayName": "Pull-request selection",
+      "configurePreset": "dev",
+      "filter": {
+        "include": { "label": "^(harness|unit|verify|differential|determinism|portability|example|expected-red)$" }
+      },
+      "output": {
+        "outputOnFailure": true,
+        "outputJUnitFile": "${sourceDir}/build/dev/test-results/pr.xml"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Complete selection",
+      "configurePreset": "dev",
+      "output": {
+        "outputOnFailure": true,
+        "outputJUnitFile": "${sourceDir}/build/dev/test-results/release.xml"
+      }
+    },
+    {
+      "name": "no-scheme",
+      "displayName": "CMake-layer specifications only",
+      "configurePreset": "no-scheme",
+      "output": {
+        "outputOnFailure": true,
+        "outputJUnitFile": "${sourceDir}/build/no-scheme/test-results/no-scheme.xml"
+      }
+    }
+  ]
+}

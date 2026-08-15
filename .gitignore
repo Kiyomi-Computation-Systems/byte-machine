@@ -1,0 +1,24 @@
+# Build trees. All generated objects and binaries live here, partitioned by
+# runtime, runtime version, OS, and architecture; they never share source
+# directories and are never shared between runtimes (parent plan section 8).
+/build/
+/build-*/
+
+# Developer-local preset overrides
+CMakeUserPresets.json
+
+# Compiled Scheme objects must never appear in a source directory. Chez's
+# compile-library and compile-program both emit .so, and Gambit emits .o1 and
+# intermediate .c; a stale object found in tree is a correctness hazard, not
+# just a commit hazard, because a lane could load it instead of the body the
+# build staged.
+*.so
+*.o1
+*.o
+*.wpo
+
+# Editor and platform noise
+.DS_Store
+*~
+\#*\#
+.\#*
