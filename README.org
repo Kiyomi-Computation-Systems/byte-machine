@@ -49,10 +49,10 @@ make test
 
 Other targets: =make doctor= reports the discovered toolchains and stops,
 =make dev= builds and runs the harness selection (the build-layer
-specifications together with the Chez and Gambit self-test lanes), =make
-test-all= runs the complete selection, =make prod= builds the release
-configuration, and =make clean= removes the build trees. =make help= lists
-them.
+specifications, the Chez and Gambit self-test lanes, and the Scheme mutation
+suite), =make test-all= runs the complete selection, =make prod= builds the
+release configuration, and =make clean= removes the build trees. =make help=
+lists them.
 
 The presets work identically without =make=, which matters on Windows:
 

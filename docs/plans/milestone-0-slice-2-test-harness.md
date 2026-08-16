@@ -191,7 +191,7 @@ runtimes must export exactly these names, with the same arity and the same meani
 | `(adapter-flush-output)` | unspecified |
 
 Both adapters additionally re-export `modulo`, `quotient`, and `remainder`, which the shared
-runner body calls directly. R6RS keeps them outside `(rnrs)`, so Chez imports them from
+test bodies call directly. R6RS keeps them outside `(rnrs)`, so Chez imports them from
 `(rnrs r5rs)`; R7RS already provides them in `(scheme base)`, but Gambit re-exports them too, so
 the shared body does not need to know which runtime supplies them natively.
 
@@ -361,8 +361,10 @@ Four layers, ordered by independence. Each depends on strictly less than the one
 3. **Self-tests.** The full suite, using `harness-probe` to observe failing checks without those
    failures counting against the run. Covers recording, counting, classification, filtering,
    `with-cleanup`, and `check-raises`.
-4. **Scheme mutation suite.** Breaks each decision in `harness-runner.scm` on a staged copy; the Chez
-   source self-test lane must fail.
+4. **Scheme mutation suite.** Breaks each decision in `harness-runner.scm` on a staged copy and checks
+   it against whichever lane can witness it: the self-tests for most decisions, the bootstrap lane for
+   the failure counter every assertion reports through, and the empty-selection lane for the
+   environment read no in-process assertion can reach.
 
 ### 9.1 Adapter name parity
 
@@ -388,6 +390,7 @@ At minimum, one per decision in the runner:
 - `check-raises` accepting a thunk that returns normally;
 - `with-cleanup` swallowing the original raise, or not running cleanup after a raise;
 - empty-selection detection removed;
+- `harness-begin` ignoring `BYTE_MACHINE_TEST_FILTER` from the environment;
 - exit-status precedence changed so a failure outranks a harness error;
 - probe state not restored, or probe output not suppressed;
 - an export deleted from each adapter (§9.1).
