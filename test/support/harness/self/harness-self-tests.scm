@@ -350,8 +350,19 @@
         (check-not-equal "the os is identified" (adapter-os) "unknown")
         (check-not-equal "the architecture is identified"
                          (adapter-architecture) "unknown")
-        (check-equal "the launcher declared the mode"
+        (check-equal "the mode is declared by the lane registration"
                      (adapter-execution-mode) "source")))
+
+    ;; adapter-exit ends the process, so no assertion may call it. Naming it is
+    ;; still load-bearing: the parity argument in spec section 9.1 rests on this
+    ;; body referencing every adapter name, and until this case existed
+    ;; adapter-exit was the one name it missed -- its only other uses are inside
+    ;; harness-runner.scm, which `include` splices into the library, so they
+    ;; resolve whatever the export list says. Dropping it from one adapter left
+    ;; this body loading and passing on that runtime.
+    (harness-case "the adapter can end the process"
+      (lambda ()
+        (check "adapter-exit is reachable" (procedure? adapter-exit))))
 
     (harness-case "the adapter reaches the process environment"
       (lambda ()
