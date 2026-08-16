@@ -150,3 +150,47 @@ byte_machine_add_scheme_lane(
   TIMEOUT 120
   LABELS expected-red
   ENVIRONMENT "BYTE_MACHINE_TEST_FILTER=no-case-has-this-in-its-name")
+
+# --- Gambit lanes ------------------------------------------------------------
+#
+# The same five bodies as above, unchanged, run through the Gambit adapter
+# instead of the Chez one. This is the parity proof the milestone exists to
+# establish: one wrapper-free body, two runtimes, no duplicated test
+# semantics. See the rationale comments on the Chez lanes above for why each
+# body exists; only the runtime differs here.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.bootstrap.gambit.source
+  BACKEND gambit
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.gambit.scm"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.self.gambit.source
+  BACKEND gambit
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.gambit.scm"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.failing-body.gambit.source
+  BACKEND gambit
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.gambit.scm"
+  EXPECT_EXIT 1
+  TIMEOUT 120
+  LABELS expected-red)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.duplicate-case.gambit.source
+  BACKEND gambit
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-duplicate-case.gambit.scm"
+  EXPECT_EXIT 2
+  TIMEOUT 120
+  LABELS expected-red)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.empty-selection.gambit.source
+  BACKEND gambit
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-empty-selection.gambit.scm"
+  EXPECT_EXIT 2
+  TIMEOUT 120
+  LABELS expected-red
+  ENVIRONMENT "BYTE_MACHINE_TEST_FILTER=no-case-has-this-in-its-name")
