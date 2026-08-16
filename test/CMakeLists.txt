@@ -208,6 +208,84 @@ byte_machine_add_scheme_lane(
   LABELS expected-red
   ENVIRONMENT "BYTE_MACHINE_TEST_FILTER=no-case-has-this-in-its-name")
 
+# --- The Chez launcher's refusals ------------------------------------------
+#
+# The launcher decides whether a lane runs at all, and its object guard is the
+# sole mechanism that makes `mode=source` an honest claim. Three places in this
+# tree say so -- the spec's section 7.1, ByteMachineSchemeLane.cmake, and the
+# Chez adapter -- and until these lanes existed none of them checked it: every
+# decision in the launcher could be deleted, and a file dropped into the guard
+# directory, with all twenty tests still green, because a healthy lane never
+# reaches a refusal.
+#
+# One lane per `die` path, each asserting status 2 exactly. Registered through
+# the exact-status helper directly rather than through
+# byte_machine_add_scheme_lane, whose whole purpose is to build the one correct
+# command line; these three need deliberately wrong ones. Guarded on a
+# discovered Chez the same way the mutation suite below is, so
+# `ctest --preset no-scheme` stays green on a host with no Scheme runtime.
+if(BYTE_MACHINE_CHEZ_EXECUTABLE)
+  # A guard directory that has acquired a file is no longer a guard. The file is
+  # written into the build tree rather than committed: a file checked into the
+  # source tree solely to make a directory non-empty is one every future glob,
+  # packaging step, and reader has to be told to ignore.
+  set(BYTE_MACHINE_HARNESS_DIRTY_GUARD_DIR
+      "${CMAKE_BINARY_DIR}/chez-object-guard-dirty")
+  file(MAKE_DIRECTORY "${BYTE_MACHINE_HARNESS_DIRTY_GUARD_DIR}")
+  file(WRITE "${BYTE_MACHINE_HARNESS_DIRTY_GUARD_DIR}/stray-object.so"
+    "Not a compiled library. Its only job is to stop this directory being empty,\n"
+    "so byte-machine.harness.launcher-dirty-guard.chez.source can prove the\n"
+    "launcher refuses a guard directory that has acquired a file.\n")
+
+  # Deliberately never created. The launcher must refuse a guard directory that
+  # is not there rather than assume it, since `directory-list` on a missing path
+  # raises and would report a crash where a named harness error belongs.
+  set(BYTE_MACHINE_HARNESS_ABSENT_GUARD_DIR
+      "${CMAKE_BINARY_DIR}/chez-object-guard-absent")
+
+  # Three arguments where the launcher takes four.
+  byte_machine_add_exit_code_test(
+    NAME byte-machine.harness.launcher-usage.chez.source
+    COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+            "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
+            "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+            "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
+    EXPECT_EXIT 2
+    TIMEOUT 120
+    LABELS expected-red)
+
+  # The remaining two name a real program, so that deleting the refusal they
+  # assert produces a lane that runs and exits 0 rather than one that fails for
+  # an unrelated reason. The execution mode is declared for the same reason: it
+  # is what the bootstrap would assert if it ever got that far.
+  byte_machine_add_exit_code_test(
+    NAME byte-machine.harness.launcher-absent-guard.chez.source
+    COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+            "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
+            "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+            "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            "${BYTE_MACHINE_HARNESS_ABSENT_GUARD_DIR}"
+            "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+    EXPECT_EXIT 2
+    TIMEOUT 120
+    LABELS expected-red
+    ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source")
+
+  byte_machine_add_exit_code_test(
+    NAME byte-machine.harness.launcher-dirty-guard.chez.source
+    COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+            "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
+            "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+            "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            "${BYTE_MACHINE_HARNESS_DIRTY_GUARD_DIR}"
+            "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+    EXPECT_EXIT 2
+    TIMEOUT 120
+    LABELS expected-red
+    ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source")
+endif()
+
 # --- Mutation proof for the harness ----------------------------------------
 
 # The harness is the instrument every later milestone is measured with, so a

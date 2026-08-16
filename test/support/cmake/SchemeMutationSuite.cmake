@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FOUR PASSES, BECAUSE FOUR DIFFERENT WITNESSES ARE NEEDED
+# EIGHT PASSES, BECAUSE EIGHT DIFFERENT WITNESSES ARE NEEDED
 #
 # Pass 1 runs the Chez self-tests lane against the shared runner body. That body
 # is identical text on both runtimes, so verifying it on a second runtime would
@@ -29,6 +29,16 @@
 # failing suite prints its FAIL lines and still exits 0. The bootstrap counts
 # its own failures with raw conditionals and exits by hand, which is exactly why
 # it exists and why it is the only lane whose verdict survives.
+#
+# Passes 5 to 7 run the Chez launcher's three refusals, one per pass, each
+# through the exact-status helper. A refusal cannot be witnessed by a lane that
+# is set up correctly, because a correctly set-up lane never reaches one: each
+# needs its own deliberately wrong command line, and a verify command is fixed
+# for the whole pass.
+#
+# Pass 8 is the launcher's `compile-imported-libraries` call, and it is the one
+# mutation in this file that no single process can catch. See its recorded
+# reason.
 #
 # WHAT THIS SUITE NEEDS FROM ITS ENVIRONMENT
 #
@@ -59,6 +69,18 @@ set(GUARD_DIR "${WORK_DIR}/guard")
 file(REMOVE_RECURSE "${GUARD_DIR}")
 file(MAKE_DIRECTORY "${GUARD_DIR}")
 
+# Two more guards, for the two refusals that need a guard directory in a state
+# the build never otherwise produces. The absent one is named and deliberately
+# not created.
+set(DIRTY_GUARD_DIR "${WORK_DIR}/guard-dirty")
+file(REMOVE_RECURSE "${DIRTY_GUARD_DIR}")
+file(MAKE_DIRECTORY "${DIRTY_GUARD_DIR}")
+file(WRITE "${DIRTY_GUARD_DIR}/stray-object.so"
+  "Not a compiled library. Its only job is to stop this directory being empty.\n")
+
+set(ABSENT_GUARD_DIR "${WORK_DIR}/guard-absent")
+file(REMOVE_RECURSE "${ABSENT_GUARD_DIR}")
+
 if(NOT BYTE_MACHINE_CHEZ_EXECUTABLE)
   message(FATAL_ERROR
     "byte-machine-mutation: BYTE_MACHINE_CHEZ_EXECUTABLE was not passed in. "
@@ -79,6 +101,7 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 
 set(RUNNER test/support/harness/shared/harness-runner.scm)
 set(CHEZ_ADAPTER test/support/harness/chez/byte-machine/test/harness.sls)
+set(LAUNCHER test/support/launchers/chez-source.ss)
 
 # --- Assertions ------------------------------------------------------------
 
@@ -249,6 +272,26 @@ byte_machine_mutation(
   EXPECT_SURVIVES
     "suppression changes only what is printed, never a counter or a status, so no assertion can observe it from inside the process; it is covered by the manual check in the implementation plan's Task 5 step 9, and its real cost -- a log that teaches readers to ignore FAIL lines -- is not machine-checkable")
 
+# --- The Chez launcher's source path ---------------------------------------
+#
+# Both entries are load-bearing and neither is visible in a passing run. The
+# shared directory is how the library resolves the runner body it includes by
+# bare filename; the program's own directory is how a wrapper resolves the body
+# beside it. Dropping either leaves the self-tests lane unable to load at all,
+# which is why these two belong to this pass rather than to one of the
+# exact-status passes below, where a refusal is the passing outcome.
+byte_machine_mutation(
+  FILE ${LAUNCHER} SPEC harness-self-tests.chez.sps
+  LABEL "launcher: the shared body directory is off the source path"
+  FIND [[(source-directories (list shared-dir (path-directory program)))]]
+  REPLACE [[(source-directories (list (path-directory program)))]])
+
+byte_machine_mutation(
+  FILE ${LAUNCHER} SPEC harness-self-tests.chez.sps
+  LABEL "launcher: the program's own directory is off the source path"
+  FIND [[(source-directories (list shared-dir (path-directory program)))]]
+  REPLACE [[(source-directories (list shared-dir))]])
+
 # --- The Chez adapter's export list ----------------------------------------
 
 byte_machine_mutation(
@@ -372,6 +415,122 @@ byte_machine_mutation(
   LABEL "runner: a recorded failure is never counted, so a failing suite exits 0"
   FIND [[  (set! harness-failure-count (+ harness-failure-count 1))]]
   REPLACE [[  (set! harness-failure-count harness-failure-count)]])
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Passes 5 to 7: the launcher's three refusals --------------------------
+#
+# The launcher decides whether a lane runs at all, and its object guard is the
+# sole mechanism that makes `mode=source` an honest claim. None of its three
+# refusals can be reached by a lane that was set up correctly, so each gets a
+# deliberately wrong command line of its own, run through the exact-status
+# helper so that exit 2 -- the refusal -- is what a healthy launcher scores.
+#
+# SPEC names the registered lane rather than a body basename, because the
+# witness is a whole invocation and not a program: with the argument count
+# wrong there is no program at all, and for the other two "passing" means the
+# named body never ran.
+
+byte_machine_mutation_reset()
+
+string(JOIN "|" LAUNCHER_USAGE_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "${STAGE_DIR}/test/support/harness/chez"
+  "${STAGE_DIR}/test/support/harness/shared"
+  "${GUARD_DIR}")
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${CMAKE_COMMAND}"
+  "-DBYTE_MACHINE_EXPECT_EXIT=2"
+  "-DBYTE_MACHINE_EXPECT_COMMAND=${LAUNCHER_USAGE_COMMAND}"
+  -P "${STAGE_DIR}/cmake/ByteMachineExpectExit.cmake")
+
+byte_machine_mutation(
+  FILE ${LAUNCHER} SPEC byte-machine.harness.launcher-usage.chez.source
+  LABEL "launcher: the argument count is not checked"
+  FIND [[(if (not (= (length args) 4))]]
+  REPLACE [[(if #f]])
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+byte_machine_mutation_reset()
+
+string(JOIN "|" LAUNCHER_ABSENT_GUARD_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "${STAGE_DIR}/test/support/harness/chez"
+  "${STAGE_DIR}/test/support/harness/shared"
+  "${ABSENT_GUARD_DIR}"
+  "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${CMAKE_COMMAND}"
+  "-DBYTE_MACHINE_EXPECT_EXIT=2"
+  "-DBYTE_MACHINE_EXPECT_COMMAND=${LAUNCHER_ABSENT_GUARD_COMMAND}"
+  -P "${STAGE_DIR}/cmake/ByteMachineExpectExit.cmake")
+
+byte_machine_mutation(
+  FILE ${LAUNCHER} SPEC byte-machine.harness.launcher-absent-guard.chez.source
+  LABEL "launcher: a guard directory that does not exist is assumed rather than checked"
+  FIND [[(if (not (file-directory? object-guard-dir))]]
+  REPLACE [[(if #f]])
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+byte_machine_mutation_reset()
+
+string(JOIN "|" LAUNCHER_DIRTY_GUARD_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "${STAGE_DIR}/test/support/harness/chez"
+  "${STAGE_DIR}/test/support/harness/shared"
+  "${DIRTY_GUARD_DIR}"
+  "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${CMAKE_COMMAND}"
+  "-DBYTE_MACHINE_EXPECT_EXIT=2"
+  "-DBYTE_MACHINE_EXPECT_COMMAND=${LAUNCHER_DIRTY_GUARD_COMMAND}"
+  -P "${STAGE_DIR}/cmake/ByteMachineExpectExit.cmake")
+
+# The one that matters most: a guard directory that has acquired a file is no
+# longer a guard, and the lane would go on reporting mode=source while loading
+# whatever was put there.
+byte_machine_mutation(
+  FILE ${LAUNCHER} SPEC byte-machine.harness.launcher-dirty-guard.chez.source
+  LABEL "launcher: a guard directory with a file in it is accepted as a guard"
+  FIND [[(if (not (null? (directory-list object-guard-dir)))]]
+  REPLACE [[(if #f]])
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Eighth pass: a source lane that compiles what it imports --------------
+#
+# Its own guard directory, because this is the one mutation here whose effect is
+# to write into one.
+
+byte_machine_mutation_reset()
+
+set(COMPILE_GUARD_DIR "${WORK_DIR}/guard-compile")
+file(REMOVE_RECURSE "${COMPILE_GUARD_DIR}")
+file(MAKE_DIRECTORY "${COMPILE_GUARD_DIR}")
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "${STAGE_DIR}/test/support/harness/chez"
+  "${STAGE_DIR}/test/support/harness/shared"
+  "${COMPILE_GUARD_DIR}"
+  "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+
+byte_machine_mutation(
+  FILE ${LAUNCHER} SPEC byte-machine.harness.bootstrap.chez.source
+  LABEL "launcher: a source lane is allowed to compile what it imports"
+  FIND [[(compile-imported-libraries #f)]]
+  REPLACE [[(compile-imported-libraries #t)]]
+  EXPECT_SURVIVES
+    "deleting the call is provably unobservable -- Chez's own default for compile-imported-libraries is already #f -- so the only mutation with an effect is turning it on, and its entire effect is a file: Chez writes byte-machine/test/harness.so into the object half of the library-directories pair, which is the guard, and it does so after the launcher has already asserted the guard was empty. No single process can see it. The registered lanes can, and do: with compilation on, the first Chez lane to run pollutes the shared object guard and three of the harness preset's tests fail. This suite runs one process per mutation, so what it can prove about this line is only that the line is still there")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
