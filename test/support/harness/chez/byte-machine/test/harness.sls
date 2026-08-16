@@ -16,6 +16,7 @@
     harness-begin harness-finish harness-summary harness-exit-status
     harness-status-pass harness-status-failed
     harness-status-harness-error harness-status-provenance
+    harness-empty-selection-error harness-empty-selection-diagnosis
     ;; structure
     harness-group harness-case
     ;; assertions
@@ -28,7 +29,7 @@
     failure-record-id failure-record-what failure-record-detail
     ;; pure helpers, exported so the runner's own tests can reach them
     harness-string-contains? harness-join harness-split harness-take
-    harness-member? harness-failure-context
+    harness-member? harness-failure-context harness-normalize-filter
     harness-counters harness-restore-counters! harness-capture-state
     ;; adapter protocol
     adapter-runtime-name adapter-runtime-version adapter-machine-type

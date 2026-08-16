@@ -1,0 +1,8 @@
+;;; Registers one case that the ambient filter cannot select, so the run
+;;; selects nothing and must exit 2.
+;;;
+;;; CTest fails an empty selection with execution.noTestsAction, and a suite
+;;; that ran nothing must not report success one layer down either. The filter
+;;; arrives from BYTE_MACHINE_TEST_FILTER, set by this lane's registration.
+
+(harness-case "never-selected" (lambda () (check "unreachable" #t)))

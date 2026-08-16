@@ -74,6 +74,16 @@
         ((equal? x (car lst)) #t)
         (else (harness-member? x (cdr lst)))))
 
+;; An empty BYTE_MACHINE_TEST_FILTER and an absent one must mean the same
+;; thing -- no filter -- because a shell that writes `VAR=` and one that never
+;; sets VAR at all are otherwise indistinguishable in intent. Pure, and kept
+;; separate from harness-begin's environment read, so the rule is directly
+;; testable: harness-string-contains? treats an empty needle as matching every
+;; id anyway, so an empty and an unnormalised "" filter select identically and
+;; no case-selection outcome could ever tell the two apart from the outside.
+(define (harness-normalize-filter value)
+  (if (and value (string=? value "")) #f value))
+
 ;; ---------------------------------------------------------------------------
 ;; Mutable result state (the imperative shell of the runner)
 ;; ---------------------------------------------------------------------------
@@ -396,9 +406,9 @@
 (define (harness-begin suite-name)
   (set! harness-suite-name suite-name)
   (harness-clear-state!)
-  (set! harness-filter (adapter-environment-variable "BYTE_MACHINE_TEST_FILTER"))
-  (if (and harness-filter (string=? harness-filter ""))
-      (set! harness-filter #f))
+  (set! harness-filter
+        (harness-normalize-filter
+         (adapter-environment-variable "BYTE_MACHINE_TEST_FILTER")))
   ;; An empty value means unset, matching adapter-execution-mode: the same
   ;; variable emptied by a shell (BYTE_MACHINE_TEST_VERBOSE=) must not mean
   ;; opposite things in the same harness.
@@ -406,12 +416,38 @@
     (set! harness-verbose (if (and v (not (string=? v ""))) #t #f)))
   (harness-banner))
 
+;; CTest refuses an empty selection with execution.noTestsAction, and a suite
+;; that ran nothing must not report success one layer down either.
+;;
+;; Split into a pure rule and a reader of the live counters, per AGENTS.md's
+;; functional core / imperative shell rule. The split is not ceremony here: the
+;; rule's interesting states are "no cases ran" and "every case was filtered
+;; out", and a suite in either state cannot assert anything about itself from
+;; the inside. As a function of two numbers it is directly testable.
+;;
+;; The two are distinguished because they are different bugs: a filter that
+;; matched nothing is usually a typo in the invocation, while a suite with no
+;; cases at all is usually a body that failed to load what it meant to.
+(define (harness-empty-selection-diagnosis case-count skipped-count)
+  (cond
+    ((> case-count 0) #f)
+    ((> skipped-count 0)
+     (string-append "no case was selected: the filter skipped all "
+                    (number->string skipped-count)
+                    " registered cases"))
+    (else "the suite registered no cases")))
+
+(define (harness-empty-selection-error)
+  (harness-empty-selection-diagnosis harness-case-count harness-skipped-count))
+
 (define (harness-exit-status)
   (cond ((> harness-error-count 0) harness-status-harness-error)
         ((> harness-failure-count 0) harness-status-failed)
         (else harness-status-pass)))
 
 (define (harness-summary)
+  (let ((empty (harness-empty-selection-error)))
+    (if empty (harness-record-error! empty)))
   (let ((status (harness-exit-status)))
     (harness-say-always
      (string-append

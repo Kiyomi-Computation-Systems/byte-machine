@@ -129,3 +129,24 @@ byte_machine_add_scheme_lane(
   BACKEND chez
   PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
   TIMEOUT 120)
+
+# A duplicate id is a defect in the suite, not a failing assertion: one
+# registration silently became unreachable. Status 2, distinct from 1.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.duplicate-case.chez.source
+  BACKEND chez
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-duplicate-case.chez.sps"
+  EXPECT_EXIT 2
+  TIMEOUT 120
+  LABELS expected-red)
+
+# A suite that selected nothing must not report success, for the same reason
+# the presets refuse an empty CTest selection one layer up.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.empty-selection.chez.source
+  BACKEND chez
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-empty-selection.chez.sps"
+  EXPECT_EXIT 2
+  TIMEOUT 120
+  LABELS expected-red
+  ENVIRONMENT "BYTE_MACHINE_TEST_FILTER=no-case-has-this-in-its-name")

@@ -295,7 +295,23 @@
           (check-equal "one selected" (probe-cases p) 1)
           (check-equal "one skipped" (probe-skipped p) 1)
           (check-equal "a filtered-out duplicate is still an error"
-                       (probe-errors p) 1))))))
+                       (probe-errors p) 1))))
+
+    ;; harness-begin's BYTE_MACHINE_TEST_FILTER handling is exercised
+    ;; end-to-end by the empty-selection lane, but only for a non-empty value.
+    ;; The empty-string branch has no observable effect on selection to check
+    ;; instead -- harness-string-contains? treats an empty needle as matching
+    ;; every id, so an empty filter and a normalised-away one select
+    ;; identically either way -- so the normalisation rule is checked directly
+    ;; here, on the pure function, rather than through a selection outcome.
+    (harness-case "the environment filter is normalised"
+      (lambda ()
+        (check-equal "an empty string means no filter"
+                     (harness-normalize-filter "") #f)
+        (check-equal "an absent variable means no filter"
+                     (harness-normalize-filter #f) #f)
+        (check-equal "a real value passes through unchanged"
+                     (harness-normalize-filter "keep") "keep")))))
 
 (harness-group "adapter"
   (lambda ()
@@ -375,3 +391,24 @@
                     (harness-case "f" (lambda () (check "z" #t)))
                     (check-equal "an error outranks it" (harness-exit-status) 2)))))
           (check-equal "the inner assertions held" (probe-failures p) 1))))))
+
+(harness-group "empty selection"
+  (lambda ()
+
+    (harness-case "an empty selection is diagnosed from the counts"
+      (lambda ()
+        (check "a run that executed cases is fine"
+               (not (harness-empty-selection-diagnosis 3 0)))
+        (check "no cases at all is reported"
+               (string? (harness-empty-selection-diagnosis 0 0)))
+        (check "a fully filtered run says the filter did it"
+               (harness-string-contains?
+                (harness-empty-selection-diagnosis 0 4) "filter"))
+        (check "and says how many it skipped"
+               (harness-string-contains?
+                (harness-empty-selection-diagnosis 0 4) "4"))
+        ;; The two empty states must not report the same thing: one is a typo in
+        ;; the invocation, the other a body that failed to load.
+        (check-not-equal "the two empty states read differently"
+                         (harness-empty-selection-diagnosis 0 0)
+                         (harness-empty-selection-diagnosis 0 4))))))
