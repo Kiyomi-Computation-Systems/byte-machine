@@ -27,6 +27,18 @@ include_guard(GLOBAL)
 
 set(_bm_mutation_count 0)
 
+# Which trees are copied into the scratch tree. The default is what the
+# CMake-layer suite needs; the Scheme suite adds the harness and the launchers,
+# whose includes resolve against their relative layout and would break if the
+# tree were flattened.
+set(BYTE_MACHINE_MUTATION_STAGE_DIRS "cmake" "test/support/cmake")
+
+# What decides whether a mutation was caught. Empty keeps the original
+# behaviour: run the named specification under `cmake -P` inside the stage. The
+# Scheme suite replaces it with a real execution lane, because a Scheme defect
+# is only visible to something that runs Scheme.
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND "")
+
 # byte_machine_mutation(FILE <repo-relative> SPEC <spec basename> LABEL <text>
 #                       FIND <text> REPLACE <text> [SITES <n>]
 #                       [EXPECT_SURVIVES <reason>])
@@ -72,33 +84,58 @@ endfunction()
 
 # byte_machine_mutation_stage(<source_root> <stage_dir>)
 #
-# Copy the modules and specifications into a scratch tree, preserving the
-# relative layout the specifications' includes depend on.
+# Copy every declared tree into a scratch tree, preserving the relative layout
+# the specifications' and the libraries' includes depend on.
 function(byte_machine_mutation_stage source_root stage_dir)
   file(REMOVE_RECURSE "${stage_dir}")
-  file(MAKE_DIRECTORY "${stage_dir}/cmake" "${stage_dir}/test/support/cmake")
 
-  file(GLOB modules "${source_root}/cmake/*.cmake")
-  file(GLOB specs "${source_root}/test/support/cmake/*.cmake")
-  if(NOT modules OR NOT specs)
-    message(FATAL_ERROR
-      "byte-machine-mutation: staging found no modules or no specifications under "
-      "'${source_root}'. Refusing to run: an empty stage would make every "
-      "mutation look caught.")
-  endif()
-  file(COPY ${modules} DESTINATION "${stage_dir}/cmake")
-  file(COPY ${specs} DESTINATION "${stage_dir}/test/support/cmake")
+  foreach(rel IN LISTS BYTE_MACHINE_MUTATION_STAGE_DIRS)
+    file(MAKE_DIRECTORY "${stage_dir}/${rel}")
+    file(GLOB entries "${source_root}/${rel}/*")
+    if(NOT entries)
+      message(FATAL_ERROR
+        "byte-machine-mutation: staging found nothing under '${rel}' in "
+        "'${source_root}'. Refusing to run: an empty stage would make every "
+        "mutation look caught, which is the exact false confidence this file "
+        "exists to eliminate.")
+    endif()
+    # Directories are copied whole, so a tree such as the harness keeps the
+    # layout its relative includes resolve against.
+    file(COPY ${entries} DESTINATION "${stage_dir}/${rel}")
+  endforeach()
 endfunction()
 
 # byte_machine_mutation_run_spec(<stage_dir> <spec> <out_rc>)
+#
+# A non-numeric result -- a command that could not be launched at all -- would
+# compare unequal to 0 and count as caught. That is safe only because the
+# baseline run happens first: if the verify command cannot run, the baseline
+# fails and nothing below is trusted.
 function(byte_machine_mutation_run_spec stage_dir spec out_rc)
+  if(BYTE_MACHINE_MUTATION_VERIFY_COMMAND)
+    set(command ${BYTE_MACHINE_MUTATION_VERIFY_COMMAND})
+  else()
+    set(command "${CMAKE_COMMAND}" -P "${stage_dir}/test/support/cmake/${spec}")
+  endif()
+
   execute_process(
-    COMMAND "${CMAKE_COMMAND}" -P "${stage_dir}/test/support/cmake/${spec}"
+    COMMAND ${command}
     WORKING_DIRECTORY "${stage_dir}"
     RESULT_VARIABLE rc
     OUTPUT_VARIABLE out
     ERROR_VARIABLE err)
   set(${out_rc} "${rc}" PARENT_SCOPE)
+endfunction()
+
+# byte_machine_mutation_reset()
+#
+# Discard the declared mutations so a second set can run under a different
+# verify command in the same script. Used by the Scheme suite, which verifies
+# the shared runner on one runtime but must verify each adapter's export list on
+# its own runtime -- a Chez lane cannot notice a name missing from the Gambit
+# library.
+function(byte_machine_mutation_reset)
+  set(_bm_mutation_count 0 PARENT_SCOPE)
 endfunction()
 
 # byte_machine_mutation_run(<source_root> <stage_dir>)

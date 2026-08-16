@@ -194,3 +194,24 @@ byte_machine_add_scheme_lane(
   TIMEOUT 120
   LABELS expected-red
   ENVIRONMENT "BYTE_MACHINE_TEST_FILTER=no-case-has-this-in-its-name")
+
+# --- Mutation proof for the harness ----------------------------------------
+
+# The harness is the instrument every later milestone is measured with, so a
+# passing self-test suite is not evidence until something has proved it can
+# fail. This breaks each decision in the runner on a staged copy and requires
+# the self-tests to notice. Registered only when a Chez was discovered: it runs
+# a real lane and cannot be verified under the no-scheme preset. Gambit's path
+# is forwarded too, empty when none was discovered, which drops only the pass
+# that checks the Gambit adapter's export list.
+if(BYTE_MACHINE_CHEZ_EXECUTABLE)
+  byte_machine_add_test(
+    NAME byte-machine.harness.scheme-mutation.cmake.direct
+    COMMAND "${CMAKE_COMMAND}"
+            "-DBYTE_MACHINE_CHEZ_EXECUTABLE=${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+            "-DBYTE_MACHINE_GAMBIT_EXECUTABLE=${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
+            -P "${CMAKE_CURRENT_LIST_DIR}/support/cmake/SchemeMutationSuite.cmake"
+    TIMEOUT 900
+    LABELS unit
+    ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source")
+endif()
