@@ -211,14 +211,21 @@
     ;; harness-restore-state! puts back thirteen fields; harness-counters
     ;; (used below for the bootstrap's own benefit) only observes three of
     ;; them. Comparing the full captured state closes that gap. The probed
-    ;; thunk deliberately fails three cases, skips three cases, and raises
-    ;; inside two cleanups, and the ambient filter is set to a real value
-    ;; beforehand, so that every field harness-clear-state! would otherwise
-    ;; reset to the same default it already has ends up somewhere else
-    ;; instead. Three-or-more is deliberate, not decorative: every other
-    ;; probe in this file registers at most two inner cases, so a leaked,
-    ;; unrestored count from any of them cannot coincidentally match this
-    ;; probe's own total the way a smaller, more "natural" count could.
+    ;; thunk deliberately fails three cases, skips three cases, raises
+    ;; inside two cleanups, and re-registers an already-used id three more
+    ;; times -- an error, not a failure, per "a duplicate case id is an
+    ;; error, not a failure" above -- and the ambient filter is set to a
+    ;; real value beforehand, so that every field harness-clear-state!
+    ;; would otherwise reset to the same default it already has ends up
+    ;; somewhere else instead. Three-or-more is deliberate, not decorative:
+    ;; every other probe in this file registers at most two inner cases or
+    ;; one duplicate id, so a leaked, unrestored count from any of them
+    ;; cannot coincidentally match this probe's own total the way a
+    ;; smaller, more "natural" count could. The duplicates reuse
+    ;; "inside-failing-1" instead of a fresh id so that only
+    ;; harness-error-count moves: the duplicate branch of harness-case
+    ;; never runs the thunk it is given and never touches harness-case-ids,
+    ;; so case-count and check-count are exactly as they were already.
     (harness-case "a probe leaves the enclosing state untouched"
       (lambda ()
         (harness-set-filter! "ambient-marker")
@@ -236,6 +243,9 @@
                 (harness-case "dropped-1" (lambda () (check "f" #t)))
                 (harness-case "dropped-2" (lambda () (check "g" #t)))
                 (harness-case "dropped-3" (lambda () (check "h" #t)))
+                (harness-case "inside-failing-1" (lambda () (check "unreachable" #t)))
+                (harness-case "inside-failing-1" (lambda () (check "unreachable" #t)))
+                (harness-case "inside-failing-1" (lambda () (check "unreachable" #t)))
                 (with-cleanup (lambda () 'body) (lambda () (raise 'cleanup-boom-1)))
                 (with-cleanup (lambda () 'body) (lambda () (raise 'cleanup-boom-2)))))
              (check-equal "the enclosing state is unchanged"
