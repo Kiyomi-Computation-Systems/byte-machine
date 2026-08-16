@@ -74,8 +74,21 @@
        (moved (harness-counters)))
   (harness-restore-counters! saved)
   (bootstrap-assert "check: a false value returns false" (eq? result #f))
-  (bootstrap-assert "check: a deliberate failure moves the counters"
-                    (not (equal? saved moved)))
+  ;; Per counter, not merely "something moved". A runner that had stopped
+  ;; counting failures would still bump the check count and still set the case
+  ;; flag, so a "the counters moved" assertion passes while the defect that
+  ;; matters most is present: failures print, nothing counts them, and every
+  ;; suite in every later milestone exits 0. Nothing written with `check` can
+  ;; report that -- recording a failure is the mechanism that would be broken --
+  ;; so this lane, which counts its own failures and exits by hand, is the only
+  ;; witness there is. harness-counters is
+  ;; (failure-count check-count current-case-failed).
+  (bootstrap-assert "check: a deliberate failure counts one failure"
+                    (= (list-ref moved 0) (+ (list-ref saved 0) 1)))
+  (bootstrap-assert "check: a deliberate failure counts one check"
+                    (= (list-ref moved 1) (+ (list-ref saved 1) 1)))
+  (bootstrap-assert "check: a deliberate failure marks the case failed"
+                    (list-ref moved 2))
   (bootstrap-assert "check: restore returns the counters to the saved values"
                     (equal? (harness-counters) saved)))
 
