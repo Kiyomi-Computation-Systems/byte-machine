@@ -208,6 +208,31 @@ byte_machine_add_scheme_lane(
   LABELS expected-red
   ENVIRONMENT "BYTE_MACHINE_TEST_FILTER=no-case-has-this-in-its-name")
 
+# --- The verbose pass line -------------------------------------------------
+#
+# BYTE_MACHINE_TEST_VERBOSE makes the runner announce every passing case.
+# Nothing else in this tree sets it, so without this lane the feature would
+# never be executed by any test at all: the environment read, the empty-string
+# rule, and the print itself would first run for whoever turned the variable on,
+# and a typo in any of them would surface there rather than here.
+#
+# One runtime is enough. The decision lives in the shared runner body, which is
+# identical text on both, and that is the same argument the mutation suite's
+# first pass makes for every other decision in it.
+#
+# What this lane cannot check is that the line was printed. The harness has no
+# portable way to read back its own output -- string ports are outside the
+# common R6RS/R7RS subset -- and the registration layer asserts exit status, not
+# output. Both decisions are therefore declared survivors in
+# SchemeMutationSuite.cmake with their reason recorded, alongside probe output
+# suppression, which is unwitnessable for exactly the same reason.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.verbose.chez.source
+  BACKEND chez
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_TEST_VERBOSE=1")
+
 # --- The Chez launcher's refusals ------------------------------------------
 #
 # The launcher decides whether a lane runs at all, and its object guard is the
