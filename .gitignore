@@ -13,6 +13,14 @@
 # Developer-local preset overrides
 CMakeUserPresets.json
 
+# Per-test working and temporary directories. byte_machine_add_test puts these
+# under CMAKE_BINARY_DIR, so a tree here means someone configured with the
+# binary directory set to the repository root. Ignored rather than left
+# untracked because a directory holding only empty directories is invisible to
+# `git status`, and one turned up in this repository naming a test that does not
+# exist.
+/test-run/
+
 # Compiled Scheme objects must never appear in a source directory. Chez's
 # compile-library and compile-program both emit .so, and Gambit emits .o1 and
 # intermediate .c; a stale object found in tree is a correctness hazard, not
