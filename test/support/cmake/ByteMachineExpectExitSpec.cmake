@@ -64,6 +64,7 @@ endforeach()
 byte_machine_expect_exit_classify("7" status message)
 spec_check_equal("${status}" "not-declared" "classify rejects 7")
 
+set(status "seed")
 byte_machine_expect_exit_classify("77" status message)
 spec_check_equal("${status}" "not-declared" "classify rejects 77")
 
@@ -88,6 +89,7 @@ spec_check_equal("${verdict}" "mismatch" "verdict: a declared but wrong status i
 byte_machine_expect_exit_verdict("1" "70" verdict message)
 spec_check_equal("${verdict}" "out-of-vocabulary" "verdict: 70 is out of vocabulary")
 
+set(verdict "seed")
 byte_machine_expect_exit_verdict("0" "139" verdict message)
 spec_check_equal("${verdict}" "out-of-vocabulary" "verdict: a crash is out of vocabulary")
 

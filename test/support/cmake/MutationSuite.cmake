@@ -337,6 +337,12 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
+  LABEL "expect-exit: an exact match is reported as a mismatch"
+  FIND [[  if(actual EQUAL expected)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
   LABEL "expect-exit: the registrar stops validating its expectation"
   FIND [[  byte_machine_expect_exit_classify("${arg_EXPECT_EXIT}" status message)
   if(NOT status STREQUAL "ok")
