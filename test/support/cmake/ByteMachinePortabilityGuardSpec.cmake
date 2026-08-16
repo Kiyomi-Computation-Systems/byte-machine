@@ -73,7 +73,17 @@ file(WRITE "${fixture}/unpaired/unpaired-body.scm" "")
 if(DEFINED BYTE_MACHINE_SPEC_CASE)
   set(c "${BYTE_MACHINE_SPEC_CASE}")
 
-  if(c STREQUAL "guard-rejects-an-empty-glob")
+  if(c STREQUAL "guard-rejects-an-unexpected-argument")
+    # SHARED_DIRS is deliberately valid and complete, so nothing else here can
+    # stop the build: a guard that does not reject the stray token globs the one
+    # directory it did understand, finds no violation, and prints the success
+    # banner -- claiming the wrapper rule held for a WRAPPED_DIRS it never
+    # received. The stray token leads, because a misspelt keyword *after* a
+    # multi-value one is absorbed as a directory rather than left unparsed.
+    byte_machine_portability_guard(
+      WRAPPED_DIR "${fixture}/unpaired"
+      SHARED_DIRS "${fixture}/paired")
+  elseif(c STREQUAL "guard-rejects-an-empty-glob")
     # A guard that finds nothing must say so. Reporting a tree it never looked
     # at as portable is worse than not guarding it, because it is reported as
     # checked.
@@ -166,13 +176,23 @@ spec_check_equal("${missing_count}" "2" "a body with no wrappers reports both")
 #
 # Each fragment names wording the module controls, so replacing a FATAL_ERROR
 # with a differently worded message is a failure rather than something that
-# passes on "an error happened". The wrapper case reaches past the wording to
-# the file it must name, because a guard that checked the wrong directory would
-# still be able to produce the first half of that sentence.
+# passes on "an error happened". Two of them reach past the wording to the text
+# the diagnostic must interpolate -- the wrapper it should have demanded, the
+# stray token it should have refused -- because a guard that checked the wrong
+# thing would still be able to produce the first half of either sentence.
+#
+# These are regular expressions (spec_expect_rejected matches with MATCHES), so
+# every `.` in a filename is escaped: an unescaped one is a wildcard that would
+# also match, say, `twinxscm`. The `.*` in the wrapper fragment is the one
+# deliberate metacharacter, bridging two halves of a sentence whose middle
+# contains `Missing (body|wrapper):` -- `|` is this helper's own entry separator
+# and `()` are metacharacters, so that middle cannot be written out. Bridging is
+# safe because spec_flatten collapses the diagnostic to a single line first.
 
 spec_expect_all_rejected("${SPEC_SELF}"
+  "guard-rejects-an-unexpected-argument|unexpected arguments to byte_machine_portability_guard: WRAPPED_DIR"
   "guard-rejects-an-empty-glob|found no shared bodies to check, which means its glob is wrong"
-  "guard-rejects-a-duplicate-basename|basenames must be unique across every shared body directory, but these repeat: twin.scm"
-  "guard-rejects-a-missing-wrapper|every shared test body needs a wrapper for each runtime.*unpaired-body.gambit.scm")
+  "guard-rejects-a-duplicate-basename|basenames must be unique across every shared body directory, but these repeat: twin\\.scm"
+  "guard-rejects-a-missing-wrapper|every shared test body needs a wrapper for each runtime.*unpaired-body\\.gambit\\.scm")
 
 spec_finish("ByteMachinePortabilityGuard")

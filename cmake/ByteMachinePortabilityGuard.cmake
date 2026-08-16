@@ -13,9 +13,11 @@
 # that should have run is exactly the thing that does not. So they are configure
 # failures: a violation stops the build.
 #
-# The glob is CONFIGURE_DEPENDS and its result is asserted non-empty. A guard
-# that silently skips new files, or that finds nothing and reports every source
-# portable, is worse than no guard at all.
+# The glob is CONFIGURE_DEPENDS wherever there is a build system to honour the
+# keyword -- script mode is the sole exception, explained at the glob itself --
+# and its result is asserted non-empty. A guard that silently skips new files,
+# or that finds nothing and reports every source portable, is worse than no
+# guard at all.
 
 include_guard(GLOBAL)
 
@@ -83,6 +85,16 @@ endfunction()
 # Every body from either kind of directory shares one basename namespace.
 function(byte_machine_portability_guard)
   cmake_parse_arguments(PARSE_ARGV 0 arg "" "" "SHARED_DIRS;WRAPPED_DIRS")
+
+  # A guard that accepts a keyword it does not understand reports success for a
+  # rule it never applied, which is the failure this whole module exists to
+  # prevent. Note the reach of this check: both keywords are multi-value, so a
+  # stray token is unparsed only until the first recognised keyword: after one,
+  # it is absorbed as another directory rather than reported here.
+  if(arg_UNPARSED_ARGUMENTS)
+    message(FATAL_ERROR
+      "byte-machine: unexpected arguments to byte_machine_portability_guard: ${arg_UNPARSED_ARGUMENTS}")
+  endif()
 
   # CONFIGURE_DEPENDS asks the build system to re-run the glob, and script mode
   # has no build system: `cmake -P` rejects the keyword outright rather than

@@ -525,10 +525,16 @@ byte_machine_mutation(
 # The imperative shell. Every decision it makes is observable only as a dead
 # process -- a guard that returns has, by construction, found nothing to say --
 # so each of these is caught by a rejection case in the specification rather
-# than by an assertion on a returned value. The first of them is what proves
-# those cases reach the guard at all: with the script-mode branch gone,
+# than by an assertion on a returned value. The script-mode mutation is what
+# proves those cases reach the guard at all: with that branch gone,
 # CONFIGURE_DEPENDS makes the function uncallable under `cmake -P` and every
 # case dies before reaching the decision it was written for.
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: unexpected arguments to the guard are accepted"
+  FIND [[  if(arg_UNPARSED_ARGUMENTS)]]
+  REPLACE [[  if(FALSE)]])
 
 byte_machine_mutation(
   FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
