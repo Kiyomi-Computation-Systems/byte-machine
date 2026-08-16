@@ -190,8 +190,10 @@ runtimes must export exactly these names, with the same arity and the same meani
 | `(adapter-describe-condition obj)` | string |
 | `(adapter-flush-output)` | unspecified |
 
-Chez additionally re-exports `modulo`, `quotient`, and `remainder`, which R6RS reaches through
-`(rnrs r5rs)` and R7RS provides in `(scheme base)`.
+Both adapters additionally re-export `modulo`, `quotient`, and `remainder`, which the shared
+runner body calls directly. R6RS keeps them outside `(rnrs)`, so Chez imports them from
+`(rnrs r5rs)`; R7RS already provides them in `(scheme base)`, but Gambit re-exports them too, so
+the shared body does not need to know which runtime supplies them natively.
 
 `adapter-os` and `adapter-architecture` are derived from Chez's machine type and from Gambit's target
 triple. §24.2 stage 2 requires every Tier 1 cell to assert the expected runtime, OS, and
