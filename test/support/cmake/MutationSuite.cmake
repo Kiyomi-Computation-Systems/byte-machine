@@ -545,6 +545,16 @@ byte_machine_mutation(
   FIND [[      if(NOT IS_DIRECTORY "${entry}")]]
   REPLACE [[      if(FALSE)]])
 
+# ...and the reach of that check. Deleting the condition (above) and narrowing
+# the set of keywords it runs over (here) are two decisions, so they get two
+# mutations: a single combined one would prove only that at least one of them
+# was noticed.
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: only SHARED_DIRS entries are checked for being directories"
+  FIND [[  foreach(keyword IN ITEMS SHARED_DIRS WRAPPED_DIRS)]]
+  REPLACE [[  foreach(keyword IN ITEMS SHARED_DIRS)]])
+
 byte_machine_mutation(
   FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
   LABEL "guard: the glob asks for a build-system re-check where there is no build system"

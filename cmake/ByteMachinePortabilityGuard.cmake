@@ -105,7 +105,9 @@ function(byte_machine_portability_guard)
   # contributes no match, no violation, and a success banner over a tree
   # nothing looked at -- the header's "worse than no guard at all". A keyword
   # absorbed into the preceding keyword's value arrives here as exactly that:
-  # a directory named `WRAPPED_DIR`.
+  # a directory named `WRAPPED_DIR` -- or, if the typo lands after WRAPPED_DIRS,
+  # one named `SHARED_DIR`. Iterating the keywords rather than one of them is
+  # what makes the second form reachable; both forms have a rejection case.
   foreach(keyword IN ITEMS SHARED_DIRS WRAPPED_DIRS)
     foreach(entry IN LISTS arg_${keyword})
       if(NOT IS_DIRECTORY "${entry}")

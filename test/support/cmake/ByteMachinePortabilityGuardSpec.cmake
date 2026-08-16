@@ -95,6 +95,23 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
     byte_machine_portability_guard(
       SHARED_DIRS "${fixture}/paired"
       WRAPPED_DIR "${fixture}/unpaired")
+  elseif(c STREQUAL "guard-rejects-a-misspelt-keyword-after-wrapped-dirs")
+    # The mirror image of the case above, and the only case that observes the
+    # entry check being applied to WRAPPED_DIRS as well as to SHARED_DIRS.
+    # Without it the keyword loop could be reduced to `IN ITEMS SHARED_DIRS`
+    # and every other case would still pass, so the decision to check both
+    # would be a claim nothing tests.
+    #
+    # The trailing directory is `empty` rather than a second `paired`: a second
+    # `paired` would repeat the basename `paired-body.scm` and a guard that
+    # skipped the entry check would then die on the duplicate rule instead of
+    # returning -- the case would pass for a reason that has nothing to do with
+    # what it is written to prove. With `empty`, a guard that skips the check
+    # globs one body from `paired/`, finds it unique and both-wrapped, and
+    # prints the success banner.
+    byte_machine_portability_guard(
+      WRAPPED_DIRS "${fixture}/paired"
+      SHARED_DIR "${fixture}/empty")
   elseif(c STREQUAL "guard-rejects-an-empty-glob")
     # A guard that finds nothing must say so. Reporting a tree it never looked
     # at as portable is worse than not guarding it, because it is reported as
@@ -188,12 +205,14 @@ spec_check_equal("${missing_count}" "2" "a body with no wrappers reports both")
 #
 # Each fragment names wording the module controls, so replacing a FATAL_ERROR
 # with a differently worded message is a failure rather than something that
-# passes on "an error happened". Three of them reach past the wording to the
+# passes on "an error happened". Four of them reach past the wording to the
 # text the diagnostic must interpolate -- the wrapper it should have demanded,
 # and the stray token it should have refused, named once where the parser left
-# it unparsed and once where the parser had already absorbed it -- because a
-# guard that checked the wrong thing would still be able to produce the first
-# half of any of those sentences.
+# it unparsed and once for each keyword that can absorb it -- because a guard
+# that checked the wrong thing would still be able to produce the first half of
+# any of those sentences. The two absorbed-token fragments differ only in which
+# keyword is reported about which token, and that is the point: each is
+# satisfied only by the half of the entry check that runs over its keyword.
 #
 # These are regular expressions (spec_expect_rejected matches with MATCHES), so
 # every `.` in a filename is escaped: an unescaped one is a wildcard that would
@@ -206,6 +225,7 @@ spec_check_equal("${missing_count}" "2" "a body with no wrappers reports both")
 spec_expect_all_rejected("${SPEC_SELF}"
   "guard-rejects-an-unexpected-argument|unexpected arguments to byte_machine_portability_guard: WRAPPED_DIR"
   "guard-rejects-a-trailing-misspelt-keyword|SHARED_DIRS was given 'WRAPPED_DIR', which is not an existing directory"
+  "guard-rejects-a-misspelt-keyword-after-wrapped-dirs|WRAPPED_DIRS was given 'SHARED_DIR', which is not an existing directory"
   "guard-rejects-an-empty-glob|found no shared bodies to check, which means its glob is wrong"
   "guard-rejects-a-duplicate-basename|basenames must be unique across every shared body directory, but these repeat: twin\\.scm"
   "guard-rejects-a-missing-wrapper|every shared test body needs a wrapper for each runtime.*unpaired-body\\.gambit\\.scm")
