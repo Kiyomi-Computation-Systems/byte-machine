@@ -74,20 +74,23 @@
         ((equal? x (car lst)) #t)
         (else (harness-member? x (cdr lst)))))
 
-;; Exported so the bootstrap can observe a deliberate failure and undo it
-;; without depending on harness-probe, which is itself one of the things the
-;; bootstrap exists to check.
+;; ---------------------------------------------------------------------------
+;; Mutable result state (the imperative shell of the runner)
+;; ---------------------------------------------------------------------------
+
+;; Capture and restore the three pieces of state a failing `check` mutates:
+;; harness-failure-count, harness-check-count, harness-current-case-failed.
+;; Exported for the bootstrap, which must undo its own deliberately failing
+;; check without depending on harness-probe -- itself one of the things the
+;; bootstrap exists to check. The two must stay symmetric: restoring less
+;; than capture saved could silently erase a real prior failure's flag.
 (define (harness-counters)
-  (list harness-failure-count harness-check-count))
+  (list harness-failure-count harness-check-count harness-current-case-failed))
 
 (define (harness-restore-counters! saved)
   (set! harness-failure-count (car saved))
   (set! harness-check-count (car (cdr saved)))
-  (set! harness-current-case-failed #f))
-
-;; ---------------------------------------------------------------------------
-;; Mutable result state (the imperative shell of the runner)
-;; ---------------------------------------------------------------------------
+  (set! harness-current-case-failed (car (cdr (cdr saved)))))
 
 (define harness-suite-name "(none)")
 (define harness-group-stack '())

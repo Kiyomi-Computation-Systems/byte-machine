@@ -65,12 +65,19 @@
 ;; A deliberately failing check must be observed without it counting against
 ;; anything. harness-probe would do this, but the probe is itself part of what
 ;; the bootstrap is not allowed to trust, so the counters are saved and restored
-;; by hand. What is asserted is the return value, nothing the runner counted.
-(bootstrap-assert "check: a false value returns false"
-                  (let* ((saved (harness-counters))
-                         (result (check "deliberate" #f)))
-                    (harness-restore-counters! saved)
-                    (eq? result #f)))
+;; by hand. Asserting only the return value would pass even if
+;; harness-restore-counters! silently did nothing, so this also proves the
+;; counters moved while the failing check ran and landed back on the exact
+;; saved values afterward.
+(let* ((saved (harness-counters))
+       (result (check "deliberate" #f))
+       (moved (harness-counters)))
+  (harness-restore-counters! saved)
+  (bootstrap-assert "check: a false value returns false" (eq? result #f))
+  (bootstrap-assert "check: a deliberate failure moves the counters"
+                    (not (equal? saved moved)))
+  (bootstrap-assert "check: restore returns the counters to the saved values"
+                    (equal? (harness-counters) saved)))
 
 ;; --- adapter protocol -------------------------------------------------------
 ;;

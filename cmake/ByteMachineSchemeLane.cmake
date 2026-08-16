@@ -120,9 +120,10 @@ function(byte_machine_add_scheme_lane)
     return()
   endif()
 
-  # The launcher is the only party that knows what it actually loaded, so it is
-  # the party that declares the mode. For the Chez lane the object guard makes
-  # the compiled lane impossible, so the declaration cannot be silently wrong.
+  # The lane registration declares the execution mode; the launcher never
+  # touches this variable. For the Chez lane, the launcher's object guard is
+  # what makes the declaration unfalsifiable: it makes a compiled object
+  # impossible to load.
   set(environment "BYTE_MACHINE_EXECUTION_MODE=source" ${arg_ENVIRONMENT})
 
   if(DEFINED arg_EXPECT_EXIT)
