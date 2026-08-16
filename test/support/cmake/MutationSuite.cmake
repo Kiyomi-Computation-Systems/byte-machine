@@ -490,6 +490,38 @@ byte_machine_mutation(
   FIND [[set(BYTE_MACHINE_TEST_MODES_gambit source o1 aot)]]
   REPLACE [[set(BYTE_MACHINE_TEST_MODES_gambit o1 aot)]])
 
+# --- ByteMachinePortabilityGuard --------------------------------------------
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: wrapper files are counted as shared bodies"
+  FIND [[  list(FILTER bodies EXCLUDE REGEX "\\.(chez|gambit)\\.(sps|scm)$")]]
+  # Same empty-REPLACE hazard as the expect-exit and scheme-lane mutations
+  # above (CMP0174; this project's 3.26 floor leaves an explicitly-empty
+  # REPLACE undefined rather than empty -- see those mutations' comments).
+  # FIND's match ends at the statement's own closing paren, not the line's
+  # trailing newline, so the comment needs none of its own.
+  REPLACE [[  # deleted]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: a repeated basename is not reported"
+  FIND [[    if(base IN_LIST seen)]]
+  REPLACE [[    if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: only the Chez wrapper is required"
+  FIND [[    foreach(wrapper "${dir}/${base}.chez.sps" "${dir}/${base}.gambit.scm")]]
+  REPLACE [[    foreach(wrapper "${dir}/${base}.chez.sps")]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: the duplicate accessor leaves a stale value when there are none"
+  FIND [[  set(seen "")
+  set(duplicates "")]]
+  REPLACE [[  set(seen "")]])
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 message(STATUS "byte-machine-spec: mutation suite complete")

@@ -100,6 +100,19 @@ set(BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER
 set(BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR "${CMAKE_BINARY_DIR}/chez-object-guard")
 file(MAKE_DIRECTORY "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}")
 
+# Checked before any lane is registered: a body missing a wrapper must stop the
+# build, not produce a suite that quietly proves one runtime.
+byte_machine_portability_guard(
+  SHARED_DIRS "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+  WRAPPED_DIRS "${BYTE_MACHINE_HARNESS_SELF_DIR}")
+
+byte_machine_add_test(
+  NAME byte-machine.harness.cmake-portability-guard.cmake.direct
+  COMMAND "${CMAKE_COMMAND}" -P
+          "${CMAKE_CURRENT_LIST_DIR}/support/cmake/ByteMachinePortabilityGuardSpec.cmake"
+  TIMEOUT 120
+  LABELS unit)
+
 # --- Harness lanes ---------------------------------------------------------
 
 # The harness must be able to fail before it can be trusted to pass. This is
