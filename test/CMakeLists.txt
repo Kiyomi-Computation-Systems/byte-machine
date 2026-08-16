@@ -62,3 +62,13 @@ byte_machine_add_test(
           "${CMAKE_CURRENT_LIST_DIR}/support/cmake/MutationSuite.cmake"
   TIMEOUT 600
   LABELS unit)
+
+# The exact-status assertion decides whether every expected-red test below is
+# checking anything at all, so its functional core is specified before any of
+# them relies on it.
+byte_machine_add_test(
+  NAME byte-machine.harness.cmake-expect-exit.cmake.direct
+  COMMAND "${CMAKE_COMMAND}" -P
+          "${CMAKE_CURRENT_LIST_DIR}/support/cmake/ByteMachineExpectExitSpec.cmake"
+  TIMEOUT 120
+  LABELS unit)

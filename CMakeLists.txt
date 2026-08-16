@@ -49,6 +49,7 @@ if(BYTE_MACHINE_BUILD_TESTS)
   # CTest will not create the directory for --output-junit itself.
   file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/test-results")
   include(ByteMachineTesting)
+  include(ByteMachineExpectExit)
   add_subdirectory(test)
 endif()
 

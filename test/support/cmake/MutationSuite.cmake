@@ -309,6 +309,61 @@ byte_machine_mutation(
   EXPECT_SURVIVES
     "lives in the discovery macro, which runs processes and reads the real environment; it is covered by configure-time behaviour, not by the cmake -P specifications")
 
+# --- ByteMachineExpectExit -------------------------------------------------
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
+  LABEL "expect-exit: the declared vocabulary is widened to accept anything"
+  FIND [[  if(NOT code IN_LIST BYTE_MACHINE_EXIT_STATUS_VOCABULARY)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
+  LABEL "expect-exit: non-numeric expectations accepted"
+  FIND [[  if(NOT code MATCHES "^[0-9]+$")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
+  LABEL "expect-exit: an out-of-vocabulary status is reported as an ordinary mismatch"
+  FIND [[  if(NOT actual IN_LIST BYTE_MACHINE_EXIT_STATUS_VOCABULARY)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
+  LABEL "expect-exit: a command that never ran is judged on its result string"
+  FIND [[  if(NOT actual MATCHES "^[0-9]+$")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
+  LABEL "expect-exit: the registrar stops validating its expectation"
+  FIND [[  byte_machine_expect_exit_classify("${arg_EXPECT_EXIT}" status message)
+  if(NOT status STREQUAL "ok")
+    message(FATAL_ERROR "byte-machine: ${message} (test '${arg_NAME}')")
+  endif()]]
+  # A truly empty REPLACE is indistinguishable from an omitted one:
+  # cmake_parse_arguments() cannot tell "REPLACE given the empty string" from
+  # "REPLACE given nothing" without CMP0174 set to NEW (confirmed against this
+  # project's 3.26 floor), and would leave arg_REPLACE undefined, tripping
+  # MutationRunner's own REPLACE-is-required check. A comment is a no-op
+  # substitution that keeps the mutation meaning "this validation is gone"
+  # without relying on a policy this project does not otherwise need.
+  REPLACE [[  # deleted]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
+  LABEL "expect-exit: a registration with no expectation is accepted"
+  FIND [[  if(NOT DEFINED arg_EXPECT_EXIT)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
+  LABEL "expect-exit: the classifier leaves a stale message on success"
+  FIND [[function(byte_machine_expect_exit_classify code out_status out_message)
+  set(${out_message} "" PARENT_SCOPE)]]
+  REPLACE [[function(byte_machine_expect_exit_classify code out_status out_message)]])
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 message(STATUS "byte-machine-spec: mutation suite complete")
