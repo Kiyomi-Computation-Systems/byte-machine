@@ -286,7 +286,7 @@ byte_machine_mutation(
   FIND [[    (set! harness-verbose (if (and v (not (string=? v ""))) #t #f)))]]
   REPLACE [[    (set! harness-verbose #f))]]
   EXPECT_SURVIVES
-    "with verbose forced off, a run prints one line per passing case fewer and reports the identical counters, cases, failures and status; nothing this suite can run tells the two apart")
+    "with verbose forced off, a run prints one line per passing case fewer and reports the identical counters, cases, failures and status; nothing this suite can run tells the two apart. byte-machine.harness.verbose.chez.source proves the read happens and does not raise; that the value read is honoured is covered by the manual check recorded in spec section 5.3 -- either self-tests lane with BYTE_MACHINE_TEST_VERBOSE=1 prints one pass line per case and none without it")
 
 byte_machine_mutation(
   FILE ${RUNNER} SPEC harness-self-tests.chez.sps
@@ -295,7 +295,7 @@ byte_machine_mutation(
                      (harness-say (string-append "byte-machine-harness: pass " id))))]]
   REPLACE [[                 #f)]]
   EXPECT_SURVIVES
-    "the pass line is the only thing this branch produces, and a line that is not printed changes no counter and no status; the verbose lane still proves the branch is reached and does not raise, but only a reader of the log can see the line itself")
+    "the pass line is the only thing this branch produces, and a line that is not printed changes no counter and no status; byte-machine.harness.verbose.chez.source still proves the branch is reached and does not raise, but only a reader of the log can see the line itself, which is the manual check recorded in spec section 5.3")
 
 # --- The Chez launcher's source path ---------------------------------------
 #
