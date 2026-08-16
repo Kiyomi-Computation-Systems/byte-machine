@@ -1578,21 +1578,12 @@ Create `test/support/harness/self/harness-bootstrap.scm`:
 (adapter-exit (if (= bootstrap-failures 0) 0 1))
 ```
 
-**Note for the implementer:** the `check: a false value returns false` assertion above is written against `harness-probe`, which does not exist until Task 5. Replace that one assertion with the following, which needs nothing new, and leave the probe-based coverage to Task 5:
-
-```scheme
-;; A deliberately failing check has to be observed without it counting against
-;; anything. Until harness-probe exists (Task 5), the counters are saved and
-;; restored by hand.
-(bootstrap-assert "check: a false value returns false"
-                  (let ((saved-failures harness-failure-count)
-                        (saved-checks harness-check-count)
-                        (result (check "deliberate" #f)))
-                    (set! harness-failure-count saved-failures)
-                    (set! harness-check-count saved-checks)
-                    (set! harness-current-case-failed #f)
-                    (eq? result #f)))
-```
+The `check: a false value returns false` assertion above reaches the counters
+through `harness-counters` and `harness-restore-counters!`, added in Step 4,
+rather than through `harness-probe`, which does not exist until Task 5 and is
+itself one of the things the bootstrap may not trust. It must not touch the
+counter variables directly either: R6RS makes assigning an *exported* variable a
+syntax violation, so the library would fail to compile.
 
 - [ ] **Step 2: Write the Chez wrapper**
 
