@@ -399,8 +399,20 @@
       (lambda ()
         (check "a run that executed cases is fine"
                (not (harness-empty-selection-diagnosis 3 0)))
-        (check "no cases at all is reported"
-               (string? (harness-empty-selection-diagnosis 0 0)))
+        ;; case-count=1 is exactly where (> case-count 0) flips from #f to
+        ;; #t; 3 sits well clear of that boundary and cannot tell the real
+        ;; predicate apart from a mutant such as (> case-count 1), which
+        ;; agrees with it everywhere except at 1.
+        (check "a single case is also fine, at the case-count boundary"
+               (not (harness-empty-selection-diagnosis 1 0)))
+        ;; (string? ...) is satisfied by any diagnosis text, including the
+        ;; filter-skipped wording a mutant would produce here if
+        ;; (> skipped-count 0) were loosened to (>= skipped-count 0) --
+        ;; skipped-count=0 is that predicate's own boundary. Pin the exact
+        ;; wording so that mutant is forced to disagree.
+        (check-equal "no cases at all says exactly that"
+                     (harness-empty-selection-diagnosis 0 0)
+                     "the suite registered no cases")
         (check "a fully filtered run says the filter did it"
                (harness-string-contains?
                 (harness-empty-selection-diagnosis 0 4) "filter"))
