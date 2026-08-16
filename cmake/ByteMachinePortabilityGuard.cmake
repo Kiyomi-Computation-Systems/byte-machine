@@ -83,6 +83,17 @@ endfunction()
 # SHARED_DIRS hold bodies included by a library; they need no wrappers.
 # WRAPPED_DIRS hold bodies included by a program; each needs both wrappers.
 # Every body from either kind of directory shares one basename namespace.
+#
+# Every <dir> must be absolute. The two things this function does with a
+# directory disagree about what a relative one means: the `if(IS_DIRECTORY)`
+# check below resolves it against the process working directory, while the
+# `file(GLOB)` that check protects resolves it against CMAKE_CURRENT_SOURCE_DIR.
+# A relative entry is therefore judged against a different tree than the one
+# that would be searched, and is refused unless the two happen to coincide --
+# which is to say, unless cmake was launched from the right directory. Callers
+# pass ${CMAKE_CURRENT_LIST_DIR}/... rather than depend on that (see
+# test/CMakeLists.txt). Narrowing the accepted form is deliberate: reconciling
+# the two would be a third decision about paths, and no caller needs one.
 function(byte_machine_portability_guard)
   cmake_parse_arguments(PARSE_ARGV 0 arg "" "" "SHARED_DIRS;WRAPPED_DIRS")
 
@@ -116,10 +127,13 @@ function(byte_machine_portability_guard)
           "existing directory. This guard learns of a body only by globbing a "
           "directory, so a path that is not there yields no body and no "
           "violation: the tree it stands for would be reported portable "
-          "without ever being looked at. Read it as one of two mistakes -- a "
-          "stale path, or a misspelt keyword absorbed into the preceding "
-          "keyword's value, which is how a typo reaches this check instead of "
-          "the unexpected-argument one above.")
+          "without ever being looked at. Read it as one of three mistakes -- a "
+          "stale path; a relative one, which this check resolves against the "
+          "working directory while the glob it protects resolves against "
+          "CMAKE_CURRENT_SOURCE_DIR, so pass an absolute path; or a misspelt "
+          "keyword absorbed into the preceding keyword's value, which is how a "
+          "typo reaches this check instead of the unexpected-argument one "
+          "above.")
       endif()
     endforeach()
   endforeach()
