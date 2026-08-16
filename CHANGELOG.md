@@ -36,31 +36,44 @@ what this milestone delivers.
   groups and cases, an isolated self-probe, and a computed exit status.
 - Source execution lanes for both runtimes. Chez runs through a launcher that
   pairs the library root with an always-empty object directory, so a stale
-  compiled object cannot be loaded by a lane that calls itself source. Gambit
-  gains a `source` mode: both of its compiled modes shell out to a C compiler
-  fixed when Gambit was built, which would have made the first slice that runs
-  Scheme unable to run on Gambit at all without that toolchain.
+  compiled object cannot be loaded by a lane that calls itself source. Each of
+  the launcher's three refusals — a wrong argument count, a guard directory that
+  is missing, and one that has acquired a file — is a lane of its own asserting
+  status 2, because a lane that is set up correctly never reaches a refusal and
+  so cannot notice one being deleted. Gambit gains a `source` mode: both of its
+  compiled modes shell out to a C compiler fixed when Gambit was built, which
+  would have made the first slice that runs Scheme unable to run on Gambit at
+  all without that toolchain.
 - Exact-exit-status assertions. The harness gives 0, 1, and 2 distinct
   meanings, and reserves 3, not yet produced, for lane provenance in a later
   slice. An expectation outside this four-value vocabulary is a configure
   error. A status outside it that is *observed* is reported as its own failure
   rather than as a wrong assertion outcome, since it means the process died
   before the harness could report.
-- Mutation testing extended to the Scheme harness. Each decision in the runner
-  is broken on a staged copy and checked against whichever lane can witness it:
-  the self-tests for most decisions, the bootstrap lane for the failure counter
-  every assertion reports through, and the empty-selection lane for the
-  environment read no in-process assertion can reach — with one declared
-  exception: probe output suppression changes only what is printed, never a
-  counter or a status, so no in-process assertion can observe it, and the suite
-  records it as a known survivor rather than as a gap that was missed. Adapter
-  export parity is checked the same way, on each runtime, because Scheme cannot
-  portably reflect on a library's export list — except for `harness-summary`,
-  `harness-empty-selection-error`, and `harness-failure-context`, which are
-  used only inside the shared runner body that `include` splices into each
-  adapter's library, so an internal reference resolves whatever the export list
-  says and dropping one of the three from an adapter's exports is not
-  detectable by this suite.
+- Mutation testing extended to the Scheme harness and to the Chez launcher. Each
+  decision is broken on a staged copy and checked against whichever lane can
+  witness it: the self-tests for most decisions in the runner, the bootstrap lane
+  for the failure counter every assertion reports through, the empty-selection
+  lane for the environment read no in-process assertion can reach, and one lane
+  per launcher refusal. Adapter export parity is checked the same way, on each
+  runtime, because Scheme cannot portably reflect on a library's export list.
+
+  Five mutations are declared survivors instead, each with a written reason the
+  suite fails if it stops being true. Three are print-only — probe output
+  suppression and the two halves of `BYTE_MACHINE_TEST_VERBOSE` — and share one
+  cause: they change what is printed, never a counter or a status, and the
+  portable subset has no string ports for a suite to read its own output back
+  with. One is `harness-summary`, `harness-empty-selection-error`, and
+  `harness-failure-context`, used only inside the shared runner body that
+  `include` splices into each adapter's library, so an internal reference
+  resolves whatever the export list says and dropping one of the three is not
+  detectable. The last is the launcher's `compile-imported-libraries` call:
+  deleting it restates Chez's default and changes nothing, and turning it on
+  writes an object into the guard directory only *after* that directory's
+  emptiness has been asserted, so the pollution is visible to the next process
+  and not to the one that caused it. The registered lanes do catch that one —
+  they share a guard directory — which this suite, one process per mutation,
+  cannot.
 - A portability guard failing the build when a shared test body is missing a
   wrapper, when two shared bodies share a basename, when its own glob matches
   nothing, when it receives an argument it does not recognize, or when a

@@ -110,15 +110,28 @@ protocol in §6.
 
 | Group | Names |
 | --- | --- |
-| Lifecycle | `harness-begin` `harness-finish` `harness-summary` `harness-exit-status` `harness-empty-selection-error` |
+| Lifecycle | `harness-begin` `harness-finish` `harness-summary` `harness-exit-status` `harness-empty-selection-error` `harness-empty-selection-diagnosis` |
 | Structure | `harness-group` `harness-case` |
 | Assertions | `check` `check-equal` `check-not-equal` `check-fail` `check-raises` `with-cleanup` |
 | Statuses | `harness-status-pass` `harness-status-failed` `harness-status-harness-error` `harness-status-provenance` |
 | Self-test | `harness-probe` `probe-cases` `probe-failed-cases` `probe-checks` `probe-failures` `probe-errors` `probe-skipped` `probe-cleanup-failures` `probe-raised?` `probe-failure-records` `failure-record-id` `failure-record-what` `failure-record-detail` `harness-set-filter!` |
-| Pure helpers | `harness-string-contains?` `harness-join` `harness-split` `harness-take` `harness-member?` `harness-failure-context` |
+| Pure helpers | `harness-string-contains?` `harness-join` `harness-split` `harness-take` `harness-member?` `harness-failure-context` `harness-normalize-filter` |
+| Result state | `harness-counters` `harness-restore-counters!` `harness-capture-state` |
+
+The rows above are forty-two of the fifty-six names each adapter exports; the other fourteen are the
+adapter protocol of §6 and its three arithmetic re-exports. The list is derived from the adapters and
+not the other way round: review pressure widened it four times during implementation, and a table
+kept by hand drifts silently, because nothing loads it.
 
 The pure helpers are exported so the runner's own tests can reach them. `harness-set-filter!` is
 exported so the self-tests can exercise filtering without depending on the process environment.
+`harness-empty-selection-diagnosis` and `harness-normalize-filter` are the pure rules behind
+`harness-empty-selection-error` and `harness-begin`'s filter read, split out for the same reason: a
+rule stated as a function of its inputs is directly assertable, while the same rule embedded in a
+reader of live state is only observable through whatever that state happens to make visible — and in
+the filter's case, nothing at all, since an empty needle matches every id. The result-state group
+exists for the bootstrap, which has to undo its own deliberately failing check without using
+`harness-probe`, itself one of the things the bootstrap exists to check.
 
 ### 5.2 Exit statuses
 
@@ -150,6 +163,24 @@ change the status.
 - **Output is flushed per line.** Standard output is block-buffered when it is not a terminal, so a
   process killed by a supervisor loses everything it had written — and the run whose log matters
   most is the one that was killed.
+
+The runner keeps two pieces of lifecycle state that come from the environment, both read once by
+`harness-begin` and both treating an empty value as unset, because a shell that writes `VAR=` and one
+that never sets `VAR` are otherwise indistinguishable in intent — and the same variable emptied by a
+shell must not mean opposite things in the same harness:
+
+| Variable | State | Effect |
+| --- | --- | --- |
+| `BYTE_MACHINE_TEST_FILTER` | `harness-filter` | only cases whose id contains the value run; the rest are skipped, and a run that selects nothing is status 2 |
+| `BYTE_MACHINE_TEST_VERBOSE` | `harness-verbose` | every passing case prints `byte-machine-harness: pass <id>` |
+
+`harness-verbose` is the one of the two with no in-process witness. Like probe suppression it changes
+only what is printed, never a counter or a status, and the harness has no portable way to read back
+its own output. `byte-machine.harness.verbose.chez.source` executes the path on a real runtime, so a
+break that raises is caught and the feature cannot silently rot; that the line is actually printed is
+checked by hand — running either self-tests lane with `BYTE_MACHINE_TEST_VERBOSE=1` prints one `pass`
+line per case and none without it. Both of its decisions are declared survivors in §9's mutation
+suite for that reason.
 
 Every failure line is followed by a `FAIL-CONTEXT` record naming the test, backend, mode, OS,
 architecture, runtime version, machine type, and artifact directory. `BYTE_MACHINE_TEST_NAME` and
@@ -240,6 +271,14 @@ directory the build keeps empty means a stray `.so` can never be loaded. Pointin
 beside the source and silently preferred. The launcher asserts the guard directory exists and is
 empty, and fails with status 2 if not.
 
+Each of its three refusals — a wrong argument count, a guard directory that does not exist, and one
+that has acquired a file — is a registered lane of its own asserting status 2 exactly
+(`byte-machine.harness.launcher-usage`, `-absent-guard`, and `-dirty-guard`, all `.chez.source`),
+because a lane that is set up correctly never reaches a refusal and could not notice one being
+deleted. `(compile-imported-libraries #f)` restates Chez's own default, so deleting it is
+unobservable and only turning it *on* has an effect: the object is then written into the guard
+directory, which every Chez lane shares, so the next lane to start refuses to run.
+
 The launcher does **not** re-check for Petite or for threading. Discovery already rejects Petite at
 configure time and re-probes the exact binary being registered, and decision 0001 explicitly refused
 to gate on threading. A second copy of either rule here would be the copied-requirement pattern that
@@ -270,7 +309,9 @@ Slice 5 must supply the equivalent guarantee for each compiled lane it adds.
   distinct failure (§5.4).
 - **`ByteMachineSchemeLane.cmake`** — registers one lane test for a body and a runtime, assembling
   the launcher invocation, the search paths, the environment, and the labels. Keeping this in one
-  place means the ten registrations below cannot drift apart.
+  place means the eleven registrations below cannot drift apart. The three launcher-refusal lanes are
+  the deliberate exception: this module exists to build the one *correct* command line, and those
+  three need wrong ones, so they call `byte_machine_add_exit_code_test` directly.
 
 - **`ByteMachinePortabilityGuard.cmake`** — the wrapper-pairing and basename-uniqueness rules of
   §8.4.
@@ -295,13 +336,20 @@ All are layer `harness`, so the existing `harness` and `pr` presets select them 
 | `byte-machine.harness.duplicate-case.gambit.source` | 2 | `expected-red` |
 | `byte-machine.harness.empty-selection.chez.source` | 2 | `expected-red` |
 | `byte-machine.harness.empty-selection.gambit.source` | 2 | `expected-red` |
+| `byte-machine.harness.verbose.chez.source` | 0 | |
+| `byte-machine.harness.launcher-usage.chez.source` | 2 | `expected-red` |
+| `byte-machine.harness.launcher-absent-guard.chez.source` | 2 | `expected-red` |
+| `byte-machine.harness.launcher-dirty-guard.chez.source` | 2 | `expected-red` |
 | `byte-machine.harness.scheme-mutation.cmake.direct` | 0 | |
 | `byte-machine.harness.cmake-expect-exit.cmake.direct` | 0 | |
 | `byte-machine.harness.cmake-scheme-lane.cmake.direct` | 0 | |
 | `byte-machine.harness.cmake-portability-guard.cmake.direct` | 0 | |
 
 The empty-selection lanes are registered with `BYTE_MACHINE_TEST_FILTER` set to a string matching no
-case.
+case, and the verbose lane with `BYTE_MACHINE_TEST_VERBOSE=1`. The verbose lane runs the self-tests
+body a second time for one reason only: without it nothing in this repository ever executes the
+verbose path (§5.3). The three launcher lanes run no body at all when they pass — each asserts that
+the launcher refused to start (§7.1).
 
 ### 8.3 The `expected-red` vocabulary entry
 
@@ -361,25 +409,51 @@ Four layers, ordered by independence. Each depends on strictly less than the one
 3. **Self-tests.** The full suite, using `harness-probe` to observe failing checks without those
    failures counting against the run. Covers recording, counting, classification, filtering,
    `with-cleanup`, and `check-raises`.
-4. **Scheme mutation suite.** Breaks each decision in `harness-runner.scm` on a staged copy and checks
-   it against whichever lane can witness it: the self-tests for most decisions, the bootstrap lane for
-   the failure counter every assertion reports through, and the empty-selection lane for the
-   environment read no in-process assertion can reach.
+4. **Scheme mutation suite.** Breaks each decision in `harness-runner.scm` and in the Chez launcher on
+   a staged copy and checks it against whichever lane can witness it: the self-tests for most
+   decisions, the bootstrap lane for the failure counter every assertion reports through, the
+   empty-selection lane for the environment read no in-process assertion can reach, and one lane per
+   launcher refusal, since a lane that is set up correctly never reaches one.
+
+   Five decisions are declared survivors rather than caught, each with a written reason the suite
+   fails if it goes stale. Three are print-only — probe output suppression and the two halves of
+   `harness-verbose` — and are unwitnessable for the same reason: they change what is printed, never a
+   counter or a status, and the portable subset has no string ports to read output back with. One is
+   the export list's three splice-resolved names (§9.1). The last is the launcher's
+   `compile-imported-libraries` call, whose only observable effect is a file written *after* the guard
+   directory's emptiness has already been asserted, so it is visible to the next process and not to
+   the one that wrote it; the registered lanes do catch it, because they share one guard directory.
 
 ### 9.1 Adapter name parity
 
 D4 requires both adapters to export exactly the same names. Scheme cannot portably reflect on a
 library's export list, so the check is made by mutation: deleting an export from `harness.sls` or
-`harness.sld` must make the self-tests fail.
+`harness.sld` must make a lane fail.
 
-That is what forces the self-test body to reference every exported name, which in turn is what makes
-running one shared body on both runtimes a parity proof rather than a coincidence. A name present in
-one adapter and absent from the other is otherwise invisible until some later milestone happens to
-use it.
+Which lane, and what forces it, is worth stating exactly, because the property that makes the
+mutation bite is not "every name is used somewhere" but "every name is referenced from a body or
+wrapper, which is *outside* the library":
+
+- The **self-tests body references every adapter-protocol name**, including `adapter-exit`, which it
+  can only name and not call. That is what makes running this one body on both runtimes a parity
+  proof for the adapter rather than a coincidence, and it is the whole basis of the mutation suite's
+  second pass — the only per-runtime witness the Gambit adapter has.
+- Every **wrapper references `harness-begin` and `harness-finish`**.
+- The **bootstrap body** covers the pure helpers and the result-state group: `harness-join`,
+  `harness-split`, `harness-take`, `harness-member?`, `harness-counters`,
+  `harness-restore-counters!`, and `adapter-exit` again.
+- Three names are referenced by **no body and no wrapper**: `harness-summary`,
+  `harness-empty-selection-error`, and `harness-failure-context`. All three are used only inside
+  `harness-runner.scm`, which `include` splices into the library body, so those references resolve
+  whatever the export list says. Dropping any of them is undetectable, and the suite records that as
+  an expected survivor rather than leaving it to be discovered.
+
+A name present in one adapter and absent from the other is otherwise invisible until some later
+milestone happens to use it.
 
 ### 9.2 Mutations to declare
 
-At minimum, one per decision in the runner:
+At minimum, one per decision in the runner and in the Chez launcher:
 
 - assertion comparison inverted or made unconditionally true (`check`, `check-equal`,
   `check-not-equal`);
@@ -393,7 +467,11 @@ At minimum, one per decision in the runner:
 - `harness-begin` ignoring `BYTE_MACHINE_TEST_FILTER` from the environment;
 - exit-status precedence changed so a failure outranks a harness error;
 - probe state not restored, or probe output not suppressed;
-- an export deleted from each adapter (§9.1).
+- `BYTE_MACHINE_TEST_VERBOSE` not read, or a passing case not announced when it is set;
+- an export deleted from each adapter (§9.1);
+- each of the launcher's three refusals removed — wrong argument count, absent guard directory,
+  guard directory with a file in it — and each entry of its source path dropped;
+- the launcher allowed to compile what it imports.
 
 ## 10. Work order
 
@@ -434,9 +512,10 @@ Each step must fail before it passes.
 - a duplicate case id and an empty selection each exit **2** on both runtimes;
 - the bootstrap body passes on both runtimes without using any assertion, case, group, or summary
   facility from the runner;
-- every mutation in `SchemeMutationSuite.cmake` is caught by the Chez source self-test lane, or is
+- every mutation in `SchemeMutationSuite.cmake` is caught by a lane that can witness it, or is
   declared `EXPECT_SURVIVES` with a written reason;
-- deleting any export from either adapter makes the self-tests fail;
+- deleting from either adapter any export a body or wrapper references makes a lane fail; the three
+  that nothing outside the library references are the declared exception, recorded in §9.1;
 - the portability guard fails when a body is missing a wrapper, when two shared bodies share a
   basename, and when its glob matches nothing;
 - `ByteMachineExpectExit`, `ByteMachineSchemeLane`, and `ByteMachinePortabilityGuard` each have a
