@@ -536,6 +536,15 @@ byte_machine_mutation(
   FIND [[  if(arg_UNPARSED_ARGUMENTS)]]
   REPLACE [[  if(FALSE)]])
 
+# The companion to the one above: the check that catches a mistyped keyword the
+# parser has already absorbed into the preceding keyword's value, where
+# arg_UNPARSED_ARGUMENTS is empty and cannot see it.
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: an entry that is not a directory is accepted"
+  FIND [[      if(NOT IS_DIRECTORY "${entry}")]]
+  REPLACE [[      if(FALSE)]])
+
 byte_machine_mutation(
   FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
   LABEL "guard: the glob asks for a build-system re-check where there is no build system"

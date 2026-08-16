@@ -83,6 +83,18 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
     byte_machine_portability_guard(
       WRAPPED_DIR "${fixture}/unpaired"
       SHARED_DIRS "${fixture}/paired")
+  elseif(c STREQUAL "guard-rejects-a-trailing-misspelt-keyword")
+    # The other half of the same typo, and the form the real call site is
+    # exposed to: at test/CMakeLists.txt the trailing keyword is WRAPPED_DIRS,
+    # so a typo there lands *after* SHARED_DIRS and is absorbed into its value
+    # -- arg_UNPARSED_ARGUMENTS is empty and the case above cannot see it. What
+    # stops it is that `WRAPPED_DIR` is not a directory. SHARED_DIRS is again
+    # deliberately complete, so a guard that does not check its entries globs
+    # `paired/`, finds no violation, and prints the success banner for a
+    # WRAPPED_DIRS it never received.
+    byte_machine_portability_guard(
+      SHARED_DIRS "${fixture}/paired"
+      WRAPPED_DIR "${fixture}/unpaired")
   elseif(c STREQUAL "guard-rejects-an-empty-glob")
     # A guard that finds nothing must say so. Reporting a tree it never looked
     # at as portable is worse than not guarding it, because it is reported as
@@ -176,10 +188,12 @@ spec_check_equal("${missing_count}" "2" "a body with no wrappers reports both")
 #
 # Each fragment names wording the module controls, so replacing a FATAL_ERROR
 # with a differently worded message is a failure rather than something that
-# passes on "an error happened". Two of them reach past the wording to the text
-# the diagnostic must interpolate -- the wrapper it should have demanded, the
-# stray token it should have refused -- because a guard that checked the wrong
-# thing would still be able to produce the first half of either sentence.
+# passes on "an error happened". Three of them reach past the wording to the
+# text the diagnostic must interpolate -- the wrapper it should have demanded,
+# and the stray token it should have refused, named once where the parser left
+# it unparsed and once where the parser had already absorbed it -- because a
+# guard that checked the wrong thing would still be able to produce the first
+# half of any of those sentences.
 #
 # These are regular expressions (spec_expect_rejected matches with MATCHES), so
 # every `.` in a filename is escaped: an unescaped one is a wildcard that would
@@ -191,6 +205,7 @@ spec_check_equal("${missing_count}" "2" "a body with no wrappers reports both")
 
 spec_expect_all_rejected("${SPEC_SELF}"
   "guard-rejects-an-unexpected-argument|unexpected arguments to byte_machine_portability_guard: WRAPPED_DIR"
+  "guard-rejects-a-trailing-misspelt-keyword|SHARED_DIRS was given 'WRAPPED_DIR', which is not an existing directory"
   "guard-rejects-an-empty-glob|found no shared bodies to check, which means its glob is wrong"
   "guard-rejects-a-duplicate-basename|basenames must be unique across every shared body directory, but these repeat: twin\\.scm"
   "guard-rejects-a-missing-wrapper|every shared test body needs a wrapper for each runtime.*unpaired-body\\.gambit\\.scm")

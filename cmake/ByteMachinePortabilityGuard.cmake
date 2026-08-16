@@ -88,13 +88,39 @@ function(byte_machine_portability_guard)
 
   # A guard that accepts a keyword it does not understand reports success for a
   # rule it never applied, which is the failure this whole module exists to
-  # prevent. Note the reach of this check: both keywords are multi-value, so a
-  # stray token is unparsed only until the first recognised keyword: after one,
-  # it is absorbed as another directory rather than reported here.
+  # prevent. This check sees one half of that hazard and the directory check
+  # below sees the other, because both keywords are multi-value: a stray token
+  # is unparsed only until the first recognised keyword, and after one it is
+  # absorbed into that keyword's value instead of arriving here. Neither check
+  # subsumes the other -- a token before any keyword never reaches the
+  # directory check, and a token after one never reaches this check -- so a
+  # mistyped keyword is refused wherever in the call it was written.
   if(arg_UNPARSED_ARGUMENTS)
     message(FATAL_ERROR
       "byte-machine: unexpected arguments to byte_machine_portability_guard: ${arg_UNPARSED_ARGUMENTS}")
   endif()
+
+  # The other half. Both keywords name directories, and this guard only ever
+  # learns of a body by globbing one, so an entry that is not a directory
+  # contributes no match, no violation, and a success banner over a tree
+  # nothing looked at -- the header's "worse than no guard at all". A keyword
+  # absorbed into the preceding keyword's value arrives here as exactly that:
+  # a directory named `WRAPPED_DIR`.
+  foreach(keyword IN ITEMS SHARED_DIRS WRAPPED_DIRS)
+    foreach(entry IN LISTS arg_${keyword})
+      if(NOT IS_DIRECTORY "${entry}")
+        message(FATAL_ERROR
+          "byte-machine: ${keyword} was given '${entry}', which is not an "
+          "existing directory. This guard learns of a body only by globbing a "
+          "directory, so a path that is not there yields no body and no "
+          "violation: the tree it stands for would be reported portable "
+          "without ever being looked at. Read it as one of two mistakes -- a "
+          "stale path, or a misspelt keyword absorbed into the preceding "
+          "keyword's value, which is how a typo reaches this check instead of "
+          "the unexpected-argument one above.")
+      endif()
+    endforeach()
+  endforeach()
 
   # CONFIGURE_DEPENDS asks the build system to re-run the glob, and script mode
   # has no build system: `cmake -P` rejects the keyword outright rather than
