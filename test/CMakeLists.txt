@@ -81,3 +81,34 @@ byte_machine_add_test(
           "${CMAKE_CURRENT_LIST_DIR}/support/cmake/ByteMachineSchemeLaneSpec.cmake"
   TIMEOUT 120
   LABELS unit)
+
+# --- Harness paths ---------------------------------------------------------
+
+set(BYTE_MACHINE_HARNESS_DIR "${CMAKE_CURRENT_LIST_DIR}/support/harness")
+set(BYTE_MACHINE_HARNESS_SHARED_DIR "${BYTE_MACHINE_HARNESS_DIR}/shared")
+set(BYTE_MACHINE_HARNESS_SELF_DIR "${BYTE_MACHINE_HARNESS_DIR}/self")
+set(BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT "${BYTE_MACHINE_HARNESS_DIR}/chez")
+set(BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT "${BYTE_MACHINE_HARNESS_DIR}/gambit")
+set(BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER
+    "${CMAKE_CURRENT_LIST_DIR}/support/launchers/chez-source.ss")
+
+# The object guard is what makes the Chez source lane honest: Chez looks for a
+# compiled library only in the object half of a library-directories pair, so
+# pairing the source root with a directory that is always empty makes a stale
+# .so unloadable. It lives in the build tree precisely because nothing may ever
+# be written into it.
+set(BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR "${CMAKE_BINARY_DIR}/chez-object-guard")
+file(MAKE_DIRECTORY "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}")
+
+# --- Harness lanes ---------------------------------------------------------
+
+# The harness must be able to fail before it can be trusted to pass. This is
+# that proof: a body that fails one assertion, with the exact status compared
+# from outside, because a program cannot report its own exit status.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.failing-body.chez.source
+  BACKEND chez
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.chez.sps"
+  EXPECT_EXIT 1
+  TIMEOUT 120
+  LABELS expected-red)
