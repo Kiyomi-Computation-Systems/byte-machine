@@ -21,7 +21,9 @@
     ;; assertions
     check
     ;; pure helpers, exported so the runner's own tests can reach them
-    harness-join harness-member? harness-failure-context
+    harness-string-contains? harness-join harness-split harness-take
+    harness-member? harness-failure-context
+    harness-counters harness-restore-counters!
     ;; adapter protocol
     adapter-runtime-name adapter-runtime-version adapter-machine-type
     adapter-os adapter-architecture adapter-execution-mode
@@ -111,9 +113,9 @@
                  (os-hit (adapter-lookup-prefix adapter-os-table rest)))
             (if os-hit (cdr os-hit) "unknown")))))
 
-  ;; The launcher declares the execution mode; it is the only party that knows
-  ;; whether it loaded source or a compiled object. Its object guard makes the
-  ;; compiled lane impossible, so the declaration cannot be silently wrong.
+  ;; The lane registration declares the execution mode; the launcher never
+  ;; touches this variable. The launcher's object guard is what makes the
+  ;; declaration unfalsifiable: it makes a compiled object impossible to load.
   (define (adapter-execution-mode)
     (let ((m (getenv "BYTE_MACHINE_EXECUTION_MODE")))
       (if (and m (not (string=? m ""))) m "unknown")))

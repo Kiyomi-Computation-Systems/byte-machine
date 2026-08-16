@@ -39,10 +39,51 @@
             acc
             (loop (cdr rest) (string-append acc separator (car rest)))))))
 
+(define (harness-string-contains? haystack needle)
+  (let ((hn (string-length haystack))
+        (nn (string-length needle)))
+    (let outer ((start 0))
+      (cond ((> (+ start nn) hn) #f)
+            ((let inner ((i 0))
+               (cond ((= i nn) #t)
+                     ((char=? (string-ref haystack (+ start i))
+                              (string-ref needle i))
+                      (inner (+ i 1)))
+                     (else #f)))
+             #t)
+            (else (outer (+ start 1)))))))
+
+;; A trailing separator yields a trailing empty field, deliberately: dropping it
+;; would make "a." and "a" split alike, and a filter written against the
+;; difference would silently stop distinguishing them.
+(define (harness-split text separator)
+  (let ((n (string-length text)))
+    (let loop ((i 0) (start 0) (acc '()))
+      (cond ((= i n) (reverse (cons (substring text start n) acc)))
+            ((char=? (string-ref text i) separator)
+             (loop (+ i 1) (+ i 1) (cons (substring text start i) acc)))
+            (else (loop (+ i 1) start acc))))))
+
+(define (harness-take lst count)
+  (if (or (= count 0) (null? lst))
+      '()
+      (cons (car lst) (harness-take (cdr lst) (- count 1)))))
+
 (define (harness-member? x lst)
   (cond ((null? lst) #f)
         ((equal? x (car lst)) #t)
         (else (harness-member? x (cdr lst)))))
+
+;; Exported so the bootstrap can observe a deliberate failure and undo it
+;; without depending on harness-probe, which is itself one of the things the
+;; bootstrap exists to check.
+(define (harness-counters)
+  (list harness-failure-count harness-check-count))
+
+(define (harness-restore-counters! saved)
+  (set! harness-failure-count (car saved))
+  (set! harness-check-count (car (cdr saved)))
+  (set! harness-current-case-failed #f))
 
 ;; ---------------------------------------------------------------------------
 ;; Mutable result state (the imperative shell of the runner)
@@ -208,8 +249,11 @@
 (define (harness-begin suite-name)
   (set! harness-suite-name suite-name)
   (harness-clear-state!)
-  (set! harness-verbose
-        (if (adapter-environment-variable "BYTE_MACHINE_TEST_VERBOSE") #t #f))
+  ;; An empty value means unset, matching adapter-execution-mode: the same
+  ;; variable emptied by a shell (BYTE_MACHINE_TEST_VERBOSE=) must not mean
+  ;; opposite things in the same harness.
+  (let ((v (adapter-environment-variable "BYTE_MACHINE_TEST_VERBOSE")))
+    (set! harness-verbose (if (and v (not (string=? v ""))) #t #f)))
   (harness-banner))
 
 (define (harness-exit-status)

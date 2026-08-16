@@ -112,3 +112,11 @@ byte_machine_add_scheme_lane(
   EXPECT_EXIT 1
   TIMEOUT 120
   LABELS expected-red)
+
+# The runner cannot be its own only witness. This judges its primitives with
+# raw conditionals, using none of the facilities it is checking.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.bootstrap.chez.source
+  BACKEND chez
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+  TIMEOUT 120)
