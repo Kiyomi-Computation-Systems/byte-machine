@@ -47,7 +47,14 @@ set(BYTE_MACHINE_TEST_MODES source aot o1 direct)
 # production `-exe -nopreload` lane; the CMake-layer specifications run directly
 # under `cmake -P` and have no Scheme runtime at all.
 set(BYTE_MACHINE_TEST_MODES_chez source aot)
-set(BYTE_MACHINE_TEST_MODES_gambit o1 aot)
+# Gambit's `source` lane is `gsi` interpreting the .sld directly. protium has no
+# equivalent because its lanes must link a native shim; byte-machine has no
+# native code of its own, and both of Gambit's compiled modes shell out to a C
+# compiler whose name was fixed when Gambit was built. Without this mode the
+# first slice that runs Scheme could not run on Gambit at all without that
+# toolchain, while Chez source needs nothing -- and parent plan section 24.2
+# asks for a source suite that stays runnable without native compilation.
+set(BYTE_MACHINE_TEST_MODES_gambit source o1 aot)
 set(BYTE_MACHINE_TEST_MODES_cmake direct)
 
 # --- Functional core -------------------------------------------------------

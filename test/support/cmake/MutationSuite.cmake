@@ -370,6 +370,55 @@ byte_machine_mutation(
   set(${out_message} "" PARENT_SCOPE)]]
   REPLACE [[function(byte_machine_expect_exit_classify code out_status out_message)]])
 
+# --- ByteMachineSchemeLane -------------------------------------------------
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: the chez object guard is dropped, so a stale .so can be preferred over source"
+  FIND [[      "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
+]]
+  # Same empty-REPLACE hazard as the expect-exit mutation above (CMP0174; see
+  # its comment for why a truly empty REPLACE will not parse). Here the
+  # deleted argument sits inside a multi-line set() list rather than replacing
+  # a whole statement, and FIND's match includes the line's own trailing
+  # newline -- so the comment needs one too, or it would swallow the following
+  # "${program}" line into itself and delete both arguments instead of one.
+  REPLACE [[  # deleted
+]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: gambit no longer skips .gambini"
+  FIND [[      "-f"
+]]
+  # Same reasoning as the object-guard mutation above.
+  REPLACE [[  # deleted
+]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: an undiscovered chez yields a command with an empty executable"
+  FIND [[    if(NOT BYTE_MACHINE_CHEZ_EXECUTABLE)]]
+  REPLACE [[    if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: an undiscovered gambit yields a command with an empty executable"
+  FIND [[    if(NOT BYTE_MACHINE_GAMBIT_EXECUTABLE)]]
+  REPLACE [[    if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: an unknown backend is reported as usable"
+  FIND [[  set(${out_status} "unknown-backend" PARENT_SCOPE)]]
+  REPLACE [[  set(${out_status} "ok" PARENT_SCOPE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
+  LABEL "testing: gambit's source mode is withdrawn"
+  FIND [[set(BYTE_MACHINE_TEST_MODES_gambit source o1 aot)]]
+  REPLACE [[set(BYTE_MACHINE_TEST_MODES_gambit o1 aot)]])
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 message(STATUS "byte-machine-spec: mutation suite complete")

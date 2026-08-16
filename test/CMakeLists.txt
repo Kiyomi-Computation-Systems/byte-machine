@@ -72,3 +72,12 @@ byte_machine_add_test(
           "${CMAKE_CURRENT_LIST_DIR}/support/cmake/ByteMachineExpectExitSpec.cmake"
   TIMEOUT 120
   LABELS unit)
+
+# A lane's command line decides whether a source lane is really a source lane.
+# Specified before any lane is registered against it.
+byte_machine_add_test(
+  NAME byte-machine.harness.cmake-scheme-lane.cmake.direct
+  COMMAND "${CMAKE_COMMAND}" -P
+          "${CMAKE_CURRENT_LIST_DIR}/support/cmake/ByteMachineSchemeLaneSpec.cmake"
+  TIMEOUT 120
+  LABELS unit)

@@ -50,6 +50,7 @@ if(BYTE_MACHINE_BUILD_TESTS)
   file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/test-results")
   include(ByteMachineTesting)
   include(ByteMachineExpectExit)
+  include(ByteMachineSchemeLane)
   add_subdirectory(test)
 endif()
 
