@@ -29,7 +29,7 @@
     ;; pure helpers, exported so the runner's own tests can reach them
     harness-string-contains? harness-join harness-split harness-take
     harness-member? harness-failure-context
-    harness-counters harness-restore-counters!
+    harness-counters harness-restore-counters! harness-capture-state
     ;; adapter protocol
     adapter-runtime-name adapter-runtime-version adapter-machine-type
     adapter-os adapter-architecture adapter-execution-mode
