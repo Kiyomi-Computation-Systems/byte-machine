@@ -120,3 +120,12 @@ byte_machine_add_scheme_lane(
   BACKEND chez
   PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
   TIMEOUT 120)
+
+# The runner tested with the runner. Safe only because the bootstrap already
+# established its primitives, and because every deliberate failure here runs
+# inside a probe.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.self.chez.source
+  BACKEND chez
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
+  TIMEOUT 120)

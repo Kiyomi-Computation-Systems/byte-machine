@@ -95,7 +95,7 @@
                   (not (string=? (adapter-os) "unknown")))
 (bootstrap-assert "adapter: architecture is known"
                   (not (string=? (adapter-architecture) "unknown")))
-(bootstrap-assert "adapter: execution mode is declared by the launcher"
+(bootstrap-assert "adapter: execution mode is declared by the lane registration"
                   (string=? (adapter-execution-mode) "source"))
 (bootstrap-assert "adapter: an unset variable reads as false"
                   (not (adapter-environment-variable "BYTE_MACHINE_NOT_SET_ANYWHERE")))

@@ -19,7 +19,13 @@
     ;; structure
     harness-group harness-case
     ;; assertions
-    check
+    check check-equal check-not-equal check-fail check-raises with-cleanup
+    ;; self-testing
+    harness-probe harness-set-filter!
+    probe-cases probe-failed-cases probe-checks probe-failures
+    probe-errors probe-skipped probe-cleanup-failures probe-raised?
+    probe-failure-records
+    failure-record-id failure-record-what failure-record-detail
     ;; pure helpers, exported so the runner's own tests can reach them
     harness-string-contains? harness-join harness-split harness-take
     harness-member? harness-failure-context
