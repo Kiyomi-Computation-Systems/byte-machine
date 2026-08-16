@@ -413,6 +413,77 @@ byte_machine_mutation(
   FIND [[  set(${out_status} "unknown-backend" PARENT_SCOPE)]]
   REPLACE [[  set(${out_status} "ok" PARENT_SCOPE)]])
 
+# Diagnostic wording is asserted exactly (see ByteMachineSchemeLaneSpec.cmake),
+# so each message the functional core can produce gets its own mutation: a
+# dropped interpolation, a copy-pasted wrong backend name, and a one-word typo.
+# Any of the three would otherwise pass every existing assertion undetected.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: the chez no-runtime message drops its program interpolation"
+  FIND [[        "no Chez was discovered, so the chez source lane for '${program}' is not registered."]]
+  REPLACE [[        "no Chez was discovered, so the chez source lane is not registered."]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: the gambit no-runtime message names the wrong backend"
+  FIND [[        "no Gambit was discovered, so the gambit source lane for '${program}' is not registered."]]
+  REPLACE [[        "no Gambit was discovered, so the chez source lane for '${program}' is not registered."]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: the unknown-backend message is garbled"
+  FIND [[    "'${backend}' is not a Scheme lane backend. Known backends: chez gambit."]]
+  REPLACE [[    "'${backend}' is not a Scheme land backend. Known backends: chez gambit."]])
+
+# byte_machine_add_scheme_lane's own decisions -- argument validation, backend
+# routing, and the environment it hands to the registrar -- had no coverage at
+# all before this: any specification failure here means the registration
+# function itself, not the functional core above it, stopped doing its job.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: unexpected arguments to the registrar are accepted"
+  FIND [[  if(arg_UNPARSED_ARGUMENTS)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: a missing NAME, BACKEND, PROGRAM, or TIMEOUT is accepted"
+  FIND [[    if(NOT arg_${required})]]
+  REPLACE [[    if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: a program that does not exist is registered anyway"
+  FIND [[  if(NOT EXISTS "${arg_PROGRAM}")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: an unknown backend no longer stops registration"
+  FIND [[  if(status STREQUAL "unknown-backend")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: a no-runtime backend is registered instead of skipped"
+  FIND [[  if(status STREQUAL "no-runtime")]]
+  REPLACE [[  if(FALSE)]])
+
+# This is the mutation that matters most: if EXPECT_EXIT stopped being able to
+# route to the exit-code registrar, every expected-red test in this milestone
+# would silently become a "must exit 0" test.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: EXPECT_EXIT is ignored, so every lane registers as a plain must-exit-0 test"
+  FIND [[  if(DEFINED arg_EXPECT_EXIT)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: the source execution mode is no longer declared in the environment"
+  FIND [[  set(environment "BYTE_MACHINE_EXECUTION_MODE=source" ${arg_ENVIRONMENT})]]
+  REPLACE [[  set(environment ${arg_ENVIRONMENT})]])
+
 byte_machine_mutation(
   FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
   LABEL "testing: gambit's source mode is withdrawn"
