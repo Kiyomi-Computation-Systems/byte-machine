@@ -84,12 +84,24 @@ endfunction()
 function(byte_machine_portability_guard)
   cmake_parse_arguments(PARSE_ARGV 0 arg "" "" "SHARED_DIRS;WRAPPED_DIRS")
 
+  # CONFIGURE_DEPENDS asks the build system to re-run the glob, and script mode
+  # has no build system: `cmake -P` rejects the keyword outright rather than
+  # ignoring it. Requesting it unconditionally would make this function
+  # uncallable by its own specification, leaving a hand-run experiment as the
+  # only evidence that it stops a build -- which is precisely what the mutation
+  # suite exists to replace. Every mode that can honour the keyword still gets
+  # it.
+  set(glob_depends CONFIGURE_DEPENDS)
+  if(CMAKE_SCRIPT_MODE_FILE)
+    set(glob_depends "")
+  endif()
+
   set(patterns "")
   foreach(dir IN LISTS arg_SHARED_DIRS arg_WRAPPED_DIRS)
     list(APPEND patterns "${dir}/*.scm")
   endforeach()
 
-  file(GLOB globbed CONFIGURE_DEPENDS ${patterns})
+  file(GLOB globbed ${glob_depends} ${patterns})
   byte_machine_guard_shared_bodies(bodies ${globbed})
 
   if(NOT bodies)
@@ -99,19 +111,24 @@ function(byte_machine_portability_guard)
       "portable. Searched: ${patterns}")
   endif()
 
-  byte_machine_guard_duplicate_basenames(duplicates ${bodies})
-  if(duplicates)
+  # Deliberately not named `duplicates`: that is the callee's own accumulator
+  # name, and CMake resolves an unset local through the *calling* scope, so an
+  # out-variable sharing the accumulator's name is correct only for as long as
+  # the callee keeps initializing it. The specification's ambient-`duplicates`
+  # assertion documents the hazard; this name keeps the shell out of its way.
+  byte_machine_guard_duplicate_basenames(repeated_basenames ${bodies})
+  if(repeated_basenames)
     message(FATAL_ERROR
       "byte-machine: shared body basenames must be unique across every shared "
-      "body directory, but these repeat: ${duplicates}. Chez resolves includes "
-      "through source-directories, which is one flat namespace, so two bodies "
-      "with one basename collapse into a single file and the build stays green "
-      "with one of them never executed again.")
+      "body directory, but these repeat: ${repeated_basenames}. Chez resolves "
+      "includes through source-directories, which is one flat namespace, so "
+      "two bodies with one basename collapse into a single file and the build "
+      "stays green with one of them never executed again.")
   endif()
 
   set(wrapped "")
   foreach(dir IN LISTS arg_WRAPPED_DIRS)
-    file(GLOB dir_globbed CONFIGURE_DEPENDS "${dir}/*.scm")
+    file(GLOB dir_globbed ${glob_depends} "${dir}/*.scm")
     byte_machine_guard_shared_bodies(dir_bodies ${dir_globbed})
     list(APPEND wrapped ${dir_bodies})
   endforeach()

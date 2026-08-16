@@ -522,6 +522,48 @@ byte_machine_mutation(
   set(duplicates "")]]
   REPLACE [[  set(seen "")]])
 
+# The imperative shell. Every decision it makes is observable only as a dead
+# process -- a guard that returns has, by construction, found nothing to say --
+# so each of these is caught by a rejection case in the specification rather
+# than by an assertion on a returned value. The first of them is what proves
+# those cases reach the guard at all: with the script-mode branch gone,
+# CONFIGURE_DEPENDS makes the function uncallable under `cmake -P` and every
+# case dies before reaching the decision it was written for.
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: the glob asks for a build-system re-check where there is no build system"
+  FIND [[  if(CMAKE_SCRIPT_MODE_FILE)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: an empty glob is reported as a portable tree"
+  FIND [[  if(NOT bodies)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: a duplicate basename is reported without stopping the build"
+  FIND [[    message(FATAL_ERROR
+      "byte-machine: shared body basenames must be unique across every shared "]]
+  REPLACE [[    message(STATUS
+      "byte-machine: shared body basenames must be unique across every shared "]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: a missing wrapper is reported without stopping the build"
+  FIND [[    message(FATAL_ERROR
+      "byte-machine: every shared test body needs a wrapper for each runtime, "]]
+  REPLACE [[    message(STATUS
+      "byte-machine: every shared test body needs a wrapper for each runtime, "]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: wrappers are demanded of the shared directories, not the wrapped ones"
+  FIND [[  foreach(dir IN LISTS arg_WRAPPED_DIRS)]]
+  REPLACE [[  foreach(dir IN LISTS arg_SHARED_DIRS)]])
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 message(STATUS "byte-machine-spec: mutation suite complete")
