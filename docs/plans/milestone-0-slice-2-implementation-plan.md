@@ -2176,8 +2176,14 @@ and replace the `(else ...)` arm of `harness-case` with:
                  (set! harness-failed-case-count (+ harness-failed-case-count 1))
                  (if harness-verbose
                      (harness-say (string-append "byte-machine-harness: pass " id))))
-             (set! harness-current-case #f)))))
+             (set! harness-current-case #f)))))))
 ```
+
+The new arm nests two levels deeper than the one it replaces (`if` then `begin`), so it
+needs two more trailing close parens than the old arm's five: one each for `begin` and
+the new `if`, on top of the `set!`, `else`, `cond`, `let`, and `define` the old arm's five
+already closed. Five here silently reproduces the old depth and leaves `let` and `define`
+open, which is invisible until the reader runs off the end of the file.
 
 Also set the filter from the environment in `harness-begin`, immediately after `harness-clear-state!`:
 
