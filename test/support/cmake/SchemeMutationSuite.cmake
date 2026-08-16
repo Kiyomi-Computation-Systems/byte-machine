@@ -139,25 +139,48 @@ byte_machine_mutation(
   FIND [[      ((harness-member? id harness-case-ids)]]
   REPLACE [[      (#f]])
 
+# harness-record-error! takes one argument where harness-record-failure! takes
+# two, so the "case raised" label goes with the call it belongs to: keeping it
+# would mutate the arity rather than the classification, and the arity violation
+# is caught by a different assertion than the one this line claims to exercise.
 byte_machine_mutation(
   FILE ${RUNNER} SPEC harness-self-tests.chez.sps
   LABEL "runner: a raise inside a case is recorded as an error rather than that case's failure"
   FIND [[                   (harness-record-failure!
-                    "case raised"]]
+                    "case raised"
+                    (adapter-describe-condition (car (cdr outcome))))]]
   REPLACE [[                   (harness-record-error!
-                    "case raised"]])
+                    (adapter-describe-condition (car (cdr outcome))))]])
 
-# Two sites, deliberately: harness-group and with-cleanup re-raise through
-# identical text, and both self-tests -- the group one and the cleanup one --
-# must notice. Splitting them would need the two to be written differently for
-# no reason other than to be mutated apart.
+# harness-group and with-cleanup re-raise through identical text, so each of the
+# two mutations below anchors on the line above the `if` -- the group-stack pop
+# for one, the tail of the cleanup report for the other. They were one SITES 2
+# mutation until a review showed what that concealed: a multi-site mutation is
+# "caught" as soon as any one site is caught, and only the cleanup site was.
+# harness-group pops its name off the stack *before* it re-raises, so deleting
+# the re-raise still leaves every prefix correct; the group merely returns the
+# condition instead of throwing it, and the one self-test that raises inside a
+# group asserted only that no prefix was left behind. Split, each re-raise has
+# to be witnessed on its own, and the group one stayed uncaught until
+# "a group re-raises its body's condition" was added to the self-tests.
 byte_machine_mutation(
   FILE ${RUNNER} SPEC harness-self-tests.chez.sps
-  LABEL "runner: a body's condition is swallowed instead of re-raised (group and cleanup)"
-  SITES 2
-  FIND [[    (if (eq? (car outcome) 'raised)
+  LABEL "runner: a group swallows its body's condition instead of re-raising it"
+  FIND [[    (set! harness-group-stack (cdr harness-group-stack))
+    (if (eq? (car outcome) 'raised)
         (raise (car (cdr outcome)))]]
-  REPLACE [[    (if #f
+  REPLACE [[    (set! harness-group-stack (cdr harness-group-stack))
+    (if #f
+        (raise (car (cdr outcome)))]])
+
+byte_machine_mutation(
+  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  LABEL "runner: with-cleanup swallows its body's condition instead of re-raising it"
+  FIND [[             (adapter-describe-condition (car (cdr cleanup-outcome)))))))
+    (if (eq? (car outcome) 'raised)
+        (raise (car (cdr outcome)))]]
+  REPLACE [[             (adapter-describe-condition (car (cdr cleanup-outcome)))))))
+    (if #f
         (raise (car (cdr outcome)))]])
 
 byte_machine_mutation(

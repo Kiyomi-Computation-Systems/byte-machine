@@ -162,7 +162,28 @@
                     (harness-case "after" (lambda () (check "x" #f)))))))
           (check-equal "the failed group left no prefix behind"
                        (failure-record-id (car (probe-failure-records p)))
-                       "after"))))))
+                       "after"))))
+
+    ;; A separate decision from the unwinding above, and not implied by it:
+    ;; harness-group pops its name off the stack *before* it re-raises, so a
+    ;; group that swallowed its body's condition outright would still leave no
+    ;; prefix behind and still let "after" register at the top level. The case
+    ;; above would pass unchanged -- its guard would simply never fire, which
+    ;; nothing there can observe. Escaping is asserted here instead, by
+    ;; recording which way harness-group returned rather than by catching the
+    ;; raise and hoping the catch ran: a swallowed condition comes back as
+    ;; 'returned and the comparison names the defect, where an unguarded (car
+    ;; outcome) would only crash on a non-pair.
+    (harness-case "a group re-raises its body's condition"
+      (lambda ()
+        (let ((outcome
+               (guard (e (#t (list 'raised e)))
+                 (list 'returned
+                       (harness-group "doomed" (lambda () (raise 'boom)))))))
+          (check-equal "the condition escaped the group"
+                       (car outcome) 'raised)
+          (check-equal "and it is the original condition, unchanged"
+                       (car (cdr outcome)) 'boom))))))
 
 (harness-group "cleanup"
   (lambda ()
