@@ -30,6 +30,39 @@ what this milestone delivers.
 - `.gitattributes` normalizing the repository to LF and marking fixture trees
   binary, since generated-source comparison and CRLF-framed HTTP fixtures both
   depend on exact bytes.
+- A dependency-free portable test harness: one shared runner body included by a
+  thin `(byte-machine test harness)` library per runtime, with adapters that
+  export identical names and contain no test semantics of their own. Assertions,
+  groups and cases, an isolated self-probe, and a computed exit status.
+- Source execution lanes for both runtimes. Chez runs through a launcher that
+  pairs the library root with an always-empty object directory, so a stale
+  compiled object cannot be loaded by a lane that calls itself source. Gambit
+  gains a `source` mode: both of its compiled modes shell out to a C compiler
+  fixed when Gambit was built, which would have made the first slice that runs
+  Scheme unable to run on Gambit at all without that toolchain.
+- Exact-exit-status assertions. The harness gives 0, 1, and 2 distinct meanings,
+  and an expectation outside the declared vocabulary is a configure error. A
+  status outside it that is *observed* is reported as its own failure rather
+  than as a wrong assertion outcome, since it means the process died before the
+  harness could report.
+- Mutation testing extended to the Scheme harness. Each decision in the runner
+  is broken on a staged copy and the self-tests are checked against it, with one
+  declared exception: probe output suppression changes only what is printed,
+  never a counter or a status, so no in-process assertion can observe it, and
+  the suite records it as a known survivor rather than as a gap that was missed.
+  Adapter export parity is checked the same way, on each runtime, because Scheme
+  cannot portably reflect on a library's export list — except for
+  `harness-summary`, `harness-empty-selection-error`, and
+  `harness-failure-context`, which are used only inside the shared runner body
+  that `include` splices into each adapter's library, so an internal reference
+  resolves whatever the export list says and dropping one of the three from an
+  adapter's exports is not detectable by this suite.
+- A portability guard failing the build when a shared test body is missing a
+  wrapper, when two shared bodies share a basename, when its own glob matches
+  nothing, when it receives an argument it does not recognize, or when a
+  `SHARED_DIRS` or `WRAPPED_DIRS` entry is not an existing directory. The last
+  two were added after each was shown to leave a tree unchecked while still
+  producing a green build.
 
 ### Changed
 
@@ -50,5 +83,10 @@ what this milestone delivers.
   documented preset entry point behaves like `make` — on Windows' default
   multi-config generator every test previously reported "Not Run".
 - Specifications print their success banner only when nothing failed.
-- The `expected-red` test layer is withdrawn until slice 2 provides a
-  registration helper that can express it.
+- `MutationRunner` takes the staged trees and the verify command as parameters,
+  so a mutation can be judged by running a real execution lane rather than only
+  by `cmake -P`, and gained a reset entry point so a second declaration pass can
+  run under a different verify command in the same script — needed because the
+  Scheme suite verifies the shared runner on one runtime but each adapter's
+  export list only on its own. The CMake-layer suite keeps its previous
+  behaviour by default.

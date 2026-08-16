@@ -183,7 +183,7 @@ runtimes must export exactly these names, with the same arity and the same meani
 | `(adapter-machine-type)` | raw implementation string; evidence only, never compared |
 | `(adapter-os)` | `"darwin"`, `"linux"`, `"windows"`, or `"unknown"` |
 | `(adapter-architecture)` | `"arm64"`, `"amd64"`, …, or `"unknown"` |
-| `(adapter-execution-mode)` | declared by the launcher through the environment |
+| `(adapter-execution-mode)` | declared by the lane registration through the environment |
 | `(adapter-environment-variable name)` | string or `#f` |
 | `(adapter-exit code)` | does not return |
 | `(adapter-value->string v)` | string |
@@ -251,11 +251,10 @@ body sits beside the program.
 
 ### 7.3 Execution-mode declaration
 
-CMake sets `BYTE_MACHINE_EXECUTION_MODE=source` in each lane's environment, and
-`adapter-execution-mode` reports it. The launcher is the only party that knows what it actually
-loaded, so it is the party that declares it. For the Chez lane the object guard makes the alternative
-lane impossible, so the declaration cannot be silently wrong. Slice 5 must supply the equivalent
-guarantee for each compiled lane it adds.
+CMake sets `BYTE_MACHINE_EXECUTION_MODE=source` in each lane's environment at lane registration, and
+`adapter-execution-mode` reports it. The launcher never touches this variable. For the Chez lane the
+object guard makes the alternative lane impossible, so the declaration cannot be silently wrong.
+Slice 5 must supply the equivalent guarantee for each compiled lane it adds.
 
 ## 8. Build layer
 

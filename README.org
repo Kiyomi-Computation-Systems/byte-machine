@@ -48,9 +48,11 @@ make test
 #+end_src
 
 Other targets: =make doctor= reports the discovered toolchains and stops,
-=make dev= runs the build-layer self-tests only, =make test-all= runs the
-complete selection, =make prod= builds the release configuration, and
-=make clean= removes the build trees. =make help= lists them.
+=make dev= builds and runs the harness selection (the build-layer
+specifications together with the Chez and Gambit self-test lanes), =make
+test-all= runs the complete selection, =make prod= builds the release
+configuration, and =make clean= removes the build trees. =make help= lists
+them.
 
 The presets work identically without =make=, which matters on Windows:
 
@@ -68,8 +70,14 @@ cmake --preset dev -DBYTE_MACHINE_CHEZ_EXECUTABLE=/absolute/path/to/scheme
 cmake --preset dev -DBYTE_MACHINE_GAMBIT_EXECUTABLE=/absolute/path/to/gsi
 #+end_src
 
-The =no-scheme= preset configures and runs the build-layer specifications with
-neither runtime installed.
+Both =make dev= and =make test= launch real Chez and Gambit processes; neither
+is a CMake-only target. To work on the build layer alone, with no Scheme
+runtime installed, use the =no-scheme= preset instead, which configures and
+runs only the build-layer specifications:
+
+#+begin_src bash
+cmake --preset no-scheme && ctest --preset no-scheme
+#+end_src
 
 ** Documentation
 
