@@ -228,14 +228,14 @@ set-up lane never reaches a refusal, so nothing else can notice one being delete
 | --- | --- |
 | unknown flag | new decision |
 | flag missing its value | new decision; a trailing `--program` would otherwise mean "no program" silently |
-| a single-valued flag given twice | one decision covering both `--program` and `--object-guard`; last-one-wins would be silent |
+| a single-valued flag given twice | one decision covering both `--program` and `--object-guard`, but two lanes: the list has two members, and dropping either from it is invisible to an invocation that repeats the other. First-one-wins would be silent — `flag-values` conses and reverses, so it returns the first occurrence, not the last |
 | no `--program` | replaces the retired exact-arity refusal; a bare invocation is the natural form |
 | no `--object-guard` | the flag absent, as distinct from the directory it names being absent |
 | no `--library-root` | without it the failure arrives as Chez's own "library not found", which reads as a broken test rather than a broken invocation |
 | no `--source-dir` | same, arriving as exit 255 from `include` |
 | guard directory absent / non-empty | the existing two lanes from slice 2, retained unchanged |
 
-Seven new lanes and the two retained: nine. The four missing-flag refusals are one loop over a
+Eight new lanes and the two retained: ten. The four missing-flag refusals are one loop over a
 declared list of required flags, so they are one *decision* — but a flag dropped from that list is
 its own defect, invisible to every other lane, which is why each entry gets a lane rather than the
 loop getting one.
@@ -312,7 +312,7 @@ time, which is what slice 2's `harness-*` prefix convention was for.
 | Lane | Count | Status |
 | --- | --- | --- |
 | `byte-machine.portability.placeholder-cwd-{identical,decoy,empty}.{chez,gambit}.source` | 6 | 0 |
-| launcher refusals, Chez | 9 (7 new, 2 retained) | 2 |
+| launcher refusals, Chez | 10 (8 new, 2 retained) | 2 |
 | existing slice 1 and 2 registrations | unchanged | — |
 
 `ctest --preset no-scheme` must still pass with neither runtime installed.
@@ -367,7 +367,7 @@ that never saw it. Only one of the two runtimes will tell you.
 
 ### 9.3 Mutations to declare
 
-- three body decisions (§5.3), each verified on both runtimes;
+- the four body mutations of §5.3 plus the interned-symbol tag and the per-call marker — six in all, each verified on both runtimes;
 - each launcher parse decision: unknown flag, missing value, a single-valued flag given twice, each
   of the four required-flag entries (`--program`, `--object-guard`, `--library-root`,
   `--source-dir`), and both guard-directory checks;
@@ -406,7 +406,7 @@ rejected in §3.1.
   different failure modes;
 - the launcher mutation makes the matrix fail in the asymmetric pattern of §9.1, survivor included;
 - every decision in the body is caught on **both** runtimes;
-- every launcher refusal has a lane asserting exit 2 exactly;
+- every launcher refusal has a lane asserting exit 2 exactly, ten of them;
 - a Gambit search root containing a comma is a configure error;
 - `src/common/byte-machine` and `test/common` are under the portability guard;
 - `ctest --preset no-scheme` passes with neither runtime installed;
@@ -415,7 +415,7 @@ rejected in §3.1.
 
 ## 13. Risks
 
-- **Nine launcher refusal lanes for one launcher.** Each is a process spawn, and the pressure to
+- **Ten launcher refusal lanes for one launcher.** Each is a process spawn, and the pressure to
   trim them is the pressure that kills mutation suites. Recorded now, while the trade can still be
   made deliberately.
 - **The Gambit matrix lanes are weaker than the Chez ones** (§9.1). The risk is that six lanes read

@@ -1898,7 +1898,7 @@ Then update the file's header comment. It opens `NINE PASSES, BECAUSE NINE DIFFE
       "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
     ```
 
-The interim deletion (item 1 above) removes one whole pass from the baseline group, so it is eight passes (1 to 8), not nine, by the time this step is reached; the body passes two steps back are "Pass 9" and "Pass 10", not 10 and 11. This step's parse-decision passes therefore span "Passes 11 to 19" -- nine sub-passes (eight from the brief plus the one for single-valued-flags), not eight. The working-directory matrix passes in the next step land on "Passes 20 to 22" regardless: the one pass the interim deletion removes and the one this step adds cancel exactly by the time the running count reaches them. While already in `test/support/launchers/chez-source.ss` for these passes, also correct decision 3's comment: it claimed "last-one-wins", but `flag-values` conses onto an accumulator and reverses at the end, so it returns occurrences in command-line order and `(car (flag-values flag))` takes the *first* -- first-one-wins, not last.
+The interim deletion (item 1 above) removes one whole pass from the baseline group, so it is eight passes (1 to 8), not nine, by the time this step is reached; the body passes two steps back are "Pass 9" and "Pass 10", not 10 and 11. This step's parse-decision passes therefore span "Passes 11 to 20" -- ten sub-passes: eight from the brief, plus one for each of single-valued-flags' two members, since dropping either from that list is invisible to an invocation that repeats the other. The working-directory matrix passes in the next step therefore land on "Passes 21 to 23", which is what the shipped module header says: the interim deletion removes one pass and this step adds two, so the running count is one higher than the draft numbering assumed. While already in `test/support/launchers/chez-source.ss` for these passes, also correct decision 3's comment: it claimed "last-one-wins", but `flag-values` conses onto an accumulator and reverses at the end, so it returns occurrences in command-line order and `(car (flag-values flag))` takes the *first* -- first-one-wins, not last.
 
 Run it before moving on:
 
@@ -1913,7 +1913,7 @@ Expected (as written above): PASS, with eight more mutations reported caught. Ex
 Append to `test/support/cmake/SchemeMutationSuite.cmake`. These need the matrix fixture directories, which `test/CMakeLists.txt` builds under `CMAKE_BINARY_DIR`; the registration must forward that path, so also add `"-DBYTE_MACHINE_CWD_MATRIX_DIR=${BYTE_MACHINE_CWD_MATRIX_DIR}"` to the `byte_machine_add_test` COMMAND that registers this suite in `test/CMakeLists.txt`.
 
 ```cmake
-# --- Passes 20 to 22: the working-directory matrix -------------------------
+# --- Passes 21 to 23: the working-directory matrix -------------------------
 #
 # One mutation, three passes, three expected outcomes. The launcher is made to
 # resolve shared bodies against the working directory -- the mechanism this
