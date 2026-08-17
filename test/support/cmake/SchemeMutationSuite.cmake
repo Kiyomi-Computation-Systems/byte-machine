@@ -11,16 +11,24 @@
 #
 # Two of the twenty-three are gated on BYTE_MACHINE_GAMBIT_EXECUTABLE, the same
 # precondition every Gambit lane in this tree runs under: pass 2, the Gambit
-# adapter's export list, and pass 10, the placeholder body's decisions run a
-# second time on Gambit. Without Gambit this file runs twenty-one passes and
-# forty-nine mutations rather than twenty-three passes and fifty-six.
+# adapter's export list (one mutation), and pass 10, the placeholder body's
+# decisions run a second time on Gambit (six mutations, the same list pass 9
+# declares for Chez). Without Gambit this file runs twenty-one passes and
+# forty-nine mutations rather than twenty-three passes and fifty-six -- the
+# with-Gambit pair less that 2-pass, 7-mutation delta.
 #
-# These four numbers are declared below as EXPECTED_PASSES_WITH_GAMBIT and
-# friends, and checked against byte_machine_mutation_totals' accumulated count
-# once every pass below has run. That check is what a whole-branch review
-# found nothing else could do: deleting the three matrix passes (21 to 23) by
-# hand left this file's own suite reporting 37/37 elsewhere, with the mutation
-# count silently dropping from 56 to 53 and nothing anywhere noticing.
+# EXPECTED_PASSES_WITH_GAMBIT and EXPECTED_MUTATIONS_WITH_GAMBIT are declared
+# below; the without-Gambit pair is computed from them and the delta rather
+# than written out a second time, so a pass added to this file that is not
+# itself Gambit-gated changes both pairs together. Two hand-maintained pairs
+# could disagree quietly -- a new ungated pass updates the with-Gambit numbers
+# because that is the run that just changed, and it is easy to forget the
+# without-Gambit numbers are describing the same file. Checked against
+# byte_machine_mutation_totals' accumulated count once every pass below has
+# run: that check is what a whole-branch review found nothing else could do --
+# deleting the three matrix passes (21 to 23) by hand left this file's own
+# suite reporting 37/37 elsewhere, with the mutation count silently dropping
+# from 56 to 53 and nothing anywhere noticing.
 #
 # Pass 1 runs the Chez self-tests lane against the shared runner body. That body
 # is identical text on both runtimes, so verifying it on a second runtime would
@@ -114,8 +122,19 @@ cmake_minimum_required(VERSION 3.26)
 # quietly disagree.
 set(EXPECTED_PASSES_WITH_GAMBIT 23)
 set(EXPECTED_MUTATIONS_WITH_GAMBIT 56)
-set(EXPECTED_PASSES_WITHOUT_GAMBIT 21)
-set(EXPECTED_MUTATIONS_WITHOUT_GAMBIT 49)
+
+# Passes 2 and 10 are the only ones gated on BYTE_MACHINE_GAMBIT_EXECUTABLE:
+# pass 2 (the Gambit adapter's export list) is one mutation, pass 10 (the
+# placeholder body's decisions, on Gambit) is the same six-mutation list pass
+# 9 declares for Chez. The without-Gambit pair is this delta subtracted from
+# the with-Gambit pair, not a second hand-maintained pair of literals, so a
+# non-gated pass added anywhere in this file changes both together.
+set(GAMBIT_ONLY_PASSES 2)
+set(GAMBIT_ONLY_MUTATIONS 7)
+math(EXPR EXPECTED_PASSES_WITHOUT_GAMBIT
+  "${EXPECTED_PASSES_WITH_GAMBIT} - ${GAMBIT_ONLY_PASSES}")
+math(EXPR EXPECTED_MUTATIONS_WITHOUT_GAMBIT
+  "${EXPECTED_MUTATIONS_WITH_GAMBIT} - ${GAMBIT_ONLY_MUTATIONS}")
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -526,8 +545,8 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 #
 # A third refusal used to live here: a missing required flag, witnessed by
 # invoking the launcher with no arguments at all (SPEC named after that
-# invocation's own ctest lane, byte-machine.harness.launcher-no-program, since
-# there was no program on the command line to name). It is gone. Slice 3's
+# invocation's own ctest lane, byte-machine.harness.launcher-no-program.chez.source,
+# since there was no program on the command line to name). It is gone. Slice 3's
 # parse-decision passes below replace it with one mutation per required-flag
 # entry, each a strictly more precise witness of the same decision than a
 # zero-argument invocation was; keeping both would mean two mutations proving
@@ -756,13 +775,20 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--object-guard" "${POISON_GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
 
+# EXPECT_OUTPUT_MATCHES turns the paragraph above's claim -- that the mutated
+# run "says so in its banner, its FAIL-CONTEXT line, and its summary" -- into
+# something this suite enforces rather than merely asserts in prose. The
+# sentinel is the literal string written into POISON_REPLACE above, so a rc
+# that happens to be nonzero for some other reason (a staging error, an
+# unrelated crash) is reported caught-for-the-wrong-reason instead of caught.
 byte_machine_mutation(
   FILE ${LAUNCHER}
   SPEC "harness-self-tests.chez.sps against a library root holding a compiled object"
   LABEL "launcher: the library root is no longer paired with the object guard"
   FIND [[(library-directories
  (map (lambda (root) (cons root object-guard-dir)) library-roots))]]
-  REPLACE [[(library-directories library-roots)]])
+  REPLACE [[(library-directories library-roots)]]
+  EXPECT_OUTPUT_MATCHES "POISONED-FROM-OBJECT")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
