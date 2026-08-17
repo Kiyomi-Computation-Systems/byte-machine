@@ -555,11 +555,19 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "-DBYTE_MACHINE_EXPECT_COMMAND=${LAUNCHER_ABSENT_GUARD_COMMAND}"
   -P "${STAGE_DIR}/cmake/ByteMachineExpectExit.cmake")
 
+# EXPECT_OUTPUT_MATCHES captures what this mutation actually, verifiably
+# produces: with the existence check gone, the very next line calls
+# directory-list on a path that does not exist, which Chez itself refuses --
+# a real, deterministic consequence of deleting exactly this check, not the
+# launcher's own die(). Verified against a real staged run, not guessed; see
+# byte_machine_slice3_launcher_pass's header comment below for why the wrapper's
+# own exit code (0 or 1) cannot make this distinction by itself.
 byte_machine_mutation(
   FILE ${LAUNCHER} SPEC byte-machine.harness.launcher-absent-guard.chez.source
   LABEL "launcher: a guard directory that does not exist is assumed rather than checked"
   FIND [[(if (not (file-directory? object-guard-dir))]]
-  REPLACE [[(if #f]])
+  REPLACE [[(if #f]]
+  EXPECT_OUTPUT_MATCHES "Exception in directory-list")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -582,11 +590,18 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 # The one that matters most: a guard directory that has acquired a file is no
 # longer a guard, and the lane would go on reporting mode=source while loading
 # whatever was put there.
+#
+# EXPECT_OUTPUT_MATCHES here is "bootstrap: failures=0", not anything about the
+# stray file: with this check gone the launcher does not notice the dirty
+# guard at all, so the whole staged bootstrap program runs and passes, ending
+# with its own success banner. That is the correct, deterministic consequence
+# of deleting exactly this line, verified against a real staged run.
 byte_machine_mutation(
   FILE ${LAUNCHER} SPEC byte-machine.harness.launcher-dirty-guard.chez.source
   LABEL "launcher: a guard directory with a file in it is accepted as a guard"
   FIND [[(if (not (null? (directory-list object-guard-dir)))]]
-  REPLACE [[(if #f]])
+  REPLACE [[(if #f]]
+  EXPECT_OUTPUT_MATCHES "bootstrap: failures=0")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -872,18 +887,38 @@ set(LAUNCHER_BASE_ARGS
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
 
-# byte_machine_slice3_launcher_pass(<lane> <label> <find> <replace> <arg>...)
+# byte_machine_slice3_launcher_pass(<lane> <label> <find> <replace>
+#                                   <expect_output_matches> <arg>...)
 #
 # One pass: point the verify command at a deliberately wrong invocation, declare
-# one mutation, run it. Defined here rather than inlined eight times because the
+# one mutation, run it. Defined here rather than inlined ten times because the
 # only thing that varies is the lane, the command line, and the mutation.
+#
+# expect_output_matches exists because the wrapper's own exit code is only ever
+# 0 or 1 -- ByteMachineExpectExit.cmake's message(FATAL_ERROR) exits 1
+# regardless of what the real launcher's exit status was, so a nonzero result
+# here means only "the real process did not exit 2", never which of the two
+# very different ways that can happen: the invocation this pass built runs to
+# completion once the deleted check stops blocking it (verified as
+# "bootstrap: failures=0" -- the bootstrap program's own success banner,
+# reachable only by loading and running the entire staged launcher and
+# program), or it reaches a later, unrelated Chez error and dies with an
+# out-of-vocabulary status (verified per pass -- see the call sites below).
+# Both are legitimate evidence that the deleted check mattered. What neither
+# looks like is a read error from a staged file that stopped being valid
+# Scheme, which is what this project measured exactly once: a REPLACE that
+# opened a line comment and swallowed a list's closing parens (recorded next to
+# the --source-dir mutation below) caught the pass at exit 255 on
+# "Exception in read: ..." rather than on the refusal it names. Every value
+# passed here was captured from a real staged run of the mutation it guards,
+# not guessed.
 #
 # The reset, the declaration and the run all happen inside this function on
 # purpose. byte_machine_mutation_reset and byte_machine_mutation both write the
 # counter with PARENT_SCOPE, so they agree only while they share a caller;
 # splitting them across this boundary would leave the run seeing a count from
 # somewhere else.
-function(byte_machine_slice3_launcher_pass lane label find replace)
+function(byte_machine_slice3_launcher_pass lane label find replace expect_output_matches)
   byte_machine_mutation_reset()
 
   string(JOIN "|" packed
@@ -901,7 +936,8 @@ function(byte_machine_slice3_launcher_pass lane label find replace)
     FILE ${LAUNCHER} SPEC "${lane}"
     LABEL "${label}"
     FIND "${find}"
-    REPLACE "${replace}")
+    REPLACE "${replace}"
+    EXPECT_OUTPUT_MATCHES "${expect_output_matches}")
 
   byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 endfunction()
@@ -911,6 +947,7 @@ byte_machine_slice3_launcher_pass(
   "launcher: an unrecognised flag is accepted"
   [[        ((not (member (car rest) known-flags))]]
   [[        (#f]]
+  "bootstrap: failures=0"
   "--librarie-root" "${STAGE_DIR}/test/support/harness/chez" ${LAUNCHER_BASE_ARGS})
 
 byte_machine_slice3_launcher_pass(
@@ -918,6 +955,7 @@ byte_machine_slice3_launcher_pass(
   "launcher: a flag with no value is accepted"
   [[        ((null? (cdr rest))]]
   [[        (#f]]
+  "Exception in cddr"
   ${LAUNCHER_BASE_ARGS} "--source-dir")
 
 byte_machine_slice3_launcher_pass(
@@ -925,6 +963,7 @@ byte_machine_slice3_launcher_pass(
   "launcher: a single-valued flag may be given twice"
   [[   (if (> (length (flag-values flag)) 1)]]
   [[   (if #f]]
+  "bootstrap: failures=0"
   ${LAUNCHER_BASE_ARGS}
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
 
@@ -952,6 +991,7 @@ byte_machine_slice3_launcher_pass(
   "launcher: a missing required flag is not noticed (decision 2's own check, general across every entry; reuses the no-library-root invocation below only for convenience)"
   [[   (if (null? (flag-values flag))]]
   [[   (if #f]]
+  [[library \(byte-machine test harness\) not found]]
   "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
@@ -965,6 +1005,7 @@ byte_machine_slice3_launcher_pass(
   "launcher: --program is dropped from required-flags"
   [[  (list "--program"]]
   [[  (list ;; --program removed by mutation]]
+  "Exception in car"
   "--library-root" "${STAGE_DIR}/test/support/harness/chez"
   "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
   "--object-guard" "${GUARD_DIR}")
@@ -974,6 +1015,7 @@ byte_machine_slice3_launcher_pass(
   "launcher: --object-guard is dropped from required-flags"
   [[        "--object-guard"]]
   [[        ;; --object-guard removed by mutation]]
+  "Exception in car"
   "--library-root" "${STAGE_DIR}/test/support/harness/chez"
   "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
@@ -983,6 +1025,7 @@ byte_machine_slice3_launcher_pass(
   "launcher: --library-root is dropped from required-flags"
   [[        "--library-root"]]
   [[        ;; --library-root removed by mutation]]
+  [[library \(byte-machine test harness\) not found]]
   "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
@@ -1003,6 +1046,7 @@ byte_machine_slice3_launcher_pass(
   [[        "--source-dir"))]]
   [[        ;; --source-dir removed by mutation
         ))]]
+  "Exception in include"
   "--library-root" "${STAGE_DIR}/test/support/harness/chez"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
@@ -1022,6 +1066,7 @@ byte_machine_slice3_launcher_pass(
   (list "--object-guard" "--program"))]]
   [[(define single-valued-flags
   (list "--program"))]]
+  "bootstrap: failures=0"
   ${LAUNCHER_BASE_ARGS}
   "--object-guard" "${GUARD_DIR}")
 
@@ -1048,6 +1093,7 @@ byte_machine_slice3_launcher_pass(
   (list "--object-guard" "--program"))]]
   [[(define single-valued-flags
   (list "--object-guard"))]]
+  "bootstrap: failures=0"
   ${LAUNCHER_BASE_ARGS}
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
 
@@ -1108,6 +1154,34 @@ foreach(cwd_case empty decoy identical)
       REPLACE "${CWD_MUTATION_REPLACE}"
       EXPECT_SURVIVES
         "This lane runs from a directory holding a copy of every body the lane includes, so an include resolved against the working directory finds the real text and the suite passes. That is the lane's purpose: it is the naive working-directory test, carried as the control that makes the decoy and empty lanes' failures attributable. If this mutation ever starts being caught, the copies have drifted from the bodies they were copied from and the control has quietly become something else.")
+  elseif(cwd_case STREQUAL "decoy")
+    # The design spec names this exact risk: add an export to placeholder.scm
+    # without adding a matching (even if wrong-answered) one to the impostor
+    # body test/CMakeLists.txt writes for this directory, and the decoy fails
+    # at library construction -- an unbound export, a load-time error -- rather
+    # than on content, and would still be "caught" by a bare nonzero check,
+    # proving nothing about resolution.
+    #
+    # This pass's verify command is the launcher itself, unwrapped by
+    # ByteMachineExpectExit -- unlike the launcher-parse passes below, where
+    # that wrapper's own exit code (0 or 1 regardless of the real one) is all
+    # that reaches this file -- so both new options can be used, and both were
+    # measured against a real staged run rather than guessed. EXPECT_STATUS 1
+    # is the harness's own "an assertion failed" status; a library-construction
+    # failure is a different defect the harness's vocabulary reserves 2 for, or
+    # an uncaught condition outside the vocabulary entirely. EXPECT_OUTPUT_MATCHES
+    # additionally requires the harness's own per-case failure line
+    # ("byte-machine-harness: FAIL ", trailing space so FAIL-CONTEXT's summary
+    # line cannot satisfy it), printed only once a check actually ran and
+    # disagreed -- i.e. once the wrong file was loaded and *evaluated*, not
+    # merely failed to load.
+    byte_machine_mutation(
+      FILE ${LAUNCHER} SPEC placeholder-tests.chez.sps
+      LABEL "launcher: shared bodies resolve against the working directory (decoy)"
+      FIND "${CWD_MUTATION_FIND}"
+      REPLACE "${CWD_MUTATION_REPLACE}"
+      EXPECT_STATUS 1
+      EXPECT_OUTPUT_MATCHES "byte-machine-harness: FAIL ")
   else()
     byte_machine_mutation(
       FILE ${LAUNCHER} SPEC placeholder-tests.chez.sps

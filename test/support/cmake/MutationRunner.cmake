@@ -47,7 +47,8 @@ set(BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY "")
 
 # byte_machine_mutation(FILE <repo-relative> SPEC <spec basename> LABEL <text>
 #                       FIND <text> REPLACE <text> [SITES <n>]
-#                       [EXPECT_SURVIVES <reason>])
+#                       [EXPECT_SURVIVES <reason>]
+#                       [EXPECT_STATUS <code>] [EXPECT_OUTPUT_MATCHES <regex>])
 #
 # Declare one mutation. FIND and REPLACE are literal text, not regexes; pass
 # them as bracket arguments so quotes, backslashes, and ${...} survive intact.
@@ -61,8 +62,20 @@ set(BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY "")
 # knowingly cannot catch, and requires a reason. Such a mutation must still
 # survive: if one starts being caught, the recorded limitation is stale and the
 # suite says so rather than letting the documentation drift.
+#
+# A nonzero result from the verify command means only that it noticed
+# *something*; by itself that is not evidence it noticed the decision this
+# mutation names, and a mutation can be "caught" by an unrelated crash just as
+# easily as by the refusal it is meant to prove. EXPECT_STATUS and
+# EXPECT_OUTPUT_MATCHES narrow "caught" to "caught for this reason": when
+# either is given, a nonzero result whose exit code or combined stdout+stderr
+# does not also satisfy the declared expectation is reported separately, as
+# caught for the wrong reason, and counted the same as UNCAUGHT. Neither is
+# consulted when the verify command exits 0 -- that is simply not caught, the
+# ordinary way. Apply them only where the wrong-reason risk is real; most
+# mutations need neither.
 function(byte_machine_mutation)
-  cmake_parse_arguments(PARSE_ARGV 0 arg "" "FILE;SPEC;LABEL;FIND;REPLACE;SITES;EXPECT_SURVIVES" "")
+  cmake_parse_arguments(PARSE_ARGV 0 arg "" "FILE;SPEC;LABEL;FIND;REPLACE;SITES;EXPECT_SURVIVES;EXPECT_STATUS;EXPECT_OUTPUT_MATCHES" "")
 
   if(arg_UNPARSED_ARGUMENTS)
     message(FATAL_ERROR "byte-machine-mutation: unexpected arguments: ${arg_UNPARSED_ARGUMENTS}")
@@ -86,6 +99,8 @@ function(byte_machine_mutation)
   set_property(GLOBAL PROPERTY _bm_mut_${next}_replace "${arg_REPLACE}")
   set_property(GLOBAL PROPERTY _bm_mut_${next}_sites "${arg_SITES}")
   set_property(GLOBAL PROPERTY _bm_mut_${next}_survives "${arg_EXPECT_SURVIVES}")
+  set_property(GLOBAL PROPERTY _bm_mut_${next}_expect_status "${arg_EXPECT_STATUS}")
+  set_property(GLOBAL PROPERTY _bm_mut_${next}_expect_output_matches "${arg_EXPECT_OUTPUT_MATCHES}")
 endfunction()
 
 # byte_machine_mutation_stage(<source_root> <stage_dir>)
@@ -111,13 +126,19 @@ function(byte_machine_mutation_stage source_root stage_dir)
   endforeach()
 endfunction()
 
-# byte_machine_mutation_run_spec(<stage_dir> <spec> <out_rc>)
+# byte_machine_mutation_run_spec(<stage_dir> <spec> <out_rc> <out_output>)
 #
 # A non-numeric result -- a command that could not be launched at all -- would
 # compare unequal to 0 and count as caught. That is safe only because the
 # baseline run happens first: if the verify command cannot run, the baseline
 # fails and nothing below is trusted.
-function(byte_machine_mutation_run_spec stage_dir spec out_rc)
+#
+# out_output is stdout and stderr concatenated, in that order, with nothing
+# else interleaved -- execute_process captures each as a whole, not as an
+# interleaved stream, so this is an approximation of what a terminal would have
+# shown, not a byte-accurate transcript. Good enough for EXPECT_OUTPUT_MATCHES,
+# which looks for a fixed marker rather than reconstructing ordering.
+function(byte_machine_mutation_run_spec stage_dir spec out_rc out_output)
   if(BYTE_MACHINE_MUTATION_VERIFY_COMMAND)
     set(command ${BYTE_MACHINE_MUTATION_VERIFY_COMMAND})
   else()
@@ -136,6 +157,7 @@ function(byte_machine_mutation_run_spec stage_dir spec out_rc)
     OUTPUT_VARIABLE out
     ERROR_VARIABLE err)
   set(${out_rc} "${rc}" PARENT_SCOPE)
+  set(${out_output} "${out}${err}" PARENT_SCOPE)
 endfunction()
 
 # byte_machine_mutation_reset()
@@ -192,7 +214,7 @@ function(byte_machine_mutation_run source_root stage_dir)
   list(REMOVE_DUPLICATES specs_used)
 
   foreach(spec IN LISTS specs_used)
-    byte_machine_mutation_run_spec("${stage_dir}" "${spec}" rc)
+    byte_machine_mutation_run_spec("${stage_dir}" "${spec}" rc baseline_output)
     if(NOT rc EQUAL 0)
       message(FATAL_ERROR
         "byte-machine-mutation: baseline failure. '${spec}' does not pass on the "
@@ -213,6 +235,8 @@ function(byte_machine_mutation_run source_root stage_dir)
     get_property(replace GLOBAL PROPERTY _bm_mut_${i}_replace)
     get_property(sites GLOBAL PROPERTY _bm_mut_${i}_sites)
     get_property(survives GLOBAL PROPERTY _bm_mut_${i}_survives)
+    get_property(expect_status GLOBAL PROPERTY _bm_mut_${i}_expect_status)
+    get_property(expect_output_matches GLOBAL PROPERTY _bm_mut_${i}_expect_output_matches)
 
     set(pristine_path "${source_root}/${rel}")
     set(staged_path "${stage_dir}/${rel}")
@@ -250,8 +274,21 @@ function(byte_machine_mutation_run source_root stage_dir)
 
     string(REPLACE "${find}" "${replace}" mutated "${pristine}")
     file(WRITE "${staged_path}" "${mutated}")
-    byte_machine_mutation_run_spec("${stage_dir}" "${spec}" rc)
+    byte_machine_mutation_run_spec("${stage_dir}" "${spec}" rc output)
     file(WRITE "${staged_path}" "${pristine}")
+
+    # A nonzero result only means the verify command noticed *something*. When
+    # the mutation says what the catch has to look like, check that before
+    # trusting the exit code -- a status or an output fragment that does not
+    # match is caught by coincidence, not by the decision this mutation names.
+    set(reason_wrong "")
+    if(NOT rc EQUAL 0)
+      if(NOT expect_status STREQUAL "" AND NOT rc EQUAL expect_status)
+        set(reason_wrong "expected the verify command to exit ${expect_status}, got ${rc}")
+      elseif(expect_output_matches AND NOT output MATCHES "${expect_output_matches}")
+        set(reason_wrong "expected the verify command's output to match '${expect_output_matches}', but it did not")
+      endif()
+    endif()
 
     if(survives)
       if(rc EQUAL 0)
@@ -268,6 +305,12 @@ function(byte_machine_mutation_run source_root stage_dir)
       message(SEND_ERROR
         "byte-machine-mutation: UNCAUGHT ${label} -- ${spec} still passes with "
         "${rel} broken. That specification is not testing this behaviour.")
+      math(EXPR uncaught "${uncaught} + 1")
+    elseif(reason_wrong)
+      message(SEND_ERROR
+        "byte-machine-mutation: '${label}' exited nonzero (${rc}) but for the "
+        "wrong reason -- ${reason_wrong}. That is caught by coincidence, not by "
+        "the decision this mutation names, and proves nothing about it.")
       math(EXPR uncaught "${uncaught} + 1")
     else()
       message(STATUS "byte-machine-mutation: caught ${label}")
