@@ -185,6 +185,13 @@ function(byte_machine_add_scheme_lane)
     endif()
   endforeach()
 
+  # The name is the single source of the mode, so a registration cannot claim
+  # one lane while running another. byte_machine_add_test parses the same name
+  # again for its labels; the function is pure, so parsing it twice is cheaper
+  # than passing a parsed field through a registrar that does not need it.
+  byte_machine_test_name_parse("${arg_NAME}" lane_layer lane_feature
+                               lane_backend lane_mode)
+
   byte_machine_scheme_lane_command(
     "${arg_BACKEND}" "${arg_PROGRAM}" command status message)
 
@@ -216,7 +223,7 @@ function(byte_machine_add_scheme_lane)
   # BYTE_MACHINE_FINGERPRINT_FILES or BYTE_MACHINE_EXPECT_FINGERPRINT_FILE after
   # this function has already computed the real ones.
   set(environment
-    "BYTE_MACHINE_EXECUTION_MODE=source"
+    "BYTE_MACHINE_EXECUTION_MODE=${lane_mode}"
     "BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin")
 
   # The manifest, and the expectation it must agree with. The separator is `|`

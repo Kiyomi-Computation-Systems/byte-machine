@@ -346,6 +346,37 @@ spec_check_equal("${environment}"
   "BYTE_MACHINE_EXECUTION_MODE=source;BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin;BYTE_MACHINE_FINGERPRINT_FILES=${SPEC_SELF};BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=/fingerprints/byte-machine.harness.example.chez.source.fingerprint;FOO=bar"
   "plain registration carries every default ahead of caller-supplied entries, which are appended last so they can override a default")
 
+# --- The mode is the name's, not a literal ---------------------------------
+#
+# A lane that declares a mode it is not running is the defect this whole slice
+# exists to prevent, and the declaration is what every other lane's evidence
+# is labelled with. Asserted over a name that is not `source`, because the
+# literal it replaced was `source`: a mutation restoring the literal passes
+# every assertion written over a source lane.
+set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "none")
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.example.chez.aot
+  BACKEND chez
+  PROGRAM "${SPEC_SELF}"
+  SHARED_BODIES "${SPEC_SELF}"
+  TIMEOUT 10)
+get_property(environment GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT)
+list(GET environment 0 mode_entry)
+spec_check_equal("${mode_entry}" "BYTE_MACHINE_EXECUTION_MODE=aot"
+  "an aot lane declares the aot mode, read from its own name")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.example.chez.source
+  BACKEND chez
+  PROGRAM "${SPEC_SELF}"
+  SHARED_BODIES "${SPEC_SELF}"
+  TIMEOUT 10)
+get_property(environment GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT)
+list(GET environment 0 mode_entry)
+spec_check_equal("${mode_entry}" "BYTE_MACHINE_EXECUTION_MODE=source"
+  "a source lane still declares source")
+
 # WRONG_FINGERPRINT chooses which function computes expect_file for the
 # manifest block: present, byte_machine_wrong_fingerprint; absent,
 # byte_machine_expected_fingerprint. Two assertions, since a branch has two

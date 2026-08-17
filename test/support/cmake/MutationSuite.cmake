@@ -592,14 +592,15 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
-  # Re-anchored on the multi-line set(environment ...) form M0 slice 5a Task 2
-  # introduced for the fingerprint fixture path (see MutationRunner.cmake's
-  # SITES comment -- a pattern that stops matching after a refactor must be
-  # updated, not deleted). REPLACE still means only "the execution mode entry
-  # is gone"; the fingerprint-sample entry and arg_ENVIRONMENT are untouched,
-  # exactly as the single-line FIND/REPLACE this replaces did.
+  # Re-anchored on ${lane_mode}: M0 slice 5b Task 1 replaced the literal
+  # "source" with the mode byte_machine_test_name_parse reads from the lane's
+  # own name (see MutationRunner.cmake's SITES comment -- a pattern that stops
+  # matching after a refactor must be updated, not deleted). REPLACE still
+  # means only "the execution mode entry is gone"; the fingerprint-sample
+  # entry and arg_ENVIRONMENT are untouched, exactly as before this
+  # re-anchoring.
   LABEL "scheme-lane: the source execution mode is no longer declared in the environment"
-  FIND [[    "BYTE_MACHINE_EXECUTION_MODE=source"
+  FIND [[    "BYTE_MACHINE_EXECUTION_MODE=${lane_mode}"
 ]]
   REPLACE [[    # deleted
 ]])
