@@ -6,16 +6,19 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# TWENTY-THREE PASSES WHEN GAMBIT IS DISCOVERED, BECAUSE TWENTY-THREE
+# TWENTY-SEVEN PASSES WHEN GAMBIT IS DISCOVERED, BECAUSE TWENTY-SEVEN
 # DIFFERENT WITNESSES ARE NEEDED
 #
-# Two of the twenty-three are gated on BYTE_MACHINE_GAMBIT_EXECUTABLE, the same
-# precondition every Gambit lane in this tree runs under: pass 2, the Gambit
-# adapter's export list (one mutation), and pass 10, the placeholder body's
+# Four of the twenty-seven are gated on BYTE_MACHINE_GAMBIT_EXECUTABLE, the
+# same precondition every Gambit lane in this tree runs under: pass 2, the
+# Gambit adapter's export list (one mutation); pass 10, the placeholder body's
 # decisions run a second time on Gambit (six mutations, the same list pass 9
-# declares for Chez). Without Gambit this file runs twenty-one passes and
-# forty-nine mutations rather than twenty-three passes and fifty-six -- the
-# with-Gambit pair less that 2-pass, 7-mutation delta.
+# declares for Chez); pass 25, the consumer body's decisions on Gambit (three
+# mutations, the same list pass 24 declares for Chez); and pass 27, the Gambit
+# consumer wrapper's double-include (one mutation, the per-runtime half of the
+# section 7.2 proof pass 26 makes for Chez). Without Gambit this file runs
+# twenty-three passes and fifty-three mutations rather than twenty-seven passes
+# and sixty-four -- the with-Gambit pair less that 4-pass, 11-mutation delta.
 #
 # EXPECTED_PASSES_WITH_GAMBIT and EXPECTED_MUTATIONS_WITH_GAMBIT are declared
 # below; the without-Gambit pair is computed from them and the delta rather
@@ -105,6 +108,19 @@
 # failure attributable to content rather than to the mere presence of a
 # same-named file.
 #
+# Passes 24 and 25 are the consumer body's three decisions, run once per
+# runtime for the reason passes 9 and 10 give. All three are now caught by a
+# failed comparison. The first used to be caught by an induced raise instead
+# -- weaker, and weighed and accepted -- before a comparison-based witness
+# replaced it.
+#
+# Passes 26 and 27 are the slice's reason for existing: the consumer wrapper
+# made a second owner of the placeholder body, once per runtime. Unlike every
+# other mutation in this file, the mutant raises nothing -- it is caught by an
+# ordinary check/check-equal mismatch that exits 1 on both runtimes, and it
+# answers both identity claims wrongly while every lane that imports only the
+# owner still passes.
+#
 # WHAT THIS SUITE NEEDS FROM ITS ENVIRONMENT
 #
 # The self-tests assert that the lane declared its execution mode and that the
@@ -116,21 +132,24 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "TWENTY-THREE PASSES..." above. Declared here, rather than only in prose,
+# See "TWENTY-SEVEN PASSES..." above. Declared here, rather than only in prose,
 # so the count enforced at the bottom of this file is the same text a reader
 # checks by eye at the top -- one number to keep in sync, not two that can
 # quietly disagree.
-set(EXPECTED_PASSES_WITH_GAMBIT 23)
-set(EXPECTED_MUTATIONS_WITH_GAMBIT 56)
+set(EXPECTED_PASSES_WITH_GAMBIT 27)
+set(EXPECTED_MUTATIONS_WITH_GAMBIT 64)
 
-# Passes 2 and 10 are the only ones gated on BYTE_MACHINE_GAMBIT_EXECUTABLE:
-# pass 2 (the Gambit adapter's export list) is one mutation, pass 10 (the
-# placeholder body's decisions, on Gambit) is the same six-mutation list pass
-# 9 declares for Chez. The without-Gambit pair is this delta subtracted from
-# the with-Gambit pair, not a second hand-maintained pair of literals, so a
-# non-gated pass added anywhere in this file changes both together.
-set(GAMBIT_ONLY_PASSES 2)
-set(GAMBIT_ONLY_MUTATIONS 7)
+# Four passes are gated on BYTE_MACHINE_GAMBIT_EXECUTABLE: pass 2 (the Gambit
+# adapter's export list, one mutation), pass 10 (the placeholder body's
+# decisions on Gambit, the same six-mutation list pass 9 declares for Chez),
+# pass 25 (the consumer body's decisions on Gambit, the same three-mutation
+# list pass 24 declares for Chez), and pass 27 (the Gambit consumer wrapper's
+# double-include, one mutation). The without-Gambit pair is this delta
+# subtracted from the with-Gambit pair, not a second hand-maintained pair of
+# literals, so a non-gated pass added anywhere in this file changes both
+# together.
+set(GAMBIT_ONLY_PASSES 4)
+set(GAMBIT_ONLY_MUTATIONS 11)
 math(EXPR EXPECTED_PASSES_WITHOUT_GAMBIT
   "${EXPECTED_PASSES_WITH_GAMBIT} - ${GAMBIT_ONLY_PASSES}")
 math(EXPR EXPECTED_MUTATIONS_WITHOUT_GAMBIT
@@ -1225,9 +1244,161 @@ endforeach()
 # from the matrix's identical directory instead of the stage.
 set(BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY "")
 
+# --- Pass 24: the consumer body's decisions, on Chez ------------------------
+#
+# Same argument as passes 9 and 10, for a second body: a wrapper that
+# reimplemented this body is exactly a wrapper whose runtime does not notice the
+# body changing, so the list runs once per runtime.
+
+set(CONSUMER_BODY src/common/byte-machine/placeholder-consumer.scm)
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "--library-root" "${STAGE_DIR}/src/chez"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--source-dir" "${STAGE_DIR}/src/common/byte-machine"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/placeholder-identity-tests.chez.sps")
+
+# byte_machine_slice4_body_pass(<runtime>)
+#
+# Declared once and called per runtime, for the reason
+# byte_machine_slice3_body_pass gives: a mutation added for one runtime and
+# forgotten for the other is precisely the asymmetry the pair exists to rule
+# out. The reset, the declarations and the run all live inside this function
+# because byte_machine_mutation_reset and byte_machine_mutation both write the
+# counter with PARENT_SCOPE and agree only while they share a caller.
+function(byte_machine_slice4_body_pass runtime)
+  byte_machine_mutation_reset()
+
+  if(runtime STREQUAL "chez")
+    set(spec placeholder-identity-tests.chez.sps)
+  else()
+    set(spec placeholder-identity-tests.gambit.scm)
+  endif()
+
+  # Caught by comparison, not by a raise: consume always takes the reject
+  # branch, so (consume (make-placeholder 7)) returns the marker instead of 7
+  # and the recognition case fails an ordinary check-equal. An earlier form
+  # used #t instead of #f, driving the same case into placeholder-value on a
+  # non-vector and catching it by an induced raise instead -- replaced once
+  # this comparison-based witness was found. See section 5.3 of the slice-4
+  # design.
+  byte_machine_mutation(
+    FILE ${CONSUMER_BODY} SPEC ${spec}
+    LABEL "consumer on ${runtime}: the argument is not checked at all"
+    FIND [[  (if (placeholder? p)]]
+    REPLACE [[  (if #f]])
+
+  byte_machine_mutation(
+    FILE ${CONSUMER_BODY} SPEC ${spec}
+    LABEL "consumer on ${runtime}: the recognised branch yields the marker, not the value"
+    FIND [[      (placeholder-value p)]]
+    REPLACE [[      (placeholder-marker)]])
+
+  # The only mutation that reaches D3's second clause by itself: recognition
+  # still works, and the outcome is merely a different object that prints the
+  # same. This is the one an eq?-free test would miss entirely.
+  byte_machine_mutation(
+    FILE ${CONSUMER_BODY} SPEC ${spec}
+    LABEL "consumer on ${runtime}: the outcome is a lookalike, not the owner's singleton"
+    FIND [[      (placeholder-marker)))]]
+    REPLACE [[      (vector 'byte-machine-marker)))]])
+
+  byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+endfunction()
+
+byte_machine_slice4_body_pass("chez")
+
+# --- Pass 25: the same decisions, on Gambit ---------------------------------
+
+if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
+  set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+    "${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
+    "-:search=${STAGE_DIR}/test/support/harness/gambit,search=${STAGE_DIR}/src/gambit"
+    "-f"
+    "${STAGE_DIR}/test/common/placeholder-identity-tests.gambit.scm")
+
+  byte_machine_slice4_body_pass("gambit")
+endif()
+
+# --- Passes 26 and 27: the consumer wrapper double-includes -----------------
+#
+# Section 7.2's rule -- each shared body is included by exactly one library per
+# runtime; others import that owner -- stated as something that can fail. The
+# mutation makes the consumer a second owner of the placeholder body, so it gets
+# its own tag and its own marker, and both identity cases answer wrongly.
+#
+# It is the mutation this slice exists for, and it is silent under every other
+# lane in the tree: measured on 2026-08-17, the mutant raises nothing -- it is
+# caught only by the identity lane's own check/check-equal assertions, which
+# exit 1 on both runtimes. The placeholder-cwd lanes still pass under it,
+# because they import only the owner. Only a program with both libraries in
+# scope can see it.
+#
+# The import is REPLACED, never augmented. Adding an include beside the import
+# was measured on the same date: Chez refuses at library construction with
+# "multiple definitions for make-placeholder and other identifiers in body" --
+# caught, but not for the declared reason -- and Gambit does not fail at all,
+# leaving the mutation a survivor. See section 8.1 of the slice-4 design.
+#
+# Two passes rather than one shared list, unlike passes 24 and 25: slice 2's
+# rule S6 ("Chez alone is enough, the text is identical") does not reach these,
+# because the two wrappers differ in import syntax and in include path form, and
+# the two runtimes do not even agree on what the augmenting variant means.
+
+set(CHEZ_CONSUMER_WRAPPER src/chez/byte-machine/placeholder-consumer.sls)
+set(GAMBIT_CONSUMER_WRAPPER src/gambit/byte-machine/placeholder-consumer.sld)
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "--library-root" "${STAGE_DIR}/src/chez"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--source-dir" "${STAGE_DIR}/src/common/byte-machine"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/placeholder-identity-tests.chez.sps")
+
+byte_machine_mutation(
+  FILE ${CHEZ_CONSUMER_WRAPPER} SPEC placeholder-identity-tests.chez.sps
+  LABEL "consumer wrapper on chez: includes the owner's body instead of importing the owner"
+  FIND [[  (import (rnrs) (byte-machine placeholder) (only (chezscheme) include))
+  (include "placeholder-consumer.scm"))]]
+  REPLACE [[  (import (rnrs) (only (chezscheme) include))
+  (include "placeholder.scm")
+  (include "placeholder-consumer.scm"))]])
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
+  byte_machine_mutation_reset()
+
+  set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+    "${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
+    "-:search=${STAGE_DIR}/test/support/harness/gambit,search=${STAGE_DIR}/src/gambit"
+    "-f"
+    "${STAGE_DIR}/test/common/placeholder-identity-tests.gambit.scm")
+
+  byte_machine_mutation(
+    FILE ${GAMBIT_CONSUMER_WRAPPER} SPEC placeholder-identity-tests.gambit.scm
+    LABEL "consumer wrapper on gambit: includes the owner's body instead of importing the owner"
+    FIND [[  (import (scheme base) (byte-machine placeholder))
+  (include "../../common/byte-machine/placeholder-consumer.scm"))]]
+    REPLACE [[  (import (scheme base))
+  (include "../../common/byte-machine/placeholder.scm")
+  (include "../../common/byte-machine/placeholder-consumer.scm"))]])
+
+  byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+endif()
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES_WITH_GAMBIT and friends, and the "TWENTY-THREE PASSES"
+# see EXPECTED_PASSES_WITH_GAMBIT and friends, and the "TWENTY-SEVEN PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

@@ -168,12 +168,13 @@ Questions 5–7 may be answered as "deferred, with rationale" if Milestone 0 can
 
 ## 10. Parent-plan corrections (folded in)
 
-Found while reading; small, but worth fixing before code depends on them. All
-three have been applied to the implementation plan.
+Found while reading; small, but worth fixing before code depends on them. The
+first three have been applied to the implementation plan.
 
 - **§7.2 dependency diagram is missing an edge.** `make-interpreted-machine` returns a runtime-compatible compiled-machine, and callbacks must return the runtime's singletons, so `interpret` depends on `runtime`. The diagram shows `runtime` with no incoming edge.
 - **§9.2 API asymmetry.** `compile-machine` takes a *machine*; `make-interpreted-machine` takes a *verification*. That means a verification result must carry its machine, not just diagnostics. Worth stating explicitly in §9 rather than leaving it implied.
 - **Milestone 1 must accept EOF declarations it cannot yet execute.** `make-machine` requires `default-eof-error` and §16.2 mandates EOF-target checks, but `parser-finish!` is Milestone 2. M1 should construct and verify EOF declarations while leaving EOF *execution* to M2, so the slice does not sprawl.
+- **D3's "every execution lane" is sequenced by the work order, not simultaneous with it.** §8 puts the cross-library identity path at item 4 and execution lanes at item 5, so slice 4 proves D3 on source lanes only; slice 5 extends the same two programs to the compiled lanes at no added design cost. D3's own wording is unchanged — see slice 4's decision U6.
 
 ## 11. Explicitly out of scope
 

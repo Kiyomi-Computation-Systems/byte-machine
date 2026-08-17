@@ -553,3 +553,32 @@ foreach(cwd_case identical decoy empty)
     TIMEOUT 120
     WORKING_DIRECTORY "${cwd_dir}")
 endforeach()
+
+# --- Cross-library identity ------------------------------------------------
+#
+# Slice 4, deliverable D3. One body, two libraries: the owner constructs, the
+# consumer -- which imported the owner rather than including its body again --
+# recognises, and the allocation-free singleton stays one object across both
+# imports.
+#
+# No working-directory matrix here. The consumer adds a second include site per
+# runtime but no new resolution mechanism: Chez resolves it by bare filename
+# through source-directories exactly as it resolves the owner's body, and Gambit
+# resolves it relative to the including file exactly as before. Slice 3 proved
+# that mechanism; a second instance of a proven mechanism is not a second proof.
+#
+# Passing here is not yet evidence. What makes it evidence is passes 24 to 27 in
+# SchemeMutationSuite.cmake, and in particular the double-include mutation --
+# under which both cases below answer wrongly, nothing raises, and every other
+# lane in this tree still passes.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.portability.placeholder-identity.chez.source
+  BACKEND chez
+  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.chez.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.portability.placeholder-identity.gambit.source
+  BACKEND gambit
+  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.gambit.scm"
+  TIMEOUT 120)

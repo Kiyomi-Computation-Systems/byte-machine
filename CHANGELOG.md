@@ -126,6 +126,27 @@ what this milestone delivers.
   `byte_machine_add_scheme_lane` forward it, which is what lets the
   working-directory matrix launch six lanes from three fixture directories
   instead of their derived ones.
+- Cross-library identity proof (Milestone 0 slice 4, deliverable D3). A second
+  library per runtime, `(byte-machine placeholder-consumer)`, built over its own
+  wrapper-free body whose free identifiers are supplied by the wrapper's import
+  of `(byte-machine placeholder)`. A shared test body importing both libraries
+  asserts that a value built through the owner is recognised through the
+  consumer, and that the allocation-free singleton is one object across both
+  imports.
+- The consumer body additionally proves a mechanism Milestone 1 depends on and
+  nothing previously exercised: a shared body naming another library's exports
+  as free identifiers, resolved identically by R6RS library-body `include` and
+  R7RS `define-library` `include`.
+- Eight Scheme mutations in four passes (24 to 27), bringing the suite to 27
+  passes and 64 mutations. The decisive two replace each consumer wrapper's
+  import with an include of the owner's body: the mutant answers both
+  identity claims wrongly and raises nothing, but the identity lane still
+  fails it — an ordinary `check`/`check-equal` mismatch, exit 1 on both
+  runtimes — while every lane that imports only the owner stays green.
+- [Decision 0003](docs/decisions/0003-cross-library-identity.md), including
+  the deferred one-owner guard with the condition that reopens it, and an
+  open question about Chez and Gambit disagreeing over a library body that
+  redefines an imported name.
 
 ### Changed
 
