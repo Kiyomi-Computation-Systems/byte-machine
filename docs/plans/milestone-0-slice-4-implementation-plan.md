@@ -10,6 +10,29 @@
 
 **Design spec:** [`milestone-0-slice-4-cross-library-identity.md`](./milestone-0-slice-4-cross-library-identity.md). Read §5.2, §8.1 and §8.2 before starting; they carry the reasoning the code cannot.
 
+> **Correction, recorded after execution.** This plan is kept as the historical
+> artifact of what was planned, and two claims in it were wrong. Both were
+> corrected in the design spec, decision record 0003, and the shipped code; they
+> are left standing here rather than rewritten, in the manner of the milestone
+> plan's §2.1 and §10.
+>
+> 1. **The double-include mutant does not "exit 0".** That figure came from a
+>    pre-design scratch driver that printed two booleans and had no harness. The
+>    shipped harness-integrated identity lane fails through ordinary
+>    `check`/`check-equal` mismatches and exits **1** on both runtimes. "Nothing
+>    raises" was and remains correct. `MutationRunner` treats a zero return code
+>    as *not-caught*, so the original claim, if true, would have made passes 26
+>    and 27 report uncaught.
+> 2. **Task 2's first mutation is `(if #f`, not `(if #t`.** The plan's form was
+>    caught by an induced raise; a comparison-based witness was found during
+>    review and replaces it, which dissolves the concession the design spec's
+>    §5.3 originally argued for.
+>
+> Two smaller drifts, fixed during execution: Task 2 and Task 3's Step 3 each say
+> to replace "the single occurrence" of the file's quoted header title, but there
+> are two, and neither task lists the follow-on fix to the paragraph naming which
+> passes are Gambit-gated.
+
 ## Global Constraints
 
 - Shared `.scm` bodies use only the R6RS/R7RS common subset and never name Chez or Gambit. Runtime-specific code lives only in the thin `.sls`/`.sld` wrappers. (AGENTS.md)
