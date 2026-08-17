@@ -546,3 +546,48 @@
                       (harness-fingerprint-file
                        (adapter-environment-variable "BYTE_MACHINE_FINGERPRINT_SAMPLE")))
                      "b1058d10fb543b0")))))
+
+;; --- provenance, as a decision -----------------------------------------------
+;;
+;; The shell around this exits the process, so nothing inside a suite can
+;; observe it. The rule itself is two values in and a diagnostic or #f out, and
+;; that part is checkable here.
+
+(harness-group "provenance"
+  (lambda ()
+
+    (harness-case "agreement is not a diagnosis"
+      (lambda ()
+        (check "identical values agree"
+               (not (harness-provenance-diagnosis "abc123" "abc123")))))
+
+    (harness-case "a mismatch names both values"
+      (lambda ()
+        (let ((d (harness-provenance-diagnosis "abc123" "def456")))
+          (check "there is a diagnosis" (if d #t #f))
+          (check "it names the expectation" (harness-string-contains? d "abc123"))
+          (check "it names what was computed" (harness-string-contains? d "def456")))))
+
+    (harness-case "a missing expectation is its own diagnosis"
+      (lambda ()
+        (let ((d (harness-provenance-diagnosis #f "abc123")))
+          (check "there is a diagnosis" (if d #t #f))
+          (check "it does not claim a mismatch"
+                 (not (harness-string-contains? d "mismatch"))))))
+
+    ;; Whitespace is trimmed at the ends only. A reader that also collapsed
+    ;; interior space would make "dead beef" compare equal to "deadbeef", which
+    ;; is the sort of leniency that turns a corrupted expectation into a passing
+    ;; comparison.
+    (harness-case "the expectation file's outer whitespace is trimmed"
+      (lambda ()
+        (check-equal "trailing newline"
+                     (harness-bytes->string (harness-bytes 4 '(97 98 99 10)))
+                     "abc")
+        (check-equal "leading and trailing spaces"
+                     (harness-bytes->string (harness-bytes 5 '(32 97 98 99 32)))
+                     "abc")
+        (check-equal "empty" (harness-bytes->string (harness-bytes 0 '())) "")
+        (check-equal "interior space is kept"
+                     (harness-bytes->string (harness-bytes 7 '(100 101 97 100 32 98 102)))
+                     "dead bf")))))

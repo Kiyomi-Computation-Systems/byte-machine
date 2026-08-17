@@ -34,9 +34,10 @@
     harness-string-contains? harness-join harness-split harness-take
     harness-member? harness-failure-context harness-normalize-filter
     harness-counters harness-restore-counters! harness-capture-state
-    ;; content fingerprint
+    ;; content fingerprint and provenance
     harness-fingerprint-bytevector harness-fingerprint-combine
     harness-fingerprint->string harness-fingerprint-file
+    harness-bytes->string harness-provenance-diagnosis
     ;; adapter protocol
     adapter-runtime-name adapter-runtime-version adapter-machine-type
     adapter-os adapter-architecture adapter-execution-mode

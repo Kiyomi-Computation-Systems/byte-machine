@@ -84,6 +84,54 @@
 (define (harness-normalize-filter value)
   (if (and value (string=? value "")) #f value))
 
+;; Decode a bytevector as ASCII, trimming whitespace at the ends only. The
+;; expectation file is written without a trailing newline, but an editor, a
+;; shell redirect, or a future writer may add one, and a comparison that failed
+;; on a newline would be a provenance failure reported for the wrong reason.
+;;
+;; Interior whitespace is deliberately kept. Collapsing it would make
+;; "dead beef" compare equal to "deadbeef" -- leniency that turns a corrupted
+;; expectation into a passing comparison, which is the one outcome this whole
+;; mechanism exists to prevent.
+(define (harness-whitespace-byte? b)
+  (or (= b 32) (= b 9) (= b 10) (= b 13)))
+
+(define (harness-bytes->string bv)
+  (let ((n (bytevector-length bv)))
+    (let find-start ((start 0))
+      (cond
+        ((= start n) "")
+        ((harness-whitespace-byte? (bytevector-u8-ref bv start))
+         (find-start (+ start 1)))
+        (else
+         (let find-end ((end n))
+           (if (harness-whitespace-byte? (bytevector-u8-ref bv (- end 1)))
+               (find-end (- end 1))
+               (let loop ((i start) (acc (list)))
+                 (if (= i end)
+                     (list->string (reverse acc))
+                     (loop (+ i 1)
+                           (cons (integer->char (bytevector-u8-ref bv i))
+                                 acc)))))))))))
+
+;; The provenance rule, as a function of two values. `expected` is #f when the
+;; build supplied nothing at all, which is a different defect from a mismatch:
+;; one means the lane ran text nobody measured, the other means it ran the wrong
+;; text. Reporting them the same way would send a reader to the wrong file.
+(define (harness-provenance-diagnosis expected computed)
+  (cond
+    ((not expected)
+     (string-append
+      "no expectation was supplied, so nothing can say whether this run "
+      "executed the text it was supposed to. This run computed " computed "."))
+    ((string=? expected computed) #f)
+    (else
+     (string-append
+      "fingerprint mismatch: the build expected " expected
+      " but this run computed " computed
+      ". Either this lane executed different text from the one the build "
+      "measured, or it is running a stale artifact."))))
+
 ;; ---------------------------------------------------------------------------
 ;; Mutable result state (the imperative shell of the runner)
 ;; ---------------------------------------------------------------------------
