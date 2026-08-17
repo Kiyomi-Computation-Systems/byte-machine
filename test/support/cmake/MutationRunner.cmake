@@ -74,6 +74,13 @@ set(BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY "")
 # consulted when the verify command exits 0 -- that is simply not caught, the
 # ordinary way. Apply them only where the wrong-reason risk is real; most
 # mutations need neither.
+#
+# EXPECT_SURVIVES is mutually exclusive with EXPECT_STATUS and
+# EXPECT_OUTPUT_MATCHES: a declared survivor is judged in
+# byte_machine_mutation_run only by whether the verify command exited zero, so
+# the other two would be parsed, stored, and never consulted -- silently inert
+# rather than enforced. Declaring both is refused rather than left to quietly
+# mean less than it says.
 function(byte_machine_mutation)
   cmake_parse_arguments(PARSE_ARGV 0 arg "" "FILE;SPEC;LABEL;FIND;REPLACE;SITES;EXPECT_SURVIVES;EXPECT_STATUS;EXPECT_OUTPUT_MATCHES" "")
 
@@ -87,6 +94,19 @@ function(byte_machine_mutation)
   endforeach()
   if(NOT DEFINED arg_SITES)
     set(arg_SITES 1)
+  endif()
+
+  # DEFINED, not a truthiness or STREQUAL test on the raw arg_* variable: an
+  # undefined cmake_parse_arguments output used bare inside if() is treated as
+  # the literal string "arg_EXPECT_SURVIVES" rather than as empty, so a
+  # STREQUAL "" test on it would silently invert. DEFINED has no such trap.
+  if(DEFINED arg_EXPECT_SURVIVES AND (DEFINED arg_EXPECT_STATUS OR DEFINED arg_EXPECT_OUTPUT_MATCHES))
+    message(FATAL_ERROR
+      "byte-machine-mutation: '${arg_LABEL}' declares EXPECT_SURVIVES together "
+      "with EXPECT_STATUS or EXPECT_OUTPUT_MATCHES. A declared survivor is "
+      "judged only by whether the verify command exits zero, so the other two "
+      "would be silently unconsulted rather than enforced. Declare one or the "
+      "other.")
   endif()
 
   math(EXPR next "${_bm_mutation_count} + 1")
@@ -158,6 +178,61 @@ function(byte_machine_mutation_run_spec stage_dir spec out_rc out_output)
     ERROR_VARIABLE err)
   set(${out_rc} "${rc}" PARENT_SCOPE)
   set(${out_output} "${out}${err}" PARENT_SCOPE)
+endfunction()
+
+# byte_machine_mutation_verdict(<rc> <output> <expect_status> <expect_output_matches>
+#                               <out_verdict> <out_reason>)
+#
+# The decision every mutation is ultimately judged by, and every specification
+# in this tree is trusted through: did the verify command's result count as
+# catching the mutation, and for the declared reason? Pure -- no
+# execute_process, no filesystem -- so it is directly specifiable under
+# `cmake -P` rather than only observable through a real staged run.
+#
+# out_verdict is one of:
+#   not-caught    rc was 0. EXPECT_STATUS and EXPECT_OUTPUT_MATCHES narrow what
+#                 a *nonzero* result has to look like to count; neither
+#                 manufactures a catch out of a zero exit, so they are not even
+#                 consulted here.
+#   wrong-reason  rc was nonzero, but a declared expectation was not met.
+#                 out_reason explains which one.
+#   caught        rc was nonzero and every declared expectation was met. With
+#                 neither EXPECT_STATUS nor EXPECT_OUTPUT_MATCHES given, this is
+#                 the whole rule: any nonzero result is caught, the ordinary,
+#                 pre-slice-3 way.
+#
+# expect_status and expect_output_matches are both tested for "was this
+# declared at all" with STREQUAL "", not truthiness: a status is a small
+# integer, so 0 would never occur here in practice, but a regex is
+# user-supplied text, and a regex that happens to read as CMake-false --
+# "0", OFF, NOTFOUND, anything ending "-NOTFOUND" -- is still a regex someone
+# declared. Truthiness would silently skip the check it names; STREQUAL does
+# not.
+function(byte_machine_mutation_verdict rc output expect_status expect_output_matches out_verdict out_reason)
+  set(${out_reason} "" PARENT_SCOPE)
+
+  if(rc EQUAL 0)
+    set(${out_verdict} "not-caught" PARENT_SCOPE)
+    return()
+  endif()
+
+  if(NOT expect_status STREQUAL "" AND NOT rc EQUAL expect_status)
+    set(${out_verdict} "wrong-reason" PARENT_SCOPE)
+    set(${out_reason}
+      "expected the verify command to exit ${expect_status}, got ${rc}"
+      PARENT_SCOPE)
+    return()
+  endif()
+
+  if(NOT expect_output_matches STREQUAL "" AND NOT output MATCHES "${expect_output_matches}")
+    set(${out_verdict} "wrong-reason" PARENT_SCOPE)
+    set(${out_reason}
+      "expected the verify command's output to match '${expect_output_matches}', but it did not"
+      PARENT_SCOPE)
+    return()
+  endif()
+
+  set(${out_verdict} "caught" PARENT_SCOPE)
 endfunction()
 
 # byte_machine_mutation_reset()
@@ -277,21 +352,18 @@ function(byte_machine_mutation_run source_root stage_dir)
     byte_machine_mutation_run_spec("${stage_dir}" "${spec}" rc output)
     file(WRITE "${staged_path}" "${pristine}")
 
-    # A nonzero result only means the verify command noticed *something*. When
-    # the mutation says what the catch has to look like, check that before
-    # trusting the exit code -- a status or an output fragment that does not
-    # match is caught by coincidence, not by the decision this mutation names.
-    set(reason_wrong "")
-    if(NOT rc EQUAL 0)
-      if(NOT expect_status STREQUAL "" AND NOT rc EQUAL expect_status)
-        set(reason_wrong "expected the verify command to exit ${expect_status}, got ${rc}")
-      elseif(expect_output_matches AND NOT output MATCHES "${expect_output_matches}")
-        set(reason_wrong "expected the verify command's output to match '${expect_output_matches}', but it did not")
-      endif()
-    endif()
+    # The pure decision -- caught, not-caught, or caught for the wrong reason
+    # -- lives in byte_machine_mutation_verdict. What is left here is turning
+    # that verdict into the recorded outcome, which also depends on
+    # EXPECT_SURVIVES: a fact about how this mutation was declared that the
+    # verdict function does not see, and is never given alongside EXPECT_STATUS
+    # or EXPECT_OUTPUT_MATCHES (byte_machine_mutation refuses that combination).
+    byte_machine_mutation_verdict(
+      "${rc}" "${output}" "${expect_status}" "${expect_output_matches}"
+      verdict reason)
 
     if(survives)
-      if(rc EQUAL 0)
+      if(verdict STREQUAL "not-caught")
         message(STATUS "byte-machine-mutation: SURVIVES (expected) ${label} -- ${survives}")
       else()
         message(SEND_ERROR
@@ -301,15 +373,15 @@ function(byte_machine_mutation_run source_root stage_dir)
           "record that cites it.")
         math(EXPR uncaught "${uncaught} + 1")
       endif()
-    elseif(rc EQUAL 0)
+    elseif(verdict STREQUAL "not-caught")
       message(SEND_ERROR
         "byte-machine-mutation: UNCAUGHT ${label} -- ${spec} still passes with "
         "${rel} broken. That specification is not testing this behaviour.")
       math(EXPR uncaught "${uncaught} + 1")
-    elseif(reason_wrong)
+    elseif(verdict STREQUAL "wrong-reason")
       message(SEND_ERROR
         "byte-machine-mutation: '${label}' exited nonzero (${rc}) but for the "
-        "wrong reason -- ${reason_wrong}. That is caught by coincidence, not by "
+        "wrong reason -- ${reason}. That is caught by coincidence, not by "
         "the decision this mutation names, and proves nothing about it.")
       math(EXPR uncaught "${uncaught} + 1")
     else()

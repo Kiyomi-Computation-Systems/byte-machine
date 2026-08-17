@@ -52,6 +52,19 @@ byte_machine_add_test(
   TIMEOUT 120
   LABELS unit)
 
+# byte_machine_mutation_verdict decides whether a mutation was caught, and for
+# the declared reason -- the decision every specification in this tree is
+# ultimately trusted through, including the mutation suite below, which
+# mutates it. Specified here, immediately before that suite, for the same
+# reason SpecSupportSpec precedes it: a mutation against machinery a proof
+# depends on must not be judged by the very thing it just broke.
+byte_machine_add_test(
+  NAME byte-machine.harness.cmake-mutation-runner.cmake.direct
+  COMMAND "${CMAKE_COMMAND}" -P
+          "${CMAKE_CURRENT_LIST_DIR}/support/cmake/MutationRunnerSpec.cmake"
+  TIMEOUT 120
+  LABELS unit)
+
 # A passing specification proves nothing by itself. This breaks each decision in
 # each module in turn, on a staged copy, and requires the owning specification to
 # notice. It runs in CI because evidence that only exists in someone's terminal
