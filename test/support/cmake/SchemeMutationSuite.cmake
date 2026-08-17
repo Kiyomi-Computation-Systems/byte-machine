@@ -630,6 +630,17 @@ string(REPLACE "${POISON_FIND}" "${POISON_REPLACE}" POISON_MUTATED "${POISON_PRI
 # The pristine source goes down first: Chez prefers the object only while it is
 # *not older* than the source beside it, and the object is written by the
 # compile below.
+#
+# There is a SECOND staleness input, and it is not local to this directory: the
+# library `include`s harness-runner.scm, which Chez re-resolves through
+# source-directories at LOAD time -- so the object is compared against the
+# STAGED runner as well. That copy keeps its source-tree mtime only because
+# byte_machine_mutation_stage uses file(COPY), which preserves timestamps. If
+# staging ever switches to a copy that stamps `now`, the staged runner becomes
+# newer than the object, Chez loads the source, and this mutation stops biting.
+# It will not do so silently -- the mutation carries no EXPECT_SURVIVES, so the
+# regression surfaces as UNCAUGHT and fails the suite -- but a reader changing
+# the staging should know why it matters.
 file(WRITE "${POISON_ROOT}/byte-machine/test/harness.sls" "${POISON_PRISTINE}")
 file(WRITE "${POISON_SOURCE_DIR}/byte-machine/test/harness.sls" "${POISON_MUTATED}")
 
