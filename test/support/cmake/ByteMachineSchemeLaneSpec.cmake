@@ -235,17 +235,40 @@ spec_check_equal("${message}"
 # and the environment prefix live directly in this function with no pure
 # helper underneath, so stubbing its two dependencies is the only way to
 # observe them at all.
+# Both stubs below record WORKING_DIRECTORY two ways: the value cmake_parse_arguments
+# extracted, and whether the literal "WORKING_DIRECTORY" keyword appears anywhere
+# in the raw argument list at all. The second is not redundant with the first. A
+# lane that omitted WORKING_DIRECTORY and a lane that forwarded it with an empty
+# value can both leave the parsed variable unset at this project's declared 3.26
+# floor (CMP0174, which would tell them apart, is 3.31+) -- so only a scan of the
+# raw arguments can tell "the keyword never appeared" from "it appeared with
+# nothing after it", and the whole point of ByteMachineSchemeLane.cmake building
+# working_directory_args conditionally is to never produce the second shape.
 function(byte_machine_add_test)
-  cmake_parse_arguments(PARSE_ARGV 0 s "" "NAME;TIMEOUT" "COMMAND;LABELS;ENVIRONMENT")
+  cmake_parse_arguments(PARSE_ARGV 0 s "" "NAME;TIMEOUT;WORKING_DIRECTORY" "COMMAND;LABELS;ENVIRONMENT")
   set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "plain")
   set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT "${s_ENVIRONMENT}")
+  set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY "${s_WORKING_DIRECTORY}")
+  list(FIND ARGN "WORKING_DIRECTORY" wd_at)
+  if(wd_at EQUAL -1)
+    set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "absent")
+  else()
+    set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "present")
+  endif()
 endfunction()
 
 function(byte_machine_add_exit_code_test)
-  cmake_parse_arguments(PARSE_ARGV 0 s "" "NAME;EXPECT_EXIT;TIMEOUT" "COMMAND;LABELS;ENVIRONMENT")
+  cmake_parse_arguments(PARSE_ARGV 0 s "" "NAME;EXPECT_EXIT;TIMEOUT;WORKING_DIRECTORY" "COMMAND;LABELS;ENVIRONMENT")
   set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "exit-code")
   set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_EXPECT_EXIT "${s_EXPECT_EXIT}")
   set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT "${s_ENVIRONMENT}")
+  set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY "${s_WORKING_DIRECTORY}")
+  list(FIND ARGN "WORKING_DIRECTORY" wd_at)
+  if(wd_at EQUAL -1)
+    set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "absent")
+  else()
+    set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "present")
+  endif()
 endfunction()
 
 # An EXPECT_EXIT lane must route to the exit-code registrar and forward the
@@ -281,6 +304,70 @@ spec_check_equal("${registrar}" "plain" "a lane without EXPECT_EXIT routes to th
 get_property(environment GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT)
 spec_check_equal("${environment}" "BYTE_MACHINE_EXECUTION_MODE=source;FOO=bar"
   "plain registration carries the source execution mode ahead of caller-supplied entries")
+
+# WORKING_DIRECTORY must be forwarded to whichever registrar the lane routed
+# to, with its value, when the lane was given one -- and the keyword must not
+# reach the registrar at all when it was not. Both directions, through both
+# registrars: ByteMachineSchemeLane.cmake builds one working_directory_args
+# list and splices it into both registration calls, so either could stop
+# forwarding it independently of the other.
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "none")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY "sentinel")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "sentinel")
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.example.chez.source
+  BACKEND chez
+  PROGRAM "${SPEC_SELF}"
+  TIMEOUT 10
+  WORKING_DIRECTORY "/h/run")
+get_property(wd GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY)
+spec_check_equal("${wd}" "/h/run"
+  "a WORKING_DIRECTORY given to the plain registration path is forwarded with its value")
+get_property(wd_keyword GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD)
+spec_check_equal("${wd_keyword}" "present"
+  "the WORKING_DIRECTORY keyword reaches the plain registrar when the lane gave one")
+
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "none")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY "sentinel")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "sentinel")
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.example.chez.source
+  BACKEND chez
+  PROGRAM "${SPEC_SELF}"
+  TIMEOUT 10)
+get_property(wd_keyword GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD)
+spec_check_equal("${wd_keyword}" "absent"
+  "no WORKING_DIRECTORY keyword reaches the plain registrar when the lane did not give one")
+
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "none")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY "sentinel")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "sentinel")
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.example.chez.source
+  BACKEND chez
+  PROGRAM "${SPEC_SELF}"
+  TIMEOUT 10
+  EXPECT_EXIT 1
+  WORKING_DIRECTORY "/h/run")
+get_property(wd GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY)
+spec_check_equal("${wd}" "/h/run"
+  "a WORKING_DIRECTORY given to the exit-code registration path is forwarded with its value")
+get_property(wd_keyword GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD)
+spec_check_equal("${wd_keyword}" "present"
+  "the WORKING_DIRECTORY keyword reaches the exit-code registrar when the lane gave one")
+
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "none")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY "sentinel")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "sentinel")
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.example.chez.source
+  BACKEND chez
+  PROGRAM "${SPEC_SELF}"
+  TIMEOUT 10
+  EXPECT_EXIT 1)
+get_property(wd_keyword GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD)
+spec_check_equal("${wd_keyword}" "absent"
+  "no WORKING_DIRECTORY keyword reaches the exit-code registrar when the lane did not give one")
 
 # A no-runtime backend must skip registration silently: neither registrar may
 # be reached. This runs in-process rather than through spec_expect_rejected, so

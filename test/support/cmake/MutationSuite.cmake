@@ -370,6 +370,20 @@ byte_machine_mutation(
   set(${out_message} "" PARENT_SCOPE)]]
   REPLACE [[function(byte_machine_expect_exit_classify code out_status out_message)]])
 
+# A reviewer once deleted this exact block by hand from
+# ByteMachineSchemeLane.cmake's copy of the same shape (below) and ran the
+# whole suite: 37/37 passed, because nothing forwarded WORKING_DIRECTORY far
+# enough to notice it stopped arriving. This is that block's other occurrence
+# -- the registrar itself, not a caller of it -- and until the WORKING_DIRECTORY
+# assertions in ByteMachineExpectExitSpec.cmake, its path was exercised by
+# nothing at all: every case that reaches byte_machine_add_exit_code_test in
+# that specification is rejected before this line runs.
+byte_machine_mutation(
+  FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
+  LABEL "expect-exit: WORKING_DIRECTORY is parsed and then never forwarded to the registrar"
+  FIND [[  if(arg_WORKING_DIRECTORY)]]
+  REPLACE [[  if(FALSE)]])
+
 # --- ByteMachineSchemeLane -------------------------------------------------
 
 byte_machine_mutation(
@@ -491,6 +505,18 @@ byte_machine_mutation(
   LABEL "scheme-lane: the source execution mode is no longer declared in the environment"
   FIND [[  set(environment "BYTE_MACHINE_EXECUTION_MODE=source" ${arg_ENVIRONMENT})]]
   REPLACE [[  set(environment ${arg_ENVIRONMENT})]])
+
+# This is the mutation a whole-branch review found undetectable: delete this
+# block by hand, reconfigure, and the working-directory matrix's six lanes all
+# launch from their derived directories instead of the three fixture
+# directories test/CMakeLists.txt built for them -- six copies of one vacuous
+# lane, and nothing anywhere failed, because neither registrar this block
+# feeds was ever asked whether it received WORKING_DIRECTORY at all.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: WORKING_DIRECTORY is parsed and then never forwarded to either registrar"
+  FIND [[  if(arg_WORKING_DIRECTORY)]]
+  REPLACE [[  if(FALSE)]])
 
 # A comma in a Gambit search root is not a wrong path but a malformed -:
 # option list: gsi prints its usage banner and runs no Scheme at all, on every
