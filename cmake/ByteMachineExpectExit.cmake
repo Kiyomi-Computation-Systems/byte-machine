@@ -131,6 +131,18 @@ function(byte_machine_add_exit_code_test)
 
   string(JOIN "|" packed ${arg_COMMAND})
 
+  # Forward WORKING_DIRECTORY only when the caller gave one, rather than
+  # forwarding an empty value unconditionally. The keyword followed by an
+  # empty string is what makes cmake_parse_arguments() print a CMP0174
+  # developer warning on every configure that reaches this call; that policy
+  # does not exist at this project's declared 3.26 floor (it arrives in
+  # 3.31), so setting it would be a no-op here. Omitting the keyword when
+  # there is nothing to say is version-independent instead.
+  set(working_directory_args "")
+  if(arg_WORKING_DIRECTORY)
+    set(working_directory_args WORKING_DIRECTORY "${arg_WORKING_DIRECTORY}")
+  endif()
+
   byte_machine_add_test(
     NAME "${arg_NAME}"
     COMMAND "${CMAKE_COMMAND}"
@@ -139,7 +151,7 @@ function(byte_machine_add_exit_code_test)
             -P "${CMAKE_CURRENT_FUNCTION_LIST_FILE}"
     TIMEOUT "${arg_TIMEOUT}"
     LABELS ${arg_LABELS}
-    WORKING_DIRECTORY "${arg_WORKING_DIRECTORY}"
+    ${working_directory_args}
     ENVIRONMENT ${arg_ENVIRONMENT})
 endfunction()
 

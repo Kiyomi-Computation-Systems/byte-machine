@@ -218,16 +218,18 @@ function(byte_machine_add_test)
   set(labels ${layer} ${backend} ${mode} ${arg_LABELS})
   list(REMOVE_DUPLICATES labels)
 
-  # The temporary directory is always the derived one: a test that writes
-  # scratch files must not be able to disturb a directory it was pointed at to
-  # make a claim about resolution.
-  set(tmp_dir "${CMAKE_BINARY_DIR}/test-run/${arg_NAME}/tmp")
-  file(MAKE_DIRECTORY "${tmp_dir}")
-
   # The directory must exist. CTest reports a missing working directory as a
   # failure to launch, which the exact-status helper classifies as `did-not-run`
   # -- correct, but it points at the runtime rather than at the registration
   # that named a directory nobody created.
+  #
+  # Checked before either file(MAKE_DIRECTORY) call below, not after: a
+  # specification that runs this function under `cmake -P` to prove the
+  # rejection must not create a directory on its way to that error. Under a
+  # bare `cmake -P` there is no project and no cache, so CMAKE_BINARY_DIR
+  # resolves to the process's current directory -- and a directory created
+  # before this check landed a test-run/ tree in the repository root when the
+  # specification was run from there.
   if(arg_WORKING_DIRECTORY AND NOT IS_DIRECTORY "${arg_WORKING_DIRECTORY}")
     message(FATAL_ERROR
       "byte-machine: '${arg_NAME}' was given WORKING_DIRECTORY "
@@ -236,6 +238,12 @@ function(byte_machine_add_test)
       "resolution happens, so the directory has to be one the build made on "
       "purpose.")
   endif()
+
+  # The temporary directory is always the derived one: a test that writes
+  # scratch files must not be able to disturb a directory it was pointed at to
+  # make a claim about resolution.
+  set(tmp_dir "${CMAKE_BINARY_DIR}/test-run/${arg_NAME}/tmp")
+  file(MAKE_DIRECTORY "${tmp_dir}")
 
   byte_machine_test_run_directory("${arg_NAME}" "${arg_WORKING_DIRECTORY}" run_dir)
   file(MAKE_DIRECTORY "${run_dir}")

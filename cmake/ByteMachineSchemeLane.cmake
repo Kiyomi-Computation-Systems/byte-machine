@@ -186,6 +186,14 @@ function(byte_machine_add_scheme_lane)
   # impossible to load.
   set(environment "BYTE_MACHINE_EXECUTION_MODE=source" ${arg_ENVIRONMENT})
 
+  # Same CMP0174 reasoning as byte_machine_add_exit_code_test in
+  # ByteMachineExpectExit.cmake: forward WORKING_DIRECTORY only when there is
+  # a value, rather than forwarding an empty one unconditionally.
+  set(working_directory_args "")
+  if(arg_WORKING_DIRECTORY)
+    set(working_directory_args WORKING_DIRECTORY "${arg_WORKING_DIRECTORY}")
+  endif()
+
   if(DEFINED arg_EXPECT_EXIT)
     byte_machine_add_exit_code_test(
       NAME "${arg_NAME}"
@@ -193,7 +201,7 @@ function(byte_machine_add_scheme_lane)
       EXPECT_EXIT "${arg_EXPECT_EXIT}"
       TIMEOUT "${arg_TIMEOUT}"
       LABELS ${arg_LABELS}
-      WORKING_DIRECTORY "${arg_WORKING_DIRECTORY}"
+      ${working_directory_args}
       ENVIRONMENT ${environment})
   else()
     byte_machine_add_test(
@@ -201,7 +209,7 @@ function(byte_machine_add_scheme_lane)
       COMMAND ${command}
       TIMEOUT "${arg_TIMEOUT}"
       LABELS ${arg_LABELS}
-      WORKING_DIRECTORY "${arg_WORKING_DIRECTORY}"
+      ${working_directory_args}
       ENVIRONMENT ${environment})
   endif()
 endfunction()
