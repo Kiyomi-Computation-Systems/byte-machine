@@ -277,7 +277,19 @@ that has acquired a file — is a registered lane of its own asserting status 2 
 because a lane that is set up correctly never reaches a refusal and could not notice one being
 deleted. `(compile-imported-libraries #f)` restates Chez's own default, so deleting it is
 unobservable and only turning it *on* has an effect: the object is then written into the guard
-directory, which every Chez lane shares, so the next lane to start refuses to run.
+directory the correctly configured Chez lanes share — the two guard-refusal lanes above are the
+exception, each having a guard of its own — so the next of the sharing lanes to start refuses to
+run.
+
+The pairing itself is checked by mutation, in the Scheme mutation suite's ninth pass. It is the one
+launcher decision no lane in this tree can witness, because no library root here has a compiled
+object beside its source for Chez to prefer: unpaired, the launcher behaves identically. The pass
+therefore builds a library root that does have one — a genuinely compiled copy of the adapter whose
+`adapter-runtime-name` returns a sentinel, sitting beside the pristine `.sls` — and runs the
+self-tests body against it. Paired with an empty guard the object is unreachable and the body
+passes; unpaired, Chez loads it and the sentinel appears in the banner, the `FAIL-CONTEXT` line, and
+the exit status. A *garbage* `.so` proves nothing: Chez ignores a file it cannot read as a library,
+and both runs then pass.
 
 The launcher does **not** re-check for Petite or for threading. Discovery already rejects Petite at
 configure time and re-probes the exact binary being registered, and decision 0001 explicitly refused
@@ -422,7 +434,12 @@ Four layers, ordered by independence. Each depends on strictly less than the one
    the export list's three splice-resolved names (§9.1). The last is the launcher's
    `compile-imported-libraries` call, whose only observable effect is a file written *after* the guard
    directory's emptiness has already been asserted, so it is visible to the next process and not to
-   the one that wrote it; the registered lanes do catch it, because they share one guard directory.
+   the one that wrote it; the registered lanes do catch it, because the correctly configured ones
+   share a single guard directory.
+
+   One pass stands apart from the rest: the `library-directories` pairing is witnessed against a
+   library root the pass compiles a poisoned object into, because no root in the tree has an object
+   beside its source and the mutation is therefore invisible everywhere else (§7.1).
 
 ### 9.1 Adapter name parity
 
@@ -471,7 +488,9 @@ At minimum, one per decision in the runner and in the Chez launcher:
 - an export deleted from each adapter (§9.1);
 - each of the launcher's three refusals removed — wrong argument count, absent guard directory,
   guard directory with a file in it — and each entry of its source path dropped;
-- the launcher allowed to compile what it imports.
+- the launcher allowed to compile what it imports;
+- the library root unpaired from the object guard, witnessed against a library root that holds a
+  compiled object (§7.1).
 
 ## 10. Work order
 

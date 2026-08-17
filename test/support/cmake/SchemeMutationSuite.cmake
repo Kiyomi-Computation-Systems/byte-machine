@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# EIGHT PASSES, BECAUSE EIGHT DIFFERENT WITNESSES ARE NEEDED
+# NINE PASSES, BECAUSE NINE DIFFERENT WITNESSES ARE NEEDED
 #
 # Pass 1 runs the Chez self-tests lane against the shared runner body. That body
 # is identical text on both runtimes, so verifying it on a second runtime would
@@ -39,6 +39,12 @@
 # Pass 8 is the launcher's `compile-imported-libraries` call, and it is the one
 # mutation in this file that no single process can catch. See its recorded
 # reason.
+#
+# Pass 9 is the library-directories pairing, the mechanism that makes
+# `mode=source` an honest claim. No library root in this tree has a compiled
+# object in it, so unpairing the root from the guard changes nothing anywhere
+# else; the pass therefore builds a root that does have one, and runs the
+# self-tests lane against it.
 #
 # WHAT THIS SUITE NEEDS FROM ITS ENVIRONMENT
 #
@@ -282,11 +288,11 @@ byte_machine_mutation(
 # line was printed. Spec section 5.3 records the manual check that does.
 byte_machine_mutation(
   FILE ${RUNNER} SPEC harness-self-tests.chez.sps
-  LABEL "runner: BYTE_MACHINE_TEST_VERBOSE is never read"
+  LABEL "runner: the value read for BYTE_MACHINE_TEST_VERBOSE is discarded"
   FIND [[    (set! harness-verbose (if (and v (not (string=? v ""))) #t #f)))]]
   REPLACE [[    (set! harness-verbose #f))]]
   EXPECT_SURVIVES
-    "with verbose forced off, a run prints one line per passing case fewer and reports the identical counters, cases, failures and status; nothing this suite can run tells the two apart. byte-machine.harness.verbose.chez.source proves the read happens and does not raise; that the value read is honoured is covered by the manual check recorded in spec section 5.3 -- either self-tests lane with BYTE_MACHINE_TEST_VERBOSE=1 prints one pass line per case and none without it")
+    "the verify command that judges this mutation does not set the variable, so both runs take the same branch -- harness-verbose ends up #f either way -- and the two are byte-identical, not merely indistinguishable by exit status. In a process that does set it the whole difference is one printed line per passing case: no counter, no case count, no status moves, and this suite judges by exit status. byte-machine.harness.verbose.chez.source proves the read happens and does not raise; that the value read is honoured is covered by the manual check recorded in spec section 5.3 -- either self-tests lane with BYTE_MACHINE_TEST_VERBOSE=1 prints one pass line per case and none without it")
 
 byte_machine_mutation(
   FILE ${RUNNER} SPEC harness-self-tests.chez.sps
@@ -556,6 +562,126 @@ byte_machine_mutation(
   REPLACE [[(compile-imported-libraries #t)]]
   EXPECT_SURVIVES
     "deleting the call is provably unobservable -- Chez's own default for compile-imported-libraries is already #f -- so the only mutation with an effect is turning it on, and its entire effect is a file: Chez writes byte-machine/test/harness.so into the object half of the library-directories pair, which is the guard, and it does so after the launcher has already asserted the guard was empty. No single process can see it. The registered lanes can, and do: with compilation on, the first Chez lane to run pollutes the shared object guard and three of the harness preset's tests fail. This suite runs one process per mutation, so what it can prove about this line is only that the line is still there")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Ninth pass: the library-directories pairing ----------------------------
+#
+# The pairing is the launcher's central mechanism. Chez looks for a library's
+# compiled object only in the *object* half of a library-directories pair, so
+# pairing the library root with a directory the build keeps empty is the whole
+# reason this lane may call itself "source". Three places in the tree assert
+# that -- the launcher's own header, test/CMakeLists.txt, and spec section 7.1 --
+# and until this pass nothing checked it. `(library-directories (list
+# library-root))` left every test green, because no library root in this tree
+# has an object beside its source for Chez to prefer.
+#
+# So this pass builds one, in a library root of its own. A garbage `.so` is not
+# enough: Chez silently ignores a file it cannot read as a library, and both the
+# pristine and the unpaired run then exit 0 -- an inconclusive experiment, not
+# evidence that the pairing does nothing. The object here is genuinely compiled,
+# from a copy of the adapter whose `adapter-runtime-name` returns a sentinel,
+# and the pristine `.sls` stays beside it so the baseline has real source to
+# load. The sentinel is what makes the catch legible: the mutated run fails
+# *because the object was loaded*, and says so in its banner, its FAIL-CONTEXT
+# line, and its summary, rather than failing for some unrelated reason.
+#
+# Everything lives under this suite's work directory. The source tree is only
+# read, no other pass's guard is touched, and this pass gets an empty guard of
+# its own so that a future change to the shared one cannot quietly decide the
+# result.
+#
+# Reached only when a Chez was passed in, the same way every other Chez pass
+# here is: this file refuses to start without one, and the registration in
+# test/CMakeLists.txt is guarded on the same variable, so `ctest --preset
+# no-scheme` never reaches the compile below.
+
+byte_machine_mutation_reset()
+
+set(POISON_DIR "${WORK_DIR}/poisoned-library-root")
+set(POISON_ROOT "${POISON_DIR}/root")
+set(POISON_SOURCE_DIR "${POISON_DIR}/poisoned-source")
+set(POISON_OBJECT "${POISON_ROOT}/byte-machine/test/harness.so")
+set(POISON_GUARD_DIR "${WORK_DIR}/guard-poisoned")
+
+file(REMOVE_RECURSE "${POISON_DIR}" "${POISON_GUARD_DIR}")
+file(MAKE_DIRECTORY "${POISON_ROOT}/byte-machine/test")
+file(MAKE_DIRECTORY "${POISON_SOURCE_DIR}/byte-machine/test")
+file(MAKE_DIRECTORY "${POISON_GUARD_DIR}")
+
+# Asserted, not assumed, for the same reason SITES is: if the adapter is
+# refactored past this pattern the "poisoned" copy would be a pristine one, the
+# mutated run would pass, and the mutation would be reported UNCAUGHT with no
+# hint that the poison was the thing that broke.
+set(POISON_FIND [[  (define (adapter-runtime-name) "chez")]])
+set(POISON_REPLACE [[  (define (adapter-runtime-name) "POISONED-FROM-OBJECT")]])
+
+file(READ "${SOURCE_ROOT}/${CHEZ_ADAPTER}" POISON_PRISTINE)
+string(FIND "${POISON_PRISTINE}" "${POISON_FIND}" POISON_AT)
+if(POISON_AT EQUAL -1)
+  message(FATAL_ERROR
+    "byte-machine-mutation: the Chez adapter no longer contains "
+    "'${POISON_FIND}', so the object this pass compiles would be an unpoisoned "
+    "copy and the library-directories mutation would prove nothing. Update the "
+    "pattern rather than dropping it.")
+endif()
+string(REPLACE "${POISON_FIND}" "${POISON_REPLACE}" POISON_MUTATED "${POISON_PRISTINE}")
+
+# The pristine source goes down first: Chez prefers the object only while it is
+# *not older* than the source beside it, and the object is written by the
+# compile below.
+file(WRITE "${POISON_ROOT}/byte-machine/test/harness.sls" "${POISON_PRISTINE}")
+file(WRITE "${POISON_SOURCE_DIR}/byte-machine/test/harness.sls" "${POISON_MUTATED}")
+
+set(POISON_COMPILE_SCRIPT "${POISON_DIR}/compile-poisoned-object.ss")
+file(WRITE "${POISON_COMPILE_SCRIPT}"
+";; Written by SchemeMutationSuite.cmake, never committed. Compiles the
+;; poisoned adapter copy into the library root that holds the pristine source,
+;; so a launcher which stops pairing that root with an empty object directory
+;; loads the object instead of the source. This is a per-runtime staging file,
+;; not a shared body, so naming Chez here is allowed.
+;;
+;; Both halves of the poison are read from the source tree, not from the stage:
+;; the two are byte-identical by construction, and reading the stage would make
+;; this pass depend on the previous pass having left it in place.
+(source-directories (list \"${SOURCE_ROOT}/test/support/harness/shared\"))
+(compile-library \"${POISON_SOURCE_DIR}/byte-machine/test/harness.sls\"
+                 \"${POISON_OBJECT}\")
+")
+
+execute_process(
+  COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" "--script" "${POISON_COMPILE_SCRIPT}"
+  RESULT_VARIABLE POISON_RC
+  OUTPUT_VARIABLE POISON_OUT
+  ERROR_VARIABLE POISON_ERR)
+if(NOT POISON_RC EQUAL 0 OR NOT EXISTS "${POISON_OBJECT}")
+  message(FATAL_ERROR
+    "byte-machine-mutation: could not compile the poisoned library object "
+    "(exit ${POISON_RC}). Without a real object in the library root the "
+    "library-directories mutation cannot discriminate, and a run against a "
+    "file Chez cannot read as a library passes either way.\n"
+    "${POISON_OUT}${POISON_ERR}")
+endif()
+
+# Makes "not older than the source" true by construction rather than by the
+# compile happening to take a second, which a filesystem with coarse timestamps
+# would not record.
+file(TOUCH "${POISON_OBJECT}")
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "${POISON_ROOT}"
+  "${STAGE_DIR}/test/support/harness/shared"
+  "${POISON_GUARD_DIR}"
+  "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
+
+byte_machine_mutation(
+  FILE ${LAUNCHER}
+  SPEC "harness-self-tests.chez.sps against a library root holding a compiled object"
+  LABEL "launcher: the library root is no longer paired with the object guard"
+  FIND [[(library-directories (list (cons library-root object-guard-dir)))]]
+  REPLACE [[(library-directories (list library-root))]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

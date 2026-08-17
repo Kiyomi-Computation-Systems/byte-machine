@@ -72,8 +72,16 @@ what this milestone delivers.
   writes an object into the guard directory only *after* that directory's
   emptiness has been asserted, so the pollution is visible to the next process
   and not to the one that caused it. The registered lanes do catch that one —
-  they share a guard directory — which this suite, one process per mutation,
-  cannot.
+  the correctly configured ones share a single guard directory — which this
+  suite, one process per mutation, cannot.
+
+  The pairing that makes a Chez source lane honest is checked against a library
+  root built for the purpose: no root in the tree has a compiled object beside
+  its source, so unpairing the root from the guard is invisible everywhere else.
+  The pass compiles a poisoned copy of the adapter — one whose runtime name is a
+  sentinel — into a root of its own, beside the pristine source. Paired, the
+  object is unreachable and the self-tests pass; unpaired, Chez loads it and the
+  sentinel comes out in the banner, the failure context, and the exit status.
 - A portability guard failing the build when a shared test body is missing a
   wrapper, when two shared bodies share a basename, when its own glob matches
   nothing, when it receives an argument it does not recognize, or when a
