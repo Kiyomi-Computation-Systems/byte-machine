@@ -1007,17 +1007,31 @@ After the `set(environment ...)` block from Task 2, add:
   # The manifest, and the expectation it must agree with. The separator is `|`
   # rather than a path separator: `:` and `;` differ between platforms, and `|`
   # is illegal in a Windows path, so it cannot occur inside a member.
-  string(JOIN "|" fingerprint_files ${arg_SHARED_BODIES})
-  if(arg_WRONG_FINGERPRINT)
-    byte_machine_wrong_fingerprint("${arg_NAME}" expect_file)
-  else()
-    byte_machine_expected_fingerprint("${arg_NAME}" expect_file
-                                      ${arg_SHARED_BODIES})
+  #
+  # Gated on a discovered Chez, because byte_machine_expected_fingerprint runs
+  # the expectation launcher under Chez. A host with Gambit but no Chez reaches
+  # this line on every Gambit lane -- that lane's own runtime was found, so it
+  # did not take the no-runtime return above -- and would otherwise build a
+  # custom command whose executable is the empty string. Neither variable is set
+  # in that case, so the harness skips provenance exactly as it does for any
+  # process a lane registration did not start. The lane still runs and still
+  # proves what it proved before this slice; it just carries no fingerprint,
+  # which is the honest outcome when the build cannot compute one.
+  if(BYTE_MACHINE_CHEZ_EXECUTABLE)
+    string(JOIN "|" fingerprint_files ${arg_SHARED_BODIES})
+    if(arg_WRONG_FINGERPRINT)
+      byte_machine_wrong_fingerprint("${arg_NAME}" expect_file)
+    else()
+      byte_machine_expected_fingerprint("${arg_NAME}" expect_file
+                                        ${arg_SHARED_BODIES})
+    endif()
+    list(APPEND environment
+      "BYTE_MACHINE_FINGERPRINT_FILES=${fingerprint_files}"
+      "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${expect_file}")
   endif()
-  list(APPEND environment
-    "BYTE_MACHINE_FINGERPRINT_FILES=${fingerprint_files}"
-    "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${expect_file}")
 ```
+
+Note the consequence for the four provenance lanes registered later in this task: each expects exit 3, and each would exit 0 on a Chez-less host, since with no expectation there is nothing to disagree with. They are Chez lanes and Gambit lanes respectively, so three of the four are already skipped when Chez is absent — but `byte-machine.harness.provenance.gambit.source` is not. Register that one inside an `if(BYTE_MACHINE_CHEZ_EXECUTABLE)` guard, with a comment saying why a Gambit lane depends on a Chez being present.
 
 `byte_machine_expected_fingerprint` and `byte_machine_wrong_fingerprint` are defined in `test/CMakeLists.txt` (Task 3), which is processed before any lane is registered, so both are in scope at call time.
 
