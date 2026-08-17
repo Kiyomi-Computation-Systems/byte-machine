@@ -181,14 +181,13 @@ what this milestone delivers.
   rather than refused, because refusing would fail the mutation suite's own
   baseline before a single mutation ran. The guarantee lives at configure
   time, where it cannot be forged by anything a running process does.
-- Four new lanes prove the check can fail, each exiting exactly 3, for one
-  of three diagnoses: a wrong expectation (reported identically by the Chez
+- Six new lanes prove the check can fail, each exiting exactly 3, for one
+  of four diagnoses: a wrong expectation (reported identically by the Chez
   and Gambit lanes, which differ only by runtime), a build that never
-  produced one, and a manifest naming a body that cannot be read. The suite
-  grows from 40
-  to 44 tests and the Scheme mutation suite from 27 to 33 passes (64 to 81
-  mutations), breaking every decision in the algorithm and in the check
-  itself on a staged copy. One of those mutations — the hex digit table
+  produced one, a manifest naming a body that cannot be read, and a manifest
+  the run never verified at all. The suite grows from 40 to 46 tests and the
+  Scheme mutation suite from 27 to 35 passes (64 to 83 mutations), breaking
+  every decision in the algorithm and in the check itself on a staged copy. One of those mutations — the hex digit table
   turned uppercase — was predicted to be caught only on Gambit, since the
   build-time expectation loads the same mutated file a Chez lane runs
   against; measured, it is caught symmetrically on both runtimes instead, by
@@ -196,6 +195,17 @@ what this milestone delivers.
   the passes that carry it set no manifest and provenance never runs there
   at all. Both the design record and the mutation suite's own comment were
   corrected once this was measured.
+- A lane that was given a manifest and never verified it now exits 3.
+  Requiring the manifest at configure time makes the environment
+  unforgeable; it says nothing about whether anything read it, and the check
+  is reached either through `harness-begin` or through a hand-placed call —
+  which is what the bootstrap body needed, having deliberately no
+  `harness-begin`. Forget that line in a future body and the lane runs
+  un-provenanced with nothing failing, which was the last way the
+  configure-time guarantee could hold while the run-time one did not. The
+  guard fires from the summary, so it cannot catch a body that reaches
+  neither the summary nor the check — the bootstrap's own shape, a single
+  deliberate exception that carries its own call.
 - [Decision 0004](docs/decisions/0004-content-fingerprint-and-provenance.md),
   including the bound the manifest does not close — a matching fingerprint
   proves the declared text is unchanged, not that the run included exactly
