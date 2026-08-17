@@ -884,7 +884,7 @@ git commit -m "feat: one shared body through both owner libraries"
 
 ---
 
-### Task 3: A comma in a Gambit search root is a configure error
+### Task 3: A Gambit search root must be absolute and comma-free
 
 **Files:**
 - Modify: `cmake/ByteMachineSchemeLane.cmake`
@@ -892,7 +892,7 @@ git commit -m "feat: one shared body through both owner libraries"
 - Modify: `test/support/cmake/MutationSuite.cmake`
 
 **Interfaces:**
-- Produces: `byte_machine_scheme_lane_gambit_search(<out_option> <out_status> <out_message> <dir>...)` — status `ok` or `comma-in-path`.
+- Produces: `byte_machine_scheme_lane_gambit_search(<out_option> <out_status> <out_message> <dir>...)` — status `ok`, `comma-in-path`, or `relative-path`.
 
 - [ ] **Step 1: Write the failing specification**
 
@@ -919,6 +919,19 @@ spec_check_equal("${message}"
   "a Gambit search root must not contain a comma, but '/b,c' does. Gambit's -: options are comma-separated, so gsi would print its usage banner and run no Scheme at all."
   "comma rejection message")
 
+# A relative root is refused for a different reason than a comma, and needs its
+# own status: gsi resolves it against its own working directory, so the lane
+# would find its libraries or not depending on where CTest happened to launch
+# it -- which is the one thing the working-directory matrix exists to rule out.
+# Nothing else can see this: ByteMachineSchemeLaneSpec sets its own fixture
+# paths, so it cannot notice test/CMakeLists.txt handing over a relative one.
+byte_machine_scheme_lane_gambit_search(option status message "/a" "relative/root")
+spec_check_equal("${status}" "relative-path" "a relative root is rejected")
+spec_check_equal("${option}" "" "a rejected search list yields no option")
+spec_check_equal("${message}"
+  "a Gambit search root must be absolute, but 'relative/root' is not. Gambit resolves a relative root against its own working directory, so the lane would find its libraries or not depending on where it was launched."
+  "relative root message")
+
 # Seeded, so a function that never writes its message is distinguishable from
 # one that clears it.
 set(message "seed")
@@ -929,6 +942,15 @@ spec_check_equal("${message}" "" "an accepted search list clears the message")
 Add a rejection case to the `BYTE_MACHINE_SPEC_CASE` dispatch, before its `else()`:
 
 ```cmake
+  elseif(c STREQUAL "lane-rejects-relative-gambit-root")
+    set(BYTE_MACHINE_GAMBIT_EXECUTABLE "/opt/gsi")
+    set(BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT "h/gambit")
+    set(BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT "/s/gambit")
+    byte_machine_add_scheme_lane(
+      NAME byte-machine.harness.example.gambit.source
+      BACKEND gambit
+      PROGRAM "${SPEC_SELF}"
+      TIMEOUT 10)
   elseif(c STREQUAL "lane-rejects-comma-in-gambit-root")
     set(BYTE_MACHINE_GAMBIT_EXECUTABLE "/opt/gsi")
     set(BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT "/h/gam,bit")
@@ -944,6 +966,7 @@ and add it to the `spec_expect_all_rejected` list at the end of the file:
 
 ```cmake
   "lane-rejects-comma-in-gambit-root|must not contain a comma"
+  "lane-rejects-relative-gambit-root|must be absolute"
 ```
 
 - [ ] **Step 2: Run the specification to verify it fails**
@@ -984,6 +1007,13 @@ function(byte_machine_scheme_lane_gambit_search out_option out_status out_messag
         PARENT_SCOPE)
       return()
     endif()
+    if(NOT IS_ABSOLUTE "${dir}")
+      set(${out_status} "relative-path" PARENT_SCOPE)
+      set(${out_message}
+        "a Gambit search root must be absolute, but '${dir}' is not. Gambit resolves a relative root against its own working directory, so the lane would find its libraries or not depending on where it was launched."
+        PARENT_SCOPE)
+      return()
+    endif()
     list(APPEND parts "search=${dir}")
   endforeach()
 
@@ -1018,7 +1048,9 @@ In the Gambit branch of `byte_machine_scheme_lane_command`, replace the hand-bui
 In `byte_machine_add_scheme_lane`, make the new status fatal alongside `unknown-backend`:
 
 ```cmake
-  if(status STREQUAL "unknown-backend" OR status STREQUAL "comma-in-path")
+  if(status STREQUAL "unknown-backend"
+     OR status STREQUAL "comma-in-path"
+     OR status STREQUAL "relative-path")
     message(FATAL_ERROR "byte-machine: ${message}")
   endif()
 ```
@@ -1050,8 +1082,16 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
-  LABEL "lane: a comma-in-path status does not stop registration"
-  FIND [[  if(status STREQUAL "unknown-backend" OR status STREQUAL "comma-in-path")]]
+  LABEL "lane: a relative Gambit search root is accepted"
+  FIND [[    if(NOT IS_ABSOLUTE "${dir}")]]
+  REPLACE [[    if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "lane: a refused search list does not stop registration"
+  FIND [[  if(status STREQUAL "unknown-backend"
+     OR status STREQUAL "comma-in-path"
+     OR status STREQUAL "relative-path")]]
   REPLACE [[  if(status STREQUAL "unknown-backend")]])
 ```
 
@@ -1067,7 +1107,7 @@ Expected: PASS, with the three new mutations reported caught.
 
 ```bash
 git add cmake/ByteMachineSchemeLane.cmake test/support/cmake/ByteMachineSchemeLaneSpec.cmake test/support/cmake/MutationSuite.cmake
-git commit -m "feat: refuse a Gambit search root containing a comma"
+git commit -m "feat: require Gambit search roots to be absolute and comma-free"
 ```
 
 ---
@@ -1799,38 +1839,6 @@ foreach(cwd_case empty decoy identical)
 
   byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 endforeach()
-
-# --- Pass 23: the Gambit lanes use absolute search roots -------------------
-#
-# The mutation above cannot touch Gambit: it resolves the include relative to
-# the including file, so no launcher decides anything. What the Gambit matrix
-# lanes prove is narrower -- that the lane command's search roots are absolute
-# -- and this is what witnesses it. All three Gambit lanes fail together;
-# symmetry of lane counts is not symmetry of evidence.
-
-byte_machine_mutation_reset()
-
-if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
-  set(BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY
-      "${BYTE_MACHINE_CWD_MATRIX_DIR}/empty")
-
-  set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
-    "${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
-    "-:search=test/support/harness/gambit,search=src/gambit"
-    "-f"
-    "${STAGE_DIR}/test/common/placeholder-tests.gambit.scm")
-
-  # No file is mutated: the deliberately relative search roots above are the
-  # mutation. The runner still needs a declaration, so this one rewrites a
-  # comment character in the launcher, which cannot affect a Gambit lane.
-  byte_machine_mutation(
-    FILE ${LAUNCHER} SPEC placeholder-tests.gambit.scm
-    LABEL "gambit lane: relative search roots do not resolve from another directory"
-    FIND [[;;; Chez source-mode launcher.]]
-    REPLACE [[;;; Chez source-mode launcher (mutated).]])
-
-  byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
-endif()
 ```
 
 - [ ] **Step 7: Forward the matrix path to the mutation suite registration**
@@ -1952,3 +1960,4 @@ Against the spec's §12. Each line must be a command someone can run, not a clai
 - [ ] Every launcher refusal has a lane asserting exit 2: `ctest --preset pr -R 'launcher-' | rg 'tests passed'` shows nine.
 - [ ] Removing `src/common/byte-machine/placeholder.scm` makes `cmake --preset dev` fail with `contributed no shared body`.
 - [ ] `rg -n "chez|gambit|chezscheme|scheme base" src/common test/common/placeholder-tests.scm` returns nothing: no shared body names a runtime.
+- [ ] A Gambit search root that is relative, or contains a comma, fails configure with a message naming the directory.

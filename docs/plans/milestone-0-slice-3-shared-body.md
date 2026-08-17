@@ -343,10 +343,12 @@ complete. The non-empty directories therefore carry every body the lane includes
 none, which is its entire purpose.
 
 The Gambit half of the matrix is weaker evidence and is recorded as such. Gambit resolves the
-include relative to the including file, so this mutation cannot touch it; what the Gambit lanes
-prove is that the *lane command* uses absolute search roots, witnessed by a separate mutation
-passing a relative root, which fails all three Gambit lanes uniformly. Symmetry of lane counts is
-not symmetry of evidence.
+include relative to the including file, so this mutation cannot touch it, and no Scheme-level
+mutation can: what would make a Gambit lane working-directory-dependent is a *relative search
+root*, which is a build-layer mistake. It is refused at configure time beside the comma refusal
+(§8.2) and witnessed there, in the CMake specification and mutation suite, rather than by a Scheme
+pass whose mutation would have to target a file the Gambit lane never reads. Symmetry of lane
+counts is not symmetry of evidence.
 
 ### 9.2 Body mutations, verified on both runtimes
 
