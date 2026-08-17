@@ -116,7 +116,8 @@
 #
 # Passes 26 and 27 are the slice's reason for existing: the consumer wrapper
 # made a second owner of the placeholder body, once per runtime. Unlike every
-# other mutation in this file, the mutant raises nothing and exits 0 -- it
+# other mutation in this file, the mutant raises nothing -- it is caught by an
+# ordinary check/check-equal mismatch that exits 1 on both runtimes, and it
 # answers both identity claims wrongly while every lane that imports only the
 # owner still passes.
 #
@@ -1331,10 +1332,11 @@ endif()
 # its own tag and its own marker, and both identity cases answer wrongly.
 #
 # It is the mutation this slice exists for, and it is silent under every other
-# lane in the tree: measured on 2026-08-17, the mutant exits 0 on both runtimes
-# and raises nothing. The placeholder-cwd lanes still pass under it, because
-# they import only the owner. Only a program with both libraries in scope can
-# see it.
+# lane in the tree: measured on 2026-08-17, the mutant raises nothing -- it is
+# caught only by the identity lane's own check/check-equal assertions, which
+# exit 1 on both runtimes. The placeholder-cwd lanes still pass under it,
+# because they import only the owner. Only a program with both libraries in
+# scope can see it.
 #
 # The import is REPLACED, never augmented. Adding an include beside the import
 # was measured on the same date: Chez refuses at library construction with
