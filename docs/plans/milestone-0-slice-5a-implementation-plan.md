@@ -1750,7 +1750,7 @@ Create `docs/decisions/0004-content-fingerprint-and-provenance.md`. It must stat
 
 - [ ] **Step 3: Add the changelog entry**
 
-Under `## [Unreleased]` → `### Added` in `CHANGELOG.md`, append an entry in the voice of the existing ones — what changed, and the defect it exists to prevent, not a feature list. Cover: the fingerprint and its arithmetic-not-bitwise choice, the digit table and the measurement forcing it, `adapter-file-bytes` through a binary port, the build-computed expectation loaded rather than reimplemented, status 3's first producer, `SHARED_BODIES` being required rather than optional, and the uppercase mutation's declared asymmetry with its reason.
+Under `## [Unreleased]` → `### Added` in `CHANGELOG.md`, append an entry in the voice of the existing ones — what changed, and the defect it exists to prevent, not a feature list. Cover: the fingerprint and its arithmetic-not-bitwise choice, the digit table and the measurement forcing it, `adapter-file-bytes` through a binary port, the build-computed expectation loaded rather than reimplemented, status 3's first producer, `SHARED_BODIES` being required rather than optional, and the uppercase mutation's outcome as measured rather than as predicted -- it is caught symmetrically, on both runtimes, by the self-tests' own fixed hex literals, because the passes carrying it set no manifest and so never reach the provenance comparison.
 
 - [ ] **Step 4: Final verification**
 
