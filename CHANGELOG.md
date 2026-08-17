@@ -90,6 +90,32 @@ what this milestone delivers.
   subdirectory is checked rather than unseen. Every rule past the first two was
   added after being shown to leave a tree unchecked while still producing a
   green build.
+- The first product library: one shared body in `src/common/byte-machine/`
+  included by exactly one thin library per runtime. Its type tag and singleton
+  are freshly allocated rather than symbols, because symbols are interned and a
+  symbol tag would make a body included twice indistinguishable from one
+  included once — the defect the one-owner rule exists to prevent.
+- A working-directory matrix. The same body loads through both wrappers from
+  three directories chosen so each catches a different failure: a copy where an
+  include resolved against the working directory would accidentally succeed, a
+  same-named impostor where it would report the wrong answer, and an empty
+  directory where it would find nothing. All three pass under a correct
+  mechanism, so what proves them is a launcher mutation whose expected outcome
+  is asymmetric — the first passes, the other two fail — with the survivor
+  asserted rather than ignored.
+- Mutation coverage that runs on both runtimes for the shared body, inverting
+  the rule the harness runner uses. A wrapper that quietly reimplemented the
+  body is exactly a wrapper whose runtime does not notice the body changing, so
+  the claim that no wrapper duplicates semantics is witnessed rather than
+  reviewed.
+- The Chez launcher takes repeatable `--library-root` and `--source-dir` flags,
+  since a lane now imports from both the harness and the product tree. Each of
+  its parse refusals is a lane asserting status 2, because a correctly set-up
+  lane never reaches one.
+- A Gambit search root containing a comma is refused at configure time.
+  Gambit's `-:` options are comma-separated, so such a root makes `gsi` print
+  its usage banner and run no Scheme at all, on every Gambit lane at once, in
+  output that names nothing this project owns.
 
 ### Changed
 
