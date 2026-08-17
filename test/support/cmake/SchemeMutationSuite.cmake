@@ -138,12 +138,15 @@ cmake_minimum_required(VERSION 3.26)
 set(EXPECTED_PASSES_WITH_GAMBIT 27)
 set(EXPECTED_MUTATIONS_WITH_GAMBIT 64)
 
-# Passes 2 and 10 are the only ones gated on BYTE_MACHINE_GAMBIT_EXECUTABLE:
-# pass 2 (the Gambit adapter's export list) is one mutation, pass 10 (the
-# placeholder body's decisions, on Gambit) is the same six-mutation list pass
-# 9 declares for Chez. The without-Gambit pair is this delta subtracted from
-# the with-Gambit pair, not a second hand-maintained pair of literals, so a
-# non-gated pass added anywhere in this file changes both together.
+# Four passes are gated on BYTE_MACHINE_GAMBIT_EXECUTABLE: pass 2 (the Gambit
+# adapter's export list, one mutation), pass 10 (the placeholder body's
+# decisions on Gambit, the same six-mutation list pass 9 declares for Chez),
+# pass 25 (the consumer body's decisions on Gambit, the same three-mutation
+# list pass 24 declares for Chez), and pass 27 (the Gambit consumer wrapper's
+# double-include, one mutation). The without-Gambit pair is this delta
+# subtracted from the with-Gambit pair, not a second hand-maintained pair of
+# literals, so a non-gated pass added anywhere in this file changes both
+# together.
 set(GAMBIT_ONLY_PASSES 4)
 set(GAMBIT_ONLY_MUTATIONS 11)
 math(EXPR EXPECTED_PASSES_WITHOUT_GAMBIT
