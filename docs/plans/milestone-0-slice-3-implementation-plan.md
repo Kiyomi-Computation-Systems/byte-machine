@@ -859,7 +859,7 @@ Expected: configure FAILS with `contributed no shared body: .../src/common/byte-
 mv /tmp/placeholder.scm.bak src/common/byte-machine/placeholder.scm && cmake --preset dev
 ```
 
-Expected: `byte-machine portability guard: 7 shared bodies, unique basenames, every wrapped body paired`.
+Expected: `byte-machine portability guard: 8 shared bodies, unique basenames, every wrapped body paired` — six harness bodies, plus `placeholder.scm` and `placeholder-tests.scm`.
 
 - [ ] **Step 14: Delete the placeholder .gitkeep files**
 
