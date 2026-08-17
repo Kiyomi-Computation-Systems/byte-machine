@@ -418,6 +418,24 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     LABELS expected-red
     ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source")
 
+  # The lane above witnesses the single-valued-flag check only through
+  # --program; --object-guard has never been exercised as a repeated flag.
+  # Both occurrences name the same real, empty guard directory -- the check
+  # counts occurrences, not distinct values, so that is enough to trigger it.
+  byte_machine_add_exit_code_test(
+    NAME byte-machine.harness.launcher-repeated-object-guard.chez.source
+    COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+            "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
+            "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
+            "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+    EXPECT_EXIT 2
+    TIMEOUT 120
+    LABELS expected-red
+    ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source")
+
   # The three remaining required-flag entries. Each is a separate lane because
   # required-flags is a list: an entry dropped from it is invisible to every
   # lane but the one that omits that flag.
@@ -473,6 +491,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${CMAKE_COMMAND}"
             "-DBYTE_MACHINE_CHEZ_EXECUTABLE=${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "-DBYTE_MACHINE_GAMBIT_EXECUTABLE=${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
+            "-DBYTE_MACHINE_CWD_MATRIX_DIR=${BYTE_MACHINE_CWD_MATRIX_DIR}"
             -P "${CMAKE_CURRENT_LIST_DIR}/support/cmake/SchemeMutationSuite.cmake"
     TIMEOUT 900
     LABELS unit

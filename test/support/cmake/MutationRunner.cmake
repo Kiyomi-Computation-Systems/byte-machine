@@ -39,6 +39,12 @@ set(BYTE_MACHINE_MUTATION_STAGE_DIRS "cmake" "test/support/cmake")
 # is only visible to something that runs Scheme.
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND "")
 
+# Where the verify command runs. Empty means the stage directory, which is what
+# every pass wanted until slice 3. The working-directory matrix needs a pass per
+# launch directory, because what it asserts is that the launch directory does
+# not matter -- a claim no command run from one fixed place can make.
+set(BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY "")
+
 # byte_machine_mutation(FILE <repo-relative> SPEC <spec basename> LABEL <text>
 #                       FIND <text> REPLACE <text> [SITES <n>]
 #                       [EXPECT_SURVIVES <reason>])
@@ -118,9 +124,14 @@ function(byte_machine_mutation_run_spec stage_dir spec out_rc)
     set(command "${CMAKE_COMMAND}" -P "${stage_dir}/test/support/cmake/${spec}")
   endif()
 
+  set(verify_cwd "${stage_dir}")
+  if(BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY)
+    set(verify_cwd "${BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY}")
+  endif()
+
   execute_process(
     COMMAND ${command}
-    WORKING_DIRECTORY "${stage_dir}"
+    WORKING_DIRECTORY "${verify_cwd}"
     RESULT_VARIABLE rc
     OUTPUT_VARIABLE out
     ERROR_VARIABLE err)

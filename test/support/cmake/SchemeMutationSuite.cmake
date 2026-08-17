@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# NINE PASSES, BECAUSE NINE DIFFERENT WITNESSES ARE NEEDED
+# TWENTY-TWO PASSES, BECAUSE TWENTY-TWO DIFFERENT WITNESSES ARE NEEDED
 #
 # Pass 1 runs the Chez self-tests lane against the shared runner body. That body
 # is identical text on both runtimes, so verifying it on a second runtime would
@@ -30,21 +30,58 @@
 # its own failures with raw conditionals and exits by hand, which is exactly why
 # it exists and why it is the only lane whose verdict survives.
 #
-# Passes 5 to 7 run the Chez launcher's three refusals, one per pass, each
-# through the exact-status helper. A refusal cannot be witnessed by a lane that
-# is set up correctly, because a correctly set-up lane never reaches one: each
-# needs its own deliberately wrong command line, and a verify command is fixed
-# for the whole pass.
+# Passes 5 to 6 run the Chez launcher's two guard-directory refusals, one per
+# pass, each through the exact-status helper. A refusal cannot be witnessed by a
+# lane that is set up correctly, because a correctly set-up lane never reaches
+# one: each needs its own deliberately wrong command line, and a verify command
+# is fixed for the whole pass.
 #
-# Pass 8 is the launcher's `compile-imported-libraries` call, and it is the one
+# Pass 7 is the launcher's `compile-imported-libraries` call, and it is the one
 # mutation in this file that no single process can catch. See its recorded
 # reason.
 #
-# Pass 9 is the library-directories pairing, the mechanism that makes
+# Pass 8 is the library-directories pairing, the mechanism that makes
 # `mode=source` an honest claim. No library root in this tree has a compiled
 # object in it, so unpairing the root from the guard changes nothing anywhere
 # else; the pass therefore builds a root that does have one, and runs the
 # self-tests lane against it.
+#
+# Passes 9 and 10 are the placeholder body's own decisions -- tag, length,
+# vector-ness, symbol-vs-fresh-allocation identity -- run once on each runtime.
+# The runner body above is verified once because its text is what both
+# runtimes load; here the text is equally shared, but *how* each runtime reaches
+# it is not; Chez resolves it by bare filename through source-directories, and
+# Gambit resolves it through `include` and a relative path. A wrapper that
+# quietly reimplemented the body instead of including it would be exactly a
+# wrapper whose runtime never notices the body changing, and only running the
+# same mutations through both inclusion mechanisms can catch that. Pass 10's
+# Gambit invocation is also the first in this file to pair two search roots --
+# the harness's and src's -- into one comma-joined `-:search=` flag, the exact
+# form slice 3's absolute-and-comma-free validation exists to keep parseable;
+# Pass 2 above never exercises that joining because it passes only one root.
+#
+# Passes 11 to 19 are the launcher's parse decisions: an unknown flag, a flag
+# with no value, a single-valued flag repeated, a required flag unchecked in
+# general, one entry dropped from each of required-flags' four members, and one
+# entry dropped from single-valued-flags. Each gets its own pass because each
+# needs its own deliberately wrong invocation and a verify command fixed for
+# the whole pass, the same constraint passes 5 to 6 already established --
+# generalised here from two decisions to nine.
+#
+# Passes 20 to 22 are the working-directory matrix: one mutation -- the
+# launcher resolving shared bodies against the working directory instead of its
+# declared source directories -- run from three different launch directories.
+# One mutation needs three passes because what it asserts is that the launch
+# directory does not matter, a claim no single fixed launch directory can make.
+# Two of the three fail as expected (nothing to include; the wrong answer, on
+# content); the third -- launched from a directory holding a faithful copy of
+# every body the lane includes -- passes, and is declared EXPECT_SURVIVES with
+# its reason recorded. That survivor is deliberate: it is what turns "the
+# identical lane is the vacuous working-directory test someone writes by
+# default" from a claim this file's comments make into something the suite
+# itself demonstrates on every run, and it is what makes the decoy lane's
+# failure attributable to content rather than to the mere presence of a
+# same-named file.
 #
 # WHAT THIS SUITE NEEDS FROM ITS ENVIRONMENT
 #
@@ -94,8 +131,15 @@ if(NOT BYTE_MACHINE_CHEZ_EXECUTABLE)
     "no-scheme preset; the registration must forward the discovered path.")
 endif()
 
+# src is staged whole, not just the body: src/gambit/byte-machine/placeholder.sld
+# includes ../../common/byte-machine/placeholder.scm, so the relative layout is
+# part of what has to be copied. Staging the body alone satisfies Chez, which
+# resolves by bare filename, and silently leaves Gambit compiling the
+# unmutated original -- a suite reporting a caught mutation on a runtime that
+# never saw it.
 set(BYTE_MACHINE_MUTATION_STAGE_DIRS
-  "cmake" "test/support/cmake" "test/support/harness" "test/support/launchers")
+  "cmake" "test/support/cmake" "test/support/harness" "test/support/launchers"
+  "src" "test/common")
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
@@ -449,38 +493,28 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Passes 5 to 7: the launcher's three refusals --------------------------
+# --- Passes 5 to 6: the launcher's two guard-directory refusals -------------
 #
 # The launcher decides whether a lane runs at all, and its object guard is the
-# sole mechanism that makes `mode=source` an honest claim. None of its three
-# refusals can be reached by a lane that was set up correctly, so each gets a
-# deliberately wrong command line of its own, run through the exact-status
-# helper so that exit 2 -- the refusal -- is what a healthy launcher scores.
+# sole mechanism that makes `mode=source` an honest claim. Neither refusal can
+# be reached by a lane that was set up correctly, so each gets a deliberately
+# wrong command line of its own, run through the exact-status helper so that
+# exit 2 -- the refusal -- is what a healthy launcher scores.
+#
+# A third refusal used to live here: a missing required flag, witnessed by
+# invoking the launcher with no arguments at all (SPEC named after that
+# invocation's own ctest lane, byte-machine.harness.launcher-no-program, since
+# there was no program on the command line to name). It is gone. Slice 3's
+# parse-decision passes below replace it with one mutation per required-flag
+# entry, each a strictly more precise witness of the same decision than a
+# zero-argument invocation was; keeping both would mean two mutations proving
+# the same line, one of them permanently coarser. The retired ctest lane
+# itself still runs, unchanged, as a real regression test -- it is just no
+# longer this suite's witness.
 #
 # SPEC names the registered lane rather than a body basename, because the
-# witness is a whole invocation and not a program: the first case is invoked
-# with no arguments at all, so there is no program to name, and for the other
-# two "passing" means the named body never ran.
-
-byte_machine_mutation_reset()
-
-string(JOIN "|" LAUNCHER_USAGE_COMMAND
-  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
-  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss")
-
-set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
-  "${CMAKE_COMMAND}"
-  "-DBYTE_MACHINE_EXPECT_EXIT=2"
-  "-DBYTE_MACHINE_EXPECT_COMMAND=${LAUNCHER_USAGE_COMMAND}"
-  -P "${STAGE_DIR}/cmake/ByteMachineExpectExit.cmake")
-
-byte_machine_mutation(
-  FILE ${LAUNCHER} SPEC byte-machine.harness.launcher-no-program.chez.source
-  LABEL "launcher: a missing required flag is not checked"
-  FIND [[(if (null? (flag-values flag))]]
-  REPLACE [[(if #f]])
-
-byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+# witness is a whole invocation and not a program: "passing" means the named
+# body never ran.
 
 byte_machine_mutation_reset()
 
@@ -533,7 +567,7 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Eighth pass: a source lane that compiles what it imports --------------
+# --- Seventh pass: a source lane that compiles what it imports -------------
 #
 # Its own guard directory, because this is the one mutation here whose effect is
 # to write into one.
@@ -562,7 +596,7 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Ninth pass: the library-directories pairing ----------------------------
+# --- Eighth pass: the library-directories pairing ---------------------------
 #
 # The pairing is the launcher's central mechanism. Chez looks for a library's
 # compiled object only in the *object* half of a library-directories pair, so
@@ -693,5 +727,317 @@ byte_machine_mutation(
   REPLACE [[(library-directories library-roots)]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 9: the body's decisions, on Chez ----------------------------------
+#
+# A wrapper that reimplemented the body is exactly a wrapper whose runtime does
+# not notice the body changing. That is why these two passes exist and why they
+# run the same mutations twice: this is not the runner body, identical text on
+# both runtimes, but a body whose being shared is the thing under test.
+
+set(PLACEHOLDER_BODY src/common/byte-machine/placeholder.scm)
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "--library-root" "${STAGE_DIR}/src/chez"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--source-dir" "${STAGE_DIR}/src/common/byte-machine"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/placeholder-tests.chez.sps")
+
+# byte_machine_slice3_body_pass(<runtime>)
+#
+# One whole pass over the body's decisions, declared once. Both runtimes call
+# it, so they are provably checked against the same list: a mutation added for
+# one and forgotten for the other would be exactly the asymmetry these two
+# passes exist to rule out.
+#
+# The reset, the declarations and the run are all inside this function on
+# purpose. byte_machine_mutation_reset and byte_machine_mutation both write the
+# counter with PARENT_SCOPE, so they agree only while they share a caller;
+# declaring here and running from the caller would leave the run seeing a count
+# of zero and reporting a pass that checked nothing. The verify command is read
+# from the caller's scope, which is what makes the runtime the only difference.
+function(byte_machine_slice3_body_pass runtime)
+  byte_machine_mutation_reset()
+
+  if(runtime STREQUAL "chez")
+    set(spec placeholder-tests.chez.sps)
+  else()
+    set(spec placeholder-tests.gambit.scm)
+  endif()
+
+  byte_machine_mutation(
+    FILE ${PLACEHOLDER_BODY} SPEC ${spec}
+    LABEL "placeholder on ${runtime}: anything is a vector"
+    FIND [[  (and (vector? x)]]
+    REPLACE [[  (and #t]])
+
+  # Two mutations, because the length check can fail two ways: it can be absent,
+  # or its bound can be wrong. Deleting it is caught by the case that builds a
+  # length-3 vector carrying the real tag -- reachable through vector-ref on a
+  # legitimately built placeholder, which is why this is witnessable at all.
+  byte_machine_mutation(
+    FILE ${PLACEHOLDER_BODY} SPEC ${spec}
+    LABEL "placeholder on ${runtime}: the length is not checked at all"
+    FIND [[       (= (vector-length x) 2)]]
+    REPLACE [[       #t]])
+
+  byte_machine_mutation(
+    FILE ${PLACEHOLDER_BODY} SPEC ${spec}
+    LABEL "placeholder on ${runtime}: the length check accepts the wrong length"
+    FIND [[       (= (vector-length x) 2)]]
+    REPLACE [[       (= (vector-length x) 3)]])
+
+  byte_machine_mutation(
+    FILE ${PLACEHOLDER_BODY} SPEC ${spec}
+    LABEL "placeholder on ${runtime}: the tag is not checked"
+    FIND [[       (eq? (vector-ref x 0) placeholder-tag)))]]
+    REPLACE [[       #t))]])
+
+  # The rule the whole representation rests on. With a symbol tag every
+  # assertion in the suite still passes except the one written for this, and
+  # slice 4's identity test would become incapable of failing.
+  byte_machine_mutation(
+    FILE ${PLACEHOLDER_BODY} SPEC ${spec}
+    LABEL "placeholder on ${runtime}: the tag is an interned symbol"
+    FIND [[(define placeholder-tag (vector 'byte-machine-placeholder))]]
+    REPLACE [[(define placeholder-tag 'byte-machine-placeholder)]])
+
+  byte_machine_mutation(
+    FILE ${PLACEHOLDER_BODY} SPEC ${spec}
+    LABEL "placeholder on ${runtime}: the marker is allocated per call"
+    FIND [[(define (placeholder-marker)
+  placeholder-marker-object)]]
+    REPLACE [[(define (placeholder-marker)
+  (vector 'byte-machine-marker))]])
+
+  byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+endfunction()
+
+byte_machine_slice3_body_pass("chez")
+
+# --- Pass 10: the same decisions, on Gambit ---------------------------------
+
+if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
+  set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+    "${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
+    "-:search=${STAGE_DIR}/test/support/harness/gambit,search=${STAGE_DIR}/src/gambit"
+    "-f"
+    "${STAGE_DIR}/test/common/placeholder-tests.gambit.scm")
+
+  # The same six mutations, declared once and run per runtime. Writing them out
+  # twice would let the two lists drift, and a mutation silently present on only
+  # one runtime is precisely the defect this pair of passes exists to detect.
+  byte_machine_slice3_body_pass("gambit")
+endif()
+
+# --- Passes 11 to 19: the launcher's parse decisions ------------------------
+#
+# Deleting a refusal does not produce a wrong answer; it produces an invocation
+# that is accepted and then fails somewhere else, or does not fail at all. Two
+# of these mutations leave the launcher reaching malformed input and dying at
+# 255 rather than 2, which the exact-status helper reports as out-of-vocabulary.
+# That is still caught, and it is the honest outcome: the refusal exists exactly
+# so that malformed input is named rather than stumbled over.
+
+set(LAUNCHER_BASE_ARGS
+  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+
+# byte_machine_slice3_launcher_pass(<lane> <label> <find> <replace> <arg>...)
+#
+# One pass: point the verify command at a deliberately wrong invocation, declare
+# one mutation, run it. Defined here rather than inlined eight times because the
+# only thing that varies is the lane, the command line, and the mutation.
+#
+# The reset, the declaration and the run all happen inside this function on
+# purpose. byte_machine_mutation_reset and byte_machine_mutation both write the
+# counter with PARENT_SCOPE, so they agree only while they share a caller;
+# splitting them across this boundary would leave the run seeing a count from
+# somewhere else.
+function(byte_machine_slice3_launcher_pass lane label find replace)
+  byte_machine_mutation_reset()
+
+  string(JOIN "|" packed
+    "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+    "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+    ${ARGN})
+
+  set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+    "${CMAKE_COMMAND}"
+    "-DBYTE_MACHINE_EXPECT_EXIT=2"
+    "-DBYTE_MACHINE_EXPECT_COMMAND=${packed}"
+    -P "${STAGE_DIR}/cmake/ByteMachineExpectExit.cmake")
+
+  byte_machine_mutation(
+    FILE ${LAUNCHER} SPEC "${lane}"
+    LABEL "${label}"
+    FIND "${find}"
+    REPLACE "${replace}")
+
+  byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+endfunction()
+
+byte_machine_slice3_launcher_pass(
+  byte-machine.harness.launcher-unknown-flag.chez.source
+  "launcher: an unrecognised flag is accepted"
+  [[        ((not (member (car rest) known-flags))]]
+  [[        (#f]]
+  "--librarie-root" "${STAGE_DIR}/test/support/harness/chez" ${LAUNCHER_BASE_ARGS})
+
+byte_machine_slice3_launcher_pass(
+  byte-machine.harness.launcher-missing-value.chez.source
+  "launcher: a flag with no value is accepted"
+  [[        ((null? (cdr rest))]]
+  [[        (#f]]
+  ${LAUNCHER_BASE_ARGS} "--source-dir")
+
+byte_machine_slice3_launcher_pass(
+  byte-machine.harness.launcher-repeated-flag.chez.source
+  "launcher: a single-valued flag may be given twice"
+  [[   (if (> (length (flag-values flag)) 1)]]
+  [[   (if #f]]
+  ${LAUNCHER_BASE_ARGS}
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
+
+byte_machine_slice3_launcher_pass(
+  byte-machine.harness.launcher-no-library-root.chez.source
+  "launcher: a missing required flag is not noticed"
+  [[   (if (null? (flag-values flag))]]
+  [[   (if #f]]
+  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+
+# Four more: one per entry in required-flags. The check above is one decision,
+# but the list it walks is four, and an entry dropped from it is invisible to
+# every invocation except the one omitting that flag.
+
+byte_machine_slice3_launcher_pass(
+  byte-machine.harness.launcher-no-program.chez.source
+  "launcher: --program is dropped from required-flags"
+  [[  (list "--program"]]
+  [[  (list ;; --program removed by mutation]]
+  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--object-guard" "${GUARD_DIR}")
+
+byte_machine_slice3_launcher_pass(
+  byte-machine.harness.launcher-no-object-guard.chez.source
+  "launcher: --object-guard is dropped from required-flags"
+  [[        "--object-guard"]]
+  [[        ;; --object-guard removed by mutation]]
+  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+
+byte_machine_slice3_launcher_pass(
+  byte-machine.harness.launcher-no-library-root.chez.source
+  "launcher: --library-root is dropped from required-flags"
+  [[        "--library-root"]]
+  [[        ;; --library-root removed by mutation]]
+  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+
+byte_machine_slice3_launcher_pass(
+  byte-machine.harness.launcher-no-source-dir.chez.source
+  "launcher: --source-dir is dropped from required-flags"
+  [[        "--source-dir"]]
+  [[        ;; --source-dir removed by mutation]]
+  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+
+# One more, for single-valued-flags. --object-guard has never been exercised as
+# a repeated flag: the general check just above is witnessed only through
+# --program (LAUNCHER_BASE_ARGS already carries one --object-guard, so this
+# pass repeats it rather than adding a second fixture guard directory --
+# decision 3 counts occurrences, not distinct values). Dropping --object-guard
+# from single-valued-flags specifically, leaving the check itself and
+# --program's membership in the list untouched, is invisible to every
+# invocation but this one.
+byte_machine_slice3_launcher_pass(
+  byte-machine.harness.launcher-repeated-object-guard.chez.source
+  "launcher: --object-guard is dropped from single-valued-flags"
+  [[(define single-valued-flags
+  (list "--object-guard" "--program"))]]
+  [[(define single-valued-flags
+  (list "--program"))]]
+  ${LAUNCHER_BASE_ARGS}
+  "--object-guard" "${GUARD_DIR}")
+
+# --- Passes 20 to 22: the working-directory matrix --------------------------
+#
+# One mutation, three passes, three expected outcomes. The launcher is made to
+# resolve shared bodies against the working directory -- the mechanism this
+# project deliberately does not use -- while the program's own directory is left
+# in place so the test body still resolves and each lane fails, or does not, for
+# the reason under test.
+#
+#   empty      fails: nothing to include
+#   decoy      fails: wrong answer, on content
+#   identical  PASSES: the copy in the working directory is the real body
+#
+# The survivor is the point. It is what turns "the identical lane is the vacuous
+# test someone writes by default" from a comment into something this suite
+# observes on every run, and it is what makes the decoy lane's failure
+# attributable to content rather than to the mere presence of a same-named file.
+
+if(NOT BYTE_MACHINE_CWD_MATRIX_DIR)
+  message(FATAL_ERROR
+    "byte-machine-mutation: BYTE_MACHINE_CWD_MATRIX_DIR was not passed in. The "
+    "matrix passes assert what a launch directory does or does not change, so "
+    "they cannot run from the stage directory like every other pass.")
+endif()
+
+set(CWD_MUTATION_FIND
+  [[(source-directories (append source-dirs (list (path-directory program))))]])
+set(CWD_MUTATION_REPLACE
+  [[(source-directories (append (list ".") (list (path-directory program))))]])
+
+foreach(cwd_case empty decoy identical)
+  byte_machine_mutation_reset()
+
+  set(BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY
+      "${BYTE_MACHINE_CWD_MATRIX_DIR}/same-name-${cwd_case}")
+  if(cwd_case STREQUAL "empty")
+    set(BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY
+        "${BYTE_MACHINE_CWD_MATRIX_DIR}/empty")
+  endif()
+
+  set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+    "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+    "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+    "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+    "--library-root" "${STAGE_DIR}/src/chez"
+    "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+    "--source-dir" "${STAGE_DIR}/src/common/byte-machine"
+    "--object-guard" "${GUARD_DIR}"
+    "--program" "${STAGE_DIR}/test/common/placeholder-tests.chez.sps")
+
+  if(cwd_case STREQUAL "identical")
+    byte_machine_mutation(
+      FILE ${LAUNCHER} SPEC placeholder-tests.chez.sps
+      LABEL "launcher: shared bodies resolve against the working directory (identical)"
+      FIND "${CWD_MUTATION_FIND}"
+      REPLACE "${CWD_MUTATION_REPLACE}"
+      EXPECT_SURVIVES
+        "This lane runs from a directory holding a copy of every body the lane includes, so an include resolved against the working directory finds the real text and the suite passes. That is the lane's purpose: it is the naive working-directory test, carried as the control that makes the decoy and empty lanes' failures attributable. If this mutation ever starts being caught, the copies have drifted from the bodies they were copied from and the control has quietly become something else.")
+  else()
+    byte_machine_mutation(
+      FILE ${LAUNCHER} SPEC placeholder-tests.chez.sps
+      LABEL "launcher: shared bodies resolve against the working directory (${cwd_case})"
+      FIND "${CWD_MUTATION_FIND}"
+      REPLACE "${CWD_MUTATION_REPLACE}")
+  endif()
+
+  byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+endforeach()
 
 message(STATUS "byte-machine-spec: scheme mutation suite complete")

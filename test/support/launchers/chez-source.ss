@@ -97,9 +97,12 @@
        (die (string-append "missing required flag: " flag))))
  required-flags)
 
-;; Decision 3: a single-valued flag appears at most once. Last-one-wins would
-;; silently run a different program, or guard a different directory, than the
-;; command line says.
+;; Decision 3: a single-valued flag appears at most once. flag-values returns
+;; every occurrence in command-line order, and (car (flag-values flag)) below
+;; always takes the first, so without this check the first occurrence would
+;; silently win: a repeat would run a different program, or guard a different
+;; directory, than a later occurrence on the command line says, with nothing
+;; to say the earlier one was the one that ran.
 (for-each
  (lambda (flag)
    (if (> (length (flag-values flag)) 1)
