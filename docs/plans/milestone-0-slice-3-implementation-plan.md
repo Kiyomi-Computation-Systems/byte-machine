@@ -1891,12 +1891,12 @@ Then update the file's header comment. It opens `NINE PASSES, BECAUSE NINE DIFFE
       byte-machine.harness.launcher-repeated-program.chez.source
       "launcher: --program is dropped from single-valued-flags"
       [[(define single-valued-flags
-  (list "--object-guard" "--program"))]]
+      (list "--object-guard" "--program"))]]
       [[(define single-valued-flags
-  (list "--object-guard"))]]
+      (list "--object-guard"))]]
       ${LAUNCHER_BASE_ARGS}
       "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
-```
+    ```
 
 The interim deletion (item 1 above) removes one whole pass from the baseline group, so it is eight passes (1 to 8), not nine, by the time this step is reached; the body passes two steps back are "Pass 9" and "Pass 10", not 10 and 11. This step's parse-decision passes therefore span "Passes 11 to 19" -- nine sub-passes (eight from the brief plus the one for single-valued-flags), not eight. The working-directory matrix passes in the next step land on "Passes 20 to 22" regardless: the one pass the interim deletion removes and the one this step adds cancel exactly by the time the running count reaches them. While already in `test/support/launchers/chez-source.ss` for these passes, also correct decision 3's comment: it claimed "last-one-wins", but `flag-values` conses onto an accumulator and reverses at the end, so it returns occurrences in command-line order and `(car (flag-values flag))` takes the *first* -- first-one-wins, not last.
 
