@@ -16,6 +16,7 @@
 - Chez floor is **10.4.1**; the machine type must be threaded. Discovery owns both checks — no launcher re-checks them (`chez-source.ss` records why).
 - Exit-status vocabulary is exactly **0, 1, 2, 3**. 0 pass, 1 assertion failure, 2 harness/configuration/registration error, 3 provenance failure. An expectation outside it is a configure error.
 - Every launcher diagnostic is prefixed `byte-machine-launcher: HARNESS-ERROR ` and exits **2**.
+- Baseline on this branch's merge-base is **46/46** for `make test` (preset `pr`), **10/10** for `no-scheme`, **97** CMake mutations, **83** Scheme mutations across **35** passes. Measured 2026-08-17; every count below is derived from it.
 - The `no-scheme` preset must stay green and must stay at **10/10**. Nothing added to the functional core may require a Scheme runtime to specify.
 - Shared-body basenames are unique repository-wide (`byte_machine_guard_duplicate_basenames`). W5's flat `fingerprint/` directory depends on this; do not weaken it.
 - The `|` separator is used for environment-borne path lists — never `:` or `;`.
@@ -170,7 +171,7 @@ Expected: PASS, with the case count risen by two.
 make test
 ```
 
-Expected: PASS, 44/44, unchanged. Then:
+Expected: PASS, 46/46, unchanged. Then:
 
 ```bash
 cmake --preset no-scheme && ctest --preset no-scheme
@@ -461,7 +462,7 @@ Expected: PASS.
 make test && cmake --preset no-scheme && ctest --preset no-scheme
 ```
 
-Expected: PASS, 44/44 and 10/10. No lane's behaviour has changed: every registration is still a source lane and every measured list is still its declared list.
+Expected: PASS, 46/46 and 10/10. No lane's behaviour has changed: every registration is still a source lane and every measured list is still its declared list.
 
 - [ ] **Step 7: Commit**
 
@@ -735,7 +736,7 @@ Expected: PASS, 2/2, each showing `byte-machine-launcher: HARNESS-ERROR` on stde
 make test
 ```
 
-Expected: PASS, 46/46.
+Expected: PASS, 48/48.
 
 - [ ] **Step 6: Commit**
 
@@ -909,7 +910,7 @@ Expected: both lanes report the same combined fingerprint string. Record that va
 make test && cmake --preset no-scheme && ctest --preset no-scheme
 ```
 
-Expected: PASS, 49/49 and 10/10.
+Expected: PASS, 51/51 and 10/10.
 
 - [ ] **Step 6: Commit**
 
@@ -986,7 +987,7 @@ git checkout test/support/harness/shared/harness-runner.scm
 make test
 ```
 
-Expected: PASS, 49/49. Confirm `git status` is clean apart from the design document.
+Expected: PASS, 51/51. Confirm `git status` is clean apart from the design document.
 
 - [ ] **Step 5: Record the answer in the design**
 
@@ -1208,7 +1209,7 @@ If it exits 0, the mechanism is not working and nothing further in this slice is
 make test && cmake --preset no-scheme && ctest --preset no-scheme
 ```
 
-Expected: PASS, 50/50 and 10/10.
+Expected: PASS, 52/52 and 10/10.
 
 - [ ] **Step 9: Commit**
 
@@ -1335,7 +1336,7 @@ For each mutation, confirm from the output that it was caught by the assertion n
 make test
 ```
 
-Expected: PASS, 50/50.
+Expected: PASS, 52/52.
 
 - [ ] **Step 8: Commit**
 
@@ -1437,20 +1438,37 @@ function(byte_machine_slice5b_provenance_pass runtime)
     REPLACE [[                               (harness-fingerprint-combine acc))))]]
     EXPECT_STATUS 3)
 
-  # A provenance failure that exits 1 is indistinguishable from an ordinary
-  # assertion failure, which is the whole reason status 3 was reserved.
+  # DECLARED SURVIVOR, for a structural reason rather than a chosen one.
+  #
+  # A provenance failure exiting 1 would be indistinguishable from an ordinary
+  # assertion failure, which is the whole reason status 3 was reserved -- so
+  # this decision is worth a mutation. This suite cannot supply one.
+  # byte_machine_mutation_run requires the verify command to exit 0 on the
+  # staged, unmutated tree, so no pass may run a command whose provenance
+  # deliberately fails; and under a command whose provenance succeeds, this
+  # line is never reached and the mutation cannot change any outcome.
+  #
+  # Not a gap in coverage of the decision, only in coverage by this suite: the
+  # provenance lanes in test/CMakeLists.txt assert exit 3 directly, and slice
+  # 5b's stale-artifact lane adds a fourth. What is unwitnessed is the constant
+  # itself, and only here.
+  #
+  # Reopening condition: a mutation runner that accepts a declared non-zero
+  # baseline. Nothing in this slice needs one.
   byte_machine_mutation(
     FILE ${RUNNER} SPEC ${spec}
     LABEL "runner on ${runtime}: a provenance failure exits as an assertion failure"
     FIND [[  (adapter-exit harness-status-provenance))]]
     REPLACE [[  (adapter-exit harness-status-failed))]]
-    EXPECT_STATUS 1)
+    EXPECT_SURVIVES TRUE)
 
   byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 endfunction()
 ```
 
-The third mutation in that pass only fires if provenance already fails, so this pass's verify command must be the wrong-expectation shape: set `BYTE_MACHINE_EXPECT_FINGERPRINT_FILE` to a file holding a value the run cannot produce, exactly as the `WRONG_FINGERPRINT` lanes do, and set `BYTE_MACHINE_FINGERPRINT_FILES` to the two staged manifest bodies joined with `|`. Under that command the unmutated tree exits 3, the first two mutations exit 3 for their own reasons, and the third exits 1 — which is what each `EXPECT_STATUS` above asserts.
+This pass's verify command must set up provenance **correctly**, and must use a manifest of two bodies. `byte_machine_mutation_run` runs every targeted specification on the staged, unmutated tree first and aborts with `baseline failure` if it does not exit 0 — so a command whose provenance deliberately fails cannot be used here, which is what makes the third mutation a declared survivor rather than an `EXPECT_STATUS 1` row.
+
+Set `BYTE_MACHINE_FINGERPRINT_FILES` to the two staged manifest bodies joined with `|`, and `BYTE_MACHINE_EXPECT_FINGERPRINT_FILE` to a file the pass computes from those same two staged bodies with `fingerprint-manifest.ss` — the staged copies, not the repository originals, because the stage is what the run reads. Confirm the baseline passes before trusting any row: an unmutated tree that exits 3 here means the expectation was computed over the wrong two files.
 
 Call the pass for Chez unconditionally and for Gambit inside the existing `if(BYTE_MACHINE_GAMBIT_EXECUTABLE)` guard, matching the slice-5a passes.
 
@@ -1470,7 +1488,7 @@ Expected: PASS. Both suites' asserted totals match what they actually ran.
 make test && cmake --preset no-scheme && ctest --preset no-scheme
 ```
 
-Expected: PASS, 50/50 and 10/10.
+Expected: PASS, 52/52 and 10/10.
 
 - [ ] **Step 5: Commit**
 
