@@ -6,7 +6,14 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# TWENTY-TWO PASSES, BECAUSE TWENTY-TWO DIFFERENT WITNESSES ARE NEEDED
+# TWENTY-THREE PASSES WHEN GAMBIT IS DISCOVERED, BECAUSE TWENTY-THREE
+# DIFFERENT WITNESSES ARE NEEDED
+#
+# Two of the twenty-three are gated on BYTE_MACHINE_GAMBIT_EXECUTABLE, the same
+# precondition every Gambit lane in this tree runs under: pass 2, the Gambit
+# adapter's export list, and pass 10, the placeholder body's decisions run a
+# second time on Gambit. Without Gambit this file runs twenty-one passes and
+# forty-nine mutations rather than twenty-three passes and fifty-six.
 #
 # Pass 1 runs the Chez self-tests lane against the shared runner body. That body
 # is identical text on both runtimes, so verifying it on a second runtime would
@@ -60,15 +67,15 @@
 # form slice 3's absolute-and-comma-free validation exists to keep parseable;
 # Pass 2 above never exercises that joining because it passes only one root.
 #
-# Passes 11 to 19 are the launcher's parse decisions: an unknown flag, a flag
+# Passes 11 to 20 are the launcher's parse decisions: an unknown flag, a flag
 # with no value, a single-valued flag repeated, a required flag unchecked in
 # general, one entry dropped from each of required-flags' four members, and one
-# entry dropped from single-valued-flags. Each gets its own pass because each
-# needs its own deliberately wrong invocation and a verify command fixed for
-# the whole pass, the same constraint passes 5 to 6 already established --
-# generalised here from two decisions to nine.
+# entry dropped from each of single-valued-flags' two members. Each gets its
+# own pass because each needs its own deliberately wrong invocation and a
+# verify command fixed for the whole pass, the same constraint passes 5 to 6
+# already established -- generalised here from two decisions to ten.
 #
-# Passes 20 to 22 are the working-directory matrix: one mutation -- the
+# Passes 21 to 23 are the working-directory matrix: one mutation -- the
 # launcher resolving shared bodies against the working directory instead of its
 # declared source directories -- run from three different launch directories.
 # One mutation needs three passes because what it asserts is that the launch
@@ -834,7 +841,7 @@ if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
   byte_machine_slice3_body_pass("gambit")
 endif()
 
-# --- Passes 11 to 19: the launcher's parse decisions ------------------------
+# --- Passes 11 to 20: the launcher's parse decisions ------------------------
 #
 # Deleting a refusal does not produce a wrong answer; it produces an invocation
 # that is accepted and then fails somewhere else, or does not fail at all. Two
@@ -905,8 +912,15 @@ byte_machine_slice3_launcher_pass(
   ${LAUNCHER_BASE_ARGS}
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
 
+# Named for the decision, not for the flag: this pass witnesses the general
+# check (decision 2's own `if`), which would break identically no matter which
+# required flag the invocation happened to omit. library-root was picked only
+# because it made a convenient invocation to reuse; the entry-specific name
+# belongs to the pass below that actually drops --library-root from the list,
+# and reusing it here left two different mutations reporting under one
+# indistinguishable lane name in the transcript.
 byte_machine_slice3_launcher_pass(
-  byte-machine.harness.launcher-no-library-root.chez.source
+  byte-machine.harness.launcher-required-flag-unchecked.chez.source
   "launcher: a missing required flag is not noticed"
   [[   (if (null? (flag-values flag))]]
   [[   (if #f]]
@@ -945,16 +959,27 @@ byte_machine_slice3_launcher_pass(
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
 
+# --source-dir is the last entry in required-flags, so its source line ends
+# with two closing parens -- the list's and the define's -- rather than one.
+# A FIND that matched only the flag's text left both dangling after a REPLACE
+# that opened a line comment: the comment swallowed ")) " too, so the staged
+# file was not readable Scheme and died with a read error at exit 255 rather
+# than the launcher's own required-flag refusal -- caught, but for the wrong
+# reason, and witnessing nothing about the decision this pass names. The FIND
+# below includes the trailing "))" so the REPLACE can close the list itself.
+# Whichever entry ends up last in required-flags after a reorder or a fifth
+# addition inherits this hazard and needs the same treatment.
 byte_machine_slice3_launcher_pass(
   byte-machine.harness.launcher-no-source-dir.chez.source
   "launcher: --source-dir is dropped from required-flags"
-  [[        "--source-dir"]]
-  [[        ;; --source-dir removed by mutation]]
+  [[        "--source-dir"))]]
+  [[        ;; --source-dir removed by mutation
+        ))]]
   "--library-root" "${STAGE_DIR}/test/support/harness/chez"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
 
-# One more, for single-valued-flags. --object-guard has never been exercised as
+# Two more, for single-valued-flags. --object-guard has never been exercised as
 # a repeated flag: the general check just above is witnessed only through
 # --program (LAUNCHER_BASE_ARGS already carries one --object-guard, so this
 # pass repeats it rather than adding a second fixture guard directory --
@@ -972,7 +997,27 @@ byte_machine_slice3_launcher_pass(
   ${LAUNCHER_BASE_ARGS}
   "--object-guard" "${GUARD_DIR}")
 
-# --- Passes 20 to 22: the working-directory matrix --------------------------
+# required-flags' own rationale -- "an entry dropped from it is invisible to
+# every invocation except the one omitting that flag" -- applies just as much
+# to single-valued-flags' other member, so --program gets the same treatment.
+# It sits last on its line, hard against the list's and the define's closing
+# parens -- the same position that made --source-dir's required-flags
+# mutation above catch a read error instead of the decision it names (the
+# hazard recorded there). The FIND below matches the whole two-line form,
+# both closing parens included, and the REPLACE is itself a complete,
+# well-formed define, so there is no dangling ")" left for a comment to
+# swallow.
+byte_machine_slice3_launcher_pass(
+  byte-machine.harness.launcher-repeated-program.chez.source
+  "launcher: --program is dropped from single-valued-flags"
+  [[(define single-valued-flags
+  (list "--object-guard" "--program"))]]
+  [[(define single-valued-flags
+  (list "--object-guard"))]]
+  ${LAUNCHER_BASE_ARGS}
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
+
+# --- Passes 21 to 23: the working-directory matrix --------------------------
 #
 # One mutation, three passes, three expected outcomes. The launcher is made to
 # resolve shared bodies against the working directory -- the mechanism this
@@ -1039,5 +1084,11 @@ foreach(cwd_case empty decoy identical)
 
   byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 endforeach()
+
+# Cleared rather than left pointing at same-name-identical: this variable is
+# set at file scope for the whole loop above, and any pass appended after this
+# point with no WORKING_DIRECTORY of its own would otherwise silently launch
+# from the matrix's identical directory instead of the stage.
+set(BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY "")
 
 message(STATUS "byte-machine-spec: scheme mutation suite complete")
