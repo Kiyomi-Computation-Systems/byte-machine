@@ -590,4 +590,11 @@
         (check-equal "empty" (harness-bytes->string (harness-bytes 0 '())) "")
         (check-equal "interior space is kept"
                      (harness-bytes->string (harness-bytes 7 '(100 101 97 100 32 98 102)))
-                     "dead bf")))))
+                     "dead bf")
+        ;; All-whitespace input is the only way to reach the scan's base case
+        ;; after consuming bytes rather than trivially. An off-by-one in the
+        ;; termination logic would either read past the end or loop forever here.
+        ;; This case also carries the only tab and carriage-return bytes tested.
+        (check-equal "all whitespace, including tab and carriage return"
+                     (harness-bytes->string (harness-bytes 4 '(32 9 10 13)))
+                     "")))))
