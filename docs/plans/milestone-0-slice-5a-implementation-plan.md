@@ -22,6 +22,8 @@
 - **Manifest separator is `|`** (V10). Illegal in a Windows path, which avoids the `:` vs `;` question the spike left open at §9 item 3.
 - **Every test runs from an isolated build-tree directory**, never the repository. `byte_machine_add_test` enforces this.
 - **Run the suite before every commit.** `make test` must be green, and `ctest --preset no-scheme` must stay 10/10.
+- **Prefer a mutation caught by a failed comparison over one caught by a raise** (AGENTS.md). A raise-based catch depends on where the mutant happens to crash rather than on an assertion naming the decision. Every mutation in Task 7 is comparison- or status-based for this reason; the two export-list mutations are the exception, because an export that is not there can only fail at library construction, and the existing passes 1 and 2 already establish that form.
+- **A measurement earns a place in a design document or decision record only once it has been re-taken against the shipped artifact** (AGENTS.md). The seven values in the table below are fingerprints of constructed bytevectors and of an immutable fixture, so nothing this slice ships can move them. Any fingerprint *of a shared body* is a different matter: this slice edits `harness-runner.scm`, so every combined value over it expires as the slice proceeds. Never copy one forward — re-take it.
 
 ### Fingerprint constants — copy these exactly
 
@@ -578,7 +580,9 @@ Create `test/support/launchers/fingerprint-manifest.ss`:
 /opt/homebrew/bin/chez --script test/support/launchers/fingerprint-manifest.ss test/support/harness/shared /tmp/bm-fp-check.txt test/support/harness/shared/harness-runner.scm src/common/byte-machine/placeholder.scm src/common/byte-machine/placeholder-consumer.scm
 ```
 
-Expected: `byte-machine-fingerprint: 101cc6beb745d034` — the value the design spec §2 measured for those three bodies in that order. If the runner body has been edited since, the value differs; re-derive it by running this command and record the new value rather than assuming the old one.
+Expected: a line of the form `byte-machine-fingerprint: <16-or-fewer lowercase hex digits>`.
+
+Do **not** assert `101cc6beb745d034`. The design spec §2 measured that value before this slice began, and Tasks 4 and 5 add roughly eighty lines to `harness-runner.scm`, so it is already stale by the time you run this. What this step verifies is that the launcher runs, loads the algorithm, reads three real bodies, and prints one combined value — not that the value equals a number written down earlier. Run it a second time and confirm you get the same answer; that is the property worth checking here.
 
 - [ ] **Step 3: Add the CMake function**
 
@@ -683,7 +687,7 @@ Then:
 make build && cat $(ls build/dev/fingerprints/*.fingerprint | head -1); echo
 ```
 
-Expected: `101cc6beb745d034`, with no trailing newline (the `echo` supplies the line break).
+Expected: the same value Step 2 printed, with no trailing newline (the `echo` supplies the line break). Compare against what you actually observed in Step 2, not against any literal in this plan or in the design spec — both were measured before `harness-runner.scm` grew the provenance code, and Step 2's own note says why.
 
 - [ ] **Step 5: Remove the temporary probe**
 
@@ -1733,7 +1737,7 @@ Match their structure: context, the decision, the measurements behind it, conseq
 Create `docs/decisions/0004-content-fingerprint-and-provenance.md`. It must state, at minimum:
 
 - The measured radix divergence — `(number->string 255 16)` is `FF` on Chez 10.4.1 and `ff` on Gambit 4.9.8 on Darwin 25.5.0 arm64, measured 2026-08-17 — and that it forces the explicit digit table.
-- The cross-runtime agreement measurement: both runtimes produce `101cc6beb745d034` for `harness-runner.scm`, `placeholder.scm`, `placeholder-consumer.scm` in that order.
+- The cross-runtime agreement measurement, **re-taken against the shipped artifact rather than copied from the design spec**. AGENTS.md requires this, and the design spec's §2.0 says explicitly that its combined value is a pre-slice reading of a body this slice edits. Take the new one from a real lane — run `ctest --test-dir build/dev -R 'placeholder-identity' -V` on each runtime and read the `fingerprint combined=` line — and record which two lanes produced it, so the record states what was measured against what.
 - The V1 split of D5, and what slices 5b and 5c inherit unchanged.
 - **The §5.3 bound**: the manifest is declared, not observed, so a matching fingerprint does not prove the run included exactly those files. Name what narrows it (slice 3's T6 body mutations on both runtimes) and what does not.
 - **The §6.1 consequence**: the expectation is computed by a Chez process, so a Chez lane agrees with itself by construction and the cross-runtime claim is carried by the Gambit lane alone. Reference the uppercase mutation as the demonstration.

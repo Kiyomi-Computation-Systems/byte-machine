@@ -54,6 +54,27 @@ three real shared bodies now in the tree. The prototype used the two `adapter-fi
 | fingerprint of `placeholder-consumer.scm` | `f6a5d9af9aaf173` | `f6a5d9af9aaf173` |
 | combined over those three, in that order | `101cc6beb745d034` | `101cc6beb745d034` |
 
+### 2.0 What these numbers are measured against, and which of them expire
+
+AGENTS.md requires that a measurement earn its place in a design document only once it has been
+re-taken against the shipped artifact. These have not been, and two kinds of row must be
+distinguished before they are used.
+
+The first two rows are properties of the runtimes and are stable: nothing this slice ships can
+change what `number->string` does with a radix.
+
+The last four are fingerprints of files, and **three of those files include `harness-runner.scm`,
+which this slice edits.** The per-file value for that body and the combined value over the three
+bodies are therefore *pre-slice* readings. They are recorded to establish that the two runtimes agree
+— which is the claim — and not as values anything may later assert against. Any lane, test, or
+decision record that needs a combined fingerprint must take it from the shipped artifact at the time
+it is written. The implementation plan's Task 3 and Task 8 both say so at the step.
+
+The prototype was a scratch driver over the two `adapter-file-bytes` bodies of §5.1 and the algorithm
+of §5.2, verbatim; no harness, no adapter library, no launcher. That is a weaker fixture than the
+shipped lane, and slice 4's cost for treating a scratch reading as a shipped one is exactly why this
+subsection exists.
+
 Two consequences, and they pull in the same direction.
 
 ### 2.1 The radix divergence is real here, not inherited
