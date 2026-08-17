@@ -159,3 +159,71 @@ what this milestone delivers.
   single mutation is judged by launching from three different directories,
   not by what it does to the stage. The CMake-layer suite keeps its previous
   behaviour by default on all three axes.
+- `byte_machine_mutation` gained optional `EXPECT_STATUS` and
+  `EXPECT_OUTPUT_MATCHES`, narrowing "caught" to "caught for the declared
+  reason": a nonzero verify-command result whose exit status or combined
+  stdout+stderr does not also satisfy the declared expectation is reported
+  separately, as caught for the wrong reason, and counted the same as an
+  outright miss rather than as a pass. Applied only where measured, not
+  guessed — a REPLACE that once opened a line comment and swallowed a list's
+  closing parens had reported caught at exit 255 on a read error rather than
+  on the refusal it named.
+- `byte_machine_mutation_run` now accumulates a running pass and mutation
+  count across every call in a process (`byte_machine_mutation_totals`), and
+  both mutation suites compare that total against a count declared next to
+  their own header comment, failing loudly on a mismatch. A whole-branch
+  review had deleted an entire pass group from the Scheme suite and left it
+  reporting 37/37 regardless, with the mutation count silently dropping
+  underneath that number and nothing noticing; this is what would have
+  caught it.
+
+### Fixed
+
+- `MutationRunner.cmake` — the machinery every specification in this tree is
+  trusted through, and staged like everything else — had neither a
+  specification nor a mutation targeting it. A re-review found this let the
+  "caught for the declared reason" narrowing above reproduce the exact defect
+  class it was written to close, one layer down: the branch that turns a
+  wrong-reason result into a failure could be deleted by hand and the real
+  CMake-layer suite stayed 89/89, because nothing mutated the decision that
+  branch depends on, or the branch itself. The verdict decision is now split
+  out as a pure function, `byte_machine_mutation_verdict` — no
+  `execute_process`, no filesystem — with its own specification,
+  `MutationRunnerSpec.cmake`, registered so it also runs under
+  `ctest --preset no-scheme`. Five mutations in `MutationSuite.cmake` break
+  each of the pure function's decisions and the registration guard beside it,
+  and the specification carries a sixth, self-contained check of its own: a
+  real staged mutation, deliberately declared with an unsatisfiable
+  `EXPECT_OUTPUT_MATCHES`, that reaches past the pure function into
+  `byte_machine_mutation_run` itself to prove a wrong-reason verdict is acted
+  on and not merely computed correctly and discarded — the one part of this
+  fix that cannot be specified as a pure function, because it is what the
+  imperative shell does with the answer, and the exact branch the original
+  deletion targeted.
+- `EXPECT_OUTPUT_MATCHES`'s presence was tested by truthiness rather than
+  `STREQUAL ""`, unlike the `EXPECT_STATUS` check one line above it. A
+  pattern CMake itself reads as false — `"0"`, `OFF`, `NOTFOUND`, anything
+  ending `-NOTFOUND` — is still a regex someone declared, and would have been
+  silently unenforced rather than checked.
+- `byte_machine_mutation` now refuses `EXPECT_SURVIVES` declared together
+  with `EXPECT_STATUS` or `EXPECT_OUTPUT_MATCHES`. A declared survivor is
+  judged only by whether the verify command exited zero, so the other two
+  would have been parsed, stored, and never consulted — silently inert
+  rather than enforced.
+- The `WORKING_DIRECTORY`-forwarding conditional in `ByteMachineExpectExit.cmake`
+  and `ByteMachineSchemeLane.cmake` was mutated in only one direction —
+  `if(arg_WORKING_DIRECTORY)` to `if(FALSE)` — which only the specifications'
+  "present" assertions could catch. Their "absent" assertions, proof that the
+  keyword does not reach the registrar when no caller gave one, are exactly
+  what stops the `CMP0174`-driven conditional-forwarding fix from silently
+  regressing to unconditional forwarding, and had no mutation exercising
+  them. Both sites now also mutate to `if(TRUE)`.
+- `SchemeMutationSuite.cmake`'s pass 8 (the poisoned-compiled-object
+  mutation) now declares `EXPECT_OUTPUT_MATCHES "POISONED-FROM-OBJECT"`,
+  enforcing what its own comment already claimed: the mutated run names the
+  sentinel in its banner, its FAIL-CONTEXT line, and its summary. Its
+  without-Gambit expected pass and mutation counts are now derived from the
+  with-Gambit pair and a declared Gambit-only delta (2 passes / 7 mutations)
+  instead of duplicated as a second pair of literals that a new non-gated
+  pass could update only one half of. A comment naming a retired ctest lane
+  is corrected to include its `.chez.source` suffix.
