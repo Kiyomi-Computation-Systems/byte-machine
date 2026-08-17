@@ -834,7 +834,7 @@ Create `src/gambit/byte-machine/placeholder.sld`:
 make build && ctest --preset pr -R 'byte-machine\.portability\.placeholder' --output-on-failure
 ```
 
-Expected: both PASS, each reporting 5 cases.
+Expected: both PASS, each reporting 6 cases.
 
 - [ ] **Step 12: Widen the portability guard**
 
@@ -1633,7 +1633,7 @@ if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
     "-f"
     "${STAGE_DIR}/test/common/placeholder-tests.gambit.scm")
 
-  # The same five mutations, declared once and run per runtime. Writing them out
+  # The same six mutations, declared once and run per runtime. Writing them out
   # twice would let the two lists drift, and a mutation silently present on only
   # one runtime is precisely the defect this pair of passes exists to detect.
   byte_machine_slice3_body_pass("gambit")
@@ -1973,7 +1973,7 @@ Against the spec's §12. Each line must be a command someone can run, not a clai
 - [ ] `make test` passes, and `ctest --preset no-scheme` passes with neither runtime installed.
 - [ ] `ctest --preset pr -R 'placeholder-cwd' -V | rg 'Working Directory'` shows three distinct directories, each used by both runtimes.
 - [ ] The scheme-mutation suite reports the `(empty)` and `(decoy)` launcher mutations caught and the `(identical)` one as an expected survivor.
-- [ ] The scheme-mutation suite reports all five body mutations caught on Chez **and** all five on Gambit.
+- [ ] The scheme-mutation suite reports all six body mutations caught on Chez **and** all six on Gambit.
 - [ ] Every launcher refusal has a lane asserting exit 2: `ctest --preset pr -R 'launcher-' | rg 'tests passed'` shows nine.
 - [ ] Removing `src/common/byte-machine/placeholder.scm` makes `cmake --preset dev` fail with `contributed no shared body`.
 - [ ] `rg -n "chez|gambit|chezscheme|scheme base" src/common test/common/placeholder-tests.scm` returns nothing: no shared body names a runtime.
