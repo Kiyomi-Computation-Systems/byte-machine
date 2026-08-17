@@ -21,6 +21,14 @@
         (set! bootstrap-failures (+ bootstrap-failures 1))
         (display "bootstrap: FAIL ") (display name) (newline))))
 
+;; The one runner facility this body uses before judging any of them. It is here
+;; because the bootstrap does not call harness-begin -- the suite lifecycle is
+;; among the things it is not allowed to trust -- and a provenance check that
+;; lived only in harness-begin would leave these two lanes the only ones in the
+;; tree running text nothing verified. It either returns or ends the process, so
+;; it cannot report a false negative into the counter below.
+(harness-verify-provenance!)
+
 ;; --- pure helpers ----------------------------------------------------------
 
 (bootstrap-assert "contains: middle" (harness-string-contains? "abcdef" "cd"))

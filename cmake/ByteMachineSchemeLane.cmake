@@ -147,14 +147,22 @@ endfunction()
 # With EXPECT_EXIT the lane is registered through the exact-status helper;
 # without it, a nonzero exit fails the test in the ordinary way.
 function(byte_machine_add_scheme_lane)
-  cmake_parse_arguments(PARSE_ARGV 0 arg ""
-    "NAME;BACKEND;PROGRAM;TIMEOUT;EXPECT_EXIT;WORKING_DIRECTORY" "LABELS;ENVIRONMENT")
+  cmake_parse_arguments(PARSE_ARGV 0 arg "WRONG_FINGERPRINT"
+    "NAME;BACKEND;PROGRAM;TIMEOUT;EXPECT_EXIT;WORKING_DIRECTORY"
+    "LABELS;ENVIRONMENT;SHARED_BODIES")
 
   if(arg_UNPARSED_ARGUMENTS)
     message(FATAL_ERROR
       "byte-machine: unexpected arguments to byte_machine_add_scheme_lane: ${arg_UNPARSED_ARGUMENTS}")
   endif()
-  foreach(required NAME BACKEND PROGRAM TIMEOUT)
+  # SHARED_BODIES is required, not optional. The property worth having is not
+  # "the lanes have provenance" but "a lane cannot be added without it" -- and
+  # this configure-time check is the whole of that guarantee, because the
+  # harness skips provenance rather than refusing when no manifest reaches it.
+  # It matters little here, where every lane is a source lane, and a great deal
+  # in slices 5b and 5c, where a lane registered without provenance is exactly
+  # the lane that can silently fall back to source.
+  foreach(required NAME BACKEND PROGRAM TIMEOUT SHARED_BODIES)
     if(NOT arg_${required})
       message(FATAL_ERROR
         "byte-machine: ${required} is required for byte_machine_add_scheme_lane ('${arg_NAME}').")
@@ -166,6 +174,16 @@ function(byte_machine_add_scheme_lane)
       "${arg_PROGRAM}. A lane registered against a missing file would fail at "
       "run time with a runtime error rather than at configure time with this one.")
   endif()
+  # A manifest entry that does not exist would be a provenance failure at run
+  # time, reported by the harness as though the build tree were incomplete. It
+  # is a registration mistake, and it is cheaper to say so here.
+  foreach(body IN LISTS arg_SHARED_BODIES)
+    if(NOT EXISTS "${body}")
+      message(FATAL_ERROR
+        "byte-machine: '${arg_NAME}' names a shared body that does not exist: "
+        "${body}.")
+    endif()
+  endforeach()
 
   byte_machine_scheme_lane_command(
     "${arg_BACKEND}" "${arg_PROGRAM}" command status message)
@@ -188,10 +206,48 @@ function(byte_machine_add_scheme_lane)
   # The fixture is immutable and lives in the source tree; a lane only ever
   # reads it. Set for every lane rather than only the self-tests, so a body that
   # starts needing it does not also need a registration change.
+  #
+  # arg_ENVIRONMENT is deliberately not spliced in here: CTest applies
+  # ENVIRONMENT entries in list order, so for a repeated key the last one wins.
+  # It is appended once, after every default this function computes for itself
+  # (including the manifest block below), so a caller-supplied entry can always
+  # override a default -- which is exactly how the provenance lanes in
+  # test/CMakeLists.txt force a specific, named failure: by overriding
+  # BYTE_MACHINE_FINGERPRINT_FILES or BYTE_MACHINE_EXPECT_FINGERPRINT_FILE after
+  # this function has already computed the real ones.
   set(environment
     "BYTE_MACHINE_EXECUTION_MODE=source"
-    "BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin"
-    ${arg_ENVIRONMENT})
+    "BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin")
+
+  # The manifest, and the expectation it must agree with. The separator is `|`
+  # rather than a path separator: `:` and `;` differ between platforms, and `|`
+  # is illegal in a Windows path, so it cannot occur inside a member.
+  #
+  # Gated on a discovered Chez, because byte_machine_expected_fingerprint runs
+  # the expectation launcher under Chez. A host with Gambit but no Chez reaches
+  # this line on every Gambit lane -- that lane's own runtime was found, so it
+  # did not take the no-runtime return above -- and would otherwise build a
+  # custom command whose executable is the empty string. Neither variable is set
+  # in that case, so the harness skips provenance exactly as it does for any
+  # process a lane registration did not start. The lane still runs and still
+  # proves what it proved before this slice; it just carries no fingerprint,
+  # which is the honest outcome when the build cannot compute one.
+  if(BYTE_MACHINE_CHEZ_EXECUTABLE)
+    string(JOIN "|" fingerprint_files ${arg_SHARED_BODIES})
+    if(arg_WRONG_FINGERPRINT)
+      byte_machine_wrong_fingerprint("${arg_NAME}" expect_file)
+    else()
+      byte_machine_expected_fingerprint("${arg_NAME}" expect_file
+                                        ${arg_SHARED_BODIES})
+    endif()
+    list(APPEND environment
+      "BYTE_MACHINE_FINGERPRINT_FILES=${fingerprint_files}"
+      "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${expect_file}")
+  endif()
+
+  # See the comment above the initial set(environment ...): appended last so a
+  # caller-supplied entry always wins over a default, including the two above.
+  list(APPEND environment ${arg_ENVIRONMENT})
 
   # Same CMP0174 reasoning as byte_machine_add_exit_code_test in
   # ByteMachineExpectExit.cmake: forward WORKING_DIRECTORY only when there is
