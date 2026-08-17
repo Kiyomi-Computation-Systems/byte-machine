@@ -54,7 +54,7 @@
 
 Today `byte_machine_add_scheme_lane` emits the literal `BYTE_MACHINE_EXECUTION_MODE=source`, so a lane named `.chez.aot` would declare itself a source lane. The name already carries the mode and `byte_machine_test_name_parse` already returns it (design M3).
 
-This task also closes a second hole it would otherwise open: `BACKEND` and the name's backend are independent today, so a lane named `.gambit.source` can be registered with `BACKEND chez`. Once the mode comes from the name while the machinery comes from `BACKEND`, that divergence becomes a lane running one thing and declaring another.
+**Considered and cut (YAGNI).** `BACKEND` and the name's backend stay independent, with no guard requiring them to agree. The disagreement is not silent: a lane named `.gambit.source` registered with `BACKEND chez` points at a `.gambit.scm` program that Chez cannot load, so it fails loudly the first time it runs. A configure-time refusal for a loud run-time failure is ceremony, and it would cost a check, a specification rejection case, and a mutation. Reopen if a program ever becomes loadable by both runtimes.
 
 **Files:**
 - Modify: `cmake/ByteMachineSchemeLane.cmake`
@@ -102,34 +102,15 @@ spec_check_equal("${mode_entry}" "BYTE_MACHINE_EXECUTION_MODE=source"
   "a source lane still declares source")
 ```
 
-And add one rejection case. In the `BYTE_MACHINE_SPEC_CASE` dispatch at the top of the file, after `lane-requires-shared-bodies`:
-
-```cmake
-  elseif(c STREQUAL "lane-rejects-backend-disagreeing-with-name")
-    byte_machine_add_scheme_lane(
-      NAME byte-machine.harness.example.gambit.source
-      BACKEND chez
-      PROGRAM "${SPEC_SELF}"
-      SHARED_BODIES "${SPEC_SELF}"
-      TIMEOUT 10)
-```
-
-and register its expected message with the other rejections:
-
-```cmake
-spec_expect_rejected("${SPEC_SELF}" "lane-rejects-backend-disagreeing-with-name"
-  "byte-machine: 'byte-machine.harness.example.gambit.source' is registered with BACKEND 'chez' while its name says 'gambit'. The name decides the mode and the labels; BACKEND decides which runtime actually runs. A lane where they disagree runs one thing and reports another.")
-```
-
 - [ ] **Step 2: Run the specification and watch it fail**
 
 ```bash
 cmake -P test/support/cmake/ByteMachineSchemeLaneSpec.cmake
 ```
 
-Expected: FAIL, naming `an aot lane declares the aot mode, read from its own name` — the emitted entry is still `BYTE_MACHINE_EXECUTION_MODE=source` — and `lane-rejects-backend-disagreeing-with-name` reported as not rejected.
+Expected: FAIL, naming `an aot lane declares the aot mode, read from its own name` — the emitted entry is still `BYTE_MACHINE_EXECUTION_MODE=source`.
 
-- [ ] **Step 3: Derive the mode, and require the backend to agree**
+- [ ] **Step 3: Derive the mode from the name**
 
 In `cmake/ByteMachineSchemeLane.cmake`, inside `byte_machine_add_scheme_lane`, immediately after the `SHARED_BODIES` existence loop and before the call to `byte_machine_scheme_lane_command`:
 
@@ -140,18 +121,6 @@ In `cmake/ByteMachineSchemeLane.cmake`, inside `byte_machine_add_scheme_lane`, i
   # than passing a parsed field through a registrar that does not need it.
   byte_machine_test_name_parse("${arg_NAME}" lane_layer lane_feature
                                lane_backend lane_mode)
-
-  # BACKEND selects the machinery; the name selects the mode and the labels.
-  # Nothing else compares them, so until this check they could disagree
-  # silently -- and after this slice a disagreement means an artifact built by
-  # one runtime being declared as another's.
-  if(NOT lane_backend STREQUAL arg_BACKEND)
-    message(FATAL_ERROR
-      "byte-machine: '${arg_NAME}' is registered with BACKEND '${arg_BACKEND}' "
-      "while its name says '${lane_backend}'. The name decides the mode and "
-      "the labels; BACKEND decides which runtime actually runs. A lane where "
-      "they disagree runs one thing and reports another.")
-  endif()
 ```
 
 Then change the environment's first entry from the literal:
@@ -168,7 +137,7 @@ Then change the environment's first entry from the literal:
 cmake -P test/support/cmake/ByteMachineSchemeLaneSpec.cmake
 ```
 
-Expected: PASS, with the case count risen by three.
+Expected: PASS, with the case count risen by two.
 
 - [ ] **Step 5: Generalise the two harness assertions (W8)**
 
@@ -720,21 +689,17 @@ In `test/CMakeLists.txt`, beside the existing Chez launcher refusal lanes:
 # A lane that is set up correctly never reaches a launcher refusal, so each one
 # needs a lane of its own or a deleted refusal is invisible. The same argument
 # the three chez-source.ss refusals above are registered under.
+#
+# Two lanes, not one per refusal in these files. The flag-vocabulary refusals
+# below the parser are the same code chez-source.ss already carries and whose
+# identical refusals already have lanes; re-proving a verbatim copy buys
+# nothing. These two are the decisions that are new here.
 byte_machine_add_exit_code_test(
   NAME byte-machine.harness.chez-aot-launcher-missing-program.cmake.direct
   COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
           "${BYTE_MACHINE_HARNESS_CHEZ_AOT_LAUNCHER}"
           --object-dir "${CMAKE_BINARY_DIR}"
           --program "${CMAKE_BINARY_DIR}/no-such-program.so"
-  EXPECT_EXIT 2
-  TIMEOUT 60
-  LABELS expected-red)
-
-byte_machine_add_exit_code_test(
-  NAME byte-machine.harness.chez-aot-launcher-unknown-flag.cmake.direct
-  COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
-          "${BYTE_MACHINE_HARNESS_CHEZ_AOT_LAUNCHER}"
-          --object-guard "${CMAKE_BINARY_DIR}"
   EXPECT_EXIT 2
   TIMEOUT 60
   LABELS expected-red)
@@ -762,7 +727,7 @@ Guard the block on a discovered Chez, matching how the existing launcher refusal
 make build && ctest --preset pr -R 'chez-(aot|compile)-launcher' -V
 ```
 
-Expected: PASS, 3/3, each showing `byte-machine-launcher: HARNESS-ERROR` on stderr — respectively `compiled program does not exist:`, `unknown flag: --object-guard`, and `each --library-root needs one --object-dir, but there are 2 roots and 1 object directories`.
+Expected: PASS, 2/2, each showing `byte-machine-launcher: HARNESS-ERROR` on stderr — respectively `compiled program does not exist:` and `each --library-root needs one --object-dir, but there are 2 roots and 1 object directories`.
 
 - [ ] **Step 5: Run the whole suite**
 
@@ -770,7 +735,7 @@ Expected: PASS, 3/3, each showing `byte-machine-launcher: HARNESS-ERROR` on stde
 make test
 ```
 
-Expected: PASS, 47/47.
+Expected: PASS, 46/46.
 
 - [ ] **Step 6: Commit**
 
@@ -944,7 +909,7 @@ Expected: both lanes report the same combined fingerprint string. Record that va
 make test && cmake --preset no-scheme && ctest --preset no-scheme
 ```
 
-Expected: PASS, 50/50 and 10/10.
+Expected: PASS, 49/49 and 10/10.
 
 - [ ] **Step 6: Commit**
 
@@ -1021,7 +986,7 @@ git checkout test/support/harness/shared/harness-runner.scm
 make test
 ```
 
-Expected: PASS, 50/50. Confirm `git status` is clean apart from the design document.
+Expected: PASS, 49/49. Confirm `git status` is clean apart from the design document.
 
 - [ ] **Step 5: Record the answer in the design**
 
@@ -1243,7 +1208,7 @@ If it exits 0, the mechanism is not working and nothing further in this slice is
 make test && cmake --preset no-scheme && ctest --preset no-scheme
 ```
 
-Expected: PASS, 51/51 and 10/10.
+Expected: PASS, 50/50 and 10/10.
 
 - [ ] **Step 9: Commit**
 
@@ -1307,21 +1272,7 @@ byte_machine_mutation(
   REPLACE [[    "BYTE_MACHINE_EXECUTION_MODE=source"]])
 ```
 
-- [ ] **Step 4: Add the backend-agreement mutation**
-
-```cmake
-# Task 1's second guard. Without it a lane named .gambit.source can be
-# registered with BACKEND chez: the labels and the declared mode come from the
-# name while the runtime comes from BACKEND, so the lane reports one runtime
-# and runs another.
-byte_machine_mutation(
-  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
-  LABEL "lane: BACKEND may disagree with the name's backend"
-  FIND [[  if(NOT lane_backend STREQUAL arg_BACKEND)]]
-  REPLACE [[  if(FALSE)]])
-```
-
-- [ ] **Step 5: Add C3, in whichever of these two forms Task 5's measurement licenses**
+- [ ] **Step 4: Add C3, in whichever of these two forms Task 5's measurement licenses**
 
 Task 5 answered whether emptying `source-directories` can be witnessed. Add exactly one of the following, and no third thing.
 
@@ -1364,11 +1315,11 @@ byte_machine_mutation(
 
 Do not add both, and do not add the survivor form because the witnessing form was awkward to write. A survivor declared for convenience is the one kind of entry this suite cannot detect.
 
-- [ ] **Step 6: Update the suite's asserted totals**
+- [ ] **Step 5: Update the suite's asserted totals**
 
-`EXPECTED_MUTATIONS` rises from 97 by the number of mutations actually added in Steps 1–5. Set it to the real number and say in the comment above it what the increment is made of, matching the existing comment's style.
+`EXPECTED_MUTATIONS` rises from 97 by the number of mutations actually added in Steps 1–4. Set it to the real number and say in the comment above it what the increment is made of, matching the existing comment's style.
 
-- [ ] **Step 7: Run the CMake mutation suite**
+- [ ] **Step 6: Run the CMake mutation suite**
 
 ```bash
 ctest --preset pr -R 'cmake-mutation' -V
@@ -1378,15 +1329,15 @@ Expected: PASS, every mutation caught, and the suite's own totals matching `EXPE
 
 For each mutation, confirm from the output that it was caught by the assertion named in its comment — not merely that something failed. A mutation caught for the wrong reason is a mutation that will stop catching anything the day its real target changes.
 
-- [ ] **Step 8: Run the whole suite**
+- [ ] **Step 7: Run the whole suite**
 
 ```bash
 make test
 ```
 
-Expected: PASS, 51/51.
+Expected: PASS, 50/50.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add test/support/cmake/MutationSuite.cmake
@@ -1395,100 +1346,35 @@ git commit -m "test: break every decision this slice added"
 
 ---
 
-### Task 8: Slice 5a's carried items 2–4
+### Task 8: The provenance decisions slice 5a left unmutated
 
-Decision W9. Three items the slice-5a final review left, paid here because this slice edits the same files.
+Decision W9, trimmed. Slice 5a's review carried four items forward; this task takes the two that
+touch code slice 5b depends on and leaves the rest.
+
+**Cut from this task (YAGNI), and why each is safe to leave:**
+
+- **The `|`-in-a-path and directory-in-`SHARED_BODIES` refusals (carried item 3).** Both guard
+  against inputs nobody has written. A directory already fails the build inside
+  `fingerprint-manifest.ss`, and a `|` already fails as a manifest member naming no file — less
+  prettily, at a layer further from the mistake, but not silently and not green. Two checks, two
+  specification cases and two mutations for a nicer message is not a trade this slice should make.
+  Reopen if either is ever hit for real.
+- **The trimming and rendering mutations** — `harness-whitespace-byte?`, `harness-bytes->string`,
+  and `fingerprint->string`'s zero case. Real gaps, and peripheral to anything 5b touches. They are
+  reached from the provenance path without being part of it, which is exactly why 5a missed them and
+  why deferring them costs 5b nothing.
+
+**What stays, and why it is not YAGNI:** the three `harness-verify-provenance!` and
+`harness-provenance-failure!` decisions below are the code path 5b's entire claim rides on. Slice 5b
+adds a lane that must exit 3 when an artifact is stale; if the separator, the combining order, or
+the failure status are not load-bearing, that lane's 3 means less than it appears to. These are
+tested here because 5b depends on them, not because they were on a list.
 
 **Files:**
-- Modify: `test/support/cmake/MutationSuite.cmake`
 - Modify: `test/support/cmake/SchemeMutationSuite.cmake`
 - Modify: `cmake/ByteMachineSchemeLane.cmake`
-- Modify: `test/CMakeLists.txt`
 
-- [ ] **Step 1: Item 3 — refuse a `|` in a manifest path, and a directory in `SHARED_BODIES`**
-
-In `byte_machine_add_scheme_lane`, extend the existing `SHARED_BODIES` existence loop:
-
-```cmake
-  foreach(body IN LISTS arg_SHARED_BODIES)
-    if(NOT EXISTS "${body}")
-      message(FATAL_ERROR
-        "byte-machine: '${arg_NAME}' names a shared body that does not exist: "
-        "${body}.")
-    endif()
-    # EXISTS is true for a directory. Left unchecked, a directory passes
-    # configure and then fails inside fingerprint-manifest.ss as an unguarded
-    # Chez exception about a file it could not open -- a true statement about
-    # the wrong layer.
-    if(IS_DIRECTORY "${body}")
-      message(FATAL_ERROR
-        "byte-machine: '${arg_NAME}' names a directory as a shared body: "
-        "${body}. A manifest names files; a directory has no bytes to "
-        "fingerprint.")
-    endif()
-    # The manifest crosses into a test ENVIRONMENT entry as a |-joined list.
-    # A member containing | would split into two members that name nothing,
-    # and the run would report a provenance failure about a path no
-    # registration wrote. The analogous comma-in-a-Gambit-root case is already
-    # refused at configure time; this is the same rule for the same reason.
-    if(body MATCHES "\\|")
-      message(FATAL_ERROR
-        "byte-machine: '${arg_NAME}' names a shared body containing '|': "
-        "${body}. The manifest reaches the lane as a |-joined list, so this "
-        "path would split into two members naming nothing.")
-    endif()
-  endforeach()
-```
-
-- [ ] **Step 2: Add a specification case and a mutation for each refusal**
-
-In `ByteMachineSchemeLaneSpec.cmake`'s `BYTE_MACHINE_SPEC_CASE` dispatch:
-
-```cmake
-  elseif(c STREQUAL "lane-rejects-directory-as-shared-body")
-    byte_machine_add_scheme_lane(
-      NAME byte-machine.harness.example.chez.source
-      BACKEND chez
-      PROGRAM "${SPEC_SELF}"
-      SHARED_BODIES "${CMAKE_CURRENT_LIST_DIR}"
-      TIMEOUT 10)
-  elseif(c STREQUAL "lane-rejects-pipe-in-shared-body")
-    byte_machine_add_scheme_lane(
-      NAME byte-machine.harness.example.chez.source
-      BACKEND chez
-      PROGRAM "${SPEC_SELF}"
-      SHARED_BODIES "${SPEC_SELF}" "/tmp/a|b.scm"
-      TIMEOUT 10)
-```
-
-and beside the other rejection expectations:
-
-```cmake
-spec_expect_rejected("${SPEC_SELF}" "lane-rejects-directory-as-shared-body"
-  "byte-machine: 'byte-machine.harness.example.chez.source' names a directory as a shared body: ${CMAKE_CURRENT_LIST_DIR}. A manifest names files; a directory has no bytes to fingerprint.")
-spec_expect_rejected("${SPEC_SELF}" "lane-rejects-pipe-in-shared-body"
-  "byte-machine: 'byte-machine.harness.example.chez.source' names a shared body containing '|': /tmp/a|b.scm. The manifest reaches the lane as a |-joined list, so this path would split into two members naming nothing.")
-```
-
-The pipe case names a path that does not exist, so it must be ordered after the existence check to be reached at all — which is why the existence check stays first in the loop.
-
-In `MutationSuite.cmake`:
-
-```cmake
-byte_machine_mutation(
-  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
-  LABEL "lane: a directory passes as a shared body"
-  FIND [[    if(IS_DIRECTORY "${body}")]]
-  REPLACE [[    if(FALSE)]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
-  LABEL "lane: a shared body containing the manifest separator is accepted"
-  FIND [[    if(body MATCHES "\\|")]]
-  REPLACE [[    if(FALSE)]])
-```
-
-- [ ] **Step 3: Item 4 — correct the signature comment**
+- [ ] **Step 1: Correct the signature comment (carried item 4)**
 
 The header comment on `byte_machine_add_scheme_lane` omits `SHARED_BODIES` (required), `WRONG_FINGERPRINT`, and now `STALE_SOURCE_DIR`. Replace it:
 
@@ -1501,7 +1387,9 @@ The header comment on `byte_machine_add_scheme_lane` omits `SHARED_BODIES` (requ
 #                              [LABELS ...] [ENVIRONMENT ...])
 #
 # NAME, BACKEND, PROGRAM, TIMEOUT and SHARED_BODIES are required. The name's
-# fifth field is the execution mode and its fourth must equal BACKEND.
+# fifth field is the execution mode. Its fourth field names a backend too, and
+# nothing requires the two to agree: a disagreement points the wrong runtime at
+# a program only the other can load, which fails loudly on the first run.
 #
 # WRONG_FINGERPRINT hands the lane an expectation the run cannot match, and
 # STALE_SOURCE_DIR compiles the artifact from bodies of the same basename found
@@ -1512,60 +1400,7 @@ The header comment on `byte_machine_add_scheme_lane` omits `SHARED_BODIES` (requ
 # without it, a nonzero exit fails the test in the ordinary way.
 ```
 
-- [ ] **Step 4: Item 2 — the missing Scheme mutations**
-
-Two passes, appended to `SchemeMutationSuite.cmake` after the slice-5a passes.
-
-The first covers the three decisions the self-tests can witness with no manifest, so it runs under the file's existing verify command:
-
-```cmake
-# --- The trimming and rendering decisions slice 5a left unmutated ------------
-#
-# All three are witnessed by the self-tests' own fixed literals rather than by
-# provenance, so this pass needs no manifest and runs under the ordinary verify
-# command. That is also why they were missed: every slice-5a pass was written
-# against the provenance path, and these three are reached from it without
-# being part of it.
-function(byte_machine_slice5b_trimming_pass runtime)
-  byte_machine_mutation_reset()
-
-  if(runtime STREQUAL "chez")
-    set(spec harness-self-tests.chez.sps)
-  else()
-    set(spec harness-self-tests.gambit.scm)
-  endif()
-
-  # A carriage return stops counting as whitespace, so an expectation file
-  # written by a CRLF-translating tool would be compared with its CR attached.
-  # The slice-5a case covering tab and CR is what sees this.
-  byte_machine_mutation(
-    FILE ${RUNNER} SPEC ${spec}
-    LABEL "runner on ${runtime}: a carriage return stops being whitespace"
-    FIND [[  (or (= b 32) (= b 9) (= b 10) (= b 13)))]]
-    REPLACE [[  (or (= b 32) (= b 9) (= b 10)))]])
-
-  # The all-whitespace input is the one path that reaches the trimming scan's
-  # base case after consuming bytes. Slice 5a's review added the case; nothing
-  # had broken the branch it covers.
-  byte_machine_mutation(
-    FILE ${RUNNER} SPEC ${spec}
-    LABEL "runner on ${runtime}: an all-whitespace expectation is not empty"
-    FIND [[        ((= start n) "")]]
-    REPLACE [[        ((= start n) "0")]])
-
-  # Zero renders as the empty string rather than "0", so a lane whose bodies
-  # fingerprint to zero would report nothing where a value belongs.
-  byte_machine_mutation(
-    FILE ${FINGERPRINT} SPEC ${spec}
-    LABEL "fingerprint on ${runtime}: the zero case stops being special"
-    FIND [[  (if (= h 0)]]
-    REPLACE [[  (if #f]])
-
-  byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
-endfunction()
-```
-
-The second covers the three decisions that are only visible when a manifest of **two or more** bodies reaches the run. Passes 32 and 33 use a one-body manifest and structurally cannot witness either of the first two, which is precisely why the review found them unmutated:
+One pass, covering the three decisions that are only visible when a manifest of **two or more** bodies reaches the run. Passes 32 and 33 use a one-body manifest and structurally cannot witness either of the first two, which is precisely why the review found them unmutated:
 
 ```cmake
 # --- The provenance decisions a one-body manifest cannot witness -------------
@@ -1617,11 +1452,11 @@ endfunction()
 
 The third mutation in that pass only fires if provenance already fails, so this pass's verify command must be the wrong-expectation shape: set `BYTE_MACHINE_EXPECT_FINGERPRINT_FILE` to a file holding a value the run cannot produce, exactly as the `WRONG_FINGERPRINT` lanes do, and set `BYTE_MACHINE_FINGERPRINT_FILES` to the two staged manifest bodies joined with `|`. Under that command the unmutated tree exits 3, the first two mutations exit 3 for their own reasons, and the third exits 1 — which is what each `EXPECT_STATUS` above asserts.
 
-Call both passes for Chez unconditionally and for Gambit inside the existing `if(BYTE_MACHINE_GAMBIT_EXECUTABLE)` guard, matching the slice-5a passes.
+Call the pass for Chez unconditionally and for Gambit inside the existing `if(BYTE_MACHINE_GAMBIT_EXECUTABLE)` guard, matching the slice-5a passes.
 
 Update `EXPECTED_PASSES` and `EXPECTED_MUTATIONS` in that file to the real new numbers, and extend the comment above them to say what the increment is made of.
 
-- [ ] **Step 5: Run both mutation suites**
+- [ ] **Step 3: Run both mutation suites**
 
 ```bash
 ctest --preset pr -R 'mutation' -V
@@ -1629,19 +1464,19 @@ ctest --preset pr -R 'mutation' -V
 
 Expected: PASS. Both suites' asserted totals match what they actually ran.
 
-- [ ] **Step 6: Run the whole suite**
+- [ ] **Step 4: Run the whole suite**
 
 ```bash
 make test && cmake --preset no-scheme && ctest --preset no-scheme
 ```
 
-Expected: PASS, and the no-scheme preset unchanged at 10/10.
+Expected: PASS, 50/50 and 10/10.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add cmake/ByteMachineSchemeLane.cmake test/support/cmake/ByteMachineSchemeLaneSpec.cmake test/support/cmake/MutationSuite.cmake test/support/cmake/SchemeMutationSuite.cmake
-git commit -m "test: the decisions slice 5a left without a mutation"
+git add cmake/ByteMachineSchemeLane.cmake test/support/cmake/SchemeMutationSuite.cmake
+git commit -m "test: the provenance decisions slice 5a left without a mutation"
 ```
 
 ---
