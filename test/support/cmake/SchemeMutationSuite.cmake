@@ -100,10 +100,10 @@ set(BYTE_MACHINE_MUTATION_STAGE_DIRS
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "${STAGE_DIR}/test/support/harness/chez"
-  "${STAGE_DIR}/test/support/harness/shared"
-  "${GUARD_DIR}"
-  "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
+  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
 
 set(RUNNER test/support/harness/shared/harness-runner.scm)
 set(CHEZ_ADAPTER test/support/harness/chez/byte-machine/test/harness.sls)
@@ -314,14 +314,14 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE ${LAUNCHER} SPEC harness-self-tests.chez.sps
   LABEL "launcher: the shared body directory is off the source path"
-  FIND [[(source-directories (list shared-dir (path-directory program)))]]
+  FIND [[(source-directories (append source-dirs (list (path-directory program))))]]
   REPLACE [[(source-directories (list (path-directory program)))]])
 
 byte_machine_mutation(
   FILE ${LAUNCHER} SPEC harness-self-tests.chez.sps
   LABEL "launcher: the program's own directory is off the source path"
-  FIND [[(source-directories (list shared-dir (path-directory program)))]]
-  REPLACE [[(source-directories (list shared-dir))]])
+  FIND [[(source-directories (append source-dirs (list (path-directory program))))]]
+  REPLACE [[(source-directories source-dirs)]])
 
 # --- The Chez adapter's export list ----------------------------------------
 
@@ -398,10 +398,10 @@ byte_machine_mutation_reset()
 string(JOIN "|" EMPTY_SELECTION_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "${STAGE_DIR}/test/support/harness/chez"
-  "${STAGE_DIR}/test/support/harness/shared"
-  "${GUARD_DIR}"
-  "${STAGE_DIR}/test/support/harness/self/harness-empty-selection.chez.sps")
+  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-empty-selection.chez.sps")
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${CMAKE_COMMAND}" -E env
@@ -436,10 +436,10 @@ byte_machine_mutation_reset()
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "${STAGE_DIR}/test/support/harness/chez"
-  "${STAGE_DIR}/test/support/harness/shared"
-  "${GUARD_DIR}"
-  "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
 
 byte_machine_mutation(
   FILE ${RUNNER} SPEC harness-bootstrap.chez.sps
@@ -458,18 +458,15 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # helper so that exit 2 -- the refusal -- is what a healthy launcher scores.
 #
 # SPEC names the registered lane rather than a body basename, because the
-# witness is a whole invocation and not a program: with the argument count
-# wrong there is no program at all, and for the other two "passing" means the
-# named body never ran.
+# witness is a whole invocation and not a program: the first case is invoked
+# with no arguments at all, so there is no program to name, and for the other
+# two "passing" means the named body never ran.
 
 byte_machine_mutation_reset()
 
 string(JOIN "|" LAUNCHER_USAGE_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
-  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "${STAGE_DIR}/test/support/harness/chez"
-  "${STAGE_DIR}/test/support/harness/shared"
-  "${GUARD_DIR}")
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss")
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${CMAKE_COMMAND}"
@@ -478,9 +475,9 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   -P "${STAGE_DIR}/cmake/ByteMachineExpectExit.cmake")
 
 byte_machine_mutation(
-  FILE ${LAUNCHER} SPEC byte-machine.harness.launcher-usage.chez.source
-  LABEL "launcher: the argument count is not checked"
-  FIND [[(if (not (= (length args) 4))]]
+  FILE ${LAUNCHER} SPEC byte-machine.harness.launcher-no-program.chez.source
+  LABEL "launcher: a missing required flag is not checked"
+  FIND [[(if (null? (flag-values flag))]]
   REPLACE [[(if #f]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
@@ -490,10 +487,10 @@ byte_machine_mutation_reset()
 string(JOIN "|" LAUNCHER_ABSENT_GUARD_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "${STAGE_DIR}/test/support/harness/chez"
-  "${STAGE_DIR}/test/support/harness/shared"
-  "${ABSENT_GUARD_DIR}"
-  "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--object-guard" "${ABSENT_GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${CMAKE_COMMAND}"
@@ -514,10 +511,10 @@ byte_machine_mutation_reset()
 string(JOIN "|" LAUNCHER_DIRTY_GUARD_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "${STAGE_DIR}/test/support/harness/chez"
-  "${STAGE_DIR}/test/support/harness/shared"
-  "${DIRTY_GUARD_DIR}"
-  "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--object-guard" "${DIRTY_GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${CMAKE_COMMAND}"
@@ -550,10 +547,10 @@ file(MAKE_DIRECTORY "${COMPILE_GUARD_DIR}")
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "${STAGE_DIR}/test/support/harness/chez"
-  "${STAGE_DIR}/test/support/harness/shared"
-  "${COMPILE_GUARD_DIR}"
-  "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--object-guard" "${COMPILE_GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
 
 byte_machine_mutation(
   FILE ${LAUNCHER} SPEC byte-machine.harness.bootstrap.chez.source
@@ -682,17 +679,18 @@ file(TOUCH "${POISON_OBJECT}")
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "${POISON_ROOT}"
-  "${STAGE_DIR}/test/support/harness/shared"
-  "${POISON_GUARD_DIR}"
-  "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
+  "--library-root" "${POISON_ROOT}"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--object-guard" "${POISON_GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
 
 byte_machine_mutation(
   FILE ${LAUNCHER}
   SPEC "harness-self-tests.chez.sps against a library root holding a compiled object"
   LABEL "launcher: the library root is no longer paired with the object guard"
-  FIND [[(library-directories (list (cons library-root object-guard-dir)))]]
-  REPLACE [[(library-directories (list library-root))]])
+  FIND [[(library-directories
+ (map (lambda (root) (cons root object-guard-dir)) library-roots))]]
+  REPLACE [[(library-directories library-roots)]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

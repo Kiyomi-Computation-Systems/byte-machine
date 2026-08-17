@@ -38,15 +38,16 @@ function(byte_machine_scheme_lane_command backend program
         PARENT_SCOPE)
       return()
     endif()
-    # The launcher takes its four paths positionally: library root, shared body
-    # directory, object guard, program.
+    # Flags, not positions: a lane names one library root per library family it
+    # imports and one source directory per shared-body directory, and both
+    # counts grow with each slice.
     set(${out_command}
       "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
       "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
-      "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-      "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
-      "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
-      "${program}"
+      "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+      "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+      "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
+      "--program" "${program}"
       PARENT_SCOPE)
     set(${out_status} "ok" PARENT_SCOPE)
     return()

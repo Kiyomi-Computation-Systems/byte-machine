@@ -375,7 +375,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: the chez object guard is dropped, so a stale .so can be preferred over source"
-  FIND [[      "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
+  FIND [[      "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
 ]]
   # Same empty-REPLACE hazard as the expect-exit mutation above (CMP0174; see
   # its comment for why a truly empty REPLACE will not parse). Here the

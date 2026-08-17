@@ -84,13 +84,16 @@ set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
 byte_machine_scheme_lane_command(chez "/h/self/p.chez.sps" command status message)
 spec_check_equal("${status}" "ok" "chez lane classifies")
 spec_check_equal("${command}"
-  "/opt/chez;--script;/h/launchers/chez-source.ss;/h/chez;/h/shared;/b/guard;/h/self/p.chez.sps"
+  "/opt/chez;--script;/h/launchers/chez-source.ss;--library-root;/h/chez;--source-dir;/h/shared;--object-guard;/b/guard;--program;/h/self/p.chez.sps"
   "chez lane command line")
 
 # The guard directory is the entire mechanism that stops a stale .so from being
-# loaded in a lane that calls itself source. Asserted by position, because
-# dropping it would leave a command that still runs.
-list(GET command 5 guard)
+# loaded in a lane that calls itself source. Asserted through its flag rather
+# than by position: with a repeatable-flag protocol a position is no longer
+# stable, and a lane that dropped the guard would still run.
+list(FIND command "--object-guard" guard_index)
+math(EXPR guard_value_index "${guard_index} + 1")
+list(GET command "${guard_value_index}" guard)
 spec_check_equal("${guard}" "/b/guard" "chez lane passes the object guard directory")
 
 # --- Gambit ----------------------------------------------------------------

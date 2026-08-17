@@ -268,30 +268,25 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
   set(BYTE_MACHINE_HARNESS_ABSENT_GUARD_DIR
       "${CMAKE_BINARY_DIR}/chez-object-guard-absent")
 
-  # Three arguments where the launcher takes four.
+  # A launcher invoked with nothing at all. Replaces the exact-arity refusal the
+  # positional protocol had; with flags, "no arguments" is the natural form of
+  # the same mistake.
   byte_machine_add_exit_code_test(
-    NAME byte-machine.harness.launcher-usage.chez.source
+    NAME byte-machine.harness.launcher-no-program.chez.source
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
-            "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
-            "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
     EXPECT_EXIT 2
     TIMEOUT 120
     LABELS expected-red)
 
-  # The remaining two name a real program, so that deleting the refusal they
-  # assert produces a lane that runs and exits 0 rather than one that fails for
-  # an unrelated reason. The execution mode is declared for the same reason: it
-  # is what the bootstrap would assert if it ever got that far.
   byte_machine_add_exit_code_test(
     NAME byte-machine.harness.launcher-absent-guard.chez.source
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
-            "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
-            "${BYTE_MACHINE_HARNESS_ABSENT_GUARD_DIR}"
-            "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            "--object-guard" "${BYTE_MACHINE_HARNESS_ABSENT_GUARD_DIR}"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
     EXPECT_EXIT 2
     TIMEOUT 120
     LABELS expected-red
@@ -301,10 +296,95 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     NAME byte-machine.harness.launcher-dirty-guard.chez.source
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
-            "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
-            "${BYTE_MACHINE_HARNESS_DIRTY_GUARD_DIR}"
-            "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            "--object-guard" "${BYTE_MACHINE_HARNESS_DIRTY_GUARD_DIR}"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+    EXPECT_EXIT 2
+    TIMEOUT 120
+    LABELS expected-red
+    ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source")
+
+  # One lane per parse decision. A correctly set-up lane never reaches a
+  # refusal, so nothing else in this tree can notice one being deleted. Each
+  # names a real program where it can, so that deleting the refusal produces a
+  # lane that runs and exits 0 rather than one that fails for another reason.
+  byte_machine_add_exit_code_test(
+    NAME byte-machine.harness.launcher-unknown-flag.chez.source
+    COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+            "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
+            "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
+            "--librarie-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+    EXPECT_EXIT 2
+    TIMEOUT 120
+    LABELS expected-red
+    ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source")
+
+  # A trailing flag. Without this refusal it would mean "no program" and be
+  # reported as a missing required flag, sending the reader to the wrong line.
+  byte_machine_add_exit_code_test(
+    NAME byte-machine.harness.launcher-missing-value.chez.source
+    COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+            "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
+            "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
+            "--program"
+    EXPECT_EXIT 2
+    TIMEOUT 120
+    LABELS expected-red)
+
+  byte_machine_add_exit_code_test(
+    NAME byte-machine.harness.launcher-repeated-flag.chez.source
+    COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+            "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
+            "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
+    EXPECT_EXIT 2
+    TIMEOUT 120
+    LABELS expected-red
+    ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source")
+
+  # The three remaining required-flag entries. Each is a separate lane because
+  # required-flags is a list: an entry dropped from it is invisible to every
+  # lane but the one that omits that flag.
+  byte_machine_add_exit_code_test(
+    NAME byte-machine.harness.launcher-no-library-root.chez.source
+    COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+            "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
+            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+    EXPECT_EXIT 2
+    TIMEOUT 120
+    LABELS expected-red
+    ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source")
+
+  byte_machine_add_exit_code_test(
+    NAME byte-machine.harness.launcher-no-source-dir.chez.source
+    COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+            "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
+            "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+            "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+    EXPECT_EXIT 2
+    TIMEOUT 120
+    LABELS expected-red
+    ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source")
+
+  byte_machine_add_exit_code_test(
+    NAME byte-machine.harness.launcher-no-object-guard.chez.source
+    COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+            "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
+            "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
     EXPECT_EXIT 2
     TIMEOUT 120
     LABELS expected-red

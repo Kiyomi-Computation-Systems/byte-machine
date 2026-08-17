@@ -1,15 +1,28 @@
 ;;; Chez source-mode launcher.
 ;;;
-;;; Arguments: <library-root> <shared-dir> <object-guard-dir> <program>
+;;; Usage:
+;;;   chez-source.ss --library-root <dir> [--library-root <dir> ...]
+;;;                  --source-dir <dir>  [--source-dir <dir> ...]
+;;;                  --object-guard <dir> --program <path>
+;;;
+;;; WHY FLAGS RATHER THAN POSITIONS
+;;;
+;;; A lane needs one library root per library family it imports and one source
+;;; directory per shared-body directory, and both counts grow: slice 3 has two
+;;; of each, slice 5's compiled lanes and Milestone 1's libraries add more. A
+;;; positional protocol renumbers every caller at each of those steps. A
+;;; separator-joined list was rejected outright: it would need a path separator
+;;; that is `:` on Unix and `;` on Windows, which is the open question in
+;;; milestone-0-portability-spike.md section 9, for no benefit here.
 ;;;
 ;;; THE OBJECT GUARD
 ;;;
 ;;; Chez looks for a library's compiled object only in the object half of a
-;;; library-directories pair. Pairing the library root with a directory the
-;;; build keeps empty therefore makes a .so left beside the sources impossible
-;;; to load, which is what lets this lane call itself "source" honestly.
-;;; Pointing library-directories at the source root alone would do the opposite:
-;;; the object would be looked for next to the source and silently preferred.
+;;; library-directories pair. Pairing every root with a directory the build
+;;; keeps empty therefore makes a .so left beside the sources impossible to
+;;; load, which is what lets this lane call itself "source" honestly. Pointing
+;;; library-directories at the source roots alone would do the opposite: the
+;;; object would be looked for next to the source and silently preferred.
 ;;;
 ;;; WHAT THIS LAUNCHER DELIBERATELY DOES NOT CHECK
 ;;;
@@ -36,15 +49,67 @@
   (newline (current-error-port))
   (exit 2))
 
+;; --- the flag vocabulary ---------------------------------------------------
+;;
+;; required-flags is data, not control flow, so that dropping an entry is its
+;; own defect with its own lane rather than a silent widening of what a valid
+;; invocation looks like.
+
+(define known-flags
+  (list "--library-root" "--source-dir" "--object-guard" "--program"))
+
+;; One per line, and in a different order from known-flags, so that each entry
+;; is unique text in this file and can be removed by a mutation of its own.
+;; Dropping an entry is a real defect with a real consequence -- an invocation
+;; missing that flag stops being refused -- and it is invisible to every lane
+;; but the one that omits it.
+(define required-flags
+  (list "--program"
+        "--object-guard"
+        "--library-root"
+        "--source-dir"))
+
+(define single-valued-flags
+  (list "--object-guard" "--program"))
+
 (define args (command-line-arguments))
 
-(if (not (= (length args) 4))
-    (die "usage: chez-source.ss <library-root> <shared-dir> <object-guard-dir> <program>"))
+;; Decision 1: every argument is a known flag followed by a value.
+(let loop ((rest args))
+  (cond ((null? rest) #t)
+        ((not (member (car rest) known-flags))
+         (die (string-append "unknown flag: " (car rest))))
+        ((null? (cdr rest))
+         (die (string-append "flag has no value: " (car rest))))
+        (else (loop (cddr rest)))))
 
-(define library-root (list-ref args 0))
-(define shared-dir (list-ref args 1))
-(define object-guard-dir (list-ref args 2))
-(define program (list-ref args 3))
+;; Safe only after decision 1: the list is known to be flag/value pairs.
+(define (flag-values flag)
+  (let loop ((rest args) (found (list)))
+    (cond ((null? rest) (reverse found))
+          ((string=? (car rest) flag) (loop (cddr rest) (cons (cadr rest) found)))
+          (else (loop (cddr rest) found)))))
+
+;; Decision 2: every required flag appears.
+(for-each
+ (lambda (flag)
+   (if (null? (flag-values flag))
+       (die (string-append "missing required flag: " flag))))
+ required-flags)
+
+;; Decision 3: a single-valued flag appears at most once. Last-one-wins would
+;; silently run a different program, or guard a different directory, than the
+;; command line says.
+(for-each
+ (lambda (flag)
+   (if (> (length (flag-values flag)) 1)
+       (die (string-append "flag given more than once: " flag))))
+ single-valued-flags)
+
+(define library-roots (flag-values "--library-root"))
+(define source-dirs (flag-values "--source-dir"))
+(define object-guard-dir (car (flag-values "--object-guard")))
+(define program (car (flag-values "--program")))
 
 (if (not (file-directory? object-guard-dir))
     (die (string-append "object guard directory does not exist: " object-guard-dir)))
@@ -59,9 +124,13 @@
 (compile-imported-libraries #f)
 
 ;; A program may include bodies that live beside it, so its own directory joins
-;; the shared directory on the source path. Both are explicit: nothing resolves
-;; against the current working directory.
-(source-directories (list shared-dir (path-directory program)))
-(library-directories (list (cons library-root object-guard-dir)))
+;; the declared source directories. All of them are explicit: nothing resolves
+;; against the current working directory, which is what the working-directory
+;; matrix in test/CMakeLists.txt exists to keep true.
+(source-directories (append source-dirs (list (path-directory program))))
+
+;; Every root is paired with the same always-empty guard directory.
+(library-directories
+ (map (lambda (root) (cons root object-guard-dir)) library-roots))
 
 (load-program program)
