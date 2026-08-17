@@ -1845,13 +1845,41 @@ byte_machine_slice3_launcher_pass(
 
 Then update the file's header comment. It opens `NINE PASSES, BECAUSE NINE DIFFERENT WITNESSES ARE NEEDED` and enumerates them; that sentence is now false. Rewrite the count and append a paragraph for the new groups: the body on each runtime (why twice, when the runner body is verified once), the launcher's parse decisions (why one pass each), the working-directory matrix (why three passes for one mutation, and why one of them declares a survivor), and the Gambit search roots.
 
+**Executed as: also delete Task 1's interim mutation, and add one more parse-decision pass.** Two things the brief above could not know when it was written:
+
+1. Task 1 left an interim mutation labelled `"launcher: a missing required flag is not checked"`, verified by invoking the launcher with no arguments at all (SPEC named after that invocation's own ctest lane, `byte-machine.harness.launcher-no-program.chez.source`). Its FIND/REPLACE is the exact pair this step's `"launcher: a missing required flag is not noticed"` pass declares, against a strictly more precise invocation (missing only `--library-root`, everything else present). Keeping both would mean two mutations proving the same line, one of them permanently coarser than the other. The interim one — its whole reset/verify-command/mutation/run block — is deleted when this step's pass lands. Its own pass had no other mutation in it, so deleting the mutation without deleting the block would leave `byte_machine_mutation_run` looking at a zero-mutation pass, which is a `FATAL_ERROR` by design (an empty pass passes trivially). The retired ctest lane itself is untouched and keeps running as a real regression test; it is just no longer this suite's mutation witness. Deleting it shifts every later pass's number down by one: the two remaining launcher-refusal passes become "Passes 5 to 6", `compile-imported-libraries` becomes Pass 7, the library-directories pairing becomes Pass 8.
+
+2. `--object-guard` is never exercised as a repeated flag by any pass above, and nothing notices if it is dropped from `single-valued-flags` specifically (as opposed to the general repeat-check being disabled outright, which the existing `launcher-repeated-flag` pass — witnessed only through `--program` — already catches). Closed with one more real ctest lane in `test/CMakeLists.txt` (`byte-machine.harness.launcher-repeated-object-guard.chez.source`, passing `--object-guard` twice with the same real guard directory — the check counts occurrences, not distinct values — expecting exit 2) and one more `byte_machine_slice3_launcher_pass` call here, appended after the four required-flags passes:
+
+    ```cmake
+    # One more, for single-valued-flags. --object-guard has never been exercised as
+    # a repeated flag: the general check just above is witnessed only through
+    # --program (LAUNCHER_BASE_ARGS already carries one --object-guard, so this
+    # pass repeats it rather than adding a second fixture guard directory --
+    # decision 3 counts occurrences, not distinct values). Dropping --object-guard
+    # from single-valued-flags specifically, leaving the check itself and
+    # --program's membership in the list untouched, is invisible to every
+    # invocation but this one.
+    byte_machine_slice3_launcher_pass(
+      byte-machine.harness.launcher-repeated-object-guard.chez.source
+      "launcher: --object-guard is dropped from single-valued-flags"
+      [[(define single-valued-flags
+      (list "--object-guard" "--program"))]]
+      [[(define single-valued-flags
+      (list "--program"))]]
+      ${LAUNCHER_BASE_ARGS}
+      "--object-guard" "${GUARD_DIR}")
+    ```
+
+The interim deletion (item 1 above) removes one whole pass from the baseline group, so it is eight passes (1 to 8), not nine, by the time this step is reached; the body passes two steps back are "Pass 9" and "Pass 10", not 10 and 11. This step's parse-decision passes therefore span "Passes 11 to 19" -- nine sub-passes (eight from the brief plus the one for single-valued-flags), not eight. The working-directory matrix passes in the next step land on "Passes 20 to 22" regardless: the one pass the interim deletion removes and the one this step adds cancel exactly by the time the running count reaches them. While already in `test/support/launchers/chez-source.ss` for these passes, also correct decision 3's comment: it claimed "last-one-wins", but `flag-values` conses onto an accumulator and reverses at the end, so it returns occurrences in command-line order and `(car (flag-values flag))` takes the *first* -- first-one-wins, not last.
+
 Run it before moving on:
 
 ```bash
 ctest --preset pr -R 'byte-machine\.harness\.scheme-mutation' --output-on-failure
 ```
 
-Expected: PASS, with eight more mutations reported caught. A dropped-entry mutation reported *uncaught* means its FIND text matched somewhere other than `required-flags` — check that `known-flags` is still written inline on one line, which is what makes the eight-space-indented entries unique.
+Expected (as written above): PASS, with eight more mutations reported caught. Expected (as executed, with the interim deletion and the extra pass folded in): PASS, with the one interim mutation retired and nine new ones (eight required-flags/general-check passes plus the single-valued-flags one) taking its place — net eight more mutations and eight more passes than immediately before this step, since retiring one pass and adding nine leaves eight. A dropped-entry mutation reported *uncaught* means its FIND text matched somewhere other than `required-flags` — check that `known-flags` is still written inline on one line, which is what makes the eight-space-indented entries unique.
 
 - [ ] **Step 6: Add the three matrix passes**
 
