@@ -6,16 +6,18 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# TWENTY-THREE PASSES WHEN GAMBIT IS DISCOVERED, BECAUSE TWENTY-THREE
+# TWENTY-FIVE PASSES WHEN GAMBIT IS DISCOVERED, BECAUSE TWENTY-FIVE
 # DIFFERENT WITNESSES ARE NEEDED
 #
-# Two of the twenty-three are gated on BYTE_MACHINE_GAMBIT_EXECUTABLE, the same
-# precondition every Gambit lane in this tree runs under: pass 2, the Gambit
-# adapter's export list (one mutation), and pass 10, the placeholder body's
+# Three of the twenty-five are gated on BYTE_MACHINE_GAMBIT_EXECUTABLE, the
+# same precondition every Gambit lane in this tree runs under: pass 2, the
+# Gambit adapter's export list (one mutation); pass 10, the placeholder body's
 # decisions run a second time on Gambit (six mutations, the same list pass 9
-# declares for Chez). Without Gambit this file runs twenty-one passes and
-# forty-nine mutations rather than twenty-three passes and fifty-six -- the
-# with-Gambit pair less that 2-pass, 7-mutation delta.
+# declares for Chez); and pass 25, the consumer body's decisions on Gambit
+# (three mutations, the same list pass 24 declares for Chez). Without Gambit
+# this file runs twenty-two passes and fifty-two mutations rather than
+# twenty-five passes and sixty-two -- the with-Gambit pair less that 3-pass,
+# 10-mutation delta.
 #
 # EXPECTED_PASSES_WITH_GAMBIT and EXPECTED_MUTATIONS_WITH_GAMBIT are declared
 # below; the without-Gambit pair is computed from them and the delta rather
@@ -105,6 +107,12 @@
 # failure attributable to content rather than to the mere presence of a
 # same-named file.
 #
+# Passes 24 and 25 are the consumer body's three decisions, run once per
+# runtime for the reason passes 9 and 10 give. Slice 4's design calls the first
+# of the three out as caught by an induced raise rather than by a failed
+# comparison -- weaker than the other two, weighed and accepted rather than
+# missed.
+#
 # WHAT THIS SUITE NEEDS FROM ITS ENVIRONMENT
 #
 # The self-tests assert that the lane declared its execution mode and that the
@@ -116,12 +124,12 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "TWENTY-THREE PASSES..." above. Declared here, rather than only in prose,
+# See "TWENTY-FIVE PASSES..." above. Declared here, rather than only in prose,
 # so the count enforced at the bottom of this file is the same text a reader
 # checks by eye at the top -- one number to keep in sync, not two that can
 # quietly disagree.
-set(EXPECTED_PASSES_WITH_GAMBIT 23)
-set(EXPECTED_MUTATIONS_WITH_GAMBIT 56)
+set(EXPECTED_PASSES_WITH_GAMBIT 25)
+set(EXPECTED_MUTATIONS_WITH_GAMBIT 62)
 
 # Passes 2 and 10 are the only ones gated on BYTE_MACHINE_GAMBIT_EXECUTABLE:
 # pass 2 (the Gambit adapter's export list) is one mutation, pass 10 (the
@@ -129,8 +137,8 @@ set(EXPECTED_MUTATIONS_WITH_GAMBIT 56)
 # 9 declares for Chez. The without-Gambit pair is this delta subtracted from
 # the with-Gambit pair, not a second hand-maintained pair of literals, so a
 # non-gated pass added anywhere in this file changes both together.
-set(GAMBIT_ONLY_PASSES 2)
-set(GAMBIT_ONLY_MUTATIONS 7)
+set(GAMBIT_ONLY_PASSES 3)
+set(GAMBIT_ONLY_MUTATIONS 10)
 math(EXPR EXPECTED_PASSES_WITHOUT_GAMBIT
   "${EXPECTED_PASSES_WITH_GAMBIT} - ${GAMBIT_ONLY_PASSES}")
 math(EXPR EXPECTED_MUTATIONS_WITHOUT_GAMBIT
@@ -1225,9 +1233,88 @@ endforeach()
 # from the matrix's identical directory instead of the stage.
 set(BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY "")
 
+# --- Pass 24: the consumer body's decisions, on Chez -------------------------
+#
+# Same argument as passes 9 and 10, for a second body: a wrapper that
+# reimplemented this body is exactly a wrapper whose runtime does not notice the
+# body changing, so the list runs once per runtime.
+
+set(CONSUMER_BODY src/common/byte-machine/placeholder-consumer.scm)
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "--library-root" "${STAGE_DIR}/src/chez"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--source-dir" "${STAGE_DIR}/src/common/byte-machine"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/placeholder-identity-tests.chez.sps")
+
+# byte_machine_slice4_body_pass(<runtime>)
+#
+# Declared once and called per runtime, for the reason
+# byte_machine_slice3_body_pass gives: a mutation added for one runtime and
+# forgotten for the other is precisely the asymmetry the pair exists to rule
+# out. The reset, the declarations and the run all live inside this function
+# because byte_machine_mutation_reset and byte_machine_mutation both write the
+# counter with PARENT_SCOPE and agree only while they share a caller.
+function(byte_machine_slice4_body_pass runtime)
+  byte_machine_mutation_reset()
+
+  if(runtime STREQUAL "chez")
+    set(spec placeholder-identity-tests.chez.sps)
+  else()
+    set(spec placeholder-identity-tests.gambit.scm)
+  endif()
+
+  # Caught by a raise rather than by a comparison: consume takes the recognised
+  # branch for 7, and placeholder-value indexes a non-vector. Weaker than the
+  # two below, and accepted rather than missed -- the alternative is a defensive
+  # branch in consume that exists only to make this mutation fail prettily, and
+  # that branch would be a decision with no independent reason to exist. See
+  # section 5.3 of the slice-4 design.
+  byte_machine_mutation(
+    FILE ${CONSUMER_BODY} SPEC ${spec}
+    LABEL "consumer on ${runtime}: the argument is not checked at all"
+    FIND [[  (if (placeholder? p)]]
+    REPLACE [[  (if #t]])
+
+  byte_machine_mutation(
+    FILE ${CONSUMER_BODY} SPEC ${spec}
+    LABEL "consumer on ${runtime}: the recognised branch yields the marker, not the value"
+    FIND [[      (placeholder-value p)]]
+    REPLACE [[      (placeholder-marker)]])
+
+  # The only mutation that reaches D3's second clause by itself: recognition
+  # still works, and the outcome is merely a different object that prints the
+  # same. This is the one an eq?-free test would miss entirely.
+  byte_machine_mutation(
+    FILE ${CONSUMER_BODY} SPEC ${spec}
+    LABEL "consumer on ${runtime}: the outcome is a lookalike, not the owner's singleton"
+    FIND [[      (placeholder-marker)))]]
+    REPLACE [[      (vector 'byte-machine-marker)))]])
+
+  byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+endfunction()
+
+byte_machine_slice4_body_pass("chez")
+
+# --- Pass 25: the same decisions, on Gambit ---------------------------------
+
+if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
+  set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+    "${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
+    "-:search=${STAGE_DIR}/test/support/harness/gambit,search=${STAGE_DIR}/src/gambit"
+    "-f"
+    "${STAGE_DIR}/test/common/placeholder-identity-tests.gambit.scm")
+
+  byte_machine_slice4_body_pass("gambit")
+endif()
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES_WITH_GAMBIT and friends, and the "TWENTY-THREE PASSES"
+# see EXPECTED_PASSES_WITH_GAMBIT and friends, and the "TWENTY-FIVE PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.
