@@ -928,16 +928,28 @@ byte_machine_slice3_launcher_pass(
   ${LAUNCHER_BASE_ARGS}
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
 
-# Named for the decision, not for the flag: this pass witnesses the general
-# check (decision 2's own `if`), which would break identically no matter which
-# required flag the invocation happened to omit. library-root was picked only
-# because it made a convenient invocation to reuse; the entry-specific name
-# belongs to the pass below that actually drops --library-root from the list,
-# and reusing it here left two different mutations reporting under one
-# indistinguishable lane name in the transcript.
+# SPEC must name a lane `ctest -N` actually lists: it is the transcript name a
+# real invocation is judged under, and once a verify command is set (as every
+# pass in this file does), SPEC is otherwise ignored -- so a value that names
+# no real lane is checked by nothing, and nothing notices. This pass and the
+# entry-specific one below that drops --library-root from required-flags both
+# run the identical missing-library-root invocation, so both are witnessed by
+# the same registered lane, byte-machine.harness.launcher-no-library-root.chez.source.
+# An earlier revision renamed this pass's SPEC to
+# "byte-machine.harness.launcher-required-flag-unchecked.chez.source" to stop
+# the two mutations sharing one name in the transcript -- a real problem -- but
+# that traded it for a worse one: a unique SPEC value naming a lane that does
+# not exist. The disambiguation belongs in LABEL instead, which is free text
+# with no such constraint: this pass witnesses decision 2's own check (the
+# `if` that runs once per required flag, so it breaks identically no matter
+# which flag the invocation happened to omit -- library-root was picked only
+# because it made a convenient invocation to reuse), while the pass below
+# witnesses required-flags' library-root *entry* specifically, i.e. whether
+# the flag is still in the list decision 2 walks at all. Two different lines,
+# two different mutations, one shared witness.
 byte_machine_slice3_launcher_pass(
-  byte-machine.harness.launcher-required-flag-unchecked.chez.source
-  "launcher: a missing required flag is not noticed"
+  byte-machine.harness.launcher-no-library-root.chez.source
+  "launcher: a missing required flag is not noticed (decision 2's own check, general across every entry; reuses the no-library-root invocation below only for convenience)"
   [[   (if (null? (flag-values flag))]]
   [[   (if #f]]
   "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
@@ -1023,9 +1035,15 @@ byte_machine_slice3_launcher_pass(
 # both closing parens included, and the REPLACE is itself a complete,
 # well-formed define, so there is no dangling ")" left for a comment to
 # swallow.
+#
+# The invocation below repeats --program, so the real lane witnessing it is
+# byte-machine.harness.launcher-repeated-flag.chez.source, not a name of this
+# pass's own -- see the SPEC-must-name-a-real-lane comment above the
+# required-flag-unchecked pass for why that match matters and what happens
+# when it drifts.
 byte_machine_slice3_launcher_pass(
-  byte-machine.harness.launcher-repeated-program.chez.source
-  "launcher: --program is dropped from single-valued-flags"
+  byte-machine.harness.launcher-repeated-flag.chez.source
+  "launcher: --program is dropped from single-valued-flags (reuses the launcher-repeated-flag invocation, which already repeats --program)"
   [[(define single-valued-flags
   (list "--object-guard" "--program"))]]
   [[(define single-valued-flags
