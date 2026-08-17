@@ -943,11 +943,31 @@ spec_check_equal("${message}"
   "a Gambit search root must be absolute, but 'relative/root' is not. Gambit resolves a relative root against its own working directory, so the lane would find its libraries or not depending on where it was launched."
   "relative root message")
 
-# Seeded, so a function that never writes its message is distinguishable from
-# one that clears it.
-set(message "seed")
+# Seeded with values no correct call could produce, so that "cleared" is
+# asserted rather than inherited. The function never writes its message on the
+# success path and never writes its option on the rejection path -- the up-front
+# clear is the only thing that does either -- so an assertion against an
+# unseeded variable is satisfied by a function that does nothing at all. Without
+# the seeding these pass by accident, because the driver reuses these two
+# variable names across calls and a stale correct value is already sitting there.
+set(option "stale-option")
+set(message "stale-message")
 byte_machine_scheme_lane_gambit_search(option status message "/a")
 spec_check_equal("${message}" "" "an accepted search list clears the message")
+
+set(option "stale-option")
+byte_machine_scheme_lane_gambit_search(option status message "/a" "/b,c")
+spec_check_equal("${option}" "" "a rejected search list clears the option")
+
+# A root with both defects reports the comma, which is the more urgent of the
+# two: a comma makes gsi print its usage banner and run no Scheme at all, on
+# every Gambit lane at once, while a relative root merely makes one lane depend
+# on where it was launched. Pinned here because nothing else can see it -- every
+# other case supplies a root with exactly one defect, so reordering the two
+# checks would be invisible to the whole suite.
+byte_machine_scheme_lane_gambit_search(option status message "/a" "rel,ative/root")
+spec_check_equal("${status}" "comma-in-path"
+  "a root with both defects reports the comma first")
 ```
 
 Add a rejection case to the `BYTE_MACHINE_SPEC_CASE` dispatch, before its `else()`:
@@ -997,7 +1017,7 @@ In `cmake/ByteMachineSchemeLane.cmake`, add to the functional core, above `byte_
 #                                        <dir>...)
 #
 # Build Gambit's `-:` runtime-option argument putting every <dir> on the module
-# search path. Status is `ok` or `comma-in-path`.
+# search path. Status is `ok`, `comma-in-path`, or `relative-path`.
 #
 # The comma check is not defensive programming. Gambit's -: option list is
 # comma-separated, so a root containing one is not a wrong path but a malformed
@@ -1112,7 +1132,7 @@ byte_machine_mutation(
 ctest --preset pr -R 'byte-machine\.harness\.cmake-mutation' --output-on-failure
 ```
 
-Expected: PASS, with the four new mutations reported caught.
+Expected: PASS, with the six new mutations reported caught — the two refusals, the join separator, the registration guard, the up-front clearing of the outputs, and the ordering of the two checks.
 
 - [ ] **Step 7: Commit**
 
