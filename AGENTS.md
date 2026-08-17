@@ -22,3 +22,22 @@
 * Project should be portable across amd64 and arm64
 * Plans live in `/docs/plans`, decision records in `/docs/decisions`
 * Add entries to `CHANGELOG.md` for each release
+
+## Closing ritual
+
+Run this when a branch's work is complete and reviewed. It is a ritual because
+each step is easy to skip and each one left undone costs someone else later.
+
+1. **Squash merge the PR.** One commit per branch on `main`. The granular
+   history — the review trail, the fixes, the plan corrections they forced —
+   stays readable in the PR.
+2. **Catch up local `main`.** Fetch and fast-forward, so the next branch starts
+   from what was actually merged rather than from where this one began.
+3. **Clean up branches.** Delete the merged branch locally and on the remote.
+   A branch list that still shows finished work makes the unfinished work
+   harder to see.
+4. **Reflect.** Put what was learned where it will be found again, choosing the
+   destination by who needs it: durable facts and corrections into memory,
+   project standards into this file, and anything the code should say about
+   itself into a comment at the site. A finding recorded only in a session
+   transcript has not been recorded.
