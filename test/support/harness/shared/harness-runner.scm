@@ -1,0 +1,470 @@
+;;; byte-machine private portable test runner.
+;;;
+;;; PORTABILITY CONTRACT
+;;;
+;;; This file is included verbatim by both the R6RS and the R7RS wrapper. It may
+;;; use only identifiers common to both standards, and must never name Chez or
+;;; Gambit. Everything a runtime does differently arrives through the adapter
+;;; protocol, documented in
+;;; docs/plans/milestone-0-slice-2-test-harness.md section 6.
+;;;
+;;; Notable exclusions, each of which differs between the two standards:
+;;; define-record-type, string ports, error, condition accessors, hash tables,
+;;; and sorting. Records are plain lists behind accessors for the same reason.
+;;;
+;;; PROCESS STATUS (spec section 5.2)
+;;;
+;;;   0  every selected case passed
+;;;   1  one or more assertions failed
+;;;   2  harness, configuration, or registration error
+;;;   3  reserved: the run could not confirm it executed the intended text
+;;;
+;;; Status is computed once, at the end, rather than chosen at each throw site,
+;;; so a new error path cannot forget to change it.
+
+(define harness-status-pass 0)
+(define harness-status-failed 1)
+(define harness-status-harness-error 2)
+(define harness-status-provenance 3)
+
+;; ---------------------------------------------------------------------------
+;; Pure helpers
+;; ---------------------------------------------------------------------------
+
+(define (harness-join parts separator)
+  (if (null? parts)
+      ""
+      (let loop ((rest (cdr parts)) (acc (car parts)))
+        (if (null? rest)
+            acc
+            (loop (cdr rest) (string-append acc separator (car rest)))))))
+
+(define (harness-string-contains? haystack needle)
+  (let ((hn (string-length haystack))
+        (nn (string-length needle)))
+    (let outer ((start 0))
+      (cond ((> (+ start nn) hn) #f)
+            ((let inner ((i 0))
+               (cond ((= i nn) #t)
+                     ((char=? (string-ref haystack (+ start i))
+                              (string-ref needle i))
+                      (inner (+ i 1)))
+                     (else #f)))
+             #t)
+            (else (outer (+ start 1)))))))
+
+;; A trailing separator yields a trailing empty field, deliberately: dropping it
+;; would make "a." and "a" split alike, and a filter written against the
+;; difference would silently stop distinguishing them.
+(define (harness-split text separator)
+  (let ((n (string-length text)))
+    (let loop ((i 0) (start 0) (acc '()))
+      (cond ((= i n) (reverse (cons (substring text start n) acc)))
+            ((char=? (string-ref text i) separator)
+             (loop (+ i 1) (+ i 1) (cons (substring text start i) acc)))
+            (else (loop (+ i 1) start acc))))))
+
+(define (harness-take lst count)
+  (if (or (= count 0) (null? lst))
+      '()
+      (cons (car lst) (harness-take (cdr lst) (- count 1)))))
+
+(define (harness-member? x lst)
+  (cond ((null? lst) #f)
+        ((equal? x (car lst)) #t)
+        (else (harness-member? x (cdr lst)))))
+
+;; An empty BYTE_MACHINE_TEST_FILTER and an absent one must mean the same
+;; thing -- no filter -- because a shell that writes `VAR=` and one that never
+;; sets VAR at all are otherwise indistinguishable in intent. Pure, and kept
+;; separate from harness-begin's environment read, so the rule is directly
+;; testable: harness-string-contains? treats an empty needle as matching every
+;; id anyway, so an empty and an unnormalised "" filter select identically and
+;; no case-selection outcome could ever tell the two apart from the outside.
+(define (harness-normalize-filter value)
+  (if (and value (string=? value "")) #f value))
+
+;; ---------------------------------------------------------------------------
+;; Mutable result state (the imperative shell of the runner)
+;; ---------------------------------------------------------------------------
+
+;; Capture and restore the three pieces of state a failing `check` mutates:
+;; harness-failure-count, harness-check-count, harness-current-case-failed.
+;; Exported for the bootstrap, which must undo its own deliberately failing
+;; check without depending on harness-probe -- itself one of the things the
+;; bootstrap exists to check. The two must stay symmetric: restoring less
+;; than capture saved could silently erase a real prior failure's flag.
+(define (harness-counters)
+  (list harness-failure-count harness-check-count harness-current-case-failed))
+
+(define (harness-restore-counters! saved)
+  (set! harness-failure-count (car saved))
+  (set! harness-check-count (car (cdr saved)))
+  (set! harness-current-case-failed (car (cdr (cdr saved)))))
+
+(define harness-suite-name "(none)")
+(define harness-group-stack '())
+(define harness-case-ids '())
+(define harness-current-case #f)
+(define harness-current-case-failed #f)
+(define harness-case-count 0)
+(define harness-failed-case-count 0)
+(define harness-check-count 0)
+(define harness-failure-count 0)
+(define harness-error-count 0)
+(define harness-skipped-count 0)
+(define harness-cleanup-failure-count 0)
+(define harness-failures '())
+(define harness-filter #f)
+(define harness-verbose #f)
+(define harness-probe-depth 0)
+
+(define (harness-quiet?) (> harness-probe-depth 0))
+
+;; Flushed per line rather than at the summary. Standard output is block
+;; buffered when it is not a terminal, so a process killed by a supervisor loses
+;; everything it had written -- and the run whose output matters most is the one
+;; that was killed before it could finish.
+(define (harness-say line)
+  (if (not (harness-quiet?))
+      (begin (display line) (newline) (adapter-flush-output))))
+
+(define (harness-say-always line)
+  (display line) (newline) (adapter-flush-output))
+
+;; ---------------------------------------------------------------------------
+;; Failure and error recording
+;; ---------------------------------------------------------------------------
+
+;; Emitted per failure rather than once per run, because a log is usually read
+;; at the failure rather than from the top. The id and the artifact path are
+;; quoted because a case name and a filesystem path may both contain spaces,
+;; which would otherwise make a key=value line ambiguous to parse.
+(define (harness-failure-context id)
+  (string-append
+   "byte-machine-harness: FAIL-CONTEXT id=\"" id "\""
+   " test=" (let ((t (adapter-environment-variable "BYTE_MACHINE_TEST_NAME")))
+              (if t t "(unregistered)"))
+   " backend=" (adapter-runtime-name)
+   " mode=" (adapter-execution-mode)
+   " os=" (adapter-os)
+   " architecture=" (adapter-architecture)
+   " runtime-version=" (adapter-runtime-version)
+   " machine-type=" (adapter-machine-type)
+   " artifacts=\"" (let ((d (adapter-environment-variable "BYTE_MACHINE_TEST_TMPDIR")))
+                     (if d d "(none)"))
+   "\""))
+
+(define (harness-record-failure! what detail)
+  (set! harness-failure-count (+ harness-failure-count 1))
+  (set! harness-current-case-failed #t)
+  (let ((id (if harness-current-case harness-current-case "(no case)")))
+    (set! harness-failures (cons (list id what detail) harness-failures))
+    (harness-say (string-append "byte-machine-harness: FAIL " id ": " what
+                                (if (string=? detail "")
+                                    ""
+                                    (string-append " -- " detail))))
+    (harness-say (harness-failure-context id))))
+
+(define (harness-record-error! detail)
+  (set! harness-error-count (+ harness-error-count 1))
+  (harness-say (string-append "byte-machine-harness: HARNESS-ERROR " detail)))
+
+;; ---------------------------------------------------------------------------
+;; Assertions
+;; ---------------------------------------------------------------------------
+
+(define (harness-count-check!)
+  (set! harness-check-count (+ harness-check-count 1)))
+
+(define (check what value)
+  (harness-count-check!)
+  (if value
+      #t
+      (begin (harness-record-failure! what "expected a true value") #f)))
+
+(define (check-equal what actual expected)
+  (harness-count-check!)
+  (if (equal? actual expected)
+      #t
+      (begin
+        (harness-record-failure!
+         what
+         (string-append "expected " (adapter-value->string expected)
+                        ", got " (adapter-value->string actual)))
+        #f)))
+
+(define (check-not-equal what actual unexpected)
+  (harness-count-check!)
+  (if (equal? actual unexpected)
+      (begin
+        (harness-record-failure!
+         what
+         (string-append "expected any value other than "
+                        (adapter-value->string unexpected)))
+        #f)
+      #t))
+
+(define (check-fail what detail)
+  (harness-count-check!)
+  (harness-record-failure! what detail)
+  #f)
+
+;; Run `thunk`; the check passes only when it raises an object satisfying
+;; `predicate`. Returning normally is a failure, and so is raising the wrong
+;; thing -- an expected error may match only its declared category.
+(define (check-raises what predicate thunk)
+  (harness-count-check!)
+  (let ((outcome (guard (e (#t (list 'raised e)))
+                   (list 'returned (thunk)))))
+    (cond
+      ((eq? (car outcome) 'returned)
+       (harness-record-failure!
+        what
+        (string-append "expected a raise, but the thunk returned "
+                       (adapter-value->string (car (cdr outcome)))))
+       #f)
+      ((predicate (car (cdr outcome))) #t)
+      (else
+       (harness-record-failure!
+        what
+        (string-append "raised object did not satisfy the predicate: "
+                       (adapter-describe-condition (car (cdr outcome)))))
+       #f))))
+
+;; Run `body`, then always run `cleanup`. A failure inside cleanup is reported
+;; separately and never replaces the original failure, which is re-raised
+;; unchanged: the first condition is the one that explains the defect.
+(define (with-cleanup body cleanup)
+  (let ((outcome (guard (e (#t (list 'raised e)))
+                   (list 'value (body)))))
+    (let ((cleanup-outcome (guard (e (#t (list 'raised e)))
+                             (list 'value (cleanup)))))
+      (if (eq? (car cleanup-outcome) 'raised)
+          (begin
+            (set! harness-cleanup-failure-count
+                  (+ harness-cleanup-failure-count 1))
+            (harness-record-failure!
+             "cleanup raised"
+             (adapter-describe-condition (car (cdr cleanup-outcome)))))))
+    (if (eq? (car outcome) 'raised)
+        (raise (car (cdr outcome)))
+        (car (cdr outcome)))))
+
+;; ---------------------------------------------------------------------------
+;; Groups and cases
+;; ---------------------------------------------------------------------------
+
+(define (harness-current-prefix)
+  (if (null? harness-group-stack)
+      ""
+      (string-append (harness-join (reverse harness-group-stack) ".") ".")))
+
+(define (harness-group name thunk)
+  (set! harness-group-stack (cons name harness-group-stack))
+  (let ((outcome (guard (e (#t (list 'raised e)))
+                   (list 'value (thunk)))))
+    (set! harness-group-stack (cdr harness-group-stack))
+    (if (eq? (car outcome) 'raised)
+        (raise (car (cdr outcome)))
+        (car (cdr outcome)))))
+
+(define (harness-selected? id)
+  (if harness-filter
+      (harness-string-contains? id harness-filter)
+      #t))
+
+;; Exported so the self-tests can exercise filtering without depending on the
+;; process environment.
+(define (harness-set-filter! value) (set! harness-filter value))
+
+;; A raise inside a case is that case's failure, not the suite's death.
+;; Otherwise the first broken case hides every case after it, and the log names
+;; one defect where there may be five.
+(define (harness-case name thunk)
+  (let ((id (string-append (harness-current-prefix) name)))
+    (cond
+      ;; A duplicate id means one registration silently became unreachable:
+      ;; coverage lost with no signal at all. That is a defect in the suite, not
+      ;; a failing assertion, so it is an error and not a failure.
+      ((harness-member? id harness-case-ids)
+       (harness-record-error! (string-append "duplicate case id " id)))
+      (else
+       (set! harness-case-ids (cons id harness-case-ids))
+       (if (not (harness-selected? id))
+           (set! harness-skipped-count (+ harness-skipped-count 1))
+           (begin
+             (set! harness-case-count (+ harness-case-count 1))
+             (set! harness-current-case id)
+             (set! harness-current-case-failed #f)
+             (let ((outcome (guard (e (#t (list 'raised e)))
+                              (list 'value (thunk)))))
+               (if (eq? (car outcome) 'raised)
+                   (harness-record-failure!
+                    "case raised"
+                    (adapter-describe-condition (car (cdr outcome))))))
+             (if harness-current-case-failed
+                 (set! harness-failed-case-count (+ harness-failed-case-count 1))
+                 (if harness-verbose
+                     (harness-say (string-append "byte-machine-harness: pass " id))))
+             (set! harness-current-case #f)))))))
+
+;; ---------------------------------------------------------------------------
+;; Probes
+;; ---------------------------------------------------------------------------
+;;
+;; A probe runs a thunk against a fresh, isolated result state and returns what
+;; happened, without disturbing the enclosing suite. This is how the runner
+;; tests itself: a self-test needs to observe a *failing* check being recorded
+;; without that failure counting against the run. Output is suppressed so an
+;; expected failure cannot be mistaken for a real one in the log.
+
+(define (harness-capture-state)
+  (list harness-group-stack harness-case-ids harness-current-case
+        harness-current-case-failed harness-case-count harness-failed-case-count
+        harness-check-count harness-failure-count harness-error-count
+        harness-skipped-count harness-cleanup-failure-count harness-failures
+        harness-filter))
+
+(define (harness-restore-state! s)
+  (set! harness-group-stack (list-ref s 0))
+  (set! harness-case-ids (list-ref s 1))
+  (set! harness-current-case (list-ref s 2))
+  (set! harness-current-case-failed (list-ref s 3))
+  (set! harness-case-count (list-ref s 4))
+  (set! harness-failed-case-count (list-ref s 5))
+  (set! harness-check-count (list-ref s 6))
+  (set! harness-failure-count (list-ref s 7))
+  (set! harness-error-count (list-ref s 8))
+  (set! harness-skipped-count (list-ref s 9))
+  (set! harness-cleanup-failure-count (list-ref s 10))
+  (set! harness-failures (list-ref s 11))
+  (set! harness-filter (list-ref s 12)))
+
+(define (harness-probe thunk)
+  (let ((saved (harness-capture-state)))
+    (harness-clear-state!)
+    (set! harness-probe-depth (+ harness-probe-depth 1))
+    (let ((raised (guard (e (#t #t)) (thunk) #f)))
+      (let ((summary (list 'probe
+                           harness-case-count
+                           harness-failed-case-count
+                           harness-check-count
+                           harness-failure-count
+                           harness-error-count
+                           harness-skipped-count
+                           harness-cleanup-failure-count
+                           raised
+                           (reverse harness-failures))))
+        (set! harness-probe-depth (- harness-probe-depth 1))
+        (harness-restore-state! saved)
+        summary))))
+
+(define (probe-cases p) (list-ref p 1))
+(define (probe-failed-cases p) (list-ref p 2))
+(define (probe-checks p) (list-ref p 3))
+(define (probe-failures p) (list-ref p 4))
+(define (probe-errors p) (list-ref p 5))
+(define (probe-skipped p) (list-ref p 6))
+(define (probe-cleanup-failures p) (list-ref p 7))
+(define (probe-raised? p) (list-ref p 8))
+(define (probe-failure-records p) (list-ref p 9))
+(define (failure-record-id r) (list-ref r 0))
+(define (failure-record-what r) (list-ref r 1))
+(define (failure-record-detail r) (list-ref r 2))
+
+;; ---------------------------------------------------------------------------
+;; Suite lifecycle
+;; ---------------------------------------------------------------------------
+
+(define (harness-clear-state!)
+  (set! harness-group-stack '())
+  (set! harness-case-ids '())
+  (set! harness-current-case #f)
+  (set! harness-current-case-failed #f)
+  (set! harness-case-count 0)
+  (set! harness-failed-case-count 0)
+  (set! harness-check-count 0)
+  (set! harness-failure-count 0)
+  (set! harness-error-count 0)
+  (set! harness-skipped-count 0)
+  (set! harness-cleanup-failure-count 0)
+  (set! harness-failures '())
+  (set! harness-filter #f))
+
+(define (harness-banner)
+  (harness-say-always
+   (string-append "byte-machine-harness: suite=" harness-suite-name))
+  (harness-say-always
+   (string-append "byte-machine-harness: runtime=" (adapter-runtime-name)
+                  " version=" (adapter-runtime-version)
+                  " machine=" (adapter-machine-type)
+                  " mode=" (adapter-execution-mode)
+                  " os=" (adapter-os)
+                  " architecture=" (adapter-architecture))))
+
+(define (harness-begin suite-name)
+  (set! harness-suite-name suite-name)
+  (harness-clear-state!)
+  (set! harness-filter
+        (harness-normalize-filter
+         (adapter-environment-variable "BYTE_MACHINE_TEST_FILTER")))
+  ;; An empty value means unset, matching adapter-execution-mode: the same
+  ;; variable emptied by a shell (BYTE_MACHINE_TEST_VERBOSE=) must not mean
+  ;; opposite things in the same harness.
+  (let ((v (adapter-environment-variable "BYTE_MACHINE_TEST_VERBOSE")))
+    (set! harness-verbose (if (and v (not (string=? v ""))) #t #f)))
+  (harness-banner))
+
+;; CTest refuses an empty selection with execution.noTestsAction, and a suite
+;; that ran nothing must not report success one layer down either.
+;;
+;; Split into a pure rule and a reader of the live counters, per AGENTS.md's
+;; functional core / imperative shell rule. The split is not ceremony here: the
+;; rule's interesting states are "no cases ran" and "every case was filtered
+;; out", and a suite in either state cannot assert anything about itself from
+;; the inside. As a function of two numbers it is directly testable.
+;;
+;; The two are distinguished because they are different bugs: a filter that
+;; matched nothing is usually a typo in the invocation, while a suite with no
+;; cases at all is usually a body that failed to load what it meant to.
+(define (harness-empty-selection-diagnosis case-count skipped-count)
+  (cond
+    ((> case-count 0) #f)
+    ((> skipped-count 0)
+     (string-append "no case was selected: the filter skipped all "
+                    (number->string skipped-count)
+                    " registered cases"))
+    (else "the suite registered no cases")))
+
+(define (harness-empty-selection-error)
+  (harness-empty-selection-diagnosis harness-case-count harness-skipped-count))
+
+(define (harness-exit-status)
+  (cond ((> harness-error-count 0) harness-status-harness-error)
+        ((> harness-failure-count 0) harness-status-failed)
+        (else harness-status-pass)))
+
+(define (harness-summary)
+  (let ((empty (harness-empty-selection-error)))
+    (if empty (harness-record-error! empty)))
+  (let ((status (harness-exit-status)))
+    (harness-say-always
+     (string-append
+      "byte-machine-harness: summary suite=" harness-suite-name
+      " runtime=" (adapter-runtime-name)
+      " mode=" (adapter-execution-mode)
+      " cases=" (number->string harness-case-count)
+      " failed-cases=" (number->string harness-failed-case-count)
+      " checks=" (number->string harness-check-count)
+      " failures=" (number->string harness-failure-count)
+      " cleanup-failures=" (number->string harness-cleanup-failure-count)
+      " skipped=" (number->string harness-skipped-count)
+      " errors=" (number->string harness-error-count)
+      " status=" (number->string status)))
+    (adapter-flush-output)
+    status))
+
+;; Print the summary and exit with the status it reports.
+(define (harness-finish)
+  (adapter-exit (harness-summary)))

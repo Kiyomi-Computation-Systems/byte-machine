@@ -1,0 +1,632 @@
+# Proof that the CMake-layer specifications are not vacuous.
+#
+# Each entry below breaks one decision in one module and names the specification
+# that must notice. A mutation that survives means that specification passes
+# whether the code is right or wrong, which is worse than having no
+# specification at all -- an absent test is visibly absent, a vacuous one reports
+# success.
+#
+# This suite exists because the same check was once run by hand and written up
+# in a decision record as evidence. Evidence that lives in a transcript is not
+# evidence: nobody can rerun it, and it cannot fail when the code changes. The
+# hand-run version also missed the most important case, because it only mutated
+# the modules and never the assertion helper every specification depends on.
+#
+# Adding a decision to a module means adding a mutation here. The SITES check
+# will tell you when a pattern has drifted; it will not tell you when a new,
+# untested decision has been added.
+
+cmake_minimum_required(VERSION 3.26)
+
+include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
+
+get_filename_component(SOURCE_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+
+# Under CTest each test gets a private temporary directory, which also keeps
+# concurrent runs from sharing one staging tree. Run directly, the stage goes
+# under the (gitignored) build tree rather than the current directory: in script
+# mode CMAKE_CURRENT_BINARY_DIR is just wherever the developer happened to be
+# standing, so the obvious default drops a tree of copied .cmake files into the
+# repository root -- untracked, un-ignored, and exactly the sort of stray file
+# that a later file(GLOB) picks up.
+if(DEFINED ENV{BYTE_MACHINE_TEST_TMPDIR})
+  set(STAGE_DIR "$ENV{BYTE_MACHINE_TEST_TMPDIR}/mutation")
+else()
+  set(STAGE_DIR "${SOURCE_ROOT}/build/mutation")
+endif()
+
+# --- ByteMachineProbe ------------------------------------------------------
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineProbe.cmake SPEC ByteMachineProbeSpec.cmake
+  LABEL "probe: key match unanchored, so 'version' matches 'full-version'"
+  SITES 2
+  FIND [[MATCHES "(^|\n)${key}=([^\n]*)"]]
+  REPLACE [[MATCHES "${key}=([^\n]*)"]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineProbe.cmake SPEC ByteMachineProbeSpec.cmake
+  LABEL "probe: empty value accepted"
+  FIND [[  if(value STREQUAL "")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineProbe.cmake SPEC ByteMachineProbeSpec.cmake
+  LABEL "probe: carriage-return normalization removed"
+  FIND [[  string(REPLACE "\r\n" "\n" normalized "${output}")
+  string(REPLACE "\r" "\n" normalized "${normalized}")]]
+  REPLACE [[  set(normalized "${output}")]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineProbe.cmake SPEC ByteMachineProbeSpec.cmake
+  LABEL "probe: absent optional field returns the previous regex's capture"
+  FIND [[    set(${out_var} "" PARENT_SCOPE)]]
+  REPLACE [[    set(${out_var} "${CMAKE_MATCH_2}" PARENT_SCOPE)]]
+  EXPECT_SURVIVES
+    "CMake 4.3.3 clears CMAKE_MATCH_<n> on a failed match, so the stale-capture hazard cannot be provoked on this version; the guard is retained for the declared 3.26 floor")
+
+# --- ByteMachineChez -------------------------------------------------------
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineChez.cmake SPEC ByteMachineChezSpec.cmake
+  LABEL "chez: any runtime accepted as Chez"
+  FIND [[if(NOT full_version MATCHES "Chez Scheme")]]
+  REPLACE [[if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineChez.cmake SPEC ByteMachineChezSpec.cmake
+  LABEL "chez: Petite accepted despite having no compile-program"
+  FIND [[if(full_version MATCHES "Petite")]]
+  REPLACE [[if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineChez.cmake SPEC ByteMachineChezSpec.cmake
+  LABEL "chez: unreadable version accepted"
+  FIND [[if(NOT full_version MATCHES "Version ([0-9]+\\.[0-9]+\\.[0-9]+)")]]
+  REPLACE [[set(CMAKE_MATCH_1 "99.0.0")
+  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineChez.cmake SPEC ByteMachineChezSpec.cmake
+  LABEL "chez: version floor removed"
+  FIND [[if(version VERSION_LESS BYTE_MACHINE_CHEZ_MINIMUM_VERSION)]]
+  REPLACE [[if(FALSE)]])
+
+# --- ByteMachineGambit -----------------------------------------------------
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
+  LABEL "gambit: identity check removed, so Ghostscript passes as Gambit"
+  FIND [[if(NOT normalized MATCHES "(^|\n)gambit=yes(\n|$)")]]
+  REPLACE [[if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
+  LABEL "gambit: version floor removed"
+  FIND [[if(version VERSION_LESS BYTE_MACHINE_GAMBIT_MINIMUM_VERSION)]]
+  REPLACE [[if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
+  LABEL "gambit: 'v' version marker no longer stripped"
+  FIND [[if(raw_version MATCHES "^v(.*)$")]]
+  REPLACE [[if(FALSE)]])
+
+# The whole condition is replaced rather than one clause: CMake's if() binds AND
+# more tightly than OR, so prefixing a single clause with FALSE leaves the other
+# comparisons live and the mutation does nothing.
+byte_machine_mutation(
+  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
+  LABEL "gambit: interpreter/compiler agreement no longer required"
+  FIND [[  if(NOT interp_version STREQUAL compiler_version
+     OR NOT interp_target STREQUAL compiler_target
+     OR NOT interp_stamp STREQUAL compiler_stamp)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
+  LABEL "gambit: compiler derived from a filename that is not gsi"
+  FIND [[if(NOT name MATCHES "^gsi(.*)$")]]
+  REPLACE [[if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
+  LABEL "gambit: compiler derived from a relative path"
+  FIND [[if(dir STREQUAL "")]]
+  REPLACE [[if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
+  LABEL "gambit: a hand-set compiler is overwritten by a derivation"
+  FIND [[  if(NOT cached STREQUAL recorded_derivation)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
+  LABEL "gambit: a stale derivation is reused instead of following the interpreter"
+  FIND [[  byte_machine_gambit_compiler_beside("${interpreter}" fresh)
+  set(${out_path} "${fresh}" PARENT_SCOPE)
+  set(${out_derived_from} "${interpreter}" PARENT_SCOPE)
+endfunction()]]
+  REPLACE [[  set(${out_path} "${cached}" PARENT_SCOPE)
+  set(${out_derived_from} "${derived_from}" PARENT_SCOPE)
+endfunction()]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
+  LABEL "gambit: an empty cache is treated as a hand-set compiler"
+  FIND [[  if(NOT cached)]]
+  REPLACE [[  if(FALSE)]])
+
+# --- ByteMachineTesting ----------------------------------------------------
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
+  LABEL "testing: any test name accepted"
+  FIND [[  if(NOT name MATCHES "^byte-machine\\.([a-z0-9-]+)\\.([a-z0-9-]+)\\.([a-z0-9-]+)\\.([a-z0-9-]+)$")]]
+  REPLACE [[  set(CMAKE_MATCH_1 unit)
+  set(CMAKE_MATCH_2 f)
+  set(CMAKE_MATCH_3 chez)
+  set(CMAKE_MATCH_4 source)
+  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
+  LABEL "testing: unknown layer accepted"
+  FIND [[  if(NOT layer IN_LIST BYTE_MACHINE_TEST_LAYERS)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
+  LABEL "testing: backend/mode incompatibility ignored"
+  FIND [[  if(NOT mode IN_LIST BYTE_MACHINE_TEST_MODES_${backend})]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
+  LABEL "testing: duplicate test names accepted"
+  FIND [[  if(name IN_LIST taken)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
+  LABEL "testing: missing timeout accepted"
+  FIND [[  if(value STREQUAL "")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
+  LABEL "testing: zero and non-numeric timeouts accepted"
+  FIND [[  if(NOT value MATCHES "^[0-9]+$" OR value EQUAL 0)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
+  LABEL "testing: unknown labels accepted"
+  FIND [[    if(NOT label IN_LIST known)]]
+  REPLACE [[    if(FALSE)]])
+
+# --- SpecSupport -----------------------------------------------------------
+#
+# These are the reason this suite exists. Every negative case in every other
+# specification, and every positive assertion in all of them, routes through
+# these two functions. Break either and all four specifications stayed green --
+# which is how a suite reports success while checking nothing.
+
+byte_machine_mutation(
+  FILE test/support/cmake/SpecSupport.cmake SPEC SpecSupportSpec.cmake
+  LABEL "spec-support: spec_check_equal never fails, so every positive assertion is decoration"
+  FIND [[  if(NOT actual STREQUAL expected)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE test/support/cmake/SpecSupport.cmake SPEC SpecSupportSpec.cmake
+  LABEL "spec-support: a child that exits 0 counts as rejected"
+  FIND [[  if(rc EQUAL 0)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE test/support/cmake/SpecSupport.cmake SPEC SpecSupportSpec.cmake
+  LABEL "spec-support: a child failing for the wrong reason counts as rejected"
+  FIND [[  if(NOT flat_err MATCHES "${flat_expected}")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE test/support/cmake/SpecSupport.cmake SPEC SpecSupportSpec.cmake
+  LABEL "spec-support: diagnostics no longer flattened, so CMake's wrapping breaks matching"
+  FIND [[  string(REGEX REPLACE "[ \t\r\n]+" " " flattened "${text}")]]
+  REPLACE [[  set(flattened "${text}")]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineChez.cmake SPEC ByteMachineChezSpec.cmake
+  LABEL "chez: a rejected candidate is classified ok, so the search accepts it"
+  FIND [[    set(${out_status} "not-chez" PARENT_SCOPE)]]
+  REPLACE [[    set(${out_status} "ok" PARENT_SCOPE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineChez.cmake SPEC ByteMachineChezSpec.cmake
+  LABEL "chez: a truncated probe answer is accepted with empty fields"
+  FIND [[      set(${out_status} "missing-field" PARENT_SCOPE)]]
+  REPLACE [[      set(${out_status} "ok" PARENT_SCOPE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineChez.cmake SPEC ByteMachineChezSpec.cmake
+  LABEL "chez: rejected candidates keep the previous candidate's fields"
+  FIND [[  set(${out_version} "" PARENT_SCOPE)
+  set(${out_machine_type} "" PARENT_SCOPE)]]
+  REPLACE [[  ]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineChez.cmake SPEC ByteMachineChezSpec.cmake
+  LABEL "chez: identity stops raising what the classifier rejected"
+  FIND [[  if(NOT status STREQUAL "ok")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineChez.cmake SPEC ByteMachineChezSpec.cmake
+  LABEL "chez: absent version floor no longer refused, so the guard fails open"
+  FIND [[  if(NOT BYTE_MACHINE_CHEZ_MINIMUM_VERSION MATCHES "^[0-9]+\\.[0-9]+")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
+  LABEL "gambit: absent version floor no longer refused, so the guard fails open"
+  FIND [[  if(NOT BYTE_MACHINE_GAMBIT_MINIMUM_VERSION MATCHES "^[0-9]+\\.[0-9]+")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE test/support/cmake/SpecSupport.cmake SPEC SpecSupportSpec.cmake
+  LABEL "spec-support: a failed specification still signs off as verified"
+  FIND [[  if(n EQUAL 0)]]
+  REPLACE [[  if(TRUE)]])
+
+byte_machine_mutation(
+  FILE test/support/cmake/SpecSupport.cmake SPEC SpecSupportSpec.cmake
+  LABEL "spec-support: failures are not counted, so the banner cannot tell"
+  FIND [[    spec_record_failure()
+    message(SEND_ERROR "byte-machine-spec: ${what}: expected '${expected}', got '${actual}'")]]
+  REPLACE [[    message(SEND_ERROR "byte-machine-spec: ${what}: expected '${expected}', got '${actual}'")]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
+  LABEL "testing: hyphen-edge features accepted"
+  FIND [[  if(feature MATCHES "^-|-$")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineProbe.cmake SPEC ByteMachineProbeSpec.cmake
+  LABEL "probe: the optional accessor's clearing branch is deleted, leaving the output untouched"
+  FIND [[  else()
+    set(${out_var} "" PARENT_SCOPE)
+  endif()]]
+  REPLACE [[  endif()]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
+  LABEL "gambit: unset GAMBIT_HOME contributes a bare /bin hint outranking PATH"
+  FIND [[  if(DEFINED ENV{GAMBIT_HOME} AND NOT "$ENV{GAMBIT_HOME}" STREQUAL "")]]
+  REPLACE [[  if(TRUE)]]
+  EXPECT_SURVIVES
+    "lives in the discovery macro, which runs processes and reads the real environment; it is covered by configure-time behaviour, not by the cmake -P specifications")
+
+# --- ByteMachineExpectExit -------------------------------------------------
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
+  LABEL "expect-exit: the declared vocabulary is widened to accept anything"
+  FIND [[  if(NOT code IN_LIST BYTE_MACHINE_EXIT_STATUS_VOCABULARY)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
+  LABEL "expect-exit: non-numeric expectations accepted"
+  FIND [[  if(NOT code MATCHES "^[0-9]+$")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
+  LABEL "expect-exit: an out-of-vocabulary status is reported as an ordinary mismatch"
+  FIND [[  if(NOT actual IN_LIST BYTE_MACHINE_EXIT_STATUS_VOCABULARY)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
+  LABEL "expect-exit: a command that never ran is judged on its result string"
+  FIND [[  if(NOT actual MATCHES "^[0-9]+$")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
+  LABEL "expect-exit: an exact match is reported as a mismatch"
+  FIND [[  if(actual EQUAL expected)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
+  LABEL "expect-exit: the registrar stops validating its expectation"
+  FIND [[  byte_machine_expect_exit_classify("${arg_EXPECT_EXIT}" status message)
+  if(NOT status STREQUAL "ok")
+    message(FATAL_ERROR "byte-machine: ${message} (test '${arg_NAME}')")
+  endif()]]
+  # A truly empty REPLACE is indistinguishable from an omitted one:
+  # cmake_parse_arguments() cannot tell "REPLACE given the empty string" from
+  # "REPLACE given nothing" without CMP0174 set to NEW (confirmed against this
+  # project's 3.26 floor), and would leave arg_REPLACE undefined, tripping
+  # MutationRunner's own REPLACE-is-required check. A comment is a no-op
+  # substitution that keeps the mutation meaning "this validation is gone"
+  # without relying on a policy this project does not otherwise need.
+  REPLACE [[  # deleted]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
+  LABEL "expect-exit: a registration with no expectation is accepted"
+  FIND [[  if(NOT DEFINED arg_EXPECT_EXIT)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
+  LABEL "expect-exit: the classifier leaves a stale message on success"
+  FIND [[function(byte_machine_expect_exit_classify code out_status out_message)
+  set(${out_message} "" PARENT_SCOPE)]]
+  REPLACE [[function(byte_machine_expect_exit_classify code out_status out_message)]])
+
+# --- ByteMachineSchemeLane -------------------------------------------------
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: the chez object guard is dropped, so a stale .so can be preferred over source"
+  FIND [[      "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
+]]
+  # Same empty-REPLACE hazard as the expect-exit mutation above (CMP0174; see
+  # its comment for why a truly empty REPLACE will not parse). Here the
+  # deleted argument sits inside a multi-line set() list rather than replacing
+  # a whole statement, and FIND's match includes the line's own trailing
+  # newline -- so the comment needs one too, or it would swallow the following
+  # "${program}" line into itself and delete both arguments instead of one.
+  REPLACE [[  # deleted
+]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: gambit no longer skips .gambini"
+  FIND [[      "-f"
+]]
+  # Same reasoning as the object-guard mutation above.
+  REPLACE [[  # deleted
+]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: an undiscovered chez yields a command with an empty executable"
+  FIND [[    if(NOT BYTE_MACHINE_CHEZ_EXECUTABLE)]]
+  REPLACE [[    if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: an undiscovered gambit yields a command with an empty executable"
+  FIND [[    if(NOT BYTE_MACHINE_GAMBIT_EXECUTABLE)]]
+  REPLACE [[    if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: an unknown backend is reported as usable"
+  FIND [[  set(${out_status} "unknown-backend" PARENT_SCOPE)]]
+  REPLACE [[  set(${out_status} "ok" PARENT_SCOPE)]])
+
+# Diagnostic wording is asserted exactly (see ByteMachineSchemeLaneSpec.cmake),
+# so each message the functional core can produce gets its own mutation: a
+# dropped interpolation, a copy-pasted wrong backend name, and a one-word typo.
+# Any of the three would otherwise pass every existing assertion undetected.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: the chez no-runtime message drops its program interpolation"
+  FIND [[        "no Chez was discovered, so the chez source lane for '${program}' is not registered."]]
+  REPLACE [[        "no Chez was discovered, so the chez source lane is not registered."]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: the gambit no-runtime message names the wrong backend"
+  FIND [[        "no Gambit was discovered, so the gambit source lane for '${program}' is not registered."]]
+  REPLACE [[        "no Gambit was discovered, so the chez source lane for '${program}' is not registered."]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: the unknown-backend message is garbled"
+  FIND [[    "'${backend}' is not a Scheme lane backend. Known backends: chez gambit."]]
+  REPLACE [[    "'${backend}' is not a Scheme land backend. Known backends: chez gambit."]])
+
+# byte_machine_add_scheme_lane's own decisions -- argument validation, backend
+# routing, and the environment it hands to the registrar -- had no coverage at
+# all before this: any specification failure here means the registration
+# function itself, not the functional core above it, stopped doing its job.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: unexpected arguments to the registrar are accepted"
+  FIND [[  if(arg_UNPARSED_ARGUMENTS)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: a missing NAME, BACKEND, PROGRAM, or TIMEOUT is accepted"
+  FIND [[    if(NOT arg_${required})]]
+  REPLACE [[    if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: a program that does not exist is registered anyway"
+  FIND [[  if(NOT EXISTS "${arg_PROGRAM}")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: an unknown backend no longer stops registration"
+  FIND [[  if(status STREQUAL "unknown-backend")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: a no-runtime backend is registered instead of skipped"
+  FIND [[  if(status STREQUAL "no-runtime")]]
+  REPLACE [[  if(FALSE)]])
+
+# This is the mutation that matters most: if EXPECT_EXIT stopped being able to
+# route to the exit-code registrar, every expected-red test in this milestone
+# would silently become a "must exit 0" test.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: EXPECT_EXIT is ignored, so every lane registers as a plain must-exit-0 test"
+  FIND [[  if(DEFINED arg_EXPECT_EXIT)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: the source execution mode is no longer declared in the environment"
+  FIND [[  set(environment "BYTE_MACHINE_EXECUTION_MODE=source" ${arg_ENVIRONMENT})]]
+  REPLACE [[  set(environment ${arg_ENVIRONMENT})]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
+  LABEL "testing: gambit's source mode is withdrawn"
+  FIND [[set(BYTE_MACHINE_TEST_MODES_gambit source o1 aot)]]
+  REPLACE [[set(BYTE_MACHINE_TEST_MODES_gambit o1 aot)]])
+
+# --- ByteMachinePortabilityGuard --------------------------------------------
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: wrapper files are counted as shared bodies"
+  FIND [[  list(FILTER bodies EXCLUDE REGEX "\\.(chez|gambit)\\.(sps|scm)$")]]
+  # Same empty-REPLACE hazard as the expect-exit and scheme-lane mutations
+  # above (CMP0174; this project's 3.26 floor leaves an explicitly-empty
+  # REPLACE undefined rather than empty -- see those mutations' comments).
+  # FIND's match ends at the statement's own closing paren, not the line's
+  # trailing newline, so the comment needs none of its own.
+  REPLACE [[  # deleted]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: a repeated basename is not reported"
+  FIND [[    if(base IN_LIST seen)]]
+  REPLACE [[    if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: only the Chez wrapper is required"
+  FIND [[    foreach(wrapper "${dir}/${base}.chez.sps" "${dir}/${base}.gambit.scm")]]
+  REPLACE [[    foreach(wrapper "${dir}/${base}.chez.sps")]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: the duplicate accessor leaves a stale value when there are none"
+  FIND [[  set(seen "")
+  set(duplicates "")]]
+  REPLACE [[  set(seen "")]])
+
+# The imperative shell. Every decision it makes is observable only as a dead
+# process -- a guard that returns has, by construction, found nothing to say --
+# so each of these is caught by a rejection case in the specification rather
+# than by an assertion on a returned value. The script-mode mutation is what
+# proves those cases reach the guard at all: with that branch gone,
+# CONFIGURE_DEPENDS makes the function uncallable under `cmake -P` and every
+# case dies before reaching the decision it was written for.
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: unexpected arguments to the guard are accepted"
+  FIND [[  if(arg_UNPARSED_ARGUMENTS)]]
+  REPLACE [[  if(FALSE)]])
+
+# The companion to the one above: the check that catches a mistyped keyword the
+# parser has already absorbed into the preceding keyword's value, where
+# arg_UNPARSED_ARGUMENTS is empty and cannot see it.
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: an entry that is not a directory is accepted"
+  FIND [[      if(NOT IS_DIRECTORY "${entry}")]]
+  REPLACE [[      if(FALSE)]])
+
+# ...and the reach of that check. Deleting the condition (above) and narrowing
+# the set of keywords it runs over (here) are two decisions, so they get two
+# mutations: a single combined one would prove only that at least one of them
+# was noticed.
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: only SHARED_DIRS entries are checked for being directories"
+  # Anchored on the preceding line: the body-collecting loop below iterates the
+  # same two keywords, so the bare `foreach` matches two sites and the SITES
+  # check rejects it. The two loops are deliberately separate -- every entry has
+  # to be judged a directory before any of them is globbed, or a bad entry
+  # sitting after a good one would be reported as having contributed nothing
+  # rather than as not being a directory at all.
+  FIND [[  # what makes the second form reachable; both forms have a rejection case.
+  foreach(keyword IN ITEMS SHARED_DIRS WRAPPED_DIRS)]]
+  REPLACE [[  # what makes the second form reachable; both forms have a rejection case.
+  foreach(keyword IN ITEMS SHARED_DIRS)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: the glob asks for a build-system re-check where there is no build system"
+  FIND [[  if(CMAKE_SCRIPT_MODE_FILE)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: a call naming no directories at all is accepted"
+  FIND [[  if(NOT bodies)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: a duplicate basename is reported without stopping the build"
+  FIND [[    message(FATAL_ERROR
+      "byte-machine: shared body basenames must be unique across every shared "]]
+  REPLACE [[    message(STATUS
+      "byte-machine: shared body basenames must be unique across every shared "]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: a missing wrapper is reported without stopping the build"
+  FIND [[    message(FATAL_ERROR
+      "byte-machine: every shared test body needs a wrapper for each runtime, "]]
+  REPLACE [[    message(STATUS
+      "byte-machine: every shared test body needs a wrapper for each runtime, "]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: wrappers are demanded of the shared directories, not the wrapped ones"
+  FIND [[      if(keyword STREQUAL "WRAPPED_DIRS")]]
+  REPLACE [[      if(keyword STREQUAL "SHARED_DIRS")]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: only the top level of a declared directory is searched"
+  # The whole point of the recursion. Without it a body in a subdirectory is
+  # not rejected -- it is unseen, so it is neither checked for a colliding
+  # basename nor required to have wrappers, and the banner covers a file that
+  # was never read.
+  FIND [[      file(GLOB_RECURSE dir_globbed ${glob_depends} "${dir}/*.scm")]]
+  REPLACE [[      file(GLOB dir_globbed ${glob_depends} "${dir}/*.scm")]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: a declared directory that yields no body is accepted"
+  # Distinct from the whole-call check below, which sees only that *everything*
+  # found nothing: this is what notices one empty directory standing beside a
+  # populated one, and it is the check slice 3 needs when src/common joins the
+  # guard holding only a .gitkeep.
+  FIND [[      if(NOT dir_bodies)]]
+  REPLACE [[      if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: bodies are collected from the shared directories only"
+  # Anchored on the preceding line, for the same reason as the entry-check loop
+  # above: the two loops iterate the same two keywords.
+  FIND [[  set(wrapped "")
+  foreach(keyword IN ITEMS SHARED_DIRS WRAPPED_DIRS)]]
+  REPLACE [[  set(wrapped "")
+  foreach(keyword IN ITEMS SHARED_DIRS)]])
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+message(STATUS "byte-machine-spec: mutation suite complete")
