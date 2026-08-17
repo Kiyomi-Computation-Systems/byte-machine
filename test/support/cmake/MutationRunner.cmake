@@ -159,6 +159,30 @@ function(byte_machine_mutation_run source_root stage_dir)
       "trivially and would report the specifications as verified.")
   endif()
 
+  # Accumulated in a GLOBAL property, not a variable, because a suite that
+  # verifies several decisions through several lanes calls this function once
+  # per pass rather than once overall (SchemeMutationSuite.cmake, for one).
+  # Both this counter and _bm_mutation_count are written with PARENT_SCOPE,
+  # which reaches only the immediate caller -- and different passes call from
+  # different scopes: bare script scope for a simple pass, a helper function's
+  # own scope for a repeated one (byte_machine_slice3_launcher_pass and
+  # byte_machine_slice3_body_pass, for instance). A plain variable would not
+  # survive that; a global property has no scope to lose. The caller reads the
+  # total back with byte_machine_mutation_totals once every pass has run.
+  get_property(_bm_total_passes GLOBAL PROPERTY BYTE_MACHINE_MUTATION_TOTAL_PASSES)
+  if(NOT _bm_total_passes)
+    set(_bm_total_passes 0)
+  endif()
+  math(EXPR _bm_total_passes "${_bm_total_passes} + 1")
+  set_property(GLOBAL PROPERTY BYTE_MACHINE_MUTATION_TOTAL_PASSES "${_bm_total_passes}")
+
+  get_property(_bm_total_mutations GLOBAL PROPERTY BYTE_MACHINE_MUTATION_TOTAL_MUTATIONS)
+  if(NOT _bm_total_mutations)
+    set(_bm_total_mutations 0)
+  endif()
+  math(EXPR _bm_total_mutations "${_bm_total_mutations} + ${_bm_mutation_count}")
+  set_property(GLOBAL PROPERTY BYTE_MACHINE_MUTATION_TOTAL_MUTATIONS "${_bm_total_mutations}")
+
   # --- Baseline: every specification a mutation targets must pass unmutated ---
   set(specs_used "")
   foreach(i RANGE 1 ${_bm_mutation_count})
@@ -254,4 +278,25 @@ function(byte_machine_mutation_run source_root stage_dir)
     message(STATUS
       "byte-machine-mutation: ${_bm_mutation_count} mutations, all accounted for")
   endif()
+endfunction()
+
+# byte_machine_mutation_totals(<out_passes> <out_mutations>)
+#
+# The running total across every byte_machine_mutation_run call made so far in
+# this process. A suite calls this once, after its last pass, and compares the
+# result against the count its own header comment declares -- the only thing
+# that would otherwise notice a whole pass, or a single mutation within one,
+# being quietly deleted: byte_machine_mutation_run's own uncaught-count check
+# is per pass and cannot see a pass that never ran at all.
+function(byte_machine_mutation_totals out_passes out_mutations)
+  get_property(passes GLOBAL PROPERTY BYTE_MACHINE_MUTATION_TOTAL_PASSES)
+  get_property(mutations GLOBAL PROPERTY BYTE_MACHINE_MUTATION_TOTAL_MUTATIONS)
+  if(NOT passes)
+    set(passes 0)
+  endif()
+  if(NOT mutations)
+    set(mutations 0)
+  endif()
+  set(${out_passes} "${passes}" PARENT_SCOPE)
+  set(${out_mutations} "${mutations}" PARENT_SCOPE)
 endfunction()

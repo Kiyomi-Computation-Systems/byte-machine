@@ -15,8 +15,23 @@
 # Adding a decision to a module means adding a mutation here. The SITES check
 # will tell you when a pattern has drifted; it will not tell you when a new,
 # untested decision has been added.
+#
+# ONE PASS, EIGHTY-NINE MUTATIONS
+#
+# Every mutation above is declared before the single byte_machine_mutation_run
+# call at the end of this file, so this suite is one pass by construction.
+# EXPECTED_MUTATIONS below is compared against the accumulated total from
+# byte_machine_mutation_totals once that call returns: it is what would have
+# caught a whole-branch review finding that deleting an entire pass group from
+# SchemeMutationSuite.cmake left that file's own suite at 37/37 -- the same
+# blind spot exists here for a single deleted byte_machine_mutation() call,
+# which SITES cannot see either, since a missing declaration is not a pattern
+# that failed to match.
 
 cmake_minimum_required(VERSION 3.26)
+
+set(EXPECTED_PASSES 1)
+set(EXPECTED_MUTATIONS 89)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -782,4 +797,16 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-message(STATUS "byte-machine-spec: mutation suite complete")
+byte_machine_mutation_totals(actual_passes actual_mutations)
+if(NOT actual_passes EQUAL EXPECTED_PASSES OR NOT actual_mutations EQUAL EXPECTED_MUTATIONS)
+  message(FATAL_ERROR
+    "byte-machine-mutation: expected ${EXPECTED_PASSES} pass / "
+    "${EXPECTED_MUTATIONS} mutations, got ${actual_passes} pass / "
+    "${actual_mutations} mutations. A byte_machine_mutation_run call or a "
+    "byte_machine_mutation() declaration was deleted (or added without "
+    "updating EXPECTED_MUTATIONS above) -- 37/37 elsewhere would not notice.")
+endif()
+
+message(STATUS
+  "byte-machine-spec: mutation suite complete (${actual_passes} pass, "
+  "${actual_mutations} mutations)")

@@ -15,6 +15,13 @@
 # second time on Gambit. Without Gambit this file runs twenty-one passes and
 # forty-nine mutations rather than twenty-three passes and fifty-six.
 #
+# These four numbers are declared below as EXPECTED_PASSES_WITH_GAMBIT and
+# friends, and checked against byte_machine_mutation_totals' accumulated count
+# once every pass below has run. That check is what a whole-branch review
+# found nothing else could do: deleting the three matrix passes (21 to 23) by
+# hand left this file's own suite reporting 37/37 elsewhere, with the mutation
+# count silently dropping from 56 to 53 and nothing anywhere noticing.
+#
 # Pass 1 runs the Chez self-tests lane against the shared runner body. That body
 # is identical text on both runtimes, so verifying it on a second runtime would
 # re-prove the same mutation at double the cost.
@@ -100,6 +107,15 @@
 # mutation look caught.
 
 cmake_minimum_required(VERSION 3.26)
+
+# See "TWENTY-THREE PASSES..." above. Declared here, rather than only in prose,
+# so the count enforced at the bottom of this file is the same text a reader
+# checks by eye at the top -- one number to keep in sync, not two that can
+# quietly disagree.
+set(EXPECTED_PASSES_WITH_GAMBIT 23)
+set(EXPECTED_MUTATIONS_WITH_GAMBIT 56)
+set(EXPECTED_PASSES_WITHOUT_GAMBIT 21)
+set(EXPECTED_MUTATIONS_WITHOUT_GAMBIT 49)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -1091,4 +1107,32 @@ endforeach()
 # from the matrix's identical directory instead of the stage.
 set(BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY "")
 
-message(STATUS "byte-machine-spec: scheme mutation suite complete")
+# Every pass above has now run exactly once, so the accumulated total is
+# final. Compared against the numbers declared at the top of this file --
+# see EXPECTED_PASSES_WITH_GAMBIT and friends, and the "TWENTY-THREE PASSES"
+# header comment they restate -- so a whole pass, or a single mutation inside
+# one, silently going missing is a build failure here rather than a stale
+# comment nobody rereads.
+byte_machine_mutation_totals(actual_passes actual_mutations)
+if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
+  set(expected_passes "${EXPECTED_PASSES_WITH_GAMBIT}")
+  set(expected_mutations "${EXPECTED_MUTATIONS_WITH_GAMBIT}")
+else()
+  set(expected_passes "${EXPECTED_PASSES_WITHOUT_GAMBIT}")
+  set(expected_mutations "${EXPECTED_MUTATIONS_WITHOUT_GAMBIT}")
+endif()
+if(NOT actual_passes EQUAL expected_passes OR NOT actual_mutations EQUAL expected_mutations)
+  message(FATAL_ERROR
+    "byte-machine-mutation: expected ${expected_passes} passes / "
+    "${expected_mutations} mutations "
+    "(Gambit discovered: ${BYTE_MACHINE_GAMBIT_EXECUTABLE}), got ${actual_passes} "
+    "passes / ${actual_mutations} mutations. A byte_machine_mutation_run call -- "
+    "a whole pass -- or a byte_machine_mutation() declaration within one was "
+    "deleted, or one was added without updating the expected count at the top "
+    "of this file. This is what notices a deleted pass group when every "
+    "individual specification still reports green.")
+endif()
+
+message(STATUS
+  "byte-machine-spec: scheme mutation suite complete (${actual_passes} passes, "
+  "${actual_mutations} mutations)")
