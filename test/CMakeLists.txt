@@ -189,6 +189,13 @@ configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/harness-runner.scm"
                "${BYTE_MACHINE_CWD_IDENTICAL_DIR}/harness-runner.scm" COPYONLY)
 configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/harness-runner.scm"
                "${BYTE_MACHINE_CWD_DECOY_DIR}/harness-runner.scm" COPYONLY)
+# fingerprint.scm (M0 slice 5a Task 1) is a second body the harness library
+# includes, alongside harness-runner.scm above. The "every body the lane
+# includes" rule in the comment above this block applies to it identically.
+configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
+               "${BYTE_MACHINE_CWD_IDENTICAL_DIR}/fingerprint.scm" COPYONLY)
+configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
+               "${BYTE_MACHINE_CWD_DECOY_DIR}/fingerprint.scm" COPYONLY)
 
 # The impostor. It implements the complete export list on purpose: an
 # incomplete one would fail the lane at library construction, which is a

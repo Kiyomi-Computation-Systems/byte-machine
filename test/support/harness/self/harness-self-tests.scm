@@ -12,6 +12,18 @@
 ;;; a name in one adapter's export list and not the other is a load failure on
 ;;; that runtime, not a silent gap (spec section 9.1).
 
+;; Construct a bytevector from a length and a list of byte values. Written by
+;; hand because the two standards disagree about every convenient constructor:
+;; R7RS has (bytevector 97 98 99), R6RS has (u8-list->bytevector '(97 98 99)),
+;; and a shared body may name neither.
+(define (harness-bytes length bytes)
+  (let ((bv (make-bytevector length 0)))
+    (let loop ((i 0) (rest bytes))
+      (if (null? rest)
+          bv
+          (begin (bytevector-u8-set! bv i (car rest))
+                 (loop (+ i 1) (cdr rest)))))))
+
 (harness-group "assertions"
   (lambda ()
 
@@ -456,3 +468,61 @@
         (check-not-equal "the two empty states read differently"
                          (harness-empty-selection-diagnosis 0 0)
                          (harness-empty-selection-diagnosis 0 4))))))
+
+;; --- the content fingerprint ------------------------------------------------
+;;
+;; Every value below was measured on Chez 10.4.1 and Gambit 4.9.8 on
+;; 2026-08-17 and was identical on both. They are literals rather than
+;; recomputations because a test that recomputes the thing under test with the
+;; thing under test asserts only that it is deterministic.
+
+(harness-group "fingerprint"
+  (lambda ()
+
+    (harness-case "an empty bytevector folds to the seed"
+      (lambda ()
+        (check-equal "empty"
+                     (harness-fingerprint->string
+                      (harness-fingerprint-bytevector (harness-bytes 0 '())))
+                     "3435eab979e3e0")))
+
+    (harness-case "three ASCII bytes"
+      (lambda ()
+        (check-equal "abc"
+                     (harness-fingerprint->string
+                      (harness-fingerprint-bytevector (harness-bytes 3 '(97 98 99))))
+                     "60b8174578c282d")))
+
+    ;; The +1 on each byte exists for exactly this: without it a leading NUL is
+    ;; absorbed and these three values collapse into one.
+    (harness-case "leading zero bytes are significant"
+      (lambda ()
+        (let ((abc (harness-fingerprint->string
+                    (harness-fingerprint-bytevector (harness-bytes 3 '(97 98 99)))))
+              (one (harness-fingerprint->string
+                    (harness-fingerprint-bytevector (harness-bytes 4 '(0 97 98 99)))))
+              (two (harness-fingerprint->string
+                    (harness-fingerprint-bytevector
+                     (harness-bytes 5 '(0 0 97 98 99))))))
+          (check-equal "one leading NUL" one "bac4261bdc123")
+          (check-equal "two leading NULs" two "1b3297b7cc8f592c")
+          (check-not-equal "one NUL differs from none" one abc)
+          (check-not-equal "two NULs differ from one" two one))))
+
+    (harness-case "combining is order sensitive"
+      (lambda ()
+        (check-equal "(1 2)"
+                     (harness-fingerprint->string (harness-fingerprint-combine '(1 2)))
+                     "3cabbf7defc450d")
+        (check-equal "(2 1)"
+                     (harness-fingerprint->string (harness-fingerprint-combine '(2 1)))
+                     "3cabbf7df0b874f")))
+
+    ;; Chez renders FF where Gambit renders ff for (number->string 255 16), so
+    ;; the rendering cannot go through a radix conversion. This case is what
+    ;; notices if someone ever changes it back.
+    (harness-case "hex digits are lowercase on every runtime"
+      (lambda ()
+        (check-equal "255" (harness-fingerprint->string 255) "ff")
+        (check-equal "3735928559" (harness-fingerprint->string 3735928559) "deadbeef")
+        (check-equal "zero" (harness-fingerprint->string 0) "0")))))

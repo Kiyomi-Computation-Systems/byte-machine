@@ -31,6 +31,10 @@
     harness-string-contains? harness-join harness-split harness-take
     harness-member? harness-failure-context harness-normalize-filter
     harness-counters harness-restore-counters! harness-capture-state
+    ;; content fingerprint (harness-fingerprint-file arrives in Task 2,
+    ;; alongside adapter-file-bytes; see the comment in fingerprint.scm)
+    harness-fingerprint-bytevector harness-fingerprint-combine
+    harness-fingerprint->string
     ;; adapter protocol
     adapter-runtime-name adapter-runtime-version adapter-machine-type
     adapter-os adapter-architecture adapter-execution-mode
@@ -143,9 +147,10 @@
 
   (define (adapter-flush-output) (flush-output-port (current-output-port)))
 
-  ;; --- shared body ---------------------------------------------------------
+  ;; --- shared bodies -------------------------------------------------------
   ;;
   ;; Included by bare filename, resolved through the launcher's
   ;; source-directories. Nothing below this point is Chez-specific.
 
+  (include "fingerprint.scm")
   (include "harness-runner.scm"))
