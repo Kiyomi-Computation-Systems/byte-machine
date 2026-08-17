@@ -261,8 +261,12 @@ same way in both places.
 
 It is the **Gambit** lane that turns the expectation into a cross-runtime claim: it renders under one
 runtime and compares against a value produced by the other. That is not a weakness to work around, it
-is where claim 2's evidence actually lives, and §7's F6 is the mutation that demonstrates it. Stated
-here because "both lanes check the fingerprint" reads like two units of evidence and is one.
+is where claim 2's evidence actually lives. Stated here because "both lanes check the fingerprint"
+reads like two units of evidence and is one.
+
+No mutation demonstrates this. §7's F6 was expected to and, measured, does not — see the note there.
+It is an argument about how the build is wired, and it is marked as one rather than dressed as a fact
+the suite reproves.
 
 Computing the expectation under both runtimes and requiring them to agree at build time would move
 that evidence into the build. Rejected as a second mechanism proving what the Gambit lane already
@@ -333,17 +337,25 @@ Mutations, each on a staged copy, each expected to be caught by a named lane:
 
 F5 needs a manifest of at least two bodies to be witnessable; every real lane already has one.
 
-**F6's outcome is asymmetric, and the asymmetry is the point.** `fingerprint.scm` is the same file
-the build-time expectation loads (V6), so mutating it mutates both sides of the Chez comparison at
-once: the expectation is rendered uppercase, the Chez run renders uppercase, and the two still agree.
-The Chez lanes pass and **the mutation survives there**. The Gambit run renders lowercase and
-diverges from the Chez-computed expectation, so the Gambit lanes exit 3 and the mutation is caught.
+**F6's outcome was predicted asymmetric and measured symmetric.** The prediction ran: `fingerprint.scm`
+is the same file the build-time expectation loads (V6), so mutating the digit table mutates both sides
+of the Chez comparison at once, the two still agree, and the mutation survives on Chez while the
+Gambit lane catches it. That reasoning is sound about a *provenance-wrapped* verify command and wrong
+about the one this suite actually uses.
 
-That asymmetric expectation must be declared and the survivor asserted, not ignored — the same shape
-slice 3 used for its launcher mutation, where one working directory passes and two fail. Declaring
-F6 as "caught" outright would fail the suite for the wrong reason and invite someone to "fix" it by
-weakening the mutation. Declaring it as a plain survivor would lose the only mutation that
-demonstrates §6.1: that the cross-runtime claim is carried by the Gambit lane and by nothing else.
+Measured 2026-08-17: the mutation is **caught symmetrically, on both runtimes**. The passes that carry
+it set no manifest, so `harness-verify-provenance!` returns immediately and provenance never runs
+there at all (V13). What catches the mutation is the self-tests' own "hex digits are lowercase on
+every runtime" case, which `check-equal`s the fixed literals `"ff"`, `"deadbeef"` and `"0"` rather
+than deriving anything from `fingerprint.scm` — so both runtimes fail an ordinary comparison. No
+asymmetric declaration, no asserted survivor.
+
+The consequence for §6.1 is recorded rather than glossed: **no mutation in this slice demonstrates
+that the cross-runtime claim rests on the Gambit lane.** §6.1 remains true — the expectation is
+computed by a Chez process, so a Chez lane compares Chez against Chez — but it is an argument from
+how the build is wired, not a fact this suite reproves on every run. Demonstrating it would need a
+pass whose verify command is provenance-wrapped *and* whose expectation is built from an unmutated
+tree, which the staged-copy model does not offer, since the stage is what gets mutated.
 
 F9 is checked per runtime for slice 2 §9.1's reason: Scheme cannot portably reflect on a library's
 export list, so parity between the two adapters is established by mutation rather than by review.
@@ -375,8 +387,7 @@ Each step must fail before it passes.
   `no-scheme` preset stays 10/10.
 - The Scheme mutation suite's baseline stays green: every pre-existing pass runs with no manifest and
   therefore no provenance check, and none of its declared expectations changes (V13, §6.2).
-- Every mutation in §7 is caught for its declared reason, with the suite's own totals asserted, and
-  F6's asymmetric outcome asserted on both runtimes.
+- Every mutation in §7 is caught for its declared reason, with the suite's own totals asserted.
 - A decision record states the §2 measurements, the §5.3 bound, and the V1 split with what 5b and 5c
   inherit.
 
