@@ -167,10 +167,15 @@ saying so, because they are easy to conflate.
 
 Whether a mutation deleting `(source-directories '())` from `chez-aot.ss` can be **witnessed** is
 unknown. P1 is a locatability rule; 0004 documents a timestamp rule; the two are different, and
-neither has been reproduced here. This is measured in 5b's first task rather than at its mutation
-task, because an unwitnessable claim changes what this design may assert. If it cannot be
-constructed, it becomes a declared survivor with a written reason, exactly as slice 5a did for its
-five.
+neither has been reproduced here. If it cannot be constructed, it becomes a declared survivor with a
+written reason, exactly as slice 5a did for its five.
+
+**When it is measured.** Not before the lane exists: witnessing it needs a compiled artifact and a
+registered lane to run, and a scratch driver would only describe the scratch driver
+(`scratch-fixture-measurements`). It is measured in the task immediately after the `chez.aot` lane
+first runs green, and before the mutation task — early enough to change what this design may assert,
+late enough to be possible. The implementation plan carries it as a task of its own so it cannot be
+folded into the mutation work and quietly answered by whatever the mutation happened to do.
 
 ## 6. Slice 5c — Gambit `.o1` and `gsc -exe -nopreload`
 
@@ -236,11 +241,12 @@ observation that distinguishes the two. Recorded rather than left as an unexplai
 
 **5b**
 
-1. Measure §5.3, and record the answer in this document before anything depends on it.
-2. Mode plumbing (W8), with the existing suite kept green.
-3. The two-list split (§4), functional core and specification first.
-4. `chez-compile.ss` and `chez-aot.ss`, with their refusals.
-5. `byte_machine_lane_chez_aot`, the `fingerprint/` copy step, and the three registrations.
+1. Mode plumbing (W8), with the existing suite kept green.
+2. The two-list split (§4), functional core and specification first.
+3. `chez-compile.ss` and `chez-aot.ss`, with their refusals.
+4. `byte_machine_lane_chez_aot`, the `fingerprint/` copy step, and the three registrations.
+5. Measure §5.3 against the lane that now exists, and record the answer in this document before the
+   mutations are written.
 6. The staleness lane, then C1–C4.
 7. Slice 5a's carried items 2–4 (W9).
 8. The 0004 amendment and the CHANGELOG entry.
