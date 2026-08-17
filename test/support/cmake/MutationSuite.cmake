@@ -16,7 +16,7 @@
 # will tell you when a pattern has drifted; it will not tell you when a new,
 # untested decision has been added.
 #
-# ONE PASS, NINETY-SIX MUTATIONS
+# ONE PASS, NINETY-SEVEN MUTATIONS
 #
 # Every mutation above is declared before the single byte_machine_mutation_run
 # call at the end of this file, so this suite is one pass by construction.
@@ -28,16 +28,19 @@
 # which SITES cannot see either, since a missing declaration is not a pattern
 # that failed to match.
 #
-# Ninety-six is eighty-nine plus seven: five for MutationRunner's own verdict
-# decision and the registration guard beside it (the "MutationRunner" section
-# below), and two for the other direction of the WORKING_DIRECTORY forwarding
-# conditional in ByteMachineExpectExit.cmake and ByteMachineSchemeLane.cmake,
-# which until a re-review only had the if(FALSE) half of its two mutations.
+# Ninety-seven is eighty-nine plus eight: five for MutationRunner's own
+# verdict decision and the registration guard beside it (the "MutationRunner"
+# section below), two for the other direction of the WORKING_DIRECTORY
+# forwarding conditional in ByteMachineExpectExit.cmake and
+# ByteMachineSchemeLane.cmake, which until a re-review only had the if(FALSE)
+# half of its two mutations, and one for the WRONG_FINGERPRINT branch in
+# ByteMachineSchemeLane.cmake's manifest block, which had no mutation until a
+# review found the routing decision unwitnessed.
 
 cmake_minimum_required(VERSION 3.26)
 
 set(EXPECTED_PASSES 1)
-set(EXPECTED_MUTATIONS 96)
+set(EXPECTED_MUTATIONS 97)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -589,9 +592,31 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  # Re-anchored on the multi-line set(environment ...) form M0 slice 5a Task 2
+  # introduced for the fingerprint fixture path (see MutationRunner.cmake's
+  # SITES comment -- a pattern that stops matching after a refactor must be
+  # updated, not deleted). REPLACE still means only "the execution mode entry
+  # is gone"; the fingerprint-sample entry and arg_ENVIRONMENT are untouched,
+  # exactly as the single-line FIND/REPLACE this replaces did.
   LABEL "scheme-lane: the source execution mode is no longer declared in the environment"
-  FIND [[  set(environment "BYTE_MACHINE_EXECUTION_MODE=source" ${arg_ENVIRONMENT})]]
-  REPLACE [[  set(environment ${arg_ENVIRONMENT})]])
+  FIND [[    "BYTE_MACHINE_EXECUTION_MODE=source"
+]]
+  REPLACE [[    # deleted
+]])
+
+# byte-machine.harness.provenance.*'s four lanes prove the provenance check
+# can fail by asking WRONG_FINGERPRINT to route here to
+# byte_machine_wrong_fingerprint. If this regressed to always calling
+# byte_machine_expected_fingerprint, every one of those lanes would compare
+# its shared bodies' real fingerprint against itself, pass, and stop proving
+# anything -- and only the slow integration lanes would notice, since neither
+# ByteMachineSchemeLaneSpec.cmake nor this mutation suite would see anything
+# wrong without this entry.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: WRONG_FINGERPRINT is ignored, so every lane routes to byte_machine_expected_fingerprint"
+  FIND [[    if(arg_WRONG_FINGERPRINT)]]
+  REPLACE [[    if(FALSE)]])
 
 # This is the mutation a whole-branch review found undetectable: delete this
 # block by hand, reconfigure, and the working-directory matrix's six lanes all

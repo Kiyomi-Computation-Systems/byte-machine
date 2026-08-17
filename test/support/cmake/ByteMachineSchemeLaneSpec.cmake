@@ -53,17 +53,32 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
       NAME byte-machine.harness.example.chez.source
       BACKEND chez
       PROGRAM "${SPEC_SELF}")
+  elseif(c STREQUAL "lane-requires-shared-bodies")
+    byte_machine_add_scheme_lane(
+      NAME byte-machine.harness.example.chez.source
+      BACKEND chez
+      PROGRAM "${SPEC_SELF}"
+      TIMEOUT 10)
   elseif(c STREQUAL "lane-requires-existing-program")
     byte_machine_add_scheme_lane(
       NAME byte-machine.harness.example.chez.source
       BACKEND chez
       PROGRAM "/h/self/does-not-exist.chez.sps"
+      SHARED_BODIES "${SPEC_SELF}"
+      TIMEOUT 10)
+  elseif(c STREQUAL "lane-rejects-missing-shared-body")
+    byte_machine_add_scheme_lane(
+      NAME byte-machine.harness.example.chez.source
+      BACKEND chez
+      PROGRAM "${SPEC_SELF}"
+      SHARED_BODIES "${SPEC_SELF}" "/nonexistent/body.scm"
       TIMEOUT 10)
   elseif(c STREQUAL "lane-rejects-unknown-backend")
     byte_machine_add_scheme_lane(
       NAME byte-machine.harness.example.chez.source
       BACKEND guile
       PROGRAM "${SPEC_SELF}"
+      SHARED_BODIES "${SPEC_SELF}"
       TIMEOUT 10)
   elseif(c STREQUAL "lane-rejects-relative-gambit-root")
     set(BYTE_MACHINE_GAMBIT_EXECUTABLE "/opt/gsi")
@@ -73,6 +88,7 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
       NAME byte-machine.harness.example.gambit.source
       BACKEND gambit
       PROGRAM "${SPEC_SELF}"
+      SHARED_BODIES "${SPEC_SELF}"
       TIMEOUT 10)
   elseif(c STREQUAL "lane-rejects-comma-in-gambit-root")
     set(BYTE_MACHINE_GAMBIT_EXECUTABLE "/opt/gsi")
@@ -82,6 +98,7 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
       NAME byte-machine.harness.example.gambit.source
       BACKEND gambit
       PROGRAM "${SPEC_SELF}"
+      SHARED_BODIES "${SPEC_SELF}"
       TIMEOUT 10)
   else()
     message(FATAL_ERROR "byte-machine-spec: unknown case '${c}'")
@@ -271,16 +288,37 @@ function(byte_machine_add_exit_code_test)
   endif()
 endfunction()
 
+# byte_machine_expected_fingerprint and byte_machine_wrong_fingerprint are
+# defined in test/CMakeLists.txt (Task 3, M0 slice 5a), which this standalone
+# script does not include, so they are stubbed for the same reason the two
+# registrars above are: every direct registration below sets
+# BYTE_MACHINE_CHEZ_EXECUTABLE, which is exactly what makes
+# byte_machine_add_scheme_lane's manifest block call one of these two. The
+# environment assertions below account for what the stub adds. Each stub also
+# records which one ran, in BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION, so the
+# WRONG_FINGERPRINT routing further down can be asserted directly.
+function(byte_machine_expected_fingerprint name out_var)
+  set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION "expected")
+  set(${out_var} "/fingerprints/${name}.fingerprint" PARENT_SCOPE)
+endfunction()
+
+function(byte_machine_wrong_fingerprint name out_var)
+  set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION "wrong")
+  set(${out_var} "/fingerprints/${name}.wrong" PARENT_SCOPE)
+endfunction()
+
 # An EXPECT_EXIT lane must route to the exit-code registrar and forward the
 # code. Both this registration and the plain one below must carry the source
-# execution mode ahead of whatever the caller supplied -- the one fact the
-# launcher itself cannot assert about its own invocation.
+# execution mode, the fingerprint sample path, and the fingerprint manifest
+# ahead of whatever the caller supplied -- facts the launcher itself cannot
+# assert about its own invocation.
 set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
 set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "none")
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
+  SHARED_BODIES "${SPEC_SELF}"
   TIMEOUT 10
   EXPECT_EXIT 1
   ENVIRONMENT "FOO=bar")
@@ -289,21 +327,52 @@ spec_check_equal("${registrar}" "exit-code" "EXPECT_EXIT routes to the exit-code
 get_property(expect_exit GLOBAL PROPERTY BYTE_MACHINE_SPEC_EXPECT_EXIT)
 spec_check_equal("${expect_exit}" "1" "EXPECT_EXIT is forwarded to the exit-code registrar")
 get_property(environment GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT)
-spec_check_equal("${environment}" "BYTE_MACHINE_EXECUTION_MODE=source;FOO=bar"
-  "exit-code registration carries the source execution mode ahead of caller-supplied entries")
+spec_check_equal("${environment}"
+  "BYTE_MACHINE_EXECUTION_MODE=source;BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin;BYTE_MACHINE_FINGERPRINT_FILES=${SPEC_SELF};BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=/fingerprints/byte-machine.harness.example.chez.source.fingerprint;FOO=bar"
+  "exit-code registration carries every default ahead of caller-supplied entries, which are appended last so they can override a default")
 
 set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "none")
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
+  SHARED_BODIES "${SPEC_SELF}"
   TIMEOUT 10
   ENVIRONMENT "FOO=bar")
 get_property(registrar GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR)
 spec_check_equal("${registrar}" "plain" "a lane without EXPECT_EXIT routes to the plain registrar")
 get_property(environment GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT)
-spec_check_equal("${environment}" "BYTE_MACHINE_EXECUTION_MODE=source;FOO=bar"
-  "plain registration carries the source execution mode ahead of caller-supplied entries")
+spec_check_equal("${environment}"
+  "BYTE_MACHINE_EXECUTION_MODE=source;BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin;BYTE_MACHINE_FINGERPRINT_FILES=${SPEC_SELF};BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=/fingerprints/byte-machine.harness.example.chez.source.fingerprint;FOO=bar"
+  "plain registration carries every default ahead of caller-supplied entries, which are appended last so they can override a default")
+
+# WRONG_FINGERPRINT chooses which function computes expect_file for the
+# manifest block: present, byte_machine_wrong_fingerprint; absent,
+# byte_machine_expected_fingerprint. Two assertions, since a branch has two
+# sides -- a spec that checked only one would still pass if the branch were
+# replaced by a constant that always called the same function.
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION "none")
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.example.chez.source
+  BACKEND chez
+  PROGRAM "${SPEC_SELF}"
+  SHARED_BODIES "${SPEC_SELF}"
+  TIMEOUT 10
+  WRONG_FINGERPRINT)
+get_property(fingerprint_function GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION)
+spec_check_equal("${fingerprint_function}" "wrong"
+  "a registration WITH WRONG_FINGERPRINT routes to byte_machine_wrong_fingerprint")
+
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION "none")
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.example.chez.source
+  BACKEND chez
+  PROGRAM "${SPEC_SELF}"
+  SHARED_BODIES "${SPEC_SELF}"
+  TIMEOUT 10)
+get_property(fingerprint_function GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION)
+spec_check_equal("${fingerprint_function}" "expected"
+  "a registration WITHOUT WRONG_FINGERPRINT routes to byte_machine_expected_fingerprint")
 
 # WORKING_DIRECTORY must be forwarded to whichever registrar the lane routed
 # to, with its value, when the lane was given one -- and the keyword must not
@@ -318,6 +387,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
+  SHARED_BODIES "${SPEC_SELF}"
   TIMEOUT 10
   WORKING_DIRECTORY "/h/run")
 get_property(wd GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY)
@@ -334,6 +404,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
+  SHARED_BODIES "${SPEC_SELF}"
   TIMEOUT 10)
 get_property(wd_keyword GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD)
 spec_check_equal("${wd_keyword}" "absent"
@@ -346,6 +417,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
+  SHARED_BODIES "${SPEC_SELF}"
   TIMEOUT 10
   EXPECT_EXIT 1
   WORKING_DIRECTORY "/h/run")
@@ -363,6 +435,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
+  SHARED_BODIES "${SPEC_SELF}"
   TIMEOUT 10
   EXPECT_EXIT 1)
 get_property(wd_keyword GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD)
@@ -378,6 +451,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
+  SHARED_BODIES "${SPEC_SELF}"
   TIMEOUT 10)
 get_property(registrar GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR)
 spec_check_equal("${registrar}" "none" "a no-runtime backend registers nothing and does not raise")
@@ -388,7 +462,9 @@ spec_expect_all_rejected("${SPEC_SELF}"
   "lane-requires-backend|BACKEND is required for byte_machine_add_scheme_lane"
   "lane-requires-program|PROGRAM is required for byte_machine_add_scheme_lane"
   "lane-requires-timeout|TIMEOUT is required for byte_machine_add_scheme_lane"
+  "lane-requires-shared-bodies|SHARED_BODIES is required for byte_machine_add_scheme_lane"
   "lane-requires-existing-program|names a program that does not exist"
+  "lane-rejects-missing-shared-body|names a shared body that does not exist"
   "lane-rejects-unknown-backend|is not a Scheme lane backend"
   "lane-rejects-comma-in-gambit-root|must not contain a comma"
   "lane-rejects-relative-gambit-root|must be absolute")

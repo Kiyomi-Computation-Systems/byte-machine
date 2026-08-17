@@ -34,16 +34,22 @@
     harness-string-contains? harness-join harness-split harness-take
     harness-member? harness-failure-context harness-normalize-filter
     harness-counters harness-restore-counters! harness-capture-state
+    ;; content fingerprint and provenance
+    harness-fingerprint-bytevector harness-fingerprint-combine
+    harness-fingerprint->string harness-fingerprint-file
+    harness-bytes->string harness-provenance-diagnosis
+    harness-verify-provenance! harness-provenance-reachability-diagnosis
     ;; adapter protocol
     adapter-runtime-name adapter-runtime-version adapter-machine-type
     adapter-os adapter-architecture adapter-execution-mode
     adapter-environment-variable adapter-exit
-    adapter-value->string adapter-describe-condition adapter-flush-output
+    adapter-value->string adapter-describe-condition adapter-file-bytes
+    adapter-flush-output
     ;; arithmetic the shared subset uses; R7RS has it in (scheme base), R6RS
     ;; does not, so both adapters export it and shared bodies need not care
     modulo quotient remainder)
 
-  (import (scheme base) (scheme write) (scheme process-context)
+  (import (scheme base) (scheme write) (scheme process-context) (scheme file)
           (only (gambit) system-version-string system-type-string
                 display-exception))
 
@@ -178,11 +184,38 @@
         (display-exception obj port)
         (adapter-flatten (get-output-string port))))
 
+    ;; A binary port, for the reason the Chez adapter gives. R7RS has no
+    ;; get-bytevector-all, so this reads in chunks and concatenates; 65536 is a
+    ;; block size, not a limit, and a body larger than one chunk is the ordinary
+    ;; case rather than an edge case.
+    (define (adapter-file-bytes path)
+      (let ((port (open-binary-input-file path)))
+        (let loop ((chunks '()) (total 0))
+          (let ((chunk (read-bytevector 65536 port)))
+            (if (eof-object? chunk)
+                (begin
+                  (close-port port)
+                  (let ((bv (make-bytevector total 0)))
+                    (let fill ((rest (reverse chunks)) (at 0))
+                      (if (null? rest)
+                          bv
+                          (let ((c (car rest)))
+                            (let copy ((i 0))
+                              (if (< i (bytevector-length c))
+                                  (begin
+                                    (bytevector-u8-set! bv (+ at i)
+                                                        (bytevector-u8-ref c i))
+                                    (copy (+ i 1)))))
+                            (fill (cdr rest)
+                                  (+ at (bytevector-length c))))))))
+                (loop (cons chunk chunks) (+ total (bytevector-length chunk))))))))
+
     (define (adapter-flush-output) (flush-output-port (current-output-port))))
 
-  ;; --- shared body ---------------------------------------------------------
+  ;; --- shared bodies -------------------------------------------------------
   ;;
   ;; Source-file-relative, which is how Gambit resolves include inside
   ;; define-library. Nothing below this point is Gambit-specific.
 
+  (include "../../../shared/fingerprint.scm")
   (include "../../../shared/harness-runner.scm"))

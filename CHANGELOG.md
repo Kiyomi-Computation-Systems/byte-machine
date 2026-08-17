@@ -147,6 +147,69 @@ what this milestone delivers.
   the deferred one-owner guard with the condition that reopens it, and an
   open question about Chez and Gambit disagreeing over a library body that
   redefines an imported name.
+- A content fingerprint of the shared test bodies a lane's manifest names,
+  checked in-process against a value the build computed from the same files
+  before the run — proving the declared text is unchanged on disk and read
+  identically by both runtimes, not that the run executed it, so two lanes
+  claiming to run the same text can be shown to disagree rather than merely
+  trusted to agree. `adapter-file-bytes`
+  reads a file through a binary port on both runtimes, the last piece of
+  slice 2's adapter protocol left unimplemented. The algorithm is a
+  polynomial rolling hash using only exact integer arithmetic, never bitwise
+  operations, since neither R6RS nor R7RS guarantees the latter over the
+  unbounded range the fold needs. Hex renders through an explicit lowercase
+  digit table rather than `number->string` with a radix, because Chez and
+  Gambit render `(number->string 255 16)` as `FF` and `ff` respectively —
+  measured on both runtimes — and a fingerprint whose case depended on that
+  would make the one claim it exists to carry, that both runtimes agree,
+  depend on a detail they already answer differently.
+- The expectation a lane's fingerprint is checked against is computed once
+  at build time, from the repository sources, by `load`ing the same
+  `fingerprint.scm` the lane itself runs rather than reimplementing the
+  algorithm a second time — a second implementation agreeing with the first
+  would prove nothing, since the two could drift and the drift would look
+  like a passing comparison. A run that cannot show it executed the intended
+  text now exits status 3 before any test case runs: the first thing in this
+  tree to produce the status slice 2's decision S3 reserved for exactly
+  this.
+- `byte_machine_add_scheme_lane` gains a required `SHARED_BODIES` argument:
+  a lane cannot be registered without declaring the manifest it will be
+  checked against. At run time, an unset or empty manifest means the
+  process was not started by a lane registration — a developer running the
+  harness by hand, or the mutation suite, whose own machinery runs every
+  verify command with no environment at all — and provenance is skipped
+  rather than refused, because refusing would fail the mutation suite's own
+  baseline before a single mutation ran. The guarantee lives at configure
+  time, where it cannot be forged by anything a running process does.
+- Six new lanes prove the check can fail, each exiting exactly 3, for one
+  of four diagnoses: a wrong expectation (reported identically by the Chez
+  and Gambit lanes, which differ only by runtime), a build that never
+  produced one, a manifest naming a body that cannot be read, and a manifest
+  the run never verified at all. The suite grows from 40 to 46 tests and the
+  Scheme mutation suite from 27 to 35 passes (64 to 83 mutations), breaking
+  every decision in the algorithm and in the check itself on a staged copy. One of those mutations — the hex digit table
+  turned uppercase — was predicted to be caught only on Gambit, since the
+  build-time expectation loads the same mutated file a Chez lane runs
+  against; measured, it is caught symmetrically on both runtimes instead, by
+  an unrelated self-test comparison against fixed literal strings, because
+  the passes that carry it set no manifest and provenance never runs there
+  at all. Both the design record and the mutation suite's own comment were
+  corrected once this was measured.
+- A lane that was given a manifest and never verified it now exits 3.
+  Requiring the manifest at configure time makes the environment
+  unforgeable; it says nothing about whether anything read it, and the check
+  is reached either through `harness-begin` or through a hand-placed call —
+  which is what the bootstrap body needed, having deliberately no
+  `harness-begin`. Forget that line in a future body and the lane runs
+  un-provenanced with nothing failing, which was the last way the
+  configure-time guarantee could hold while the run-time one did not. The
+  guard fires from the summary, so it cannot catch a body that reaches
+  neither the summary nor the check — the bootstrap's own shape, a single
+  deliberate exception that carries its own call.
+- [Decision 0004](docs/decisions/0004-content-fingerprint-and-provenance.md),
+  including the bound the manifest does not close — a matching fingerprint
+  proves the declared text is unchanged, not that the run included exactly
+  those files — and the open question that reopens it.
 
 ### Changed
 

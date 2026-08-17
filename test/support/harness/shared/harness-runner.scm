@@ -84,6 +84,80 @@
 (define (harness-normalize-filter value)
   (if (and value (string=? value "")) #f value))
 
+;; Decode a bytevector as ASCII, trimming whitespace at the ends only. The
+;; expectation file is written without a trailing newline, but an editor, a
+;; shell redirect, or a future writer may add one, and a comparison that failed
+;; on a newline would be a provenance failure reported for the wrong reason.
+;;
+;; Interior whitespace is deliberately kept. Collapsing it would make
+;; "dead beef" compare equal to "deadbeef" -- leniency that turns a corrupted
+;; expectation into a passing comparison, which is the one outcome this whole
+;; mechanism exists to prevent.
+(define (harness-whitespace-byte? b)
+  (or (= b 32) (= b 9) (= b 10) (= b 13)))
+
+(define (harness-bytes->string bv)
+  (let ((n (bytevector-length bv)))
+    (let find-start ((start 0))
+      (cond
+        ((= start n) "")
+        ((harness-whitespace-byte? (bytevector-u8-ref bv start))
+         (find-start (+ start 1)))
+        (else
+         (let find-end ((end n))
+           (if (harness-whitespace-byte? (bytevector-u8-ref bv (- end 1)))
+               (find-end (- end 1))
+               (let loop ((i start) (acc (list)))
+                 (if (= i end)
+                     (list->string (reverse acc))
+                     (loop (+ i 1)
+                           (cons (integer->char (bytevector-u8-ref bv i))
+                                 acc)))))))))))
+
+;; The provenance rule, as a function of two values. `expected` is #f when the
+;; build supplied nothing at all, which is a different defect from a mismatch:
+;; one means the lane ran text nobody measured, the other means it ran the wrong
+;; text. Reporting them the same way would send a reader to the wrong file.
+(define (harness-provenance-diagnosis expected computed)
+  (cond
+    ((not expected)
+     (string-append
+      "no expectation was supplied, so nothing can say whether this run "
+      "executed the text it was supposed to. This run computed " computed "."))
+    ((string=? expected computed) #f)
+    (else
+     (string-append
+      "fingerprint mismatch: the build expected " expected
+      " but this run computed " computed
+      ". Either this lane executed different text from the one the build "
+      "measured, or it is running a stale artifact."))))
+
+;; A lane whose build declared a manifest, in a run where nothing verified it.
+;;
+;; SHARED_BODIES being required makes the environment unforgeable; it says
+;; nothing about whether anything read it. The check is reached from
+;; harness-begin, or by a hand-placed call -- which is what harness-bootstrap
+;; needed, having deliberately no harness-begin. Forget that line in a future
+;; body and the lane runs un-provenanced with nothing failing, which is the one
+;; remaining way V9's guarantee can be true at configure time and false at run
+;; time.
+;;
+;; Pure, and separate from the summary's read of the live flag, for the reason
+;; harness-empty-selection-diagnosis is: a run in this state cannot assert
+;; anything about itself from the inside, so the rule has to be checkable as a
+;; function of two values.
+;;
+;; An absent or empty manifest is not this defect. It means no lane
+;; registration started this process, and skipping is then correct -- see
+;; harness-verify-provenance!.
+(define (harness-provenance-reachability-diagnosis manifest checked?)
+  (if (and manifest (not (string=? manifest "")) (not checked?))
+      (string-append
+       "the build declared a manifest for this run and nothing verified it. "
+       "harness-verify-provenance! was never reached, so this suite's result "
+       "says nothing about whether it executed the text it was given.")
+      #f))
+
 ;; ---------------------------------------------------------------------------
 ;; Mutable result state (the imperative shell of the runner)
 ;; ---------------------------------------------------------------------------
@@ -118,6 +192,14 @@
 (define harness-filter #f)
 (define harness-verbose #f)
 (define harness-probe-depth 0)
+
+;; Set by harness-verify-provenance! itself, so "unset" means the procedure was
+;; never called -- not that it ran and found nothing. Deliberately outside
+;; harness-clear-state! and the probe's captured state: harness-begin verifies
+;; before it clears, and a probe restoring this would erase the fact that the
+;; check happened.
+(define harness-provenance-checked #f)
+(define harness-provenance-unreached #f)
 
 (define (harness-quiet?) (> harness-probe-depth 0))
 
@@ -403,8 +485,107 @@
                   " os=" (adapter-os)
                   " architecture=" (adapter-architecture))))
 
+;; ---------------------------------------------------------------------------
+;; Provenance
+;; ---------------------------------------------------------------------------
+;;
+;; A provenance failure ends the run there and then, rather than recording an
+;; error and continuing. Recording is not enough, for the reason status 3 exists
+;; at all: a body that goes on to hang satisfies a timeout expectation whether
+;; or not an error was recorded first, so a recorded-and-continued failure is
+;; invisible to every lane whose expected outcome does not depend on reaching
+;; the summary. Beyond that, continuing is pointless -- a run that cannot show
+;; it is executing the intended text says nothing meaningful afterwards.
+
+(define (harness-provenance-failure! detail)
+  (harness-say-always
+   (string-append "byte-machine-harness: PROVENANCE-ERROR " detail))
+  (harness-say-always
+   (string-append
+    "byte-machine-harness: summary suite=" harness-suite-name
+    " runtime=" (adapter-runtime-name)
+    " mode=" (adapter-execution-mode)
+    " os=" (adapter-os)
+    " architecture=" (adapter-architecture)
+    " cases=0 status=" (number->string harness-status-provenance)))
+  (adapter-flush-output)
+  (adapter-exit harness-status-provenance))
+
+;; A body named in the manifest that cannot be read is a provenance failure, not
+;; an I/O accident to propagate. Without this the raise escapes the runner and
+;; takes the process out through a status outside this file's four-value
+;; vocabulary, with no summary line and a message about a file handle -- which
+;; the exact-status helper would then report as an out-of-vocabulary status, a
+;; true statement about the wrong thing.
+(define (harness-fingerprint-file-checked path)
+  (let ((h (guard (e (#t #f)) (harness-fingerprint-file path))))
+    (if h
+        h
+        (harness-provenance-failure!
+         (string-append
+          "cannot read " path
+          ", which this run is supposed to have executed. The build tree is "
+          "incomplete; build before running the tests.")))))
+
+;; Returns the expected value as a string, or #f. #f covers both an unset
+;; variable and a build that never produced the file; harness-provenance-
+;; diagnosis reports either as "no expectation was supplied", since from the
+;; run's side they are the same condition.
+(define (harness-expected-fingerprint)
+  (let ((path (adapter-environment-variable "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE")))
+    (if (or (not path) (string=? path ""))
+        #f
+        (let ((bytes (guard (e (#t #f)) (adapter-file-bytes path))))
+          (if bytes (harness-bytes->string bytes) #f)))))
+
+;; Fingerprint each manifest entry, report the values, then check the combined
+;; one. Printing alone would not be a check: a digest nothing reads is a claim.
+;;
+;; AN ABSENT MANIFEST IS NOT A FAILURE
+;;
+;; An unset or empty BYTE_MACHINE_FINGERPRINT_FILES means this process was not
+;; started by a lane registration, and the only things that start a harness
+;; program any other way are a developer running one by hand and the Scheme
+;; mutation suite. The second is not optional: byte_machine_mutation_run
+;; requires every spec to exit 0 unmutated on the staged tree, and it runs its
+;; verify commands with no environment at all, so refusing here would fail
+;; every one of the mutation suite's baselines before a single mutation ran.
+;;
+;; Nothing is lost by skipping. SHARED_BODIES is a required argument of
+;; byte_machine_add_scheme_lane, so a registered lane always has a manifest and
+;; there is no reachable path by which a real lane silently loses provenance.
+;; The guarantee lives at configure time, where it cannot be forged; a run-time
+;; refusal would add only a rule this repository's own tooling cannot satisfy.
+(define (harness-verify-provenance!)
+  (set! harness-provenance-checked #t)
+  (let ((raw (adapter-environment-variable "BYTE_MACHINE_FINGERPRINT_FILES")))
+    (if (or (not raw) (string=? raw ""))
+        #t
+        (let loop ((rest (harness-split raw #\|)) (acc '()))
+          (if (null? rest)
+              (let ((combined (harness-fingerprint->string
+                               (harness-fingerprint-combine (reverse acc)))))
+                (harness-say-always
+                 (string-append "byte-machine-harness: fingerprint combined="
+                                combined))
+                (let ((d (harness-provenance-diagnosis
+                          (harness-expected-fingerprint) combined)))
+                  (if d
+                      (harness-provenance-failure! d)
+                      (harness-say-always
+                       "byte-machine-harness: fingerprint verified against the build manifest"))))
+              (let ((h (harness-fingerprint-file-checked (car rest))))
+                (harness-say-always
+                 (string-append "byte-machine-harness: fingerprint "
+                                (car rest) "="
+                                (harness-fingerprint->string h)))
+                (loop (cdr rest) (cons h acc))))))))
+
 (define (harness-begin suite-name)
   (set! harness-suite-name suite-name)
+  ;; Before anything else a suite might report. A run that cannot show it
+  ;; executed the intended text must not first print a banner implying it did.
+  (harness-verify-provenance!)
   (harness-clear-state!)
   (set! harness-filter
         (harness-normalize-filter
@@ -441,13 +622,22 @@
   (harness-empty-selection-diagnosis harness-case-count harness-skipped-count))
 
 (define (harness-exit-status)
-  (cond ((> harness-error-count 0) harness-status-harness-error)
+  (cond (harness-provenance-unreached harness-status-provenance)
+        ((> harness-error-count 0) harness-status-harness-error)
         ((> harness-failure-count 0) harness-status-failed)
         (else harness-status-pass)))
 
 (define (harness-summary)
   (let ((empty (harness-empty-selection-error)))
     (if empty (harness-record-error! empty)))
+  (let ((unreached (harness-provenance-reachability-diagnosis
+                    (adapter-environment-variable "BYTE_MACHINE_FINGERPRINT_FILES")
+                    harness-provenance-checked)))
+    (if unreached
+        (begin
+          (set! harness-provenance-unreached #t)
+          (harness-say-always
+           (string-append "byte-machine-harness: PROVENANCE-ERROR " unreached)))))
   (let ((status (harness-exit-status)))
     (harness-say-always
      (string-append

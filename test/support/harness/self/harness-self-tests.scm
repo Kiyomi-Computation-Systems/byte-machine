@@ -12,6 +12,18 @@
 ;;; a name in one adapter's export list and not the other is a load failure on
 ;;; that runtime, not a silent gap (spec section 9.1).
 
+;; Construct a bytevector from a length and a list of byte values. Written by
+;; hand because the two standards disagree about every convenient constructor:
+;; R7RS has (bytevector 97 98 99), R6RS has (u8-list->bytevector '(97 98 99)),
+;; and a shared body may name neither.
+(define (harness-bytes length bytes)
+  (let ((bv (make-bytevector length 0)))
+    (let loop ((i 0) (rest bytes))
+      (if (null? rest)
+          bv
+          (begin (bytevector-u8-set! bv i (car rest))
+                 (loop (+ i 1) (cdr rest)))))))
+
 (harness-group "assertions"
   (lambda ()
 
@@ -456,3 +468,154 @@
         (check-not-equal "the two empty states read differently"
                          (harness-empty-selection-diagnosis 0 0)
                          (harness-empty-selection-diagnosis 0 4))))))
+
+;; --- the content fingerprint ------------------------------------------------
+;;
+;; Every value below was measured on Chez 10.4.1 and Gambit 4.9.8 on
+;; 2026-08-17 and was identical on both. They are literals rather than
+;; recomputations because a test that recomputes the thing under test with the
+;; thing under test asserts only that it is deterministic.
+
+(harness-group "fingerprint"
+  (lambda ()
+
+    (harness-case "an empty bytevector folds to the seed"
+      (lambda ()
+        (check-equal "empty"
+                     (harness-fingerprint->string
+                      (harness-fingerprint-bytevector (harness-bytes 0 '())))
+                     "3435eab979e3e0")))
+
+    (harness-case "three ASCII bytes"
+      (lambda ()
+        (check-equal "abc"
+                     (harness-fingerprint->string
+                      (harness-fingerprint-bytevector (harness-bytes 3 '(97 98 99))))
+                     "60b8174578c282d")))
+
+    ;; The +1 on each byte exists for exactly this: without it a leading NUL is
+    ;; absorbed and these three values collapse into one.
+    (harness-case "leading zero bytes are significant"
+      (lambda ()
+        (let ((abc (harness-fingerprint->string
+                    (harness-fingerprint-bytevector (harness-bytes 3 '(97 98 99)))))
+              (one (harness-fingerprint->string
+                    (harness-fingerprint-bytevector (harness-bytes 4 '(0 97 98 99)))))
+              (two (harness-fingerprint->string
+                    (harness-fingerprint-bytevector
+                     (harness-bytes 5 '(0 0 97 98 99))))))
+          (check-equal "one leading NUL" one "bac4261bdc123")
+          (check-equal "two leading NULs" two "1b3297b7cc8f592c")
+          (check-not-equal "one NUL differs from none" one abc)
+          (check-not-equal "two NULs differ from one" two one))))
+
+    (harness-case "combining is order sensitive"
+      (lambda ()
+        (check-equal "(1 2)"
+                     (harness-fingerprint->string (harness-fingerprint-combine '(1 2)))
+                     "3cabbf7defc450d")
+        (check-equal "(2 1)"
+                     (harness-fingerprint->string (harness-fingerprint-combine '(2 1)))
+                     "3cabbf7df0b874f")))
+
+    ;; Chez renders FF where Gambit renders ff for (number->string 255 16), so
+    ;; the rendering cannot go through a radix conversion. This case is what
+    ;; notices if someone ever changes it back.
+    (harness-case "hex digits are lowercase on every runtime"
+      (lambda ()
+        (check-equal "255" (harness-fingerprint->string 255) "ff")
+        (check-equal "3735928559" (harness-fingerprint->string 3735928559) "deadbeef")
+        (check-equal "zero" (harness-fingerprint->string 0) "0")))
+
+    ;; adapter-file-bytes is called directly here, not only through
+    ;; harness-fingerprint-file. A name used only inside the shared runner body
+    ;; resolves internally regardless of the export list, so testing it only
+    ;; indirectly would make its export-list mutation undetectable.
+    (harness-case "a file is read as its exact bytes"
+      (lambda ()
+        (let ((bv (adapter-file-bytes
+                   (adapter-environment-variable "BYTE_MACHINE_FINGERPRINT_SAMPLE"))))
+          (check-equal "length" (bytevector-length bv) 13)
+          (check-equal "first byte is b" (bytevector-u8-ref bv 0) 98)
+          (check-equal "last byte is LF" (bytevector-u8-ref bv 12) 10))))
+
+    (harness-case "both runtimes fingerprint the same file identically"
+      (lambda ()
+        (check-equal "sample"
+                     (harness-fingerprint->string
+                      (harness-fingerprint-file
+                       (adapter-environment-variable "BYTE_MACHINE_FINGERPRINT_SAMPLE")))
+                     "b1058d10fb543b0")))))
+
+;; --- provenance, as a decision -----------------------------------------------
+;;
+;; The shell around this exits the process, so nothing inside a suite can
+;; observe it. The rule itself is two values in and a diagnostic or #f out, and
+;; that part is checkable here.
+
+(harness-group "provenance"
+  (lambda ()
+
+    (harness-case "agreement is not a diagnosis"
+      (lambda ()
+        (check "identical values agree"
+               (not (harness-provenance-diagnosis "abc123" "abc123")))))
+
+    (harness-case "a mismatch names both values"
+      (lambda ()
+        (let ((d (harness-provenance-diagnosis "abc123" "def456")))
+          (check "there is a diagnosis" (if d #t #f))
+          (check "it names the expectation" (harness-string-contains? d "abc123"))
+          (check "it names what was computed" (harness-string-contains? d "def456")))))
+
+    (harness-case "a missing expectation is its own diagnosis"
+      (lambda ()
+        (let ((d (harness-provenance-diagnosis #f "abc123")))
+          (check "there is a diagnosis" (if d #t #f))
+          (check "it does not claim a mismatch"
+                 (not (harness-string-contains? d "mismatch"))))))
+
+    ;; Whitespace is trimmed at the ends only. A reader that also collapsed
+    ;; interior space would make "dead beef" compare equal to "deadbeef", which
+    ;; is the sort of leniency that turns a corrupted expectation into a passing
+    ;; comparison.
+    (harness-case "the expectation file's outer whitespace is trimmed"
+      (lambda ()
+        (check-equal "trailing newline"
+                     (harness-bytes->string (harness-bytes 4 '(97 98 99 10)))
+                     "abc")
+        (check-equal "leading and trailing spaces"
+                     (harness-bytes->string (harness-bytes 5 '(32 97 98 99 32)))
+                     "abc")
+        (check-equal "empty" (harness-bytes->string (harness-bytes 0 '())) "")
+        (check-equal "interior space is kept"
+                     (harness-bytes->string (harness-bytes 7 '(100 101 97 100 32 98 102)))
+                     "dead bf")
+        ;; All-whitespace input is the only way to reach the scan's base case
+        ;; after consuming bytes rather than trivially. An off-by-one in the
+        ;; termination logic would either read past the end or loop forever here.
+        ;; This case also carries the only tab and carriage-return bytes tested.
+        (check-equal "all whitespace, including tab and carriage return"
+                     (harness-bytes->string (harness-bytes 4 '(32 9 10 13)))
+                     "")))
+
+    (harness-case "a manifest nothing verified is a defect"
+      (lambda ()
+        (let ((d (harness-provenance-reachability-diagnosis "a.scm|b.scm" #f)))
+          (check "there is a diagnosis" (if d #t #f))
+          (check "it says the check was not reached"
+                 (harness-string-contains? d "never reached")))))
+
+    (harness-case "a manifest that was verified is not a defect"
+      (lambda ()
+        (check "verified"
+               (not (harness-provenance-reachability-diagnosis "a.scm" #t)))))
+
+    ;; An absent or empty manifest means no lane registration started this
+    ;; process. Skipping is correct there, so neither may be reported as a
+    ;; defect -- and both spellings must agree, for the reason
+    ;; harness-normalize-filter gives about a shell that writes VAR= .
+    (harness-case "no manifest is not a defect, however it is spelled"
+      (lambda ()
+        (check "absent" (not (harness-provenance-reachability-diagnosis #f #f)))
+        (check "empty" (not (harness-provenance-reachability-diagnosis "" #f)))))))

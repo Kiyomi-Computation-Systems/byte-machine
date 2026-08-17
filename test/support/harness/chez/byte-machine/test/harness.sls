@@ -31,11 +31,17 @@
     harness-string-contains? harness-join harness-split harness-take
     harness-member? harness-failure-context harness-normalize-filter
     harness-counters harness-restore-counters! harness-capture-state
+    ;; content fingerprint and provenance
+    harness-fingerprint-bytevector harness-fingerprint-combine
+    harness-fingerprint->string harness-fingerprint-file
+    harness-bytes->string harness-provenance-diagnosis
+    harness-verify-provenance! harness-provenance-reachability-diagnosis
     ;; adapter protocol
     adapter-runtime-name adapter-runtime-version adapter-machine-type
     adapter-os adapter-architecture adapter-execution-mode
     adapter-environment-variable adapter-exit
-    adapter-value->string adapter-describe-condition adapter-flush-output
+    adapter-value->string adapter-describe-condition adapter-file-bytes
+    adapter-flush-output
     ;; arithmetic the shared subset uses, which R6RS keeps outside (rnrs)
     modulo quotient remainder)
 
@@ -141,11 +147,23 @@
         (with-output-to-string (lambda () (display-condition obj)))
         (with-output-to-string (lambda () (write obj)))))
 
+  ;; A binary port, so the value is a fingerprint of bytes rather than of
+  ;; decoded characters -- and so an LF is an LF on a platform whose text ports
+  ;; would translate it. get-bytevector-all returns the EOF object for an empty
+  ;; file rather than a zero-length bytevector, so an empty file fingerprints as
+  ;; the seed instead of raising.
+  (define (adapter-file-bytes path)
+    (let* ((port (open-file-input-port path))
+           (bytes (get-bytevector-all port)))
+      (close-port port)
+      (if (eof-object? bytes) (make-bytevector 0) bytes)))
+
   (define (adapter-flush-output) (flush-output-port (current-output-port)))
 
-  ;; --- shared body ---------------------------------------------------------
+  ;; --- shared bodies -------------------------------------------------------
   ;;
   ;; Included by bare filename, resolved through the launcher's
   ;; source-directories. Nothing below this point is Chez-specific.
 
+  (include "fingerprint.scm")
   (include "harness-runner.scm"))
