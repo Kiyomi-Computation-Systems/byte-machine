@@ -520,6 +520,10 @@ endif()
 # a real lane and cannot be verified under the no-scheme preset. Gambit's path
 # is forwarded too, empty when none was discovered, which drops only the pass
 # that checks the Gambit adapter's export list.
+#
+# The self-tests load the fingerprint fixture through adapter-file-bytes; staged
+# lanes inherit this process's environment through execute_process, so the
+# variable must be set here.
 if(BYTE_MACHINE_CHEZ_EXECUTABLE)
   byte_machine_add_test(
     NAME byte-machine.harness.scheme-mutation.cmake.direct
@@ -530,7 +534,8 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
             -P "${CMAKE_CURRENT_LIST_DIR}/support/cmake/SchemeMutationSuite.cmake"
     TIMEOUT 900
     LABELS unit
-    ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source")
+    ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source"
+                "BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin")
 endif()
 
 # --- The placeholder library, from three working directories ---------------
