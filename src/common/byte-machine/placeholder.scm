@@ -1,9 +1,9 @@
 ;;; Placeholder body for the Milestone 0 portability proof.
 ;;;
 ;;; PORTABILITY: shared body, common R6RS/R7RS subset only. No library form, no
-;;; include, no runtime-specific identifier. Included by exactly one library per
-;;; runtime: src/chez/byte-machine/placeholder.sls and
-;;; src/gambit/byte-machine/placeholder.sld.
+;;; include, no runtime-specific identifier. Included by exactly one owner
+;;; library per runtime, one such library living in each runtime's own source
+;;; tree.
 ;;;
 ;;; This carries no byte-machine semantics and is deleted in Milestone 1
 ;;; (milestone-0-portability-spike.md, decision D4). It exists to prove that one

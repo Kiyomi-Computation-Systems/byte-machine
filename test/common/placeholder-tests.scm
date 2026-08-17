@@ -37,6 +37,17 @@
         (check "a symbol spelled like the tag is not the tag"
                (not (placeholder? (vector 'byte-machine-placeholder 7))))))
 
+    (harness-case "placeholder? rejects a mis-sized vector carrying the real tag"
+      (lambda ()
+        ;; The tag is private, but it is not out of reach: a legitimately built
+        ;; placeholder hands it over through ordinary vector-ref. So the length
+        ;; check is witnessable from outside the library after all, and deleting
+        ;; it outright -- not merely perturbing its constant -- is a mutation
+        ;; this body catches.
+        (let ((real-tag (vector-ref (make-placeholder 0) 0)))
+          (check "a length-3 vector carrying the real tag is not a placeholder"
+                 (not (placeholder? (vector real-tag 1 2)))))))
+
     (harness-case "the marker is one object"
       (lambda ()
         (check "eq? to itself across two calls"
