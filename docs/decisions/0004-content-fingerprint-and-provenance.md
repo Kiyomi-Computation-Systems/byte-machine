@@ -209,13 +209,86 @@ below are copied from that table.
   (`byte-machine.harness.provenance.{chez,gambit}.source`,
   `byte-machine.harness.provenance-absent-expectation.chez.source`,
   `byte-machine.harness.provenance-missing-body.chez.source`) are the first
-  code in this tree to exit it, each for a distinct, named reason.
+  code in this tree to exit it, for three named reasons, not four: a wrong
+  expectation, an expectation the build never produced, and a manifest
+  naming a body that cannot be read. The `chez` and `gambit` provenance
+  lanes report the identical diagnosis for the first reason and differ only
+  by which runtime ran it — design §7's own table already lists these four
+  lanes against three assertions; this record now agrees with it.
 
-- **5b and 5c inherit `SHARED_BODIES` unchanged and owe only a manifest.**
-  V1's split means a compiled lane's registration adds a manifest naming the
-  compiled artifact's source rather than replacing any part of this
-  mechanism; the required-argument guarantee (V9) and the skip-not-refuse
-  rule (V13) need no change to extend to them.
+- **5b and 5c inherit `SHARED_BODIES` unchanged; they do not, on that
+  account, owe only a manifest.** V1's split still means a compiled lane's
+  registration adds a manifest naming the compiled artifact's source rather
+  than replacing any part of the registration mechanism, and the
+  required-argument guarantee (V9) and the skip-not-refuse rule (V13) still
+  need no change to extend to them. What does not carry over for free: a
+  manifest naming that source proves nothing about the compiled artifact
+  itself, because both sides of the check still read the source, never the
+  artifact. See the gap below.
+
+- **The concrete gap slice 5b must close: a matching fingerprint does not
+  prove the running code was built from the text it names.** The final
+  whole-branch review demonstrated this directly against the shipped code,
+  in a scratch tree, in the shape slice 5b will have: compile
+  `(byte-machine test harness)` to a Chez `.so`; edit `harness-runner.scm`
+  afterward, leaving `harness.sls` itself untouched, so the object stays
+  "current" by Chez's own rule — currency is decided by comparing the
+  object's timestamp against the *wrapper's*, and a body reached only
+  through `include` has no timestamp of its own that anything consults;
+  recompute the expectation with the shipped launcher over the edited
+  source; run a lane against the object. Result: `fingerprint verified
+  against the build manifest`, exit 0 — while the compiled object provably
+  did not contain the edit.
+
+  The mechanism cannot do otherwise. `fingerprint-manifest.ss` at build time
+  and `harness-fingerprint-file` at run time (`harness-runner.scm`) are the
+  same function reading the same manifest paths from disk
+  (`test/CMakeLists.txt`'s `byte_machine_expected_fingerprint`,
+  `cmake/ByteMachineSchemeLane.cmake`'s `fingerprint_files`) — current disk
+  contents are the only text there is for a source lane, but they are not
+  what a compiled lane's object was built from. What the check actually
+  proves is narrower than it can sound: **that the declared text is
+  unchanged on disk and is read identically by both runtimes — not that the
+  code actually executing was built from it.**
+
+  This is a second bound, distinct from the one §5.3 and Decision 2 already
+  record — that the manifest is *declared* rather than *observed*, so a
+  lane is not proven to touch exactly the files it names. That bound is
+  about which files a run reaches; this one is about whether a named file's
+  *current* content has any relationship to a *previously built* artifact.
+  Both are real and neither closes the other: naming every file a run
+  touches would still leave each one read fresh at both ends, telling a
+  compiled lane nothing about its object; and a build-baked expectation
+  (below) would still say nothing about a file a run reaches outside its
+  manifest.
+
+  The direction for closing it, small enough to record now: generate a
+  Scheme file at build time holding the combined expectation as a literal,
+  have the compiled wrapper `include` it so the value is compiled *into*
+  the artifact, and compare that literal — carried inside the object, not
+  recomputed from today's source — against the value the run computes from
+  the manifest. A stale artifact then carries a stale literal, the
+  comparison disagrees, and the lane exits 3. The alternative that looks
+  obvious instead — keep computing the expectation from repository
+  originals as this slice does, but measure the artifact rather than the
+  source — has nowhere to enter this tree today: `byte_machine_expected_fingerprint`
+  is handed exactly the `arg_SHARED_BODIES` list the run-time manifest is
+  also built from (`cmake/ByteMachineSchemeLane.cmake`, lines 240-241) — one
+  list, not two — so "expectation from repository originals, measurement
+  from staged copies" is not a distinction this function's inputs can
+  express yet.
+
+  One note on how to read this record's own language now:
+  `harness-provenance-diagnosis`'s mismatch message (`harness-runner.scm`,
+  line 133) offers "or it is running a stale artifact" as a reading of a
+  fingerprint *mismatch*. That reading holds only when the staleness
+  happens to touch a file the manifest names — the gap above is exactly the
+  case where it does not, and the check passes rather than mismatching.
+  Left as written rather than softened: it already carries a second,
+  always-available reading ("this lane executed different text from the
+  one the build measured"), it fires only after a mismatch has happened
+  rather than characterizing a pass, and a claim about what a *passing*
+  check proves belongs here, not in a string a Scheme process prints.
 
 - **A caller-supplied `ENVIRONMENT` entry always wins over this function's
   own defaults, including `BYTE_MACHINE_EXECUTION_MODE` — pre-existing, and

@@ -1447,29 +1447,54 @@ if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
 endif()
 ```
 
-- [ ] **Step 3: Write passes 30 and 31 — the hex table, with its asymmetric outcome**
+- [ ] **Step 3: Write passes 30 and 31 — the hex table, caught symmetrically**
 
 Append immediately after:
 
 ```cmake
-# --- Passes 30 and 31: the hex rendering, and why its outcome is asymmetric -
+# --- Passes 30 and 31: the hex rendering table -------------------------------
 #
-# fingerprint.scm is the same file the build-time expectation loads, so mutating
-# it mutates both sides of the Chez comparison at once: the expectation renders
-# uppercase, the Chez run renders uppercase, and the two still agree. The Chez
-# lane passes and this mutation SURVIVES there. The Gambit run renders lowercase
-# and diverges from the Chez-computed expectation, so the Gambit lane exits 3
-# and it is caught.
+# MEASURED 2026-08-17, AND SYMMETRIC -- NOT THE ASYMMETRIC OUTCOME A FIRST
+# READING OF "fingerprint.scm is also what the build-time expectation loads"
+# SUGGESTS.
 #
-# That asymmetry is not a weakness to route around -- it is the demonstration
-# that the cross-runtime claim is carried by the Gambit lane and by nothing
-# else. Declaring it caught outright would fail this suite for the wrong reason
-# and invite someone to "fix" it by weakening the mutation. Declaring it a plain
-# survivor would lose the only evidence of section 6.1.
+# Neither pass sets a manifest, so provenance is skipped here exactly as it is
+# for every other pass but 32 and 33 below: BYTE_MACHINE_FINGERPRINT_FILES is
+# unset, harness-verify-provenance! returns #t immediately, and the self-tests
+# suite runs its own cases undisturbed. It is the self-tests' own "hex digits
+# are lowercase on every runtime" case that actually witnesses this mutation --
+# it check-equals fixed literals ("ff", "deadbeef", "0") rather than deriving
+# its expectation from fingerprint.scm, so mutating the digit table fails an
+# ordinary comparison on both runtimes: both processes exit 1 (the harness's
+# own "an assertion failed" status) with a "byte-machine-harness: FAIL " line,
+# which is exactly what EXPECT_STATUS and EXPECT_OUTPUT_MATCHES below assert
+# and exactly what the real run reports caught for both.
 #
-# The self-tests' own "hex digits are lowercase on every runtime" case catches
-# it on both runtimes -- which is why the Chez half is verified through the
-# self-tests lane while the Gambit half is verified through the provenance path.
+# The asymmetric story -- Chez agreeing with a build-time expectation that
+# moved with it, Gambit alone catching the divergence -- is not demonstrated
+# by any pass in this file, passes 32 and 33 included. Both run Chez only,
+# neither wrapped in if(BYTE_MACHINE_GAMBIT_EXECUTABLE), so neither can be
+# where "Gambit alone catches it" happens. Both compare against a fixed
+# wrong-value fixture rather than a fingerprint recomputed from the mutated
+# tree -- pass 32 against a file holding the literal "not-a-fingerprint",
+# pass 33 against never-produced.fingerprint, a path this suite never writes
+# -- so neither expectation can move with a mutation the way the story
+# requires. And harness-hex-digits is the one definition both adapters
+# include verbatim: any pass that did compute its expectation via Chez over
+# the same staged tree the mutation lands on would have that computation read
+# the identical mutated table the runtime under test reads, so the two would
+# agree regardless of runtime. Showing the asymmetry needs a provenance-
+# wrapped verify command whose expectation is built from an *unmutated* tree
+# while the runtime under test sees the mutated one; staging gives every pass
+# one tree, already mutated, so no pass here can offer that.
+#
+# Section 6.1 of the slice-5a design carries the claim instead, in the
+# design's own terms: the cross-runtime guarantee rests on the Gambit lane
+# because the expectation is a Chez computation -- an argument from how the
+# build is wired, not a fact this suite reproves. An earlier draft of this
+# comment reassigned the asymmetric outcome to passes 32 and 33 rather than
+# dropping it; checked against what those two passes actually mutate and
+# compare, that reassignment does not hold either.
 
 set(HEX_MUTATION_FIND [[(define harness-hex-digits "0123456789abcdef")]])
 set(HEX_MUTATION_REPLACE [[(define harness-hex-digits "0123456789ABCDEF")]])
@@ -1699,7 +1724,7 @@ Expected: PASS, with the suite's own totals check accepting 33 passes and 81 mut
 
 Also update the prose block at the top of the file: it opens with `TWENTY-SEVEN PASSES WHEN GAMBIT IS DISCOVERED` and describes each pass. Update the heading and add a paragraph for passes 28–33, matching the style of the existing per-pass paragraphs. The file's own comment says the declared numbers exist so a reader checks one number by eye, not two that can disagree.
 
-- [ ] **Step 8: Verify the hex mutation's asymmetry is real**
+- [ ] **Step 8: Verify the hex mutation is caught symmetrically**
 
 ```bash
 ctest --test-dir build/dev -R 'scheme-mutation' -V 2>&1 | grep -i 'uppercase'

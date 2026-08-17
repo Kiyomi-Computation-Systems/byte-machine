@@ -514,8 +514,8 @@
 ;; program any other way are a developer running one by hand and the Scheme
 ;; mutation suite. The second is not optional: byte_machine_mutation_run
 ;; requires every spec to exit 0 unmutated on the staged tree, and it runs its
-;; verify commands with no environment at all, so refusing here would fail all
-;; twenty-seven mutation passes at their baseline before a single mutation ran.
+;; verify commands with no environment at all, so refusing here would fail
+;; every one of the mutation suite's baselines before a single mutation ran.
 ;;
 ;; Nothing is lost by skipping. SHARED_BODIES is a required argument of
 ;; byte_machine_add_scheme_lane, so a registered lane always has a manifest and

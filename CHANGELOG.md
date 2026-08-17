@@ -147,10 +147,12 @@ what this milestone delivers.
   the deferred one-owner guard with the condition that reopens it, and an
   open question about Chez and Gambit disagreeing over a library body that
   redefines an imported name.
-- A content fingerprint of the shared test bodies a lane actually ran,
-  checked in-process against a value the build computed from the repository
-  sources before the run — so two lanes claiming to run the same text can be
-  shown to disagree rather than merely trusted to agree. `adapter-file-bytes`
+- A content fingerprint of the shared test bodies a lane's manifest names,
+  checked in-process against a value the build computed from the same files
+  before the run — proving the declared text is unchanged on disk and read
+  identically by both runtimes, not that the run executed it, so two lanes
+  claiming to run the same text can be shown to disagree rather than merely
+  trusted to agree. `adapter-file-bytes`
   reads a file through a binary port on both runtimes, the last piece of
   slice 2's adapter protocol left unimplemented. The algorithm is a
   polynomial rolling hash using only exact integer arithmetic, never bitwise
@@ -179,9 +181,11 @@ what this milestone delivers.
   rather than refused, because refusing would fail the mutation suite's own
   baseline before a single mutation ran. The guarantee lives at configure
   time, where it cannot be forged by anything a running process does.
-- Four new lanes prove the check can fail, each exiting exactly 3 for a
-  distinct diagnosis: a wrong expectation, a build that never produced one,
-  and a manifest naming a body that cannot be read. The suite grows from 40
+- Four new lanes prove the check can fail, each exiting exactly 3, for one
+  of three diagnoses: a wrong expectation (reported identically by the Chez
+  and Gambit lanes, which differ only by runtime), a build that never
+  produced one, and a manifest naming a body that cannot be read. The suite
+  grows from 40
   to 44 tests and the Scheme mutation suite from 27 to 33 passes (64 to 81
   mutations), breaking every decision in the algorithm and in the check
   itself on a staged copy. One of those mutations — the hex digit table
