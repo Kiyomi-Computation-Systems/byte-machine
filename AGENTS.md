@@ -13,6 +13,19 @@
   "this cannot be tested" is a claim to demonstrate, and an experiment that shows
   nothing is inconclusive, not negative. `EXPECT_SURVIVES` is for the genuinely
   unwitnessable, with a written reason; never to reach green.
+* Adding a new way for the program to exit can silently disarm an existing
+  mutation. Slice 5a's reachability guard gave a *mutated* `harness-begin` its
+  own route to status 3, so that mutation's baseline and mutant both landed on 3
+  — still reported caught, no longer discriminating anything. After adding an
+  exit path, re-run the whole mutation suite, not just the new lanes, and check
+  each affected pass's baseline and mutant still differ for the reason the
+  mutation names. A green suite will not tell you.
+* A registration that depends on a tool other than its own backend is gated on
+  that tool, not on the backend. A Gambit lane whose expectation is computed by
+  a Chez process needs `if(BYTE_MACHINE_CHEZ_EXECUTABLE)`; its own no-runtime
+  skip fires on a missing Gambit and says nothing about a missing Chez. Slice 5a
+  shipped this bug twice, on a host where both are installed and neither review
+  could see it without configuring a one-runtime build.
 * Prefer the mutation form caught by a failed comparison over one caught by a
   raise. A raise-based catch depends on where the mutant happens to crash rather
   than on the assertion naming the decision. Before accepting one, try the
