@@ -44,13 +44,14 @@
                            (+ (bytevector-u8-ref bv i) 1))
                         harness-fingerprint-modulus))))))
 
-;; Fingerprints a file's exact bytes. Reads through adapter-file-bytes, so the
-;; read is a binary one on both runtimes (see each adapter's definition) --
-;; this cannot be defined until adapter-file-bytes exists, which is why Task 1
-;; left a comment here instead: a free identifier bound nowhere in the
-;; library, not merely later in the same body, fails Chez library construction
-;; immediately, for every lane that imports it, whether or not the identifier
-;; is exported or called.
+;; Fingerprints a file's exact bytes, read through adapter-file-bytes (binary
+;; on both runtimes -- see each adapter's definition) and folded through
+;; harness-fingerprint-bytevector, so the same file fingerprints identically
+;; on both. The adapter-file-bytes dependency is structural, not stylistic:
+;; R6RS requires every free identifier in a library body to be bound, so this
+;; procedure cannot be separated from whatever defines adapter-file-bytes
+;; without failing Chez library construction immediately, whether or not it
+;; is exported or ever called.
 (define (harness-fingerprint-file path)
   (harness-fingerprint-bytevector (adapter-file-bytes path)))
 

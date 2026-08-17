@@ -123,12 +123,15 @@
 #
 # WHAT THIS SUITE NEEDS FROM ITS ENVIRONMENT
 #
-# The self-tests assert that the lane declared its execution mode and that the
-# registration's test name is visible, so BYTE_MACHINE_EXECUTION_MODE=source and
-# BYTE_MACHINE_TEST_NAME must be set in this process; CTest supplies both. Run
-# by hand without them, the baseline fails before any mutation is tried -- which
-# is the designed behaviour, not a bug: an unverifiable baseline makes every
-# mutation look caught.
+# The self-tests assert that the lane declared its execution mode, that the
+# registration's test name is visible, and read the fingerprint fixture
+# through adapter-file-bytes, so BYTE_MACHINE_EXECUTION_MODE=source,
+# BYTE_MACHINE_TEST_NAME, and BYTE_MACHINE_FINGERPRINT_SAMPLE (naming
+# test/fixtures/fingerprint-sample.bin) must all be set in this process;
+# CTest supplies all three -- see this suite's registration in
+# test/CMakeLists.txt. Run by hand without them, the baseline fails before any
+# mutation is tried -- which is the designed behaviour, not a bug: an
+# unverifiable baseline makes every mutation look caught.
 
 cmake_minimum_required(VERSION 3.26)
 
