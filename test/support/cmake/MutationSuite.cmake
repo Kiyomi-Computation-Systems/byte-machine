@@ -460,7 +460,15 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: an unknown backend no longer stops registration"
-  FIND [[  if(status STREQUAL "unknown-backend")]]
+  # Re-anchored on the three-clause form the Gambit search-root check added:
+  # the single-clause pattern this mutation used to match no longer occurs
+  # anywhere in the file (see MutationRunner.cmake's SITES comment -- a pattern
+  # that stops matching after a refactor must be updated, not deleted). REPLACE
+  # is unchanged: this mutation still means "the whole fatal-error guard is
+  # gone", which is a different break than the narrower one below.
+  FIND [[  if(status STREQUAL "unknown-backend"
+     OR status STREQUAL "comma-in-path"
+     OR status STREQUAL "relative-path")]]
   REPLACE [[  if(FALSE)]])
 
 byte_machine_mutation(
@@ -483,6 +491,44 @@ byte_machine_mutation(
   LABEL "scheme-lane: the source execution mode is no longer declared in the environment"
   FIND [[  set(environment "BYTE_MACHINE_EXECUTION_MODE=source" ${arg_ENVIRONMENT})]]
   REPLACE [[  set(environment ${arg_ENVIRONMENT})]])
+
+# A comma in a Gambit search root is not a wrong path but a malformed -:
+# option list: gsi prints its usage banner and runs no Scheme at all, on every
+# Gambit lane at once. A relative root is resolved against gsi's own working
+# directory, so a lane would find its libraries or not depending on where
+# CTest launched it. Both are configure-time refusals, so each gets its own
+# mutation alongside the wrong-separator case, which would corrupt every
+# multi-root search silently rather than refusing it.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "lane: a comma in a Gambit search root is accepted"
+  FIND [[    if(dir MATCHES ",")]]
+  REPLACE [[    if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "lane: the search roots are joined with the wrong separator"
+  FIND [[  list(JOIN parts "," joined)]]
+  REPLACE [[  list(JOIN parts ";" joined)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "lane: a relative Gambit search root is accepted"
+  FIND [[    if(NOT IS_ABSOLUTE "${dir}")]]
+  REPLACE [[    if(FALSE)]])
+
+# The companion to the re-anchored "an unknown backend no longer stops
+# registration" mutation above: that one deletes the guard outright, this one
+# narrows it back to the pre-Task-3 single clause, so comma-in-path and
+# relative-path would fail open while unknown-backend stayed refused. Two
+# distinct regressions, so two mutations.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "lane: a refused search list does not stop registration"
+  FIND [[  if(status STREQUAL "unknown-backend"
+     OR status STREQUAL "comma-in-path"
+     OR status STREQUAL "relative-path")]]
+  REPLACE [[  if(status STREQUAL "unknown-backend")]])
 
 byte_machine_mutation(
   FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake

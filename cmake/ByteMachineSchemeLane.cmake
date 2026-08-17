@@ -18,13 +18,55 @@ include("${CMAKE_CURRENT_LIST_DIR}/ByteMachineTesting.cmake")
 
 # --- Functional core -------------------------------------------------------
 
+# byte_machine_scheme_lane_gambit_search(<out_option> <out_status> <out_message>
+#                                        <dir>...)
+#
+# Build Gambit's `-:` runtime-option argument putting every <dir> on the module
+# search path. Status is `ok` or `comma-in-path`.
+#
+# The comma check is not defensive programming. Gambit's -: option list is
+# comma-separated, so a root containing one is not a wrong path but a malformed
+# option list: gsi prints its usage banner and runs nothing, on every Gambit
+# lane at once, mentioning nothing this project owns. A checkout under
+# ~/my,projects/ is enough. Refusing at configure time turns that into a
+# sentence naming the directory.
+function(byte_machine_scheme_lane_gambit_search out_option out_status out_message)
+  set(${out_option} "" PARENT_SCOPE)
+  set(${out_message} "" PARENT_SCOPE)
+
+  set(parts "")
+  foreach(dir IN LISTS ARGN)
+    if(dir MATCHES ",")
+      set(${out_status} "comma-in-path" PARENT_SCOPE)
+      set(${out_message}
+        "a Gambit search root must not contain a comma, but '${dir}' does. Gambit's -: options are comma-separated, so gsi would print its usage banner and run no Scheme at all."
+        PARENT_SCOPE)
+      return()
+    endif()
+    if(NOT IS_ABSOLUTE "${dir}")
+      set(${out_status} "relative-path" PARENT_SCOPE)
+      set(${out_message}
+        "a Gambit search root must be absolute, but '${dir}' is not. Gambit resolves a relative root against its own working directory, so the lane would find its libraries or not depending on where it was launched."
+        PARENT_SCOPE)
+      return()
+    endif()
+    list(APPEND parts "search=${dir}")
+  endforeach()
+
+  list(JOIN parts "," joined)
+  set(${out_option} "-:${joined}" PARENT_SCOPE)
+  set(${out_status} "ok" PARENT_SCOPE)
+endfunction()
+
 # byte_machine_scheme_lane_command(<backend> <program>
 #                                  <out_command> <out_status> <out_message>)
 #
-# Status is `ok`, `no-runtime`, or `unknown-backend`. A missing runtime is not
-# fatal: the CMake-layer specifications must stay runnable on a host with no
-# Scheme installed, so a lane whose runtime was never discovered is skipped with
-# a message rather than failing configuration.
+# Status is `ok`, `no-runtime`, or `unknown-backend` -- or, for gambit, one of
+# byte_machine_scheme_lane_gambit_search's own statuses (`comma-in-path`,
+# `relative-path`), forwarded unchanged. A missing runtime is not fatal: the
+# CMake-layer specifications must stay runnable on a host with no Scheme
+# installed, so a lane whose runtime was never discovered is skipped with a
+# message rather than failing configuration.
 function(byte_machine_scheme_lane_command backend program
          out_command out_status out_message)
   set(${out_command} "" PARENT_SCOPE)
@@ -70,9 +112,18 @@ function(byte_machine_scheme_lane_command backend program
     # `-f` skips .gambini so a developer's personal initialisation cannot change
     # what a test proves. No launcher is needed: Gambit's include inside
     # define-library is source-file-relative and needs no ambient state.
+    byte_machine_scheme_lane_gambit_search(search_option search_status search_message
+      "${BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT}"
+      "${BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT}")
+    if(NOT search_status STREQUAL "ok")
+      set(${out_status} "${search_status}" PARENT_SCOPE)
+      set(${out_message} "${search_message}" PARENT_SCOPE)
+      return()
+    endif()
+
     set(${out_command}
       "${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
-      "-:search=${BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT},search=${BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT}"
+      "${search_option}"
       "-f"
       "${program}"
       PARENT_SCOPE)
@@ -118,7 +169,9 @@ function(byte_machine_add_scheme_lane)
   byte_machine_scheme_lane_command(
     "${arg_BACKEND}" "${arg_PROGRAM}" command status message)
 
-  if(status STREQUAL "unknown-backend")
+  if(status STREQUAL "unknown-backend"
+     OR status STREQUAL "comma-in-path"
+     OR status STREQUAL "relative-path")
     message(FATAL_ERROR "byte-machine: ${message}")
   endif()
   if(status STREQUAL "no-runtime")

@@ -65,6 +65,24 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
       BACKEND guile
       PROGRAM "${SPEC_SELF}"
       TIMEOUT 10)
+  elseif(c STREQUAL "lane-rejects-relative-gambit-root")
+    set(BYTE_MACHINE_GAMBIT_EXECUTABLE "/opt/gsi")
+    set(BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT "h/gambit")
+    set(BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT "/s/gambit")
+    byte_machine_add_scheme_lane(
+      NAME byte-machine.harness.example.gambit.source
+      BACKEND gambit
+      PROGRAM "${SPEC_SELF}"
+      TIMEOUT 10)
+  elseif(c STREQUAL "lane-rejects-comma-in-gambit-root")
+    set(BYTE_MACHINE_GAMBIT_EXECUTABLE "/opt/gsi")
+    set(BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT "/h/gam,bit")
+    set(BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT "/s/gambit")
+    byte_machine_add_scheme_lane(
+      NAME byte-machine.harness.example.gambit.source
+      BACKEND gambit
+      PROGRAM "${SPEC_SELF}"
+      TIMEOUT 10)
   else()
     message(FATAL_ERROR "byte-machine-spec: unknown case '${c}'")
   endif()
@@ -115,6 +133,45 @@ spec_check_equal("${first_option}" "-:search=/h/gambit,search=/s/gambit"
   "gambit runtime option comes first")
 list(FIND command "-f" f_index)
 spec_check_equal("${f_index}" "2" "gambit lane skips initialisation files")
+
+# --- The Gambit search list ------------------------------------------------
+#
+# Gambit's -: options are comma-separated, so a search root containing a comma
+# does not produce a wrong path: gsi prints its runtime-options usage banner and
+# runs no Scheme at all, naming nothing this project owns. Measured on
+# 2026-08-16; see docs/plans/milestone-0-slice-3-shared-body.md section 2.
+byte_machine_scheme_lane_gambit_search(option status message "/a" "/b")
+spec_check_equal("${status}" "ok" "two roots are accepted")
+spec_check_equal("${option}" "-:search=/a,search=/b" "two roots join with a comma")
+
+byte_machine_scheme_lane_gambit_search(option status message "/a")
+spec_check_equal("${option}" "-:search=/a" "one root needs no separator")
+
+byte_machine_scheme_lane_gambit_search(option status message "/a" "/b,c")
+spec_check_equal("${status}" "comma-in-path" "a comma in a root is rejected")
+spec_check_equal("${option}" "" "a rejected search list yields no option")
+spec_check_equal("${message}"
+  "a Gambit search root must not contain a comma, but '/b,c' does. Gambit's -: options are comma-separated, so gsi would print its usage banner and run no Scheme at all."
+  "comma rejection message")
+
+# A relative root is refused for a different reason than a comma, and needs its
+# own status: gsi resolves it against its own working directory, so the lane
+# would find its libraries or not depending on where CTest happened to launch
+# it -- which is the one thing the working-directory matrix exists to rule out.
+# Nothing else can see this: ByteMachineSchemeLaneSpec sets its own fixture
+# paths, so it cannot notice test/CMakeLists.txt handing over a relative one.
+byte_machine_scheme_lane_gambit_search(option status message "/a" "relative/root")
+spec_check_equal("${status}" "relative-path" "a relative root is rejected")
+spec_check_equal("${option}" "" "a rejected search list yields no option")
+spec_check_equal("${message}"
+  "a Gambit search root must be absolute, but 'relative/root' is not. Gambit resolves a relative root against its own working directory, so the lane would find its libraries or not depending on where it was launched."
+  "relative root message")
+
+# Seeded, so a function that never writes its message is distinguishable from
+# one that clears it.
+set(message "seed")
+byte_machine_scheme_lane_gambit_search(option status message "/a")
+spec_check_equal("${message}" "" "an accepted search list clears the message")
 
 # --- Rejections ------------------------------------------------------------
 
@@ -218,6 +275,8 @@ spec_expect_all_rejected("${SPEC_SELF}"
   "lane-requires-program|PROGRAM is required for byte_machine_add_scheme_lane"
   "lane-requires-timeout|TIMEOUT is required for byte_machine_add_scheme_lane"
   "lane-requires-existing-program|names a program that does not exist"
-  "lane-rejects-unknown-backend|is not a Scheme lane backend")
+  "lane-rejects-unknown-backend|is not a Scheme lane backend"
+  "lane-rejects-comma-in-gambit-root|must not contain a comma"
+  "lane-rejects-relative-gambit-root|must be absolute")
 
 spec_finish("ByteMachineSchemeLane")
