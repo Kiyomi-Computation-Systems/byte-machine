@@ -110,6 +110,28 @@ set(BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT "${CMAKE_SOURCE_DIR}/src/chez")
 set(BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT "${CMAKE_SOURCE_DIR}/src/gambit")
 set(BYTE_MACHINE_TEST_COMMON_DIR "${CMAKE_CURRENT_LIST_DIR}/common")
 
+# Checked before any lane is registered, and before the working-directory
+# matrix's own fixture copies below: a body missing a wrapper must stop the
+# build with this guard's own named diagnostic, not with a bare
+# configure_file error from a copy step that has no idea why the file it
+# wanted is missing. This call used to sit after that copy step; moved here,
+# removing a shared body reports "every shared test body needs a wrapper..."
+# instead of "configure_file Problem opening file for copying".
+# src/common holds bodies included by a library, so they owe no program
+# wrapper; test/common holds bodies included by a program, so each owes both.
+# Every body from either kind of directory shares one basename namespace, which
+# now spans the harness and src/ for the first time.
+byte_machine_portability_guard(
+  SHARED_DIRS "${BYTE_MACHINE_HARNESS_SHARED_DIR}" "${BYTE_MACHINE_SRC_COMMON_DIR}"
+  WRAPPED_DIRS "${BYTE_MACHINE_HARNESS_SELF_DIR}" "${BYTE_MACHINE_TEST_COMMON_DIR}")
+
+byte_machine_add_test(
+  NAME byte-machine.harness.cmake-portability-guard.cmake.direct
+  COMMAND "${CMAKE_COMMAND}" -P
+          "${CMAKE_CURRENT_LIST_DIR}/support/cmake/ByteMachinePortabilityGuardSpec.cmake"
+  TIMEOUT 120
+  LABELS unit)
+
 # --- The working-directory matrix ------------------------------------------
 #
 # Three directories, each catching a different failure of the include
@@ -162,23 +184,6 @@ file(WRITE "${BYTE_MACHINE_CWD_DECOY_DIR}/placeholder.scm"
 (define (placeholder-value p) 'decoy)
 (define (placeholder-marker) (vector 'decoy))
 ")
-
-# Checked before any lane is registered: a body missing a wrapper must stop the
-# build, not produce a suite that quietly proves one runtime.
-# src/common holds bodies included by a library, so they owe no program
-# wrapper; test/common holds bodies included by a program, so each owes both.
-# Every body from either kind of directory shares one basename namespace, which
-# now spans the harness and src/ for the first time.
-byte_machine_portability_guard(
-  SHARED_DIRS "${BYTE_MACHINE_HARNESS_SHARED_DIR}" "${BYTE_MACHINE_SRC_COMMON_DIR}"
-  WRAPPED_DIRS "${BYTE_MACHINE_HARNESS_SELF_DIR}" "${BYTE_MACHINE_TEST_COMMON_DIR}")
-
-byte_machine_add_test(
-  NAME byte-machine.harness.cmake-portability-guard.cmake.direct
-  COMMAND "${CMAKE_COMMAND}" -P
-          "${CMAKE_CURRENT_LIST_DIR}/support/cmake/ByteMachinePortabilityGuardSpec.cmake"
-  TIMEOUT 120
-  LABELS unit)
 
 # --- Harness lanes ---------------------------------------------------------
 
