@@ -90,7 +90,9 @@ Fingerprint strings have no leading-zero padding, so their length varies (13 to 
 
 **Interfaces:**
 - Consumes: `harness-group`, `harness-case`, `check`, `check-equal`, `check-not-equal` from the existing runner.
-- Produces: `harness-fingerprint-bytevector` (bytevector → exact non-negative integer), `harness-fingerprint-combine` (list of integers → integer), `harness-fingerprint->string` (integer → lowercase hex string, no padding, `"0"` for zero). `harness-fingerprint-file` is defined here but not usable until Task 2 supplies `adapter-file-bytes`.
+- Produces: `harness-fingerprint-bytevector` (bytevector → exact non-negative integer), `harness-fingerprint-combine` (list of integers → integer), `harness-fingerprint->string` (integer → lowercase hex string, no padding, `"0"` for zero).
+
+**`harness-fingerprint-file` is NOT part of this task.** It references `adapter-file-bytes`, which arrives in Task 2, and R6RS requires every free identifier in a library body to be bound — Chez refuses the whole library at import time whether or not anything calls it. Defining it here breaks every Chez lane in the tree. Task 2 adds it alongside `adapter-file-bytes`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -231,8 +233,11 @@ Create `test/support/harness/shared/fingerprint.scm`:
                            (+ (bytevector-u8-ref bv i) 1))
                         harness-fingerprint-modulus))))))
 
-(define (harness-fingerprint-file path)
-  (harness-fingerprint-bytevector (adapter-file-bytes path)))
+;; harness-fingerprint-file is NOT defined here. It would reference
+;; adapter-file-bytes, which Task 2 supplies, and R6RS requires every free
+;; identifier in a library body to be bound: Chez refuses the library at import
+;; time whether or not anything calls it. Task 2 adds the definition and its
+;; export together with adapter-file-bytes.
 
 ;; Combine per-file fingerprints in the order given. Order is significant, so a
 ;; reordered manifest is a different combined value: the result identifies a
@@ -270,9 +275,10 @@ Create `test/support/harness/shared/fingerprint.scm`:
 In `test/support/harness/chez/byte-machine/test/harness.sls`, add to the export list immediately after the `harness-counters harness-restore-counters! harness-capture-state` line:
 
 ```scheme
-    ;; content fingerprint
+    ;; content fingerprint (harness-fingerprint-file arrives in Task 2,
+    ;; alongside adapter-file-bytes)
     harness-fingerprint-bytevector harness-fingerprint-combine
-    harness-fingerprint->string harness-fingerprint-file
+    harness-fingerprint->string
 ```
 
 Then replace the final include with two, keeping the surrounding comment:
@@ -292,9 +298,10 @@ Then replace the final include with two, keeping the surrounding comment:
 In `test/support/harness/gambit/byte-machine/test/harness.sld`, add the identical four export names after the same `harness-counters harness-restore-counters! harness-capture-state` line:
 
 ```scheme
-    ;; content fingerprint
+    ;; content fingerprint (harness-fingerprint-file arrives in Task 2,
+    ;; alongside adapter-file-bytes)
     harness-fingerprint-bytevector harness-fingerprint-combine
-    harness-fingerprint->string harness-fingerprint-file
+    harness-fingerprint->string
 ```
 
 Then replace the final include, keeping its comment:
@@ -309,7 +316,22 @@ Then replace the final include, keeping its comment:
   (include "../../../shared/harness-runner.scm"))
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [ ] **Step 6: Copy `fingerprint.scm` into the two non-empty matrix directories**
+
+Both adapters now include it, so it joins the set of bodies the working-directory matrix must carry. This is required *in this task*, not later: the matrix's fixture directories mirror every shared body the harness library includes, and the launcher mutation in `SchemeMutationSuite.cmake` fails all three Chez lanes identically for want of the file — destroying the asymmetry that makes passes 21–23 evidence — from the moment the include is added.
+
+In `test/CMakeLists.txt`, alongside the existing `configure_file` calls for `harness-runner.scm`, add:
+
+```cmake
+configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
+               "${BYTE_MACHINE_CWD_IDENTICAL_DIR}/fingerprint.scm" COPYONLY)
+configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
+               "${BYTE_MACHINE_CWD_DECOY_DIR}/fingerprint.scm" COPYONLY)
+```
+
+This is the only change to `test/CMakeLists.txt` this task makes.
+
+- [ ] **Step 7: Run the tests to verify they pass**
 
 ```bash
 make test
@@ -317,10 +339,10 @@ make test
 
 Expected: 40/40 pass. The five new fingerprint cases run inside the two self-tests lanes, on both runtimes, reporting the same literals.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add test/support/harness/shared/fingerprint.scm test/support/harness/chez test/support/harness/gambit test/support/harness/self/harness-self-tests.scm && git commit -m "feat: a portable content fingerprint both runtimes agree on"
+git add test/support/harness/shared/fingerprint.scm test/support/harness/chez test/support/harness/gambit test/support/harness/self/harness-self-tests.scm test/CMakeLists.txt && git commit -m "feat: a portable content fingerprint both runtimes agree on"
 ```
 
 ---
@@ -335,7 +357,13 @@ git add test/support/harness/shared/fingerprint.scm test/support/harness/chez te
 - Test: `test/support/harness/self/harness-self-tests.scm`
 
 **Interfaces:**
-- Consumes: `harness-fingerprint-file`, `harness-fingerprint->string` from Task 1.
+- Consumes: `harness-fingerprint-bytevector`, `harness-fingerprint->string` from Task 1.
+- Also produces `harness-fingerprint-file` (path → integer), which Task 1 deliberately did not define: it references `adapter-file-bytes`, and an unbound free identifier makes Chez refuse the entire library at import time. Add it to `test/support/harness/shared/fingerprint.scm` in the same step that adds `adapter-file-bytes`, and add its name to both adapters' export lists at the same time:
+
+```scheme
+(define (harness-fingerprint-file path)
+  (harness-fingerprint-bytevector (adapter-file-bytes path)))
+```
 - Produces: `adapter-file-bytes` (path string → bytevector; an empty file yields a zero-length bytevector, never an EOF object). The self-tests reach the fixture through a new environment variable `BYTE_MACHINE_FINGERPRINT_SAMPLE`.
 
 The self-tests call `adapter-file-bytes` **directly**, not only through `harness-fingerprint-file`. That is deliberate: a name used solely inside the shared runner body resolves internally whatever the export list says, so an export-list mutation against it would be undetectable — the trap `CHANGELOG.md` already records for `harness-summary`.
@@ -1027,19 +1055,6 @@ byte_machine_add_scheme_lane(
 ```
 
 The three `placeholder-cwd-*` lanes are registered inside a `foreach(cwd_case ...)` loop; add `SHARED_BODIES` once inside the loop body, to both the Chez and the Gambit registration.
-
-- [ ] **Step 5: Copy `fingerprint.scm` into the two non-empty matrix directories**
-
-Both adapters now include it, so it joins the set of bodies the working-directory matrix must carry. Without this the launcher mutation fails all three Chez lanes identically — for want of a file rather than for the reason under test — and the asymmetry that makes passes 21–23 evidence is destroyed while the suite stays green.
-
-Alongside the existing `configure_file` calls for `harness-runner.scm`, add:
-
-```cmake
-configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
-               "${BYTE_MACHINE_CWD_IDENTICAL_DIR}/fingerprint.scm" COPYONLY)
-configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
-               "${BYTE_MACHINE_CWD_DECOY_DIR}/fingerprint.scm" COPYONLY)
-```
 
 - [ ] **Step 6: Run it again to verify the lane now fails for the right reason**
 
