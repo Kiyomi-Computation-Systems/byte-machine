@@ -127,9 +127,9 @@ below are copied from that table.
   the measurement was taken. Only the measured outcome is used below; the
   prediction is not.
 
-- **Suite totals, from real runs.** `make test` reports 44/44 and
+- **Suite totals, from real runs.** `make test` reports 46/46 and
   `ctest --preset no-scheme` stays 10/10, matching design §9's exit
-  criteria; the Scheme mutation suite reports "33 passes, 81 mutations",
+  criteria; the Scheme mutation suite reports "35 passes, 83 mutations",
   also §9; the CMake mutation suite, which the design does not itself size,
   reports "1 pass, 97 mutations" — one mutation more than before this
   slice, added by a review that found the `WRONG_FINGERPRINT` routing

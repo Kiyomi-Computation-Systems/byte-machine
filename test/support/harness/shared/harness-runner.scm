@@ -622,7 +622,7 @@
   (harness-empty-selection-diagnosis harness-case-count harness-skipped-count))
 
 (define (harness-exit-status)
-  (cond ((or harness-provenance-unreached) harness-status-provenance)
+  (cond (harness-provenance-unreached harness-status-provenance)
         ((> harness-error-count 0) harness-status-harness-error)
         ((> harness-failure-count 0) harness-status-failed)
         (else harness-status-pass)))

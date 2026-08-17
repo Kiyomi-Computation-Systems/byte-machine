@@ -809,22 +809,41 @@ endif()
 #
 # A real manifest, deliberately: with none, the run is a process no lane
 # registration started, and skipping is correct rather than a defect.
-byte_machine_add_scheme_lane(
-  NAME byte-machine.harness.unreached-provenance.chez.source
-  BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.chez.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.scm"
-  EXPECT_EXIT 3
-  TIMEOUT 120
-  LABELS expected-red)
+#
+# Both lanes below expect exit 3 for the same reason byte-machine.harness.
+# provenance.gambit.source above does: ByteMachineSchemeLane.cmake sets
+# BYTE_MACHINE_FINGERPRINT_FILES only inside its own
+# if(BYTE_MACHINE_CHEZ_EXECUTABLE) block, regardless of either lane's own
+# BACKEND here. On a host with Gambit but no Chez, the Gambit lane is still
+# registered -- its own runtime was found, so byte_machine_add_scheme_lane's
+# no-runtime return does not apply to it -- but it carries no manifest, so
+# harness-provenance-reachability-diagnosis finds an empty
+# BYTE_MACHINE_FINGERPRINT_FILES and stays quiet, the same as a process no
+# lane registration started. harness-provenance-unreached never gets set,
+# harness-exit-status falls through to harness-status-pass, and the lane
+# exits 0 where EXPECT_EXIT 3 requires 3. The Chez lane is wrapped here too,
+# even though it would already self-gate on a Chez-less host through the
+# same no-runtime return -- kept alongside the Gambit lane rather than left
+# to stand alone, matching how the two Chez-backend lanes above stay inside
+# the Gambit provenance lane's own if(BYTE_MACHINE_CHEZ_EXECUTABLE) block.
+if(BYTE_MACHINE_CHEZ_EXECUTABLE)
+  byte_machine_add_scheme_lane(
+    NAME byte-machine.harness.unreached-provenance.chez.source
+    BACKEND chez
+    PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.chez.sps"
+    SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
+                  "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.scm"
+    EXPECT_EXIT 3
+    TIMEOUT 120
+    LABELS expected-red)
 
-byte_machine_add_scheme_lane(
-  NAME byte-machine.harness.unreached-provenance.gambit.source
-  BACKEND gambit
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.gambit.scm"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.scm"
-  EXPECT_EXIT 3
-  TIMEOUT 120
-  LABELS expected-red)
+  byte_machine_add_scheme_lane(
+    NAME byte-machine.harness.unreached-provenance.gambit.source
+    BACKEND gambit
+    PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.gambit.scm"
+    SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
+                  "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.scm"
+    EXPECT_EXIT 3
+    TIMEOUT 120
+    LABELS expected-red)
+endif()
