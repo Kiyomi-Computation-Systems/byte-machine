@@ -943,31 +943,38 @@ spec_check_equal("${message}"
   "a Gambit search root must be absolute, but 'relative/root' is not. Gambit resolves a relative root against its own working directory, so the lane would find its libraries or not depending on where it was launched."
   "relative root message")
 
-# Seeded with values no correct call could produce, so that "cleared" is
-# asserted rather than inherited. The function never writes its message on the
-# success path and never writes its option on the rejection path -- the up-front
-# clear is the only thing that does either -- so an assertion against an
-# unseeded variable is satisfied by a function that does nothing at all. Without
-# the seeding these pass by accident, because the driver reuses these two
-# variable names across calls and a stale correct value is already sitting there.
-set(option "stale-option")
-set(message "stale-message")
+# A root that is both relative and contains a comma must report
+# comma-in-path, not relative-path: the comma check runs first, and that is
+# the useful precedence, because a comma malforms the -: option list and
+# silences gsi -- and therefore every Gambit lane at once -- while a relative
+# root only misleads the one lane that carries it. Nothing else in this
+# specification can see the two checks swapped: every other case here
+# supplies a root with exactly one defect, so either order produces the same
+# status.
+byte_machine_scheme_lane_gambit_search(option status message "/a" "rel,ative/root")
+spec_check_equal("${status}" "comma-in-path"
+  "a root with both defects is rejected for the comma, not the relative path")
+
+# Seeded with sentinel values no correct call could produce. An assertion
+# against an unseeded variable is satisfied by a function that does nothing
+# at all: CMake variables persist across calls, so an unseeded "message"
+# could already read "" by coincidence, and a deleted up-front clear would go
+# unnoticed. The function never writes its message on the success path -- the
+# up-front clear is the only thing that empties it there -- so a seeded
+# sentinel surviving to this assertion is exactly the defect.
+set(option "sentinel-option")
+set(message "sentinel-message")
 byte_machine_scheme_lane_gambit_search(option status message "/a")
 spec_check_equal("${message}" "" "an accepted search list clears the message")
 
-set(option "stale-option")
+# Same seeding, on the rejection path. The function never writes the option
+# once it has decided to reject, so again the up-front clear is the only
+# thing that empties it, and a seeded sentinel surviving would be the same
+# defect on the other output.
+set(option "sentinel-option")
+set(message "sentinel-message")
 byte_machine_scheme_lane_gambit_search(option status message "/a" "/b,c")
 spec_check_equal("${option}" "" "a rejected search list clears the option")
-
-# A root with both defects reports the comma, which is the more urgent of the
-# two: a comma makes gsi print its usage banner and run no Scheme at all, on
-# every Gambit lane at once, while a relative root merely makes one lane depend
-# on where it was launched. Pinned here because nothing else can see it -- every
-# other case supplies a root with exactly one defect, so reordering the two
-# checks would be invisible to the whole suite.
-byte_machine_scheme_lane_gambit_search(option status message "/a" "rel,ative/root")
-spec_check_equal("${status}" "comma-in-path"
-  "a root with both defects reports the comma first")
 ```
 
 Add a rejection case to the `BYTE_MACHINE_SPEC_CASE` dispatch, before its `else()`:
@@ -1116,6 +1123,28 @@ byte_machine_mutation(
   LABEL "lane: a relative Gambit search root is accepted"
   FIND [[    if(NOT IS_ABSOLUTE "${dir}")]]
   REPLACE [[    if(FALSE)]])
+
+# The two output variables are cleared up front so that a caller-supplied
+# stale value cannot leak through on either the accepted path (which never
+# rewrites the message) or the rejected path (which never rewrites the
+# option).
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "lane: the gambit search function's up-front output clear is deleted, so a stale caller-supplied option or message can survive a call"
+  FIND [[  set(${out_option} "" PARENT_SCOPE)
+  set(${out_message} "" PARENT_SCOPE)]]
+  REPLACE [[  ]])
+
+# Both checks stay intact; only their order swaps. It is caught solely by the
+# both-defects assertion, since every single-defect case supplies a root with
+# exactly one problem and cannot see the checks reordered. Write its FIND and
+# REPLACE against the two `if` blocks as they stand in the file, comma block
+# first in FIND and absolute block first in REPLACE.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "lane: the Gambit search checks are reordered, so a root with both defects reports relative-path instead of comma-in-path"
+  FIND [[<the comma `if` block followed by the absolute `if` block, verbatim>]]
+  REPLACE [[<the same two blocks, absolute first>]])
 
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
