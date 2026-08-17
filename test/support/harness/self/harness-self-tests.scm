@@ -525,4 +525,24 @@
       (lambda ()
         (check-equal "255" (harness-fingerprint->string 255) "ff")
         (check-equal "3735928559" (harness-fingerprint->string 3735928559) "deadbeef")
-        (check-equal "zero" (harness-fingerprint->string 0) "0")))))
+        (check-equal "zero" (harness-fingerprint->string 0) "0")))
+
+    ;; adapter-file-bytes is called directly here, not only through
+    ;; harness-fingerprint-file. A name used only inside the shared runner body
+    ;; resolves internally regardless of the export list, so testing it only
+    ;; indirectly would make its export-list mutation undetectable.
+    (harness-case "a file is read as its exact bytes"
+      (lambda ()
+        (let ((bv (adapter-file-bytes
+                   (adapter-environment-variable "BYTE_MACHINE_FINGERPRINT_SAMPLE"))))
+          (check-equal "length" (bytevector-length bv) 13)
+          (check-equal "first byte is b" (bytevector-u8-ref bv 0) 98)
+          (check-equal "last byte is LF" (bytevector-u8-ref bv 12) 10))))
+
+    (harness-case "both runtimes fingerprint the same file identically"
+      (lambda ()
+        (check-equal "sample"
+                     (harness-fingerprint->string
+                      (harness-fingerprint-file
+                       (adapter-environment-variable "BYTE_MACHINE_FINGERPRINT_SAMPLE")))
+                     "b1058d10fb543b0")))))

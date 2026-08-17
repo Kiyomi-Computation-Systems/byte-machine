@@ -44,30 +44,15 @@
                            (+ (bytevector-u8-ref bv i) 1))
                         harness-fingerprint-modulus))))))
 
-;; harness-fingerprint-file is not defined in this file, even though the
-;; slice-5a Task 1 plan shows it here and Task 2 is written expecting it to
-;; already exist. Reason, measured directly against this Chez 10.4.1: an
-;; R6RS library body is elaborated as one unit, so a `define` anywhere in it
-;; that references a free identifier bound nowhere in the library -- not
-;; "not yet, by this point" but genuinely absent -- fails library
-;; construction immediately, whether or not the identifier is exported and
-;; whether or not anything calls the procedure that names it. (A forward
-;; reference to a name defined *later in this same file* is fine, by
-;; letrec*-like rules, exactly as the plan expected -- verified separately.
-;; The difference is "bound later in this body" versus "bound nowhere in
-;; it.") adapter-file-bytes is the second case until Task 2 defines it, so
-;; the definition below would break every Chez lane that imports this
-;; library -- bootstrap, duplicate-case, empty-selection, and so on, not
-;; only the fingerprint self-tests. Gambit's source-mode loader does not
-;; enforce the same simultaneity, so this asymmetry is invisible from the
-;; Gambit side alone. Task 2, which supplies adapter-file-bytes, should add
-;; here:
-;;
-;;   (define (harness-fingerprint-file path)
-;;     (harness-fingerprint-bytevector (adapter-file-bytes path)))
-;;
-;; and add harness-fingerprint-file to both adapters' export lists at the
-;; same time it adds adapter-file-bytes.
+;; Fingerprints a file's exact bytes. Reads through adapter-file-bytes, so the
+;; read is a binary one on both runtimes (see each adapter's definition) --
+;; this cannot be defined until adapter-file-bytes exists, which is why Task 1
+;; left a comment here instead: a free identifier bound nowhere in the
+;; library, not merely later in the same body, fails Chez library construction
+;; immediately, for every lane that imports it, whether or not the identifier
+;; is exported or called.
+(define (harness-fingerprint-file path)
+  (harness-fingerprint-bytevector (adapter-file-bytes path)))
 
 ;; Combine per-file fingerprints in the order given. Order is significant, so a
 ;; reordered manifest is a different combined value: the result identifies a

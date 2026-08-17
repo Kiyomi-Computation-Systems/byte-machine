@@ -273,8 +273,9 @@ endfunction()
 
 # An EXPECT_EXIT lane must route to the exit-code registrar and forward the
 # code. Both this registration and the plain one below must carry the source
-# execution mode ahead of whatever the caller supplied -- the one fact the
-# launcher itself cannot assert about its own invocation.
+# execution mode and the fingerprint sample path ahead of whatever the caller
+# supplied -- facts the launcher itself cannot assert about its own
+# invocation.
 set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
 set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "none")
 byte_machine_add_scheme_lane(
@@ -289,8 +290,9 @@ spec_check_equal("${registrar}" "exit-code" "EXPECT_EXIT routes to the exit-code
 get_property(expect_exit GLOBAL PROPERTY BYTE_MACHINE_SPEC_EXPECT_EXIT)
 spec_check_equal("${expect_exit}" "1" "EXPECT_EXIT is forwarded to the exit-code registrar")
 get_property(environment GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT)
-spec_check_equal("${environment}" "BYTE_MACHINE_EXECUTION_MODE=source;FOO=bar"
-  "exit-code registration carries the source execution mode ahead of caller-supplied entries")
+spec_check_equal("${environment}"
+  "BYTE_MACHINE_EXECUTION_MODE=source;BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin;FOO=bar"
+  "exit-code registration carries the source execution mode and fingerprint sample ahead of caller-supplied entries")
 
 set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "none")
 byte_machine_add_scheme_lane(
@@ -302,8 +304,9 @@ byte_machine_add_scheme_lane(
 get_property(registrar GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR)
 spec_check_equal("${registrar}" "plain" "a lane without EXPECT_EXIT routes to the plain registrar")
 get_property(environment GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT)
-spec_check_equal("${environment}" "BYTE_MACHINE_EXECUTION_MODE=source;FOO=bar"
-  "plain registration carries the source execution mode ahead of caller-supplied entries")
+spec_check_equal("${environment}"
+  "BYTE_MACHINE_EXECUTION_MODE=source;BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin;FOO=bar"
+  "plain registration carries the source execution mode and fingerprint sample ahead of caller-supplied entries")
 
 # WORKING_DIRECTORY must be forwarded to whichever registrar the lane routed
 # to, with its value, when the lane was given one -- and the keyword must not

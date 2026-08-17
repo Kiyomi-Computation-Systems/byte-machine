@@ -184,7 +184,14 @@ function(byte_machine_add_scheme_lane)
   # touches this variable. For the Chez lane, the launcher's object guard is
   # what makes the declaration unfalsifiable: it makes a compiled object
   # impossible to load.
-  set(environment "BYTE_MACHINE_EXECUTION_MODE=source" ${arg_ENVIRONMENT})
+  #
+  # The fixture is immutable and lives in the source tree; a lane only ever
+  # reads it. Set for every lane rather than only the self-tests, so a body that
+  # starts needing it does not also need a registration change.
+  set(environment
+    "BYTE_MACHINE_EXECUTION_MODE=source"
+    "BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin"
+    ${arg_ENVIRONMENT})
 
   # Same CMP0174 reasoning as byte_machine_add_exit_code_test in
   # ByteMachineExpectExit.cmake: forward WORKING_DIRECTORY only when there is
