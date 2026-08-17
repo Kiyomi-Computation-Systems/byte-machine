@@ -13,6 +13,18 @@
   "this cannot be tested" is a claim to demonstrate, and an experiment that shows
   nothing is inconclusive, not negative. `EXPECT_SURVIVES` is for the genuinely
   unwitnessable, with a written reason; never to reach green.
+* Prefer the mutation form caught by a failed comparison over one caught by a
+  raise. A raise-based catch depends on where the mutant happens to crash rather
+  than on the assertion naming the decision. Before accepting one, try the
+  opposite constant — slice 4's `(if #t` left the predicate's own case passing
+  and made a later case error, where `(if #f` fails that case's `check-equal`
+  outright and tests the same decision.
+* A measurement earns a place in a design doc or decision record only once it has
+  been re-taken against the shipped artifact. Numbers from a pre-design scratch
+  fixture describe the fixture: slice 4 recorded a mutant as "exits 0", true of a
+  bare driver with no harness and false of the shipped harness-integrated lane,
+  and it propagated into five documents before review caught it. Decision 0002
+  models the handling — re-measure, then state what was measured against what.
 * Shared `.scm` bodies use only the R6RS/R7RS common subset and never name Chez
   or Gambit; runtime-specific code lives only in the thin `.sls`/`.sld` wrappers.
   R6RS forbids assigning an exported variable — reach mutable state through
