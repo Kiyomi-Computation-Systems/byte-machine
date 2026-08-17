@@ -269,7 +269,7 @@ notice the body changing. That claim is new again here, for a new body.
 
 | # | Target | Mutation | Expected |
 | --- | --- | --- | --- |
-| B1 | `placeholder-consumer.scm`, each runtime | `(placeholder? p)` → `#t` | identity lane fails |
+| B1 | `placeholder-consumer.scm`, each runtime | `(placeholder? p)` → `#f` | identity lane fails |
 | B2 | `placeholder-consumer.scm`, each runtime | recognised branch yields `(placeholder-marker)` | identity lane fails |
 | B3 | `placeholder-consumer.scm`, each runtime | other branch yields a fresh vector | identity lane fails |
 | W1 | `placeholder-consumer.sls` | import **replaced** by `(include "placeholder.scm")` | identity lane fails, both cases |
