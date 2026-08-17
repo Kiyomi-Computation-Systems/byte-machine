@@ -7,8 +7,8 @@ Milestone: 0, slice 3
 ## Context
 
 Milestone 0 decision D6 chose `source-directories` plus bare filenames for
-Chez's `include`, and a source-relative `include` inside `define-library` for
-Gambit — see [the milestone plan](../plans/milestone-0-portability-spike.md)
+Chez's `include`; decision D1 chose a source-relative `include` inside
+`define-library` for Gambit — see [the milestone plan](../plans/milestone-0-portability-spike.md)
 §2 and §6. (The milestone plan reuses the label `D6` for an unrelated §7
 deliverable, deterministic text emission; this record's `D6` is always the §5
 decision.) Slice 3 put the first product code behind that choice: one
@@ -17,9 +17,9 @@ exactly one owner library per runtime (`src/chez/byte-machine/placeholder.sls`,
 `src/gambit/byte-machine/placeholder.sld`) — see
 [the slice-3 design](../plans/milestone-0-slice-3-shared-body.md) §3–§6.
 
-Milestone plan §9 question 3 asks what library search paths look like across
-platforms, "including the `--libdirs` separator (`:` vs `;`) and `/`-only path
-splitting" on Windows. Slice 3's own design record (§2) measured this behavior
+Milestone plan §9 question 3 asks what library search paths look like on
+Windows, "including the `--libdirs` separator (`:` vs `;`) and `/`-only path
+splitting". Slice 3's own design record (§2) measured this behavior
 against scratch fixtures, before the design was accepted, to decide how the
 launcher should carry more than one root. This record reconfirms the same
 behavior against what actually shipped — the real launcher and the real body,
