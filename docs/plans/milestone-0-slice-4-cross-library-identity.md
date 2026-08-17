@@ -189,16 +189,13 @@ already working.
 
 | Decision | Mutation | Witness |
 | --- | --- | --- |
-| the argument is checked at all | `(placeholder? p)` → `#t` | `(consume 7)` takes the recognised branch and `placeholder-value` raises on a non-vector; the case errors |
+| the argument is checked at all | `(placeholder? p)` → `#f` | `(consume (make-placeholder 7))` takes the reject branch and returns the marker instead of `7`; the recognition case fails, the identity case still passes |
 | the recognised branch yields the carried value | it yields `(placeholder-marker)` instead | the recognition case fails; the identity case still passes, so this is distinguishable from the next row |
 | the other branch yields the **owner's** singleton | it yields a freshly allocated `(vector 'x)` | the identity case fails alone — the only mutation that reaches D3's second clause by itself |
 
-The first witness is an induced error rather than a failed assertion, which is a weaker kind of catch
-than the other two: the lane fails on a raise, not on a comparison. It is accepted here because the
-alternative — reshaping `consume` so the mutant returns a wrong value instead of crashing — means
-adding a defensive branch that exists only to make a mutation prettier, and that branch would itself
-be a decision with no independent reason to exist. Recorded so the next reader knows it was weighed
-rather than missed.
+All three witnesses are now failed comparisons, not raises. The first row originally caught its
+mutation through an induced raise instead — `#t` drove `placeholder-value` onto a non-vector — until
+`#f` gave it a comparison-based witness like the other two.
 
 ## 6. The wrappers
 

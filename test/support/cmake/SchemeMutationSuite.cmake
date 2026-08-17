@@ -109,10 +109,10 @@
 # same-named file.
 #
 # Passes 24 and 25 are the consumer body's three decisions, run once per
-# runtime for the reason passes 9 and 10 give. Slice 4's design calls the first
-# of the three out as caught by an induced raise rather than by a failed
-# comparison -- weaker than the other two, weighed and accepted rather than
-# missed.
+# runtime for the reason passes 9 and 10 give. All three are now caught by a
+# failed comparison. The first used to be caught by an induced raise instead
+# -- weaker, and weighed and accepted -- before a comparison-based witness
+# replaced it.
 #
 # Passes 26 and 27 are the slice's reason for existing: the consumer wrapper
 # made a second owner of the placeholder body, once per runtime. Unlike every
@@ -1278,17 +1278,18 @@ function(byte_machine_slice4_body_pass runtime)
     set(spec placeholder-identity-tests.gambit.scm)
   endif()
 
-  # Caught by a raise rather than by a comparison: consume takes the recognised
-  # branch for 7, and placeholder-value indexes a non-vector. Weaker than the
-  # two below, and accepted rather than missed -- the alternative is a defensive
-  # branch in consume that exists only to make this mutation fail prettily, and
-  # that branch would be a decision with no independent reason to exist. See
-  # section 5.3 of the slice-4 design.
+  # Caught by comparison, not by a raise: consume always takes the reject
+  # branch, so (consume (make-placeholder 7)) returns the marker instead of 7
+  # and the recognition case fails an ordinary check-equal. An earlier form
+  # used #t instead of #f, driving the same case into placeholder-value on a
+  # non-vector and catching it by an induced raise instead -- replaced once
+  # this comparison-based witness was found. See section 5.3 of the slice-4
+  # design.
   byte_machine_mutation(
     FILE ${CONSUMER_BODY} SPEC ${spec}
     LABEL "consumer on ${runtime}: the argument is not checked at all"
     FIND [[  (if (placeholder? p)]]
-    REPLACE [[  (if #t]])
+    REPLACE [[  (if #f]])
 
   byte_machine_mutation(
     FILE ${CONSUMER_BODY} SPEC ${spec}
