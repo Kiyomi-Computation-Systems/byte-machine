@@ -140,6 +140,16 @@ byte_machine_add_test(
 # launcher mutation in SchemeMutationSuite.cmake, whose expected outcome is
 # asymmetric -- empty and decoy fail, identical passes.
 #
+# Six lane names below read as six units of evidence, but only the three Chez
+# ones are: Gambit resolves an `include` inside `define-library` against the
+# including file itself, not against the process working directory, so no
+# launcher mutation can make a Gambit lane depend on where it was launched
+# from (decision record 0002, point 3). The three Gambit lanes here are
+# non-discriminating by construction -- they still have to pass, as parity
+# proof that the shared body loads identically through both wrappers, but
+# nothing in SchemeMutationSuite.cmake can fail them the way the Chez mutation
+# fails the Chez ones, and nothing here should be added trying to make it.
+#
 # Both non-empty directories carry a copy of EVERY body the lane includes, the
 # harness runner included. A directory holding only a placeholder body would
 # fail to build (byte-machine test harness) under that mutation, before reaching

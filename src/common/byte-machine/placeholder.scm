@@ -14,12 +14,12 @@
 ;;;
 ;;; Symbols are interned, so (eq? 'x 'x) is true however many separate copies of
 ;;; this body produced those two occurrences. A symbol tag would make the
-;;; double-include defect that the implementation plan's section 7.2 forbids
-;;; structurally invisible: two libraries that had each included this body would
-;;; recognise each other's values, and slice 4's identity test would pass
-;;; against exactly the tree the rule exists to prevent. A freshly allocated
-;;; vector gives a second include a second tag, so the second library rejects
-;;; the first's values and the defect is caught.
+;;; double-include defect that byte-machine-implementation-plan.md's section 7.2
+;;; forbids structurally invisible: two libraries that had each included this
+;;; body would recognise each other's values, and slice 4's identity test would
+;;; pass against exactly the tree the rule exists to prevent. A freshly
+;;; allocated vector gives a second include a second tag, so the second library
+;;; rejects the first's values and the defect is caught.
 ;;;
 ;;; test/common/placeholder-tests.scm holds the executable form of this rule.
 

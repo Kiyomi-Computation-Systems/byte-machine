@@ -31,6 +31,19 @@
 ;;; 0001 refused to gate on threading because byte-machine has no threads. A
 ;;; second copy of either rule would be a requirement inherited rather than
 ;;; owned.
+;;;
+;;; Also not checked: that --library-root and --source-dir name directories
+;;; that exist. The object guard gets exactly this check (file-directory?,
+;;; below) because an absent or dirty guard is the one thing that makes
+;;; "source" a false claim; a mistyped library root or source directory is a
+;;; different failure with no honesty claim riding on it. The cost is that a
+;;; build-layer typo is not named at the harness's own status-2 boundary: it
+;;; surfaces however Chez happens to fail once source-directories or
+;;; library-directories can't resolve what was asked of them -- an unbound
+;;; library, a missing include, an uncaught condition -- which is Chez's own
+;;; exit 255, not this launcher's HARNESS-ERROR. Adding the check is a new
+;;; decision needing a new lane and a new mutation, not a fix to something
+;;; this file already tries and fails to do.
 
 (define (path-directory path)
   (let loop ((i (- (string-length path) 1)))
