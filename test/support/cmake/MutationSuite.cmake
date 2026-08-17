@@ -15,8 +15,29 @@
 # Adding a decision to a module means adding a mutation here. The SITES check
 # will tell you when a pattern has drifted; it will not tell you when a new,
 # untested decision has been added.
+#
+# ONE PASS, NINETY-SIX MUTATIONS
+#
+# Every mutation above is declared before the single byte_machine_mutation_run
+# call at the end of this file, so this suite is one pass by construction.
+# EXPECTED_MUTATIONS below is compared against the accumulated total from
+# byte_machine_mutation_totals once that call returns: it is what would have
+# caught a whole-branch review finding that deleting an entire pass group from
+# SchemeMutationSuite.cmake left that file's own suite at 37/37 -- the same
+# blind spot exists here for a single deleted byte_machine_mutation() call,
+# which SITES cannot see either, since a missing declaration is not a pattern
+# that failed to match.
+#
+# Ninety-six is eighty-nine plus seven: five for MutationRunner's own verdict
+# decision and the registration guard beside it (the "MutationRunner" section
+# below), and two for the other direction of the WORKING_DIRECTORY forwarding
+# conditional in ByteMachineExpectExit.cmake and ByteMachineSchemeLane.cmake,
+# which until a re-review only had the if(FALSE) half of its two mutations.
 
 cmake_minimum_required(VERSION 3.26)
+
+set(EXPECTED_PASSES 1)
+set(EXPECTED_MUTATIONS 96)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -309,6 +330,60 @@ byte_machine_mutation(
   EXPECT_SURVIVES
     "lives in the discovery macro, which runs processes and reads the real environment; it is covered by configure-time behaviour, not by the cmake -P specifications")
 
+# --- MutationRunner (byte_machine_mutation_verdict and its registration) ---
+#
+# The machinery every specification above is trusted through, and the one
+# module in this directory that had neither a specification nor a mutation
+# targeting it -- even though it is staged like everything else. A re-review
+# found that the fix narrowing "caught" to "caught for the declared reason"
+# had reproduced the same defect class one layer down: the `elseif`
+# translating a wrong-reason result into a failure could be deleted by hand
+# and the whole suite stayed 89/89, because nothing mutated the decision that
+# branch depends on. These mutations are what closes that.
+
+byte_machine_mutation(
+  FILE test/support/cmake/MutationRunner.cmake SPEC MutationRunnerSpec.cmake
+  LABEL "mutation-runner: rc 0 is judged caught instead of not-caught"
+  FIND [[  if(rc EQUAL 0)]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE test/support/cmake/MutationRunner.cmake SPEC MutationRunnerSpec.cmake
+  LABEL "mutation-runner: a status mismatch is no longer reported as wrong-reason"
+  FIND [[  if(NOT expect_status STREQUAL "" AND NOT rc EQUAL expect_status)]]
+  REPLACE [[  if(FALSE)]])
+
+# The exact bug this pure function was extracted to fix: expect_output_matches
+# tested by truthiness rather than by presence. A regex CMake reads as false --
+# "0", OFF, NOTFOUND, anything ending "-NOTFOUND" -- would silently stop being
+# enforced. MutationRunnerSpec.cmake's "reads as CMake-false" case is the one
+# assertion that can tell this REPLACE apart from the fixed FIND: every other
+# case in that file uses a pattern that is not itself CMake-false, so both
+# forms of the condition agree on it.
+byte_machine_mutation(
+  FILE test/support/cmake/MutationRunner.cmake SPEC MutationRunnerSpec.cmake
+  LABEL "mutation-runner: EXPECT_OUTPUT_MATCHES is tested by truthiness, so a pattern reading as CMake-false is silently unenforced"
+  FIND [[  if(NOT expect_output_matches STREQUAL "" AND NOT output MATCHES "${expect_output_matches}")]]
+  REPLACE [[  if(expect_output_matches AND NOT output MATCHES "${expect_output_matches}")]])
+
+byte_machine_mutation(
+  FILE test/support/cmake/MutationRunner.cmake SPEC MutationRunnerSpec.cmake
+  LABEL "mutation-runner: a caught verdict is reported as not-caught"
+  FIND [[  set(${out_verdict} "caught" PARENT_SCOPE)]]
+  REPLACE [[  set(${out_verdict} "not-caught" PARENT_SCOPE)]])
+
+# EXPECT_SURVIVES is judged by whether the verify command merely exited zero;
+# EXPECT_STATUS and EXPECT_OUTPUT_MATCHES are never consulted for a declared
+# survivor. Without this guard the combination is accepted and silently means
+# less than it says -- exactly the "wrong reason" defect class this whole
+# section exists to close, one level up, at declaration time rather than at
+# judging time.
+byte_machine_mutation(
+  FILE test/support/cmake/MutationRunner.cmake SPEC MutationRunnerSpec.cmake
+  LABEL "mutation-runner: EXPECT_SURVIVES alongside EXPECT_STATUS or EXPECT_OUTPUT_MATCHES is accepted instead of refused"
+  FIND [[  if(DEFINED arg_EXPECT_SURVIVES AND (DEFINED arg_EXPECT_STATUS OR DEFINED arg_EXPECT_OUTPUT_MATCHES))]]
+  REPLACE [[  if(FALSE)]])
+
 # --- ByteMachineExpectExit -------------------------------------------------
 
 byte_machine_mutation(
@@ -370,12 +445,38 @@ byte_machine_mutation(
   set(${out_message} "" PARENT_SCOPE)]]
   REPLACE [[function(byte_machine_expect_exit_classify code out_status out_message)]])
 
+# A reviewer once deleted this exact block by hand from
+# ByteMachineSchemeLane.cmake's copy of the same shape (below) and ran the
+# whole suite: 37/37 passed, because nothing forwarded WORKING_DIRECTORY far
+# enough to notice it stopped arriving. This is that block's other occurrence
+# -- the registrar itself, not a caller of it -- and until the WORKING_DIRECTORY
+# assertions in ByteMachineExpectExitSpec.cmake, its path was exercised by
+# nothing at all: every case that reaches byte_machine_add_exit_code_test in
+# that specification is rejected before this line runs.
+byte_machine_mutation(
+  FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
+  LABEL "expect-exit: WORKING_DIRECTORY is parsed and then never forwarded to the registrar"
+  FIND [[  if(arg_WORKING_DIRECTORY)]]
+  REPLACE [[  if(FALSE)]])
+
+# The other direction of the same conditional: forwarding the keyword to the
+# registrar unconditionally, even when the caller gave no WORKING_DIRECTORY at
+# all. A re-review found this direction just as unwitnessed as the one above
+# was before it got a mutation: only ByteMachineExpectExitSpec.cmake's
+# "absent" assertion can see a keyword arriving that should not have, and
+# nothing mutated the condition to make it arrive.
+byte_machine_mutation(
+  FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
+  LABEL "expect-exit: WORKING_DIRECTORY is forwarded to the registrar even when the caller did not give one"
+  FIND [[  if(arg_WORKING_DIRECTORY)]]
+  REPLACE [[  if(TRUE)]])
+
 # --- ByteMachineSchemeLane -------------------------------------------------
 
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: the chez object guard is dropped, so a stale .so can be preferred over source"
-  FIND [[      "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
+  FIND [[      "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
 ]]
   # Same empty-REPLACE hazard as the expect-exit mutation above (CMP0174; see
   # its comment for why a truly empty REPLACE will not parse). Here the
@@ -460,7 +561,15 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: an unknown backend no longer stops registration"
-  FIND [[  if(status STREQUAL "unknown-backend")]]
+  # Re-anchored on the three-clause form the Gambit search-root check added:
+  # the single-clause pattern this mutation used to match no longer occurs
+  # anywhere in the file (see MutationRunner.cmake's SITES comment -- a pattern
+  # that stops matching after a refactor must be updated, not deleted). REPLACE
+  # is unchanged: this mutation still means "the whole fatal-error guard is
+  # gone", which is a different break than the narrower one below.
+  FIND [[  if(status STREQUAL "unknown-backend"
+     OR status STREQUAL "comma-in-path"
+     OR status STREQUAL "relative-path")]]
   REPLACE [[  if(FALSE)]])
 
 byte_machine_mutation(
@@ -484,11 +593,156 @@ byte_machine_mutation(
   FIND [[  set(environment "BYTE_MACHINE_EXECUTION_MODE=source" ${arg_ENVIRONMENT})]]
   REPLACE [[  set(environment ${arg_ENVIRONMENT})]])
 
+# This is the mutation a whole-branch review found undetectable: delete this
+# block by hand, reconfigure, and the working-directory matrix's six lanes all
+# launch from their derived directories instead of the three fixture
+# directories test/CMakeLists.txt built for them -- six copies of one vacuous
+# lane, and nothing anywhere failed, because neither registrar this block
+# feeds was ever asked whether it received WORKING_DIRECTORY at all.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: WORKING_DIRECTORY is parsed and then never forwarded to either registrar"
+  FIND [[  if(arg_WORKING_DIRECTORY)]]
+  REPLACE [[  if(FALSE)]])
+
+# The other direction: forwarding the keyword to whichever registrar the lane
+# routed to, unconditionally, even when the lane gave no WORKING_DIRECTORY at
+# all. Both registrars' "absent" assertions in ByteMachineSchemeLaneSpec.cmake
+# can see this -- the plain path and the exit-code path both splice the same
+# working_directory_args, so one mutation here is witnessed by both -- but
+# until now nothing mutated the condition to make the keyword arrive
+# unwanted, the same blind spot the if(FALSE) mutation above used to be alone
+# in closing.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: WORKING_DIRECTORY is forwarded to either registrar even when the lane did not give one"
+  FIND [[  if(arg_WORKING_DIRECTORY)]]
+  REPLACE [[  if(TRUE)]])
+
+# A comma in a Gambit search root is not a wrong path but a malformed -:
+# option list: gsi prints its usage banner and runs no Scheme at all, on every
+# Gambit lane at once. A relative root is resolved against gsi's own working
+# directory, so a lane would find its libraries or not depending on where
+# CTest launched it. Both are configure-time refusals, so each gets its own
+# mutation alongside the wrong-separator case, which would corrupt every
+# multi-root search silently rather than refusing it.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "lane: a comma in a Gambit search root is accepted"
+  FIND [[    if(dir MATCHES ",")]]
+  REPLACE [[    if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "lane: the search roots are joined with the wrong separator"
+  FIND [[  list(JOIN parts "," joined)]]
+  REPLACE [[  list(JOIN parts ";" joined)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "lane: a relative Gambit search root is accepted"
+  FIND [[    if(NOT IS_ABSOLUTE "${dir}")]]
+  REPLACE [[    if(FALSE)]])
+
+# The two output variables are cleared up front so that a caller-supplied
+# stale value cannot leak through on either the accepted path (which never
+# rewrites the message) or the rejected path (which never rewrites the
+# option). Without this clear, a lane that reused a variable from an earlier
+# call could see the earlier call's answer instead of this one's.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "lane: the gambit search function's up-front output clear is deleted, so a stale caller-supplied option or message can survive a call"
+  FIND [[  set(${out_option} "" PARENT_SCOPE)
+  set(${out_message} "" PARENT_SCOPE)]]
+  REPLACE [[  ]])
+
+# The comma check must run first: a comma malforms the -: option list and
+# silences gsi -- and therefore every Gambit lane at once -- while a relative
+# root only misleads the one lane that carries it. This mutation keeps both
+# checks intact and only swaps their order, so it is caught solely by the
+# both-defects assertion in the specification; every single-defect case
+# supplies a root with exactly one problem and cannot see the checks
+# reordered.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "lane: the Gambit search checks are reordered, so a root with both defects reports relative-path instead of comma-in-path"
+  FIND [[    if(dir MATCHES ",")
+      set(${out_status} "comma-in-path" PARENT_SCOPE)
+      set(${out_message}
+        "a Gambit search root must not contain a comma, but '${dir}' does. Gambit's -: options are comma-separated, so gsi would print its usage banner and run no Scheme at all."
+        PARENT_SCOPE)
+      return()
+    endif()
+    if(NOT IS_ABSOLUTE "${dir}")
+      set(${out_status} "relative-path" PARENT_SCOPE)
+      set(${out_message}
+        "a Gambit search root must be absolute, but '${dir}' is not. Gambit resolves a relative root against its own working directory, so the lane would find its libraries or not depending on where it was launched."
+        PARENT_SCOPE)
+      return()
+    endif()]]
+  REPLACE [[    if(NOT IS_ABSOLUTE "${dir}")
+      set(${out_status} "relative-path" PARENT_SCOPE)
+      set(${out_message}
+        "a Gambit search root must be absolute, but '${dir}' is not. Gambit resolves a relative root against its own working directory, so the lane would find its libraries or not depending on where it was launched."
+        PARENT_SCOPE)
+      return()
+    endif()
+    if(dir MATCHES ",")
+      set(${out_status} "comma-in-path" PARENT_SCOPE)
+      set(${out_message}
+        "a Gambit search root must not contain a comma, but '${dir}' does. Gambit's -: options are comma-separated, so gsi would print its usage banner and run no Scheme at all."
+        PARENT_SCOPE)
+      return()
+    endif()]])
+
+# The companion to the re-anchored "an unknown backend no longer stops
+# registration" mutation above: that one deletes the guard outright, this one
+# narrows it back to the pre-Task-3 single clause, so comma-in-path and
+# relative-path would fail open while unknown-backend stayed refused. Two
+# distinct regressions, so two mutations.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "lane: a refused search list does not stop registration"
+  FIND [[  if(status STREQUAL "unknown-backend"
+     OR status STREQUAL "comma-in-path"
+     OR status STREQUAL "relative-path")]]
+  REPLACE [[  if(status STREQUAL "unknown-backend")]])
+
 byte_machine_mutation(
   FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
   LABEL "testing: gambit's source mode is withdrawn"
   FIND [[set(BYTE_MACHINE_TEST_MODES_gambit source o1 aot)]]
   REPLACE [[set(BYTE_MACHINE_TEST_MODES_gambit o1 aot)]])
+
+# The run directory is where slice 3's working-directory matrix hangs: a lane
+# that overrides it is asserting something about where resolution happens, so
+# each of the three decisions inside byte_machine_test_run_directory gets its
+# own mutation.
+byte_machine_mutation(
+  FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
+  LABEL "testing: WORKING_DIRECTORY names a directory that need not exist"
+  FIND [[  if(arg_WORKING_DIRECTORY AND NOT IS_DIRECTORY "${arg_WORKING_DIRECTORY}")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
+  LABEL "testing: the override is parsed and then ignored"
+  FIND [[  if(override)
+    set(${out_dir} "${override}" PARENT_SCOPE)
+    return()
+  endif()]]
+  REPLACE [[  if(FALSE)
+    set(${out_dir} "${override}" PARENT_SCOPE)
+    return()
+  endif()]])
+
+# The empty-override branch is a decision of its own: treating "" as a value
+# would launch every non-overriding lane from the filesystem root.
+byte_machine_mutation(
+  FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
+  LABEL "testing: an empty override is treated as a directory"
+  FIND [[  if(override)]]
+  REPLACE [[  if(TRUE)]])
 
 # --- ByteMachinePortabilityGuard --------------------------------------------
 
@@ -629,4 +883,16 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-message(STATUS "byte-machine-spec: mutation suite complete")
+byte_machine_mutation_totals(actual_passes actual_mutations)
+if(NOT actual_passes EQUAL EXPECTED_PASSES OR NOT actual_mutations EQUAL EXPECTED_MUTATIONS)
+  message(FATAL_ERROR
+    "byte-machine-mutation: expected ${EXPECTED_PASSES} pass / "
+    "${EXPECTED_MUTATIONS} mutations, got ${actual_passes} pass / "
+    "${actual_mutations} mutations. A byte_machine_mutation_run call or a "
+    "byte_machine_mutation() declaration was deleted (or added without "
+    "updating EXPECTED_MUTATIONS above) -- 37/37 elsewhere would not notice.")
+endif()
+
+message(STATUS
+  "byte-machine-spec: mutation suite complete (${actual_passes} pass, "
+  "${actual_mutations} mutations)")

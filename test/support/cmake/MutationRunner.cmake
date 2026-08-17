@@ -39,9 +39,16 @@ set(BYTE_MACHINE_MUTATION_STAGE_DIRS "cmake" "test/support/cmake")
 # is only visible to something that runs Scheme.
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND "")
 
+# Where the verify command runs. Empty means the stage directory, which is what
+# every pass wanted until slice 3. The working-directory matrix needs a pass per
+# launch directory, because what it asserts is that the launch directory does
+# not matter -- a claim no command run from one fixed place can make.
+set(BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY "")
+
 # byte_machine_mutation(FILE <repo-relative> SPEC <spec basename> LABEL <text>
 #                       FIND <text> REPLACE <text> [SITES <n>]
-#                       [EXPECT_SURVIVES <reason>])
+#                       [EXPECT_SURVIVES <reason>]
+#                       [EXPECT_STATUS <code>] [EXPECT_OUTPUT_MATCHES <regex>])
 #
 # Declare one mutation. FIND and REPLACE are literal text, not regexes; pass
 # them as bracket arguments so quotes, backslashes, and ${...} survive intact.
@@ -55,8 +62,27 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND "")
 # knowingly cannot catch, and requires a reason. Such a mutation must still
 # survive: if one starts being caught, the recorded limitation is stale and the
 # suite says so rather than letting the documentation drift.
+#
+# A nonzero result from the verify command means only that it noticed
+# *something*; by itself that is not evidence it noticed the decision this
+# mutation names, and a mutation can be "caught" by an unrelated crash just as
+# easily as by the refusal it is meant to prove. EXPECT_STATUS and
+# EXPECT_OUTPUT_MATCHES narrow "caught" to "caught for this reason": when
+# either is given, a nonzero result whose exit code or combined stdout+stderr
+# does not also satisfy the declared expectation is reported separately, as
+# caught for the wrong reason, and counted the same as UNCAUGHT. Neither is
+# consulted when the verify command exits 0 -- that is simply not caught, the
+# ordinary way. Apply them only where the wrong-reason risk is real; most
+# mutations need neither.
+#
+# EXPECT_SURVIVES is mutually exclusive with EXPECT_STATUS and
+# EXPECT_OUTPUT_MATCHES: a declared survivor is judged in
+# byte_machine_mutation_run only by whether the verify command exited zero, so
+# the other two would be parsed, stored, and never consulted -- silently inert
+# rather than enforced. Declaring both is refused rather than left to quietly
+# mean less than it says.
 function(byte_machine_mutation)
-  cmake_parse_arguments(PARSE_ARGV 0 arg "" "FILE;SPEC;LABEL;FIND;REPLACE;SITES;EXPECT_SURVIVES" "")
+  cmake_parse_arguments(PARSE_ARGV 0 arg "" "FILE;SPEC;LABEL;FIND;REPLACE;SITES;EXPECT_SURVIVES;EXPECT_STATUS;EXPECT_OUTPUT_MATCHES" "")
 
   if(arg_UNPARSED_ARGUMENTS)
     message(FATAL_ERROR "byte-machine-mutation: unexpected arguments: ${arg_UNPARSED_ARGUMENTS}")
@@ -70,6 +96,19 @@ function(byte_machine_mutation)
     set(arg_SITES 1)
   endif()
 
+  # DEFINED, not a truthiness or STREQUAL test on the raw arg_* variable: an
+  # undefined cmake_parse_arguments output used bare inside if() is treated as
+  # the literal string "arg_EXPECT_SURVIVES" rather than as empty, so a
+  # STREQUAL "" test on it would silently invert. DEFINED has no such trap.
+  if(DEFINED arg_EXPECT_SURVIVES AND (DEFINED arg_EXPECT_STATUS OR DEFINED arg_EXPECT_OUTPUT_MATCHES))
+    message(FATAL_ERROR
+      "byte-machine-mutation: '${arg_LABEL}' declares EXPECT_SURVIVES together "
+      "with EXPECT_STATUS or EXPECT_OUTPUT_MATCHES. A declared survivor is "
+      "judged only by whether the verify command exits zero, so the other two "
+      "would be silently unconsulted rather than enforced. Declare one or the "
+      "other.")
+  endif()
+
   math(EXPR next "${_bm_mutation_count} + 1")
   set(_bm_mutation_count "${next}" PARENT_SCOPE)
 
@@ -80,6 +119,8 @@ function(byte_machine_mutation)
   set_property(GLOBAL PROPERTY _bm_mut_${next}_replace "${arg_REPLACE}")
   set_property(GLOBAL PROPERTY _bm_mut_${next}_sites "${arg_SITES}")
   set_property(GLOBAL PROPERTY _bm_mut_${next}_survives "${arg_EXPECT_SURVIVES}")
+  set_property(GLOBAL PROPERTY _bm_mut_${next}_expect_status "${arg_EXPECT_STATUS}")
+  set_property(GLOBAL PROPERTY _bm_mut_${next}_expect_output_matches "${arg_EXPECT_OUTPUT_MATCHES}")
 endfunction()
 
 # byte_machine_mutation_stage(<source_root> <stage_dir>)
@@ -105,26 +146,93 @@ function(byte_machine_mutation_stage source_root stage_dir)
   endforeach()
 endfunction()
 
-# byte_machine_mutation_run_spec(<stage_dir> <spec> <out_rc>)
+# byte_machine_mutation_run_spec(<stage_dir> <spec> <out_rc> <out_output>)
 #
 # A non-numeric result -- a command that could not be launched at all -- would
 # compare unequal to 0 and count as caught. That is safe only because the
 # baseline run happens first: if the verify command cannot run, the baseline
 # fails and nothing below is trusted.
-function(byte_machine_mutation_run_spec stage_dir spec out_rc)
+#
+# out_output is stdout and stderr concatenated, in that order, with nothing
+# else interleaved -- execute_process captures each as a whole, not as an
+# interleaved stream, so this is an approximation of what a terminal would have
+# shown, not a byte-accurate transcript. Good enough for EXPECT_OUTPUT_MATCHES,
+# which looks for a fixed marker rather than reconstructing ordering.
+function(byte_machine_mutation_run_spec stage_dir spec out_rc out_output)
   if(BYTE_MACHINE_MUTATION_VERIFY_COMMAND)
     set(command ${BYTE_MACHINE_MUTATION_VERIFY_COMMAND})
   else()
     set(command "${CMAKE_COMMAND}" -P "${stage_dir}/test/support/cmake/${spec}")
   endif()
 
+  set(verify_cwd "${stage_dir}")
+  if(BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY)
+    set(verify_cwd "${BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY}")
+  endif()
+
   execute_process(
     COMMAND ${command}
-    WORKING_DIRECTORY "${stage_dir}"
+    WORKING_DIRECTORY "${verify_cwd}"
     RESULT_VARIABLE rc
     OUTPUT_VARIABLE out
     ERROR_VARIABLE err)
   set(${out_rc} "${rc}" PARENT_SCOPE)
+  set(${out_output} "${out}${err}" PARENT_SCOPE)
+endfunction()
+
+# byte_machine_mutation_verdict(<rc> <output> <expect_status> <expect_output_matches>
+#                               <out_verdict> <out_reason>)
+#
+# The decision every mutation is ultimately judged by, and every specification
+# in this tree is trusted through: did the verify command's result count as
+# catching the mutation, and for the declared reason? Pure -- no
+# execute_process, no filesystem -- so it is directly specifiable under
+# `cmake -P` rather than only observable through a real staged run.
+#
+# out_verdict is one of:
+#   not-caught    rc was 0. EXPECT_STATUS and EXPECT_OUTPUT_MATCHES narrow what
+#                 a *nonzero* result has to look like to count; neither
+#                 manufactures a catch out of a zero exit, so they are not even
+#                 consulted here.
+#   wrong-reason  rc was nonzero, but a declared expectation was not met.
+#                 out_reason explains which one.
+#   caught        rc was nonzero and every declared expectation was met. With
+#                 neither EXPECT_STATUS nor EXPECT_OUTPUT_MATCHES given, this is
+#                 the whole rule: any nonzero result is caught, the ordinary,
+#                 pre-slice-3 way.
+#
+# expect_status and expect_output_matches are both tested for "was this
+# declared at all" with STREQUAL "", not truthiness: a status is a small
+# integer, so 0 would never occur here in practice, but a regex is
+# user-supplied text, and a regex that happens to read as CMake-false --
+# "0", OFF, NOTFOUND, anything ending "-NOTFOUND" -- is still a regex someone
+# declared. Truthiness would silently skip the check it names; STREQUAL does
+# not.
+function(byte_machine_mutation_verdict rc output expect_status expect_output_matches out_verdict out_reason)
+  set(${out_reason} "" PARENT_SCOPE)
+
+  if(rc EQUAL 0)
+    set(${out_verdict} "not-caught" PARENT_SCOPE)
+    return()
+  endif()
+
+  if(NOT expect_status STREQUAL "" AND NOT rc EQUAL expect_status)
+    set(${out_verdict} "wrong-reason" PARENT_SCOPE)
+    set(${out_reason}
+      "expected the verify command to exit ${expect_status}, got ${rc}"
+      PARENT_SCOPE)
+    return()
+  endif()
+
+  if(NOT expect_output_matches STREQUAL "" AND NOT output MATCHES "${expect_output_matches}")
+    set(${out_verdict} "wrong-reason" PARENT_SCOPE)
+    set(${out_reason}
+      "expected the verify command's output to match '${expect_output_matches}', but it did not"
+      PARENT_SCOPE)
+    return()
+  endif()
+
+  set(${out_verdict} "caught" PARENT_SCOPE)
 endfunction()
 
 # byte_machine_mutation_reset()
@@ -148,6 +256,30 @@ function(byte_machine_mutation_run source_root stage_dir)
       "trivially and would report the specifications as verified.")
   endif()
 
+  # Accumulated in a GLOBAL property, not a variable, because a suite that
+  # verifies several decisions through several lanes calls this function once
+  # per pass rather than once overall (SchemeMutationSuite.cmake, for one).
+  # Both this counter and _bm_mutation_count are written with PARENT_SCOPE,
+  # which reaches only the immediate caller -- and different passes call from
+  # different scopes: bare script scope for a simple pass, a helper function's
+  # own scope for a repeated one (byte_machine_slice3_launcher_pass and
+  # byte_machine_slice3_body_pass, for instance). A plain variable would not
+  # survive that; a global property has no scope to lose. The caller reads the
+  # total back with byte_machine_mutation_totals once every pass has run.
+  get_property(_bm_total_passes GLOBAL PROPERTY BYTE_MACHINE_MUTATION_TOTAL_PASSES)
+  if(NOT _bm_total_passes)
+    set(_bm_total_passes 0)
+  endif()
+  math(EXPR _bm_total_passes "${_bm_total_passes} + 1")
+  set_property(GLOBAL PROPERTY BYTE_MACHINE_MUTATION_TOTAL_PASSES "${_bm_total_passes}")
+
+  get_property(_bm_total_mutations GLOBAL PROPERTY BYTE_MACHINE_MUTATION_TOTAL_MUTATIONS)
+  if(NOT _bm_total_mutations)
+    set(_bm_total_mutations 0)
+  endif()
+  math(EXPR _bm_total_mutations "${_bm_total_mutations} + ${_bm_mutation_count}")
+  set_property(GLOBAL PROPERTY BYTE_MACHINE_MUTATION_TOTAL_MUTATIONS "${_bm_total_mutations}")
+
   # --- Baseline: every specification a mutation targets must pass unmutated ---
   set(specs_used "")
   foreach(i RANGE 1 ${_bm_mutation_count})
@@ -157,7 +289,7 @@ function(byte_machine_mutation_run source_root stage_dir)
   list(REMOVE_DUPLICATES specs_used)
 
   foreach(spec IN LISTS specs_used)
-    byte_machine_mutation_run_spec("${stage_dir}" "${spec}" rc)
+    byte_machine_mutation_run_spec("${stage_dir}" "${spec}" rc baseline_output)
     if(NOT rc EQUAL 0)
       message(FATAL_ERROR
         "byte-machine-mutation: baseline failure. '${spec}' does not pass on the "
@@ -178,6 +310,8 @@ function(byte_machine_mutation_run source_root stage_dir)
     get_property(replace GLOBAL PROPERTY _bm_mut_${i}_replace)
     get_property(sites GLOBAL PROPERTY _bm_mut_${i}_sites)
     get_property(survives GLOBAL PROPERTY _bm_mut_${i}_survives)
+    get_property(expect_status GLOBAL PROPERTY _bm_mut_${i}_expect_status)
+    get_property(expect_output_matches GLOBAL PROPERTY _bm_mut_${i}_expect_output_matches)
 
     set(pristine_path "${source_root}/${rel}")
     set(staged_path "${stage_dir}/${rel}")
@@ -215,11 +349,21 @@ function(byte_machine_mutation_run source_root stage_dir)
 
     string(REPLACE "${find}" "${replace}" mutated "${pristine}")
     file(WRITE "${staged_path}" "${mutated}")
-    byte_machine_mutation_run_spec("${stage_dir}" "${spec}" rc)
+    byte_machine_mutation_run_spec("${stage_dir}" "${spec}" rc output)
     file(WRITE "${staged_path}" "${pristine}")
 
+    # The pure decision -- caught, not-caught, or caught for the wrong reason
+    # -- lives in byte_machine_mutation_verdict. What is left here is turning
+    # that verdict into the recorded outcome, which also depends on
+    # EXPECT_SURVIVES: a fact about how this mutation was declared that the
+    # verdict function does not see, and is never given alongside EXPECT_STATUS
+    # or EXPECT_OUTPUT_MATCHES (byte_machine_mutation refuses that combination).
+    byte_machine_mutation_verdict(
+      "${rc}" "${output}" "${expect_status}" "${expect_output_matches}"
+      verdict reason)
+
     if(survives)
-      if(rc EQUAL 0)
+      if(verdict STREQUAL "not-caught")
         message(STATUS "byte-machine-mutation: SURVIVES (expected) ${label} -- ${survives}")
       else()
         message(SEND_ERROR
@@ -229,10 +373,16 @@ function(byte_machine_mutation_run source_root stage_dir)
           "record that cites it.")
         math(EXPR uncaught "${uncaught} + 1")
       endif()
-    elseif(rc EQUAL 0)
+    elseif(verdict STREQUAL "not-caught")
       message(SEND_ERROR
         "byte-machine-mutation: UNCAUGHT ${label} -- ${spec} still passes with "
         "${rel} broken. That specification is not testing this behaviour.")
+      math(EXPR uncaught "${uncaught} + 1")
+    elseif(verdict STREQUAL "wrong-reason")
+      message(SEND_ERROR
+        "byte-machine-mutation: '${label}' exited nonzero (${rc}) but for the "
+        "wrong reason -- ${reason}. That is caught by coincidence, not by "
+        "the decision this mutation names, and proves nothing about it.")
       math(EXPR uncaught "${uncaught} + 1")
     else()
       message(STATUS "byte-machine-mutation: caught ${label}")
@@ -243,4 +393,25 @@ function(byte_machine_mutation_run source_root stage_dir)
     message(STATUS
       "byte-machine-mutation: ${_bm_mutation_count} mutations, all accounted for")
   endif()
+endfunction()
+
+# byte_machine_mutation_totals(<out_passes> <out_mutations>)
+#
+# The running total across every byte_machine_mutation_run call made so far in
+# this process. A suite calls this once, after its last pass, and compares the
+# result against the count its own header comment declares -- the only thing
+# that would otherwise notice a whole pass, or a single mutation within one,
+# being quietly deleted: byte_machine_mutation_run's own uncaught-count check
+# is per pass and cannot see a pass that never ran at all.
+function(byte_machine_mutation_totals out_passes out_mutations)
+  get_property(passes GLOBAL PROPERTY BYTE_MACHINE_MUTATION_TOTAL_PASSES)
+  get_property(mutations GLOBAL PROPERTY BYTE_MACHINE_MUTATION_TOTAL_MUTATIONS)
+  if(NOT passes)
+    set(passes 0)
+  endif()
+  if(NOT mutations)
+    set(mutations 0)
+  endif()
+  set(${out_passes} "${passes}" PARENT_SCOPE)
+  set(${out_mutations} "${mutations}" PARENT_SCOPE)
 endfunction()

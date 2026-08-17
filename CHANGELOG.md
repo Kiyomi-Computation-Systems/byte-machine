@@ -90,6 +90,42 @@ what this milestone delivers.
   subdirectory is checked rather than unseen. Every rule past the first two was
   added after being shown to leave a tree unchecked while still producing a
   green build.
+- The first product library: one shared body in `src/common/byte-machine/`
+  included by exactly one thin library per runtime. Its type tag and singleton
+  are freshly allocated rather than symbols, because symbols are interned and a
+  symbol tag would make a body included twice indistinguishable from one
+  included once — the defect the one-owner rule exists to prevent.
+- A working-directory matrix. The same body loads through both wrappers from
+  three directories chosen so each catches a different failure: a copy where an
+  include resolved against the working directory would accidentally succeed, a
+  same-named impostor where it would report the wrong answer, and an empty
+  directory where it would find nothing. All three pass under a correct
+  mechanism, so what proves them is a launcher mutation whose expected outcome
+  is asymmetric — the first passes, the other two fail — with the survivor
+  asserted rather than ignored.
+- Mutation coverage that runs on both runtimes for the shared body, inverting
+  the rule the harness runner uses. A wrapper that quietly reimplemented the
+  body is exactly a wrapper whose runtime does not notice the body changing, so
+  the claim that no wrapper duplicates semantics is witnessed rather than
+  reviewed.
+- The Chez launcher takes repeatable `--library-root` and `--source-dir` flags,
+  since a lane now imports from both the harness and the product tree. Each of
+  its parse refusals is a lane asserting status 2, because a correctly set-up
+  lane never reaches one.
+- A Gambit search root containing a comma is refused at configure time.
+  Gambit's `-:` options are comma-separated, so such a root makes `gsi` print
+  its usage banner and run no Scheme at all, on every Gambit lane at once, in
+  output that names nothing this project owns. A relative search root is
+  refused too, for a different reason: `gsi` resolves it against its own
+  working directory, so the lane would find its libraries or not depending on
+  where it was launched — the one thing the working-directory matrix exists
+  to rule out.
+- `byte_machine_add_test` gains an optional `WORKING_DIRECTORY`, overriding
+  its derived per-test run directory; the temporary directory it also creates
+  is unaffected. `byte_machine_add_exit_code_test` and
+  `byte_machine_add_scheme_lane` forward it, which is what lets the
+  working-directory matrix launch six lanes from three fixture directories
+  instead of their derived ones.
 
 ### Changed
 
@@ -110,12 +146,84 @@ what this milestone delivers.
   documented preset entry point behaves like `make` — on Windows' default
   multi-config generator every test previously reported "Not Run".
 - Specifications print their success banner only when nothing failed.
-- `MutationRunner` takes the staged trees and the verify command as parameters,
-  so a mutation can be judged by running a real execution lane rather than only
-  by `cmake -P`, and gained a reset entry point so a second declaration pass
-  can run under a different verify command in the same script — needed because
-  the Scheme suite's passes each judge a different decision through a different
-  lane: the shared runner against the self-tests, each adapter's export list on
-  its own runtime, and two further runner decisions reachable only through the
-  empty-selection and bootstrap lanes. The CMake-layer suite keeps its previous
-  behaviour by default.
+- `MutationRunner` is now generalized on three axes rather than two: it takes
+  the staged trees and the verify command as parameters, so a mutation can be
+  judged by running a real execution lane rather than only by `cmake -P`;
+  gained a reset entry point so a second declaration pass can run under a
+  different verify command in the same script — needed because the Scheme
+  suite's passes each judge a different decision through a different lane:
+  the shared runner against the self-tests, each adapter's export list on its
+  own runtime, and two further runner decisions reachable only through the
+  empty-selection and bootstrap lanes; and gained a verify working directory,
+  separate from the staged tree, because the working-directory matrix's
+  single mutation is judged by launching from three different directories,
+  not by what it does to the stage. The CMake-layer suite keeps its previous
+  behaviour by default on all three axes.
+- `byte_machine_mutation` gained optional `EXPECT_STATUS` and
+  `EXPECT_OUTPUT_MATCHES`, narrowing "caught" to "caught for the declared
+  reason": a nonzero verify-command result whose exit status or combined
+  stdout+stderr does not also satisfy the declared expectation is reported
+  separately, as caught for the wrong reason, and counted the same as an
+  outright miss rather than as a pass. Applied only where measured, not
+  guessed — a REPLACE that once opened a line comment and swallowed a list's
+  closing parens had reported caught at exit 255 on a read error rather than
+  on the refusal it named.
+- `byte_machine_mutation_run` now accumulates a running pass and mutation
+  count across every call in a process (`byte_machine_mutation_totals`), and
+  both mutation suites compare that total against a count declared next to
+  their own header comment, failing loudly on a mismatch. A whole-branch
+  review had deleted an entire pass group from the Scheme suite and left it
+  reporting 37/37 regardless, with the mutation count silently dropping
+  underneath that number and nothing noticing; this is what would have
+  caught it.
+
+### Fixed
+
+- `MutationRunner.cmake` — the machinery every specification in this tree is
+  trusted through, and staged like everything else — had neither a
+  specification nor a mutation targeting it. A re-review found this let the
+  "caught for the declared reason" narrowing above reproduce the exact defect
+  class it was written to close, one layer down: the branch that turns a
+  wrong-reason result into a failure could be deleted by hand and the real
+  CMake-layer suite stayed 89/89, because nothing mutated the decision that
+  branch depends on, or the branch itself. The verdict decision is now split
+  out as a pure function, `byte_machine_mutation_verdict` — no
+  `execute_process`, no filesystem — with its own specification,
+  `MutationRunnerSpec.cmake`, registered so it also runs under
+  `ctest --preset no-scheme`. Five mutations in `MutationSuite.cmake` break
+  each of the pure function's decisions and the registration guard beside it,
+  and the specification carries a sixth, self-contained check of its own: a
+  real staged mutation, deliberately declared with an unsatisfiable
+  `EXPECT_OUTPUT_MATCHES`, that reaches past the pure function into
+  `byte_machine_mutation_run` itself to prove a wrong-reason verdict is acted
+  on and not merely computed correctly and discarded — the one part of this
+  fix that cannot be specified as a pure function, because it is what the
+  imperative shell does with the answer, and the exact branch the original
+  deletion targeted.
+- `EXPECT_OUTPUT_MATCHES`'s presence was tested by truthiness rather than
+  `STREQUAL ""`, unlike the `EXPECT_STATUS` check one line above it. A
+  pattern CMake itself reads as false — `"0"`, `OFF`, `NOTFOUND`, anything
+  ending `-NOTFOUND` — is still a regex someone declared, and would have been
+  silently unenforced rather than checked.
+- `byte_machine_mutation` now refuses `EXPECT_SURVIVES` declared together
+  with `EXPECT_STATUS` or `EXPECT_OUTPUT_MATCHES`. A declared survivor is
+  judged only by whether the verify command exited zero, so the other two
+  would have been parsed, stored, and never consulted — silently inert
+  rather than enforced.
+- The `WORKING_DIRECTORY`-forwarding conditional in `ByteMachineExpectExit.cmake`
+  and `ByteMachineSchemeLane.cmake` was mutated in only one direction —
+  `if(arg_WORKING_DIRECTORY)` to `if(FALSE)` — which only the specifications'
+  "present" assertions could catch. Their "absent" assertions, proof that the
+  keyword does not reach the registrar when no caller gave one, are exactly
+  what stops the `CMP0174`-driven conditional-forwarding fix from silently
+  regressing to unconditional forwarding, and had no mutation exercising
+  them. Both sites now also mutate to `if(TRUE)`.
+- `SchemeMutationSuite.cmake`'s pass 8 (the poisoned-compiled-object
+  mutation) now declares `EXPECT_OUTPUT_MATCHES "POISONED-FROM-OBJECT"`,
+  enforcing what its own comment already claimed: the mutated run names the
+  sentinel in its banner, its FAIL-CONTEXT line, and its summary. Its
+  without-Gambit expected pass and mutation counts are now derived from the
+  with-Gambit pair and a declared Gambit-only delta (2 passes / 7 mutations)
+  instead of duplicated as a second pair of literals that a new non-gated
+  pass could update only one half of. A comment naming a retired ctest lane
+  is corrected to include its `.chez.source` suffix.

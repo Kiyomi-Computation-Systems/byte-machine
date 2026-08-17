@@ -101,6 +101,60 @@ set(message "seed")
 byte_machine_expect_exit_verdict("2" "2" verdict message)
 spec_check_equal("${message}" "" "verdict clears the message on success")
 
+# --- Registration (byte_machine_add_exit_code_test): WORKING_DIRECTORY -----
+#
+# byte_machine_add_test belongs to a project context this script does not
+# have, so it is stubbed here too -- but every case above that reaches
+# byte_machine_add_exit_code_test does so only to prove a rejection, and each
+# one is rejected before the registrar at the bottom of that function is ever
+# called (the stub inside the BYTE_MACHINE_SPEC_CASE block above stands aside
+# for exactly that reason). Nothing here previously drove a valid registration
+# through to that final call, so the WORKING_DIRECTORY-forwarding block in
+# ByteMachineExpectExit.cmake -- the same conditional-forwarding shape
+# byte_machine_add_scheme_lane uses, and CMP0174-motivated for the same reason
+# -- was exercised by nothing at all. This stub records what it was handed,
+# the same two ways ByteMachineSchemeLaneSpec.cmake does: the value
+# cmake_parse_arguments extracted, and whether the literal "WORKING_DIRECTORY"
+# keyword appears anywhere in the raw arguments, since a keyword present with
+# an empty value and a keyword never given can both leave the parsed variable
+# unset at this project's 3.26 floor.
+function(byte_machine_add_test)
+  cmake_parse_arguments(PARSE_ARGV 0 s "" "NAME;TIMEOUT;WORKING_DIRECTORY" "COMMAND;LABELS;ENVIRONMENT")
+  set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY "${s_WORKING_DIRECTORY}")
+  list(FIND ARGN "WORKING_DIRECTORY" wd_at)
+  if(wd_at EQUAL -1)
+    set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "absent")
+  else()
+    set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "present")
+  endif()
+endfunction()
+
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY "sentinel")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "sentinel")
+byte_machine_add_exit_code_test(
+  NAME byte-machine.harness.example.chez.source
+  COMMAND "/bin/true"
+  EXPECT_EXIT 1
+  TIMEOUT 10
+  WORKING_DIRECTORY "/h/run")
+get_property(wd GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY)
+spec_check_equal("${wd}" "/h/run"
+  "a WORKING_DIRECTORY given to the registrar is forwarded with its value")
+get_property(wd_keyword GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD)
+spec_check_equal("${wd_keyword}" "present"
+  "the WORKING_DIRECTORY keyword reaches the registrar when the caller gave one")
+
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY "sentinel")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "sentinel")
+byte_machine_add_exit_code_test(
+  NAME byte-machine.harness.example.chez.source
+  COMMAND "/bin/true"
+  EXPECT_EXIT 1
+  TIMEOUT 10)
+get_property(wd_keyword GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD)
+spec_check_equal("${wd_keyword}" "absent"
+  "no WORKING_DIRECTORY keyword reaches the registrar when the caller did not give one")
+
 spec_expect_all_rejected("${SPEC_SELF}"
   "registration-rejects-undeclared-status|is not a declared harness status"
   "registration-rejects-non-numeric-status|must be a whole number"

@@ -16,6 +16,15 @@ set(SPEC_SELF "${CMAKE_CURRENT_LIST_FILE}")
 if(DEFINED BYTE_MACHINE_SPEC_CASE)
   set(c "${BYTE_MACHINE_SPEC_CASE}")
 
+  # add_test and set_tests_properties belong to a project context this script
+  # does not have. Stubbing both lets the registrar's own validation be
+  # exercised: without it a case would die on that unrelated error instead of
+  # falling through to the "must be rejected" check.
+  function(add_test)
+  endfunction()
+  function(set_tests_properties)
+  endfunction()
+
   if(c STREQUAL "too-few-segments")
     byte_machine_test_name_parse("byte-machine.unit.graph.chez" l f b m)
   elseif(c STREQUAL "uppercase")
@@ -44,6 +53,12 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
     byte_machine_test_require_timeout("0" "byte-machine.unit.graph.chez.source")
   elseif(c STREQUAL "noninteger-timeout")
     byte_machine_test_require_timeout("30s" "byte-machine.unit.graph.chez.source")
+  elseif(c STREQUAL "registration-rejects-absent-working-directory")
+    byte_machine_add_test(
+      NAME byte-machine.harness.example.cmake.direct
+      COMMAND "/bin/true"
+      TIMEOUT 10
+      WORKING_DIRECTORY "/there/is/no/such/directory")
   else()
     message(FATAL_ERROR "byte-machine-spec: unknown case '${c}'")
   endif()
@@ -82,6 +97,26 @@ byte_machine_test_reserve_name("byte-machine.unit.unique-one.chez.source")
 byte_machine_test_reserve_name("byte-machine.unit.unique-two.chez.source")
 byte_machine_test_require_timeout("120" "byte-machine.unit.graph.chez.source")
 
+# --- The run directory ------------------------------------------------------
+#
+# Which directory a lane launches from is a decision, and slice 3 is the first
+# code to depend on being able to change it. Specified against the pure function
+# rather than through byte_machine_add_test: the registrar calls add_test, which
+# script mode does not have, and creates directories, which a specification must
+# not do to whatever tree it happens to be run from.
+byte_machine_test_run_directory("byte-machine.harness.example.cmake.direct" "" derived)
+spec_check_equal("${derived}" "${CMAKE_BINARY_DIR}/test-run/byte-machine.harness.example.cmake.direct"
+  "with no override, the run directory is derived from the test name")
+
+byte_machine_test_run_directory("byte-machine.harness.example.cmake.direct" "/some/where" chosen)
+spec_check_equal("${chosen}" "/some/where" "an override is used verbatim")
+
+# The empty string is the shape a caller that omitted WORKING_DIRECTORY produces,
+# and it must mean "derive", not "launch from the filesystem root".
+byte_machine_test_run_directory("byte-machine.harness.other.cmake.direct" "" empty_override)
+spec_check_equal("${empty_override}" "${CMAKE_BINARY_DIR}/test-run/byte-machine.harness.other.cmake.direct"
+  "an empty override still derives, and derives from this name")
+
 # --- Negative --------------------------------------------------------------
 
 set(negative_cases
@@ -97,7 +132,8 @@ set(negative_cases
   "duplicate-name|byte-machine: duplicate test name"
   "missing-timeout|byte-machine: TIMEOUT is required"
   "zero-timeout|byte-machine: TIMEOUT for .* must be a positive whole number"
-  "noninteger-timeout|byte-machine: TIMEOUT for .* must be a positive whole number")
+  "noninteger-timeout|byte-machine: TIMEOUT for .* must be a positive whole number"
+  "registration-rejects-absent-working-directory|is not an existing directory")
 
 spec_expect_all_rejected("${SPEC_SELF}" ${negative_cases})
 

@@ -97,14 +97,15 @@ endfunction()
 # --- Imperative shell ------------------------------------------------------
 
 # byte_machine_add_exit_code_test(NAME <name> COMMAND <cmd>... EXPECT_EXIT <code>
-#                                 TIMEOUT <seconds> [LABELS ...] [ENVIRONMENT ...])
+#                                 TIMEOUT <seconds> [WORKING_DIRECTORY <dir>]
+#                                 [LABELS ...] [ENVIRONMENT ...])
 #
 # The command is packed with `|` rather than passed as a list because it has to
 # survive a trip through -D into a child cmake, where a `;` would be re-read as
 # a list separator. No path in this project contains `|`.
 function(byte_machine_add_exit_code_test)
   cmake_parse_arguments(PARSE_ARGV 0 arg ""
-    "NAME;EXPECT_EXIT;TIMEOUT" "COMMAND;LABELS;ENVIRONMENT")
+    "NAME;EXPECT_EXIT;TIMEOUT;WORKING_DIRECTORY" "COMMAND;LABELS;ENVIRONMENT")
 
   if(arg_UNPARSED_ARGUMENTS)
     message(FATAL_ERROR
@@ -130,6 +131,18 @@ function(byte_machine_add_exit_code_test)
 
   string(JOIN "|" packed ${arg_COMMAND})
 
+  # Forward WORKING_DIRECTORY only when the caller gave one, rather than
+  # forwarding an empty value unconditionally. The keyword followed by an
+  # empty string is what makes cmake_parse_arguments() print a CMP0174
+  # developer warning on every configure that reaches this call; that policy
+  # does not exist at this project's declared 3.26 floor (it arrives in
+  # 3.31), so setting it would be a no-op here. Omitting the keyword when
+  # there is nothing to say is version-independent instead.
+  set(working_directory_args "")
+  if(arg_WORKING_DIRECTORY)
+    set(working_directory_args WORKING_DIRECTORY "${arg_WORKING_DIRECTORY}")
+  endif()
+
   byte_machine_add_test(
     NAME "${arg_NAME}"
     COMMAND "${CMAKE_COMMAND}"
@@ -138,6 +151,7 @@ function(byte_machine_add_exit_code_test)
             -P "${CMAKE_CURRENT_FUNCTION_LIST_FILE}"
     TIMEOUT "${arg_TIMEOUT}"
     LABELS ${arg_LABELS}
+    ${working_directory_args}
     ENVIRONMENT ${arg_ENVIRONMENT})
 endfunction()
 

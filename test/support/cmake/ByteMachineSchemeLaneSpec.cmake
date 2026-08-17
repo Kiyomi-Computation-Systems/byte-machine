@@ -65,6 +65,24 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
       BACKEND guile
       PROGRAM "${SPEC_SELF}"
       TIMEOUT 10)
+  elseif(c STREQUAL "lane-rejects-relative-gambit-root")
+    set(BYTE_MACHINE_GAMBIT_EXECUTABLE "/opt/gsi")
+    set(BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT "h/gambit")
+    set(BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT "/s/gambit")
+    byte_machine_add_scheme_lane(
+      NAME byte-machine.harness.example.gambit.source
+      BACKEND gambit
+      PROGRAM "${SPEC_SELF}"
+      TIMEOUT 10)
+  elseif(c STREQUAL "lane-rejects-comma-in-gambit-root")
+    set(BYTE_MACHINE_GAMBIT_EXECUTABLE "/opt/gsi")
+    set(BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT "/h/gam,bit")
+    set(BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT "/s/gambit")
+    byte_machine_add_scheme_lane(
+      NAME byte-machine.harness.example.gambit.source
+      BACKEND gambit
+      PROGRAM "${SPEC_SELF}"
+      TIMEOUT 10)
   else()
     message(FATAL_ERROR "byte-machine-spec: unknown case '${c}'")
   endif()
@@ -77,6 +95,9 @@ set(BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT "/h/chez")
 set(BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT "/h/gambit")
 set(BYTE_MACHINE_HARNESS_SHARED_DIR "/h/shared")
 set(BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR "/b/guard")
+set(BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT "/s/chez")
+set(BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT "/s/gambit")
+set(BYTE_MACHINE_SRC_COMMON_DIR "/s/common/byte-machine")
 
 # --- Chez ------------------------------------------------------------------
 
@@ -84,13 +105,16 @@ set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
 byte_machine_scheme_lane_command(chez "/h/self/p.chez.sps" command status message)
 spec_check_equal("${status}" "ok" "chez lane classifies")
 spec_check_equal("${command}"
-  "/opt/chez;--script;/h/launchers/chez-source.ss;/h/chez;/h/shared;/b/guard;/h/self/p.chez.sps"
+  "/opt/chez;--script;/h/launchers/chez-source.ss;--library-root;/h/chez;--library-root;/s/chez;--source-dir;/h/shared;--source-dir;/s/common/byte-machine;--object-guard;/b/guard;--program;/h/self/p.chez.sps"
   "chez lane command line")
 
 # The guard directory is the entire mechanism that stops a stale .so from being
-# loaded in a lane that calls itself source. Asserted by position, because
-# dropping it would leave a command that still runs.
-list(GET command 5 guard)
+# loaded in a lane that calls itself source. Asserted through its flag rather
+# than by position: with a repeatable-flag protocol a position is no longer
+# stable, and a lane that dropped the guard would still run.
+list(FIND command "--object-guard" guard_index)
+math(EXPR guard_value_index "${guard_index} + 1")
+list(GET command "${guard_value_index}" guard)
 spec_check_equal("${guard}" "/b/guard" "chez lane passes the object guard directory")
 
 # --- Gambit ----------------------------------------------------------------
@@ -99,15 +123,82 @@ set(BYTE_MACHINE_GAMBIT_EXECUTABLE "/opt/gsi")
 byte_machine_scheme_lane_command(gambit "/h/self/p.gambit.scm" command status message)
 spec_check_equal("${status}" "ok" "gambit lane classifies")
 spec_check_equal("${command}"
-  "/opt/gsi;-:search=/h/gambit;-f;/h/self/p.gambit.scm"
+  "/opt/gsi;-:search=/h/gambit,search=/s/gambit;-f;/h/self/p.gambit.scm"
   "gambit lane command line")
 
 # Gambit requires its -: runtime options to be the very first argument, and -f
 # must be present or a developer's .gambini can change what a test proves.
 list(GET command 1 first_option)
-spec_check_equal("${first_option}" "-:search=/h/gambit" "gambit runtime option comes first")
+spec_check_equal("${first_option}" "-:search=/h/gambit,search=/s/gambit"
+  "gambit runtime option comes first")
 list(FIND command "-f" f_index)
 spec_check_equal("${f_index}" "2" "gambit lane skips initialisation files")
+
+# --- The Gambit search list ------------------------------------------------
+#
+# Gambit's -: options are comma-separated, so a search root containing a comma
+# does not produce a wrong path: gsi prints its runtime-options usage banner and
+# runs no Scheme at all, naming nothing this project owns. Measured on
+# 2026-08-16; see docs/plans/milestone-0-slice-3-shared-body.md section 2.
+byte_machine_scheme_lane_gambit_search(option status message "/a" "/b")
+spec_check_equal("${status}" "ok" "two roots are accepted")
+spec_check_equal("${option}" "-:search=/a,search=/b" "two roots join with a comma")
+
+byte_machine_scheme_lane_gambit_search(option status message "/a")
+spec_check_equal("${option}" "-:search=/a" "one root needs no separator")
+
+byte_machine_scheme_lane_gambit_search(option status message "/a" "/b,c")
+spec_check_equal("${status}" "comma-in-path" "a comma in a root is rejected")
+spec_check_equal("${option}" "" "a rejected search list yields no option")
+spec_check_equal("${message}"
+  "a Gambit search root must not contain a comma, but '/b,c' does. Gambit's -: options are comma-separated, so gsi would print its usage banner and run no Scheme at all."
+  "comma rejection message")
+
+# A relative root is refused for a different reason than a comma, and needs its
+# own status: gsi resolves it against its own working directory, so the lane
+# would find its libraries or not depending on where CTest happened to launch
+# it -- which is the one thing the working-directory matrix exists to rule out.
+# Nothing else can see this: ByteMachineSchemeLaneSpec sets its own fixture
+# paths, so it cannot notice test/CMakeLists.txt handing over a relative one.
+byte_machine_scheme_lane_gambit_search(option status message "/a" "relative/root")
+spec_check_equal("${status}" "relative-path" "a relative root is rejected")
+spec_check_equal("${option}" "" "a rejected search list yields no option")
+spec_check_equal("${message}"
+  "a Gambit search root must be absolute, but 'relative/root' is not. Gambit resolves a relative root against its own working directory, so the lane would find its libraries or not depending on where it was launched."
+  "relative root message")
+
+# A root that is both relative and contains a comma must report
+# comma-in-path, not relative-path: the comma check runs first, and that is
+# the useful precedence, because a comma malforms the -: option list and
+# silences gsi -- and therefore every Gambit lane at once -- while a relative
+# root only misleads the one lane that carries it. Nothing else in this
+# specification can see the two checks swapped: every other case here
+# supplies a root with exactly one defect, so either order produces the same
+# status.
+byte_machine_scheme_lane_gambit_search(option status message "/a" "rel,ative/root")
+spec_check_equal("${status}" "comma-in-path"
+  "a root with both defects is rejected for the comma, not the relative path")
+
+# Seeded with sentinel values no correct call could produce. An assertion
+# against an unseeded variable is satisfied by a function that does nothing
+# at all: CMake variables persist across calls, so an unseeded "message"
+# could already read "" by coincidence, and a deleted up-front clear would go
+# unnoticed. The function never writes its message on the success path -- the
+# up-front clear is the only thing that empties it there -- so a seeded
+# sentinel surviving to this assertion is exactly the defect.
+set(option "sentinel-option")
+set(message "sentinel-message")
+byte_machine_scheme_lane_gambit_search(option status message "/a")
+spec_check_equal("${message}" "" "an accepted search list clears the message")
+
+# Same seeding, on the rejection path. The function never writes the option
+# once it has decided to reject, so again the up-front clear is the only
+# thing that empties it, and a seeded sentinel surviving would be the same
+# defect on the other output.
+set(option "sentinel-option")
+set(message "sentinel-message")
+byte_machine_scheme_lane_gambit_search(option status message "/a" "/b,c")
+spec_check_equal("${option}" "" "a rejected search list clears the option")
 
 # --- Rejections ------------------------------------------------------------
 
@@ -144,17 +235,40 @@ spec_check_equal("${message}"
 # and the environment prefix live directly in this function with no pure
 # helper underneath, so stubbing its two dependencies is the only way to
 # observe them at all.
+# Both stubs below record WORKING_DIRECTORY two ways: the value cmake_parse_arguments
+# extracted, and whether the literal "WORKING_DIRECTORY" keyword appears anywhere
+# in the raw argument list at all. The second is not redundant with the first. A
+# lane that omitted WORKING_DIRECTORY and a lane that forwarded it with an empty
+# value can both leave the parsed variable unset at this project's declared 3.26
+# floor (CMP0174, which would tell them apart, is 3.31+) -- so only a scan of the
+# raw arguments can tell "the keyword never appeared" from "it appeared with
+# nothing after it", and the whole point of ByteMachineSchemeLane.cmake building
+# working_directory_args conditionally is to never produce the second shape.
 function(byte_machine_add_test)
-  cmake_parse_arguments(PARSE_ARGV 0 s "" "NAME;TIMEOUT" "COMMAND;LABELS;ENVIRONMENT")
+  cmake_parse_arguments(PARSE_ARGV 0 s "" "NAME;TIMEOUT;WORKING_DIRECTORY" "COMMAND;LABELS;ENVIRONMENT")
   set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "plain")
   set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT "${s_ENVIRONMENT}")
+  set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY "${s_WORKING_DIRECTORY}")
+  list(FIND ARGN "WORKING_DIRECTORY" wd_at)
+  if(wd_at EQUAL -1)
+    set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "absent")
+  else()
+    set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "present")
+  endif()
 endfunction()
 
 function(byte_machine_add_exit_code_test)
-  cmake_parse_arguments(PARSE_ARGV 0 s "" "NAME;EXPECT_EXIT;TIMEOUT" "COMMAND;LABELS;ENVIRONMENT")
+  cmake_parse_arguments(PARSE_ARGV 0 s "" "NAME;EXPECT_EXIT;TIMEOUT;WORKING_DIRECTORY" "COMMAND;LABELS;ENVIRONMENT")
   set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "exit-code")
   set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_EXPECT_EXIT "${s_EXPECT_EXIT}")
   set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT "${s_ENVIRONMENT}")
+  set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY "${s_WORKING_DIRECTORY}")
+  list(FIND ARGN "WORKING_DIRECTORY" wd_at)
+  if(wd_at EQUAL -1)
+    set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "absent")
+  else()
+    set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "present")
+  endif()
 endfunction()
 
 # An EXPECT_EXIT lane must route to the exit-code registrar and forward the
@@ -191,6 +305,70 @@ get_property(environment GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT)
 spec_check_equal("${environment}" "BYTE_MACHINE_EXECUTION_MODE=source;FOO=bar"
   "plain registration carries the source execution mode ahead of caller-supplied entries")
 
+# WORKING_DIRECTORY must be forwarded to whichever registrar the lane routed
+# to, with its value, when the lane was given one -- and the keyword must not
+# reach the registrar at all when it was not. Both directions, through both
+# registrars: ByteMachineSchemeLane.cmake builds one working_directory_args
+# list and splices it into both registration calls, so either could stop
+# forwarding it independently of the other.
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "none")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY "sentinel")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "sentinel")
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.example.chez.source
+  BACKEND chez
+  PROGRAM "${SPEC_SELF}"
+  TIMEOUT 10
+  WORKING_DIRECTORY "/h/run")
+get_property(wd GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY)
+spec_check_equal("${wd}" "/h/run"
+  "a WORKING_DIRECTORY given to the plain registration path is forwarded with its value")
+get_property(wd_keyword GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD)
+spec_check_equal("${wd_keyword}" "present"
+  "the WORKING_DIRECTORY keyword reaches the plain registrar when the lane gave one")
+
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "none")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY "sentinel")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "sentinel")
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.example.chez.source
+  BACKEND chez
+  PROGRAM "${SPEC_SELF}"
+  TIMEOUT 10)
+get_property(wd_keyword GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD)
+spec_check_equal("${wd_keyword}" "absent"
+  "no WORKING_DIRECTORY keyword reaches the plain registrar when the lane did not give one")
+
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "none")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY "sentinel")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "sentinel")
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.example.chez.source
+  BACKEND chez
+  PROGRAM "${SPEC_SELF}"
+  TIMEOUT 10
+  EXPECT_EXIT 1
+  WORKING_DIRECTORY "/h/run")
+get_property(wd GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY)
+spec_check_equal("${wd}" "/h/run"
+  "a WORKING_DIRECTORY given to the exit-code registration path is forwarded with its value")
+get_property(wd_keyword GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD)
+spec_check_equal("${wd_keyword}" "present"
+  "the WORKING_DIRECTORY keyword reaches the exit-code registrar when the lane gave one")
+
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "none")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY "sentinel")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "sentinel")
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.example.chez.source
+  BACKEND chez
+  PROGRAM "${SPEC_SELF}"
+  TIMEOUT 10
+  EXPECT_EXIT 1)
+get_property(wd_keyword GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD)
+spec_check_equal("${wd_keyword}" "absent"
+  "no WORKING_DIRECTORY keyword reaches the exit-code registrar when the lane did not give one")
+
 # A no-runtime backend must skip registration silently: neither registrar may
 # be reached. This runs in-process rather than through spec_expect_rejected, so
 # simply reaching the assertion below is itself proof that nothing raised.
@@ -211,6 +389,8 @@ spec_expect_all_rejected("${SPEC_SELF}"
   "lane-requires-program|PROGRAM is required for byte_machine_add_scheme_lane"
   "lane-requires-timeout|TIMEOUT is required for byte_machine_add_scheme_lane"
   "lane-requires-existing-program|names a program that does not exist"
-  "lane-rejects-unknown-backend|is not a Scheme lane backend")
+  "lane-rejects-unknown-backend|is not a Scheme lane backend"
+  "lane-rejects-comma-in-gambit-root|must not contain a comma"
+  "lane-rejects-relative-gambit-root|must be absolute")
 
 spec_finish("ByteMachineSchemeLane")
