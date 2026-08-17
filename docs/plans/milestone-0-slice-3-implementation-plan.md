@@ -1087,7 +1087,33 @@ git commit -m "feat: refuse a Gambit search root containing a comma"
 
 - [ ] **Step 1: Write the failing specification**
 
-In `test/support/cmake/ByteMachineTestingSpec.cmake`, add a rejection case to the `BYTE_MACHINE_SPEC_CASE` dispatch. Stub the two project-context commands first if the file does not already stub them — put these immediately after `set(c "${BYTE_MACHINE_SPEC_CASE}")`:
+The decision — which directory a registration ends up using — goes in the functional core, not the shell. `byte_machine_add_test` is the imperative shell: it calls `add_test`, which is not scriptable under `cmake -P`, and it creates directories, so a specification that drove it would leave `test-run/` litter wherever it was run. The module's own header documents this core/shell split; follow it.
+
+Add to the driver of `test/support/cmake/ByteMachineTestingSpec.cmake`:
+
+```cmake
+# --- The run directory ------------------------------------------------------
+#
+# Which directory a lane launches from is a decision, and slice 3 is the first
+# code to depend on being able to change it. Specified against the pure function
+# rather than through byte_machine_add_test: the registrar calls add_test, which
+# script mode does not have, and creates directories, which a specification must
+# not do to whatever tree it happens to be run from.
+byte_machine_test_run_directory("byte-machine.harness.example.cmake.direct" "" derived)
+spec_check_equal("${derived}" "${CMAKE_BINARY_DIR}/test-run/byte-machine.harness.example.cmake.direct"
+  "with no override, the run directory is derived from the test name")
+
+byte_machine_test_run_directory("byte-machine.harness.example.cmake.direct" "/some/where" chosen)
+spec_check_equal("${chosen}" "/some/where" "an override is used verbatim")
+
+# The empty string is the shape a caller that omitted WORKING_DIRECTORY produces,
+# and it must mean "derive", not "launch from the filesystem root".
+byte_machine_test_run_directory("byte-machine.harness.other.cmake.direct" "" empty_override)
+spec_check_equal("${empty_override}" "${CMAKE_BINARY_DIR}/test-run/byte-machine.harness.other.cmake.direct"
+  "an empty override still derives, and derives from this name")
+```
+
+Then the existence check, which is I/O and stays in the shell. Add a rejection case to the `BYTE_MACHINE_SPEC_CASE` dispatch, stubbing the two project-context commands first if the file does not already stub them — put these immediately after `set(c "${BYTE_MACHINE_SPEC_CASE}")`:
 
 ```cmake
   # add_test and set_tests_properties belong to a project context this script
@@ -1129,36 +1155,60 @@ Expected: FAIL — `case 'registration-rejects-absent-working-directory' exited 
 
 - [ ] **Step 3: Implement the override**
 
-In `cmake/ByteMachineTesting.cmake`, add `WORKING_DIRECTORY` to the single-value keywords:
+In `cmake/ByteMachineTesting.cmake`, add the pure function to the functional core, beside the other pure decisions:
+
+```cmake
+# byte_machine_test_run_directory(<name> <override> <out_dir>)
+#
+# Where a lane launches from. Empty override means the derived private
+# directory, which is the default precisely because Chez once resolved includes
+# against the process working directory: a test allowed to run from the
+# repository could load a body the build never staged, and would keep passing
+# after that body stopped being staged correctly.
+#
+# A lane that overrides this is making a claim about where resolution happens,
+# which is what the working-directory matrix in test/CMakeLists.txt exists to
+# check. Pure, so that the choice can be specified without registering a test or
+# creating a directory.
+function(byte_machine_test_run_directory name override out_dir)
+  if(override)
+    set(${out_dir} "${override}" PARENT_SCOPE)
+    return()
+  endif()
+  set(${out_dir} "${CMAKE_BINARY_DIR}/test-run/${name}" PARENT_SCOPE)
+endfunction()
+```
+
+Add `WORKING_DIRECTORY` to the single-value keywords:
 
 ```cmake
   cmake_parse_arguments(PARSE_ARGV 0 arg "" "NAME;TIMEOUT;WORKING_DIRECTORY" "COMMAND;LABELS;ENVIRONMENT")
 ```
 
-and, after the existing `run_dir` / `tmp_dir` block, before `add_test`:
+Replace the existing `run_dir` / `tmp_dir` block with one that asks the core, keeping the temporary directory derived either way:
 
 ```cmake
-  # The derived run directory is the default precisely because Chez once
-  # resolved includes against the process working directory, so a test allowed
-  # to run from the repository could load a body the build never staged. A lane
-  # that overrides it is making a claim about resolution and must say so; the
-  # temporary directory is unaffected either way.
-  #
+  # The temporary directory is always the derived one: a test that writes
+  # scratch files must not be able to disturb a directory it was pointed at to
+  # make a claim about resolution.
+  set(tmp_dir "${CMAKE_BINARY_DIR}/test-run/${arg_NAME}/tmp")
+  file(MAKE_DIRECTORY "${tmp_dir}")
+
   # The directory must exist. CTest reports a missing working directory as a
   # failure to launch, which the exact-status helper classifies as `did-not-run`
   # -- correct, but it points at the runtime rather than at the registration
   # that named a directory nobody created.
-  if(arg_WORKING_DIRECTORY)
-    if(NOT IS_DIRECTORY "${arg_WORKING_DIRECTORY}")
-      message(FATAL_ERROR
-        "byte-machine: '${arg_NAME}' was given WORKING_DIRECTORY "
-        "'${arg_WORKING_DIRECTORY}', which is not an existing directory. A "
-        "lane that overrides its working directory is asserting something "
-        "about where resolution happens, so the directory has to be one the "
-        "build made on purpose.")
-    endif()
-    set(run_dir "${arg_WORKING_DIRECTORY}")
+  if(arg_WORKING_DIRECTORY AND NOT IS_DIRECTORY "${arg_WORKING_DIRECTORY}")
+    message(FATAL_ERROR
+      "byte-machine: '${arg_NAME}' was given WORKING_DIRECTORY "
+      "'${arg_WORKING_DIRECTORY}', which is not an existing directory. A lane "
+      "that overrides its working directory is asserting something about where "
+      "resolution happens, so the directory has to be one the build made on "
+      "purpose.")
   endif()
+
+  byte_machine_test_run_directory("${arg_NAME}" "${arg_WORKING_DIRECTORY}" run_dir)
+  file(MAKE_DIRECTORY "${run_dir}")
 ```
 
 - [ ] **Step 4: Forward it from both registrars**
@@ -1316,16 +1366,28 @@ In `test/support/cmake/MutationSuite.cmake`:
 byte_machine_mutation(
   FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
   LABEL "testing: WORKING_DIRECTORY names a directory that need not exist"
-  FIND [[    if(NOT IS_DIRECTORY "${arg_WORKING_DIRECTORY}")]]
-  REPLACE [[    if(FALSE)]])
+  FIND [[  if(arg_WORKING_DIRECTORY AND NOT IS_DIRECTORY "${arg_WORKING_DIRECTORY}")]]
+  REPLACE [[  if(FALSE)]])
 
 byte_machine_mutation(
   FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
-  LABEL "testing: WORKING_DIRECTORY is parsed but never applied"
-  FIND [[    set(run_dir "${arg_WORKING_DIRECTORY}")]]
-  REPLACE [[    set(run_dir "${run_dir}")]]
-  EXPECT_SURVIVES
-    "The specifications run under cmake -P with add_test stubbed out, so no assertion in them can observe which directory a registration would have used. The witness is byte-machine.portability.placeholder-cwd-decoy.chez.source under the SchemeMutationSuite pass that makes the launcher resolve against the working directory: with the override ignored, all three matrix lanes run from their derived run directories and that pass's asymmetric expectation fails.")
+  LABEL "testing: the override is parsed and then ignored"
+  FIND [[  if(override)
+    set(${out_dir} "${override}" PARENT_SCOPE)
+    return()
+  endif()]]
+  REPLACE [[  if(FALSE)
+    set(${out_dir} "${override}" PARENT_SCOPE)
+    return()
+  endif()]])
+
+# The empty-override branch is a decision of its own: treating "" as a value
+# would launch every non-overriding lane from the filesystem root.
+byte_machine_mutation(
+  FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
+  LABEL "testing: an empty override is treated as a directory"
+  FIND [[  if(override)]]
+  REPLACE [[  if(TRUE)]])
 ```
 
 - [ ] **Step 10: Run the mutation suite and the full test suite**
@@ -1427,8 +1489,6 @@ At the end of `test/support/cmake/SchemeMutationSuite.cmake`, after the existing
 # run the same mutations twice: this is not the runner body, identical text on
 # both runtimes, but a body whose being shared is the thing under test.
 
-byte_machine_mutation_reset()
-
 set(PLACEHOLDER_BODY src/common/byte-machine/placeholder.scm)
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
@@ -1441,50 +1501,73 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/common/placeholder-tests.chez.sps")
 
-byte_machine_mutation(
-  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.chez.sps
-  LABEL "placeholder: anything is a vector"
-  FIND [[  (and (vector? x)]]
-  REPLACE [[  (and #t]])
+# byte_machine_slice3_body_pass(<runtime>)
+#
+# One whole pass over the body's decisions, declared once. Both runtimes call
+# it, so they are provably checked against the same list: a mutation added for
+# one and forgotten for the other would be exactly the asymmetry these two
+# passes exist to rule out.
+#
+# The reset, the declarations and the run are all inside this function on
+# purpose. byte_machine_mutation_reset and byte_machine_mutation both write the
+# counter with PARENT_SCOPE, so they agree only while they share a caller;
+# declaring here and running from the caller would leave the run seeing a count
+# of zero and reporting a pass that checked nothing. The verify command is read
+# from the caller's scope, which is what makes the runtime the only difference.
+function(byte_machine_slice3_body_pass runtime)
+  byte_machine_mutation_reset()
 
-# The length check is broken by changing the constant, not by deleting it.
-# Deleting it cannot be witnessed from outside the library: the tag is private,
-# so no caller can build a mis-sized vector carrying it. Changing the constant
-# breaks the same decision and every genuine placeholder is rejected.
-byte_machine_mutation(
-  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.chez.sps
-  LABEL "placeholder: the length check accepts the wrong length"
-  FIND [[       (= (vector-length x) 2)]]
-  REPLACE [[       (= (vector-length x) 3)]])
+  if(runtime STREQUAL "chez")
+    set(spec placeholder-tests.chez.sps)
+  else()
+    set(spec placeholder-tests.gambit.scm)
+  endif()
 
-byte_machine_mutation(
-  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.chez.sps
-  LABEL "placeholder: the tag is not checked"
-  FIND [[       (eq? (vector-ref x 0) placeholder-tag)))]]
-  REPLACE [[       #t))]])
+  byte_machine_mutation(
+    FILE ${PLACEHOLDER_BODY} SPEC ${spec}
+    LABEL "placeholder on ${runtime}: anything is a vector"
+    FIND [[  (and (vector? x)]]
+    REPLACE [[  (and #t]])
 
-# The rule the whole representation rests on. With a symbol tag every assertion
-# in the suite still passes except the one written for this, and slice 4's
-# identity test would become incapable of failing.
-byte_machine_mutation(
-  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.chez.sps
-  LABEL "placeholder: the tag is an interned symbol"
-  FIND [[(define placeholder-tag (vector 'byte-machine-placeholder))]]
-  REPLACE [[(define placeholder-tag 'byte-machine-placeholder)]])
+  # The length check is broken by changing the constant, not by deleting it.
+  # Deleting it cannot be witnessed from outside the library: the tag is
+  # private, so no caller can build a mis-sized vector carrying it. Changing the
+  # constant breaks the same decision and every genuine placeholder is rejected.
+  byte_machine_mutation(
+    FILE ${PLACEHOLDER_BODY} SPEC ${spec}
+    LABEL "placeholder on ${runtime}: the length check accepts the wrong length"
+    FIND [[       (= (vector-length x) 2)]]
+    REPLACE [[       (= (vector-length x) 3)]])
 
-byte_machine_mutation(
-  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.chez.sps
-  LABEL "placeholder: the marker is allocated per call"
-  FIND [[(define (placeholder-marker)
+  byte_machine_mutation(
+    FILE ${PLACEHOLDER_BODY} SPEC ${spec}
+    LABEL "placeholder on ${runtime}: the tag is not checked"
+    FIND [[       (eq? (vector-ref x 0) placeholder-tag)))]]
+    REPLACE [[       #t))]])
+
+  # The rule the whole representation rests on. With a symbol tag every
+  # assertion in the suite still passes except the one written for this, and
+  # slice 4's identity test would become incapable of failing.
+  byte_machine_mutation(
+    FILE ${PLACEHOLDER_BODY} SPEC ${spec}
+    LABEL "placeholder on ${runtime}: the tag is an interned symbol"
+    FIND [[(define placeholder-tag (vector 'byte-machine-placeholder))]]
+    REPLACE [[(define placeholder-tag 'byte-machine-placeholder)]])
+
+  byte_machine_mutation(
+    FILE ${PLACEHOLDER_BODY} SPEC ${spec}
+    LABEL "placeholder on ${runtime}: the marker is allocated per call"
+    FIND [[(define (placeholder-marker)
   placeholder-marker-object)]]
-  REPLACE [[(define (placeholder-marker)
+    REPLACE [[(define (placeholder-marker)
   (vector 'byte-machine-marker))]])
 
-byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+  byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+endfunction()
+
+byte_machine_slice3_body_pass("chez")
 
 # --- Pass 11: the same decisions, on Gambit --------------------------------
-
-byte_machine_mutation_reset()
 
 if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
   set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
@@ -1493,43 +1576,10 @@ if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
     "-f"
     "${STAGE_DIR}/test/common/placeholder-tests.gambit.scm")
 
-  # The same five mutations. Repeat them rather than factoring them out: the
-  # point of this pass is that a second runtime independently notices the body
-  # changing, and a shared helper would make it easy to quietly stop running one
-  # of them here.
-  byte_machine_mutation(
-    FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.gambit.scm
-    LABEL "placeholder on gambit: anything is a vector"
-    FIND [[  (and (vector? x)]]
-    REPLACE [[  (and #t]])
-
-  byte_machine_mutation(
-    FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.gambit.scm
-    LABEL "placeholder on gambit: the length check accepts the wrong length"
-    FIND [[       (= (vector-length x) 2)]]
-    REPLACE [[       (= (vector-length x) 3)]])
-
-  byte_machine_mutation(
-    FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.gambit.scm
-    LABEL "placeholder on gambit: the tag is not checked"
-    FIND [[       (eq? (vector-ref x 0) placeholder-tag)))]]
-    REPLACE [[       #t))]])
-
-  byte_machine_mutation(
-    FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.gambit.scm
-    LABEL "placeholder on gambit: the tag is an interned symbol"
-    FIND [[(define placeholder-tag (vector 'byte-machine-placeholder))]]
-    REPLACE [[(define placeholder-tag 'byte-machine-placeholder)]])
-
-  byte_machine_mutation(
-    FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.gambit.scm
-    LABEL "placeholder on gambit: the marker is allocated per call"
-    FIND [[(define (placeholder-marker)
-  placeholder-marker-object)]]
-    REPLACE [[(define (placeholder-marker)
-  (vector 'byte-machine-marker))]])
-
-  byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+  # The same five mutations, declared once and run per runtime. Writing them out
+  # twice would let the two lists drift, and a mutation silently present on only
+  # one runtime is precisely the defect this pair of passes exists to detect.
+  byte_machine_slice3_body_pass("gambit")
 endif()
 ```
 
