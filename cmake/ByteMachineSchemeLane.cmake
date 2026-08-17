@@ -141,13 +141,14 @@ endfunction()
 
 # byte_machine_add_scheme_lane(NAME <name> BACKEND <chez|gambit> PROGRAM <path>
 #                              TIMEOUT <seconds> [EXPECT_EXIT <code>]
+#                              [WORKING_DIRECTORY <dir>]
 #                              [LABELS ...] [ENVIRONMENT ...])
 #
 # With EXPECT_EXIT the lane is registered through the exact-status helper;
 # without it, a nonzero exit fails the test in the ordinary way.
 function(byte_machine_add_scheme_lane)
   cmake_parse_arguments(PARSE_ARGV 0 arg ""
-    "NAME;BACKEND;PROGRAM;TIMEOUT;EXPECT_EXIT" "LABELS;ENVIRONMENT")
+    "NAME;BACKEND;PROGRAM;TIMEOUT;EXPECT_EXIT;WORKING_DIRECTORY" "LABELS;ENVIRONMENT")
 
   if(arg_UNPARSED_ARGUMENTS)
     message(FATAL_ERROR
@@ -192,6 +193,7 @@ function(byte_machine_add_scheme_lane)
       EXPECT_EXIT "${arg_EXPECT_EXIT}"
       TIMEOUT "${arg_TIMEOUT}"
       LABELS ${arg_LABELS}
+      WORKING_DIRECTORY "${arg_WORKING_DIRECTORY}"
       ENVIRONMENT ${environment})
   else()
     byte_machine_add_test(
@@ -199,6 +201,7 @@ function(byte_machine_add_scheme_lane)
       COMMAND ${command}
       TIMEOUT "${arg_TIMEOUT}"
       LABELS ${arg_LABELS}
+      WORKING_DIRECTORY "${arg_WORKING_DIRECTORY}"
       ENVIRONMENT ${environment})
   endif()
 endfunction()

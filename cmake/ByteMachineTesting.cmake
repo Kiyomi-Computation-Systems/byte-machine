@@ -161,21 +161,43 @@ function(byte_machine_test_require_timeout value name)
   endif()
 endfunction()
 
+# byte_machine_test_run_directory(<name> <override> <out_dir>)
+#
+# Where a lane launches from. Empty override means the derived private
+# directory, which is the default precisely because Chez once resolved includes
+# against the process working directory: a test allowed to run from the
+# repository could load a body the build never staged, and would keep passing
+# after that body stopped being staged correctly.
+#
+# A lane that overrides this is making a claim about where resolution happens,
+# which is what the working-directory matrix in test/CMakeLists.txt exists to
+# check. Pure, so that the choice can be specified without registering a test or
+# creating a directory.
+function(byte_machine_test_run_directory name override out_dir)
+  if(override)
+    set(${out_dir} "${override}" PARENT_SCOPE)
+    return()
+  endif()
+  set(${out_dir} "${CMAKE_BINARY_DIR}/test-run/${name}" PARENT_SCOPE)
+endfunction()
+
 # --- Imperative shell ------------------------------------------------------
 
 # byte_machine_add_test(NAME <name> COMMAND <cmd>... TIMEOUT <seconds>
-#                       [LABELS <label>...] [ENVIRONMENT <K=V>...])
+#                       [WORKING_DIRECTORY <dir>] [LABELS <label>...]
+#                       [ENVIRONMENT <K=V>...])
 #
 # Registers one CTest test with the layer, backend, and mode labels derived from
 # its name, plus a private working and temporary directory.
 #
-# The working directory is inside the build tree, never the repository. That is
+# The working directory is inside the build tree, never the repository, unless
+# WORKING_DIRECTORY names an existing directory of the caller's choosing. That is
 # not tidiness: Chez resolves `include` against the process working directory
 # (see docs/plans/milestone-0-portability-spike.md section 2), so a test allowed
 # to run from the repository root could load a shared body the build never
 # staged, and would keep passing after that body stopped being staged correctly.
 function(byte_machine_add_test)
-  cmake_parse_arguments(PARSE_ARGV 0 arg "" "NAME;TIMEOUT" "COMMAND;LABELS;ENVIRONMENT")
+  cmake_parse_arguments(PARSE_ARGV 0 arg "" "NAME;TIMEOUT;WORKING_DIRECTORY" "COMMAND;LABELS;ENVIRONMENT")
 
   if(arg_UNPARSED_ARGUMENTS)
     message(FATAL_ERROR
@@ -196,10 +218,27 @@ function(byte_machine_add_test)
   set(labels ${layer} ${backend} ${mode} ${arg_LABELS})
   list(REMOVE_DUPLICATES labels)
 
-  set(run_dir "${CMAKE_BINARY_DIR}/test-run/${arg_NAME}")
-  set(tmp_dir "${run_dir}/tmp")
-  file(MAKE_DIRECTORY "${run_dir}")
+  # The temporary directory is always the derived one: a test that writes
+  # scratch files must not be able to disturb a directory it was pointed at to
+  # make a claim about resolution.
+  set(tmp_dir "${CMAKE_BINARY_DIR}/test-run/${arg_NAME}/tmp")
   file(MAKE_DIRECTORY "${tmp_dir}")
+
+  # The directory must exist. CTest reports a missing working directory as a
+  # failure to launch, which the exact-status helper classifies as `did-not-run`
+  # -- correct, but it points at the runtime rather than at the registration
+  # that named a directory nobody created.
+  if(arg_WORKING_DIRECTORY AND NOT IS_DIRECTORY "${arg_WORKING_DIRECTORY}")
+    message(FATAL_ERROR
+      "byte-machine: '${arg_NAME}' was given WORKING_DIRECTORY "
+      "'${arg_WORKING_DIRECTORY}', which is not an existing directory. A lane "
+      "that overrides its working directory is asserting something about where "
+      "resolution happens, so the directory has to be one the build made on "
+      "purpose.")
+  endif()
+
+  byte_machine_test_run_directory("${arg_NAME}" "${arg_WORKING_DIRECTORY}" run_dir)
+  file(MAKE_DIRECTORY "${run_dir}")
 
   set(environment
     "BYTE_MACHINE_TEST_NAME=${arg_NAME}"

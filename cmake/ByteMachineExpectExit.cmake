@@ -97,14 +97,15 @@ endfunction()
 # --- Imperative shell ------------------------------------------------------
 
 # byte_machine_add_exit_code_test(NAME <name> COMMAND <cmd>... EXPECT_EXIT <code>
-#                                 TIMEOUT <seconds> [LABELS ...] [ENVIRONMENT ...])
+#                                 TIMEOUT <seconds> [WORKING_DIRECTORY <dir>]
+#                                 [LABELS ...] [ENVIRONMENT ...])
 #
 # The command is packed with `|` rather than passed as a list because it has to
 # survive a trip through -D into a child cmake, where a `;` would be re-read as
 # a list separator. No path in this project contains `|`.
 function(byte_machine_add_exit_code_test)
   cmake_parse_arguments(PARSE_ARGV 0 arg ""
-    "NAME;EXPECT_EXIT;TIMEOUT" "COMMAND;LABELS;ENVIRONMENT")
+    "NAME;EXPECT_EXIT;TIMEOUT;WORKING_DIRECTORY" "COMMAND;LABELS;ENVIRONMENT")
 
   if(arg_UNPARSED_ARGUMENTS)
     message(FATAL_ERROR
@@ -138,6 +139,7 @@ function(byte_machine_add_exit_code_test)
             -P "${CMAKE_CURRENT_FUNCTION_LIST_FILE}"
     TIMEOUT "${arg_TIMEOUT}"
     LABELS ${arg_LABELS}
+    WORKING_DIRECTORY "${arg_WORKING_DIRECTORY}"
     ENVIRONMENT ${arg_ENVIRONMENT})
 endfunction()
 

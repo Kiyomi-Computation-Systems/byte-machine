@@ -110,6 +110,59 @@ set(BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT "${CMAKE_SOURCE_DIR}/src/chez")
 set(BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT "${CMAKE_SOURCE_DIR}/src/gambit")
 set(BYTE_MACHINE_TEST_COMMON_DIR "${CMAKE_CURRENT_LIST_DIR}/common")
 
+# --- The working-directory matrix ------------------------------------------
+#
+# Three directories, each catching a different failure of the include
+# mechanism. Under a correct mechanism all three lanes pass and the decoy is
+# simply ignored, so the matrix proves nothing on its own: what proves it is the
+# launcher mutation in SchemeMutationSuite.cmake, whose expected outcome is
+# asymmetric -- empty and decoy fail, identical passes.
+#
+# Both non-empty directories carry a copy of EVERY body the lane includes, the
+# harness runner included. A directory holding only a placeholder body would
+# fail to build (byte-machine test harness) under that mutation, before reaching
+# the code under test, and all three lanes would fail identically -- destroying
+# the only evidence that the lanes differ.
+#
+# They live in the build tree, which keeps intact byte_machine_add_test's rule
+# that a test never runs from the repository. They cannot be checked in in any
+# case: they share basenames with real bodies on purpose, and the portability
+# guard forbids exactly that.
+set(BYTE_MACHINE_CWD_MATRIX_DIR "${CMAKE_BINARY_DIR}/cwd-matrix")
+set(BYTE_MACHINE_CWD_IDENTICAL_DIR "${BYTE_MACHINE_CWD_MATRIX_DIR}/same-name-identical")
+set(BYTE_MACHINE_CWD_DECOY_DIR "${BYTE_MACHINE_CWD_MATRIX_DIR}/same-name-decoy")
+set(BYTE_MACHINE_CWD_EMPTY_DIR "${BYTE_MACHINE_CWD_MATRIX_DIR}/empty")
+file(MAKE_DIRECTORY "${BYTE_MACHINE_CWD_IDENTICAL_DIR}")
+file(MAKE_DIRECTORY "${BYTE_MACHINE_CWD_DECOY_DIR}")
+file(MAKE_DIRECTORY "${BYTE_MACHINE_CWD_EMPTY_DIR}")
+
+# COPYONLY rather than file(COPY): configure_file records a dependency, so
+# editing a body re-runs configure and refreshes the copies.
+configure_file("${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder.scm"
+               "${BYTE_MACHINE_CWD_IDENTICAL_DIR}/placeholder.scm" COPYONLY)
+configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/harness-runner.scm"
+               "${BYTE_MACHINE_CWD_IDENTICAL_DIR}/harness-runner.scm" COPYONLY)
+configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/harness-runner.scm"
+               "${BYTE_MACHINE_CWD_DECOY_DIR}/harness-runner.scm" COPYONLY)
+
+# The impostor. It implements the complete export list on purpose: an
+# incomplete one would fail the lane at library construction, which is a
+# different failure. The claim under test is that resolution picked the wrong
+# file, and that is only tested if the wrong file would otherwise work.
+file(WRITE "${BYTE_MACHINE_CWD_DECOY_DIR}/placeholder.scm"
+";;; Impostor placeholder body. Not part of the product.
+;;;
+;;; Shares a basename with src/common/byte-machine/placeholder.scm and answers
+;;; every question wrongly. It is only ever reachable by an include that
+;;; resolved against the process working directory, which is the defect
+;;; byte-machine.portability.placeholder-cwd-decoy.* exists to catch.
+
+(define (make-placeholder value) (vector 'decoy value))
+(define (placeholder? x) #f)
+(define (placeholder-value p) 'decoy)
+(define (placeholder-marker) (vector 'decoy))
+")
+
 # Checked before any lane is registered: a body missing a wrapper must stop the
 # build, not produce a suite that quietly proves one runtime.
 # src/common holds bodies included by a library, so they owe no program
@@ -426,20 +479,30 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source")
 endif()
 
-# --- The placeholder library -----------------------------------------------
+# --- The placeholder library, from three working directories ---------------
 #
-# One shared body, one owner library per runtime, one shared test body. The
-# working directories these run from are what slice 3 is actually about; they
-# arrive in the next task, and until then both run from the default private run
-# directory.
-byte_machine_add_scheme_lane(
-  NAME byte-machine.portability.placeholder.chez.source
-  BACKEND chez
-  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.chez.sps"
-  TIMEOUT 120)
+# Same program, same body, three launch directories. See the matrix comment
+# above for what each one catches and why passing here is not yet evidence.
+foreach(cwd_case identical decoy empty)
+  if(cwd_case STREQUAL "identical")
+    set(cwd_dir "${BYTE_MACHINE_CWD_IDENTICAL_DIR}")
+  elseif(cwd_case STREQUAL "decoy")
+    set(cwd_dir "${BYTE_MACHINE_CWD_DECOY_DIR}")
+  else()
+    set(cwd_dir "${BYTE_MACHINE_CWD_EMPTY_DIR}")
+  endif()
 
-byte_machine_add_scheme_lane(
-  NAME byte-machine.portability.placeholder.gambit.source
-  BACKEND gambit
-  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.gambit.scm"
-  TIMEOUT 120)
+  byte_machine_add_scheme_lane(
+    NAME "byte-machine.portability.placeholder-cwd-${cwd_case}.chez.source"
+    BACKEND chez
+    PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.chez.sps"
+    TIMEOUT 120
+    WORKING_DIRECTORY "${cwd_dir}")
+
+  byte_machine_add_scheme_lane(
+    NAME "byte-machine.portability.placeholder-cwd-${cwd_case}.gambit.source"
+    BACKEND gambit
+    PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.gambit.scm"
+    TIMEOUT 120
+    WORKING_DIRECTORY "${cwd_dir}")
+endforeach()

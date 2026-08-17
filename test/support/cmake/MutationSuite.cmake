@@ -587,6 +587,36 @@ byte_machine_mutation(
   FIND [[set(BYTE_MACHINE_TEST_MODES_gambit source o1 aot)]]
   REPLACE [[set(BYTE_MACHINE_TEST_MODES_gambit o1 aot)]])
 
+# The run directory is where slice 3's working-directory matrix hangs: a lane
+# that overrides it is asserting something about where resolution happens, so
+# each of the three decisions inside byte_machine_test_run_directory gets its
+# own mutation.
+byte_machine_mutation(
+  FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
+  LABEL "testing: WORKING_DIRECTORY names a directory that need not exist"
+  FIND [[  if(arg_WORKING_DIRECTORY AND NOT IS_DIRECTORY "${arg_WORKING_DIRECTORY}")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
+  LABEL "testing: the override is parsed and then ignored"
+  FIND [[  if(override)
+    set(${out_dir} "${override}" PARENT_SCOPE)
+    return()
+  endif()]]
+  REPLACE [[  if(FALSE)
+    set(${out_dir} "${override}" PARENT_SCOPE)
+    return()
+  endif()]])
+
+# The empty-override branch is a decision of its own: treating "" as a value
+# would launch every non-overriding lane from the filesystem root.
+byte_machine_mutation(
+  FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
+  LABEL "testing: an empty override is treated as a directory"
+  FIND [[  if(override)]]
+  REPLACE [[  if(TRUE)]])
+
 # --- ByteMachinePortabilityGuard --------------------------------------------
 
 byte_machine_mutation(
