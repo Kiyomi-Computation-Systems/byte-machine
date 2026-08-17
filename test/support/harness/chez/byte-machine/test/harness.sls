@@ -35,7 +35,7 @@
     harness-fingerprint-bytevector harness-fingerprint-combine
     harness-fingerprint->string harness-fingerprint-file
     harness-bytes->string harness-provenance-diagnosis
-    harness-verify-provenance!
+    harness-verify-provenance! harness-provenance-reachability-diagnosis
     ;; adapter protocol
     adapter-runtime-name adapter-runtime-version adapter-machine-type
     adapter-os adapter-architecture adapter-execution-mode

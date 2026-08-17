@@ -132,6 +132,32 @@
       ". Either this lane executed different text from the one the build "
       "measured, or it is running a stale artifact."))))
 
+;; A lane whose build declared a manifest, in a run where nothing verified it.
+;;
+;; SHARED_BODIES being required makes the environment unforgeable; it says
+;; nothing about whether anything read it. The check is reached from
+;; harness-begin, or by a hand-placed call -- which is what harness-bootstrap
+;; needed, having deliberately no harness-begin. Forget that line in a future
+;; body and the lane runs un-provenanced with nothing failing, which is the one
+;; remaining way V9's guarantee can be true at configure time and false at run
+;; time.
+;;
+;; Pure, and separate from the summary's read of the live flag, for the reason
+;; harness-empty-selection-diagnosis is: a run in this state cannot assert
+;; anything about itself from the inside, so the rule has to be checkable as a
+;; function of two values.
+;;
+;; An absent or empty manifest is not this defect. It means no lane
+;; registration started this process, and skipping is then correct -- see
+;; harness-verify-provenance!.
+(define (harness-provenance-reachability-diagnosis manifest checked?)
+  (if (and manifest (not (string=? manifest "")) (not checked?))
+      (string-append
+       "the build declared a manifest for this run and nothing verified it. "
+       "harness-verify-provenance! was never reached, so this suite's result "
+       "says nothing about whether it executed the text it was given.")
+      #f))
+
 ;; ---------------------------------------------------------------------------
 ;; Mutable result state (the imperative shell of the runner)
 ;; ---------------------------------------------------------------------------
@@ -166,6 +192,14 @@
 (define harness-filter #f)
 (define harness-verbose #f)
 (define harness-probe-depth 0)
+
+;; Set by harness-verify-provenance! itself, so "unset" means the procedure was
+;; never called -- not that it ran and found nothing. Deliberately outside
+;; harness-clear-state! and the probe's captured state: harness-begin verifies
+;; before it clears, and a probe restoring this would erase the fact that the
+;; check happened.
+(define harness-provenance-checked #f)
+(define harness-provenance-unreached #f)
 
 (define (harness-quiet?) (> harness-probe-depth 0))
 
@@ -523,6 +557,7 @@
 ;; The guarantee lives at configure time, where it cannot be forged; a run-time
 ;; refusal would add only a rule this repository's own tooling cannot satisfy.
 (define (harness-verify-provenance!)
+  (set! harness-provenance-checked #t)
   (let ((raw (adapter-environment-variable "BYTE_MACHINE_FINGERPRINT_FILES")))
     (if (or (not raw) (string=? raw ""))
         #t
@@ -587,13 +622,22 @@
   (harness-empty-selection-diagnosis harness-case-count harness-skipped-count))
 
 (define (harness-exit-status)
-  (cond ((> harness-error-count 0) harness-status-harness-error)
+  (cond ((or harness-provenance-unreached) harness-status-provenance)
+        ((> harness-error-count 0) harness-status-harness-error)
         ((> harness-failure-count 0) harness-status-failed)
         (else harness-status-pass)))
 
 (define (harness-summary)
   (let ((empty (harness-empty-selection-error)))
     (if empty (harness-record-error! empty)))
+  (let ((unreached (harness-provenance-reachability-diagnosis
+                    (adapter-environment-variable "BYTE_MACHINE_FINGERPRINT_FILES")
+                    harness-provenance-checked)))
+    (if unreached
+        (begin
+          (set! harness-provenance-unreached #t)
+          (harness-say-always
+           (string-append "byte-machine-harness: PROVENANCE-ERROR " unreached)))))
   (let ((status (harness-exit-status)))
     (harness-say-always
      (string-append

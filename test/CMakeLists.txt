@@ -799,3 +799,32 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     LABELS expected-red
     ENVIRONMENT "BYTE_MACHINE_FINGERPRINT_FILES=${CMAKE_BINARY_DIR}/fingerprints/no-such-body.scm")
 endif()
+
+# Provenance configured and never performed. SHARED_BODIES guarantees the
+# environment carries a manifest; nothing until now guaranteed anything read
+# it. This body reaches harness-summary without ever reaching
+# harness-verify-provenance!, which is precisely the shape harness-bootstrap
+# would have had if its hand-placed call had been forgotten -- and that would
+# have run un-provenanced with nothing failing.
+#
+# A real manifest, deliberately: with none, the run is a process no lane
+# registration started, and skipping is correct rather than a defect.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.unreached-provenance.chez.source
+  BACKEND chez
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.chez.sps"
+  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
+                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.scm"
+  EXPECT_EXIT 3
+  TIMEOUT 120
+  LABELS expected-red)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.unreached-provenance.gambit.source
+  BACKEND gambit
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.gambit.scm"
+  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
+                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.scm"
+  EXPECT_EXIT 3
+  TIMEOUT 120
+  LABELS expected-red)

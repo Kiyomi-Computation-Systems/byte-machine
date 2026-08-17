@@ -6,10 +6,10 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# THIRTY-THREE PASSES WHEN GAMBIT IS DISCOVERED, BECAUSE THIRTY-THREE
+# THIRTY-FIVE PASSES WHEN GAMBIT IS DISCOVERED, BECAUSE THIRTY-FIVE
 # DIFFERENT WITNESSES ARE NEEDED
 #
-# Six of the thirty-three are gated on BYTE_MACHINE_GAMBIT_EXECUTABLE, the
+# Six of the thirty-five are gated on BYTE_MACHINE_GAMBIT_EXECUTABLE, the
 # same precondition every Gambit lane in this tree runs under: pass 2, the
 # Gambit adapter's export list (two mutations); pass 10, the placeholder body's
 # decisions run a second time on Gambit (six mutations, the same list pass 9
@@ -20,9 +20,12 @@
 # algorithm's decisions run a second time on Gambit (five mutations, the same
 # list pass 28 declares for Chez); and pass 31, the hex digit table on Gambit
 # (one mutation, the per-runtime half of the pair pass 30 makes for Chez).
-# Without Gambit this file runs twenty-seven passes and sixty-three mutations
-# rather than thirty-three passes and eighty-one -- the with-Gambit pair less
-# that 6-pass, 18-mutation delta.
+# Passes 34 and 35 -- Task 8's reachability guard, described where the file
+# discusses 32 and 33 below -- are both Chez-only, like 32 and 33 themselves,
+# so neither is part of this six. Without Gambit this file runs twenty-nine
+# passes and sixty-five mutations rather than thirty-five passes and
+# eighty-three -- the with-Gambit pair less that same 6-pass, 18-mutation
+# delta.
 #
 # EXPECTED_PASSES_WITH_GAMBIT and EXPECTED_MUTATIONS_WITH_GAMBIT are declared
 # below; the without-Gambit pair is computed from them and the delta rather
@@ -134,21 +137,26 @@
 #
 # Passes 30 and 31 are the hex digit table, run once per runtime. Neither sets
 # a manifest, so provenance is skipped here exactly as it is for every other
-# pass but 32 and 33: what actually catches the mutation is the self-tests'
-# own "hex digits are lowercase on every runtime" case, which check-equals
-# fixed literals ("ff", "deadbeef", "0") rather than deriving its expectation
-# from fingerprint.scm, so both runtimes fail an ordinary comparison. See the
-# measured note beside the mutation declarations below for why this is
-# symmetric rather than the asymmetric outcome a provenance-wrapped version of
-# the same mutation would show.
+# pass but 32 through 35: what actually catches the mutation is the
+# self-tests' own "hex digits are lowercase on every runtime" case, which
+# check-equals fixed literals ("ff", "deadbeef", "0") rather than deriving its
+# expectation from fingerprint.scm, so both runtimes fail an ordinary
+# comparison. See the measured note beside the mutation declarations below for
+# why this is symmetric rather than the asymmetric outcome a
+# provenance-wrapped version of the same mutation would show.
 #
-# Passes 32 and 33 are the provenance check itself: the comparison, the call
-# site that invokes it, and the missing-expectation branch, each witnessed
-# through the exact-status helper so that exit 3 -- the refusal -- is the
-# green baseline, exactly as passes 5 and 6 do for the launcher's
-# guard-directory refusals. A third refusal -- a manifest naming an unreadable
-# body -- has no mutation; see the stated blind spot recorded beside pass 33
-# below.
+# Passes 32 through 35 are the provenance check and the reachability guard
+# that closes over it (Task 8): 32 is the comparison, 33 the
+# missing-expectation branch, 34 the call site that reaches
+# harness-verify-provenance! at all, and 35 harness-provenance-reachability-
+# diagnosis itself, each witnessed through the exact-status helper so that
+# exit 3 -- the refusal -- is the green baseline, exactly as passes 5 and 6 do
+# for the launcher's guard-directory refusals. A third refusal -- a manifest
+# naming an unreadable body -- has no mutation; see the stated blind spot
+# recorded beside pass 33 below. Pass 34 was pass 32's second mutation until
+# Task 8: see the detail beside its declaration for why the reachability guard
+# made WRONG_FP_FILE's exit-3 baseline ambiguous for that one mutation and not
+# for pass 32's own.
 #
 # WHAT THIS SUITE NEEDS FROM ITS ENVIRONMENT
 #
@@ -164,12 +172,12 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "THIRTY-THREE PASSES..." above. Declared here, rather than only in prose,
+# See "THIRTY-FIVE PASSES..." above. Declared here, rather than only in prose,
 # so the count enforced at the bottom of this file is the same text a reader
 # checks by eye at the top -- one number to keep in sync, not two that can
 # quietly disagree.
-set(EXPECTED_PASSES_WITH_GAMBIT 33)
-set(EXPECTED_MUTATIONS_WITH_GAMBIT 81)
+set(EXPECTED_PASSES_WITH_GAMBIT 35)
+set(EXPECTED_MUTATIONS_WITH_GAMBIT 83)
 
 # Six passes are gated on BYTE_MACHINE_GAMBIT_EXECUTABLE: pass 2 (the Gambit
 # adapter's export list, two mutations), pass 10 (the placeholder body's
@@ -358,12 +366,17 @@ byte_machine_mutation(
                              (list 'value (cleanup)))))]]
   REPLACE [[    (let ((cleanup-outcome (list 'value #f)))]])
 
+# FIND used to open on `(cond (...` itself, back when the error clause was the
+# cond's first clause. Task 8 gave harness-exit-status a new first clause --
+# provenance outranking both -- which pushed the error and failure clauses one
+# line down, onto their own matching indentation; anchoring on those two lines
+# alone is what survives a further clause ever being added the same way again.
 byte_machine_mutation(
   FILE ${RUNNER} SPEC harness-self-tests.chez.sps
   LABEL "runner: a failure outranks a harness error in the exit status"
-  FIND [[  (cond ((> harness-error-count 0) harness-status-harness-error)
+  FIND [[        ((> harness-error-count 0) harness-status-harness-error)
         ((> harness-failure-count 0) harness-status-failed)]]
-  REPLACE [[  (cond ((> harness-failure-count 0) harness-status-failed)
+  REPLACE [[        ((> harness-failure-count 0) harness-status-failed)
         ((> harness-error-count 0) harness-status-harness-error)]])
 
 # --- Probes ----------------------------------------------------------------
@@ -1533,27 +1546,32 @@ endif()
 # SUGGESTS.
 #
 # Neither pass sets a manifest, so provenance is skipped here exactly as it is
-# for every other pass but 32 and 33 below: BYTE_MACHINE_FINGERPRINT_FILES is
-# unset, harness-verify-provenance! returns #t immediately, and the self-tests
-# suite runs its own cases undisturbed. It is the self-tests' own "hex digits
-# are lowercase on every runtime" case that actually witnesses this mutation --
-# it check-equals fixed literals ("ff", "deadbeef", "0") rather than deriving
-# its expectation from fingerprint.scm, so mutating the digit table fails an
-# ordinary comparison on both runtimes: both processes exit 1 (the harness's
+# for every other pass but 32 through 35 below: BYTE_MACHINE_FINGERPRINT_FILES
+# is unset, harness-verify-provenance! returns #t immediately, and the
+# self-tests suite runs its own cases undisturbed. It is the self-tests' own
+# "hex digits are lowercase on every runtime" case that actually witnesses
+# this mutation -- it check-equals fixed literals ("ff", "deadbeef", "0")
+# rather than deriving its expectation from fingerprint.scm, so mutating the
+# digit table fails an ordinary comparison on both runtimes: both processes
+# exit 1 (the harness's
 # own "an assertion failed" status) with a "byte-machine-harness: FAIL " line,
 # which is exactly what EXPECT_STATUS and EXPECT_OUTPUT_MATCHES below assert
 # and exactly what the real run reports caught for both.
 #
 # The asymmetric story -- Chez agreeing with a build-time expectation that
 # moved with it, Gambit alone catching the divergence -- is not demonstrated
-# by any pass in this file, passes 32 and 33 included. Both run Chez only,
-# neither wrapped in if(BYTE_MACHINE_GAMBIT_EXECUTABLE), so neither can be
-# where "Gambit alone catches it" happens. Both compare against a fixed
-# wrong-value fixture rather than a fingerprint recomputed from the mutated
-# tree -- pass 32 against a file holding the literal "not-a-fingerprint",
-# pass 33 against never-produced.fingerprint, a path this suite never writes
-# -- so neither expectation can move with a mutation the way the story
-# requires. And harness-hex-digits is the one definition both adapters
+# by any pass in this file, passes 32 through 35 included (none of the four
+# mutates the hex table; that is what this pair alone does). Passes 32 and 33
+# both run Chez only, neither wrapped in if(BYTE_MACHINE_GAMBIT_EXECUTABLE), so
+# neither can be where "Gambit alone catches it" happens. Both compare against
+# a fixed wrong-value fixture rather than a fingerprint recomputed from the
+# mutated tree -- pass 32 against a file holding the literal
+# "not-a-fingerprint", pass 33 against never-produced.fingerprint, a path this
+# suite never writes -- so neither expectation can move with a mutation the
+# way the story requires. (Pass 34's fixture is a correct, not a wrong, value,
+# computed once from the unmutated tree before its own mutation runs; pass 34
+# does not mutate fingerprint.scm either, so this still cannot show the
+# asymmetry.) And harness-hex-digits is the one definition both adapters
 # include verbatim: any pass that did compute its expectation via Chez over
 # the same staged tree the mutation lands on would have that computation read
 # the identical mutated table the runtime under test reads, so the two would
@@ -1618,14 +1636,16 @@ endif()
 # Wrapped in the exact-status helper so exit 3 -- the refusal -- is the green
 # baseline, exactly as passes 5 and 6 do for the launcher. A mutation that makes
 # the check more permissive drops the inner status to 0, the wrapper reports
-# nonzero, and the mutation is caught.
+# nonzero, and the mutation is caught. Continued below by passes 34 and 35,
+# which this pair's own comments point to at the place each split off.
 #
 # THE MANIFEST NAMES ONE BODY ON PURPOSE
 #
 # BYTE_MACHINE_EXPECT_COMMAND packs its argument vector with `|`, which is also
 # the manifest separator, so a two-element manifest would be unpacked as two
 # arguments. One body is enough: these passes test whether the check runs and is
-# consulted, not how values combine, which passes 28 and 29 cover.
+# consulted, not how values combine, which passes 28 and 29 cover. Passes 34
+# and 35 keep the same one-body manifest for the same reason.
 
 set(RUNNER_BODY test/support/harness/shared/harness-runner.scm)
 
@@ -1658,14 +1678,20 @@ byte_machine_mutation(
   FIND [[    ((string=? expected computed) #f)]]
   REPLACE [[    (#t #f)]])
 
-byte_machine_mutation(
-  FILE ${RUNNER_BODY} SPEC byte-machine.harness.provenance.chez.source
-  LABEL "provenance: harness-begin stops checking at all"
-  FIND [[  (harness-verify-provenance!)
-  (harness-clear-state!)]]
-  REPLACE [[  (harness-clear-state!)]])
-
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# "provenance: harness-begin stops checking at all" used to live here, sharing
+# this pass's WRONG_FP_FILE verify command with EXPECT_EXIT 3. Task 8's
+# reachability guard (test/support/harness/shared/harness-runner.scm,
+# harness-provenance-reachability-diagnosis) made that ambiguous: with the call
+# removed, harness-provenance-checked never becomes #t, and the guard now
+# refuses with status 3 of its own accord -- the same number WRONG_FP_FILE's
+# mismatch was already producing, for an unrelated reason. ByteMachineExpectExit
+# compares only the number, so both baseline and this mutation satisfy
+# EXPECT_EXIT 3 and the wrapper reports "exited as expected" either way: not
+# caught, not because nothing noticed, but because two different refusals now
+# agree on the one status this vocabulary gives refusals. Moved to pass 34
+# below, which is what gives it a baseline the guard cannot also produce.
 
 # Pass 33: the same wrapper, but the expectation file does not exist, so the
 # refusal under test is the missing-expectation branch rather than the
@@ -1731,9 +1757,125 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # and this is recorded rather than papered over with an EXPECT_SURVIVES, which
 # AGENTS.md reserves for the genuinely unwitnessable.
 
+# --- Pass 34: the call site, witnessed against a baseline the guard cannot
+# also satisfy -----------------------------------------------------------
+#
+# Continues "provenance: harness-begin stops checking at all" from pass 32,
+# with a different baseline. WRONG_FP_FILE cannot be reused: it makes the
+# unmutated lane's correct behaviour exit 3, and after Task 8 this mutation's
+# broken behaviour *also* exits 3 (the reachability guard's own refusal), so a
+# wrapper that only compares the exit number cannot tell them apart -- both
+# read as "exited 3 as expected." Giving the lane an expectation it actually
+# matches makes the unmutated baseline exit 0 instead, which the guard cannot
+# produce (harness-provenance-checked is #t by the time harness-summary reads
+# it, so the guard stays quiet and the self-tests' own pass/fail is what
+# decides). The mutation still removes the call, so harness-provenance-checked
+# stays #f, the guard still refuses, and the lane still exits 3 -- now cleanly
+# distinct from the 0 baseline instead of coinciding with the old one.
+#
+# THE MANIFEST NAMES ONE BODY, AS ABOVE, AND ITS EXPECTATION IS COMPUTED, NOT
+# WRITTEN BY HAND
+#
+# byte_machine_expected_fingerprint in test/CMakeLists.txt is a CMake function,
+# unreachable from this standalone script, so the value is produced the same
+# way it is: running fingerprint-manifest.ss over the staged fingerprint.scm.
+# THE ALGORITHM IS NOT REIMPLEMENTED HERE applies here just as it does there.
+set(CORRECT_FP_FILE "${WORK_DIR}/correct.fingerprint")
+execute_process(
+  COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" "--script"
+          "${STAGE_DIR}/test/support/launchers/fingerprint-manifest.ss"
+          "${STAGE_DIR}/test/support/harness/shared"
+          "${CORRECT_FP_FILE}"
+          "${STAGE_DIR}/test/support/harness/shared/fingerprint.scm"
+  RESULT_VARIABLE fp_rc
+  OUTPUT_VARIABLE fp_out
+  ERROR_VARIABLE fp_err)
+if(NOT fp_rc EQUAL 0)
+  message(FATAL_ERROR
+    "byte-machine-mutation: could not compute pass 34's baseline fingerprint "
+    "(exit ${fp_rc}): ${fp_out}${fp_err}")
+endif()
+
+byte_machine_mutation_reset()
+
+string(JOIN "|" PROVENANCE_UNCALLED_COMMAND
+  "${CMAKE_COMMAND}" "-E" "env"
+  "BYTE_MACHINE_FINGERPRINT_FILES=${STAGE_DIR}/test/support/harness/shared/fingerprint.scm"
+  "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${CORRECT_FP_FILE}"
+  "--"
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${CMAKE_COMMAND}"
+  "-DBYTE_MACHINE_EXPECT_EXIT=0"
+  "-DBYTE_MACHINE_EXPECT_COMMAND=${PROVENANCE_UNCALLED_COMMAND}"
+  -P "${STAGE_DIR}/cmake/ByteMachineExpectExit.cmake")
+
+byte_machine_mutation(
+  FILE ${RUNNER_BODY} SPEC byte-machine.harness.provenance.chez.source
+  LABEL "provenance: harness-begin stops checking at all"
+  FIND [[  (harness-verify-provenance!)
+  (harness-clear-state!)]]
+  REPLACE [[  (harness-clear-state!)]])
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 35: the reachability guard itself -------------------------------
+#
+# harness-unreached-provenance.scm (test/support/harness/self/) deliberately
+# never calls harness-begin, so its lane's baseline already exits 3 through
+# the guard alone -- no WRONG_FP_FILE trick needed, and no
+# BYTE_MACHINE_EXPECT_FINGERPRINT_FILE either, since nothing in this lane's
+# reachable code ever compares a fingerprint. Two mutations, because
+# harness-provenance-reachability-diagnosis's rule has two halves that fail
+# independently (V13's own comment: "manifest and not checked?"): the
+# diagnosis can stop firing, or checked? can stop meaning what its name says.
+# Either one drops the baseline's 3 to 0, which EXPECT_EXIT catches cleanly --
+# unlike pass 34, nothing else in this lane's execution can also produce 3, so
+# no separate baseline is needed here.
+set(UNREACHED_PROVENANCE_SPEC byte-machine.harness.unreached-provenance.chez.source)
+
+byte_machine_mutation_reset()
+
+string(JOIN "|" PROVENANCE_REACHABILITY_COMMAND
+  "${CMAKE_COMMAND}" "-E" "env"
+  "BYTE_MACHINE_FINGERPRINT_FILES=${STAGE_DIR}/test/support/harness/shared/fingerprint.scm"
+  "--"
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-unreached-provenance.chez.sps")
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${CMAKE_COMMAND}"
+  "-DBYTE_MACHINE_EXPECT_EXIT=3"
+  "-DBYTE_MACHINE_EXPECT_COMMAND=${PROVENANCE_REACHABILITY_COMMAND}"
+  -P "${STAGE_DIR}/cmake/ByteMachineExpectExit.cmake")
+
+byte_machine_mutation(
+  FILE ${RUNNER_BODY} SPEC ${UNREACHED_PROVENANCE_SPEC}
+  LABEL "provenance: the reachability diagnosis stops guarding"
+  FIND [[  (if (and manifest (not (string=? manifest "")) (not checked?))]]
+  REPLACE [[  (if #f]])
+
+byte_machine_mutation(
+  FILE ${RUNNER_BODY} SPEC ${UNREACHED_PROVENANCE_SPEC}
+  LABEL "provenance: harness-provenance-checked starts true, so unreached looks reached"
+  FIND [[(define harness-provenance-checked #f)]]
+  REPLACE [[(define harness-provenance-checked #t)]])
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES_WITH_GAMBIT and friends, and the "THIRTY-THREE PASSES"
+# see EXPECTED_PASSES_WITH_GAMBIT and friends, and the "THIRTY-FIVE PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

@@ -597,4 +597,25 @@
         ;; This case also carries the only tab and carriage-return bytes tested.
         (check-equal "all whitespace, including tab and carriage return"
                      (harness-bytes->string (harness-bytes 4 '(32 9 10 13)))
-                     "")))))
+                     "")))
+
+    (harness-case "a manifest nothing verified is a defect"
+      (lambda ()
+        (let ((d (harness-provenance-reachability-diagnosis "a.scm|b.scm" #f)))
+          (check "there is a diagnosis" (if d #t #f))
+          (check "it says the check was not reached"
+                 (harness-string-contains? d "never reached")))))
+
+    (harness-case "a manifest that was verified is not a defect"
+      (lambda ()
+        (check "verified"
+               (not (harness-provenance-reachability-diagnosis "a.scm" #t)))))
+
+    ;; An absent or empty manifest means no lane registration started this
+    ;; process. Skipping is correct there, so neither may be reported as a
+    ;; defect -- and both spellings must agree, for the reason
+    ;; harness-normalize-filter gives about a shell that writes VAR= .
+    (harness-case "no manifest is not a defect, however it is spelled"
+      (lambda ()
+        (check "absent" (not (harness-provenance-reachability-diagnosis #f #f)))
+        (check "empty" (not (harness-provenance-reachability-diagnosis "" #f)))))))
