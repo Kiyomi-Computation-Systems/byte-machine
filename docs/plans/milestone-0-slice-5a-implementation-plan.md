@@ -4,7 +4,7 @@
 
 **Goal:** Give every Scheme lane a content fingerprint of the shared bodies it ran, checked against a value the build computed, so that a lane which executed different or stale text exits 3 instead of reporting success.
 
-**Architecture:** A portable rolling-hash body (`fingerprint.scm`) is included by both runtime adapters alongside the existing runner. A new adapter procedure `adapter-file-bytes` reads files through a binary port on each runtime. At build time a Chez launcher `load`s that same body and writes the expected combined value to a file. At run time the harness fingerprints the manifest it was given, compares against that file, and exits 3 on any disagreement — before any test case runs.
+**Architecture:** A portable rolling-hash body (`fingerprint.scm`) is included by both runtime adapters alongside the existing runner. A new adapter procedure `adapter-file-bytes` reads files through a binary port on each runtime. At build time a Chez launcher `load`s that same body and writes the expected combined value to a file. At run time the harness fingerprints the manifest it was given, compares against that file, and exits 3 on any disagreement — before any test case runs. A process that receives no manifest at all was not started by a lane registration, and skips the check rather than refusing; the guarantee that every registered lane has one is enforced at configure time instead.
 
 **Tech Stack:** Chez Scheme 10.4.1, Gambit 4.9.8, CMake ≥ 3.26, CTest. No external Scheme libraries; no SRFI; no package manager.
 
@@ -861,21 +861,24 @@ git add test/support/harness && git commit -m "feat: the provenance rule as a fu
 
 ---
 
-## Task 5: The check that ends the run, and the lane that proves it fires
+## Task 5: The check, every manifest, and the lanes that prove it fires
 
 **Files:**
 - Modify: `test/support/harness/shared/harness-runner.scm`
 - Modify: `test/support/harness/chez/byte-machine/test/harness.sls`
 - Modify: `test/support/harness/gambit/byte-machine/test/harness.sld`
+- Modify: `test/support/harness/self/harness-bootstrap.scm`
 - Modify: `cmake/ByteMachineSchemeLane.cmake`
 - Modify: `test/support/cmake/ByteMachineSchemeLaneSpec.cmake`
 - Modify: `test/CMakeLists.txt`
 
 **Interfaces:**
-- Consumes: `harness-provenance-diagnosis`, `harness-bytes->string`, `harness-fingerprint-file`, `harness-fingerprint-combine`, `harness-fingerprint->string`, `harness-split`, `adapter-file-bytes`, `adapter-exit`, `adapter-environment-variable`.
-- Produces: `harness-verify-provenance!` (no arguments; returns normally or exits 3). `byte_machine_add_scheme_lane` gains `SHARED_BODIES <path>...` (optional in this task, required in Task 6) and the `WRONG_FINGERPRINT` option.
+- Consumes: `harness-provenance-diagnosis`, `harness-bytes->string`, `harness-fingerprint-file`, `harness-fingerprint-combine`, `harness-fingerprint->string`, `harness-split`, `adapter-file-bytes`, `adapter-exit`, `adapter-environment-variable`; `byte_machine_expected_fingerprint` and `byte_machine_wrong_fingerprint` from Task 3.
+- Produces: `harness-verify-provenance!` (no arguments; returns normally or exits 3). `byte_machine_add_scheme_lane` gains `SHARED_BODIES <path>...` — **required**, like `TIMEOUT` — and the `WRONG_FINGERPRINT` option. The suite ends at 44 tests.
 
-This task's registered lane is the slice's central failing test: nothing in this tree has ever produced status 3.
+This task's first registered lane is the slice's central failing test: nothing in this tree has ever produced status 3. The task is deliberately one unit so the tree is never committed red — the check goes live and every manifest arrives together.
+
+**The one decision this task must get right.** An unset or empty `BYTE_MACHINE_FINGERPRINT_FILES` means *"this process was not started by a lane registration"*, and provenance is **skipped**, not refused. Refusing is unimplementable: `byte_machine_mutation_run` requires every spec to pass unmutated on the staged tree, and `byte_machine_mutation_run_spec` runs verify commands through `execute_process` with no environment at all, so a refusal fails all 27 existing mutation passes at their baseline before a single mutation runs. Nothing is lost, because `SHARED_BODIES` being a required argument already makes an unprovenanced registered lane impossible one layer up. See design spec §6.2 and decision V13.
 
 - [ ] **Step 1: Register the failing lane**
 
@@ -885,20 +888,19 @@ At the end of `test/CMakeLists.txt`, add:
 # --- Provenance ------------------------------------------------------------
 #
 # Every lane above checks the fingerprint of the text it ran against the value
-# the build computed. This proves that check can fail. Without it the mechanism
-# would be a claim: protium recorded two occasions where two of its lanes
-# printed different digests for text both said they ran, and the suite stayed
-# green, because nothing read the values back.
+# the build computed. These prove that check can fail. Without them the
+# mechanism would be a claim: protium recorded two occasions where two of its
+# lanes printed different digests for text both said they ran, and the suite
+# stayed green, because nothing read the values back.
 #
-# Status 3 is what makes it falsifiable. Six lanes in this tree legitimately
+# Status 3 is what makes them falsifiable. Six lanes in this tree legitimately
 # expect 1 or 2, so a provenance failure sharing either status would be
 # indistinguishable from those fixtures' own expected outcomes.
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.provenance.chez.source
   BACKEND chez
   PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
-  SHARED_BODIES "${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
-                "${BYTE_MACHINE_HARNESS_SHARED_DIR}/harness-runner.scm"
+  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
                 "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.scm"
   WRONG_FINGERPRINT
   EXPECT_EXIT 3
@@ -906,15 +908,15 @@ byte_machine_add_scheme_lane(
   LABELS expected-red)
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [ ] **Step 2: Run it to verify configuration fails**
 
 ```bash
 make build 2>&1 | tail -20
 ```
 
-Expected: configuration FAILS with `byte-machine: unexpected arguments to byte_machine_add_scheme_lane: SHARED_BODIES;...;WRONG_FINGERPRINT`. The lane module does not know these arguments yet.
+Expected: configuration FAILS with `byte-machine: unexpected arguments to byte_machine_add_scheme_lane: SHARED_BODIES;...;WRONG_FINGERPRINT`. Neither the arguments nor `BYTE_MACHINE_HARNESS_MANIFEST` exist yet.
 
-- [ ] **Step 3: Teach the lane module the two new arguments**
+- [ ] **Step 3: Teach the lane module the two new arguments, with `SHARED_BODIES` required**
 
 In `cmake/ByteMachineSchemeLane.cmake`, change the `cmake_parse_arguments` call in `byte_machine_add_scheme_lane` from:
 
@@ -931,7 +933,26 @@ to:
     "LABELS;ENVIRONMENT;SHARED_BODIES")
 ```
 
-Then, immediately after the existing `if(NOT EXISTS "${arg_PROGRAM}")` block, add:
+Change the required-argument loop from:
+
+```cmake
+  foreach(required NAME BACKEND PROGRAM TIMEOUT)
+```
+
+to:
+
+```cmake
+  # SHARED_BODIES is required, not optional. The property worth having is not
+  # "the lanes have provenance" but "a lane cannot be added without it" -- and
+  # this configure-time check is the whole of that guarantee, because the
+  # harness skips provenance rather than refusing when no manifest reaches it.
+  # It matters little here, where every lane is a source lane, and a great deal
+  # in slices 5b and 5c, where a lane registered without provenance is exactly
+  # the lane that can silently fall back to source.
+  foreach(required NAME BACKEND PROGRAM TIMEOUT SHARED_BODIES)
+```
+
+Immediately after the existing `if(NOT EXISTS "${arg_PROGRAM}")` block, add:
 
 ```cmake
   # A manifest entry that does not exist would be a provenance failure at run
@@ -946,37 +967,89 @@ Then, immediately after the existing `if(NOT EXISTS "${arg_PROGRAM}")` block, ad
   endforeach()
 ```
 
-And after the `set(environment ...)` block from Task 2, add:
+After the `set(environment ...)` block from Task 2, add:
 
 ```cmake
   # The manifest, and the expectation it must agree with. The separator is `|`
   # rather than a path separator: `:` and `;` differ between platforms, and `|`
   # is illegal in a Windows path, so it cannot occur inside a member.
-  if(arg_SHARED_BODIES)
-    string(JOIN "|" fingerprint_files ${arg_SHARED_BODIES})
-    if(arg_WRONG_FINGERPRINT)
-      byte_machine_wrong_fingerprint("${arg_NAME}" expect_file)
-    else()
-      byte_machine_expected_fingerprint("${arg_NAME}" expect_file
-                                        ${arg_SHARED_BODIES})
-    endif()
-    list(APPEND environment
-      "BYTE_MACHINE_FINGERPRINT_FILES=${fingerprint_files}"
-      "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${expect_file}")
+  string(JOIN "|" fingerprint_files ${arg_SHARED_BODIES})
+  if(arg_WRONG_FINGERPRINT)
+    byte_machine_wrong_fingerprint("${arg_NAME}" expect_file)
+  else()
+    byte_machine_expected_fingerprint("${arg_NAME}" expect_file
+                                      ${arg_SHARED_BODIES})
   endif()
+  list(APPEND environment
+    "BYTE_MACHINE_FINGERPRINT_FILES=${fingerprint_files}"
+    "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${expect_file}")
 ```
 
 `byte_machine_expected_fingerprint` and `byte_machine_wrong_fingerprint` are defined in `test/CMakeLists.txt` (Task 3), which is processed before any lane is registered, so both are in scope at call time.
 
-- [ ] **Step 4: Run it again to verify it now fails for the right reason**
+- [ ] **Step 4: Give every existing lane a manifest**
+
+In `test/CMakeLists.txt`, define the shared manifest once, immediately after the `# --- Source tree paths ---` block:
+
+```cmake
+# The bodies every harness lane executes. Named once: a lane that listed them
+# itself would drift, and a manifest that drifts is one that quietly stops
+# describing the run.
+set(BYTE_MACHINE_HARNESS_MANIFEST
+    "${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
+    "${BYTE_MACHINE_HARNESS_SHARED_DIR}/harness-runner.scm")
+```
+
+Then add `SHARED_BODIES` to every `byte_machine_add_scheme_lane` call already in the file — each lane's manifest is the harness manifest plus the shared body its program includes:
+
+| Lane | `SHARED_BODIES` |
+| --- | --- |
+| `harness.failing-body.*` | `${BYTE_MACHINE_HARNESS_MANIFEST}` `${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.scm` |
+| `harness.bootstrap.*` | `${BYTE_MACHINE_HARNESS_MANIFEST}` `${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.scm` |
+| `harness.self.*` and `harness.verbose.*` | `${BYTE_MACHINE_HARNESS_MANIFEST}` `${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.scm` |
+| `harness.duplicate-case.*` | `${BYTE_MACHINE_HARNESS_MANIFEST}` `${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-duplicate-case.scm` |
+| `harness.empty-selection.*` | `${BYTE_MACHINE_HARNESS_MANIFEST}` `${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-empty-selection.scm` |
+| `portability.placeholder-cwd-*.*` | `${BYTE_MACHINE_HARNESS_MANIFEST}` `${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder.scm` `${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.scm` |
+| `portability.placeholder-identity.*` | `${BYTE_MACHINE_HARNESS_MANIFEST}` `${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder.scm` `${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder-consumer.scm` `${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.scm` |
+
+For example, the failing-body lane becomes:
+
+```cmake
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.failing-body.chez.source
+  BACKEND chez
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.chez.sps"
+  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
+                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.scm"
+  EXPECT_EXIT 1
+  TIMEOUT 120
+  LABELS expected-red)
+```
+
+The three `placeholder-cwd-*` lanes are registered inside a `foreach(cwd_case ...)` loop; add `SHARED_BODIES` once inside the loop body, to both the Chez and the Gambit registration.
+
+- [ ] **Step 5: Copy `fingerprint.scm` into the two non-empty matrix directories**
+
+Both adapters now include it, so it joins the set of bodies the working-directory matrix must carry. Without this the launcher mutation fails all three Chez lanes identically — for want of a file rather than for the reason under test — and the asymmetry that makes passes 21–23 evidence is destroyed while the suite stays green.
+
+Alongside the existing `configure_file` calls for `harness-runner.scm`, add:
+
+```cmake
+configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
+               "${BYTE_MACHINE_CWD_IDENTICAL_DIR}/fingerprint.scm" COPYONLY)
+configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
+               "${BYTE_MACHINE_CWD_DECOY_DIR}/fingerprint.scm" COPYONLY)
+```
+
+- [ ] **Step 6: Run it again to verify the lane now fails for the right reason**
 
 ```bash
 make build && ctest --test-dir build/dev -R 'provenance' --output-on-failure 2>&1 | tail -20
 ```
 
-Expected: the lane FAILS, reporting `exit status 0, expected 3`. Configuration now succeeds and the lane runs; the harness does not check provenance yet, so the self-tests pass and the process exits 0.
+Expected: configuration succeeds and the lane FAILS, reporting `exit status 0, expected 3`. The harness does not check provenance yet, so the self-tests pass and the process exits 0. Every other lane still passes.
 
-- [ ] **Step 5: Implement the check**
+- [ ] **Step 7: Implement the check**
 
 In `test/support/harness/shared/harness-runner.scm`, add to the "Suite lifecycle" section, immediately before `harness-begin`:
 
@@ -1036,13 +1109,26 @@ In `test/support/harness/shared/harness-runner.scm`, add to the "Suite lifecycle
 
 ;; Fingerprint each manifest entry, report the values, then check the combined
 ;; one. Printing alone would not be a check: a digest nothing reads is a claim.
+;;
+;; AN ABSENT MANIFEST IS NOT A FAILURE
+;;
+;; An unset or empty BYTE_MACHINE_FINGERPRINT_FILES means this process was not
+;; started by a lane registration, and the only things that start a harness
+;; program any other way are a developer running one by hand and the Scheme
+;; mutation suite. The second is not optional: byte_machine_mutation_run
+;; requires every spec to exit 0 unmutated on the staged tree, and it runs its
+;; verify commands with no environment at all, so refusing here would fail all
+;; twenty-seven mutation passes at their baseline before a single mutation ran.
+;;
+;; Nothing is lost by skipping. SHARED_BODIES is a required argument of
+;; byte_machine_add_scheme_lane, so a registered lane always has a manifest and
+;; there is no reachable path by which a real lane silently loses provenance.
+;; The guarantee lives at configure time, where it cannot be forged; a run-time
+;; refusal would add only a rule this repository's own tooling cannot satisfy.
 (define (harness-verify-provenance!)
   (let ((raw (adapter-environment-variable "BYTE_MACHINE_FINGERPRINT_FILES")))
     (if (or (not raw) (string=? raw ""))
-        (harness-provenance-failure!
-         (string-append
-          "BYTE_MACHINE_FINGERPRINT_FILES is unset, so this run cannot identify "
-          "the shared bodies it executed"))
+        #t
         (let loop ((rest (harness-split raw #\|)) (acc '()))
           (if (null? rest)
               (let ((combined (harness-fingerprint->string
@@ -1083,7 +1169,7 @@ to:
   (harness-clear-state!)
 ```
 
-- [ ] **Step 6: Export the entry point from both adapters**
+- [ ] **Step 8: Export the entry point from both adapters**
 
 In both adapters, extend the block from Task 4 so the two read identically:
 
@@ -1095,77 +1181,9 @@ In both adapters, extend the block from Task 4 so the two read identically:
     harness-verify-provenance!
 ```
 
-- [ ] **Step 7: Run the tests to verify the lane now passes**
+- [ ] **Step 9: Give the bootstrap body its own call**
 
-```bash
-make build && ctest --test-dir build/dev -R 'provenance' --output-on-failure 2>&1 | tail -20
-```
-
-Expected: `byte-machine.harness.provenance.chez.source` PASSES — the process exits 3, which is what the lane expects.
-
-- [ ] **Step 8: Confirm the rest of the suite is red for the right reason**
-
-```bash
-make test 2>&1 | tail -30
-```
-
-Expected: every lane that calls `harness-begin` now FAILS with `PROVENANCE-ERROR BYTE_MACHINE_FINGERPRINT_FILES is unset` and exit 3, because no other lane has a manifest yet. The two bootstrap lanes still pass — they do not call `harness-begin`. This red state is expected and is closed by Task 6; do not commit here.
-
-- [ ] **Step 9: Add the lane-module specification cases**
-
-In `test/support/cmake/ByteMachineSchemeLaneSpec.cmake`, add to the `BYTE_MACHINE_SPEC_CASE` dispatch chain, following the shape of the existing `lane-rejects-unparsed-arguments` case:
-
-```cmake
-  elseif(c STREQUAL "lane-rejects-missing-shared-body")
-    byte_machine_add_scheme_lane(
-      NAME byte-machine.harness.example.chez.source
-      BACKEND chez
-      PROGRAM "${SPEC_SELF}"
-      SHARED_BODIES "${SPEC_SELF}" "/nonexistent/body.scm"
-      TIMEOUT 10)
-```
-
-And register it with the file's existing rejection-assertion helper, alongside the other `spec_case_must_be_rejected` calls, matching on the diagnostic text:
-
-```cmake
-spec_case_must_be_rejected("lane-rejects-missing-shared-body"
-  "names a shared body that does not exist")
-```
-
-Read the surrounding calls first and match their exact helper name and argument order; the helper is defined in `test/support/cmake/SpecSupport.cmake`.
-
-- [ ] **Step 10: Run the specification**
-
-```bash
-ctest --preset no-scheme --output-on-failure 2>&1 | tail -10
-```
-
-Expected: 10/10 pass, with the lane specification exercising the new case.
-
-- [ ] **Step 11: Commit**
-
-```bash
-git add test/support/harness cmake/ByteMachineSchemeLane.cmake test/support/cmake/ByteMachineSchemeLaneSpec.cmake test/CMakeLists.txt && git commit -m "feat: a run that cannot show it ran the intended text exits 3"
-```
-
-Note: `make test` is red at this commit by construction — the check is live and only one lane has a manifest. Task 6 is the other half and must follow immediately. If you would rather not commit a red tree, fold Tasks 5 and 6 into one commit.
-
----
-
-## Task 6: Every lane carries its manifest
-
-**Files:**
-- Modify: `test/CMakeLists.txt`
-- Modify: `cmake/ByteMachineSchemeLane.cmake`
-- Modify: `test/support/harness/self/harness-bootstrap.scm`
-
-**Interfaces:**
-- Consumes: everything from Task 5.
-- Produces: `SHARED_BODIES` as a required argument; four more provenance lanes; the suite at 45 tests.
-
-- [ ] **Step 1: Give the bootstrap body its own call**
-
-The bootstrap deliberately does not call `harness-begin`, so a check living only there would leave both bootstrap lanes unchecked (V11). In `test/support/harness/self/harness-bootstrap.scm`, immediately after the `(define bootstrap-failures 0)` / `bootstrap-assert` definitions and before the first `bootstrap-assert` call, add:
+The bootstrap deliberately does not call `harness-begin`, so a check living only there would leave both bootstrap lanes unchecked (V11). In `test/support/harness/self/harness-bootstrap.scm`, immediately after the `bootstrap-assert` definition and before the first `bootstrap-assert` call, add:
 
 ```scheme
 ;; The one runner facility this body uses before judging any of them. It is here
@@ -1177,130 +1195,22 @@ The bootstrap deliberately does not call `harness-begin`, so a check living only
 (harness-verify-provenance!)
 ```
 
-- [ ] **Step 2: Add manifests to every existing lane**
-
-In `test/CMakeLists.txt`, define the shared manifest lists once, immediately after the `# --- Source tree paths ---` block:
-
-```cmake
-# The bodies every harness lane executes. Named once: a lane that listed them
-# itself would drift, and a manifest that drifts is one that quietly stops
-# describing the run.
-set(BYTE_MACHINE_HARNESS_MANIFEST
-    "${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
-    "${BYTE_MACHINE_HARNESS_SHARED_DIR}/harness-runner.scm")
-```
-
-Then add `SHARED_BODIES` to every `byte_machine_add_scheme_lane` call already in the file. Each lane's manifest is the harness manifest plus the shared body its program includes:
-
-| Lane | `SHARED_BODIES` |
-| --- | --- |
-| `harness.failing-body.*` | `${BYTE_MACHINE_HARNESS_MANIFEST}` `${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.scm` |
-| `harness.bootstrap.*` | `${BYTE_MACHINE_HARNESS_MANIFEST}` `${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.scm` |
-| `harness.self.*` and `harness.verbose.*` | `${BYTE_MACHINE_HARNESS_MANIFEST}` `${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.scm` |
-| `harness.duplicate-case.*` | `${BYTE_MACHINE_HARNESS_MANIFEST}` `${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-duplicate-case.scm` |
-| `harness.empty-selection.*` | `${BYTE_MACHINE_HARNESS_MANIFEST}` `${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-empty-selection.scm` |
-| `portability.placeholder-cwd-*.*` | `${BYTE_MACHINE_HARNESS_MANIFEST}` `${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder.scm` `${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.scm` |
-| `portability.placeholder-identity.*` | `${BYTE_MACHINE_HARNESS_MANIFEST}` `${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder.scm` `${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder-consumer.scm` `${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.scm` |
-
-For example, the failing-body lane becomes:
-
-```cmake
-byte_machine_add_scheme_lane(
-  NAME byte-machine.harness.failing-body.chez.source
-  BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.chez.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.scm"
-  EXPECT_EXIT 1
-  TIMEOUT 120
-  LABELS expected-red)
-```
-
-The three `placeholder-cwd-*` lanes are registered inside a `foreach(cwd_case ...)` loop; add `SHARED_BODIES` once inside the loop body, to both the Chez and the Gambit registration.
-
-- [ ] **Step 3: Copy `fingerprint.scm` into the two non-empty matrix directories**
-
-Both adapters now include it, so it joins the set of bodies the working-directory matrix must carry. Without this the launcher mutation fails all three Chez lanes identically — for want of a file rather than for the reason under test — and the asymmetry that makes passes 21–23 evidence is destroyed while the suite stays green.
-
-In `test/CMakeLists.txt`, alongside the existing `configure_file` calls for `harness-runner.scm`, add:
-
-```cmake
-configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
-               "${BYTE_MACHINE_CWD_IDENTICAL_DIR}/fingerprint.scm" COPYONLY)
-configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
-               "${BYTE_MACHINE_CWD_DECOY_DIR}/fingerprint.scm" COPYONLY)
-```
-
-- [ ] **Step 4: Run the tests to verify the tree is green again**
+- [ ] **Step 10: Run the tests**
 
 ```bash
 make test
 ```
 
-Expected: 41/41 pass — the original 40 plus the provenance lane from Task 5. Every lane prints `fingerprint verified against the build manifest`.
+Expected: 41/41 pass. The provenance lane now exits 3 as it expects, and every other lane prints `fingerprint verified against the build manifest`.
 
-- [ ] **Step 5: Make `SHARED_BODIES` required**
+- [ ] **Step 11: Register the three remaining provenance lanes**
 
-In `cmake/ByteMachineSchemeLane.cmake`, change the required-argument loop from:
-
-```cmake
-  foreach(required NAME BACKEND PROGRAM TIMEOUT)
-```
-
-to:
-
-```cmake
-  # SHARED_BODIES is required, not optional. The property worth having is not
-  # "the lanes have provenance" but "a lane cannot be added without it" -- which
-  # matters little here, where every lane is a source lane, and a great deal in
-  # slices 5b and 5c, where a lane registered without provenance is exactly the
-  # lane that can silently fall back to source.
-  foreach(required NAME BACKEND PROGRAM TIMEOUT SHARED_BODIES)
-```
-
-Then replace the `if(arg_SHARED_BODIES)` guard around the manifest block added in Task 5 step 3 with the unguarded body, since the argument can no longer be absent:
-
-```cmake
-  string(JOIN "|" fingerprint_files ${arg_SHARED_BODIES})
-  if(arg_WRONG_FINGERPRINT)
-    byte_machine_wrong_fingerprint("${arg_NAME}" expect_file)
-  else()
-    byte_machine_expected_fingerprint("${arg_NAME}" expect_file
-                                      ${arg_SHARED_BODIES})
-  endif()
-  list(APPEND environment
-    "BYTE_MACHINE_FINGERPRINT_FILES=${fingerprint_files}"
-    "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${expect_file}")
-```
-
-- [ ] **Step 6: Add the specification case for the new requirement**
-
-In `test/support/cmake/ByteMachineSchemeLaneSpec.cmake`, add to the dispatch chain:
-
-```cmake
-  elseif(c STREQUAL "lane-requires-shared-bodies")
-    byte_machine_add_scheme_lane(
-      NAME byte-machine.harness.example.chez.source
-      BACKEND chez
-      PROGRAM "${SPEC_SELF}"
-      TIMEOUT 10)
-```
-
-and its rejection assertion, matching the existing `lane-requires-*` calls:
-
-```cmake
-spec_case_must_be_rejected("lane-requires-shared-bodies"
-  "SHARED_BODIES is required")
-```
-
-- [ ] **Step 7: Register the four remaining provenance lanes**
-
-Append to the provenance section of `test/CMakeLists.txt`, after the lane from Task 5:
+Append to the provenance section of `test/CMakeLists.txt`:
 
 ```cmake
 # The Gambit half. This one is not a duplicate of the Chez lane: the path it
 # exercises reads the expectation through adapter-file-bytes, which is
-# per-runtime code, and exits through adapter-exit. The three refusals below run
+# per-runtime code, and exits through adapter-exit. The two refusals below run
 # on Chez alone under slice 2's rule S6 -- they are decisions in the shared
 # runner body, identical text on both runtimes, and this pair already
 # establishes that both reach it.
@@ -1315,24 +1225,10 @@ byte_machine_add_scheme_lane(
   TIMEOUT 120
   LABELS expected-red)
 
-# An empty value, not an absent one: the registration always sets the variable,
-# so emptying it is the reachable form of "the build told this run nothing". The
-# harness treats empty and unset alike, which is the same rule
-# harness-normalize-filter and adapter-execution-mode already follow.
-byte_machine_add_scheme_lane(
-  NAME byte-machine.harness.provenance-no-manifest.chez.source
-  BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.scm"
-  EXPECT_EXIT 3
-  TIMEOUT 120
-  LABELS expected-red
-  ENVIRONMENT "BYTE_MACHINE_FINGERPRINT_FILES=")
-
 # The build never produced this file, and never will: no rule names it as an
 # output. That is the "you did not build before running the tests" case, which
-# used to escape as a raw I/O condition and a status outside the vocabulary.
+# would otherwise escape as a raw I/O condition and a status outside the
+# vocabulary.
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.provenance-absent-expectation.chez.source
   BACKEND chez
@@ -1344,8 +1240,8 @@ byte_machine_add_scheme_lane(
   LABELS expected-red
   ENVIRONMENT "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${CMAKE_BINARY_DIR}/fingerprints/never-produced.fingerprint")
 
-# A manifest naming a body that is not there. The expectation is correct for the
-# real manifest; what fails is reading the text, before any comparison happens.
+# A manifest naming a body that is not there. What fails is reading the text,
+# before any comparison happens.
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.provenance-missing-body.chez.source
   BACKEND chez
@@ -1358,31 +1254,64 @@ byte_machine_add_scheme_lane(
   ENVIRONMENT "BYTE_MACHINE_FINGERPRINT_FILES=${CMAKE_BINARY_DIR}/fingerprints/no-such-body.scm")
 ```
 
-- [ ] **Step 8: Run the whole suite**
+There is deliberately no lane asserting that an unset manifest exits 3. Under this design an unset manifest skips the check, and a lane asserting that a skip skips would pass whether the code checked anything or not.
+
+- [ ] **Step 12: Add the lane-module specification cases**
+
+In `test/support/cmake/ByteMachineSchemeLaneSpec.cmake`, add to the `BYTE_MACHINE_SPEC_CASE` dispatch chain, following the shape of the existing `lane-rejects-unparsed-arguments` case:
+
+```cmake
+  elseif(c STREQUAL "lane-requires-shared-bodies")
+    byte_machine_add_scheme_lane(
+      NAME byte-machine.harness.example.chez.source
+      BACKEND chez
+      PROGRAM "${SPEC_SELF}"
+      TIMEOUT 10)
+  elseif(c STREQUAL "lane-rejects-missing-shared-body")
+    byte_machine_add_scheme_lane(
+      NAME byte-machine.harness.example.chez.source
+      BACKEND chez
+      PROGRAM "${SPEC_SELF}"
+      SHARED_BODIES "${SPEC_SELF}" "/nonexistent/body.scm"
+      TIMEOUT 10)
+```
+
+And register both with the file's existing rejection-assertion helper, alongside the other such calls:
+
+```cmake
+spec_case_must_be_rejected("lane-requires-shared-bodies"
+  "SHARED_BODIES is required")
+spec_case_must_be_rejected("lane-rejects-missing-shared-body"
+  "names a shared body that does not exist")
+```
+
+Read the surrounding calls first and match their exact helper name and argument order; the helper is defined in `test/support/cmake/SpecSupport.cmake`. Note that the existing spec cases stub `byte_machine_add_test` and `byte_machine_add_exit_code_test`; `byte_machine_expected_fingerprint` and `byte_machine_wrong_fingerprint` live in `test/CMakeLists.txt` and are not visible under `cmake -P`, so both new cases must be rejected *before* reaching them — which they are, since a missing required argument and a nonexistent body are both refused earlier in the function.
+
+- [ ] **Step 13: Run everything**
 
 ```bash
 make test && ctest --preset no-scheme --output-on-failure 2>&1 | tail -5
 ```
 
-Expected: 45/45 pass on the dev preset, 10/10 on `no-scheme`.
+Expected: 44/44 on the dev preset, 10/10 on `no-scheme`.
 
-- [ ] **Step 9: Confirm each provenance lane fails for its own reason**
+- [ ] **Step 14: Confirm each provenance lane fails for its own reason**
 
 ```bash
 ctest --test-dir build/dev -R 'provenance' -V 2>&1 | grep -E 'PROVENANCE-ERROR|Test #|Passed|Failed'
 ```
 
-Expected: five lanes, each passing, and four distinct `PROVENANCE-ERROR` messages — `fingerprint mismatch` (twice, once per runtime), `BYTE_MACHINE_FINGERPRINT_FILES is unset`, `no expectation was supplied`, and `cannot read ... The build tree is incomplete`. Four identical messages would mean the lanes are not discriminating what they claim to.
+Expected: four lanes, each passing, and three distinct `PROVENANCE-ERROR` messages — `fingerprint mismatch` (twice, once per runtime), `no expectation was supplied`, and `cannot read ... The build tree is incomplete`. Identical messages would mean the lanes are not discriminating what they claim to.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 15: Commit**
 
 ```bash
-git add test/CMakeLists.txt cmake/ByteMachineSchemeLane.cmake test/support/cmake/ByteMachineSchemeLaneSpec.cmake test/support/harness/self/harness-bootstrap.scm && git commit -m "feat: every lane declares the text it ran, and cannot be registered without it"
+git add test/support/harness cmake/ByteMachineSchemeLane.cmake test/support/cmake/ByteMachineSchemeLaneSpec.cmake test/CMakeLists.txt && git commit -m "feat: a run that cannot show it ran the intended text exits 3"
 ```
 
 ---
 
-## Task 7: Mutations
+## Task 6: Mutations
 
 **Files:**
 - Modify: `test/support/cmake/SchemeMutationSuite.cmake`
@@ -1551,29 +1480,41 @@ if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
 endif()
 ```
 
-- [ ] **Step 4: Write pass 32 — the provenance decisions**
+- [ ] **Step 4: Write passes 32 and 33 — the provenance check itself**
 
-Append immediately after:
+Every other pass in this file runs with no manifest, so provenance is skipped and none of them can witness it. These two are the exception: each sets a manifest and an expectation through `cmake -E env`, and runs the lane through the exact-status helper so that **exit 3 is what a healthy check scores** and the baseline is green. That is the same shape passes 5 and 6 use for the launcher's refusals, and for the same reason — `byte_machine_mutation_run` requires a green baseline, and a lane that proves a refusal is red by construction until something inverts it.
+
+Note `EXPECT_STATUS 0` is impossible here and anywhere else: `byte_machine_mutation_verdict` returns `not-caught` for `rc EQUAL 0` before it consults any expectation. A mutation is caught by making the *wrapper* exit nonzero, which happens when the inner lane stops exiting 3.
+
+Append after pass 31:
 
 ```cmake
-# --- Pass 32: the provenance decisions --------------------------------------
+# --- Passes 32 and 33: the provenance check itself ---------------------------
 #
-# Each is a separate mutation because each is a separate refusal with its own
-# lane, and a refusal cannot be witnessed by a lane that is set up correctly:
-# a correct lane never reaches one. The verify command here is the provenance
-# lane's own -- a wrong expectation -- so what these mutations break is the
-# check itself, not the text it checks.
+# Wrapped in the exact-status helper so exit 3 -- the refusal -- is the green
+# baseline, exactly as passes 5 and 6 do for the launcher. A mutation that makes
+# the check more permissive drops the inner status to 0, the wrapper reports
+# nonzero, and the mutation is caught.
+#
+# THE MANIFEST NAMES ONE BODY ON PURPOSE
+#
+# BYTE_MACHINE_EXPECT_COMMAND packs its argument vector with `|`, which is also
+# the manifest separator, so a two-element manifest would be unpacked as two
+# arguments. One body is enough: these passes test whether the check runs and is
+# consulted, not how values combine, which passes 28 and 29 cover.
 
 set(RUNNER_BODY test/support/harness/shared/harness-runner.scm)
 
-byte_machine_mutation_reset()
-
-# The wrong-fingerprint file the registered lane uses is a build artifact; this
-# suite stages its own so the pass does not depend on a build having run.
 set(WRONG_FP_FILE "${WORK_DIR}/wrong.fingerprint")
 file(WRITE "${WRONG_FP_FILE}" "not-a-fingerprint")
 
-set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+byte_machine_mutation_reset()
+
+string(JOIN "|" PROVENANCE_MISMATCH_COMMAND
+  "${CMAKE_COMMAND}" "-E" "env"
+  "BYTE_MACHINE_FINGERPRINT_FILES=${STAGE_DIR}/test/support/harness/shared/fingerprint.scm"
+  "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${WRONG_FP_FILE}"
+  "--"
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
   "--library-root" "${STAGE_DIR}/test/support/harness/chez"
@@ -1581,33 +1522,61 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
 
-# The baseline for this pass is a run that exits 3. A mutation is "caught" when
-# it stops doing so, which is the inverse of every other pass in this file --
-# hence EXPECT_STATUS on each, rather than a bare nonzero check that the
-# unmutated lane would already satisfy.
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${CMAKE_COMMAND}"
+  "-DBYTE_MACHINE_EXPECT_EXIT=3"
+  "-DBYTE_MACHINE_EXPECT_COMMAND=${PROVENANCE_MISMATCH_COMMAND}"
+  -P "${STAGE_DIR}/cmake/ByteMachineExpectExit.cmake")
+
 byte_machine_mutation(
-  FILE ${RUNNER_BODY} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER_BODY} SPEC byte-machine.harness.provenance.chez.source
   LABEL "provenance: the comparison always reports agreement"
   FIND [[    ((string=? expected computed) #f)]]
-  REPLACE [[    (#t #f)]]
-  EXPECT_STATUS 0)
+  REPLACE [[    (#t #f)]])
 
 byte_machine_mutation(
-  FILE ${RUNNER_BODY} SPEC harness-self-tests.chez.sps
-  LABEL "provenance: an unset manifest stops being refused"
-  FIND [[    (if (or (not raw) (string=? raw ""))]]
-  REPLACE [[    (if #f]]
-  EXPECT_STATUS 0)
-
-byte_machine_mutation(
-  FILE ${RUNNER_BODY} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER_BODY} SPEC byte-machine.harness.provenance.chez.source
   LABEL "provenance: harness-begin stops checking at all"
-  FIND [[  (harness-verify-provenance!)]]
-  REPLACE [[  #t]]
-  EXPECT_STATUS 0)
+  FIND [[  (harness-verify-provenance!)
+  (harness-clear-state!)]]
+  REPLACE [[  (harness-clear-state!)]])
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# Pass 33: the same wrapper, but the expectation file does not exist, so the
+# refusal under test is the missing-expectation branch rather than the
+# comparison. Its mutation removes the branch that treats an absent expectation
+# as a diagnosis; without it the run compares nothing and proceeds.
+byte_machine_mutation_reset()
+
+string(JOIN "|" PROVENANCE_ABSENT_COMMAND
+  "${CMAKE_COMMAND}" "-E" "env"
+  "BYTE_MACHINE_FINGERPRINT_FILES=${STAGE_DIR}/test/support/harness/shared/fingerprint.scm"
+  "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${WORK_DIR}/never-produced.fingerprint"
+  "--"
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${CMAKE_COMMAND}"
+  "-DBYTE_MACHINE_EXPECT_EXIT=3"
+  "-DBYTE_MACHINE_EXPECT_COMMAND=${PROVENANCE_ABSENT_COMMAND}"
+  -P "${STAGE_DIR}/cmake/ByteMachineExpectExit.cmake")
+
+byte_machine_mutation(
+  FILE ${RUNNER_BODY} SPEC byte-machine.harness.provenance-absent-expectation.chez.source
+  LABEL "provenance: a missing expectation stops being a diagnosis"
+  FIND [[    ((not expected)]]
+  REPLACE [[    ((and #f expected)]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 ```
+
+**A stated blind spot.** The third refusal — a manifest naming an unreadable body — has no mutation here. Making it witnessable would need an expectation crafted to equal what the mutant computes after the read fails, which is a value with no meaning outside that mutation. It is covered by its registered lane, `byte-machine.harness.provenance-missing-body.chez.source`, and this is recorded rather than papered over with an `EXPECT_SURVIVES`, which AGENTS.md reserves for the genuinely unwitnessable.
 
 - [ ] **Step 5: Add `adapter-file-bytes` to the two existing export-list passes**
 
@@ -1637,11 +1606,11 @@ byte_machine_mutation(
   REPLACE [[    adapter-value->string adapter-describe-condition]])
 ```
 
-Both `FIND` strings must match the export lines exactly as Task 2 Steps 4 and 5 wrote them. If they were formatted differently, use the actual text — `byte_machine_mutation` fails loudly on a `FIND` that matches nothing, so a mismatch is reported rather than silently skipped.
+Both `FIND` strings must match the export lines exactly as Task 2 Steps 4 and 5 wrote them. `byte_machine_mutation` fails loudly on a `FIND` that matches nothing, so a mismatch is reported rather than silently skipped.
 
 - [ ] **Step 6: Update the counters**
 
-Five new passes and thirteen new mutations. Counting them, so a reviewer can check the literals below without running anything:
+Six new passes and seventeen new mutations. Counting them, so a reviewer can check the literals below without running anything:
 
 | Added | Passes | Mutations | Gambit-gated |
 | --- | --- | --- | --- |
@@ -1649,12 +1618,13 @@ Five new passes and thirteen new mutations. Counting them, so a reviewer can che
 | pass 29, algorithm on Gambit | 1 | 5 | yes |
 | pass 30, hex on Chez | 1 | 1 | no |
 | pass 31, hex on Gambit | 1 | 1 | yes |
-| pass 32, provenance decisions | 1 | 3 | no |
+| pass 32, provenance comparison and call site | 1 | 2 | no |
+| pass 33, provenance missing expectation | 1 | 1 | no |
 | `adapter-file-bytes` export, into existing pass 1 | 0 | 1 | no |
 | `adapter-file-bytes` export, into existing pass 2 | 0 | 1 | yes |
-| **total** | **5** | **17** | **2 passes, 7 mutations** |
+| **total** | **6** | **17** | **2 passes, 7 mutations** |
 
-So `27 + 5 = 32` passes and `64 + 17 = 81` mutations, of which `4 + 2 = 6` passes and `11 + 7 = 18` mutations are Gambit-gated. Without Gambit the derived pair is 26 passes and 63 mutations.
+So `27 + 6 = 33` passes and `64 + 17 = 81` mutations, of which `4 + 2 = 6` passes and `11 + 7 = 18` mutations are Gambit-gated. Without Gambit the derived pair is 27 passes and 63 mutations.
 
 Near the top of `test/support/cmake/SchemeMutationSuite.cmake`, change:
 
@@ -1666,7 +1636,7 @@ set(EXPECTED_MUTATIONS_WITH_GAMBIT 64)
 to:
 
 ```cmake
-set(EXPECTED_PASSES_WITH_GAMBIT 32)
+set(EXPECTED_PASSES_WITH_GAMBIT 33)
 set(EXPECTED_MUTATIONS_WITH_GAMBIT 81)
 ```
 
@@ -1684,15 +1654,15 @@ set(GAMBIT_ONLY_PASSES 6)
 set(GAMBIT_ONLY_MUTATIONS 18)
 ```
 
-- [ ] **Step 7: Run the mutation suite and correct the counters against it**
+- [ ] **Step 7: Run the mutation suite**
 
 ```bash
 ctest --test-dir build/dev -R 'scheme-mutation' --output-on-failure 2>&1 | tail -25
 ```
 
-Expected: PASS, with the suite's own totals check accepting 32 passes and 81 mutations. If it reports different numbers, the run is right and Step 6's table is wrong — replace the literals with what the run reports and correct the table to match. Counters are confirmed against a real run, never inherited from a plan; slice 4 followed the same rule and its design document says so explicitly.
+Expected: PASS, with the suite's own totals check accepting 33 passes and 81 mutations. If it reports different numbers, the run is right and Step 6's table is wrong — replace the literals with what the run reports and correct Step 6's table to match. Counters are confirmed against a real run, never inherited from a plan; slice 4 followed the same rule and its design document says so explicitly.
 
-Also confirm the prose block at the top of the file: it opens with `TWENTY-SEVEN PASSES WHEN GAMBIT IS DISCOVERED` and describes each pass. Update the heading and add a paragraph for passes 28–32, matching the style of the existing per-pass paragraphs. The file's own comment says the declared numbers exist so a reader checks one number by eye, not two that can disagree.
+Also update the prose block at the top of the file: it opens with `TWENTY-SEVEN PASSES WHEN GAMBIT IS DISCOVERED` and describes each pass. Update the heading and add a paragraph for passes 28–33, matching the style of the existing per-pass paragraphs. The file's own comment says the declared numbers exist so a reader checks one number by eye, not two that can disagree.
 
 - [ ] **Step 8: Verify the hex mutation's asymmetry is real**
 
@@ -1708,7 +1678,7 @@ Expected: both the Chez and the Gambit uppercase mutations reported as caught, e
 make test && ctest --preset no-scheme --output-on-failure 2>&1 | tail -5
 ```
 
-Expected: 45/45 and 10/10.
+Expected: 44/44 and 10/10.
 
 - [ ] **Step 10: Commit**
 
@@ -1718,7 +1688,7 @@ git add test/support/cmake/SchemeMutationSuite.cmake && git commit -m "test: bre
 
 ---
 
-## Task 8: The record
+## Task 7: The record
 
 **Files:**
 - Create: `docs/decisions/0004-content-fingerprint-and-provenance.md`
@@ -1753,7 +1723,7 @@ Under `## [Unreleased]` → `### Added` in `CHANGELOG.md`, append an entry in th
 make test && ctest --preset no-scheme --output-on-failure 2>&1 | tail -5 && git status --short
 ```
 
-Expected: 45/45, 10/10, and only the two documentation files modified.
+Expected: 44/44, 10/10, and only the two documentation files modified.
 
 - [ ] **Step 5: Commit**
 
@@ -1765,12 +1735,15 @@ git add docs/decisions/0004-content-fingerprint-and-provenance.md CHANGELOG.md &
 
 ## Self-Review
 
-**Spec coverage.** Every section of the design spec maps to a task: §5.2 algorithm → Task 1; §5.1 `adapter-file-bytes` → Task 2; §6 build-time expectation → Task 3; §6 in-process check → Tasks 4 and 5; §4.1 cwd-matrix copies and V9's required argument → Task 6; §7 mutations F1–F9 → Task 7; §9 decision record → Task 8. The five lanes of §7 are registered across Tasks 5 and 6.
+**Spec coverage.** Every section of the design spec maps to a task: §5.2 algorithm → Task 1; §5.1 `adapter-file-bytes` → Task 2; §6 build-time expectation → Task 3; §6 in-process check → Tasks 4 and 5; §6.2 and V13's skip-when-unset → Task 5's opening note and Step 7; §4.1 cwd-matrix copies and V9's required argument → Task 5; §7 mutations → Task 6; §9 decision record → Task 7.
 
-**F9 is placed, not deferred.** The adapter export-list passes drop one named export at a time with an explicit `FIND`/`REPLACE` rather than sweeping the list, so `adapter-file-bytes` gets a concrete mutation in each of the two existing passes — Task 7 Step 5 — and adds no new pass. It is load-bearing rather than a declared survivor because Task 2's self-tests call it directly.
+**Two conflicts were resolved before execution, both by the human.**
 
-**One deliberate rough edge.** Task 5 leaves the tree red at its commit and says so at the step: the check is live while only one lane has a manifest. Tasks 5 and 6 may be squashed if a red intermediate commit is unacceptable.
+1. **Provenance skips rather than refuses when the manifest is unset** (design V13, §6.2). Refusing would have failed all 27 existing mutation passes at their baseline — verified against `MutationRunner.cmake`, whose `byte_machine_mutation_run` requires a green baseline and whose `byte_machine_mutation_run_spec` passes no environment. The `provenance-no-manifest` lane is deleted rather than inverted; the suite ends at 44, not 45.
+2. **Tasks 5 and 6 are merged** so the tree is never committed red, honouring both the plan's own Global Constraints and CLAUDE.md's "run tests before every commit".
 
-**Type consistency.** `harness-fingerprint-bytevector`, `harness-fingerprint-file`, `harness-fingerprint-combine`, `harness-fingerprint->string`, `harness-bytes->string`, `harness-provenance-diagnosis`, `harness-verify-provenance!`, `adapter-file-bytes`, `harness-bytes`, `byte_machine_expected_fingerprint`, `byte_machine_wrong_fingerprint`, `BYTE_MACHINE_FINGERPRINT_FILES`, `BYTE_MACHINE_EXPECT_FINGERPRINT_FILE`, `BYTE_MACHINE_FINGERPRINT_SAMPLE`, `BYTE_MACHINE_HARNESS_MANIFEST` — each is spelled the same everywhere it appears above, and each is defined in the task before the one that first uses it.
+**F9 is placed, not deferred.** The adapter export-list passes drop one named export at a time with an explicit `FIND`/`REPLACE` rather than sweeping the list, so `adapter-file-bytes` gets a concrete mutation in each of the two existing passes — Task 6 Step 5 — and adds no new pass.
 
-**Mutation counts are stated and then checked.** Task 7 Step 6 derives 32 passes and 81 mutations from a per-pass table rather than asserting a total on faith, and Step 7 runs the suite's own totals check against it. If the two disagree, the run wins.
+**One stated blind spot.** The unreadable-manifest-body refusal has no mutation; witnessing it would require an expectation crafted to equal what the mutant computes after the read fails. It is covered by its registered lane and recorded at Task 6 Step 4, rather than papered over with an `EXPECT_SURVIVES` that AGENTS.md reserves for the genuinely unwitnessable.
+
+**Type consistency.** `harness-fingerprint-bytevector`, `harness-fingerprint-file`, `harness-fingerprint-combine`, `harness-fingerprint->string`, `harness-bytes->string`, `harness-provenance-diagnosis`, `harness-verify-provenance!`, `harness-fingerprint-file-checked`, `harness-expected-fingerprint`, `harness-provenance-failure!`, `adapter-file-bytes`, `harness-bytes`, `byte_machine_expected_fingerprint`, `byte_machine_wrong_fingerprint`, `BYTE_MACHINE_FINGERPRINT_FILES`, `BYTE_MACHINE_EXPECT_FINGERPRINT_FILE`, `BYTE_MACHINE_FINGERPRINT_SAMPLE`, `BYTE_MACHINE_HARNESS_MANIFEST` — each is spelled the same everywhere it appears, and each is defined in the task before the one that first uses it.

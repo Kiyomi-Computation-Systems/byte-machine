@@ -122,7 +122,8 @@ Continuing the per-slice labelling: slice 2 used `S`, slice 3 used `T`, slice 4 
 | V6 | The build-time expectation is computed by `load`ing `fingerprint.scm`, never by reimplementing it | A second implementation agreeing with the first is the kind of proof that proves nothing: the two would drift, and the drift would look like a passing comparison. |
 | V7 | A provenance failure ends the run immediately, before any case runs | Protium measured why recording-and-continuing is insufficient: a body that then hangs satisfies its timeout expectation whether or not an error was recorded first. Beyond that, a run that cannot show it is executing the intended text says nothing meaningful afterwards. |
 | V8 | A manifest body that cannot be read is a provenance failure, not an escaping I/O condition | Otherwise the raise leaves the runner and takes the process out through a status outside slice 2 §5.2's four-value vocabulary, with no summary line and a message about a file handle. `ByteMachineExpectExit.cmake` would then report an out-of-vocabulary observed status, which is a true statement about the wrong thing. |
-| V9 | `SHARED_BODIES` is **required** by `byte_machine_add_scheme_lane`, the way `TIMEOUT` already is | The property worth having is not "the lanes have provenance" but "a lane cannot be added without it". That matters little in 5a, where every lane is a source lane, and a great deal in 5b and 5c, where a lane registered without provenance is exactly the lane that can silently fall back to source. |
+| V9 | `SHARED_BODIES` is **required** by `byte_machine_add_scheme_lane`, the way `TIMEOUT` already is, and this configure-time requirement is the *whole* of the guarantee | The property worth having is not "the lanes have provenance" but "a lane cannot be added without it". That matters little in 5a, where every lane is a source lane, and a great deal in 5b and 5c, where a lane registered without provenance is exactly the lane that can silently fall back to source. A required argument is unforgeable at configure time, which is why V13 can drop the run-time half without losing anything. |
+| V13 | An **unset or empty** `BYTE_MACHINE_FINGERPRINT_FILES` means "not a registered lane" and provenance is skipped, not refused | Refusing was the first design and it is unimplementable: `byte_machine_mutation_run` requires every spec to pass unmutated on the staged tree, and `byte_machine_mutation_run_spec` runs verify commands through `execute_process` with no environment. Under a refusal, all 27 existing mutation passes fail their baseline before running a single mutation. The alternatives were worse — an opt-out variable is a hole anyone can set in CI, and giving the suite a real manifest makes every body mutation exit 3 on provenance instead of 1 on its own assertion, breaking pass 22's declared `EXPECT_STATUS 1` and silently converting passes 9, 10 and 21 to 25 into fingerprint checks. Nothing is lost: V9's requirement already makes an unprovenanced registered lane impossible one layer up. See §6.2. |
 | V10 | `\|` joins the manifest path list in the environment | A path list needs a separator, and the portable one is the open question the spike left at §9 item 3 (`:` on Unix, `;` on Windows). `\|` is illegal in a Windows path and rare enough elsewhere to be safe, and `harness-split` already exists in the runner from slice 2. |
 | V11 | The provenance check is its own exported procedure called from `harness-begin`, and the bootstrap body calls it directly | The bootstrap deliberately does not call `harness-begin` — it judges the runner's primitives with raw conditionals, using none of its facilities — so a check that lived only inside `harness-begin` would leave the two bootstrap lanes unchecked. One line in the shared bootstrap body is what keeps "every lane that runs Scheme checks its provenance" true rather than nearly true. |
 | V12 | No output assertion is added | Protium's provenance lanes assert on output as well as status, but its status 3 has to coexist with a 77 and with fixtures that expect 2. Here 3 is exclusive to provenance and no other lane can produce it, so status alone discriminates. An `EXPECT_OUTPUT_CONTAINS` mechanism would be a new decision owing its own specification and mutations for no added discrimination. |
@@ -268,10 +269,28 @@ that evidence into the build. Rejected as a second mechanism proving what the Ga
 proves, and one that would make the expectation unavailable on a host with no Gambit — which the
 `no-scheme` preset and the "skip the lane, do not fail configuration" rule both depend on.
 
-`harness-verify-provenance!` runs before any case. It fingerprints each manifest entry, prints the
-per-file values and the combined value, then compares. On mismatch, on an unset or empty
-`BYTE_MACHINE_FINGERPRINT_FILES`, on a missing expectation file, or on an unreadable manifest body,
-it prints a `PROVENANCE-ERROR` line and a summary line carrying `cases=0 status=3`, and exits.
+`harness-verify-provenance!` runs before any case. On an unset or empty
+`BYTE_MACHINE_FINGERPRINT_FILES` it returns immediately and silently (V13). Otherwise it fingerprints
+each manifest entry, prints the per-file values and the combined value, then compares. On mismatch,
+on a missing expectation file, or on an unreadable manifest body, it prints a `PROVENANCE-ERROR` line
+and a summary line carrying `cases=0 status=3`, and exits.
+
+### 6.2 Why an absent manifest is not itself a failure
+
+An unset manifest means the process was not started by a lane registration, and the only two things
+that start a harness program any other way are a developer running one by hand and the Scheme
+mutation suite. The second is not optional: `byte_machine_mutation_run` requires every spec to exit 0
+unmutated on the staged tree, and `byte_machine_mutation_run_spec` runs its verify commands with no
+environment at all. A refusal there fails 27 passes at their baseline, before any mutation runs.
+
+What makes skipping safe is that the guarantee lives one layer up and is stronger there. `SHARED_BODIES`
+is a required argument (V9), so a registered lane always has a manifest; there is no reachable path
+by which a real lane silently loses provenance. A run-time refusal would add nothing on top of that
+except a rule the repository's own tooling cannot satisfy.
+
+The cost is one lane. An earlier draft registered `byte-machine.harness.provenance-no-manifest.chez.source`
+asserting that an unset manifest exits 3; it is deleted rather than inverted, because a lane asserting
+that a skip *skips* would pass whether the code checked anything or not.
 
 The 12 launcher-refusal lanes are unaffected: the launcher dies before `load-program`, so the harness
 never runs. That is correct — they assert the launcher refuses, and a provenance check they cannot
@@ -279,19 +298,18 @@ reach would be a check in name only.
 
 ## 7. Lanes and mutations
 
-Five new lanes, taking the suite from 40 to 45. The `no-scheme` preset stays at 10.
+Four new lanes, taking the suite from 40 to 44. The `no-scheme` preset stays at 10.
 
 | Lane | Asserts |
 | --- | --- |
 | `byte-machine.harness.provenance.chez.source` | a deliberately wrong expectation → 3 |
 | `byte-machine.harness.provenance.gambit.source` | a deliberately wrong expectation → 3 |
-| `byte-machine.harness.provenance-no-manifest.chez.source` | `BYTE_MACHINE_FINGERPRINT_FILES` unset → 3 |
 | `byte-machine.harness.provenance-absent-expectation.chez.source` | the expectation file was never built → 3 |
 | `byte-machine.harness.provenance-missing-body.chez.source` | the manifest names an unreadable file → 3 |
 
 The two mismatch lanes run on both runtimes because the path they exercise is not identical text on
 both: it reads the expectation file through `adapter-file-bytes`, which is new per-runtime code in
-this slice, and exits through `adapter-exit`. The three refusals run on Chez only, under slice 2's
+this slice, and exits through `adapter-exit`. The two refusals run on Chez only, under slice 2's
 rule S6 — they are decisions in the shared runner body, identical text on both, and the mismatch
 lanes already establish that both runtimes reach it.
 
@@ -310,7 +328,7 @@ Mutations, each on a staged copy, each expected to be caught by a named lane:
 | F5 | `fingerprint.scm` | `harness-fingerprint-combine` made order-insensitive |
 | F6 | `fingerprint.scm` | hex rendered through `number->string` with radix 16 |
 | F7 | `harness-runner.scm` | the comparison always reports a match |
-| F8 | `harness-runner.scm` | each of the three non-comparison refusal paths of §6 — unset manifest, absent expectation file, unreadable manifest body — one mutation each |
+| F8 | `harness-runner.scm` | the two non-comparison refusal paths of §6 — absent expectation file, unreadable manifest body — one mutation each, plus `harness-begin` no longer calling the check |
 | F9 | both adapters | `adapter-file-bytes` deleted from the export list |
 
 F5 needs a manifest of at least two bodies to be witnessable; every real lane already has one.
@@ -353,8 +371,10 @@ Each step must fail before it passes.
 - Both runtimes print the same combined fingerprint for the same manifest, verified against one
   build-computed value.
 - All five provenance lanes exit exactly 3.
-- The existing 40 tests still pass, now each with provenance checked, bringing the suite to 45; the
+- The existing 40 tests still pass, now each with provenance checked, bringing the suite to 44; the
   `no-scheme` preset stays 10/10.
+- The Scheme mutation suite's baseline stays green: every pre-existing pass runs with no manifest and
+  therefore no provenance check, and none of its declared expectations changes (V13, §6.2).
 - Every mutation in §7 is caught for its declared reason, with the suite's own totals asserted, and
   F6's asymmetric outcome asserted on both runtimes.
 - A decision record states the §2 measurements, the §5.3 bound, and the V1 split with what 5b and 5c
