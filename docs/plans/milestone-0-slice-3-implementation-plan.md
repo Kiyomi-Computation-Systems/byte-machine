@@ -2098,7 +2098,7 @@ Against the spec's §12. Each line must be a command someone can run, not a clai
 - [ ] `ctest --preset pr -R 'placeholder-cwd' -V | rg 'Working Directory'` shows three distinct directories, each used by both runtimes.
 - [ ] The scheme-mutation suite reports the `(empty)` and `(decoy)` launcher mutations caught and the `(identical)` one as an expected survivor.
 - [ ] The scheme-mutation suite reports all six body mutations caught on Chez **and** all six on Gambit.
-- [ ] Every launcher refusal has a lane asserting exit 2: `ctest --preset pr -R 'launcher-' | rg 'tests passed'` shows nine.
+- [ ] Every launcher refusal has a lane asserting exit 2: `ctest --preset pr -R 'launcher-' | rg 'tests passed'` shows ten — the nine this plan first counted, plus `launcher-repeated-object-guard`, added once it became clear that `single-valued-flags` had two members and only one of them was ever exercised.
 - [ ] Removing `src/common/byte-machine/placeholder.scm` makes `cmake --preset dev` fail with `contributed no shared body`.
 - [ ] `rg -n "chez|gambit|chezscheme|scheme base" src/common test/common/placeholder-tests.scm` returns nothing: no shared body names a runtime.
 - [ ] A Gambit search root that is relative, or contains a comma, fails configure with a message naming the directory.
