@@ -510,10 +510,16 @@ make test
 
 Expected: 40/40 pass. Both runtimes report `b1058d10fb543b0` for the same 13-byte file.
 
+**Three files beyond the list above also need changes, all found during execution:**
+
+- `test/support/cmake/ByteMachineSchemeLaneSpec.cmake` — the modified module's own specification asserts the exact environment string the module builds, so it must gain the new entry. Use `${CMAKE_SOURCE_DIR}` symbolically rather than a hardcoded path, so the spec and the module evaluate the same variable in the same process and the assertion holds wherever it runs.
+- `test/support/cmake/MutationSuite.cmake` — one existing mutation anchors on the environment line this task edits, and must be re-anchored to the moved text. Re-anchor it; do not delete it. The total must stay at 96.
+- `test/CMakeLists.txt` — the Scheme mutation suite is registered with `byte_machine_add_test`, not as a lane, and its `execute_process` children inherit that registration's environment. Add `BYTE_MACHINE_FINGERPRINT_SAMPLE` to its `ENVIRONMENT` list pointing at the source-tree fixture, or its unmutated baseline goes red the moment the self-tests read the fixture.
+
 - [ ] **Step 8: Commit**
 
 ```bash
-git add test/fixtures/fingerprint-sample.bin test/support/harness cmake/ByteMachineSchemeLane.cmake && git commit -m "feat: read a file as bytes on both runtimes, through a binary port"
+git add test/fixtures/fingerprint-sample.bin test/support/harness test/support/cmake cmake/ByteMachineSchemeLane.cmake test/CMakeLists.txt && git commit -m "feat: read a file as bytes on both runtimes, through a binary port"
 ```
 
 ---
