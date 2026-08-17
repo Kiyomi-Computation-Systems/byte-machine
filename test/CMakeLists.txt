@@ -123,6 +123,85 @@ set(BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT "${CMAKE_SOURCE_DIR}/src/chez")
 set(BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT "${CMAKE_SOURCE_DIR}/src/gambit")
 set(BYTE_MACHINE_TEST_COMMON_DIR "${CMAKE_CURRENT_LIST_DIR}/common")
 
+# --- Build-time fingerprint expectations -----------------------------------
+
+set(BYTE_MACHINE_FINGERPRINT_LAUNCHER
+    "${CMAKE_CURRENT_LIST_DIR}/support/launchers/fingerprint-manifest.ss")
+set(BYTE_MACHINE_FINGERPRINT_DIR "${CMAKE_BINARY_DIR}/fingerprints")
+
+# byte_machine_expected_fingerprint(<name> <out_var> <body>...)
+#
+# Produce, at build time, the combined fingerprint the named lane must report,
+# and set <out_var> to the file holding it.
+#
+# A build output rather than a configure-time value, because a registration's
+# environment is fixed when CMake configures and this must be recomputed
+# whenever a body changes -- which is precisely the case it exists to catch.
+# The DEPENDS list is what makes that true, so a body added to a manifest
+# without being added there produces an expectation that silently never
+# refreshes.
+#
+# Keyed by a digest of the manifest, not by lane name: the value depends only on
+# the manifest, and keying by name would spawn one Chez process per lane to
+# produce a handful of distinct answers while hiding which lanes claim to run
+# the same text.
+function(byte_machine_expected_fingerprint name out_var)
+  if(NOT ARGN)
+    message(FATAL_ERROR
+      "byte-machine: '${name}' asked for a fingerprint expectation over no "
+      "bodies. An empty manifest fingerprints to the seed on every lane, which "
+      "would compare equal forever and check nothing.")
+  endif()
+
+  string(JOIN "|" manifest ${ARGN})
+  string(SHA256 manifest_digest "${manifest}")
+  string(SUBSTRING "${manifest_digest}" 0 16 manifest_key)
+  set(expect_file "${BYTE_MACHINE_FINGERPRINT_DIR}/${manifest_key}.fingerprint")
+
+  # add_custom_command rejects a second rule for the same OUTPUT, so the first
+  # lane to need a manifest creates the rule and the rest reuse it.
+  get_property(known GLOBAL PROPERTY BYTE_MACHINE_FINGERPRINT_MANIFESTS)
+  if(NOT manifest_key IN_LIST known)
+    set_property(GLOBAL APPEND PROPERTY BYTE_MACHINE_FINGERPRINT_MANIFESTS
+                 "${manifest_key}")
+
+    add_custom_command(
+      OUTPUT "${expect_file}"
+      COMMAND "${CMAKE_COMMAND}" -E make_directory "${BYTE_MACHINE_FINGERPRINT_DIR}"
+      COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
+              "${BYTE_MACHINE_FINGERPRINT_LAUNCHER}"
+              "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+              "${expect_file}"
+              ${ARGN}
+      DEPENDS ${ARGN}
+              "${BYTE_MACHINE_FINGERPRINT_LAUNCHER}"
+              "${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
+      COMMENT "byte-machine: fingerprint manifest ${manifest_key} (first needed by ${name})"
+      VERBATIM)
+
+    add_custom_target("byte_machine_fingerprint_${manifest_key}"
+                      DEPENDS "${expect_file}")
+    if(NOT TARGET byte_machine_fingerprints)
+      add_custom_target(byte_machine_fingerprints ALL)
+    endif()
+    add_dependencies(byte_machine_fingerprints
+                     "byte_machine_fingerprint_${manifest_key}")
+  endif()
+
+  set(${out_var} "${expect_file}" PARENT_SCOPE)
+endfunction()
+
+# A deliberately wrong expectation, so the provenance check is proved to fire by
+# a registered lane rather than by editing a build artifact during a mutation
+# gate. It is not a fingerprint of anything and cannot become one: every real
+# value is lowercase hex, so no manifest can ever produce this text.
+function(byte_machine_wrong_fingerprint name out_var)
+  set(expect_file "${BYTE_MACHINE_FINGERPRINT_DIR}/${name}.wrong")
+  file(MAKE_DIRECTORY "${BYTE_MACHINE_FINGERPRINT_DIR}")
+  file(WRITE "${expect_file}" "not-a-fingerprint")
+  set(${out_var} "${expect_file}" PARENT_SCOPE)
+endfunction()
+
 # Checked before any lane is registered, and before the working-directory
 # matrix's own fixture copies below: a body missing a wrapper must stop the
 # build with this guard's own named diagnostic, not with a bare
