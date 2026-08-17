@@ -38,12 +38,15 @@ slice that also has semantics to get right, is the failure this milestone exists
 Measured 2026-08-17 (Darwin 25.5.0 arm64, Chez 10.4.1, Gambit 4.9.8) against the real Chez launcher
 (`test/support/launchers/chez-source.ss`) and a copy of the shipped body
 (`src/common/byte-machine/placeholder.scm`) through a copy of its shipped owner wrapper. Only the
-consumer body, the consumer wrappers, and the driver program were scratch fixtures.
+consumer body, the consumer wrappers, and the driver program were scratch fixtures — the driver had
+no harness and printed two bare booleans, so its own exit status was 0 regardless of what they said.
+The exit-status figure in the mutant row below is not the driver's: it is the shipped,
+harness-integrated identity lane's, confirmed separately against the exact committed files.
 
 | Fact | Result |
 | --- | --- |
 | Correct tree: a consumer body's free references resolve through its wrapper's import list, both runtimes, launched from a working directory containing neither body | `recognises=#t`, `eq-marker=#t`, exit 0 on both |
-| Mutant: the consumer wrapper's import **replaced by** an `include` of the owner's body | `recognises=#f`, `eq-marker=#f`, **exit 0** on both |
+| Mutant: the consumer wrapper's import **replaced by** an `include` of the owner's body | `recognises=#f`, `eq-marker=#f` on the scratch driver; the shipped, harness-integrated identity lane **exits 1** on both, via `check`/`check-equal` failures |
 | Wrong mutation form — import **kept** and an `include` **added**, Chez | refused at library construction: `Exception: multiple definitions for make-placeholder and other identifiers in body` |
 | Wrong mutation form — import kept and an `include` added, Gambit | **does not fail**: `consumer-tag-EQ-owner-tag=#t`, both cases pass |
 
@@ -52,12 +55,13 @@ Three of these are new. Two carry consequences.
 ### 2.1 The real mutation produces wrong answers, not an error
 
 The second row is what makes this slice worth its files. Under the double-include mutant both
-runtimes exit 0 and report false for both claims. Nothing raises. That is parent plan §7.2's
-defect class in its exact stated form — *"interpreter and generated execution would disagree about
-callback results while both looking correct in isolation"* — and "in isolation" is literal here: the
-existing `byte-machine.portability.placeholder-cwd-*` lanes still pass under this mutant, because
-they import only the owner. The defect is visible from exactly one place in the tree, which is the
-place this slice adds.
+runtimes report false for both claims, and nothing raises: the shipped, harness-integrated identity
+lane catches both through ordinary `check`/`check-equal` failures and exits 1, not through an
+exception. That is parent plan §7.2's defect class in its exact stated form — *"interpreter and
+generated execution would disagree about callback results while both looking correct in isolation"*
+— and "in isolation" is literal here: the existing `byte-machine.portability.placeholder-cwd-*`
+lanes still pass under this mutant, because they import only the owner. The defect is visible from
+exactly one place in the tree, which is the place this slice adds.
 
 ### 2.2 The two runtimes disagree about a body that redefines an imported name
 

@@ -1243,7 +1243,7 @@ endforeach()
 # from the matrix's identical directory instead of the stage.
 set(BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY "")
 
-# --- Pass 24: the consumer body's decisions, on Chez -------------------------
+# --- Pass 24: the consumer body's decisions, on Chez ------------------------
 #
 # Same argument as passes 9 and 10, for a second body: a wrapper that
 # reimplemented this body is exactly a wrapper whose runtime does not notice the
@@ -1322,7 +1322,7 @@ if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
   byte_machine_slice4_body_pass("gambit")
 endif()
 
-# --- Passes 26 and 27: the consumer wrapper double-includes ------------------
+# --- Passes 26 and 27: the consumer wrapper double-includes -----------------
 #
 # Section 7.2's rule -- each shared body is included by exactly one library per
 # runtime; others import that owner -- stated as something that can fail. The

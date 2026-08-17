@@ -30,9 +30,11 @@ real Chez launcher and the shipped placeholder body.
   directory containing neither body. This is the mechanism Milestone 1 runs on
   and nothing in the tree exercised it before this slice.
 
-- **The double-include defect is silent.** With the consumer wrapper's import
-  replaced by an `include` of the owner's body, both runtimes exit 0 and answer
-  both identity claims wrongly. Nothing raises. The six
+- **The double-include defect is invisible to every lane except the one built
+  to catch it.** With the consumer wrapper's import replaced by an `include`
+  of the owner's body, both runtimes answer both identity claims wrongly.
+  Nothing raises: the identity lane catches it through ordinary
+  `check`/`check-equal` failures and exits 1 on both. The six
   `byte-machine.portability.placeholder-cwd-*` lanes stay green, because they
   import only the owner. This is §7.2's "both looking correct in isolation" in
   its literal form.

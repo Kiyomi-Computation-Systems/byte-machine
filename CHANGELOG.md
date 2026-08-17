@@ -139,12 +139,14 @@ what this milestone delivers.
   R7RS `define-library` `include`.
 - Eight Scheme mutations in four passes (24 to 27), bringing the suite to 27
   passes and 64 mutations. The decisive two replace each consumer wrapper's
-  import with an include of the owner's body: the mutant exits 0 on both
-  runtimes, raises nothing, answers both identity claims wrongly, and leaves
-  every lane that imports only the owner green.
-- Decision record 0003, including the deferred one-owner guard with the
-  condition that reopens it, and an open question about Chez and Gambit
-  disagreeing over a library body that redefines an imported name.
+  import with an include of the owner's body: the mutant answers both
+  identity claims wrongly and raises nothing, but the identity lane still
+  fails it — an ordinary `check`/`check-equal` mismatch, exit 1 on both
+  runtimes — while every lane that imports only the owner stays green.
+- [Decision 0003](docs/decisions/0003-cross-library-identity.md), including
+  the deferred one-owner guard with the condition that reopens it, and an
+  open question about Chez and Gambit disagreeing over a library body that
+  redefines an imported name.
 
 ### Changed
 
