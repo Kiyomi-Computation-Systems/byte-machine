@@ -60,11 +60,13 @@ Today `byte_machine_add_scheme_lane` emits the literal `BYTE_MACHINE_EXECUTION_M
 **Files:**
 - Modify: `cmake/ByteMachineSchemeLane.cmake`
 - Modify: `test/support/cmake/ByteMachineSchemeLaneSpec.cmake`
+- Modify: `test/support/cmake/MutationSuite.cmake` (re-anchor one existing mutation — see Interfaces)
 - Modify: `test/support/harness/self/harness-self-tests.scm:365-366`
 - Modify: `test/support/harness/self/harness-bootstrap.scm:119-120`
 
 **Interfaces:**
-- Produces: `byte_machine_add_scheme_lane` emits `BYTE_MACHINE_EXECUTION_MODE=<mode>` where `<mode>` is the fifth dot-separated field of `NAME`. It raises a fatal error when `BACKEND` disagrees with the fourth field.
+- Produces: `byte_machine_add_scheme_lane` emits `BYTE_MACHINE_EXECUTION_MODE=<mode>` where `<mode>` is the fifth dot-separated field of `NAME`.
+- Also modifies: `test/support/cmake/MutationSuite.cmake`. An existing mutation anchors on the literal `"BYTE_MACHINE_EXECUTION_MODE=source"`; replacing that literal stops its pattern matching, and the suite's own site check fails. Re-anchor it on `${lane_mode}`, keeping `LABEL` and `REPLACE` unchanged — the precedent for this is in the same file, and the rule is that a pattern which stops matching after a refactor is updated, never deleted.
 
 - [ ] **Step 1: Write the failing specification cases**
 
@@ -1296,7 +1298,9 @@ byte_machine_mutation(
 - [ ] **Step 3: Add C4 — the mode goes back to a literal**
 
 ```cmake
-# C4. The literal this slice replaced. Not caught by the harness's own
+# C4. The literal this slice replaced. Distinct from the pre-existing mutation
+# anchored on the same line: that one deletes the entry, this one keeps it and
+# makes it wrong, which is the defect a compiled lane actually suffers. Not caught by the harness's own
 # assertion: under W8 that assertion accepts any mode in the vocabulary, and
 # `source` is in the vocabulary -- so a lane declaring it passes. What catches
 # it is the registration's name-to-mode mapping, asserted with no runtime
