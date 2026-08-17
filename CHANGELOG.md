@@ -115,7 +115,17 @@ what this milestone delivers.
 - A Gambit search root containing a comma is refused at configure time.
   Gambit's `-:` options are comma-separated, so such a root makes `gsi` print
   its usage banner and run no Scheme at all, on every Gambit lane at once, in
-  output that names nothing this project owns.
+  output that names nothing this project owns. A relative search root is
+  refused too, for a different reason: `gsi` resolves it against its own
+  working directory, so the lane would find its libraries or not depending on
+  where it was launched — the one thing the working-directory matrix exists
+  to rule out.
+- `byte_machine_add_test` gains an optional `WORKING_DIRECTORY`, overriding
+  its derived per-test run directory; the temporary directory it also creates
+  is unaffected. `byte_machine_add_exit_code_test` and
+  `byte_machine_add_scheme_lane` forward it, which is what lets the
+  working-directory matrix launch six lanes from three fixture directories
+  instead of their derived ones.
 
 ### Changed
 
@@ -136,12 +146,16 @@ what this milestone delivers.
   documented preset entry point behaves like `make` — on Windows' default
   multi-config generator every test previously reported "Not Run".
 - Specifications print their success banner only when nothing failed.
-- `MutationRunner` takes the staged trees and the verify command as parameters,
-  so a mutation can be judged by running a real execution lane rather than only
-  by `cmake -P`, and gained a reset entry point so a second declaration pass
-  can run under a different verify command in the same script — needed because
-  the Scheme suite's passes each judge a different decision through a different
-  lane: the shared runner against the self-tests, each adapter's export list on
-  its own runtime, and two further runner decisions reachable only through the
-  empty-selection and bootstrap lanes. The CMake-layer suite keeps its previous
-  behaviour by default.
+- `MutationRunner` is now generalized on three axes rather than two: it takes
+  the staged trees and the verify command as parameters, so a mutation can be
+  judged by running a real execution lane rather than only by `cmake -P`;
+  gained a reset entry point so a second declaration pass can run under a
+  different verify command in the same script — needed because the Scheme
+  suite's passes each judge a different decision through a different lane:
+  the shared runner against the self-tests, each adapter's export list on its
+  own runtime, and two further runner decisions reachable only through the
+  empty-selection and bootstrap lanes; and gained a verify working directory,
+  separate from the staged tree, because the working-directory matrix's
+  single mutation is judged by launching from three different directories,
+  not by what it does to the stage. The CMake-layer suite keeps its previous
+  behaviour by default on all three axes.
