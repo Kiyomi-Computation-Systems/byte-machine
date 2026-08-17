@@ -506,6 +506,24 @@ Two programs, in the flag style `chez-source.ss` established. Neither is reachab
 ;;; launcher never puts on its library path, and that lane would then fail at
 ;;; run time with an unbound library rather than here with a sentence.
 ;;;
+;;; WHY THE FLAG BLOCK BELOW IS A THIRD COPY
+;;;
+;;; known-flags, required-flags, single-valued-flags and the three loops under
+;;; them are the same code chez-source.ss carries. The duplication is
+;;; deliberate and it is not a candidate for extraction. A Chez --script
+;;; program runs standalone with no library path and no source-directories, so
+;;; the only way to share this block is to `load` it from an absolute path --
+;;; and that path would have to arrive as a command-line argument, read before
+;;; the code that reads command-line arguments exists. The bootstrap argument
+;;; that buys costs every launcher and every call site a positional they must
+;;; agree on, whose failure mode is a `load` of the wrong file rather than a
+;;; named refusal.
+;;;
+;;; The cost of the copy is that a flag-vocabulary decision fixed in one
+;;; launcher is not fixed in the others. Each copy is mutated separately for
+;;; that reason: the copies are independent decisions, not one decision spelled
+;;; three times.
+;;;
 ;;; WHY compile-imported-libraries IS ON HERE AND OFF THERE
 ;;;
 ;;; This step exists to produce the objects; the run must never produce one.
@@ -605,6 +623,24 @@ Two programs, in the flag style `chez-source.ss` established. Neither is reachab
 ;;;
 ;;; Usage:
 ;;;   chez-aot.ss --object-dir <dir> [--object-dir <dir> ...] --program <compiled>
+;;;
+;;; WHY THE FLAG BLOCK BELOW IS A THIRD COPY
+;;;
+;;; known-flags, required-flags, single-valued-flags and the three loops under
+;;; them are the same code chez-source.ss carries. The duplication is
+;;; deliberate and it is not a candidate for extraction. A Chez --script
+;;; program runs standalone with no library path and no source-directories, so
+;;; the only way to share this block is to `load` it from an absolute path --
+;;; and that path would have to arrive as a command-line argument, read before
+;;; the code that reads command-line arguments exists. The bootstrap argument
+;;; that buys costs every launcher and every call site a positional they must
+;;; agree on, whose failure mode is a `load` of the wrong file rather than a
+;;; named refusal.
+;;;
+;;; The cost of the copy is that a flag-vocabulary decision fixed in one
+;;; launcher is not fixed in the others. Each copy is mutated separately for
+;;; that reason: the copies are independent decisions, not one decision spelled
+;;; three times.
 ;;;
 ;;; WHY source-directories IS EMPTIED
 ;;;
