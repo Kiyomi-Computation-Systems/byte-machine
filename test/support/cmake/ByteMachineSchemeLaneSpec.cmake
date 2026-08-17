@@ -294,12 +294,16 @@ endfunction()
 # registrars above are: every direct registration below sets
 # BYTE_MACHINE_CHEZ_EXECUTABLE, which is exactly what makes
 # byte_machine_add_scheme_lane's manifest block call one of these two. The
-# environment assertions below account for what the stub adds.
+# environment assertions below account for what the stub adds. Each stub also
+# records which one ran, in BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION, so the
+# WRONG_FINGERPRINT routing further down can be asserted directly.
 function(byte_machine_expected_fingerprint name out_var)
+  set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION "expected")
   set(${out_var} "/fingerprints/${name}.fingerprint" PARENT_SCOPE)
 endfunction()
 
 function(byte_machine_wrong_fingerprint name out_var)
+  set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION "wrong")
   set(${out_var} "/fingerprints/${name}.wrong" PARENT_SCOPE)
 endfunction()
 
@@ -341,6 +345,34 @@ get_property(environment GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT)
 spec_check_equal("${environment}"
   "BYTE_MACHINE_EXECUTION_MODE=source;BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin;BYTE_MACHINE_FINGERPRINT_FILES=${SPEC_SELF};BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=/fingerprints/byte-machine.harness.example.chez.source.fingerprint;FOO=bar"
   "plain registration carries every default ahead of caller-supplied entries, which are appended last so they can override a default")
+
+# WRONG_FINGERPRINT chooses which function computes expect_file for the
+# manifest block: present, byte_machine_wrong_fingerprint; absent,
+# byte_machine_expected_fingerprint. Two assertions, since a branch has two
+# sides -- a spec that checked only one would still pass if the branch were
+# replaced by a constant that always called the same function.
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION "none")
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.example.chez.source
+  BACKEND chez
+  PROGRAM "${SPEC_SELF}"
+  SHARED_BODIES "${SPEC_SELF}"
+  TIMEOUT 10
+  WRONG_FINGERPRINT)
+get_property(fingerprint_function GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION)
+spec_check_equal("${fingerprint_function}" "wrong"
+  "a registration WITH WRONG_FINGERPRINT routes to byte_machine_wrong_fingerprint")
+
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION "none")
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.example.chez.source
+  BACKEND chez
+  PROGRAM "${SPEC_SELF}"
+  SHARED_BODIES "${SPEC_SELF}"
+  TIMEOUT 10)
+get_property(fingerprint_function GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION)
+spec_check_equal("${fingerprint_function}" "expected"
+  "a registration WITHOUT WRONG_FINGERPRINT routes to byte_machine_expected_fingerprint")
 
 # WORKING_DIRECTORY must be forwarded to whichever registrar the lane routed
 # to, with its value, when the lane was given one -- and the keyword must not

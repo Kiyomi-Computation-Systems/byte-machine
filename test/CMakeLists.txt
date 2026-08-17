@@ -746,10 +746,14 @@ byte_machine_add_scheme_lane(
 # runner body, identical text on both runtimes, and this pair already
 # establishes that both reach it.
 #
-# All four are guarded on a discovered Chez, not only the three that are Chez
-# lanes on their face. byte_machine_expected_fingerprint and
-# byte_machine_wrong_fingerprint both run their launcher under Chez, so on a
-# Chez-less host neither BYTE_MACHINE_FINGERPRINT_FILES nor
+# Three of the four are textually inside this if(BYTE_MACHINE_CHEZ_EXECUTABLE)
+# block; the fourth, byte-machine.harness.provenance.chez.source above, is
+# skipped on a Chez-less host by a different mechanism:
+# byte_machine_add_scheme_lane's own no-runtime return for a chez-backend
+# lane. byte_machine_expected_fingerprint runs its launcher under Chez, and
+# ByteMachineSchemeLane.cmake gates the call to either fingerprint function --
+# byte_machine_wrong_fingerprint included -- on that same discovered-Chez
+# check, so on a Chez-less host neither BYTE_MACHINE_FINGERPRINT_FILES nor
 # BYTE_MACHINE_EXPECT_FINGERPRINT_FILE is ever set for this Gambit lane, its
 # own runtime notwithstanding -- and harness-verify-provenance! skips rather
 # than refuses when the manifest variable is unset. Without this guard the
