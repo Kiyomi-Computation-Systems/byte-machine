@@ -633,6 +633,17 @@ Create `test/common/placeholder-tests.scm`:
         (check "a symbol spelled like the tag is not the tag"
                (not (placeholder? (vector 'byte-machine-placeholder 7))))))
 
+    (harness-case "placeholder? rejects a mis-sized vector carrying the real tag"
+      (lambda ()
+        ;; The tag is private, but it is not out of reach: a legitimately built
+        ;; placeholder hands it over through ordinary vector-ref. So the length
+        ;; check is witnessable from outside the library after all, and deleting
+        ;; it outright -- not merely perturbing its constant -- is a mutation
+        ;; this body catches.
+        (let ((real-tag (vector-ref (make-placeholder 0) 0)))
+          (check "a length-3 vector carrying the real tag is not a placeholder"
+                 (not (placeholder? (vector real-tag 1 2)))))))
+
     (harness-case "the marker is one object"
       (lambda ()
         (check "eq? to itself across two calls"
@@ -1569,10 +1580,16 @@ function(byte_machine_slice3_body_pass runtime)
     FIND [[  (and (vector? x)]]
     REPLACE [[  (and #t]])
 
-  # The length check is broken by changing the constant, not by deleting it.
-  # Deleting it cannot be witnessed from outside the library: the tag is
-  # private, so no caller can build a mis-sized vector carrying it. Changing the
-  # constant breaks the same decision and every genuine placeholder is rejected.
+  # Two mutations, because the length check can fail two ways: it can be absent,
+  # or its bound can be wrong. Deleting it is caught by the case that builds a
+  # length-3 vector carrying the real tag -- reachable through vector-ref on a
+  # legitimately built placeholder, which is why this is witnessable at all.
+  byte_machine_mutation(
+    FILE ${PLACEHOLDER_BODY} SPEC ${spec}
+    LABEL "placeholder on ${runtime}: the length is not checked at all"
+    FIND [[       (= (vector-length x) 2)]]
+    REPLACE [[       #t]])
+
   byte_machine_mutation(
     FILE ${PLACEHOLDER_BODY} SPEC ${spec}
     LABEL "placeholder on ${runtime}: the length check accepts the wrong length"
@@ -1629,7 +1646,7 @@ endif()
 ctest --preset pr -R 'byte-machine\.harness\.scheme-mutation' --output-on-failure
 ```
 
-Expected: PASS, with ten new mutations reported caught — five on each runtime. If a Gambit one survives while its Chez twin was caught, the stage is not preserving the relative layout; re-read Step 2 before changing anything else.
+Expected: PASS, with twelve new mutations reported caught — six on each runtime. If a Gambit one survives while its Chez twin was caught, the stage is not preserving the relative layout; re-read Step 2 before changing anything else.
 
 - [ ] **Step 5: Add the launcher's parse decisions**
 

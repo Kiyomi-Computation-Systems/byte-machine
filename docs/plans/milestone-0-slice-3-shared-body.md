@@ -173,15 +173,19 @@ break:
 | Decision | Mutation | Witness |
 | --- | --- | --- |
 | the argument is a vector | `(vector? x)` → `#t` | `(placeholder? 7)` reaches `vector-length` and raises; the case errors |
+| the length is right | the check is deleted | a length-3 vector carrying the *real* tag is accepted |
 | the length is right | `2` → `3` | every genuine placeholder is rejected; the round-trip case fails |
 | the tag matches | tag comparison → `#t` | a same-shaped vector carrying a *symbol* that looks like the tag is accepted |
 
-The length decision is worth a note, because the obvious mutation for it is the one that cannot be
-caught. Deleting the length check outright is unwitnessable from outside the library: the tag is
-private, so no caller can construct a mis-sized vector carrying it. Changing the constant breaks the
-same decision and is caught immediately. The declared mutation is therefore the constant change —
-the decision is covered, and the reason the other form is not used is recorded rather than left for
-someone to rediscover as an uncaught mutation.
+The length decision gets two mutations because it can fail two ways — the check can be absent, or
+its bound can be wrong — and the first of those is the one an earlier draft of this document got
+wrong. It claimed deleting the check outright was unwitnessable from outside the library, on the
+grounds that the tag is private so no caller could construct a mis-sized vector carrying it. That
+premise is false: a legitimately built placeholder hands the tag over through ordinary
+`vector-ref`, so `(vector (vector-ref (make-placeholder 0) 0) 1 2)` is a length-3 vector with the
+genuine tag, buildable from the exported API alone. The claim was found by review, not by test,
+which is the point of the standard it broke: "this cannot be tested" is a claim to demonstrate, and
+concluding it without demonstrating it is how a decision quietly stops being checked.
 
 The third witness doubles as the executable version of §5.2: the test constructs
 `(vector 'byte-machine-placeholder <v>)` and requires `placeholder?` to reject it. If the tag ever
