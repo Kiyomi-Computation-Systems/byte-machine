@@ -100,11 +100,25 @@ set(BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER
 set(BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR "${CMAKE_BINARY_DIR}/chez-object-guard")
 file(MAKE_DIRECTORY "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}")
 
+# --- Source tree paths -----------------------------------------------------
+#
+# Read by byte_machine_scheme_lane_command. src/ holds the product libraries;
+# the harness above is test infrastructure. A lane imports from both, which is
+# why the launcher takes repeatable roots.
+set(BYTE_MACHINE_SRC_COMMON_DIR "${CMAKE_SOURCE_DIR}/src/common/byte-machine")
+set(BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT "${CMAKE_SOURCE_DIR}/src/chez")
+set(BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT "${CMAKE_SOURCE_DIR}/src/gambit")
+set(BYTE_MACHINE_TEST_COMMON_DIR "${CMAKE_CURRENT_LIST_DIR}/common")
+
 # Checked before any lane is registered: a body missing a wrapper must stop the
 # build, not produce a suite that quietly proves one runtime.
+# src/common holds bodies included by a library, so they owe no program
+# wrapper; test/common holds bodies included by a program, so each owes both.
+# Every body from either kind of directory shares one basename namespace, which
+# now spans the harness and src/ for the first time.
 byte_machine_portability_guard(
-  SHARED_DIRS "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
-  WRAPPED_DIRS "${BYTE_MACHINE_HARNESS_SELF_DIR}")
+  SHARED_DIRS "${BYTE_MACHINE_HARNESS_SHARED_DIR}" "${BYTE_MACHINE_SRC_COMMON_DIR}"
+  WRAPPED_DIRS "${BYTE_MACHINE_HARNESS_SELF_DIR}" "${BYTE_MACHINE_TEST_COMMON_DIR}")
 
 byte_machine_add_test(
   NAME byte-machine.harness.cmake-portability-guard.cmake.direct
@@ -411,3 +425,21 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     LABELS unit
     ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source")
 endif()
+
+# --- The placeholder library -----------------------------------------------
+#
+# One shared body, one owner library per runtime, one shared test body. The
+# working directories these run from are what slice 3 is actually about; they
+# arrive in the next task, and until then both run from the default private run
+# directory.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.portability.placeholder.chez.source
+  BACKEND chez
+  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.chez.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.portability.placeholder.gambit.source
+  BACKEND gambit
+  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.gambit.scm"
+  TIMEOUT 120)

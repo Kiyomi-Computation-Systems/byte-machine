@@ -45,7 +45,9 @@ function(byte_machine_scheme_lane_command backend program
       "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
       "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
       "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+      "--library-root" "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}"
       "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+      "--source-dir" "${BYTE_MACHINE_SRC_COMMON_DIR}"
       "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
       "--program" "${program}"
       PARENT_SCOPE)
@@ -61,13 +63,16 @@ function(byte_machine_scheme_lane_command backend program
         PARENT_SCOPE)
       return()
     endif()
-    # `-:` runtime options must be the first argument; `-f` skips .gambini so a
-    # developer's personal initialisation cannot change what a test proves.
-    # No launcher is needed: Gambit's include inside define-library is
-    # source-file-relative and needs no ambient state.
+    # `-:` runtime options must be the first argument, and the option list is
+    # comma-separated: `search=A,search=B` puts two module roots on the path.
+    # Measured, with a control proving the second root is load-bearing
+    # (docs/plans/milestone-0-slice-3-shared-body.md section 2).
+    # `-f` skips .gambini so a developer's personal initialisation cannot change
+    # what a test proves. No launcher is needed: Gambit's include inside
+    # define-library is source-file-relative and needs no ambient state.
     set(${out_command}
       "${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
-      "-:search=${BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT}"
+      "-:search=${BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT},search=${BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT}"
       "-f"
       "${program}"
       PARENT_SCOPE)

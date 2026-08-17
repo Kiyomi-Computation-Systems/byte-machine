@@ -77,6 +77,9 @@ set(BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT "/h/chez")
 set(BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT "/h/gambit")
 set(BYTE_MACHINE_HARNESS_SHARED_DIR "/h/shared")
 set(BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR "/b/guard")
+set(BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT "/s/chez")
+set(BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT "/s/gambit")
+set(BYTE_MACHINE_SRC_COMMON_DIR "/s/common/byte-machine")
 
 # --- Chez ------------------------------------------------------------------
 
@@ -84,7 +87,7 @@ set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
 byte_machine_scheme_lane_command(chez "/h/self/p.chez.sps" command status message)
 spec_check_equal("${status}" "ok" "chez lane classifies")
 spec_check_equal("${command}"
-  "/opt/chez;--script;/h/launchers/chez-source.ss;--library-root;/h/chez;--source-dir;/h/shared;--object-guard;/b/guard;--program;/h/self/p.chez.sps"
+  "/opt/chez;--script;/h/launchers/chez-source.ss;--library-root;/h/chez;--library-root;/s/chez;--source-dir;/h/shared;--source-dir;/s/common/byte-machine;--object-guard;/b/guard;--program;/h/self/p.chez.sps"
   "chez lane command line")
 
 # The guard directory is the entire mechanism that stops a stale .so from being
@@ -102,13 +105,14 @@ set(BYTE_MACHINE_GAMBIT_EXECUTABLE "/opt/gsi")
 byte_machine_scheme_lane_command(gambit "/h/self/p.gambit.scm" command status message)
 spec_check_equal("${status}" "ok" "gambit lane classifies")
 spec_check_equal("${command}"
-  "/opt/gsi;-:search=/h/gambit;-f;/h/self/p.gambit.scm"
+  "/opt/gsi;-:search=/h/gambit,search=/s/gambit;-f;/h/self/p.gambit.scm"
   "gambit lane command line")
 
 # Gambit requires its -: runtime options to be the very first argument, and -f
 # must be present or a developer's .gambini can change what a test proves.
 list(GET command 1 first_option)
-spec_check_equal("${first_option}" "-:search=/h/gambit" "gambit runtime option comes first")
+spec_check_equal("${first_option}" "-:search=/h/gambit,search=/s/gambit"
+  "gambit runtime option comes first")
 list(FIND command "-f" f_index)
 spec_check_equal("${f_index}" "2" "gambit lane skips initialisation files")
 
