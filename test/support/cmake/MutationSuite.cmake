@@ -517,6 +517,57 @@ byte_machine_mutation(
   FIND [[    if(NOT IS_ABSOLUTE "${dir}")]]
   REPLACE [[    if(FALSE)]])
 
+# The two output variables are cleared up front so that a caller-supplied
+# stale value cannot leak through on either the accepted path (which never
+# rewrites the message) or the rejected path (which never rewrites the
+# option). Without this clear, a lane that reused a variable from an earlier
+# call could see the earlier call's answer instead of this one's.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "lane: the gambit search function's up-front output clear is deleted, so a stale caller-supplied option or message can survive a call"
+  FIND [[  set(${out_option} "" PARENT_SCOPE)
+  set(${out_message} "" PARENT_SCOPE)]]
+  REPLACE [[  ]])
+
+# The comma check must run first: a comma malforms the -: option list and
+# silences gsi -- and therefore every Gambit lane at once -- while a relative
+# root only misleads the one lane that carries it. This mutation keeps both
+# checks intact and only swaps their order, so it is caught solely by the
+# both-defects assertion in the specification; every single-defect case
+# supplies a root with exactly one problem and cannot see the checks
+# reordered.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "lane: the Gambit search checks are reordered, so a root with both defects reports relative-path instead of comma-in-path"
+  FIND [[    if(dir MATCHES ",")
+      set(${out_status} "comma-in-path" PARENT_SCOPE)
+      set(${out_message}
+        "a Gambit search root must not contain a comma, but '${dir}' does. Gambit's -: options are comma-separated, so gsi would print its usage banner and run no Scheme at all."
+        PARENT_SCOPE)
+      return()
+    endif()
+    if(NOT IS_ABSOLUTE "${dir}")
+      set(${out_status} "relative-path" PARENT_SCOPE)
+      set(${out_message}
+        "a Gambit search root must be absolute, but '${dir}' is not. Gambit resolves a relative root against its own working directory, so the lane would find its libraries or not depending on where it was launched."
+        PARENT_SCOPE)
+      return()
+    endif()]]
+  REPLACE [[    if(NOT IS_ABSOLUTE "${dir}")
+      set(${out_status} "relative-path" PARENT_SCOPE)
+      set(${out_message}
+        "a Gambit search root must be absolute, but '${dir}' is not. Gambit resolves a relative root against its own working directory, so the lane would find its libraries or not depending on where it was launched."
+        PARENT_SCOPE)
+      return()
+    endif()
+    if(dir MATCHES ",")
+      set(${out_status} "comma-in-path" PARENT_SCOPE)
+      set(${out_message}
+        "a Gambit search root must not contain a comma, but '${dir}' does. Gambit's -: options are comma-separated, so gsi would print its usage banner and run no Scheme at all."
+        PARENT_SCOPE)
+      return()
+    endif()]])
+
 # The companion to the re-anchored "an unknown backend no longer stops
 # registration" mutation above: that one deletes the guard outright, this one
 # narrows it back to the pre-Task-3 single clause, so comma-in-path and

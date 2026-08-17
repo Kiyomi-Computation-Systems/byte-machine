@@ -167,11 +167,38 @@ spec_check_equal("${message}"
   "a Gambit search root must be absolute, but 'relative/root' is not. Gambit resolves a relative root against its own working directory, so the lane would find its libraries or not depending on where it was launched."
   "relative root message")
 
-# Seeded, so a function that never writes its message is distinguishable from
-# one that clears it.
-set(message "seed")
+# A root that is both relative and contains a comma must report
+# comma-in-path, not relative-path: the comma check runs first, and that is
+# the useful precedence, because a comma malforms the -: option list and
+# silences gsi -- and therefore every Gambit lane at once -- while a relative
+# root only misleads the one lane that carries it. Nothing else in this
+# specification can see the two checks swapped: every other case here
+# supplies a root with exactly one defect, so either order produces the same
+# status.
+byte_machine_scheme_lane_gambit_search(option status message "/a" "rel,ative/root")
+spec_check_equal("${status}" "comma-in-path"
+  "a root with both defects is rejected for the comma, not the relative path")
+
+# Seeded with sentinel values no correct call could produce. An assertion
+# against an unseeded variable is satisfied by a function that does nothing
+# at all: CMake variables persist across calls, so an unseeded "message"
+# could already read "" by coincidence, and a deleted up-front clear would go
+# unnoticed. The function never writes its message on the success path -- the
+# up-front clear is the only thing that empties it there -- so a seeded
+# sentinel surviving to this assertion is exactly the defect.
+set(option "sentinel-option")
+set(message "sentinel-message")
 byte_machine_scheme_lane_gambit_search(option status message "/a")
 spec_check_equal("${message}" "" "an accepted search list clears the message")
+
+# Same seeding, on the rejection path. The function never writes the option
+# once it has decided to reject, so again the up-front clear is the only
+# thing that empties it, and a seeded sentinel surviving would be the same
+# defect on the other output.
+set(option "sentinel-option")
+set(message "sentinel-message")
+byte_machine_scheme_lane_gambit_search(option status message "/a" "/b,c")
+spec_check_equal("${option}" "" "a rejected search list clears the option")
 
 # --- Rejections ------------------------------------------------------------
 

@@ -22,7 +22,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/ByteMachineTesting.cmake")
 #                                        <dir>...)
 #
 # Build Gambit's `-:` runtime-option argument putting every <dir> on the module
-# search path. Status is `ok` or `comma-in-path`.
+# search path. Status is `ok`, `comma-in-path`, or `relative-path`.
 #
 # The comma check is not defensive programming. Gambit's -: option list is
 # comma-separated, so a root containing one is not a wrong path but a malformed
