@@ -1807,3 +1807,260 @@ git add docs/decisions/0004-content-fingerprint-and-provenance.md CHANGELOG.md &
 **One stated blind spot.** The unreadable-manifest-body refusal has no mutation; witnessing it would require an expectation crafted to equal what the mutant computes after the read fails. It is covered by its registered lane and recorded at Task 6 Step 4, rather than papered over with an `EXPECT_SURVIVES` that AGENTS.md reserves for the genuinely unwitnessable.
 
 **Type consistency.** `harness-fingerprint-bytevector`, `harness-fingerprint-file`, `harness-fingerprint-combine`, `harness-fingerprint->string`, `harness-bytes->string`, `harness-provenance-diagnosis`, `harness-verify-provenance!`, `harness-fingerprint-file-checked`, `harness-expected-fingerprint`, `harness-provenance-failure!`, `adapter-file-bytes`, `harness-bytes`, `byte_machine_expected_fingerprint`, `byte_machine_wrong_fingerprint`, `BYTE_MACHINE_FINGERPRINT_FILES`, `BYTE_MACHINE_EXPECT_FINGERPRINT_FILE`, `BYTE_MACHINE_FINGERPRINT_SAMPLE`, `BYTE_MACHINE_HARNESS_MANIFEST` — each is spelled the same everywhere it appears, and each is defined in the task before the one that first uses it.
+
+---
+
+## Task 8: The check must be reached, not merely configured
+
+**Files:**
+- Modify: `test/support/harness/shared/harness-runner.scm`
+- Modify: `test/support/harness/chez/byte-machine/test/harness.sls`
+- Modify: `test/support/harness/gambit/byte-machine/test/harness.sld`
+- Create: `test/support/harness/self/harness-unreached-provenance.scm`
+- Create: `test/support/harness/self/harness-unreached-provenance.chez.sps`
+- Create: `test/support/harness/self/harness-unreached-provenance.gambit.scm`
+- Modify: `test/support/harness/self/harness-self-tests.scm`
+- Modify: `test/CMakeLists.txt`
+- Modify: `test/support/cmake/SchemeMutationSuite.cmake`
+
+**Interfaces:**
+- Consumes: `harness-provenance-diagnosis`, `harness-verify-provenance!`, `harness-exit-status`, `harness-summary` from Tasks 4 and 5.
+- Produces: `harness-provenance-reachability-diagnosis` (manifest-string-or-`#f`, checked-boolean → `#f` or a diagnostic string), and a runner that exits 3 when a lane was given a manifest that nothing verified.
+
+### Why this exists
+
+`SHARED_BODIES` being required guarantees the *environment is set*. It does not guarantee the check *runs*. `harness-verify-provenance!` is reached from `harness-begin`, or by a hand-placed call — which is exactly what `harness-bootstrap.scm` needed, because it deliberately never calls `harness-begin`. Had that one line been forgotten, both bootstrap lanes would have run un-provenanced and nothing would have failed.
+
+That is the last reachable way a *registered* lane loses provenance silently, and V9's whole claim — "a lane cannot be added without it" — rests on closing it.
+
+### The bound this does not close, stated before it is built
+
+The guard fires from `harness-summary`. A body that calls neither `harness-begin` nor `harness-summary` — the bootstrap's own shape — still cannot be caught by it. That shape is a deliberate, singular exception that already carries its own call, and catching it would need a mechanism outside the harness entirely. What this closes is the far larger class: every body that uses the suite lifecycle but never reaches the check.
+
+- [ ] **Step 1: Write the failing lane**
+
+Create `test/support/harness/self/harness-unreached-provenance.scm`:
+
+```scheme
+;;; A suite that was given a manifest and never verified it.
+;;;
+;;; PORTABILITY: a shared body, included verbatim by each runtime's thin
+;;; wrapper. Common R6RS/R7RS subset only.
+;;;
+;;; Every other body in this tree reaches harness-verify-provenance! through
+;;; harness-begin. This one deliberately does not call harness-begin at all, so
+;;; the check is never reached -- and its lane is registered with a real
+;;; manifest, so the build did declare text this run was supposed to verify.
+;;; That combination is the defect: provenance configured and not performed.
+;;;
+;;; It still reaches harness-summary, which is where the guard lives. A body
+;;; that reached neither could not be caught this way, which is stated at the
+;;; guard itself.
+
+(harness-case "a case runs, so the suite is not empty"
+  (lambda ()
+    (check "this assertion is beside the point; reaching the summary is not" #t)))
+
+(harness-finish)
+```
+
+Create the two wrappers, matching the import lists of the existing `harness-duplicate-case` wrappers exactly:
+
+`harness-unreached-provenance.chez.sps`:
+
+```scheme
+;;; Chez wrapper for the unreached-provenance body. Runtime-specific only in
+;;; its imports.
+
+(import (rnrs) (byte-machine test harness) (only (chezscheme) include))
+
+(include "harness-unreached-provenance.scm")
+```
+
+`harness-unreached-provenance.gambit.scm`:
+
+```scheme
+;;; Gambit wrapper for the unreached-provenance body. Runtime-specific only in
+;;; its imports.
+
+(import (scheme base) (scheme write) (byte-machine test harness))
+
+(include "harness-unreached-provenance.scm")
+```
+
+Register both lanes at the end of the provenance section of `test/CMakeLists.txt`:
+
+```cmake
+# Provenance configured and never performed. SHARED_BODIES guarantees the
+# environment carries a manifest; nothing until now guaranteed anything read
+# it. This body reaches harness-summary without ever reaching
+# harness-verify-provenance!, which is precisely the shape harness-bootstrap
+# would have had if its hand-placed call had been forgotten -- and that would
+# have run un-provenanced with nothing failing.
+#
+# A real manifest, deliberately: with none, the run is a process no lane
+# registration started, and skipping is correct rather than a defect.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.unreached-provenance.chez.source
+  BACKEND chez
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.chez.sps"
+  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
+                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.scm"
+  EXPECT_EXIT 3
+  TIMEOUT 120
+  LABELS expected-red)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.unreached-provenance.gambit.source
+  BACKEND gambit
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.gambit.scm"
+  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
+                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.gambit.scm"
+  EXPECT_EXIT 3
+  TIMEOUT 120
+  LABELS expected-red)
+```
+
+Note the Gambit registration's second manifest entry is the `.gambit.scm` wrapper, not the shared body — correct that to the shared body when you write it, matching the Chez lane.
+
+- [ ] **Step 2: Run it and confirm it fails**
+
+```bash
+make build && ctest --test-dir build/dev -R 'unreached-provenance' --output-on-failure 2>&1 | tail -15
+```
+
+Expected: both lanes FAIL with `exit status 0, expected 3`. The body runs one passing case and exits 0, because nothing yet notices the manifest went unverified.
+
+- [ ] **Step 3: Add the pure rule and its self-tests**
+
+In `harness-runner.scm`, add to the "Pure helpers" section, after `harness-provenance-diagnosis`:
+
+```scheme
+;; A lane whose build declared a manifest, in a run where nothing verified it.
+;;
+;; SHARED_BODIES being required makes the environment unforgeable; it says
+;; nothing about whether anything read it. The check is reached from
+;; harness-begin, or by a hand-placed call -- which is what harness-bootstrap
+;; needed, having deliberately no harness-begin. Forget that line in a future
+;; body and the lane runs un-provenanced with nothing failing, which is the one
+;; remaining way V9's guarantee can be true at configure time and false at run
+;; time.
+;;
+;; Pure, and separate from the summary's read of the live flag, for the reason
+;; harness-empty-selection-diagnosis is: a run in this state cannot assert
+;; anything about itself from the inside, so the rule has to be checkable as a
+;; function of two values.
+;;
+;; An absent or empty manifest is not this defect. It means no lane
+;; registration started this process, and skipping is then correct -- see
+;; harness-verify-provenance!.
+(define (harness-provenance-reachability-diagnosis manifest checked?)
+  (if (and manifest (not (string=? manifest "")) (not checked?))
+      (string-append
+       "the build declared a manifest for this run and nothing verified it. "
+       "harness-verify-provenance! was never reached, so this suite's result "
+       "says nothing about whether it executed the text it was given.")
+      #f))
+```
+
+Add self-test cases for both sides of the condition and for the two ways it must stay quiet, in the existing `harness-group "provenance"`:
+
+```scheme
+    (harness-case "a manifest nothing verified is a defect"
+      (lambda ()
+        (let ((d (harness-provenance-reachability-diagnosis "a.scm|b.scm" #f)))
+          (check "there is a diagnosis" (if d #t #f))
+          (check "it says the check was not reached"
+                 (harness-string-contains? d "never reached")))))
+
+    (harness-case "a manifest that was verified is not a defect"
+      (lambda ()
+        (check "verified"
+               (not (harness-provenance-reachability-diagnosis "a.scm" #t)))))
+
+    ;; An absent or empty manifest means no lane registration started this
+    ;; process. Skipping is correct there, so neither may be reported as a
+    ;; defect -- and both spellings must agree, for the reason
+    ;; harness-normalize-filter gives about a shell that writes VAR= .
+    (harness-case "no manifest is not a defect, however it is spelled"
+      (lambda ()
+        (check "absent" (not (harness-provenance-reachability-diagnosis #f #f)))
+        (check "empty" (not (harness-provenance-reachability-diagnosis "" #f)))))
+```
+
+- [ ] **Step 4: Wire the flag and the status**
+
+Add the flag beside the other top-level mutable state, NOT inside `harness-clear-state!` and NOT in `harness-capture-state` / `harness-restore-state!`. Both reasons are load-bearing: `harness-begin` calls `harness-verify-provenance!` *before* `harness-clear-state!`, so a flag cleared there would be set and immediately erased; and a probe restores captured state, so a flag captured there would be reset by any probe that ran after the check.
+
+```scheme
+;; Set by harness-verify-provenance! itself, so "unset" means the procedure was
+;; never called -- not that it ran and found nothing. Deliberately outside
+;; harness-clear-state! and the probe's captured state: harness-begin verifies
+;; before it clears, and a probe restoring this would erase the fact that the
+;; check happened.
+(define harness-provenance-checked #f)
+(define harness-provenance-unreached #f)
+```
+
+Set it at the very top of `harness-verify-provenance!`, unconditionally — before the skip branch, so the flag records that the procedure ran rather than what it concluded.
+
+In `harness-summary`, alongside the existing empty-selection check and before the status is computed:
+
+```scheme
+  (let ((unreached (harness-provenance-reachability-diagnosis
+                    (adapter-environment-variable "BYTE_MACHINE_FINGERPRINT_FILES")
+                    harness-provenance-checked)))
+    (if unreached
+        (begin
+          (set! harness-provenance-unreached #t)
+          (harness-say-always
+           (string-append "byte-machine-harness: PROVENANCE-ERROR " unreached)))))
+```
+
+And extend `harness-exit-status` with a first clause, keeping status computed in one place as this file's header requires:
+
+```scheme
+(define (harness-exit-status)
+  (cond ((or harness-provenance-unreached) harness-status-provenance)
+        ((> harness-error-count 0) harness-status-harness-error)
+        ((> harness-failure-count 0) harness-status-failed)
+        (else harness-status-pass)))
+```
+
+Provenance outranks both other nonzero statuses, for the reason slice 2's decision S3 reserved 3 in the first place: several lanes legitimately expect 1 or 2, and a provenance defect sharing either would be indistinguishable from those fixtures' own expected outcomes.
+
+Export `harness-provenance-reachability-diagnosis` from both adapters, in the existing `;; content fingerprint and provenance` group. Verify parity with a set comparison.
+
+- [ ] **Step 5: Run everything**
+
+```bash
+make test && ctest --preset no-scheme --output-on-failure 2>&1 | tail -5
+```
+
+Expected: 46/46 and 10/10. The two new lanes now exit 3; every other lane is unaffected, because each reaches the check through `harness-begin`.
+
+Also confirm the mutation suite is undisturbed — its staged lanes carry no manifest, so the guard must stay quiet there:
+
+```bash
+ctest --test-dir build/dev -R 'scheme-mutation' --output-on-failure 2>&1 | tail -6
+```
+
+- [ ] **Step 6: Mutate the guard**
+
+Add a pass to `SchemeMutationSuite.cmake` breaking the reachability rule and requiring the new lane to notice. The verify command is the new lane wrapped in the exact-status helper with `BYTE_MACHINE_EXPECT_EXIT=3`, and the manifest and its expectation supplied through `cmake -E env`, exactly as passes 32 and 33 do — read them and match their shape, including the one-body manifest, since `BYTE_MACHINE_EXPECT_COMMAND` packs with `|`.
+
+Two mutations, because the rule has two halves that fail independently:
+- the diagnosis always returns `#f` — the guard stops guarding;
+- `harness-verify-provenance!` sets the flag even when it is never called, i.e. initialise `harness-provenance-checked` to `#t` — the guard cannot distinguish a reached check from an unreached one.
+
+Update the declared counters and the file's opening prose to match what the suite actually reports.
+
+- [ ] **Step 7: Run everything again and commit**
+
+```bash
+make test && ctest --preset no-scheme --output-on-failure 2>&1 | tail -5 && ctest --test-dir build/dev -R 'mutation' --output-on-failure 2>&1 | tail -6
+```
+
+```bash
+git add -A && git commit -m "feat: a manifest nothing verified is a provenance failure"
+```
