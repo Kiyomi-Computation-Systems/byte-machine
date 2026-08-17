@@ -1112,7 +1112,7 @@ byte_machine_mutation(
 ctest --preset pr -R 'byte-machine\.harness\.cmake-mutation' --output-on-failure
 ```
 
-Expected: PASS, with the three new mutations reported caught.
+Expected: PASS, with the four new mutations reported caught.
 
 - [ ] **Step 7: Commit**
 
