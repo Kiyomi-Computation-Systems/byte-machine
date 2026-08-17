@@ -1545,13 +1545,30 @@ endif()
 # and exactly what the real run reports caught for both.
 #
 # The asymmetric story -- Chez agreeing with a build-time expectation that
-# moved with it, Gambit alone catching the divergence -- is real, but it
-# belongs to the provenance *comparison*, which passes 32 and 33 exercise on
-# purpose with a manifest set. It is not what these two passes exercise: no
-# manifest means no provenance comparison runs here at all, on either runtime,
-# so there is nothing for that asymmetry to attach to. Recorded here because an
-# earlier draft of this comment described that hypothetical as if it were this
-# pass's own outcome, before being checked against a real run.
+# moved with it, Gambit alone catching the divergence -- is not demonstrated
+# by any pass in this file, passes 32 and 33 included. Both run Chez only,
+# neither wrapped in if(BYTE_MACHINE_GAMBIT_EXECUTABLE), so neither can be
+# where "Gambit alone catches it" happens. Both compare against a fixed
+# wrong-value fixture rather than a fingerprint recomputed from the mutated
+# tree -- pass 32 against a file holding the literal "not-a-fingerprint",
+# pass 33 against never-produced.fingerprint, a path this suite never writes
+# -- so neither expectation can move with a mutation the way the story
+# requires. And harness-hex-digits is the one definition both adapters
+# include verbatim: any pass that did compute its expectation via Chez over
+# the same staged tree the mutation lands on would have that computation read
+# the identical mutated table the runtime under test reads, so the two would
+# agree regardless of runtime. Showing the asymmetry needs a provenance-
+# wrapped verify command whose expectation is built from an *unmutated* tree
+# while the runtime under test sees the mutated one; staging gives every pass
+# one tree, already mutated, so no pass here can offer that.
+#
+# Section 6.1 of the slice-5a design carries the claim instead, in the
+# design's own terms: the cross-runtime guarantee rests on the Gambit lane
+# because the expectation is a Chez computation -- an argument from how the
+# build is wired, not a fact this suite reproves. An earlier draft of this
+# comment reassigned the asymmetric outcome to passes 32 and 33 rather than
+# dropping it; checked against what those two passes actually mutate and
+# compare, that reassignment does not hold either.
 
 set(HEX_MUTATION_FIND [[(define harness-hex-digits "0123456789abcdef")]])
 set(HEX_MUTATION_REPLACE [[(define harness-hex-digits "0123456789ABCDEF")]])
@@ -1652,8 +1669,29 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # Pass 33: the same wrapper, but the expectation file does not exist, so the
 # refusal under test is the missing-expectation branch rather than the
-# comparison. Its mutation removes the branch that treats an absent expectation
-# as a diagnosis; without it the run compares nothing and proceeds.
+# comparison. Its mutation leaves the guard `(not expected)` matching -- so
+# there is no fallthrough to the next clause -- and changes only what the
+# matched branch returns: silently #f instead of the diagnosis string.
+# harness-verify-provenance! reads that #f as nothing to report and lets the
+# run proceed as though the missing expectation had been verified.
+#
+# Measured 2026-08-17: caught, but not by exiting 0. The self-tests' own
+# "a missing expectation is its own diagnosis" case calls
+# harness-provenance-diagnosis(#f, ...) directly and checks that a diagnosis
+# comes back; with the branch mutated that check fails outright -- an
+# ordinary comparison -- and the whole run reports byte-machine-harness
+# status 1, not 3. The exact-status wrapper below compares that 1 against the
+# declared EXPECT_EXIT of 3 and reports the mismatch. Both routes are a
+# failed comparison; neither is a raise.
+#
+# An earlier form mutated the guard instead of the branch: `(not expected)`
+# became `(and #f expected)`, which never matches, so control fell through to
+# `(string=? expected computed)` with expected still #f. string=? on a
+# non-string is a type violation, so that form was caught by Chez's top-level
+# handler killing the process at exit 255 -- outside the harness's own status
+# vocabulary, and before a single self-test case ran -- rather than by the
+# assertion naming this decision. Replaced once this comparison-based form
+# was found, per AGENTS.md's preference for a failed comparison over a raise.
 byte_machine_mutation_reset()
 
 string(JOIN "|" PROVENANCE_ABSENT_COMMAND
@@ -1677,8 +1715,11 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 byte_machine_mutation(
   FILE ${RUNNER_BODY} SPEC byte-machine.harness.provenance-absent-expectation.chez.source
   LABEL "provenance: a missing expectation stops being a diagnosis"
-  FIND [[    ((not expected)]]
-  REPLACE [[    ((and #f expected)]])
+  FIND [[    ((not expected)
+     (string-append
+      "no expectation was supplied, so nothing can say whether this run "
+      "executed the text it was supposed to. This run computed " computed "."))]]
+  REPLACE [[    ((not expected) #f)]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
