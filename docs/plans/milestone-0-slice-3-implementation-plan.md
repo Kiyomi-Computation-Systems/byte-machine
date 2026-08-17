@@ -1288,16 +1288,18 @@ Add `WORKING_DIRECTORY` to the single-value keywords:
 Replace the existing `run_dir` / `tmp_dir` block with one that asks the core, keeping the temporary directory derived either way:
 
 ```cmake
-  # The temporary directory is always the derived one: a test that writes
-  # scratch files must not be able to disturb a directory it was pointed at to
-  # make a claim about resolution.
-  set(tmp_dir "${CMAKE_BINARY_DIR}/test-run/${arg_NAME}/tmp")
-  file(MAKE_DIRECTORY "${tmp_dir}")
-
   # The directory must exist. CTest reports a missing working directory as a
   # failure to launch, which the exact-status helper classifies as `did-not-run`
   # -- correct, but it points at the runtime rather than at the registration
   # that named a directory nobody created.
+  #
+  # This check comes BEFORE any directory is created, and that order is
+  # load-bearing rather than tidy. Its specification calls this function for
+  # real, and under a bare `cmake -P` there is no project and no cache, so
+  # CMAKE_BINARY_DIR resolves to the process's working directory: a
+  # MAKE_DIRECTORY reached before the rejection lands a test-run/ tree in
+  # whatever tree the specification was run from, which for the TDD loop this
+  # plan prescribes is the repository itself.
   if(arg_WORKING_DIRECTORY AND NOT IS_DIRECTORY "${arg_WORKING_DIRECTORY}")
     message(FATAL_ERROR
       "byte-machine: '${arg_NAME}' was given WORKING_DIRECTORY "
@@ -1306,6 +1308,12 @@ Replace the existing `run_dir` / `tmp_dir` block with one that asks the core, ke
       "resolution happens, so the directory has to be one the build made on "
       "purpose.")
   endif()
+
+  # The temporary directory is always the derived one: a test that writes
+  # scratch files must not be able to disturb a directory it was pointed at to
+  # make a claim about resolution.
+  set(tmp_dir "${CMAKE_BINARY_DIR}/test-run/${arg_NAME}/tmp")
+  file(MAKE_DIRECTORY "${tmp_dir}")
 
   byte_machine_test_run_directory("${arg_NAME}" "${arg_WORKING_DIRECTORY}" run_dir)
   file(MAKE_DIRECTORY "${run_dir}")
@@ -1320,6 +1328,18 @@ In `cmake/ByteMachineExpectExit.cmake`, add `WORKING_DIRECTORY` to the parse key
 ```
 
 ```cmake
+  # Forwarded only when there is something to forward. Passing the keyword with
+  # an empty value is what CMake policy CMP0174 warns about, and it warned 26
+  # times per configure -- burying the discovery and portability-guard lines
+  # this project reads its configure output for. The policy is not the fix: it
+  # does not exist at the declared 3.26 floor, arriving in 3.31, so setting it
+  # would be a no-op exactly where the floor is. Omitting the keyword is
+  # version-independent.
+  set(working_directory_args "")
+  if(arg_WORKING_DIRECTORY)
+    set(working_directory_args WORKING_DIRECTORY "${arg_WORKING_DIRECTORY}")
+  endif()
+
   byte_machine_add_test(
     NAME "${arg_NAME}"
     COMMAND "${CMAKE_COMMAND}"
@@ -1328,7 +1348,7 @@ In `cmake/ByteMachineExpectExit.cmake`, add `WORKING_DIRECTORY` to the parse key
             -P "${CMAKE_CURRENT_FUNCTION_LIST_FILE}"
     TIMEOUT "${arg_TIMEOUT}"
     LABELS ${arg_LABELS}
-    WORKING_DIRECTORY "${arg_WORKING_DIRECTORY}"
+    ${working_directory_args}
     ENVIRONMENT ${arg_ENVIRONMENT})
 ```
 
@@ -1341,7 +1361,7 @@ In `cmake/ByteMachineSchemeLane.cmake`, do the same for `byte_machine_add_scheme
     "NAME;BACKEND;PROGRAM;TIMEOUT;EXPECT_EXIT;WORKING_DIRECTORY" "LABELS;ENVIRONMENT")
 ```
 
-and add `WORKING_DIRECTORY "${arg_WORKING_DIRECTORY}"` to both the `byte_machine_add_exit_code_test` and the `byte_machine_add_test` calls at the end of the function.
+and do the same there: build `working_directory_args` once, before the `if(DEFINED arg_EXPECT_EXIT)` branch, and splice `${working_directory_args}` into both the `byte_machine_add_exit_code_test` and the `byte_machine_add_test` calls at the end of the function.
 
 - [ ] **Step 5: Run the specification to verify it passes**
 
