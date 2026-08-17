@@ -380,13 +380,21 @@ shell globs the tree at configure time and raises. A violation is a configure fa
 that runs later — a body missing a wrapper must stop the build, not produce a suite that quietly
 proves one runtime.
 
-A `CONFIGURE_DEPENDS` glob over `test/support/harness/shared/*.scm` and
-`test/support/harness/self/*.scm`, excluding `*.gambit.scm`, enforcing:
+A recursive `CONFIGURE_DEPENDS` glob over `test/support/harness/shared/` and
+`test/support/harness/self/`, excluding `*.gambit.scm`, enforcing:
 
 1. every body under `self/` has both a `.chez.sps` and a `.gambit.scm` wrapper;
 2. shared-body basenames are unique across all shared-body directories (D6; slice 3 widens the glob
    to `src/common/`);
-3. a glob matching nothing is a fatal error, since an empty guard reports every source portable.
+3. every declared directory contributed at least one body, and a call declaring no directory at all
+   is a fatal error, since a guard that found nothing reports every source portable.
+
+The glob is applied per directory rather than once over a combined pattern list, and it descends.
+Both are about the same failure: a directory that yields nothing would otherwise pass on its
+neighbours' bodies, and a body in a subdirectory would be neither checked nor reported. Rule 3 is
+what slice 3 needs when it widens the guard to `src/common/`, which today holds only a `.gitkeep` --
+under a combined check the harness directories would keep the result non-empty and the new
+directory would be reported portable without having been looked at.
 
 ### 8.5 Mutation runner generalization
 
@@ -536,7 +544,8 @@ Each step must fail before it passes.
 - deleting from either adapter any export a body or wrapper references makes a lane fail; the three
   that nothing outside the library references are the declared exception, recorded in §9.1;
 - the portability guard fails when a body is missing a wrapper, when two shared bodies share a
-  basename, and when its glob matches nothing;
+  basename, when any declared directory contributes no body, and when no directory is declared;
+  its glob recurses, so a body in a subdirectory is checked rather than unseen;
 - `ByteMachineExpectExit`, `ByteMachineSchemeLane`, and `ByteMachinePortabilityGuard` each have a
   `cmake -P` specification and mutations against their decisions;
 - `make dev` runs all of the above; `ctest --preset no-scheme` still passes with no runtime

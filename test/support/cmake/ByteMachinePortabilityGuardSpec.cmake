@@ -60,6 +60,25 @@ file(WRITE "${fixture}/paired/paired-body.chez.sps" "")
 file(WRITE "${fixture}/paired/paired-body.gambit.scm" "")
 file(WRITE "${fixture}/unpaired/unpaired-body.scm" "")
 
+# Nested bodies, for the rules that only bite if the glob descends. Each
+# directory holds a top-level body as well, so a non-recursive glob finds
+# something there and passes the per-directory contribution check -- otherwise
+# these cases would be rejected for emptiness and prove nothing about depth.
+#
+# `nested-dup/deep/twin.scm` repeats the basename in `twin-a`, and
+# `nested-unpaired/deep/deep-body.scm` has neither wrapper. Both violations are
+# invisible to a glob that stops at the top level, which is the whole point: a
+# body in a subdirectory would be neither checked nor reported, and the tree
+# would be called portable without it having been looked at.
+file(MAKE_DIRECTORY "${fixture}/nested-dup/deep")
+file(WRITE "${fixture}/nested-dup/surface.scm" "")
+file(WRITE "${fixture}/nested-dup/deep/twin.scm" "")
+file(MAKE_DIRECTORY "${fixture}/nested-unpaired/deep")
+file(WRITE "${fixture}/nested-unpaired/surface-body.scm" "")
+file(WRITE "${fixture}/nested-unpaired/surface-body.chez.sps" "")
+file(WRITE "${fixture}/nested-unpaired/surface-body.gambit.scm" "")
+file(WRITE "${fixture}/nested-unpaired/deep/deep-body.scm" "")
+
 # --- Rejection cases -------------------------------------------------------
 #
 # byte_machine_portability_guard's entire contract is to stop a build, so none
@@ -112,11 +131,42 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
     byte_machine_portability_guard(
       WRAPPED_DIRS "${fixture}/paired"
       SHARED_DIR "${fixture}/empty")
+  elseif(c STREQUAL "guard-rejects-a-directory-that-contributes-nothing")
+    # The per-directory half of "found nothing". `paired` contributes a body, so
+    # the whole-call check below is satisfied and only a check that looks at
+    # each directory separately can see that `empty` contributed none. This is
+    # the shape slice 3 walks into: spec section 8.4 widens the guard to
+    # src/common, which today holds only a .gitkeep, so the harness directories
+    # would keep the combined result non-empty while the new directory was
+    # reported portable without ever having been looked at.
+    byte_machine_portability_guard(
+      SHARED_DIRS "${fixture}/paired" "${fixture}/empty")
+  elseif(c STREQUAL "guard-rejects-a-nested-duplicate-basename")
+    # Proves the glob descends. `nested-dup` holds a top-level body as well, so
+    # a non-recursive glob finds one there, reports the directory as having
+    # contributed, and never sees `deep/twin.scm` colliding with `twin-a`.
+    byte_machine_portability_guard(
+      SHARED_DIRS "${fixture}/twin-a" "${fixture}/nested-dup")
+  elseif(c STREQUAL "guard-rejects-a-nested-missing-wrapper")
+    # The same descent, for the other rule, and the only case that exercises
+    # byte_machine_guard_missing_wrappers deriving sibling wrapper paths for a
+    # body that is not at the top of its declared directory.
+    byte_machine_portability_guard(
+      WRAPPED_DIRS "${fixture}/nested-unpaired")
   elseif(c STREQUAL "guard-rejects-an-empty-glob")
     # A guard that finds nothing must say so. Reporting a tree it never looked
     # at as portable is worse than not guarding it, because it is reported as
-    # checked.
+    # checked. This is now the per-directory check's doing -- a lone empty
+    # directory is a directory that contributed nothing -- and the whole-call
+    # check below survives for the one case no per-directory loop can reach.
     byte_machine_portability_guard(SHARED_DIRS "${fixture}/empty")
+  elseif(c STREQUAL "guard-rejects-a-call-declaring-no-directories")
+    # The case the per-directory loop cannot see, because it does not run: a
+    # caller that names neither keyword. Without this check that call globs
+    # nothing, finds no violation in the nothing it globbed, and prints the
+    # success banner -- the strongest possible form of reporting a tree as
+    # checked without looking at it.
+    byte_machine_portability_guard()
   elseif(c STREQUAL "guard-rejects-a-duplicate-basename")
     byte_machine_portability_guard(
       SHARED_DIRS "${fixture}/twin-a" "${fixture}/twin-b")
@@ -226,7 +276,11 @@ spec_expect_all_rejected("${SPEC_SELF}"
   "guard-rejects-an-unexpected-argument|unexpected arguments to byte_machine_portability_guard: WRAPPED_DIR"
   "guard-rejects-a-trailing-misspelt-keyword|SHARED_DIRS was given 'WRAPPED_DIR', which is not an existing directory"
   "guard-rejects-a-misspelt-keyword-after-wrapped-dirs|WRAPPED_DIRS was given 'SHARED_DIR', which is not an existing directory"
-  "guard-rejects-an-empty-glob|found no shared bodies to check, which means its glob is wrong"
+  "guard-rejects-a-directory-that-contributes-nothing|contributed no shared body: .*/empty"
+  "guard-rejects-a-nested-duplicate-basename|basenames must be unique across every shared body directory, but these repeat: twin\\.scm"
+  "guard-rejects-a-nested-missing-wrapper|every shared test body needs a wrapper for each runtime.*deep-body\\.gambit\\.scm"
+  "guard-rejects-an-empty-glob|contributed no shared body: .*/empty"
+  "guard-rejects-a-call-declaring-no-directories|was given no directories to check"
   "guard-rejects-a-duplicate-basename|basenames must be unique across every shared body directory, but these repeat: twin\\.scm"
   "guard-rejects-a-missing-wrapper|every shared test body needs a wrapper for each runtime.*unpaired-body\\.gambit\\.scm")
 

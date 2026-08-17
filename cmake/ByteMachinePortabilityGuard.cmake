@@ -15,9 +15,13 @@
 #
 # The glob is CONFIGURE_DEPENDS wherever there is a build system to honour the
 # keyword -- script mode is the sole exception, explained at the glob itself --
-# and its result is asserted non-empty. A guard that silently skips new files,
-# or that finds nothing and reports every source portable, is worse than no
-# guard at all.
+# it recurses, and *each declared directory* is asserted to have contributed at
+# least one body. A guard that silently skips new files, or that finds nothing
+# and reports every source portable, is worse than no guard at all, and both
+# halves of that sentence have a way of coming true one directory at a time: a
+# body in a subdirectory is skipped by a glob that does not descend, and a
+# directory that yields nothing passes on its neighbours' bodies if the check
+# is made on the combined result.
 
 include_guard(GLOBAL)
 
@@ -150,19 +154,61 @@ function(byte_machine_portability_guard)
     set(glob_depends "")
   endif()
 
-  set(patterns "")
-  foreach(dir IN LISTS arg_SHARED_DIRS arg_WRAPPED_DIRS)
-    list(APPEND patterns "${dir}/*.scm")
+  # One pass over every declared directory, rather than one combined glob and a
+  # second glob of the wrapped ones. Two things follow from working per
+  # directory, and neither is available from a combined result.
+  #
+  # A directory that contributed nothing gets named. A check on the combined
+  # result can only notice that *everything* found nothing, so a stale or
+  # premature directory sitting beside a populated one passes on its
+  # neighbour's bodies and is reported portable without having been looked at.
+  # That is the shape slice 3 walks into: section 8.4 of the design spec widens
+  # this guard to src/common, which today holds only a .gitkeep.
+  #
+  # And the glob recurses, so a body in a subdirectory is a body. A
+  # non-recursive glob does not fail on one -- it does not see it. The body is
+  # then neither checked for a colliding basename nor required to have
+  # wrappers, and the success banner covers a file nobody read. Both halves are
+  # the header's "a guard that silently skips new files is worse than no guard
+  # at all", which is a claim about this loop and nothing else.
+  set(bodies "")
+  set(wrapped "")
+  foreach(keyword IN ITEMS SHARED_DIRS WRAPPED_DIRS)
+    foreach(dir IN LISTS arg_${keyword})
+      file(GLOB_RECURSE dir_globbed ${glob_depends} "${dir}/*.scm")
+      byte_machine_guard_shared_bodies(dir_bodies ${dir_globbed})
+
+      if(NOT dir_bodies)
+        message(FATAL_ERROR
+          "byte-machine: contributed no shared body: ${dir}, declared to this "
+          "guard under ${keyword}. A directory is named here so that it is "
+          "checked, so one that yields nothing is a stale path, a directory "
+          "whose bodies are not there yet, or a glob that has stopped "
+          "matching -- never a tree that is portable. It cannot be the last "
+          "of those without also being unexamined, which is the one outcome "
+          "this guard exists to refuse.")
+      endif()
+
+      list(APPEND bodies ${dir_bodies})
+
+      # SHARED_DIRS hold bodies a *library* includes, and a library carries its
+      # own imports, so it has no wrapper and its bodies owe none. Only the
+      # wrapped directories, whose bodies are included by a program, owe a pair.
+      if(keyword STREQUAL "WRAPPED_DIRS")
+        list(APPEND wrapped ${dir_bodies})
+      endif()
+    endforeach()
   endforeach()
 
-  file(GLOB globbed ${glob_depends} ${patterns})
-  byte_machine_guard_shared_bodies(bodies ${globbed})
-
+  # Reachable only when neither keyword named a directory, since a directory
+  # that named nothing already died above. A caller who forgets both keywords
+  # otherwise globs nothing, finds no violation in the nothing it globbed, and
+  # prints the banner -- reporting a tree as checked in the one case where not
+  # a single file was read.
   if(NOT bodies)
     message(FATAL_ERROR
-      "byte-machine: the portability guard found no shared bodies to check, "
-      "which means its glob is wrong rather than that the sources are "
-      "portable. Searched: ${patterns}")
+      "byte-machine: the portability guard was given no directories to check. "
+      "Pass SHARED_DIRS, WRAPPED_DIRS, or both.")
   endif()
 
   # Deliberately not named `duplicates`: that is the callee's own accumulator
@@ -179,13 +225,6 @@ function(byte_machine_portability_guard)
       "two bodies with one basename collapse into a single file and the build "
       "stays green with one of them never executed again.")
   endif()
-
-  set(wrapped "")
-  foreach(dir IN LISTS arg_WRAPPED_DIRS)
-    file(GLOB dir_globbed ${glob_depends} "${dir}/*.scm")
-    byte_machine_guard_shared_bodies(dir_bodies ${dir_globbed})
-    list(APPEND wrapped ${dir_bodies})
-  endforeach()
 
   byte_machine_guard_missing_wrappers(missing ${wrapped})
   if(missing)

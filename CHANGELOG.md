@@ -83,11 +83,13 @@ what this milestone delivers.
   object is unreachable and the self-tests pass; unpaired, Chez loads it and the
   sentinel comes out in the banner, the failure context, and the exit status.
 - A portability guard failing the build when a shared test body is missing a
-  wrapper, when two shared bodies share a basename, when its own glob matches
-  nothing, when it receives an argument it does not recognize, or when a
-  `SHARED_DIRS` or `WRAPPED_DIRS` entry is not an existing directory. The last
-  two were added after each was shown to leave a tree unchecked while still
-  producing a green build.
+  wrapper, when two shared bodies share a basename, when any declared directory
+  contributes no body, when no directory is declared at all, when it receives an
+  argument it does not recognize, or when a `SHARED_DIRS` or `WRAPPED_DIRS`
+  entry is not an existing directory. Its glob recurses, so a body in a
+  subdirectory is checked rather than unseen. Every rule past the first two was
+  added after being shown to leave a tree unchecked while still producing a
+  green build.
 
 ### Changed
 

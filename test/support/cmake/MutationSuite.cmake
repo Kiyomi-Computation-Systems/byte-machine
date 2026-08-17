@@ -552,8 +552,16 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
   LABEL "guard: only SHARED_DIRS entries are checked for being directories"
-  FIND [[  foreach(keyword IN ITEMS SHARED_DIRS WRAPPED_DIRS)]]
-  REPLACE [[  foreach(keyword IN ITEMS SHARED_DIRS)]])
+  # Anchored on the preceding line: the body-collecting loop below iterates the
+  # same two keywords, so the bare `foreach` matches two sites and the SITES
+  # check rejects it. The two loops are deliberately separate -- every entry has
+  # to be judged a directory before any of them is globbed, or a bad entry
+  # sitting after a good one would be reported as having contributed nothing
+  # rather than as not being a directory at all.
+  FIND [[  # what makes the second form reachable; both forms have a rejection case.
+  foreach(keyword IN ITEMS SHARED_DIRS WRAPPED_DIRS)]]
+  REPLACE [[  # what makes the second form reachable; both forms have a rejection case.
+  foreach(keyword IN ITEMS SHARED_DIRS)]])
 
 byte_machine_mutation(
   FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
@@ -563,7 +571,7 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
-  LABEL "guard: an empty glob is reported as a portable tree"
+  LABEL "guard: a call naming no directories at all is accepted"
   FIND [[  if(NOT bodies)]]
   REPLACE [[  if(FALSE)]])
 
@@ -586,8 +594,38 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
   LABEL "guard: wrappers are demanded of the shared directories, not the wrapped ones"
-  FIND [[  foreach(dir IN LISTS arg_WRAPPED_DIRS)]]
-  REPLACE [[  foreach(dir IN LISTS arg_SHARED_DIRS)]])
+  FIND [[      if(keyword STREQUAL "WRAPPED_DIRS")]]
+  REPLACE [[      if(keyword STREQUAL "SHARED_DIRS")]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: only the top level of a declared directory is searched"
+  # The whole point of the recursion. Without it a body in a subdirectory is
+  # not rejected -- it is unseen, so it is neither checked for a colliding
+  # basename nor required to have wrappers, and the banner covers a file that
+  # was never read.
+  FIND [[      file(GLOB_RECURSE dir_globbed ${glob_depends} "${dir}/*.scm")]]
+  REPLACE [[      file(GLOB dir_globbed ${glob_depends} "${dir}/*.scm")]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: a declared directory that yields no body is accepted"
+  # Distinct from the whole-call check below, which sees only that *everything*
+  # found nothing: this is what notices one empty directory standing beside a
+  # populated one, and it is the check slice 3 needs when src/common joins the
+  # guard holding only a .gitkeep.
+  FIND [[      if(NOT dir_bodies)]]
+  REPLACE [[      if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
+  LABEL "guard: bodies are collected from the shared directories only"
+  # Anchored on the preceding line, for the same reason as the entry-check loop
+  # above: the two loops iterate the same two keywords.
+  FIND [[  set(wrapped "")
+  foreach(keyword IN ITEMS SHARED_DIRS WRAPPED_DIRS)]]
+  REPLACE [[  set(wrapped "")
+  foreach(keyword IN ITEMS SHARED_DIRS)]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
