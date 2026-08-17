@@ -1833,11 +1833,19 @@ byte_machine_slice3_launcher_pass(
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
 
+# The last entry in required-flags shares its line with the list's two closing
+# parens, so a FIND matching only the quoted string leaves them inside the
+# comment the REPLACE introduces -- and the mutated launcher stops being
+# readable Scheme. It still "fails", at 255 on a read error, so the pass reports
+# caught while witnessing nothing: it would report caught against a launcher
+# that checked no required flags at all. Whoever adds a fifth entry or reorders
+# this list inherits the hazard along with the last position.
 byte_machine_slice3_launcher_pass(
   byte-machine.harness.launcher-no-source-dir.chez.source
   "launcher: --source-dir is dropped from required-flags"
-  [[        "--source-dir"]]
-  [[        ;; --source-dir removed by mutation]]
+  [[        "--source-dir"))]]
+  [[        ;; --source-dir removed by mutation
+        ))]]
   "--library-root" "${STAGE_DIR}/test/support/harness/chez"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
