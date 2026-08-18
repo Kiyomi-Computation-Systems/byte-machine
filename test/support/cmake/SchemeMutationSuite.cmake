@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# TWENTY-SIX PASSES, BECAUSE TWENTY-SIX DIFFERENT WITNESSES ARE NEEDED
+# TWENTY-FIVE PASSES, BECAUSE TWENTY-FIVE DIFFERENT WITNESSES ARE NEEDED
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -53,13 +53,13 @@
 # Pass 8 is the placeholder body's own decisions -- tag, length, vector-ness,
 # symbol-vs-fresh-allocation identity.
 #
-# Passes 9 to 18 are the launcher's parse decisions: an unknown flag, a flag
+# Passes 9 to 17 are the launcher's parse decisions: an unknown flag, a flag
 # with no value, a single-valued flag repeated, a required flag unchecked in
-# general, one entry dropped from each of required-flags' four members, and one
-# entry dropped from each of single-valued-flags' two members. Each gets its
-# own pass because each needs its own deliberately wrong invocation and a
+# general, one entry dropped from each of required-flags' three members, and
+# one entry dropped from each of single-valued-flags' two members. Each gets
+# its own pass because each needs its own deliberately wrong invocation and a
 # verify command fixed for the whole pass, the same constraint passes 4 to 5
-# already established -- generalised here from two decisions to ten.
+# already established -- generalised here from two decisions to nine.
 #
 # The three working-directory-matrix passes that used to sit between the
 # parse decisions and the consumer pass retired with the include mechanism
@@ -67,12 +67,12 @@
 # there is no resolution step left for a launch directory to change, so the
 # claim the matrix witnessed empirically is now structural.
 #
-# Pass 19 is the consumer body's three decisions. All three are now caught by a
+# Pass 18 is the consumer body's three decisions. All three are now caught by a
 # failed comparison. The first used to be caught by an induced raise instead
 # -- weaker, and weighed and accepted -- before a comparison-based witness
 # replaced it.
 #
-# Pass 20 is the slice's reason for existing, reconstructed for the inline
+# Pass 19 is the slice's reason for existing, reconstructed for the inline
 # tree: the consumer defines its own copies of the owner's procedures instead
 # of importing them, so it gets its own tag and its own marker. Unlike every
 # other mutation in this file, the mutant raises nothing -- it is caught by
@@ -80,28 +80,28 @@
 # identity claims wrongly while every lane that imports only the owner still
 # passes.
 #
-# Pass 21 is the fingerprint algorithm's own decisions -- the +1 that keeps a
+# Pass 20 is the fingerprint algorithm's own decisions -- the +1 that keeps a
 # leading zero byte significant, the seed, the multiplier, the modulus, and
 # combine's order sensitivity.
 #
-# Pass 22 is the hex digit table. It sets no manifest, so provenance is
-# skipped here exactly as it is for every other pass but 23 through 26: what
+# Pass 21 is the hex digit table. It sets no manifest, so provenance is
+# skipped here exactly as it is for every other pass but 22 through 25: what
 # actually catches the mutation is the self-tests' own "hex digits render
 # lowercase" case, which check-equals fixed literals ("ff", "deadbeef", "0")
 # rather than deriving its expectation from fingerprint.sls.
 #
-# Passes 23 through 26 are the provenance check and the reachability guard
-# that closes over it (Task 8): 23 is the comparison, 24 the
-# missing-expectation branch, 25 the call site that reaches
-# harness-verify-provenance! at all, and 26 harness-provenance-reachability-
+# Passes 22 through 25 are the provenance check and the reachability guard
+# that closes over it (Task 8): 22 is the comparison, 23 the
+# missing-expectation branch, 24 the call site that reaches
+# harness-verify-provenance! at all, and 25 harness-provenance-reachability-
 # diagnosis itself, each witnessed through the exact-status helper so that
 # exit 3 -- the refusal -- is the green baseline, exactly as passes 4 and 5 do
 # for the launcher's guard-directory refusals. A third refusal -- a manifest
 # naming an unreadable body -- has no mutation; see the stated blind spot
-# recorded beside pass 24 below. Pass 25 was pass 23's second mutation until
+# recorded beside pass 23 below. Pass 24 was pass 22's second mutation until
 # Task 8: see the detail beside its declaration for why the reachability guard
 # made WRONG_FP_FILE's exit-3 baseline ambiguous for that one mutation and not
-# for pass 23's own.
+# for pass 22's own.
 #
 # WHAT THIS SUITE NEEDS FROM ITS ENVIRONMENT
 #
@@ -117,12 +117,12 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "TWENTY-SIX PASSES..." above. Declared here, rather than only in prose,
+# See "TWENTY-FIVE PASSES..." above. Declared here, rather than only in prose,
 # so the count enforced at the bottom of this file is the same text a reader
 # checks by eye at the top -- one number to keep in sync, not two that can
 # quietly disagree.
-set(EXPECTED_PASSES 26)
-set(EXPECTED_MUTATIONS 62)
+set(EXPECTED_PASSES 25)
+set(EXPECTED_MUTATIONS 60)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -175,7 +175,6 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
   "--library-root" "${STAGE_DIR}/test/support/harness"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
 
@@ -445,7 +444,6 @@ string(JOIN "|" EMPTY_SELECTION_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
   "--library-root" "${STAGE_DIR}/test/support/harness"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-empty-selection.sps")
 
@@ -483,7 +481,6 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
   "--library-root" "${STAGE_DIR}/test/support/harness"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps")
 
@@ -524,7 +521,6 @@ string(JOIN "|" LAUNCHER_ABSENT_GUARD_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
   "--library-root" "${STAGE_DIR}/test/support/harness"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${ABSENT_GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps")
 
@@ -556,7 +552,6 @@ string(JOIN "|" LAUNCHER_DIRTY_GUARD_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
   "--library-root" "${STAGE_DIR}/test/support/harness"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${DIRTY_GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps")
 
@@ -599,7 +594,6 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
   "--library-root" "${STAGE_DIR}/test/support/harness"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${COMPILE_GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps")
 
@@ -767,7 +761,6 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
   "--library-root" "${POISON_ROOT}"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${POISON_GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
 
@@ -801,7 +794,6 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
   "--library-root" "${STAGE_DIR}/test/support/harness"
   "--library-root" "${STAGE_DIR}/src"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/common/placeholder-tests.sps")
 
@@ -852,69 +844,19 @@ byte_machine_mutation(
   REPLACE [[(define (placeholder-marker)
   (vector 'byte-machine-marker))]])
 
-# Relocated from pass 1: they lived there until the include collapse (Task 4)
-# emptied that invocation's distinction -- harness.sls stopped including
-# anything, and pass 1's own --source-dir substitution (shared/ -> self/) made
-# source-dirs and (path-directory program) the same directory for
-# harness-self-tests.sps, so dropping either half of the append lost
-# nothing there.
-#
-# Task 6 (the src collapse) narrowed what these two REPLACEs could still
-# prove. --source-dir carried one entry, test/support/harness/self (Step 3's
-# transitional value); --program's own directory was test/common. MEASURED
-# then, against the src-collapsed tree: "the program's own directory is off
-# the source path" still starved this program's own (include
-# "placeholder-tests.scm") and was caught -- "Exception in include: file
-# "placeholder-tests.scm" not found in source directories", exit 255. "the
-# shared body directory is off the source path" no longer starved anything,
-# because the include it used to starve -- the deleted owner wrapper's own
-# include of placeholder.scm, git rm'd in Task 6's Step 1 -- no longer
-# existed: that task inlined the body straight into
-# src/byte-machine/placeholder.sls, leaving no second include for
-# source-dirs to reach. Declared EXPECT_SURVIVES for that reason; its
-# sibling stayed caught, for one task more.
-#
-# Task 7 (this task, the program merges) removes what Task 6 left standing.
-# placeholder-tests.chez.sps -- the wrapper whose own (include
-# "placeholder-tests.scm") was the last thing "the program's own directory is
-# off the source path" could still starve -- is deleted in Step 1; its body
-# is now placeholder-tests.sps itself, with no include form anywhere in it.
-# MEASURED 2026-08-18, against the merged tree: the mutation runner reports
-# this mutation UNCAUGHT -- "placeholder-tests.sps still passes with
-# test/support/launchers/chez-source.ss broken. That specification is not
-# testing this behaviour." -- because nothing in this invocation calls
-# include any more, so dropping (path-directory program) from the append is
-# now unobservable, exactly as dropping source-dirs already was. Both
-# mutations are declared EXPECT_SURVIVES below for that one shared reason.
-#
-# --source-dir's one remaining entry, and --program's own directory, are
-# therefore inert rather than merely safe: self/ carries no .scm file at all
-# after this task -- every body that lived there became a .sps program in
-# Step 1 -- so there is no basename left for either source-directories entry
-# to resolve, in the mutant or the baseline. The precedence question the
-# pre-Task-7 version of this comment answered by inspection does not arise
-# any more; that sentence, like the flag it described, expires in Task 8,
-# when (source-directories '()) deletes both entries and both FIND texts
-# alike.
+# The line these two retired mutations targeted is gone with the include
+# mechanism; what replaced it is deliberate narrowing, measured inert.
 byte_machine_mutation(
-  FILE ${LAUNCHER} SPEC placeholder-tests.sps
-  LABEL "launcher: the shared body directory is off the source path"
-  FIND [[(source-directories (append source-dirs (list (path-directory program))))]]
-  REPLACE [[(source-directories (list (path-directory program)))]]
+  FILE ${LAUNCHER} SPEC harness-self-tests.sps
+  LABEL "launcher: source-directories is left at Chez's default instead of emptied"
+  FIND [[(source-directories '())]]
+  REPLACE [[;; deleted]]
   EXPECT_SURVIVES
-    "measured 2026-08-18: this REPLACE drops source-dirs -- by now just test/support/harness/self -- from the append. Task 6 inlined placeholder.scm into src/byte-machine/placeholder.sls, leaving no include there for source-dirs to reach; Task 7 (this task) then deleted placeholder-tests.chez.sps, the wrapper whose own include of placeholder-tests.scm was the append's other half's last reason to matter -- the merged placeholder-tests.sps that replaced it contains no include form at all. With nothing in this invocation calling include any more, the mutant and the baseline are byte-identical and both exit 0. The FIND text itself, and the --source-dir flag it reads, retire outright in Task 8's (source-directories '()).")
-
-byte_machine_mutation(
-  FILE ${LAUNCHER} SPEC placeholder-tests.sps
-  LABEL "launcher: the program's own directory is off the source path"
-  FIND [[(source-directories (append source-dirs (list (path-directory program))))]]
-  REPLACE [[(source-directories source-dirs)]]
-  EXPECT_SURVIVES
-    "measured 2026-08-18, after this task's own merge: through Task 6 this REPLACE -- dropping (path-directory program), placeholder-tests.sps's own directory -- still starved placeholder-tests.chez.sps's own include of placeholder-tests.scm and was caught at exit 255. Task 7 (this task) deletes that wrapper in Step 1 and folds its body into placeholder-tests.sps directly, which contains no include form. The mutation runner now reports it UNCAUGHT: \"placeholder-tests.sps still passes with test/support/launchers/chez-source.ss broken. That specification is not testing this behaviour.\" Declared a survivor for the same reason as its sibling above, rather than left failing the suite. The FIND text itself, and the --source-dir flag it reads, retire outright in Task 8's (source-directories '()).")
+    "measured inert (decision 0006, extending 5b's C3b): no include form exists anywhere, library resolution runs through library-directories, and no lane's outcome differs between an empty source path and Chez's default; the line is kept as narrowing, not as behavior")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Passes 9 to 18: the launcher's parse decisions -------------------------
+# --- Passes 9 to 17: the launcher's parse decisions -------------------------
 #
 # Deleting a refusal does not produce a wrong answer; it produces an invocation
 # that is accepted and then fails somewhere else, or does not fail at all. Two
@@ -925,7 +867,6 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 set(LAUNCHER_BASE_ARGS
   "--library-root" "${STAGE_DIR}/test/support/harness"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps")
 
@@ -933,7 +874,7 @@ set(LAUNCHER_BASE_ARGS
 #                                   <expect_output_matches> <arg>...)
 #
 # One pass: point the verify command at a deliberately wrong invocation, declare
-# one mutation, run it. Defined here rather than inlined ten times because the
+# one mutation, run it. Defined here rather than inlined nine times because the
 # only thing that varies is the lane, the command line, and the mutation.
 #
 # expect_output_matches exists because the wrapper's own exit code is only ever
@@ -950,7 +891,7 @@ set(LAUNCHER_BASE_ARGS
 # looks like is a read error from a staged file that stopped being valid
 # Scheme, which is what this project measured exactly once: a REPLACE that
 # opened a line comment and swallowed a list's closing parens (recorded next to
-# the --source-dir mutation below) caught the pass at exit 255 on
+# the --library-root mutation below) caught the pass at exit 255 on
 # "Exception in read: ..." rather than on the refusal it names. Every value
 # passed here was captured from a real staged run of the mutation it guards,
 # not guessed.
@@ -998,7 +939,7 @@ byte_machine_slice3_launcher_pass(
   [[        ((null? (cdr rest))]]
   [[        (#f]]
   "Exception in cddr"
-  ${LAUNCHER_BASE_ARGS} "--source-dir")
+  ${LAUNCHER_BASE_ARGS} "--library-root")
 
 byte_machine_slice3_launcher_pass(
   byte-machine.harness.launcher-repeated-flag.chez.source
@@ -1034,12 +975,11 @@ byte_machine_slice3_launcher_pass(
   [[   (if (null? (flag-values flag))]]
   [[   (if #f]]
   [[library \(byte-machine test harness\) not found]]
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps")
 
-# Four more: one per entry in required-flags. The check above is one decision,
-# but the list it walks is four, and an entry dropped from it is invisible to
+# Three more: one per entry in required-flags. The check above is one decision,
+# but the list it walks is three, and an entry dropped from it is invisible to
 # every invocation except the one omitting that flag.
 
 byte_machine_slice3_launcher_pass(
@@ -1049,7 +989,6 @@ byte_machine_slice3_launcher_pass(
   [[  (list ;; --program removed by mutation]]
   "Exception in car"
   "--library-root" "${STAGE_DIR}/test/support/harness"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}")
 
 byte_machine_slice3_launcher_pass(
@@ -1059,20 +998,9 @@ byte_machine_slice3_launcher_pass(
   [[        ;; --object-guard removed by mutation]]
   "Exception in car"
   "--library-root" "${STAGE_DIR}/test/support/harness"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps")
 
-byte_machine_slice3_launcher_pass(
-  byte-machine.harness.launcher-no-library-root.chez.source
-  "launcher: --library-root is dropped from required-flags"
-  [[        "--library-root"]]
-  [[        ;; --library-root removed by mutation]]
-  [[library \(byte-machine test harness\) not found]]
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
-  "--object-guard" "${GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps")
-
-# --source-dir is the last entry in required-flags, so its source line ends
+# --library-root is the last entry in required-flags, so its source line ends
 # with two closing parens -- the list's and the define's -- rather than one.
 # A FIND that matched only the flag's text left both dangling after a REPLACE
 # that opened a line comment: the comment swallowed ")) " too, so the staged
@@ -1080,38 +1008,15 @@ byte_machine_slice3_launcher_pass(
 # than the launcher's own required-flag refusal -- caught, but for the wrong
 # reason, and witnessing nothing about the decision this pass names. The FIND
 # below includes the trailing "))" so the REPLACE can close the list itself.
-# Whichever entry ends up last in required-flags after a reorder or a fifth
+# Whichever entry ends up last in required-flags after a reorder or a fourth
 # addition inherits this hazard and needs the same treatment.
-#
-# EXPECT_OUTPUT_MATCHES changed from "Exception in include" to
-# "bootstrap: failures=0" by Task 4 of the include collapse, and MEASURED
-# against both trees rather than guessed. Before Task 4, harness.sls itself
-# included harness-runner.scm, so an invocation missing --source-dir starved
-# THAT include and crashed before the program ever ran. Task 4 inlined the
-# runner into harness.sls, so the library stopped including anything; Task 7
-# (the program merges) then deleted harness-bootstrap.sps's own last include
-# too, folding harness-bootstrap.scm straight into the program itself. No
-# invocation in this suite includes anything any more -- every program
-# carries its own text since the Task 7 merges -- so source-directories, and
-# whatever --source-dir would have contributed to it, has nothing left to
-# resolve. The required-flag refusal this pass names is therefore witnessed
-# purely at the flag-vocabulary level: the baseline invocation (which never
-# passes --source-dir at all) is refused because the flag is required and
-# absent, and the mutant accepts the very same invocation because dropping
-# the entry from required-flags stops asking for it -- the bootstrap program
-# then just runs to a clean, passing completion, with no include left for
-# --source-dir's absence to have starved. required-flags' --source-dir entry
-# is still witnessed: the baseline still correctly refuses at EXIT 2
-# (BYTE_MACHINE_EXPECT_EXIT above), and the mutant does not -- it is just a
-# clean pass now, not a read error.
 byte_machine_slice3_launcher_pass(
-  byte-machine.harness.launcher-no-source-dir.chez.source
-  "launcher: --source-dir is dropped from required-flags"
-  [[        "--source-dir"))]]
-  [[        ;; --source-dir removed by mutation
+  byte-machine.harness.launcher-no-library-root.chez.source
+  "launcher: --library-root is dropped from required-flags"
+  [[        "--library-root"))]]
+  [[        ;; --library-root removed by mutation
         ))]]
-  "bootstrap: failures=0"
-  "--library-root" "${STAGE_DIR}/test/support/harness"
+  [[library \(byte-machine test harness\) not found]]
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps")
 
@@ -1138,7 +1043,7 @@ byte_machine_slice3_launcher_pass(
 # every invocation except the one omitting that flag" -- applies just as much
 # to single-valued-flags' other member, so --program gets the same treatment.
 # It sits last on its line, hard against the list's and the define's closing
-# parens -- the same position that made --source-dir's required-flags
+# parens -- the same position that made --library-root's required-flags
 # mutation above catch a read error instead of the decision it names (the
 # hazard recorded there). The FIND below matches the whole two-line form,
 # both closing parens included, and the REPLACE is itself a complete,
@@ -1161,7 +1066,7 @@ byte_machine_slice3_launcher_pass(
   ${LAUNCHER_BASE_ARGS}
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
 
-# --- Pass 19: the consumer body's decisions ---------------------------------
+# --- Pass 18: the consumer body's decisions ---------------------------------
 #
 # Same argument as pass 8, for a second body: placeholder-identity-tests.scm
 # already checks each of these decisions directly; this pass proves those
@@ -1174,7 +1079,6 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
   "--library-root" "${STAGE_DIR}/test/support/harness"
   "--library-root" "${STAGE_DIR}/src"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/common/placeholder-identity-tests.sps")
 
@@ -1210,7 +1114,7 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Pass 20: the ownership pass -- a consumer that copies instead of importing
+# --- Pass 19: the ownership pass -- a consumer that copies instead of importing
 #
 # Decisions 0002/0003's one-owner rule is unconstructible against the inline
 # tree -- there is no include form and no body file for a second owner to
@@ -1228,7 +1132,6 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
   "--library-root" "${STAGE_DIR}/test/support/harness"
   "--library-root" "${STAGE_DIR}/src"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/common/placeholder-identity-tests.sps")
 
@@ -1251,7 +1154,7 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Pass 21: the fingerprint algorithm --------------------------------------
+# --- Pass 20: the fingerprint algorithm --------------------------------------
 #
 # The self-tests assert measured literals, so any change to seed, multiplier,
 # modulus, the +1, or the digit table moves at least one of them.
@@ -1262,7 +1165,6 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
   "--library-root" "${STAGE_DIR}/test/support/harness"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
 
@@ -1306,10 +1208,10 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Pass 22: the hex rendering table -----------------------------------------
+# --- Pass 21: the hex rendering table -----------------------------------------
 #
 # MEASURED 2026-08-17. No manifest is set, so provenance is skipped here
-# exactly as it is for every other pass but 23 through 26 below:
+# exactly as it is for every other pass but 22 through 25 below:
 # BYTE_MACHINE_FINGERPRINT_FILES is unset, harness-verify-provenance! returns
 # #t immediately, and the self-tests suite runs its own cases undisturbed. It
 # is the self-tests' own "hex digits render lowercase" case that actually
@@ -1329,7 +1231,6 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
   "--library-root" "${STAGE_DIR}/test/support/harness"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
 
@@ -1343,12 +1244,12 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Passes 23 and 24: the provenance check itself ----------------------------
+# --- Passes 22 and 23: the provenance check itself ----------------------------
 #
 # Wrapped in the exact-status helper so exit 3 -- the refusal -- is the green
 # baseline, exactly as passes 4 and 5 do for the launcher. A mutation that makes
 # the check more permissive drops the inner status to 0, the wrapper reports
-# nonzero, and the mutation is caught. Continued below by passes 25 and 26,
+# nonzero, and the mutation is caught. Continued below by passes 24 and 25,
 # which this pair's own comments point to at the place each split off.
 #
 # THE MANIFEST NAMES ONE BODY ON PURPOSE
@@ -1356,7 +1257,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # BYTE_MACHINE_EXPECT_COMMAND packs its argument vector with `|`, which is also
 # the manifest separator, so a two-element manifest would be unpacked as two
 # arguments. One body is enough: these passes test whether the check runs and is
-# consulted, not how values combine, which pass 21 covers. Passes 25 and 26
+# consulted, not how values combine, which pass 20 covers. Passes 24 and 25
 # keep the same one-body manifest for the same reason.
 
 set(RUNNER_BODY test/support/harness/byte-machine/test/harness.sls)
@@ -1374,7 +1275,6 @@ string(JOIN "|" PROVENANCE_MISMATCH_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
   "--library-root" "${STAGE_DIR}/test/support/harness"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
 
@@ -1402,10 +1302,10 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # compares only the number, so both baseline and this mutation satisfy
 # EXPECT_EXIT 3 and the wrapper reports "exited as expected" either way: not
 # caught, not because nothing noticed, but because two different refusals now
-# agree on the one status this vocabulary gives refusals. Moved to pass 25
+# agree on the one status this vocabulary gives refusals. Moved to pass 24
 # below, which is what gives it a baseline the guard cannot also produce.
 
-# Pass 24: the same wrapper, but the expectation file does not exist, so the
+# Pass 23: the same wrapper, but the expectation file does not exist, so the
 # refusal under test is the missing-expectation branch rather than the
 # comparison. Its mutation leaves the guard `(not expected)` matching -- so
 # there is no fallthrough to the next clause -- and changes only what the
@@ -1440,7 +1340,6 @@ string(JOIN "|" PROVENANCE_ABSENT_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
   "--library-root" "${STAGE_DIR}/test/support/harness"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
 
@@ -1469,10 +1368,10 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # and this is recorded rather than papered over with an EXPECT_SURVIVES, which
 # AGENTS.md reserves for the genuinely unwitnessable.
 
-# --- Pass 25: the call site, witnessed against a baseline the guard cannot
+# --- Pass 24: the call site, witnessed against a baseline the guard cannot
 # also satisfy -----------------------------------------------------------
 #
-# Continues "provenance: harness-begin stops checking at all" from pass 23,
+# Continues "provenance: harness-begin stops checking at all" from pass 22,
 # with a different baseline. WRONG_FP_FILE cannot be reused: it makes the
 # unmutated lane's correct behaviour exit 3, and after Task 8 this mutation's
 # broken behaviour *also* exits 3 (the reachability guard's own refusal), so a
@@ -1505,7 +1404,7 @@ execute_process(
   ERROR_VARIABLE fp_err)
 if(NOT fp_rc EQUAL 0)
   message(FATAL_ERROR
-    "byte-machine-mutation: could not compute pass 25's baseline fingerprint "
+    "byte-machine-mutation: could not compute pass 24's baseline fingerprint "
     "(exit ${fp_rc}): ${fp_out}${fp_err}")
 endif()
 
@@ -1519,7 +1418,6 @@ string(JOIN "|" PROVENANCE_UNCALLED_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
   "--library-root" "${STAGE_DIR}/test/support/harness"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
 
@@ -1538,7 +1436,7 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Pass 26: the reachability guard itself -------------------------------
+# --- Pass 25: the reachability guard itself -------------------------------
 #
 # harness-unreached-provenance.scm (test/support/harness/self/) deliberately
 # never calls harness-begin, so its lane's baseline already exits 3 through
@@ -1549,7 +1447,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # independently (V13's own comment: "manifest and not checked?"): the
 # diagnosis can stop firing, or checked? can stop meaning what its name says.
 # Either one drops the baseline's 3 to 0, which EXPECT_EXIT catches cleanly --
-# unlike pass 25, nothing else in this lane's execution can also produce 3, so
+# unlike pass 24, nothing else in this lane's execution can also produce 3, so
 # no separate baseline is needed here.
 set(UNREACHED_PROVENANCE_SPEC byte-machine.harness.unreached-provenance.chez.source)
 
@@ -1562,7 +1460,6 @@ string(JOIN "|" PROVENANCE_REACHABILITY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
   "--library-root" "${STAGE_DIR}/test/support/harness"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-unreached-provenance.sps")
 
@@ -1588,7 +1485,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "TWENTY-SIX PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "TWENTY-FIVE PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

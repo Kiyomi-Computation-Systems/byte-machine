@@ -124,20 +124,13 @@ function(byte_machine_scheme_lane_command name backend mode program
     endif()
 
     if(mode STREQUAL "source")
-      # Flags, not positions: a lane names one library root per library family it
-      # imports and one source directory per shared-body directory, and both
-      # counts grow with each slice.
+      # Flags, not positions: a lane names one library root per library
+      # family it imports, and the count grows with each slice.
       set(${out_command}
         "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
         "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
         "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
         "--library-root" "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}"
-        # Transitional: --source-dir is still a required launcher flag until
-        # the flag itself retires (include-collapse Task 8). Program bodies
-        # resolve through the program's own directory, so this value is
-        # inert; it names a real directory only so the invocation stays
-        # honest about what exists.
-        "--source-dir" "${BYTE_MACHINE_TEST_COMMON_DIR}"
         "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
         "--program" "${program}"
         PARENT_SCOPE)

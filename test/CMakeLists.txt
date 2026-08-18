@@ -370,7 +370,6 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_ABSENT_GUARD_DIR}"
             "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
     EXPECT_EXIT 2
@@ -383,7 +382,6 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_DIRTY_GUARD_DIR}"
             "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
     EXPECT_EXIT 2
@@ -400,7 +398,6 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
             "--librarie-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
             "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
@@ -416,7 +413,6 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
             "--program"
     EXPECT_EXIT 2
@@ -428,7 +424,6 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
             "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
             "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
@@ -446,7 +441,6 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
             "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
@@ -462,19 +456,6 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     NAME byte-machine.harness.launcher-no-library-root.chez.source
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
-            "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
-            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
-    EXPECT_EXIT 2
-    TIMEOUT 120
-    LABELS expected-red
-    ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source")
-
-  byte_machine_add_exit_code_test(
-    NAME byte-machine.harness.launcher-no-source-dir.chez.source
-    COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
-            "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
-            "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
             "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
     EXPECT_EXIT 2
@@ -487,7 +468,6 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
     EXPECT_EXIT 2
     TIMEOUT 120
@@ -497,7 +477,7 @@ endif()
 
 # A lane that is set up correctly never reaches a launcher refusal, so each one
 # needs a lane of its own or a deleted refusal is invisible. The same argument
-# the ten chez-source.ss refusals above are registered under.
+# the nine chez-source.ss refusals above are registered under.
 #
 # Three lanes, not one per refusal in these files. The flag-vocabulary
 # refusals below the parser, and --source-guard's own absent-directory check,
@@ -526,7 +506,6 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
             --library-root "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
             --library-root "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}"
             --object-dir "${CMAKE_BINARY_DIR}"
-            --source-dir "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             --program "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
             --output "${CMAKE_BINARY_DIR}/unused.so"
     EXPECT_EXIT 2

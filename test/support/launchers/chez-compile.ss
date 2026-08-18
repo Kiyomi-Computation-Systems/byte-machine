@@ -3,7 +3,6 @@
 ;;; Usage:
 ;;;   chez-compile.ss --library-root <dir> [--library-root <dir> ...]
 ;;;                   --object-dir <dir>   [--object-dir <dir> ...]
-;;;                   --source-dir <dir>   [--source-dir <dir> ...]
 ;;;                   --program <path> --output <path>
 ;;;
 ;;; The nth --object-dir pairs with the nth --library-root. The pairing is
@@ -21,12 +20,11 @@
 ;;; --script program has nowhere to `load` a shared file from. Measured
 ;;; against Chez 10.4.1 on 2026-08-17: under --script, (car (command-line))
 ;;; is this script's own path, so the absolute directory to `load` a sibling
-;;; file from is derivable with no bootstrap argument. The real reason is
-;;; that Chez's own defaults for both library-directories and
-;;; source-directories are CWD-relative -- (("." . ".")) and (".")
-;;; respectively, measured the same day -- and this suite deliberately varies
-;;; the working directory a lane is launched from (the matrix in
-;;; test/CMakeLists.txt). Sharing this block would make every launcher's
+;;; file from is derivable with no bootstrap argument. Chez's own defaults
+;;; for both library-directories and source-directories are CWD-relative --
+;;; (("." . ".")) and (".") respectively, measured 2026-08-17 -- and a
+;;; launcher must never inherit either, whatever directory a lane happens to
+;;; launch from. Sharing this block would make every launcher's
 ;;; correctness depend on `load`ing another launcher file: a load-order
 ;;; dependency between files that stand alone today, with its own new failure
 ;;; mode -- a `load` of the wrong file rather than a named refusal. That is
@@ -47,14 +45,6 @@
 ;;; A run that compiled would be doing at run time what this step claims to
 ;;; have done at build time, and the lane would pass having proved nothing
 ;;; about the artifact.
-
-(define (path-directory path)
-  (let loop ((i (- (string-length path) 1)))
-    (cond ((< i 0) ".")
-          ((or (char=? (string-ref path i) #\/)
-               (char=? (string-ref path i) #\\))
-           (substring path 0 i))
-          (else (loop (- i 1))))))
 
 ;; Status 2 is the harness's "harness, configuration, or registration error".
 ;; A launcher that could not set up the lane has not run a test at all, and
@@ -78,7 +68,7 @@
 ;; invocation looks like.
 
 (define known-flags
-  (list "--library-root" "--object-dir" "--source-dir" "--program" "--output"))
+  (list "--library-root" "--object-dir" "--program" "--output"))
 
 ;; One per line, in a different order from known-flags, so each entry is
 ;; unique text in this file and can be removed by a mutation of its own.
@@ -89,8 +79,7 @@
   (list "--output"
         "--program"
         "--object-dir"
-        "--library-root"
-        "--source-dir"))
+        "--library-root"))
 
 (define single-valued-flags (list "--program" "--output"))
 
@@ -133,7 +122,6 @@
 
 (define library-roots (flag-values "--library-root"))
 (define object-dirs (flag-values "--object-dir"))
-(define source-dirs (flag-values "--source-dir"))
 (define program (car (flag-values "--program")))
 (define output (car (flag-values "--output")))
 
@@ -152,7 +140,7 @@
 ;; design, docs/plans/milestone-0-slice-5b-5c-compiled-lanes.md section 10.
 (generate-wpo-files #f)
 
-(source-directories (append source-dirs (list (path-directory program))))
+(source-directories '())
 (library-directories (map cons library-roots object-dirs))
 
 (compile-program program output)

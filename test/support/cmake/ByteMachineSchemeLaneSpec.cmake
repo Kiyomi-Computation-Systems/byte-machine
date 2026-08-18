@@ -118,7 +118,6 @@ set(BYTE_MACHINE_HARNESS_CHEZ_COMPILE_LAUNCHER "/launchers/chez-compile.ss")
 set(BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT "/h/chez")
 set(BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR "/b/guard")
 set(BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT "/s/chez")
-set(BYTE_MACHINE_TEST_COMMON_DIR "/t/common")
 
 # --- Chez ------------------------------------------------------------------
 
@@ -127,7 +126,7 @@ byte_machine_scheme_lane_command(byte-machine.harness.example.chez.source
   chez source "/h/self/p.chez.sps" command measured status message)
 spec_check_equal("${status}" "ok" "chez lane classifies")
 spec_check_equal("${command}"
-  "/opt/chez;--script;/h/launchers/chez-source.ss;--library-root;/h/chez;--library-root;/s/chez;--source-dir;/t/common;--object-guard;/b/guard;--program;/h/self/p.chez.sps"
+  "/opt/chez;--script;/h/launchers/chez-source.ss;--library-root;/h/chez;--library-root;/s/chez;--object-guard;/b/guard;--program;/h/self/p.chez.sps"
   "chez lane command line")
 
 # The guard directory is the entire mechanism that stops a stale .so from being

@@ -2,18 +2,17 @@
 ;;;
 ;;; Usage:
 ;;;   chez-source.ss --library-root <dir> [--library-root <dir> ...]
-;;;                  --source-dir <dir>  [--source-dir <dir> ...]
 ;;;                  --object-guard <dir> --program <path>
 ;;;
 ;;; WHY FLAGS RATHER THAN POSITIONS
 ;;;
-;;; A lane needs one library root per library family it imports and one source
-;;; directory per shared-body directory, and both counts grow: slice 3 has two
-;;; of each, slice 5's compiled lanes and Milestone 1's libraries add more. A
-;;; positional protocol renumbers every caller at each of those steps. A
-;;; separator-joined list was rejected outright: it would need a path separator
-;;; that is `:` on Unix and `;` on Windows, which is the open question in
-;;; milestone-0-portability-spike.md section 9, for no benefit here.
+;;; A lane needs one library root per library family it imports, and the count
+;;; grows: slice 3 has two, slice 5's compiled lanes and Milestone 1's
+;;; libraries add more. A positional protocol renumbers every caller at each
+;;; of those steps. A separator-joined list was rejected outright: it would
+;;; need a path separator that is `:` on Unix and `;` on Windows, which is the
+;;; open question in milestone-0-portability-spike.md section 9, for no
+;;; benefit here.
 ;;;
 ;;; THE OBJECT GUARD
 ;;;
@@ -32,26 +31,17 @@
 ;;; second copy of either rule would be a requirement inherited rather than
 ;;; owned.
 ;;;
-;;; Also not checked: that --library-root and --source-dir name directories
-;;; that exist. The object guard gets exactly this check (file-directory?,
-;;; below) because an absent or dirty guard is the one thing that makes
-;;; "source" a false claim; a mistyped library root or source directory is a
-;;; different failure with no honesty claim riding on it. The cost is that a
-;;; build-layer typo is not named at the harness's own status-2 boundary: it
-;;; surfaces however Chez happens to fail once source-directories or
-;;; library-directories can't resolve what was asked of them -- an unbound
+;;; Also not checked: that --library-root names directories that exist. The
+;;; object guard gets exactly this check (file-directory?, below) because an
+;;; absent or dirty guard is the one thing that makes "source" a false claim;
+;;; a mistyped library root is a different failure with no honesty claim
+;;; riding on it. The cost is that a build-layer typo is not named at the
+;;; harness's own status-2 boundary: it surfaces however Chez happens to fail
+;;; once library-directories can't resolve what was asked of it -- an unbound
 ;;; library, a missing include, an uncaught condition -- which is Chez's own
 ;;; exit 255, not this launcher's HARNESS-ERROR. Adding the check is a new
 ;;; decision needing a new lane and a new mutation, not a fix to something
 ;;; this file already tries and fails to do.
-
-(define (path-directory path)
-  (let loop ((i (- (string-length path) 1)))
-    (cond ((< i 0) ".")
-          ((or (char=? (string-ref path i) #\/)
-               (char=? (string-ref path i) #\\))
-           (substring path 0 i))
-          (else (loop (- i 1))))))
 
 ;; Status 2 is the harness's "harness, configuration, or registration error".
 ;; A launcher that could not set up the lane has not run a test at all, and must
@@ -69,7 +59,7 @@
 ;; invocation looks like.
 
 (define known-flags
-  (list "--library-root" "--source-dir" "--object-guard" "--program"))
+  (list "--library-root" "--object-guard" "--program"))
 
 ;; One per line, and in a different order from known-flags, so that each entry
 ;; is unique text in this file and can be removed by a mutation of its own.
@@ -79,8 +69,7 @@
 (define required-flags
   (list "--program"
         "--object-guard"
-        "--library-root"
-        "--source-dir"))
+        "--library-root"))
 
 (define single-valued-flags
   (list "--object-guard" "--program"))
@@ -123,7 +112,6 @@
  single-valued-flags)
 
 (define library-roots (flag-values "--library-root"))
-(define source-dirs (flag-values "--source-dir"))
 (define object-guard-dir (car (flag-values "--object-guard")))
 (define program (car (flag-values "--program")))
 
@@ -139,11 +127,13 @@
 
 (compile-imported-libraries #f)
 
-;; A program may include bodies that live beside it, so its own directory joins
-;; the declared source directories. All of them are explicit: nothing resolves
-;; against the current working directory, which is what the working-directory
-;; matrix in test/CMakeLists.txt exists to keep true.
-(source-directories (append source-dirs (list (path-directory program))))
+;; Nothing includes, so nothing resolves through source-directories at all
+;; (decision 0006; measured inert for the aot launcher as mutation C3b, and
+;; extended here by the absence of any include form). Emptied rather than
+;; left at Chez's CWD-containing default: it still narrows what a later
+;; top-level load or include added to this file could reach, and an empty
+;; list costs nothing to state.
+(source-directories '())
 
 ;; Every root is paired with the same always-empty guard directory.
 (library-directories

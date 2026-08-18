@@ -12,12 +12,11 @@
 ;;; --script program has nowhere to `load` a shared file from. Measured
 ;;; against Chez 10.4.1 on 2026-08-17: under --script, (car (command-line))
 ;;; is this script's own path, so the absolute directory to `load` a sibling
-;;; file from is derivable with no bootstrap argument. The real reason is
-;;; that Chez's own defaults for both library-directories and
-;;; source-directories are CWD-relative -- (("." . ".")) and (".")
-;;; respectively, measured the same day -- and this suite deliberately varies
-;;; the working directory a lane is launched from (the matrix in
-;;; test/CMakeLists.txt). Sharing this block would make every launcher's
+;;; file from is derivable with no bootstrap argument. Chez's own defaults
+;;; for both library-directories and source-directories are CWD-relative --
+;;; (("." . ".")) and (".") respectively, measured 2026-08-17 -- and a
+;;; launcher must never inherit either, whatever directory a lane happens to
+;;; launch from. Sharing this block would make every launcher's
 ;;; correctness depend on `load`ing another launcher file: a load-order
 ;;; dependency between files that stand alone today, with its own new failure
 ;;; mode -- a `load` of the wrong file rather than a named refusal. That is
