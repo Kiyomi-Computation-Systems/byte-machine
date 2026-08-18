@@ -740,7 +740,7 @@ Expected: 37/37 green; `Total Tests: 37`; scheme-mutation lane reports `29 passe
 ```bash
 rg -n 'harness/shared|harness/chez' cmake test src CMakeLists.txt --glob '!*.md'
 ```
-Expected: no hits.
+Expected: exactly one hit — `harness.sls`'s own header prose `formerly test/support/harness/shared/harness-runner.scm`, a historical citation this task's step 1 mandates, not a live path. (Corrected after Task 4 landed: the gate as first written said "no hits" and conflicted with the header text it mandates.)
 
 - [ ] **Step 7: Commit**
 
@@ -1244,7 +1244,7 @@ In `test/CMakeLists.txt`:
 - [ ] **Step 6: `SchemeMutationSuite.cmake`**
 
 1. Strip every `"--source-dir" "…"` pair from every verify command and from `LAUNCHER_BASE_ARGS`.
-2. Delete the two source-path mutations in the first pass (`launcher: the shared body directory is off the source path` and `launcher: the program's own directory is off the source path` — their FIND text no longer exists) and add the declared survivor in their place:
+2. Delete the two source-path mutations (`launcher: the shared body directory is off the source path` and `launcher: the program's own directory is off the source path` — their FIND text no longer exists). They live in the **placeholder pass** since Task 4's review relocated them there (pass 1's invocation lost the distinction when the harness includes went; the placeholder pass could still catch both, and did, with measured include-starvation signatures). Add the declared survivor in the first pass where the pair originally lived:
 ```cmake
 # The line these two retired mutations targeted is gone with the include
 # mechanism; what replaced it is deliberate narrowing, measured inert.
