@@ -3,11 +3,11 @@
 State machine generator in the manner of [[https://github.com/nodejs/llparse][llparse]].
 
 Byte Machine is a byte-oriented deterministic state-machine generator for Chez
-and Gambit Scheme. Machines are built with ordinary Scheme procedures into an
-immutable, inspectable source IR; a mandatory verifier gates every path to
-output; and an offline generator emits deterministic, portable Scheme. Generated
-parsers depend only on a small runtime library — never on the builder, verifier,
-compiler, or reference interpreter.
+Scheme. Machines are built with ordinary Scheme procedures into an immutable,
+inspectable source IR; a mandatory verifier gates every path to output; and an
+offline generator emits deterministic R6RS Scheme. Generated parsers depend only
+on a small runtime library — never on the builder, verifier, compiler, or
+reference interpreter.
 
 It is a library and source generator, not itself an HTTP parser. A separate
 project will use it to define and generate one.
@@ -21,21 +21,9 @@ architecture, and milestones.
 
 - CMake 3.26 or newer (only 4.3.3 has been exercised so far)
 - Chez Scheme 10.4.1 or newer, full system rather than Petite
-- Gambit 4.9.8 or newer
 
-Both version pins are floors recording what has actually been verified, not
-guesses at what would work; lowering one needs CI evidence from the older
-release.
-
-Byte Machine locates Gambit by finding =gsi= and deriving =gsc= from the same
-directory. It never searches for =gsc=: Ghostscript installs a binary of that
-name, and handed a Scheme file it prints its own banner rather than failing
-usefully. On a host with Ghostscript present, install Gambit and leave it
-unlinked.
-
-Gambit's native lanes invoke a C compiler whose name is fixed when Gambit itself
-was built — the Homebrew build hard-codes =gcc-16= — so that compiler must be on
-=PATH= for those lanes, independently of anything configured here.
+The Chez pin is a floor recording what has actually been verified, not a guess
+at what would work; lowering it needs CI evidence from the older release.
 
 ** Building and testing
 
@@ -47,9 +35,9 @@ make build
 make test
 #+end_src
 
-Other targets: =make doctor= reports the discovered toolchains and stops,
+Other targets: =make doctor= reports the discovered toolchain and stops,
 =make dev= builds and runs the harness selection (the build-layer
-specifications, the Chez and Gambit self-test lanes, and the Scheme mutation
+specifications, the Chez self-test lanes, and the Scheme mutation
 suite), =make test-all= runs the complete selection, =make prod= builds the
 release configuration, and =make clean= removes the build trees. =make help=
 lists them.
@@ -66,14 +54,10 @@ If discovery cannot find a runtime, point it at one explicitly:
 cmake --preset dev -DBYTE_MACHINE_CHEZ_EXECUTABLE=/absolute/path/to/scheme
 #+end_src
 
-#+begin_src bash
-cmake --preset dev -DBYTE_MACHINE_GAMBIT_EXECUTABLE=/absolute/path/to/gsi
-#+end_src
-
-Both =make dev= and =make test= launch real Chez and Gambit processes; neither
-is a CMake-only target. To work on the build layer alone, with no Scheme
-runtime installed, use the =no-scheme= preset instead, which configures and
-runs only the build-layer specifications:
+Both =make dev= and =make test= launch real Chez processes; neither is a
+CMake-only target. To work on the build layer alone, with no Scheme runtime
+installed, use the =no-scheme= preset instead, which configures and runs only
+the build-layer specifications:
 
 #+begin_src bash
 cmake --preset no-scheme && ctest --preset no-scheme

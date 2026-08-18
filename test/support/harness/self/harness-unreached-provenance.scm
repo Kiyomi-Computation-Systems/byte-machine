@@ -1,7 +1,7 @@
 ;;; A suite that was given a manifest and never verified it.
 ;;;
-;;; PORTABILITY: a shared body, included verbatim by each runtime's thin
-;;; wrapper. Common R6RS/R7RS subset only.
+;;; SHARED BODY: included verbatim by harness-unreached-provenance.chez.sps,
+;;; its sole owner wrapper (decisions 0002/0003). Plain R6RS.
 ;;;
 ;;; Every other body in this tree reaches harness-verify-provenance! through
 ;;; harness-begin. This one deliberately does not call harness-begin at all, so

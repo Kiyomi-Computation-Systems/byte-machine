@@ -2,29 +2,32 @@
 ;;;
 ;;; A run reports the digest of the bodies it executed so that a stale
 ;;; artifact, a copied backend-specific variant, or a basename collision is
-;;; detectable rather than merely unlikely. Chez and Gambit must report the
-;;; same value for the same text; that agreement is the claim, and everything
-;;; below is chosen to keep it from depending on anything unspecified.
+;;; detectable rather than merely unlikely. Every runtime must report the same
+;;; value for the same text; that agreement is the claim, and everything below
+;;; is chosen to keep it from depending on anything unspecified.
 ;;;
 ;;; This is a change detector, not a cryptographic digest. It is a polynomial
 ;;; rolling hash modulo the Mersenne prime 2^61-1. Do not use it for anything
 ;;; security relevant.
 ;;;
-;;; PORTABILITY CONTRACT
+;;; SHARED BODY CONTRACT
 ;;;
-;;; Included verbatim by both adapters, like harness-runner.scm. Only the
-;;; common R6RS/R7RS subset plus the adapter protocol. The arithmetic is
-;;; deliberately not bitwise: neither standard's base library guarantees
-;;; bitwise operations, and both guarantee exact integers of unbounded range,
-;;; so arithmetic is the portable choice. Intermediate products exceed 64 bits,
-;;; which is what makes exact bignums load-bearing rather than incidental.
+;;; Included verbatim by the Chez adapter, like harness-runner.scm, through the
+;;; same source-directories include -- plain R6RS plus the adapter protocol,
+;;; no library or include form of its own. The arithmetic is deliberately not
+;;; bitwise -- not because bitwise operations are unavailable (R6RS's `(rnrs)`
+;;; composite guarantees them the same as everything else the owner library
+;;; imports), but because the algorithm needs nothing beyond exact integers of
+;;; unbounded range, which plain R6RS also guarantees. Intermediate products
+;;; exceed 64 bits, which is what makes exact bignums load-bearing rather than
+;;; incidental.
 ;;;
 ;;; WHAT THIS CANNOT PROVE
 ;;;
 ;;; The manifest is declared, not observed. Scheme cannot portably report which
 ;;; files an `include` spliced in, so a matching fingerprint means the declared
-;;; text is unchanged and both runtimes read it identically -- not that the run
-;;; included exactly those files. See section 5.3 of the slice-5a design.
+;;; text is unchanged -- not that the run included exactly those files. See
+;;; section 5.3 of the slice-5a design.
 
 (define harness-fingerprint-modulus 2305843009213693951) ; 2^61 - 1
 (define harness-fingerprint-multiplier 1000003)
@@ -45,9 +48,9 @@
                         harness-fingerprint-modulus))))))
 
 ;; Fingerprints a file's exact bytes, read through adapter-file-bytes (binary
-;; on both runtimes -- see each adapter's definition) and folded through
+;; -- see the Chez adapter's definition) and folded through
 ;; harness-fingerprint-bytevector, so the same file fingerprints identically
-;; on both. The adapter-file-bytes dependency is structural, not stylistic:
+;; on every run. The adapter-file-bytes dependency is structural, not stylistic:
 ;; R6RS requires every free identifier in a library body to be bound, so this
 ;; procedure cannot be separated from whatever defines adapter-file-bytes
 ;; without failing Chez library construction immediately, whether or not it
@@ -68,12 +71,12 @@
                       harness-fingerprint-modulus)))))
 
 ;; Lowercase hex from an explicit digit table, never number->string with a
-;; radix. Measured 2026-08-17: Chez yields "FF" and Gambit yields "ff" for
-;; (number->string 255 16). Neither is wrong -- the standards do not fix the
-;; case -- so a radix conversion would make the one claim this file exists to
-;; establish depend on a detail these two runtimes already answer differently.
-;; Comparing case-insensitively later would be worse: it would hide exactly the
-;; class of divergence this file exists to expose.
+;; radix. Measured 2026-08-17: Chez yields "FF" for (number->string 255 16).
+;; That is not wrong -- the standards do not fix the case -- so a radix
+;; conversion would make the one claim this file exists to establish depend on
+;; a detail an implementation is free to answer differently. Comparing
+;; case-insensitively later would be worse: it would hide exactly the class of
+;; divergence this file exists to expose.
 (define harness-hex-digits "0123456789abcdef")
 
 (define (harness-fingerprint->string h)

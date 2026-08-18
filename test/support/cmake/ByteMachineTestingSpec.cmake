@@ -75,22 +75,15 @@ spec_check_equal("${b}" "chez" "backend")
 spec_check_equal("${m}" "source" "mode")
 
 # Every backend/mode pair the project actually has a lane for must parse. These
-# are the four lanes of the execution model, and a helper that rejected one
+# are the three lanes of the execution model, and a helper that rejected one
 # would silently delete that lane's coverage.
-foreach(pair "chez.source" "chez.aot" "gambit.o1" "gambit.aot" "cmake.direct")
+foreach(pair "chez.source" "chez.aot" "cmake.direct")
   byte_machine_test_name_parse("byte-machine.unit.graph.${pair}" l f b m)
 endforeach()
 
 # A multi-word feature with interior hyphens is fine; only the edges are barred.
-byte_machine_test_name_parse("byte-machine.differential.span-boundary.gambit.o1" l f b m)
+byte_machine_test_name_parse("byte-machine.differential.span-boundary.chez.aot" l f b m)
 spec_check_equal("${f}" "span-boundary" "hyphenated feature")
-
-# Gambit's interpreted lane. Without it the harness cannot run on Gambit at all
-# without a C toolchain.
-byte_machine_test_name_parse(
-  "byte-machine.harness.self.gambit.source" layer feature backend mode)
-spec_check_equal("${mode}" "source" "gambit accepts the source mode")
-spec_check_equal("${backend}" "gambit" "gambit source parses its backend")
 
 byte_machine_test_validate_labels(unit chez source)
 byte_machine_test_reserve_name("byte-machine.unit.unique-one.chez.source")

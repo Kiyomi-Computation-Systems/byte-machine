@@ -1,21 +1,23 @@
 ;;; Self-tests for the byte-machine private test runner.
 ;;;
-;;; PORTABILITY: shared body, common R6RS/R7RS subset only.
+;;; SHARED BODY: included verbatim by harness-self-tests.chez.sps, its sole
+;;; owner wrapper (decisions 0002/0003). Plain R6RS.
 ;;;
 ;;; Every deliberate failure below runs inside harness-probe, which gives it a
 ;;; fresh isolated result state and suppresses its output. Without that, a
 ;;; self-test that proves failures are recorded would itself fail the run, and
 ;;; the log would teach readers to ignore FAIL lines.
 ;;;
-;;; Every exported adapter name is referenced here. That is what makes running
-;;; this one body on both runtimes a parity proof rather than a coincidence:
-;;; a name in one adapter's export list and not the other is a load failure on
-;;; that runtime, not a silent gap (spec section 9.1).
+;;; Every exported adapter name is referenced here, so a name missing from the
+;;; adapter's export list is a load failure, not a silent gap (spec section
+;;; 9.1).
 
-;; Construct a bytevector from a length and a list of byte values. Written by
-;; hand because the two standards disagree about every convenient constructor:
-;; R7RS has (bytevector 97 98 99), R6RS has (u8-list->bytevector '(97 98 99)),
-;; and a shared body may name neither.
+;; Construct a bytevector from a length and a list of byte values, by hand
+;; rather than through u8-list->bytevector. Under the portability era this
+;; avoided a spelling only one of R6RS and R7RS defined; under R6RS alone,
+;; which is all that remains, u8-list->bytevector would do the same job just
+;; as well. Kept as written because nothing depends on changing it, not
+;; because anything still forbids the alternative.
 (define (harness-bytes length bytes)
   (let ((bv (make-bytevector length 0)))
     (let loop ((i 0) (rest bytes))
@@ -352,8 +354,7 @@
     (harness-case "the adapter reports this runtime"
       (lambda ()
         (check "the runtime names itself"
-               (or (string=? (adapter-runtime-name) "chez")
-                   (string=? (adapter-runtime-name) "gambit")))
+               (string=? (adapter-runtime-name) "chez"))
         (check "the version is bare and non-empty"
                (and (> (string-length (adapter-runtime-version)) 0)
                     (not (harness-string-contains? (adapter-runtime-version) "v"))))
@@ -376,7 +377,7 @@
         ;; mutation C4 against the registration's own mapping.
         (check "the mode is one the lane vocabulary defines"
                (harness-member? (adapter-execution-mode)
-                                (list "source" "aot" "o1")))))
+                                (list "source" "aot")))))
 
     ;; adapter-exit ends the process, so no assertion may call it. Naming it is
     ;; still load-bearing: the parity argument in spec section 9.1 rests on this
@@ -484,10 +485,10 @@
 
 ;; --- the content fingerprint ------------------------------------------------
 ;;
-;; Every value below was measured on Chez 10.4.1 and Gambit 4.9.8 on
-;; 2026-08-17 and was identical on both. They are literals rather than
-;; recomputations because a test that recomputes the thing under test with the
-;; thing under test asserts only that it is deterministic.
+;; Every value below was measured on Chez 10.4.1 on 2026-08-17. They are
+;; literals rather than recomputations because a test that recomputes the
+;; thing under test with the thing under test asserts only that it is
+;; deterministic.
 
 (harness-group "fingerprint"
   (lambda ()
@@ -531,10 +532,10 @@
                      (harness-fingerprint->string (harness-fingerprint-combine '(2 1)))
                      "3cabbf7df0b874f")))
 
-    ;; Chez renders FF where Gambit renders ff for (number->string 255 16), so
-    ;; the rendering cannot go through a radix conversion. This case is what
-    ;; notices if someone ever changes it back.
-    (harness-case "hex digits are lowercase on every runtime"
+    ;; Chez renders FF, not ff, for (number->string 255 16), so the rendering
+    ;; cannot go through a radix conversion. This case is what notices if
+    ;; someone ever changes it back.
+    (harness-case "hex digits render lowercase"
       (lambda ()
         (check-equal "255" (harness-fingerprint->string 255) "ff")
         (check-equal "3735928559" (harness-fingerprint->string 3735928559) "deadbeef")
@@ -552,7 +553,7 @@
           (check-equal "first byte is b" (bytevector-u8-ref bv 0) 98)
           (check-equal "last byte is LF" (bytevector-u8-ref bv 12) 10))))
 
-    (harness-case "both runtimes fingerprint the same file identically"
+    (harness-case "harness-fingerprint-file matches the sample's recorded fingerprint"
       (lambda ()
         (check-equal "sample"
                      (harness-fingerprint->string

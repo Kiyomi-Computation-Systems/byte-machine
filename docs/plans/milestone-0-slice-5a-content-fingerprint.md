@@ -8,6 +8,22 @@ Previous slice: [`milestone-0-slice-4-cross-library-identity.md`](./milestone-0-
 Scope: **the provenance instrument, on the source lanes that already exist.** No compiled lane. Chez
 AOT is slice 5b; Gambit `.o1` and `-exe -nopreload` are slice 5c.
 
+> **Amended 2026-08-18 by [decision 0005](../decisions/0005-chez-only.md): Gambit
+> and R7RS leave the project contract.** This document is a record and keeps all
+> of its Gambit content — it was true when taken, and a record edited to agree
+> with a later decision stops being evidence of anything. What changed *after*
+> it: **§6.1's cross-runtime carrier is gone.** Claim 2 ("Chez and Gambit report
+> the same string for the same bodies") had its cross-runtime half retired by
+> decision 0005, and nothing replaces it; a two-lane agreement between
+> `chez.source` and `chez.aot` is the weaker statement slice 5b owns under its
+> own name. The **scope line above's Gambit `.o1` and `-exe -nopreload`
+> references describe cancelled slice 5c.** Everything else here stands as run:
+> the instrument, claims 1 and 3, and the algorithm and its mutations are
+> Chez-internal and unchanged. `test/support/launchers/fingerprint-manifest.ss`
+> still points readers at §6.1 for what a single-runtime comparison does and does
+> not prove; that pointer is accurate for the surviving half of the claim. See
+> [chez-only-simplification.md](./chez-only-simplification.md).
+
 ## 1. What this slice must prove
 
 The milestone plan states work-order item 5 as: *all four lanes green over the same shared body,

@@ -1,10 +1,9 @@
 # Specification for cmake/ByteMachineSchemeLane.cmake.
 #
 # A lane's command line is where a source lane quietly stops being a source
-# lane. Chez needs its object-guard pair to make a compiled object unloadable,
-# and Gambit needs -f so a developer's .gambini cannot change a test result.
-# Both are invisible when they are missing: the lane still runs and still
-# passes, having proved something other than what it claims.
+# lane. Chez needs its object-guard pair to make a compiled object unloadable.
+# That is invisible when it is missing: the lane still runs and still passes,
+# having proved something other than what it claims.
 
 cmake_minimum_required(VERSION 3.26)
 
@@ -80,23 +79,21 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
       PROGRAM "${SPEC_SELF}"
       SHARED_BODIES "${SPEC_SELF}"
       TIMEOUT 10)
-  elseif(c STREQUAL "lane-rejects-relative-gambit-root")
-    set(BYTE_MACHINE_GAMBIT_EXECUTABLE "/opt/gsi")
-    set(BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT "h/gambit")
-    set(BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT "/s/gambit")
+  elseif(c STREQUAL "lane-rejects-unknown-mode")
+    # The registrar never compares BACKEND against the NAME's own backend
+    # segment: byte_machine_test_name_parse supplies only lane_mode, and
+    # BACKEND routes byte_machine_scheme_lane_command directly (see that call
+    # in ByteMachineSchemeLane.cmake). A name whose backend segment is cmake
+    # -- so byte_machine_test_name_parse validates "direct" against cmake's
+    # own mode vocabulary and accepts it -- paired with BACKEND chez reaches
+    # the chez branch carrying a mode (direct) it does not build a command
+    # for: unknown-mode, not unknown-backend, and reachable only through the
+    # full registrar this way -- byte_machine_scheme_lane_command's own
+    # unknown-mode case is already covered directly, without a registrar.
+    set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
     byte_machine_add_scheme_lane(
-      NAME byte-machine.harness.example.gambit.source
-      BACKEND gambit
-      PROGRAM "${SPEC_SELF}"
-      SHARED_BODIES "${SPEC_SELF}"
-      TIMEOUT 10)
-  elseif(c STREQUAL "lane-rejects-comma-in-gambit-root")
-    set(BYTE_MACHINE_GAMBIT_EXECUTABLE "/opt/gsi")
-    set(BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT "/h/gam,bit")
-    set(BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT "/s/gambit")
-    byte_machine_add_scheme_lane(
-      NAME byte-machine.harness.example.gambit.source
-      BACKEND gambit
+      NAME byte-machine.harness.example.cmake.direct
+      BACKEND chez
       PROGRAM "${SPEC_SELF}"
       SHARED_BODIES "${SPEC_SELF}"
       TIMEOUT 10)
@@ -112,11 +109,9 @@ set(BYTE_MACHINE_CHEZ_OBJECT_ROOT "/objects")
 set(BYTE_MACHINE_HARNESS_CHEZ_AOT_LAUNCHER "/launchers/chez-aot.ss")
 set(BYTE_MACHINE_HARNESS_CHEZ_COMPILE_LAUNCHER "/launchers/chez-compile.ss")
 set(BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT "/h/chez")
-set(BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT "/h/gambit")
 set(BYTE_MACHINE_HARNESS_SHARED_DIR "/h/shared")
 set(BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR "/b/guard")
 set(BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT "/s/chez")
-set(BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT "/s/gambit")
 set(BYTE_MACHINE_SRC_COMMON_DIR "/s/common/byte-machine")
 
 # --- Chez ------------------------------------------------------------------
@@ -138,101 +133,17 @@ math(EXPR guard_value_index "${guard_index} + 1")
 list(GET command "${guard_value_index}" guard)
 spec_check_equal("${guard}" "/b/guard" "chez lane passes the object guard directory")
 
-# --- Gambit ----------------------------------------------------------------
-
-set(BYTE_MACHINE_GAMBIT_EXECUTABLE "/opt/gsi")
-byte_machine_scheme_lane_command(byte-machine.harness.example.gambit.source
-  gambit source "/h/self/p.gambit.scm" command measured status message)
-spec_check_equal("${status}" "ok" "gambit lane classifies")
-spec_check_equal("${command}"
-  "/opt/gsi;-:search=/h/gambit,search=/s/gambit;-f;/h/self/p.gambit.scm"
-  "gambit lane command line")
-
-# Gambit requires its -: runtime options to be the very first argument, and -f
-# must be present or a developer's .gambini can change what a test proves.
-list(GET command 1 first_option)
-spec_check_equal("${first_option}" "-:search=/h/gambit,search=/s/gambit"
-  "gambit runtime option comes first")
-list(FIND command "-f" f_index)
-spec_check_equal("${f_index}" "2" "gambit lane skips initialisation files")
-
-# --- The Gambit search list ------------------------------------------------
-#
-# Gambit's -: options are comma-separated, so a search root containing a comma
-# does not produce a wrong path: gsi prints its runtime-options usage banner and
-# runs no Scheme at all, naming nothing this project owns. Measured on
-# 2026-08-16; see docs/plans/milestone-0-slice-3-shared-body.md section 2.
-byte_machine_scheme_lane_gambit_search(option status message "/a" "/b")
-spec_check_equal("${status}" "ok" "two roots are accepted")
-spec_check_equal("${option}" "-:search=/a,search=/b" "two roots join with a comma")
-
-byte_machine_scheme_lane_gambit_search(option status message "/a")
-spec_check_equal("${option}" "-:search=/a" "one root needs no separator")
-
-byte_machine_scheme_lane_gambit_search(option status message "/a" "/b,c")
-spec_check_equal("${status}" "comma-in-path" "a comma in a root is rejected")
-spec_check_equal("${option}" "" "a rejected search list yields no option")
-spec_check_equal("${message}"
-  "a Gambit search root must not contain a comma, but '/b,c' does. Gambit's -: options are comma-separated, so gsi would print its usage banner and run no Scheme at all."
-  "comma rejection message")
-
-# A relative root is refused for a different reason than a comma, and needs its
-# own status: gsi resolves it against its own working directory, so the lane
-# would find its libraries or not depending on where CTest happened to launch
-# it -- which is the one thing the working-directory matrix exists to rule out.
-# Nothing else can see this: ByteMachineSchemeLaneSpec sets its own fixture
-# paths, so it cannot notice test/CMakeLists.txt handing over a relative one.
-byte_machine_scheme_lane_gambit_search(option status message "/a" "relative/root")
-spec_check_equal("${status}" "relative-path" "a relative root is rejected")
-spec_check_equal("${option}" "" "a rejected search list yields no option")
-spec_check_equal("${message}"
-  "a Gambit search root must be absolute, but 'relative/root' is not. Gambit resolves a relative root against its own working directory, so the lane would find its libraries or not depending on where it was launched."
-  "relative root message")
-
-# A root that is both relative and contains a comma must report
-# comma-in-path, not relative-path: the comma check runs first, and that is
-# the useful precedence, because a comma malforms the -: option list and
-# silences gsi -- and therefore every Gambit lane at once -- while a relative
-# root only misleads the one lane that carries it. Nothing else in this
-# specification can see the two checks swapped: every other case here
-# supplies a root with exactly one defect, so either order produces the same
-# status.
-byte_machine_scheme_lane_gambit_search(option status message "/a" "rel,ative/root")
-spec_check_equal("${status}" "comma-in-path"
-  "a root with both defects is rejected for the comma, not the relative path")
-
-# Seeded with sentinel values no correct call could produce. An assertion
-# against an unseeded variable is satisfied by a function that does nothing
-# at all: CMake variables persist across calls, so an unseeded "message"
-# could already read "" by coincidence, and a deleted up-front clear would go
-# unnoticed. The function never writes its message on the success path -- the
-# up-front clear is the only thing that empties it there -- so a seeded
-# sentinel surviving to this assertion is exactly the defect.
-set(option "sentinel-option")
-set(message "sentinel-message")
-byte_machine_scheme_lane_gambit_search(option status message "/a")
-spec_check_equal("${message}" "" "an accepted search list clears the message")
-
-# Same seeding, on the rejection path. The function never writes the option
-# once it has decided to reject, so again the up-front clear is the only
-# thing that empties it, and a seeded sentinel surviving would be the same
-# defect on the other output.
-set(option "sentinel-option")
-set(message "sentinel-message")
-byte_machine_scheme_lane_gambit_search(option status message "/a" "/b,c")
-spec_check_equal("${option}" "" "a rejected search list clears the option")
-
 # --- Rejections ------------------------------------------------------------
 
 # Diagnostics carry a stable prefix precisely so a specification can assert the
-# exact wording, not merely a nonzero status. Asserted here for all three
-# messages the functional core can produce: a typo, a dropped interpolation, or
-# a garbled string would otherwise pass every existing assertion undetected.
+# exact wording, not merely a nonzero status. Asserted here for both messages
+# the functional core can produce: a typo or a garbled string would otherwise
+# pass every existing assertion undetected.
 byte_machine_scheme_lane_command(byte-machine.harness.example.guile.source
   guile source "/h/self/p.scm" command measured status message)
 spec_check_equal("${status}" "unknown-backend" "an unknown backend is rejected")
 spec_check_equal("${message}"
-  "'guile' is not a Scheme lane backend. Known backends: chez gambit."
+  "'guile' is not a Scheme lane backend. Known backends: chez."
   "unknown backend message")
 
 set(BYTE_MACHINE_CHEZ_EXECUTABLE "")
@@ -258,30 +169,6 @@ spec_check_equal("${message}"
   "no Chez was discovered, so the chez aot lane for '/h/self/p.chez.sps' is not registered."
   "chez lane no-runtime message names the aot mode, not a hardcoded source")
 
-set(BYTE_MACHINE_GAMBIT_EXECUTABLE "")
-byte_machine_scheme_lane_command(byte-machine.harness.example.gambit.source
-  gambit source "/h/self/p.gambit.scm" command measured status message)
-spec_check_equal("${status}" "no-runtime" "a gambit lane without a gambit is not registered")
-spec_check_equal("${message}"
-  "no Gambit was discovered, so the gambit source lane for '/h/self/p.gambit.scm' is not registered."
-  "gambit lane no-runtime message")
-
-# The Gambit half of the same hazard the chez aot case above closes. Both
-# no-runtime messages interpolate ${mode}, and every other assertion over
-# either one is written against a source lane -- so freezing the literal
-# `source` back into the Gambit branch would pass all of them. This is the one
-# assertion that would not. Registered against `o1` rather than `aot` because
-# o1 is Gambit's own mode and the one slice 5c reaches first; the message is
-# built the same way for both.
-set(BYTE_MACHINE_GAMBIT_EXECUTABLE "")
-byte_machine_scheme_lane_command(byte-machine.harness.example.gambit.o1
-  gambit o1 "/h/self/p.gambit.scm" command measured status message)
-spec_check_equal("${status}" "no-runtime" "a gambit o1 lane without a gambit is not registered")
-spec_check_equal("${measured}" "" "a rejected lane measures nothing")
-spec_check_equal("${message}"
-  "no Gambit was discovered, so the gambit o1 lane for '/h/self/p.gambit.scm' is not registered."
-  "gambit lane no-runtime message names the o1 mode, not a hardcoded source")
-
 # --- Declared bodies versus measured bodies --------------------------------
 #
 # A source lane reads the repository sources, so the two lists coincide and
@@ -306,25 +193,6 @@ spec_check_equal("${measured}" "" "a rejected lane measures nothing")
 spec_check_equal("${message}"
   "'unknown-mode-name' is not an execution mode this lane module can build a command for. Known modes: source aot."
   "unknown mode message")
-
-# --- Gambit's narrower mode vocabulary --------------------------------------
-#
-# .gambit.aot and .gambit.o1 are legal lane names -- BYTE_MACHINE_TEST_MODES_gambit
-# in ByteMachineTesting.cmake accepts both -- so both reach this branch, even
-# though this module can only build a Gambit command for source today. Tested
-# with mode aot specifically, because that is the self-refuting case for the
-# message the Chez and Gambit branches used to share: it named its own
-# rejected mode among the "known" modes it listed. The Gambit branch's message
-# is backend-scoped now, so it cannot make that claim.
-set(BYTE_MACHINE_GAMBIT_EXECUTABLE "/opt/gsi")
-byte_machine_scheme_lane_command(byte-machine.harness.example.gambit.aot
-  gambit aot "/h/self/p.gambit.scm" command measured status message)
-spec_check_equal("${status}" "unknown-mode" "gambit rejects a mode it cannot build yet")
-spec_check_equal("${command}" "" "a rejected lane returns no command")
-spec_check_equal("${measured}" "" "a rejected lane measures nothing")
-spec_check_equal("${message}"
-  "'aot' is not an execution mode the gambit backend of this lane module can build a command for yet. Known modes: source. Gambit's compiled modes (o1, aot) arrive in a later slice."
-  "gambit's unknown-mode message names only what gambit can build today, not the mode it just rejected")
 
 # --- Registration (byte_machine_add_scheme_lane) ----------------------------
 #
@@ -589,7 +457,6 @@ spec_expect_all_rejected("${SPEC_SELF}"
   "lane-requires-existing-program|names a program that does not exist"
   "lane-rejects-missing-shared-body|names a shared body that does not exist"
   "lane-rejects-unknown-backend|is not a Scheme lane backend"
-  "lane-rejects-comma-in-gambit-root|must not contain a comma"
-  "lane-rejects-relative-gambit-root|must be absolute")
+  "lane-rejects-unknown-mode|is not an execution mode this lane module can build a command for")
 
 spec_finish("ByteMachineSchemeLane")

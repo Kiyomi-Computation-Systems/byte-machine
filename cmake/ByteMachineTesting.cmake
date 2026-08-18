@@ -38,23 +38,19 @@ set(BYTE_MACHINE_TEST_LAYERS
   example       # the documented end-to-end examples
   expected-red) # tests that must fail, proving the harness can fail
 
-set(BYTE_MACHINE_TEST_BACKENDS chez gambit cmake)
+set(BYTE_MACHINE_TEST_BACKENDS chez cmake)
 
+# o1 outlives the backend that owned it: no BYTE_MACHINE_TEST_MODES_<backend>
+# below claims it, so a lane naming it for a backend that does not is caught
+# as an incompatible backend/mode pairing rather than an unrecognized mode --
+# the distinction ByteMachineTestingSpec.cmake's chez.o1 case exists to prove,
+# and removing the token here would collapse it into the wrong error.
 set(BYTE_MACHINE_TEST_MODES source aot o1 direct)
 
 # A backend may only be registered in a mode it can actually execute. Chez has
-# source and ahead-of-time lanes; Gambit has a developer .o1 lane and a
-# production `-exe -nopreload` lane; the CMake-layer specifications run directly
+# source and ahead-of-time lanes; the CMake-layer specifications run directly
 # under `cmake -P` and have no Scheme runtime at all.
 set(BYTE_MACHINE_TEST_MODES_chez source aot)
-# Gambit's `source` lane is `gsi` interpreting the .sld directly. protium has no
-# equivalent because its lanes must link a native shim; byte-machine has no
-# native code of its own, and both of Gambit's compiled modes shell out to a C
-# compiler whose name was fixed when Gambit was built. Without this mode the
-# first slice that runs Scheme could not run on Gambit at all without that
-# toolchain, while Chez source needs nothing -- and parent plan section 24.2
-# asks for a source suite that stays runnable without native compilation.
-set(BYTE_MACHINE_TEST_MODES_gambit source o1 aot)
 set(BYTE_MACHINE_TEST_MODES_cmake direct)
 
 # --- Functional core -------------------------------------------------------

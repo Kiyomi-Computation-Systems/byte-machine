@@ -1,16 +1,19 @@
 ;;; byte-machine private portable test runner.
 ;;;
-;;; PORTABILITY CONTRACT
+;;; SHARED BODY CONTRACT
 ;;;
-;;; This file is included verbatim by both the R6RS and the R7RS wrapper. It may
-;;; use only identifiers common to both standards, and must never name Chez or
-;;; Gambit. Everything a runtime does differently arrives through the adapter
-;;; protocol, documented in
+;;; Included verbatim by the Chez adapter's wrapper (harness.sls), its sole
+;;; owner library (decisions 0002/0003). No library or include form of its
+;;; own, and must never name a specific runtime -- everything the adapter does
+;;; differently arrives through the adapter protocol, documented in
 ;;; docs/plans/milestone-0-slice-2-test-harness.md section 6.
 ;;;
-;;; Notable exclusions, each of which differs between the two standards:
-;;; define-record-type, string ports, error, condition accessors, hash tables,
-;;; and sorting. Records are plain lists behind accessors for the same reason.
+;;; Plain R6RS. define-record-type, string ports, error, condition accessors,
+;;; hash tables, and sorting are all available under R6RS alone, and nothing
+;;; here forbids them; this body still avoids them and keeps records as plain
+;;; lists behind accessors because nothing has needed to change since the
+;;; portability era, not because a rule still requires it (AGENTS.md; decision
+;;; 0005).
 ;;;
 ;;; PROCESS STATUS (spec section 5.2)
 ;;;

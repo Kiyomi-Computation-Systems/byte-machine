@@ -260,6 +260,53 @@ what this milestone delivers.
   reporting 37/37 regardless, with the mutation count silently dropping
   underneath that number and nothing noticing; this is what would have
   caught it.
+- `ByteMachineExpectExit`'s comments and specification illustrated the
+  out-of-vocabulary case with Gambit's own missing-file exit number (70); no
+  lane ever declared 70 as an expected exit, and the declared vocabulary was
+  and remains 0/1/2/3. Re-measured with Gambit gone: Chez 10.4.1 exits 255 for
+  a `--script` naming a file that does not exist, and the illustration now
+  uses that measured value.
+
+### Removed
+
+- Gambit and R7RS leave the project contract: byte-machine now targets Chez
+  Scheme and R6RS only. The one consumer that required a second runtime,
+  protium, is being replaced by a Chez-only libuv library, so nothing
+  remaining needs Gambit. See
+  [decision 0005](docs/decisions/0005-chez-only.md) and
+  [the removal plan](docs/plans/chez-only-simplification.md). Milestone 0
+  slice 5c, which existed only to add Gambit's two compiled modes, is
+  cancelled; deliverable D5 closes at two lanes, `chez.source` and
+  `chez.aot`.
+- The portability guard's pairing rule — every wrapped body twinned `.scm` /
+  `.gambit.scm` — goes with nothing left to pair. Its basename-uniqueness
+  rule stays in force: the Chez `include`/`source-directories` mechanism
+  still needs it, until the follow-up slice below retires that mechanism
+  too.
+- All 11 Gambit execution lanes and their test halves: the `.gambit.scm`
+  drivers, the `.sld` harness adapter and its wrappers, `src/gambit/`, and
+  `test/gambit/`. The Scheme mutation suite's with/without-Gambit counting
+  delta collapses into a single declared set.
+- The Gambit toolchain layer: the discovery module, the probe script, their
+  specification and spec lane, and every build-frontend reference to
+  Gambit — the `BYTE_MACHINE_REQUIRE_GAMBIT` option, presets, `Makefile`
+  text, and backend vocabulary.
+
+  Net across the cut, measured on this branch: registered lanes drop from
+  49 to 37; the CMake-layer mutation suite drops from 97 to 75, net of one
+  mutation restored with a new registrar-path witness and one added over
+  the unknown-mode message — a pre-existing gap closed during review, not
+  Gambit fallout; the Scheme-layer mutation suite drops from 35 passes/83
+  mutations to 29 passes/65 mutations; the `no-scheme` selection drops from
+  10 to 9.
+
+  What stays: [decision 0002](docs/decisions/0002-shared-body-include-mechanism.md)
+  and [decision 0003](docs/decisions/0003-cross-library-identity.md) — the
+  shared-body `include` mechanism and its one-owner rule — remain in force,
+  unchanged by this cut. The follow-up slice named in
+  [the removal plan](docs/plans/chez-only-simplification.md)'s §6, not yet
+  designed, collapses that indirection into inline R6RS libraries; until it
+  lands, both decisions govern exactly as before.
 
 ### Fixed
 

@@ -22,13 +22,12 @@ CMakeUserPresets.json
 /test-run/
 
 # Compiled Scheme objects must never appear in a source directory. Chez's
-# compile-library and compile-program both emit .so, and Gambit emits .o1 and
-# intermediate .c; a stale object found in tree is a correctness hazard, not
-# just a commit hazard, because a lane could load it instead of the body the
-# build staged.
+# compile-library and compile-program emit .so; declining generate-wpo-files
+# (chez-compile.ss) keeps .wpo out of the picture today, but the pattern
+# stays in case that is ever revisited. A stale object found in tree is a
+# correctness hazard, not just a commit hazard, because a lane could load it
+# instead of the body the build staged.
 *.so
-*.o1
-*.o
 *.wpo
 
 # Editor and platform noise

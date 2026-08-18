@@ -238,10 +238,9 @@ endfunction()
 # byte_machine_mutation_reset()
 #
 # Discard the declared mutations so a second set can run under a different
-# verify command in the same script. Used by the Scheme suite, which verifies
-# the shared runner on one runtime but must verify each adapter's export list on
-# its own runtime -- a Chez lane cannot notice a name missing from the Gambit
-# library.
+# verify command in the same script. Used by the Scheme suite, which mutates
+# several different files in one pass and must start a fresh batch each time
+# the file being mutated -- and the specification meant to catch it -- changes.
 function(byte_machine_mutation_reset)
   set(_bm_mutation_count 0 PARENT_SCOPE)
 endfunction()
@@ -262,10 +261,10 @@ function(byte_machine_mutation_run source_root stage_dir)
   # Both this counter and _bm_mutation_count are written with PARENT_SCOPE,
   # which reaches only the immediate caller -- and different passes call from
   # different scopes: bare script scope for a simple pass, a helper function's
-  # own scope for a repeated one (byte_machine_slice3_launcher_pass and
-  # byte_machine_slice3_body_pass, for instance). A plain variable would not
-  # survive that; a global property has no scope to lose. The caller reads the
-  # total back with byte_machine_mutation_totals once every pass has run.
+  # own scope for a repeated one (byte_machine_slice3_launcher_pass, for
+  # instance, called once per launcher parse decision). A plain variable would
+  # not survive that; a global property has no scope to lose. The caller reads
+  # the total back with byte_machine_mutation_totals once every pass has run.
   get_property(_bm_total_passes GLOBAL PROPERTY BYTE_MACHINE_MUTATION_TOTAL_PASSES)
   if(NOT _bm_total_passes)
     set(_bm_total_passes 0)

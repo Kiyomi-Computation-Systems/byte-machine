@@ -1,7 +1,7 @@
 ;;; Bootstrap verification of the runner's primitives.
 ;;;
-;;; PORTABILITY: a shared body, included verbatim by each runtime's thin
-;;; wrapper. Common R6RS/R7RS subset only.
+;;; SHARED BODY: included verbatim by harness-bootstrap.chez.sps, its sole
+;;; owner wrapper (decisions 0002/0003). Plain R6RS.
 ;;;
 ;;; The runner cannot be the only witness to its own correctness, so this
 ;;; program judges it with raw conditionals and its own counter. It uses no
@@ -105,9 +105,8 @@
 ;; Every adapter procedure is called, so a name missing from one runtime's
 ;; export list is a load failure on that runtime rather than a silent gap.
 
-(bootstrap-assert "adapter: runtime name is one of the two"
-                  (or (string=? (adapter-runtime-name) "chez")
-                      (string=? (adapter-runtime-name) "gambit")))
+(bootstrap-assert "adapter: runtime name is chez"
+                  (string=? (adapter-runtime-name) "chez"))
 (bootstrap-assert "adapter: version is non-empty"
                   (> (string-length (adapter-runtime-version)) 0))
 (bootstrap-assert "adapter: machine type is non-empty"
@@ -118,7 +117,7 @@
                   (not (string=? (adapter-architecture) "unknown")))
 (bootstrap-assert "adapter: execution mode is one the lane vocabulary defines"
                   (harness-member? (adapter-execution-mode)
-                                   (list "source" "aot" "o1")))
+                                   (list "source" "aot")))
 (bootstrap-assert "adapter: an unset variable reads as false"
                   (not (adapter-environment-variable "BYTE_MACHINE_NOT_SET_ANYWHERE")))
 (bootstrap-assert "adapter: value->string writes readably"

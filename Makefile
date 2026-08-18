@@ -21,7 +21,7 @@ all: build
 
 help:
 	@echo "byte-machine make targets:"
-	@echo "  doctor    report the discovered Chez and Gambit toolchains, then stop"
+	@echo "  doctor    report the discovered Chez toolchain, then stop"
 	@echo "  build     configure and build the development preset"
 	@echo "  dev       build, then run the harness and build-layer self-tests"
 	@echo "  test      build, then run the pull-request selection"
@@ -31,7 +31,6 @@ help:
 	@echo ""
 	@echo "If discovery cannot find a runtime, point it at one explicitly:"
 	@echo "  cmake --preset dev -DBYTE_MACHINE_CHEZ_EXECUTABLE=/absolute/path/to/scheme"
-	@echo "  cmake --preset dev -DBYTE_MACHINE_GAMBIT_EXECUTABLE=/absolute/path/to/gsi"
 
 # Configure is where discovery runs and where every toolchain diagnostic is
 # emitted, so 'doctor' is just a configure whose output is the point.

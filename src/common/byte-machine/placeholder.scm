@@ -1,14 +1,13 @@
 ;;; Placeholder body for the Milestone 0 portability proof.
 ;;;
-;;; PORTABILITY: shared body, common R6RS/R7RS subset only. No library form, no
-;;; include, no runtime-specific identifier. Included by exactly one owner
-;;; library per runtime, one such library living in each runtime's own source
-;;; tree.
+;;; SHARED BODY: no library form, no include, no runtime-specific identifier.
+;;; Included by exactly one owner library,
+;;; src/chez/byte-machine/placeholder.sls (decisions 0002/0003).
 ;;;
 ;;; This carries no byte-machine semantics and is deleted in Milestone 1
-;;; (milestone-0-portability-spike.md, decision D4). It exists to prove that one
-;;; body loads through both wrappers, and to give slice 4 a value whose identity
-;;; can be compared across a library boundary.
+;;; (milestone-0-portability-spike.md, decision D4). It exists to prove that
+;;; the include mechanism loads a body through its owner wrapper, and to give
+;;; slice 4 a value whose identity can be compared across a library boundary.
 ;;;
 ;;; THE TAG AND THE MARKER ARE FRESHLY ALLOCATED, NEVER SYMBOLS
 ;;;
@@ -31,7 +30,7 @@
   (vector placeholder-tag value))
 
 ;; Three decisions, deliberately not folded into one: each is broken by its own
-;; mutation in SchemeMutationSuite.cmake, on each runtime.
+;; mutation in SchemeMutationSuite.cmake.
 (define (placeholder? x)
   (and (vector? x)
        (= (vector-length x) 2)
