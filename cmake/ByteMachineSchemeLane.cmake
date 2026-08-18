@@ -109,7 +109,6 @@ function(byte_machine_scheme_lane_command name backend mode program
         "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
         "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
         "--library-root" "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}"
-        "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
         "--source-dir" "${BYTE_MACHINE_SRC_COMMON_DIR}"
         "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
         "--program" "${program}"

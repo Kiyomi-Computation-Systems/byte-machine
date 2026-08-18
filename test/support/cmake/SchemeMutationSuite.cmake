@@ -177,13 +177,13 @@ set(BYTE_MACHINE_MUTATION_STAGE_DIRS
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
 
-set(RUNNER test/support/harness/shared/harness-runner.scm)
-set(CHEZ_ADAPTER test/support/harness/chez/byte-machine/test/harness.sls)
+set(RUNNER test/support/harness/byte-machine/test/harness.sls)
+set(CHEZ_ADAPTER test/support/harness/byte-machine/test/harness.sls)
 set(LAUNCHER test/support/launchers/chez-source.ss)
 
 # --- Assertions ------------------------------------------------------------
@@ -389,23 +389,38 @@ byte_machine_mutation(
 
 # --- The Chez launcher's source path ---------------------------------------
 #
-# Both entries are load-bearing and neither is visible in a passing run. The
-# shared directory is how the library resolves the runner body it includes by
-# bare filename; the program's own directory is how a wrapper resolves the body
-# beside it. Dropping either leaves the self-tests lane unable to load at all,
-# which is why these two belong to this pass rather than to one of the
-# exact-status passes below, where a refusal is the passing outcome.
+# Both halves of the append used to be load-bearing and invisible in a passing
+# run: the shared directory was how the library resolved the runner body it
+# included by bare filename, and the program's own directory was how a wrapper
+# resolved the body beside it -- two different directories, so dropping either
+# starved a real include.
+#
+# Task 4 of the include collapse (harness.sls no longer includes anything) and
+# this suite's own --source-dir substitution (shared/ -> self/, since shared/
+# is gone) together collapsed that distinction for this specific invocation:
+# --source-dir is now "${STAGE_DIR}/test/support/harness/self", byte-for-byte
+# the same string as (path-directory program) for harness-self-tests.chez.sps,
+# which lives in that same directory. Both mutations below are MEASURED
+# survivors as a result -- each half of the append still supplies that one
+# directory on its own, so dropping either loses nothing this invocation
+# needed. Kept here, rather than deleted, because --source-dir is still a
+# required flag until Task 8: the decision that a *missing* --source-dir is
+# refused is witnessed separately, by the required-flags mutation below.
 byte_machine_mutation(
   FILE ${LAUNCHER} SPEC harness-self-tests.chez.sps
   LABEL "launcher: the shared body directory is off the source path"
   FIND [[(source-directories (append source-dirs (list (path-directory program))))]]
-  REPLACE [[(source-directories (list (path-directory program)))]])
+  REPLACE [[(source-directories (list (path-directory program)))]]
+  EXPECT_SURVIVES
+    "source-dirs (from --source-dir) and (path-directory program) both resolve to \"${STAGE_DIR}/test/support/harness/self\" for this invocation, so dropping source-dirs from the append leaves (path-directory program) still supplying the one directory this lane's own include (of harness-self-tests.scm) needs; harness.sls itself no longer includes anything for source-dirs to have been resolving in the first place")
 
 byte_machine_mutation(
   FILE ${LAUNCHER} SPEC harness-self-tests.chez.sps
   LABEL "launcher: the program's own directory is off the source path"
   FIND [[(source-directories (append source-dirs (list (path-directory program))))]]
-  REPLACE [[(source-directories source-dirs)]])
+  REPLACE [[(source-directories source-dirs)]]
+  EXPECT_SURVIVES
+    "the same collapse as the survivor above, from the other side: source-dirs alone is already \"${STAGE_DIR}/test/support/harness/self\", byte-for-byte identical to (path-directory program) for this invocation, so dropping the program's own directory from the append loses nothing -- source-dirs already supplies it")
 
 # --- The Chez adapter's export list ----------------------------------------
 
@@ -417,20 +432,21 @@ byte_machine_mutation(
 
 # Not every export is load-bearing, and pretending otherwise would be the more
 # comfortable lie. harness-summary, harness-empty-selection-error, and
-# harness-failure-context are used only from inside harness-runner.scm, which is
-# spliced into each adapter's library body by `include`; an internal reference
-# resolves against the body, never through the export list. Dropping any of the
-# three therefore changes nothing any lane can observe -- the parity argument for
-# these names rests on the two export lists being read side by side, not on this
-# suite. Recorded here so the blind spot is asserted rather than remembered, and
-# so the day one of them acquires a caller outside the library, this line fails.
+# harness-failure-context are used only from the runner section of harness.sls
+# itself, inlined there by the include collapse (decision 0006); an internal
+# reference resolves against the body, never through the export list. Dropping
+# any of the three therefore changes nothing any lane can observe -- the parity
+# argument for these names rests on the two export lists being read side by
+# side, not on this suite. Recorded here so the blind spot is asserted rather
+# than remembered, and so the day one of them acquires a caller outside the
+# library, this line fails.
 byte_machine_mutation(
   FILE ${CHEZ_ADAPTER} SPEC harness-self-tests.chez.sps
   LABEL "chez adapter: an export used only inside the spliced body is dropped"
   FIND [[    harness-begin harness-finish harness-summary harness-exit-status]]
   REPLACE [[    harness-begin harness-finish harness-exit-status]]
   EXPECT_SURVIVES
-    "harness-summary, harness-empty-selection-error, and harness-failure-context are referenced only from harness-runner.scm, which `include` splices into the library body, so those references resolve inside the library whatever the export list says; no lane imports the three, so no lane can notice one going missing")
+    "harness-summary, harness-empty-selection-error, and harness-failure-context are referenced only from the runner section of harness.sls itself; an internal reference resolves inside the library whatever the export list says, so no lane imports the three and none can notice one going missing")
 
 # Load-bearing, unlike the three names in the survivor above: the fingerprint
 # library now reads files itself (byte-machine test fingerprint), so
@@ -466,8 +482,8 @@ byte_machine_mutation_reset()
 string(JOIN "|" EMPTY_SELECTION_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-empty-selection.chez.sps")
 
@@ -504,8 +520,8 @@ byte_machine_mutation_reset()
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
 
@@ -545,8 +561,8 @@ byte_machine_mutation_reset()
 string(JOIN "|" LAUNCHER_ABSENT_GUARD_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${ABSENT_GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
 
@@ -577,8 +593,8 @@ byte_machine_mutation_reset()
 string(JOIN "|" LAUNCHER_DIRTY_GUARD_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${DIRTY_GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
 
@@ -620,8 +636,8 @@ file(MAKE_DIRECTORY "${COMPILE_GUARD_DIR}")
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${COMPILE_GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
 
@@ -701,16 +717,12 @@ string(REPLACE "${POISON_FIND}" "${POISON_REPLACE}" POISON_MUTATED "${POISON_PRI
 # *not older* than the source beside it, and the object is written by the
 # compile below.
 #
-# There is a SECOND staleness input, and it is not local to this directory: the
-# library `include`s harness-runner.scm, which Chez re-resolves through
-# source-directories at LOAD time -- so the object is compared against the
-# STAGED runner as well. That copy keeps its source-tree mtime only because
-# byte_machine_mutation_stage uses file(COPY), which preserves timestamps. If
-# staging ever switches to a copy that stamps `now`, the staged runner becomes
-# newer than the object, Chez loads the source, and this mutation stops biting.
-# It will not do so silently -- the mutation carries no EXPECT_SURVIVES, so the
-# regression surfaces as UNCAUGHT and fails the suite -- but a reader changing
-# the staging should know why it matters.
+# The object is preferred only while it is not older than the .sls beside
+# it -- and, transitively, while its imported fingerprint library also
+# resolves to a non-stale object (the MEASURED note below). What died with
+# the include (decision 0006) is the include-era caveat this paragraph used
+# to carry: no STAGED file's mtime participates any more, because the
+# library no longer re-resolves harness-runner.scm at load time.
 file(WRITE "${POISON_ROOT}/byte-machine/test/harness.sls" "${POISON_PRISTINE}")
 file(WRITE "${POISON_SOURCE_DIR}/byte-machine/test/harness.sls" "${POISON_MUTATED}")
 
@@ -733,14 +745,14 @@ file(WRITE "${POISON_SOURCE_DIR}/byte-machine/test/harness.sls" "${POISON_MUTATE
 # object is never older than a library it depends on.
 #
 # One cross-copy invariant this relies on: the compile below resolves
-# fingerprint's import from ${SOURCE_ROOT}/test/support/harness/chez (the
+# fingerprint's import from ${SOURCE_ROOT}/test/support/harness (the
 # real source tree, via library-directories), while the verify run further
 # down resolves the same import from POISON_ROOT's own copy. Compiling
 # against one copy and running against another is safe here only because
 # the file(READ)/file(WRITE) pair immediately below makes the two
 # byte-identical by construction -- the same guarantee the pristine
 # harness.sls copy above already depends on.
-file(READ "${SOURCE_ROOT}/test/support/harness/chez/byte-machine/test/fingerprint.sls"
+file(READ "${SOURCE_ROOT}/test/support/harness/byte-machine/test/fingerprint.sls"
      POISON_FINGERPRINT_PRISTINE)
 file(WRITE "${POISON_ROOT}/byte-machine/test/fingerprint.sls" "${POISON_FINGERPRINT_PRISTINE}")
 
@@ -755,8 +767,7 @@ file(WRITE "${POISON_COMPILE_SCRIPT}"
 ;; Both halves of the poison are read from the source tree, not from the stage:
 ;; the two are byte-identical by construction, and reading the stage would make
 ;; this pass depend on the previous pass having left it in place.
-(source-directories (list \"${SOURCE_ROOT}/test/support/harness/shared\"))
-(library-directories (list (cons \"${SOURCE_ROOT}/test/support/harness/chez\" \"${POISON_GUARD_DIR}\")))
+(library-directories (list (cons \"${SOURCE_ROOT}/test/support/harness\" \"${POISON_GUARD_DIR}\")))
 ;; Compiled first, and into POISON_ROOT itself (not the guard): harness's own
 ;; object is trusted only if this one is also a real, reachable object by the
 ;; time harness compiles, per the transitive staleness note above.
@@ -795,7 +806,7 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
   "--library-root" "${POISON_ROOT}"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${POISON_GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
 
@@ -827,9 +838,9 @@ set(PLACEHOLDER_BODY src/common/byte-machine/placeholder.scm)
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
   "--library-root" "${STAGE_DIR}/src/chez"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--source-dir" "${STAGE_DIR}/src/common/byte-machine"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/common/placeholder-tests.chez.sps")
@@ -893,8 +904,8 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # so that malformed input is named rather than stumbled over.
 
 set(LAUNCHER_BASE_ARGS
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
 
@@ -959,7 +970,7 @@ byte_machine_slice3_launcher_pass(
   [[        ((not (member (car rest) known-flags))]]
   [[        (#f]]
   "bootstrap: failures=0"
-  "--librarie-root" "${STAGE_DIR}/test/support/harness/chez" ${LAUNCHER_BASE_ARGS})
+  "--librarie-root" "${STAGE_DIR}/test/support/harness" ${LAUNCHER_BASE_ARGS})
 
 byte_machine_slice3_launcher_pass(
   byte-machine.harness.launcher-missing-value.chez.source
@@ -1003,7 +1014,7 @@ byte_machine_slice3_launcher_pass(
   [[   (if (null? (flag-values flag))]]
   [[   (if #f]]
   [[library \(byte-machine test harness\) not found]]
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
 
@@ -1017,8 +1028,8 @@ byte_machine_slice3_launcher_pass(
   [[  (list "--program"]]
   [[  (list ;; --program removed by mutation]]
   "Exception in car"
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}")
 
 byte_machine_slice3_launcher_pass(
@@ -1027,8 +1038,8 @@ byte_machine_slice3_launcher_pass(
   [[        "--object-guard"]]
   [[        ;; --object-guard removed by mutation]]
   "Exception in car"
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
 
 byte_machine_slice3_launcher_pass(
@@ -1037,7 +1048,7 @@ byte_machine_slice3_launcher_pass(
   [[        "--library-root"]]
   [[        ;; --library-root removed by mutation]]
   [[library \(byte-machine test harness\) not found]]
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
 
@@ -1051,14 +1062,29 @@ byte_machine_slice3_launcher_pass(
 # below includes the trailing "))" so the REPLACE can close the list itself.
 # Whichever entry ends up last in required-flags after a reorder or a fifth
 # addition inherits this hazard and needs the same treatment.
+#
+# EXPECT_OUTPUT_MATCHES changed from "Exception in include" to
+# "bootstrap: failures=0" by Task 4 of the include collapse, and MEASURED
+# against both trees rather than guessed. Before Task 4, harness.sls itself
+# included harness-runner.scm, so an invocation missing --source-dir starved
+# THAT include and crashed before the program ever ran. Task 4 inlined the
+# runner into harness.sls, so the library no longer includes anything; the
+# only include left in this invocation is harness-bootstrap.chez.sps's own
+# "harness-bootstrap.scm", and the launcher always appends the program's own
+# directory to source-directories (see the launcher's comment on that line)
+# -- which is exactly where that file lives. So the mutant now runs the
+# bootstrap program to a clean, passing completion regardless of
+# --source-dir. required-flags' --source-dir entry is still witnessed: the
+# baseline still correctly refuses at EXIT 2 (BYTE_MACHINE_EXPECT_EXIT above),
+# and the mutant does not -- it is just a clean pass now, not a read error.
 byte_machine_slice3_launcher_pass(
   byte-machine.harness.launcher-no-source-dir.chez.source
   "launcher: --source-dir is dropped from required-flags"
   [[        "--source-dir"))]]
   [[        ;; --source-dir removed by mutation
         ))]]
-  "Exception in include"
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "bootstrap: failures=0"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
 
@@ -1150,9 +1176,9 @@ foreach(cwd_case empty decoy identical)
   set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
     "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
     "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-    "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+    "--library-root" "${STAGE_DIR}/test/support/harness"
     "--library-root" "${STAGE_DIR}/src/chez"
-    "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+    "--source-dir" "${STAGE_DIR}/test/support/harness/self"
     "--source-dir" "${STAGE_DIR}/src/common/byte-machine"
     "--object-guard" "${GUARD_DIR}"
     "--program" "${STAGE_DIR}/test/common/placeholder-tests.chez.sps")
@@ -1220,9 +1246,9 @@ set(CONSUMER_BODY src/common/byte-machine/placeholder-consumer.scm)
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
   "--library-root" "${STAGE_DIR}/src/chez"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--source-dir" "${STAGE_DIR}/src/common/byte-machine"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/common/placeholder-identity-tests.chez.sps")
@@ -1285,9 +1311,9 @@ byte_machine_mutation_reset()
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
   "--library-root" "${STAGE_DIR}/src/chez"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--source-dir" "${STAGE_DIR}/src/common/byte-machine"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/common/placeholder-identity-tests.chez.sps")
@@ -1308,13 +1334,13 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # The self-tests assert measured literals, so any change to seed, multiplier,
 # modulus, the +1, or the digit table moves at least one of them.
 
-set(FINGERPRINT test/support/harness/chez/byte-machine/test/fingerprint.sls)
+set(FINGERPRINT test/support/harness/byte-machine/test/fingerprint.sls)
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
 
@@ -1380,8 +1406,8 @@ byte_machine_mutation_reset()
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
 
@@ -1411,7 +1437,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # consulted, not how values combine, which pass 24 covers. Passes 28 and 29
 # keep the same one-body manifest for the same reason.
 
-set(RUNNER_BODY test/support/harness/shared/harness-runner.scm)
+set(RUNNER_BODY test/support/harness/byte-machine/test/harness.sls)
 
 set(WRONG_FP_FILE "${WORK_DIR}/wrong.fingerprint")
 file(WRITE "${WRONG_FP_FILE}" "not-a-fingerprint")
@@ -1420,13 +1446,13 @@ byte_machine_mutation_reset()
 
 string(JOIN "|" PROVENANCE_MISMATCH_COMMAND
   "${CMAKE_COMMAND}" "-E" "env"
-  "BYTE_MACHINE_FINGERPRINT_FILES=${STAGE_DIR}/test/support/harness/chez/byte-machine/test/fingerprint.sls"
+  "BYTE_MACHINE_FINGERPRINT_FILES=${STAGE_DIR}/test/support/harness/byte-machine/test/fingerprint.sls"
   "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${WRONG_FP_FILE}"
   "--"
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
 
@@ -1446,7 +1472,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # "provenance: harness-begin stops checking at all" used to live here, sharing
 # this pass's WRONG_FP_FILE verify command with EXPECT_EXIT 3. Task 8's
-# reachability guard (test/support/harness/shared/harness-runner.scm,
+# reachability guard (test/support/harness/byte-machine/test/harness.sls,
 # harness-provenance-reachability-diagnosis) made that ambiguous: with the call
 # removed, harness-provenance-checked never becomes #t, and the guard now
 # refuses with status 3 of its own accord -- the same number WRONG_FP_FILE's
@@ -1486,13 +1512,13 @@ byte_machine_mutation_reset()
 
 string(JOIN "|" PROVENANCE_ABSENT_COMMAND
   "${CMAKE_COMMAND}" "-E" "env"
-  "BYTE_MACHINE_FINGERPRINT_FILES=${STAGE_DIR}/test/support/harness/chez/byte-machine/test/fingerprint.sls"
+  "BYTE_MACHINE_FINGERPRINT_FILES=${STAGE_DIR}/test/support/harness/byte-machine/test/fingerprint.sls"
   "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${WORK_DIR}/never-produced.fingerprint"
   "--"
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
 
@@ -1548,10 +1574,10 @@ set(CORRECT_FP_FILE "${WORK_DIR}/correct.fingerprint")
 execute_process(
   COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" "--script"
           "${STAGE_DIR}/test/support/launchers/fingerprint-manifest.ss"
-          "${STAGE_DIR}/test/support/harness/chez"
+          "${STAGE_DIR}/test/support/harness"
           "${GUARD_DIR}"
           "${CORRECT_FP_FILE}"
-          "${STAGE_DIR}/test/support/harness/chez/byte-machine/test/fingerprint.sls"
+          "${STAGE_DIR}/test/support/harness/byte-machine/test/fingerprint.sls"
   RESULT_VARIABLE fp_rc
   OUTPUT_VARIABLE fp_out
   ERROR_VARIABLE fp_err)
@@ -1565,13 +1591,13 @@ byte_machine_mutation_reset()
 
 string(JOIN "|" PROVENANCE_UNCALLED_COMMAND
   "${CMAKE_COMMAND}" "-E" "env"
-  "BYTE_MACHINE_FINGERPRINT_FILES=${STAGE_DIR}/test/support/harness/chez/byte-machine/test/fingerprint.sls"
+  "BYTE_MACHINE_FINGERPRINT_FILES=${STAGE_DIR}/test/support/harness/byte-machine/test/fingerprint.sls"
   "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${CORRECT_FP_FILE}"
   "--"
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
 
@@ -1609,12 +1635,12 @@ byte_machine_mutation_reset()
 
 string(JOIN "|" PROVENANCE_REACHABILITY_COMMAND
   "${CMAKE_COMMAND}" "-E" "env"
-  "BYTE_MACHINE_FINGERPRINT_FILES=${STAGE_DIR}/test/support/harness/chez/byte-machine/test/fingerprint.sls"
+  "BYTE_MACHINE_FINGERPRINT_FILES=${STAGE_DIR}/test/support/harness/byte-machine/test/fingerprint.sls"
   "--"
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
-  "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-unreached-provenance.chez.sps")
 

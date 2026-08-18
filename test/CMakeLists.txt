@@ -89,9 +89,8 @@ byte_machine_add_test(
 # --- Harness paths ---------------------------------------------------------
 
 set(BYTE_MACHINE_HARNESS_DIR "${CMAKE_CURRENT_LIST_DIR}/support/harness")
-set(BYTE_MACHINE_HARNESS_SHARED_DIR "${BYTE_MACHINE_HARNESS_DIR}/shared")
 set(BYTE_MACHINE_HARNESS_SELF_DIR "${BYTE_MACHINE_HARNESS_DIR}/self")
-set(BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT "${BYTE_MACHINE_HARNESS_DIR}/chez")
+set(BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT "${BYTE_MACHINE_HARNESS_DIR}")
 set(BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER
     "${CMAKE_CURRENT_LIST_DIR}/support/launchers/chez-source.ss")
 
@@ -149,7 +148,7 @@ set(BYTE_MACHINE_TEST_COMMON_DIR "${CMAKE_CURRENT_LIST_DIR}/common")
 # describing the run.
 set(BYTE_MACHINE_HARNESS_MANIFEST
     "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/fingerprint.sls"
-    "${BYTE_MACHINE_HARNESS_SHARED_DIR}/harness-runner.scm")
+    "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/harness.sls")
 
 # --- Build-time fingerprint expectations -----------------------------------
 
@@ -236,7 +235,7 @@ endfunction()
 # basename namespace, which now spans the harness and src/ for the first
 # time.
 byte_machine_portability_guard(
-  SHARED_DIRS "${BYTE_MACHINE_HARNESS_SHARED_DIR}" "${BYTE_MACHINE_SRC_COMMON_DIR}"
+  SHARED_DIRS "${BYTE_MACHINE_SRC_COMMON_DIR}"
   WRAPPED_DIRS "${BYTE_MACHINE_HARNESS_SELF_DIR}" "${BYTE_MACHINE_TEST_COMMON_DIR}")
 
 byte_machine_add_test(
@@ -276,10 +275,6 @@ file(MAKE_DIRECTORY "${BYTE_MACHINE_CWD_EMPTY_DIR}")
 # editing a body re-runs configure and refreshes the copies.
 configure_file("${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder.scm"
                "${BYTE_MACHINE_CWD_IDENTICAL_DIR}/placeholder.scm" COPYONLY)
-configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/harness-runner.scm"
-               "${BYTE_MACHINE_CWD_IDENTICAL_DIR}/harness-runner.scm" COPYONLY)
-configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/harness-runner.scm"
-               "${BYTE_MACHINE_CWD_DECOY_DIR}/harness-runner.scm" COPYONLY)
 
 # The impostor. It implements the complete export list on purpose: an
 # incomplete one would fail the lane at library construction, which is a
@@ -440,7 +435,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_ABSENT_GUARD_DIR}"
             "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
     EXPECT_EXIT 2
@@ -453,7 +448,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_DIRTY_GUARD_DIR}"
             "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
     EXPECT_EXIT 2
@@ -470,7 +465,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
             "--librarie-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
             "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
@@ -486,7 +481,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
             "--program"
     EXPECT_EXIT 2
@@ -498,7 +493,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
             "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
             "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
@@ -516,7 +511,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
             "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
@@ -532,7 +527,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     NAME byte-machine.harness.launcher-no-library-root.chez.source
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
             "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
     EXPECT_EXIT 2
@@ -557,7 +552,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
     EXPECT_EXIT 2
     TIMEOUT 120
@@ -596,7 +591,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
             --library-root "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
             --library-root "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}"
             --object-dir "${CMAKE_BINARY_DIR}"
-            --source-dir "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            --source-dir "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             --program "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
             --output "${CMAKE_BINARY_DIR}/unused.so"
     EXPECT_EXIT 2
