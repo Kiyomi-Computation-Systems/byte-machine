@@ -117,7 +117,7 @@ The portability guard enforces **two** rules: `.scm`/`.gambit.scm` twinning (eve
 **Steps:**
 - [ ] `ctest --preset release -N | rg -i gambit | wc -l` — expected: nonzero. Record the number.
 - [ ] Deregister and delete per the file list; collapse the mutation-suite totals.
-- [ ] `make test-all` then `ctest --preset release -N | rg -i gambit` — expected: green; empty.
+- [ ] `make test-all` then `ctest --preset release -N | rg -i gambit` — expected: green; exactly one hit, `byte-machine.harness.cmake-gambit.cmake.direct`, the toolchain module's own spec lane (BACKEND cmake, not gambit) — Task 4 removes it with the module. (Gate corrected after Task 2: "empty" was wrong while the module survives.)
 - [ ] Commit: `refactor: remove the Gambit lanes and their test halves`
 
 ### Task 4: The Gambit toolchain layer itself
