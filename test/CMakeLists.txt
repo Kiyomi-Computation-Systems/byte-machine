@@ -110,6 +110,28 @@ set(BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER
 # another; nothing is written into the source tree.
 set(BYTE_MACHINE_CHEZ_OBJECT_ROOT
     "${CMAKE_BINARY_DIR}/chez-objects/${BYTE_MACHINE_CHEZ_VERSION}/${BYTE_MACHINE_CHEZ_MACHINE_TYPE}")
+# The keying above is only as real as these two variables. Empty, every Chez
+# version and every machine type would share one object root, a `.so` built by
+# a different Chez could be loaded as though it were current, and every AOT
+# lane would stay green while proving nothing about the runtime that actually
+# ran it -- the exact defect this slice exists to prevent. No task in its plan
+# re-derives BYTE_MACHINE_CHEZ_VERSION or BYTE_MACHINE_CHEZ_MACHINE_TYPE to
+# catch a regression here, so this is the one place that can. Guarded on
+# BYTE_MACHINE_CHEZ_EXECUTABLE: on a host with no Chez neither variable is
+# ever set, no AOT lane is registered, and an empty root is inert rather than
+# a keying failure.
+if(BYTE_MACHINE_CHEZ_EXECUTABLE)
+  if(NOT BYTE_MACHINE_CHEZ_VERSION OR NOT BYTE_MACHINE_CHEZ_MACHINE_TYPE)
+    message(FATAL_ERROR
+      "byte-machine: BYTE_MACHINE_CHEZ_VERSION ('${BYTE_MACHINE_CHEZ_VERSION}') "
+      "and BYTE_MACHINE_CHEZ_MACHINE_TYPE ('${BYTE_MACHINE_CHEZ_MACHINE_TYPE}') "
+      "must both be non-empty once a Chez has been discovered. They key "
+      "BYTE_MACHINE_CHEZ_OBJECT_ROOT so a compiled object can never outlive "
+      "the runtime that produced it; empty, every AOT lane would share one "
+      "root across every Chez version and machine type ever built here, and a "
+      "stale object could load silently while every lane stayed green.")
+  endif()
+endif()
 set(BYTE_MACHINE_HARNESS_CHEZ_AOT_LAUNCHER
     "${CMAKE_CURRENT_LIST_DIR}/support/launchers/chez-aot.ss")
 set(BYTE_MACHINE_HARNESS_CHEZ_COMPILE_LAUNCHER

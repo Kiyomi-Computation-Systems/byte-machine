@@ -74,26 +74,51 @@ function(byte_machine_lane_measured_copies dir out_var)
   set(${out_var} "${copies}" PARENT_SCOPE)
 endfunction()
 
-# byte_machine_chez_aot_paths(<program> <out_object_dir> <out_compiled>)
+# byte_machine_chez_aot_paths(<name> <program> <out_object_dir> <out_compiled>)
 #
 # Where one AOT lane's artifacts live. Keyed by Chez version and machine type
-# so a parallel build cannot race and no object outlives the runtime that
-# produced it, and by program stem so two lanes over one program share nothing.
-function(byte_machine_chez_aot_paths program out_object_dir out_compiled)
-  get_filename_component(stem "${program}" NAME_WE)
-  set(dir "${BYTE_MACHINE_CHEZ_OBJECT_ROOT}/${stem}")
+# (BYTE_MACHINE_CHEZ_OBJECT_ROOT) so a parallel build cannot race and no
+# object outlives the runtime that produced it, and by LANE NAME -- not
+# program -- so two lanes that build the same program from different text
+# share nothing. That is not hypothetical: this slice registers
+# byte-machine.harness.self.chez.aot and
+# byte-machine.harness.stale-artifact.chez.aot over the same PROGRAM,
+# harness-self-tests.chez.sps, and the second exists to compile it from
+# deliberately divergent text. Keyed by program stem instead, both would
+# resolve to one object directory, one compiled .so, and one flat
+# fingerprint/ directory, so the stale lane's copies would silently overwrite
+# the real lane's.
+function(byte_machine_chez_aot_paths name program out_object_dir out_compiled)
+  string(REPLACE "." "_" name_key "${name}")
+  set(dir "${BYTE_MACHINE_CHEZ_OBJECT_ROOT}/${name_key}")
   set(${out_object_dir} "${dir}" PARENT_SCOPE)
+  # NAME_WLE, not NAME_WE: NAME_WE strips the longest extension, so
+  # harness-self-tests.chez.sps and harness-self-tests.gambit.scm would both
+  # yield the stem harness-self-tests -- harmless now that the directory
+  # above is keyed per lane rather than per program, but NAME_WLE keeps the
+  # .chez segment in the artifact's filename, one less thing a reader of the
+  # object tree has to reconstruct from the directory name alone.
+  get_filename_component(stem "${program}" NAME_WLE)
   set(${out_compiled} "${dir}/${stem}.so" PARENT_SCOPE)
 endfunction()
 
-# byte_machine_scheme_lane_command(<backend> <mode> <program>
+# byte_machine_scheme_lane_command(<name> <backend> <mode> <program>
 #                                  <out_command> <out_measured>
 #                                  <out_status> <out_message>
 #                                  <declared-body>...)
 #
 # Status is `ok`, `no-runtime`, `unknown-backend`, `unknown-mode` -- or, for
 # gambit, one of byte_machine_scheme_lane_gambit_search's own statuses
-# (`comma-in-path`, `relative-path`), forwarded unchanged.
+# (`comma-in-path`, `relative-path`), forwarded unchanged. A missing runtime is
+# not fatal: the CMake-layer specifications must stay runnable on a host with
+# no Scheme installed, so a lane whose runtime was never discovered is skipped
+# with a message rather than failing configuration. The runtime check runs
+# first, ahead of the mode check that can produce `unknown-mode`, for the same
+# reason: a lane naming a mode this module cannot build yet (Gambit's aot and
+# o1, at present -- see the Gambit branch below) must still fail loudly on a
+# host that has the runtime to attempt it, but must not turn `cmake --preset
+# no-scheme` into a configure failure over a backend/mode combination the host
+# was never going to exercise.
 #
 # <out_measured> is the list of paths the run will fingerprint, in the order
 # the declared bodies were given. For a source lane it is the declared list:
@@ -104,7 +129,7 @@ endfunction()
 # Order is load-bearing. harness-fingerprint-combine is order-sensitive by
 # design, so measured[i] must correspond to declared[i]; the mapping below
 # walks the declared list rather than partitioning and rejoining it.
-function(byte_machine_scheme_lane_command backend mode program
+function(byte_machine_scheme_lane_command name backend mode program
          out_command out_measured out_status out_message)
   set(${out_command} "" PARENT_SCOPE)
   set(${out_measured} "" PARENT_SCOPE)
@@ -120,6 +145,9 @@ function(byte_machine_scheme_lane_command backend mode program
     endif()
 
     if(mode STREQUAL "source")
+      # Flags, not positions: a lane names one library root per library family it
+      # imports and one source directory per shared-body directory, and both
+      # counts grow with each slice.
       set(${out_command}
         "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
         "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
@@ -136,7 +164,7 @@ function(byte_machine_scheme_lane_command backend mode program
     endif()
 
     if(mode STREQUAL "aot")
-      byte_machine_chez_aot_paths("${program}" object_dir compiled)
+      byte_machine_chez_aot_paths("${name}" "${program}" object_dir compiled)
       set(${out_command}
         "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
         "--script" "${BYTE_MACHINE_HARNESS_CHEZ_AOT_LAUNCHER}"
@@ -168,11 +196,18 @@ function(byte_machine_scheme_lane_command backend mode program
     if(NOT mode STREQUAL "source")
       set(${out_status} "unknown-mode" PARENT_SCOPE)
       set(${out_message}
-        "'${mode}' is not an execution mode this lane module can build a command for. Known modes: source aot."
+        "'${mode}' is not an execution mode the gambit backend of this lane module can build a command for yet. Known modes: source. Gambit's compiled modes (o1, aot) arrive in a later slice."
         PARENT_SCOPE)
       return()
     endif()
 
+    # `-:` runtime options must be the first argument, and the option list is
+    # comma-separated: `search=A,search=B` puts two module roots on the path.
+    # Measured, with a control proving the second root is load-bearing
+    # (docs/plans/milestone-0-slice-3-shared-body.md section 2).
+    # `-f` skips .gambini so a developer's personal initialisation cannot change
+    # what a test proves. No launcher is needed: Gambit's include inside
+    # define-library is source-file-relative and needs no ambient state.
     byte_machine_scheme_lane_gambit_search(search_option search_status search_message
       "${BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT}"
       "${BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT}")
@@ -265,7 +300,7 @@ function(byte_machine_add_scheme_lane)
                                lane_backend lane_mode)
 
   byte_machine_scheme_lane_command(
-    "${arg_BACKEND}" "${lane_mode}" "${arg_PROGRAM}"
+    "${arg_NAME}" "${arg_BACKEND}" "${lane_mode}" "${arg_PROGRAM}"
     command measured status message ${arg_SHARED_BODIES})
 
   if(status STREQUAL "unknown-backend"

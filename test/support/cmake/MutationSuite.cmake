@@ -736,9 +736,11 @@ byte_machine_mutation(
 
 # The companion to the re-anchored "an unknown backend no longer stops
 # registration" mutation above: that one deletes the guard outright, this one
-# narrows it back to the pre-Task-3 single clause, so unknown-mode,
-# comma-in-path, and relative-path would all fail open while unknown-backend
-# stayed refused. Two distinct regressions, so two mutations.
+# narrows it back to the single unknown-backend clause that predates M0 slice
+# 3 Task 3 ("A Gambit search root must be absolute and comma-free", which grew
+# this guard from one clause to three), so unknown-mode, comma-in-path, and
+# relative-path would all fail open while unknown-backend stayed refused. Two
+# distinct regressions, so two mutations.
 #
 # Re-anchored on the four-clause form for the same reason as the mutation
 # above (see MutationRunner.cmake's SITES comment). REPLACE is unchanged: it
