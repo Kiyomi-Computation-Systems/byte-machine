@@ -339,11 +339,17 @@ below are copied from that table.
   `docs/plans/milestone-0-slice-5b-5c-compiled-lanes.md` — in a narrower form
   than the paragraph above asked for.** Both assertions now read
   `(harness-member? (adapter-execution-mode) (list "source" "aot" "o1"))`
-  (`harness-self-tests.scm` lines 372-374; `harness-bootstrap.scm` lines
+  (`harness-self-tests.scm` lines 377-379; `harness-bootstrap.scm` lines
   119-121): a vocabulary check, not the self-referential comparison against
   "the mode the lane's own registration declares" the paragraph above called
-  for — decision W8 records why that stronger check was rejected, not merely
-  deferred: it would only measure the environment against itself. Re-measured
+  for. Decision W8 gives the reason as self-reference — the check would measure
+  the environment against itself — which is the weaker of the two available and
+  is superseded by the one recorded beside the assertion itself: this body is
+  staged inside `byte-machine.harness.scheme-mutation.cmake.direct`, which
+  hand-sets `BYTE_MACHINE_EXECUTION_MODE=source` whatever it stages
+  (`test/CMakeLists.txt` line 645), so a name-versus-mode cross-check here
+  would be red on every mutation pass's baseline rather than only on a broken
+  one. Re-measured
   2026-08-17 against the same shipped lane, the same way: an override outside
   the vocabulary is still caught — `BYTE_MACHINE_EXECUTION_MODE=chez-aot`
   still fails outright, exit 1 (`the mode is one the lane vocabulary defines

@@ -189,8 +189,13 @@ function(byte_machine_add_scheme_lane)
   # registration here cannot claim one lane while running another. It is not the
   # only place the repository sets BYTE_MACHINE_EXECUTION_MODE: nine
   # registrations in test/CMakeLists.txt (search that name) bypass this function
-  # and hand-set it directly instead, and today every one of them agrees with
-  # the lane it describes -- nothing enforces that the way this parse does.
+  # and hand-set it directly instead, and nothing enforces those the way this
+  # parse does. Eight name a .chez.source lane and hand-set "source", so they
+  # agree literally. The ninth, byte-machine.harness.scheme-mutation.cmake.direct,
+  # does not describe itself at all: its name's mode field is "direct", a
+  # cmake-backend value disjoint from the source/aot/o1 vocabulary, and the
+  # "source" it sets is for the lanes it stages and runs. There is nothing there
+  # for agreement to mean, which is why this comment does not claim it.
   # byte_machine_add_test parses the same name again for its labels; the
   # function is pure, so parsing it twice is cheaper than passing a parsed field
   # through a registrar that does not need it.
