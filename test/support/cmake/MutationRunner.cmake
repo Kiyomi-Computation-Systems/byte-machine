@@ -262,10 +262,10 @@ function(byte_machine_mutation_run source_root stage_dir)
   # Both this counter and _bm_mutation_count are written with PARENT_SCOPE,
   # which reaches only the immediate caller -- and different passes call from
   # different scopes: bare script scope for a simple pass, a helper function's
-  # own scope for a repeated one (byte_machine_slice3_launcher_pass and
-  # byte_machine_slice3_body_pass, for instance). A plain variable would not
-  # survive that; a global property has no scope to lose. The caller reads the
-  # total back with byte_machine_mutation_totals once every pass has run.
+  # own scope for a repeated one (byte_machine_slice3_launcher_pass, for
+  # instance, called once per launcher parse decision). A plain variable would
+  # not survive that; a global property has no scope to lose. The caller reads
+  # the total back with byte_machine_mutation_totals once every pass has run.
   get_property(_bm_total_passes GLOBAL PROPERTY BYTE_MACHINE_MUTATION_TOTAL_PASSES)
   if(NOT _bm_total_passes)
     set(_bm_total_passes 0)

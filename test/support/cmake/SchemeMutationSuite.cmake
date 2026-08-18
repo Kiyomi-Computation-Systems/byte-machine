@@ -11,7 +11,8 @@
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
 # run: that check is what a whole-branch review found nothing else could do --
-# deleting the three matrix passes (19 to 21) by hand left this file's own
+# deleting the three matrix passes (21 to 23 in the numbering of the tree
+# where this happened; today's passes 19 to 21) by hand left this file's own
 # suite reporting 37/37 elsewhere, with the mutation count silently dropping
 # from 56 to 53 and nothing anywhere noticing.
 #

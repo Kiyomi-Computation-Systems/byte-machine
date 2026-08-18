@@ -717,9 +717,9 @@ byte_machine_add_scheme_lane(
 # lanes printed different digests for text both said they ran, and the suite
 # stayed green, because nothing read the values back.
 #
-# Status 3 is what makes them falsifiable. Three lanes in this tree legitimately
-# expect 1 or 2, so a provenance failure sharing either status would be
-# indistinguishable from those fixtures' own expected outcomes.
+# Status 3 is what makes them falsifiable. Several lanes in this tree
+# legitimately expect 1 or 2, so a provenance failure sharing either status
+# would be indistinguishable from those fixtures' own expected outcomes.
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.provenance.chez.source
   BACKEND chez
