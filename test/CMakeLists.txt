@@ -653,25 +653,30 @@ endif()
 
 # A lane that is set up correctly never reaches a launcher refusal, so each one
 # needs a lane of its own or a deleted refusal is invisible. The same argument
-# the three chez-source.ss refusals above are registered under.
+# the ten chez-source.ss refusals above are registered under.
 #
-# Two lanes, not one per refusal in these files. The flag-vocabulary refusals
-# below the parser are the same code chez-source.ss already carries and whose
-# identical refusals already have lanes; re-proving a verbatim copy buys
-# nothing. These two are the decisions that are new here.
+# Three lanes, not one per refusal in these files. The flag-vocabulary
+# refusals below the parser, and --source-guard's own absent-directory check,
+# are the same shape as refusals chez-source.ss already carries and already
+# has lanes for; re-proving a verbatim shape in a new file buys nothing. These
+# three are what is actually new here: chez-aot.ss's missing-program check,
+# chez-compile.ss's unpaired-roots check, and --source-guard's non-empty-guard
+# check -- the one that most directly proves the hazard the flag exists to
+# close.
 if(BYTE_MACHINE_CHEZ_EXECUTABLE)
   byte_machine_add_exit_code_test(
-    NAME byte-machine.harness.chez-aot-launcher-missing-program.cmake.direct
+    NAME byte-machine.harness.chez-aot-launcher-missing-program.chez.aot
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
             "${BYTE_MACHINE_HARNESS_CHEZ_AOT_LAUNCHER}"
             --object-dir "${CMAKE_BINARY_DIR}"
+            --source-guard "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
             --program "${CMAKE_BINARY_DIR}/no-such-program.so"
     EXPECT_EXIT 2
     TIMEOUT 60
     LABELS expected-red)
 
   byte_machine_add_exit_code_test(
-    NAME byte-machine.harness.chez-compile-launcher-unpaired-roots.cmake.direct
+    NAME byte-machine.harness.chez-compile-launcher-unpaired-roots.chez.aot
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
             "${BYTE_MACHINE_HARNESS_CHEZ_COMPILE_LAUNCHER}"
             --library-root "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
@@ -680,6 +685,24 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
             --source-dir "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
             --program "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
             --output "${CMAKE_BINARY_DIR}/unused.so"
+    EXPECT_EXIT 2
+    TIMEOUT 60
+    LABELS expected-red)
+
+  # The one new decision --source-guard's own checks add over chez-source.ss's
+  # object-guard shape: chez-source.ss's launcher-dirty-guard.chez.source lane
+  # already proves this die branch works when a guard has acquired a file, but
+  # only for chez-source.ss's own copy of the check. Reuses
+  # BYTE_MACHINE_HARNESS_DIRTY_GUARD_DIR rather than declaring a second dirty
+  # directory: both are the same fixture -- a build-tree directory holding one
+  # stray file for the sole purpose of not being empty.
+  byte_machine_add_exit_code_test(
+    NAME byte-machine.harness.chez-aot-launcher-dirty-source-guard.chez.aot
+    COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
+            "${BYTE_MACHINE_HARNESS_CHEZ_AOT_LAUNCHER}"
+            --object-dir "${CMAKE_BINARY_DIR}"
+            --source-guard "${BYTE_MACHINE_HARNESS_DIRTY_GUARD_DIR}"
+            --program "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
     EXPECT_EXIT 2
     TIMEOUT 60
     LABELS expected-red)

@@ -165,11 +165,19 @@ function(byte_machine_scheme_lane_command name backend mode program
 
     if(mode STREQUAL "aot")
       byte_machine_chez_aot_paths("${name}" "${program}" object_dir compiled)
+      # --source-guard pairs every --object-dir's SOURCE half with the same
+      # always-empty directory the chez.source lane uses as its OBJECT guard
+      # (BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR, set once in
+      # test/CMakeLists.txt). A bare directory string handed to
+      # library-directories becomes both halves of the pair, so without this
+      # an object directory is also a source directory Chez can expand;
+      # chez-aot.ss's own header records the measurement.
       set(${out_command}
         "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
         "--script" "${BYTE_MACHINE_HARNESS_CHEZ_AOT_LAUNCHER}"
         "--object-dir" "${object_dir}/harness"
         "--object-dir" "${object_dir}/src"
+        "--source-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
         "--program" "${compiled}"
         PARENT_SCOPE)
       byte_machine_lane_measured_copies("${object_dir}/fingerprint" measured ${ARGN})
