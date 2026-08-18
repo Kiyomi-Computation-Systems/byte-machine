@@ -101,7 +101,6 @@ set(BYTE_MACHINE_HARNESS_DIR "${CMAKE_CURRENT_LIST_DIR}/support/harness")
 set(BYTE_MACHINE_HARNESS_SHARED_DIR "${BYTE_MACHINE_HARNESS_DIR}/shared")
 set(BYTE_MACHINE_HARNESS_SELF_DIR "${BYTE_MACHINE_HARNESS_DIR}/self")
 set(BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT "${BYTE_MACHINE_HARNESS_DIR}/chez")
-set(BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT "${BYTE_MACHINE_HARNESS_DIR}/gambit")
 set(BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER
     "${CMAKE_CURRENT_LIST_DIR}/support/launchers/chez-source.ss")
 
@@ -152,7 +151,6 @@ file(MAKE_DIRECTORY "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}")
 # why the launcher takes repeatable roots.
 set(BYTE_MACHINE_SRC_COMMON_DIR "${CMAKE_SOURCE_DIR}/src/common/byte-machine")
 set(BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT "${CMAKE_SOURCE_DIR}/src/chez")
-set(BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT "${CMAKE_SOURCE_DIR}/src/gambit")
 set(BYTE_MACHINE_TEST_COMMON_DIR "${CMAKE_CURRENT_LIST_DIR}/common")
 
 # The bodies every harness lane executes. Named once: a lane that listed them
@@ -264,16 +262,6 @@ byte_machine_add_test(
 # launcher mutation in SchemeMutationSuite.cmake, whose expected outcome is
 # asymmetric -- empty and decoy fail, identical passes.
 #
-# Six lane names below read as six units of evidence, but only the three Chez
-# ones are: Gambit resolves an `include` inside `define-library` against the
-# including file itself, not against the process working directory, so no
-# launcher mutation can make a Gambit lane depend on where it was launched
-# from (decision record 0002, point 3). The three Gambit lanes here are
-# non-discriminating by construction -- they still have to pass, as parity
-# proof that the shared body loads identically through both wrappers, but
-# nothing in SchemeMutationSuite.cmake can fail them the way the Chez mutation
-# fails the Chez ones, and nothing here should be added trying to make it.
-#
 # Both non-empty directories carry a copy of EVERY body the lane includes, the
 # harness runner included. A directory holding only a placeholder body would
 # fail to build (byte-machine test harness) under that mutation, before reaching
@@ -380,60 +368,6 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.empty-selection.chez.source
   BACKEND chez
   PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-empty-selection.chez.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-empty-selection.scm"
-  EXPECT_EXIT 2
-  TIMEOUT 120
-  LABELS expected-red
-  ENVIRONMENT "BYTE_MACHINE_TEST_FILTER=no-case-has-this-in-its-name")
-
-# --- Gambit lanes ------------------------------------------------------------
-#
-# The same five bodies as above, unchanged, run through the Gambit adapter
-# instead of the Chez one. This is the parity proof the milestone exists to
-# establish: one wrapper-free body, two runtimes, no duplicated test
-# semantics. See the rationale comments on the Chez lanes above for why each
-# body exists; only the runtime differs here.
-byte_machine_add_scheme_lane(
-  NAME byte-machine.harness.bootstrap.gambit.source
-  BACKEND gambit
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.gambit.scm"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.scm"
-  TIMEOUT 120)
-
-byte_machine_add_scheme_lane(
-  NAME byte-machine.harness.self.gambit.source
-  BACKEND gambit
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.gambit.scm"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.scm"
-  TIMEOUT 120)
-
-byte_machine_add_scheme_lane(
-  NAME byte-machine.harness.failing-body.gambit.source
-  BACKEND gambit
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.gambit.scm"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.scm"
-  EXPECT_EXIT 1
-  TIMEOUT 120
-  LABELS expected-red)
-
-byte_machine_add_scheme_lane(
-  NAME byte-machine.harness.duplicate-case.gambit.source
-  BACKEND gambit
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-duplicate-case.gambit.scm"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-duplicate-case.scm"
-  EXPECT_EXIT 2
-  TIMEOUT 120
-  LABELS expected-red)
-
-byte_machine_add_scheme_lane(
-  NAME byte-machine.harness.empty-selection.gambit.source
-  BACKEND gambit
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-empty-selection.gambit.scm"
   SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
                 "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-empty-selection.scm"
   EXPECT_EXIT 2
@@ -707,9 +641,7 @@ endif()
 # passing self-test suite is not evidence until something has proved it can
 # fail. This breaks each decision in the runner on a staged copy and requires
 # the self-tests to notice. Registered only when a Chez was discovered: it runs
-# a real lane and cannot be verified under the no-scheme preset. Gambit's path
-# is forwarded too, empty when none was discovered, which drops only the pass
-# that checks the Gambit adapter's export list.
+# a real lane and cannot be verified under the no-scheme preset.
 #
 # The self-tests load the fingerprint fixture through adapter-file-bytes; staged
 # lanes inherit this process's environment through execute_process, so the
@@ -719,7 +651,6 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     NAME byte-machine.harness.scheme-mutation.cmake.direct
     COMMAND "${CMAKE_COMMAND}"
             "-DBYTE_MACHINE_CHEZ_EXECUTABLE=${BYTE_MACHINE_CHEZ_EXECUTABLE}"
-            "-DBYTE_MACHINE_GAMBIT_EXECUTABLE=${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
             "-DBYTE_MACHINE_CWD_MATRIX_DIR=${BYTE_MACHINE_CWD_MATRIX_DIR}"
             -P "${CMAKE_CURRENT_LIST_DIR}/support/cmake/SchemeMutationSuite.cmake"
     TIMEOUT 900
@@ -750,16 +681,6 @@ foreach(cwd_case identical decoy empty)
                   "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.scm"
     TIMEOUT 120
     WORKING_DIRECTORY "${cwd_dir}")
-
-  byte_machine_add_scheme_lane(
-    NAME "byte-machine.portability.placeholder-cwd-${cwd_case}.gambit.source"
-    BACKEND gambit
-    PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.gambit.scm"
-    SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                  "${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder.scm"
-                  "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.scm"
-    TIMEOUT 120
-    WORKING_DIRECTORY "${cwd_dir}")
 endforeach()
 
 # --- Cross-library identity ------------------------------------------------
@@ -769,13 +690,12 @@ endforeach()
 # recognises, and the allocation-free singleton stays one object across both
 # imports.
 #
-# No working-directory matrix here. The consumer adds a second include site per
-# runtime but no new resolution mechanism: Chez resolves it by bare filename
-# through source-directories exactly as it resolves the owner's body, and Gambit
-# resolves it relative to the including file exactly as before. Slice 3 proved
+# No working-directory matrix here. The consumer adds a second include site but
+# no new resolution mechanism: Chez resolves it by bare filename through
+# source-directories exactly as it resolves the owner's body. Slice 3 proved
 # that mechanism; a second instance of a proven mechanism is not a second proof.
 #
-# Passing here is not yet evidence. What makes it evidence is passes 24 to 27 in
+# Passing here is not yet evidence. What makes it evidence is passes 22 and 23 in
 # SchemeMutationSuite.cmake, and in particular the double-include mutation --
 # under which both cases below answer wrongly, nothing raises, and every other
 # lane in this tree still passes.
@@ -783,16 +703,6 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.portability.placeholder-identity.chez.source
   BACKEND chez
   PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.chez.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder.scm"
-                "${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder-consumer.scm"
-                "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.scm"
-  TIMEOUT 120)
-
-byte_machine_add_scheme_lane(
-  NAME byte-machine.portability.placeholder-identity.gambit.source
-  BACKEND gambit
-  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.gambit.scm"
   SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
                 "${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder.scm"
                 "${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder-consumer.scm"
@@ -807,7 +717,7 @@ byte_machine_add_scheme_lane(
 # lanes printed different digests for text both said they ran, and the suite
 # stayed green, because nothing read the values back.
 #
-# Status 3 is what makes them falsifiable. Six lanes in this tree legitimately
+# Status 3 is what makes them falsifiable. Three lanes in this tree legitimately
 # expect 1 or 2, so a provenance failure sharing either status would be
 # indistinguishable from those fixtures' own expected outcomes.
 byte_machine_add_scheme_lane(
@@ -821,66 +731,38 @@ byte_machine_add_scheme_lane(
   TIMEOUT 120
   LABELS expected-red)
 
-# The Gambit half. This one is not a duplicate of the Chez lane: the path it
-# exercises reads the expectation through adapter-file-bytes, which is
-# per-runtime code, and exits through adapter-exit. The two refusals below run
-# on Chez alone under slice 2's rule S6 -- they are decisions in the shared
-# runner body, identical text on both runtimes, and this pair already
-# establishes that both reach it.
-#
-# Three of the four are textually inside this if(BYTE_MACHINE_CHEZ_EXECUTABLE)
-# block; the fourth, byte-machine.harness.provenance.chez.source above, is
-# skipped on a Chez-less host by a different mechanism:
-# byte_machine_add_scheme_lane's own no-runtime return for a chez-backend
-# lane. byte_machine_expected_fingerprint runs its launcher under Chez, and
-# ByteMachineSchemeLane.cmake gates the call to either fingerprint function --
-# byte_machine_wrong_fingerprint included -- on that same discovered-Chez
-# check, so on a Chez-less host neither BYTE_MACHINE_FINGERPRINT_FILES nor
-# BYTE_MACHINE_EXPECT_FINGERPRINT_FILE is ever set for this Gambit lane, its
-# own runtime notwithstanding -- and harness-verify-provenance! skips rather
-# than refuses when the manifest variable is unset. Without this guard the
-# lane would still run, still find nothing to disagree with, and exit 0 where
-# EXPECT_EXIT 3 requires 3.
-if(BYTE_MACHINE_CHEZ_EXECUTABLE)
-  byte_machine_add_scheme_lane(
-    NAME byte-machine.harness.provenance.gambit.source
-    BACKEND gambit
-    PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.gambit.scm"
-    SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                  "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.scm"
-    WRONG_FINGERPRINT
-    EXPECT_EXIT 3
-    TIMEOUT 120
-    LABELS expected-red)
+# Two more refusals. Neither is wrapped in if(BYTE_MACHINE_CHEZ_EXECUTABLE):
+# each is a BACKEND chez lane, so byte_machine_add_scheme_lane's own
+# no-runtime return already skips it on a Chez-less host, the same mechanism
+# that skips the lane above.
 
-  # The build never produced this file, and never will: no rule names it as an
-  # output. That is the "you did not build before running the tests" case, which
-  # would otherwise escape as a raw I/O condition and a status outside the
-  # vocabulary.
-  byte_machine_add_scheme_lane(
-    NAME byte-machine.harness.provenance-absent-expectation.chez.source
-    BACKEND chez
-    PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
-    SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                  "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.scm"
-    EXPECT_EXIT 3
-    TIMEOUT 120
-    LABELS expected-red
-    ENVIRONMENT "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${CMAKE_BINARY_DIR}/fingerprints/never-produced.fingerprint")
+# The build never produced this file, and never will: no rule names it as an
+# output. That is the "you did not build before running the tests" case, which
+# would otherwise escape as a raw I/O condition and a status outside the
+# vocabulary.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.provenance-absent-expectation.chez.source
+  BACKEND chez
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
+  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
+                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.scm"
+  EXPECT_EXIT 3
+  TIMEOUT 120
+  LABELS expected-red
+  ENVIRONMENT "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${CMAKE_BINARY_DIR}/fingerprints/never-produced.fingerprint")
 
-  # A manifest naming a body that is not there. What fails is reading the text,
-  # before any comparison happens.
-  byte_machine_add_scheme_lane(
-    NAME byte-machine.harness.provenance-missing-body.chez.source
-    BACKEND chez
-    PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
-    SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                  "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.scm"
-    EXPECT_EXIT 3
-    TIMEOUT 120
-    LABELS expected-red
-    ENVIRONMENT "BYTE_MACHINE_FINGERPRINT_FILES=${CMAKE_BINARY_DIR}/fingerprints/no-such-body.scm")
-endif()
+# A manifest naming a body that is not there. What fails is reading the text,
+# before any comparison happens.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.provenance-missing-body.chez.source
+  BACKEND chez
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
+  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
+                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.scm"
+  EXPECT_EXIT 3
+  TIMEOUT 120
+  LABELS expected-red
+  ENVIRONMENT "BYTE_MACHINE_FINGERPRINT_FILES=${CMAKE_BINARY_DIR}/fingerprints/no-such-body.scm")
 
 # Provenance configured and never performed. SHARED_BODIES guarantees the
 # environment carries a manifest; nothing until now guaranteed anything read
@@ -892,40 +774,15 @@ endif()
 # A real manifest, deliberately: with none, the run is a process no lane
 # registration started, and skipping is correct rather than a defect.
 #
-# Both lanes below expect exit 3 for the same reason byte-machine.harness.
-# provenance.gambit.source above does: ByteMachineSchemeLane.cmake sets
-# BYTE_MACHINE_FINGERPRINT_FILES only inside its own
-# if(BYTE_MACHINE_CHEZ_EXECUTABLE) block, regardless of either lane's own
-# BACKEND here. On a host with Gambit but no Chez, the Gambit lane is still
-# registered -- its own runtime was found, so byte_machine_add_scheme_lane's
-# no-runtime return does not apply to it -- but it carries no manifest, so
-# harness-provenance-reachability-diagnosis finds an empty
-# BYTE_MACHINE_FINGERPRINT_FILES and stays quiet, the same as a process no
-# lane registration started. harness-provenance-unreached never gets set,
-# harness-exit-status falls through to harness-status-pass, and the lane
-# exits 0 where EXPECT_EXIT 3 requires 3. The Chez lane is wrapped here too,
-# even though it would already self-gate on a Chez-less host through the
-# same no-runtime return -- kept alongside the Gambit lane rather than left
-# to stand alone, matching how the two Chez-backend lanes above stay inside
-# the Gambit provenance lane's own if(BYTE_MACHINE_CHEZ_EXECUTABLE) block.
-if(BYTE_MACHINE_CHEZ_EXECUTABLE)
-  byte_machine_add_scheme_lane(
-    NAME byte-machine.harness.unreached-provenance.chez.source
-    BACKEND chez
-    PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.chez.sps"
-    SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                  "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.scm"
-    EXPECT_EXIT 3
-    TIMEOUT 120
-    LABELS expected-red)
-
-  byte_machine_add_scheme_lane(
-    NAME byte-machine.harness.unreached-provenance.gambit.source
-    BACKEND gambit
-    PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.gambit.scm"
-    SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                  "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.scm"
-    EXPECT_EXIT 3
-    TIMEOUT 120
-    LABELS expected-red)
-endif()
+# Not wrapped in if(BYTE_MACHINE_CHEZ_EXECUTABLE): this is a BACKEND chez
+# lane, so byte_machine_add_scheme_lane's own no-runtime return already skips
+# it on a Chez-less host.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.unreached-provenance.chez.source
+  BACKEND chez
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.chez.sps"
+  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
+                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.scm"
+  EXPECT_EXIT 3
+  TIMEOUT 120
+  LABELS expected-red)

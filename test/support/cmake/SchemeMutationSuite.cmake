@@ -6,101 +6,59 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# THIRTY-FIVE PASSES WHEN GAMBIT IS DISCOVERED, BECAUSE THIRTY-FIVE
-# DIFFERENT WITNESSES ARE NEEDED
+# TWENTY-NINE PASSES, BECAUSE TWENTY-NINE DIFFERENT WITNESSES ARE NEEDED
 #
-# Six of the thirty-five are gated on BYTE_MACHINE_GAMBIT_EXECUTABLE, the
-# same precondition every Gambit lane in this tree runs under: pass 2, the
-# Gambit adapter's export list (two mutations); pass 10, the placeholder body's
-# decisions run a second time on Gambit (six mutations, the same list pass 9
-# declares for Chez); pass 25, the consumer body's decisions on Gambit (three
-# mutations, the same list pass 24 declares for Chez); pass 27, the Gambit
-# consumer wrapper's double-include (one mutation, the per-runtime half of the
-# section 7.2 proof pass 26 makes for Chez); pass 29, the fingerprint
-# algorithm's decisions run a second time on Gambit (five mutations, the same
-# list pass 28 declares for Chez); and pass 31, the hex digit table on Gambit
-# (one mutation, the per-runtime half of the pair pass 30 makes for Chez).
-# Passes 34 and 35 -- Task 8's reachability guard, described where the file
-# discusses 32 and 33 below -- are both Chez-only, like 32 and 33 themselves,
-# so neither is part of this six. Without Gambit this file runs twenty-nine
-# passes and sixty-five mutations rather than thirty-five passes and
-# eighty-three -- the with-Gambit pair less that same 6-pass, 18-mutation
-# delta.
-#
-# EXPECTED_PASSES_WITH_GAMBIT and EXPECTED_MUTATIONS_WITH_GAMBIT are declared
-# below; the without-Gambit pair is computed from them and the delta rather
-# than written out a second time, so a pass added to this file that is not
-# itself Gambit-gated changes both pairs together. Two hand-maintained pairs
-# could disagree quietly -- a new ungated pass updates the with-Gambit numbers
-# because that is the run that just changed, and it is easy to forget the
-# without-Gambit numbers are describing the same file. Checked against
+# EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
 # run: that check is what a whole-branch review found nothing else could do --
-# deleting the three matrix passes (21 to 23) by hand left this file's own
+# deleting the three matrix passes (19 to 21) by hand left this file's own
 # suite reporting 37/37 elsewhere, with the mutation count silently dropping
 # from 56 to 53 and nothing anywhere noticing.
 #
-# Pass 1 runs the Chez self-tests lane against the shared runner body. That body
-# is identical text on both runtimes, so verifying it on a second runtime would
-# re-prove the same mutation at double the cost.
+# Pass 1 runs the Chez self-tests lane against the shared runner body.
 #
-# Pass 2 runs the Gambit self-tests lane, for the one thing that is per-runtime
-# by definition: an adapter's export list. A Chez lane cannot notice a name
-# missing from the Gambit library.
-#
-# Pass 3 runs the Chez empty-selection lane through the exact-status helper, for
+# Pass 2 runs the Chez empty-selection lane through the exact-status helper, for
 # the one decision in the runner that no in-process assertion can reach --
 # harness-begin reading BYTE_MACHINE_TEST_FILTER out of the environment. A suite
 # cannot set its own environment from inside the portable subset, and the
 # harness exports no reader for the filter that read produces, so the only
 # witness is a whole process that was supposed to select nothing and exit 2.
 #
-# Pass 4 runs the Chez bootstrap lane, for the defect that disarms the
+# Pass 3 runs the Chez bootstrap lane, for the defect that disarms the
 # self-tests as it commits them: a failure counter that stops counting. Every
 # assertion in every suite reports through the counter, so with it broken a
 # failing suite prints its FAIL lines and still exits 0. The bootstrap counts
 # its own failures with raw conditionals and exits by hand, which is exactly why
 # it exists and why it is the only lane whose verdict survives.
 #
-# Passes 5 to 6 run the Chez launcher's two guard-directory refusals, one per
+# Passes 4 to 5 run the Chez launcher's two guard-directory refusals, one per
 # pass, each through the exact-status helper. A refusal cannot be witnessed by a
 # lane that is set up correctly, because a correctly set-up lane never reaches
 # one: each needs its own deliberately wrong command line, and a verify command
 # is fixed for the whole pass.
 #
-# Pass 7 is the launcher's `compile-imported-libraries` call, and it is the one
+# Pass 6 is the launcher's `compile-imported-libraries` call, and it is the one
 # mutation in this file that no single process can catch. See its recorded
 # reason.
 #
-# Pass 8 is the library-directories pairing, the mechanism that makes
+# Pass 7 is the library-directories pairing, the mechanism that makes
 # `mode=source` an honest claim. No library root in this tree has a compiled
 # object in it, so unpairing the root from the guard changes nothing anywhere
 # else; the pass therefore builds a root that does have one, and runs the
 # self-tests lane against it.
 #
-# Passes 9 and 10 are the placeholder body's own decisions -- tag, length,
-# vector-ness, symbol-vs-fresh-allocation identity -- run once on each runtime.
-# The runner body above is verified once because its text is what both
-# runtimes load; here the text is equally shared, but *how* each runtime reaches
-# it is not; Chez resolves it by bare filename through source-directories, and
-# Gambit resolves it through `include` and a relative path. A wrapper that
-# quietly reimplemented the body instead of including it would be exactly a
-# wrapper whose runtime never notices the body changing, and only running the
-# same mutations through both inclusion mechanisms can catch that. Pass 10's
-# Gambit invocation is also the first in this file to pair two search roots --
-# the harness's and src's -- into one comma-joined `-:search=` flag, the exact
-# form slice 3's absolute-and-comma-free validation exists to keep parseable;
-# Pass 2 above never exercises that joining because it passes only one root.
+# Pass 8 is the placeholder body's own decisions -- tag, length, vector-ness,
+# symbol-vs-fresh-allocation identity.
 #
-# Passes 11 to 20 are the launcher's parse decisions: an unknown flag, a flag
+# Passes 9 to 18 are the launcher's parse decisions: an unknown flag, a flag
 # with no value, a single-valued flag repeated, a required flag unchecked in
 # general, one entry dropped from each of required-flags' four members, and one
 # entry dropped from each of single-valued-flags' two members. Each gets its
 # own pass because each needs its own deliberately wrong invocation and a
-# verify command fixed for the whole pass, the same constraint passes 5 to 6
+# verify command fixed for the whole pass, the same constraint passes 4 to 5
 # already established -- generalised here from two decisions to ten.
 #
-# Passes 21 to 23 are the working-directory matrix: one mutation -- the
+# Passes 19 to 21 are the working-directory matrix: one mutation -- the
 # launcher resolving shared bodies against the working directory instead of its
 # declared source directories -- run from three different launch directories.
 # One mutation needs three passes because what it asserts is that the launch
@@ -115,48 +73,39 @@
 # failure attributable to content rather than to the mere presence of a
 # same-named file.
 #
-# Passes 24 and 25 are the consumer body's three decisions, run once per
-# runtime for the reason passes 9 and 10 give. All three are now caught by a
+# Pass 22 is the consumer body's three decisions. All three are now caught by a
 # failed comparison. The first used to be caught by an induced raise instead
 # -- weaker, and weighed and accepted -- before a comparison-based witness
 # replaced it.
 #
-# Passes 26 and 27 are the slice's reason for existing: the consumer wrapper
-# made a second owner of the placeholder body, once per runtime. Unlike every
-# other mutation in this file, the mutant raises nothing -- it is caught by an
-# ordinary check/check-equal mismatch that exits 1 on both runtimes, and it
-# answers both identity claims wrongly while every lane that imports only the
-# owner still passes.
+# Pass 23 is the slice's reason for existing: the consumer wrapper made a
+# second owner of the placeholder body. Unlike every other mutation in this
+# file, the mutant raises nothing -- it is caught by an ordinary
+# check/check-equal mismatch that exits 1, and it answers both identity claims
+# wrongly while every lane that imports only the owner still passes.
 #
-# Passes 28 and 29 are the fingerprint algorithm's own decisions -- the +1
-# that keeps a leading zero byte significant, the seed, the multiplier, the
-# modulus, and combine's order sensitivity -- run once per runtime for the
-# reason passes 9, 10, 24 and 25 give: the text is shared, but how each
-# runtime reaches it is not, and only running the same mutations through both
-# inclusion mechanisms can catch a wrapper that quietly stopped including it.
+# Pass 24 is the fingerprint algorithm's own decisions -- the +1 that keeps a
+# leading zero byte significant, the seed, the multiplier, the modulus, and
+# combine's order sensitivity.
 #
-# Passes 30 and 31 are the hex digit table, run once per runtime. Neither sets
-# a manifest, so provenance is skipped here exactly as it is for every other
-# pass but 32 through 35: what actually catches the mutation is the
-# self-tests' own "hex digits are lowercase on every runtime" case, which
-# check-equals fixed literals ("ff", "deadbeef", "0") rather than deriving its
-# expectation from fingerprint.scm, so both runtimes fail an ordinary
-# comparison. See the measured note beside the mutation declarations below for
-# why this is symmetric rather than the asymmetric outcome a
-# provenance-wrapped version of the same mutation would show.
+# Pass 25 is the hex digit table. It sets no manifest, so provenance is
+# skipped here exactly as it is for every other pass but 26 through 29: what
+# actually catches the mutation is the self-tests' own "hex digits are
+# lowercase" case, which check-equals fixed literals ("ff", "deadbeef", "0")
+# rather than deriving its expectation from fingerprint.scm.
 #
-# Passes 32 through 35 are the provenance check and the reachability guard
-# that closes over it (Task 8): 32 is the comparison, 33 the
-# missing-expectation branch, 34 the call site that reaches
-# harness-verify-provenance! at all, and 35 harness-provenance-reachability-
+# Passes 26 through 29 are the provenance check and the reachability guard
+# that closes over it (Task 8): 26 is the comparison, 27 the
+# missing-expectation branch, 28 the call site that reaches
+# harness-verify-provenance! at all, and 29 harness-provenance-reachability-
 # diagnosis itself, each witnessed through the exact-status helper so that
-# exit 3 -- the refusal -- is the green baseline, exactly as passes 5 and 6 do
+# exit 3 -- the refusal -- is the green baseline, exactly as passes 4 and 5 do
 # for the launcher's guard-directory refusals. A third refusal -- a manifest
 # naming an unreadable body -- has no mutation; see the stated blind spot
-# recorded beside pass 33 below. Pass 34 was pass 32's second mutation until
+# recorded beside pass 27 below. Pass 28 was pass 26's second mutation until
 # Task 8: see the detail beside its declaration for why the reachability guard
 # made WRONG_FP_FILE's exit-3 baseline ambiguous for that one mutation and not
-# for pass 32's own.
+# for pass 26's own.
 #
 # WHAT THIS SUITE NEEDS FROM ITS ENVIRONMENT
 #
@@ -172,30 +121,12 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "THIRTY-FIVE PASSES..." above. Declared here, rather than only in prose,
+# See "TWENTY-NINE PASSES..." above. Declared here, rather than only in prose,
 # so the count enforced at the bottom of this file is the same text a reader
 # checks by eye at the top -- one number to keep in sync, not two that can
 # quietly disagree.
-set(EXPECTED_PASSES_WITH_GAMBIT 35)
-set(EXPECTED_MUTATIONS_WITH_GAMBIT 83)
-
-# Six passes are gated on BYTE_MACHINE_GAMBIT_EXECUTABLE: pass 2 (the Gambit
-# adapter's export list, two mutations), pass 10 (the placeholder body's
-# decisions on Gambit, the same six-mutation list pass 9 declares for Chez),
-# pass 25 (the consumer body's decisions on Gambit, the same three-mutation
-# list pass 24 declares for Chez), pass 27 (the Gambit consumer wrapper's
-# double-include, one mutation), pass 29 (the fingerprint algorithm's
-# decisions on Gambit, the same five-mutation list pass 28 declares for
-# Chez), and pass 31 (the hex digit table on Gambit, one mutation). The
-# without-Gambit pair is this delta subtracted from the with-Gambit pair, not
-# a second hand-maintained pair of literals, so a non-gated pass added
-# anywhere in this file changes both together.
-set(GAMBIT_ONLY_PASSES 6)
-set(GAMBIT_ONLY_MUTATIONS 18)
-math(EXPR EXPECTED_PASSES_WITHOUT_GAMBIT
-  "${EXPECTED_PASSES_WITH_GAMBIT} - ${GAMBIT_ONLY_PASSES}")
-math(EXPR EXPECTED_MUTATIONS_WITHOUT_GAMBIT
-  "${EXPECTED_MUTATIONS_WITH_GAMBIT} - ${GAMBIT_ONLY_MUTATIONS}")
+set(EXPECTED_PASSES 29)
+set(EXPECTED_MUTATIONS 65)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -234,12 +165,10 @@ if(NOT BYTE_MACHINE_CHEZ_EXECUTABLE)
     "no-scheme preset; the registration must forward the discovered path.")
 endif()
 
-# src is staged whole, not just the body: src/gambit/byte-machine/placeholder.sld
-# includes ../../common/byte-machine/placeholder.scm, so the relative layout is
-# part of what has to be copied. Staging the body alone satisfies Chez, which
-# resolves by bare filename, and silently leaves Gambit compiling the
-# unmutated original -- a suite reporting a caught mutation on a runtime that
-# never saw it.
+# src is staged whole, not just the shared body: --library-root below points at
+# src/chez, the owner wrapper's own directory, and --source-dir points at
+# src/common, the shared body's directory. Both live under src, so staging the
+# body alone would leave the wrapper it is included through unreachable.
 set(BYTE_MACHINE_MUTATION_STAGE_DIRS
   "cmake" "test/support/cmake" "test/support/harness" "test/support/launchers"
   "src" "test/common")
@@ -511,42 +440,7 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Second pass: the Gambit adapter's export list -------------------------
-#
-# Per-runtime by definition. One mutation, one process; the runner mutations
-# above are not repeated.
-
-if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
-  byte_machine_mutation_reset()
-
-  set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
-    "${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
-    "-:search=${STAGE_DIR}/test/support/harness/gambit"
-    "-f"
-    "${STAGE_DIR}/test/support/harness/self/harness-self-tests.gambit.scm")
-
-  byte_machine_mutation(
-    FILE test/support/harness/gambit/byte-machine/test/harness.sld
-    SPEC harness-self-tests.gambit.scm
-    LABEL "gambit adapter: an exported adapter name is dropped"
-    FIND [[    adapter-os adapter-architecture adapter-execution-mode]]
-    REPLACE [[    adapter-architecture adapter-execution-mode]])
-
-  byte_machine_mutation(
-    FILE test/support/harness/gambit/byte-machine/test/harness.sld
-    SPEC harness-self-tests.gambit.scm
-    LABEL "gambit adapter: adapter-file-bytes is dropped from the export list"
-    FIND [[    adapter-value->string adapter-describe-condition adapter-file-bytes]]
-    REPLACE [[    adapter-value->string adapter-describe-condition]])
-
-  byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
-else()
-  message(STATUS
-    "byte-machine-mutation: no Gambit was passed in, so the Gambit adapter's "
-    "export list is not covered by this run.")
-endif()
-
-# --- Third pass: harness-begin's read of the environment filter ------------
+# --- Second pass: harness-begin's read of the environment filter -----------
 #
 # The self-tests cannot witness this one. They check the normalisation rule
 # directly, on the pure function, but the read itself only matters to a process
@@ -589,7 +483,7 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Fourth pass: the failure counter itself -------------------------------
+# --- Third pass: the failure counter itself ---------------------------------
 #
 # Declared under the self-tests lane first, and observed UNCAUGHT there: with
 # harness-record-failure! no longer counting, a self-test that fails prints its
@@ -617,7 +511,7 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Passes 5 to 6: the launcher's two guard-directory refusals -------------
+# --- Passes 4 to 5: the launcher's two guard-directory refusals -------------
 #
 # The launcher decides whether a lane runs at all, and its object guard is the
 # sole mechanism that makes `mode=source` an honest claim. Neither refusal can
@@ -706,7 +600,7 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Seventh pass: a source lane that compiles what it imports -------------
+# --- Sixth pass: a source lane that compiles what it imports ---------------
 #
 # Its own guard directory, because this is the one mutation here whose effect is
 # to write into one.
@@ -735,7 +629,7 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Eighth pass: the library-directories pairing ---------------------------
+# --- Seventh pass: the library-directories pairing ---------------------------
 #
 # The pairing is the launcher's central mechanism. Chez looks for a library's
 # compiled object only in the *object* half of a library-directories pair, so
@@ -874,12 +768,11 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Pass 9: the body's decisions, on Chez ----------------------------------
+# --- Pass 8: the placeholder body's decisions -------------------------------
 #
 # A wrapper that reimplemented the body is exactly a wrapper whose runtime does
-# not notice the body changing. That is why these two passes exist and why they
-# run the same mutations twice: this is not the runner body, identical text on
-# both runtimes, but a body whose being shared is the thing under test.
+# not notice the body changing. That is why this body is included rather than
+# defined in its owner library, and why this pass mutates it there.
 
 set(PLACEHOLDER_BODY src/common/byte-machine/placeholder.scm)
 
@@ -893,94 +786,56 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/common/placeholder-tests.chez.sps")
 
-# byte_machine_slice3_body_pass(<runtime>)
-#
-# One whole pass over the body's decisions, declared once. Both runtimes call
-# it, so they are provably checked against the same list: a mutation added for
-# one and forgotten for the other would be exactly the asymmetry these two
-# passes exist to rule out.
-#
-# The reset, the declarations and the run are all inside this function on
-# purpose. byte_machine_mutation_reset and byte_machine_mutation both write the
-# counter with PARENT_SCOPE, so they agree only while they share a caller;
-# declaring here and running from the caller would leave the run seeing a count
-# of zero and reporting a pass that checked nothing. The verify command is read
-# from the caller's scope, which is what makes the runtime the only difference.
-function(byte_machine_slice3_body_pass runtime)
-  byte_machine_mutation_reset()
+byte_machine_mutation_reset()
 
-  if(runtime STREQUAL "chez")
-    set(spec placeholder-tests.chez.sps)
-  else()
-    set(spec placeholder-tests.gambit.scm)
-  endif()
+byte_machine_mutation(
+  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.chez.sps
+  LABEL "placeholder: anything is a vector"
+  FIND [[  (and (vector? x)]]
+  REPLACE [[  (and #t]])
 
-  byte_machine_mutation(
-    FILE ${PLACEHOLDER_BODY} SPEC ${spec}
-    LABEL "placeholder on ${runtime}: anything is a vector"
-    FIND [[  (and (vector? x)]]
-    REPLACE [[  (and #t]])
+# Two mutations, because the length check can fail two ways: it can be absent,
+# or its bound can be wrong. Deleting it is caught by the case that builds a
+# length-3 vector carrying the real tag -- reachable through vector-ref on a
+# legitimately built placeholder, which is why this is witnessable at all.
+byte_machine_mutation(
+  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.chez.sps
+  LABEL "placeholder: the length is not checked at all"
+  FIND [[       (= (vector-length x) 2)]]
+  REPLACE [[       #t]])
 
-  # Two mutations, because the length check can fail two ways: it can be absent,
-  # or its bound can be wrong. Deleting it is caught by the case that builds a
-  # length-3 vector carrying the real tag -- reachable through vector-ref on a
-  # legitimately built placeholder, which is why this is witnessable at all.
-  byte_machine_mutation(
-    FILE ${PLACEHOLDER_BODY} SPEC ${spec}
-    LABEL "placeholder on ${runtime}: the length is not checked at all"
-    FIND [[       (= (vector-length x) 2)]]
-    REPLACE [[       #t]])
+byte_machine_mutation(
+  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.chez.sps
+  LABEL "placeholder: the length check accepts the wrong length"
+  FIND [[       (= (vector-length x) 2)]]
+  REPLACE [[       (= (vector-length x) 3)]])
 
-  byte_machine_mutation(
-    FILE ${PLACEHOLDER_BODY} SPEC ${spec}
-    LABEL "placeholder on ${runtime}: the length check accepts the wrong length"
-    FIND [[       (= (vector-length x) 2)]]
-    REPLACE [[       (= (vector-length x) 3)]])
+byte_machine_mutation(
+  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.chez.sps
+  LABEL "placeholder: the tag is not checked"
+  FIND [[       (eq? (vector-ref x 0) placeholder-tag)))]]
+  REPLACE [[       #t))]])
 
-  byte_machine_mutation(
-    FILE ${PLACEHOLDER_BODY} SPEC ${spec}
-    LABEL "placeholder on ${runtime}: the tag is not checked"
-    FIND [[       (eq? (vector-ref x 0) placeholder-tag)))]]
-    REPLACE [[       #t))]])
+# The rule the whole representation rests on. With a symbol tag every
+# assertion in the suite still passes except the one written for this, and
+# slice 4's identity test would become incapable of failing.
+byte_machine_mutation(
+  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.chez.sps
+  LABEL "placeholder: the tag is an interned symbol"
+  FIND [[(define placeholder-tag (vector 'byte-machine-placeholder))]]
+  REPLACE [[(define placeholder-tag 'byte-machine-placeholder)]])
 
-  # The rule the whole representation rests on. With a symbol tag every
-  # assertion in the suite still passes except the one written for this, and
-  # slice 4's identity test would become incapable of failing.
-  byte_machine_mutation(
-    FILE ${PLACEHOLDER_BODY} SPEC ${spec}
-    LABEL "placeholder on ${runtime}: the tag is an interned symbol"
-    FIND [[(define placeholder-tag (vector 'byte-machine-placeholder))]]
-    REPLACE [[(define placeholder-tag 'byte-machine-placeholder)]])
-
-  byte_machine_mutation(
-    FILE ${PLACEHOLDER_BODY} SPEC ${spec}
-    LABEL "placeholder on ${runtime}: the marker is allocated per call"
-    FIND [[(define (placeholder-marker)
+byte_machine_mutation(
+  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.chez.sps
+  LABEL "placeholder: the marker is allocated per call"
+  FIND [[(define (placeholder-marker)
   placeholder-marker-object)]]
-    REPLACE [[(define (placeholder-marker)
+  REPLACE [[(define (placeholder-marker)
   (vector 'byte-machine-marker))]])
 
-  byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
-endfunction()
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-byte_machine_slice3_body_pass("chez")
-
-# --- Pass 10: the same decisions, on Gambit ---------------------------------
-
-if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
-  set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
-    "${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
-    "-:search=${STAGE_DIR}/test/support/harness/gambit,search=${STAGE_DIR}/src/gambit"
-    "-f"
-    "${STAGE_DIR}/test/common/placeholder-tests.gambit.scm")
-
-  # The same six mutations, declared once and run per runtime. Writing them out
-  # twice would let the two lists drift, and a mutation silently present on only
-  # one runtime is precisely the defect this pair of passes exists to detect.
-  byte_machine_slice3_body_pass("gambit")
-endif()
-
-# --- Passes 11 to 20: the launcher's parse decisions ------------------------
+# --- Passes 9 to 18: the launcher's parse decisions -------------------------
 #
 # Deleting a refusal does not produce a wrong answer; it produces an invocation
 # that is accepted and then fails somewhere else, or does not fail at all. Two
@@ -1205,7 +1060,7 @@ byte_machine_slice3_launcher_pass(
   ${LAUNCHER_BASE_ARGS}
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
 
-# --- Passes 21 to 23: the working-directory matrix --------------------------
+# --- Passes 19 to 21: the working-directory matrix --------------------------
 #
 # One mutation, three passes, three expected outcomes. The launcher is made to
 # resolve shared bodies against the working directory -- the mechanism this
@@ -1307,11 +1162,10 @@ endforeach()
 # from the matrix's identical directory instead of the stage.
 set(BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY "")
 
-# --- Pass 24: the consumer body's decisions, on Chez ------------------------
+# --- Pass 22: the consumer body's decisions ---------------------------------
 #
-# Same argument as passes 9 and 10, for a second body: a wrapper that
-# reimplemented this body is exactly a wrapper whose runtime does not notice the
-# body changing, so the list runs once per runtime.
+# Same argument as pass 8, for a second body: a wrapper that reimplemented this
+# body is exactly a wrapper whose runtime does not notice the body changing.
 
 set(CONSUMER_BODY src/common/byte-machine/placeholder-consumer.scm)
 
@@ -1325,95 +1179,58 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/common/placeholder-identity-tests.chez.sps")
 
-# byte_machine_slice4_body_pass(<runtime>)
+byte_machine_mutation_reset()
+
+# Caught by comparison, not by a raise: consume always takes the reject
+# branch, so (consume (make-placeholder 7)) returns the marker instead of 7
+# and the recognition case fails an ordinary check-equal. An earlier form
+# used #t instead of #f, driving the same case into placeholder-value on a
+# non-vector and catching it by an induced raise instead -- replaced once
+# this comparison-based witness was found. See section 5.3 of the slice-4
+# design.
+byte_machine_mutation(
+  FILE ${CONSUMER_BODY} SPEC placeholder-identity-tests.chez.sps
+  LABEL "consumer: the argument is not checked at all"
+  FIND [[  (if (placeholder? p)]]
+  REPLACE [[  (if #f]])
+
+byte_machine_mutation(
+  FILE ${CONSUMER_BODY} SPEC placeholder-identity-tests.chez.sps
+  LABEL "consumer: the recognised branch yields the marker, not the value"
+  FIND [[      (placeholder-value p)]]
+  REPLACE [[      (placeholder-marker)]])
+
+# The only mutation that reaches D3's second clause by itself: recognition
+# still works, and the outcome is merely a different object that prints the
+# same. This is the one an eq?-free test would miss entirely.
+byte_machine_mutation(
+  FILE ${CONSUMER_BODY} SPEC placeholder-identity-tests.chez.sps
+  LABEL "consumer: the outcome is a lookalike, not the owner's singleton"
+  FIND [[      (placeholder-marker)))]]
+  REPLACE [[      (vector 'byte-machine-marker)))]])
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 23: the consumer wrapper double-include ---------------------------
 #
-# Declared once and called per runtime, for the reason
-# byte_machine_slice3_body_pass gives: a mutation added for one runtime and
-# forgotten for the other is precisely the asymmetry the pair exists to rule
-# out. The reset, the declarations and the run all live inside this function
-# because byte_machine_mutation_reset and byte_machine_mutation both write the
-# counter with PARENT_SCOPE and agree only while they share a caller.
-function(byte_machine_slice4_body_pass runtime)
-  byte_machine_mutation_reset()
-
-  if(runtime STREQUAL "chez")
-    set(spec placeholder-identity-tests.chez.sps)
-  else()
-    set(spec placeholder-identity-tests.gambit.scm)
-  endif()
-
-  # Caught by comparison, not by a raise: consume always takes the reject
-  # branch, so (consume (make-placeholder 7)) returns the marker instead of 7
-  # and the recognition case fails an ordinary check-equal. An earlier form
-  # used #t instead of #f, driving the same case into placeholder-value on a
-  # non-vector and catching it by an induced raise instead -- replaced once
-  # this comparison-based witness was found. See section 5.3 of the slice-4
-  # design.
-  byte_machine_mutation(
-    FILE ${CONSUMER_BODY} SPEC ${spec}
-    LABEL "consumer on ${runtime}: the argument is not checked at all"
-    FIND [[  (if (placeholder? p)]]
-    REPLACE [[  (if #f]])
-
-  byte_machine_mutation(
-    FILE ${CONSUMER_BODY} SPEC ${spec}
-    LABEL "consumer on ${runtime}: the recognised branch yields the marker, not the value"
-    FIND [[      (placeholder-value p)]]
-    REPLACE [[      (placeholder-marker)]])
-
-  # The only mutation that reaches D3's second clause by itself: recognition
-  # still works, and the outcome is merely a different object that prints the
-  # same. This is the one an eq?-free test would miss entirely.
-  byte_machine_mutation(
-    FILE ${CONSUMER_BODY} SPEC ${spec}
-    LABEL "consumer on ${runtime}: the outcome is a lookalike, not the owner's singleton"
-    FIND [[      (placeholder-marker)))]]
-    REPLACE [[      (vector 'byte-machine-marker)))]])
-
-  byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
-endfunction()
-
-byte_machine_slice4_body_pass("chez")
-
-# --- Pass 25: the same decisions, on Gambit ---------------------------------
-
-if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
-  set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
-    "${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
-    "-:search=${STAGE_DIR}/test/support/harness/gambit,search=${STAGE_DIR}/src/gambit"
-    "-f"
-    "${STAGE_DIR}/test/common/placeholder-identity-tests.gambit.scm")
-
-  byte_machine_slice4_body_pass("gambit")
-endif()
-
-# --- Passes 26 and 27: the consumer wrapper double-includes -----------------
-#
-# Section 7.2's rule -- each shared body is included by exactly one library per
-# runtime; others import that owner -- stated as something that can fail. The
-# mutation makes the consumer a second owner of the placeholder body, so it gets
-# its own tag and its own marker, and both identity cases answer wrongly.
+# Section 7.2's rule -- each shared body is included by exactly one library;
+# others import that owner -- stated as something that can fail. The mutation
+# makes the consumer a second owner of the placeholder body, so it gets its own
+# tag and its own marker, and both identity cases answer wrongly.
 #
 # It is the mutation this slice exists for, and it is silent under every other
 # lane in the tree: measured on 2026-08-17, the mutant raises nothing -- it is
 # caught only by the identity lane's own check/check-equal assertions, which
-# exit 1 on both runtimes. The placeholder-cwd lanes still pass under it,
-# because they import only the owner. Only a program with both libraries in
-# scope can see it.
+# exit 1. The placeholder-cwd lanes still pass under it, because they import
+# only the owner. Only a program with both libraries in scope can see it.
 #
 # The import is REPLACED, never augmented. Adding an include beside the import
 # was measured on the same date: Chez refuses at library construction with
 # "multiple definitions for make-placeholder and other identifiers in body" --
-# caught, but not for the declared reason -- and Gambit does not fail at all,
-# leaving the mutation a survivor. See section 8.1 of the slice-4 design.
-#
-# Two passes rather than one shared list, unlike passes 24 and 25: slice 2's
-# rule S6 ("Chez alone is enough, the text is identical") does not reach these,
-# because the two wrappers differ in import syntax and in include path form, and
-# the two runtimes do not even agree on what the augmenting variant means.
+# caught, but not for the declared reason. See section 8.1 of the slice-4
+# design.
 
 set(CHEZ_CONSUMER_WRAPPER src/chez/byte-machine/placeholder-consumer.sls)
-set(GAMBIT_CONSUMER_WRAPPER src/gambit/byte-machine/placeholder-consumer.sld)
 
 byte_machine_mutation_reset()
 
@@ -1429,7 +1246,7 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 
 byte_machine_mutation(
   FILE ${CHEZ_CONSUMER_WRAPPER} SPEC placeholder-identity-tests.chez.sps
-  LABEL "consumer wrapper on chez: includes the owner's body instead of importing the owner"
+  LABEL "consumer wrapper: includes the owner's body instead of importing the owner"
   FIND [[  (import (rnrs) (byte-machine placeholder) (only (chezscheme) include))
   (include "placeholder-consumer.scm"))]]
   REPLACE [[  (import (rnrs) (only (chezscheme) include))
@@ -1438,86 +1255,12 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
-  byte_machine_mutation_reset()
-
-  set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
-    "${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
-    "-:search=${STAGE_DIR}/test/support/harness/gambit,search=${STAGE_DIR}/src/gambit"
-    "-f"
-    "${STAGE_DIR}/test/common/placeholder-identity-tests.gambit.scm")
-
-  byte_machine_mutation(
-    FILE ${GAMBIT_CONSUMER_WRAPPER} SPEC placeholder-identity-tests.gambit.scm
-    LABEL "consumer wrapper on gambit: includes the owner's body instead of importing the owner"
-    FIND [[  (import (scheme base) (byte-machine placeholder))
-  (include "../../common/byte-machine/placeholder-consumer.scm"))]]
-    REPLACE [[  (import (scheme base))
-  (include "../../common/byte-machine/placeholder.scm")
-  (include "../../common/byte-machine/placeholder-consumer.scm"))]])
-
-  byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
-endif()
-
-# --- Passes 28 and 29: the fingerprint algorithm ----------------------------
-#
-# Run once per runtime for the reason passes 9 and 10 give: the text is shared,
-# but how each runtime reaches it is not, and an adapter that quietly stopped
-# including it is exactly an adapter whose runtime never notices the body
-# changing.
+# --- Pass 24: the fingerprint algorithm --------------------------------------
 #
 # The self-tests assert measured literals, so any change to seed, multiplier,
 # modulus, the +1, or the digit table moves at least one of them.
 
 set(FINGERPRINT test/support/harness/shared/fingerprint.scm)
-
-function(byte_machine_slice5a_algorithm_pass runtime)
-  byte_machine_mutation_reset()
-
-  if(runtime STREQUAL "chez")
-    set(spec harness-self-tests.chez.sps)
-  else()
-    set(spec harness-self-tests.gambit.scm)
-  endif()
-
-  # Without the +1 a NUL contributes nothing, and the three leading-zero cases
-  # collapse into one value. This is the only mutation here that a fixed set of
-  # literals could survive if the literals happened not to include a NUL --
-  # which is why they do.
-  byte_machine_mutation(
-    FILE ${FINGERPRINT} SPEC ${spec}
-    LABEL "fingerprint on ${runtime}: leading zero bytes stop being significant"
-    FIND [[                           (+ (bytevector-u8-ref bv i) 1))]]
-    REPLACE [[                           (bytevector-u8-ref bv i))]])
-
-  byte_machine_mutation(
-    FILE ${FINGERPRINT} SPEC ${spec}
-    LABEL "fingerprint on ${runtime}: the seed changes"
-    FIND [[(define harness-fingerprint-seed 14695981039346656)]]
-    REPLACE [[(define harness-fingerprint-seed 14695981039346657)]])
-
-  byte_machine_mutation(
-    FILE ${FINGERPRINT} SPEC ${spec}
-    LABEL "fingerprint on ${runtime}: the multiplier changes"
-    FIND [[(define harness-fingerprint-multiplier 1000003)]]
-    REPLACE [[(define harness-fingerprint-multiplier 1000033)]])
-
-  byte_machine_mutation(
-    FILE ${FINGERPRINT} SPEC ${spec}
-    LABEL "fingerprint on ${runtime}: the modulus changes"
-    FIND [[(define harness-fingerprint-modulus 2305843009213693951) ; 2^61 - 1]]
-    REPLACE [[(define harness-fingerprint-modulus 2305843009213693907)]])
-
-  # Combining becomes a sum, so order stops mattering and the two combine cases
-  # collapse to one value.
-  byte_machine_mutation(
-    FILE ${FINGERPRINT} SPEC ${spec}
-    LABEL "fingerprint on ${runtime}: combining stops being order sensitive"
-    FIND [[              (modulo (+ (* h harness-fingerprint-multiplier) (+ (car rest) 1))]]
-    REPLACE [[              (modulo (+ h (+ (car rest) 1))]])
-
-  byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
-endfunction()
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
@@ -1527,66 +1270,59 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
 
-byte_machine_slice5a_algorithm_pass("chez")
+byte_machine_mutation_reset()
 
-if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
-  set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
-    "${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
-    "-:search=${STAGE_DIR}/test/support/harness/gambit"
-    "-f"
-    "${STAGE_DIR}/test/support/harness/self/harness-self-tests.gambit.scm")
+# Without the +1 a NUL contributes nothing, and the three leading-zero cases
+# collapse into one value. This is the only mutation here that a fixed set of
+# literals could survive if the literals happened not to include a NUL --
+# which is why they do.
+byte_machine_mutation(
+  FILE ${FINGERPRINT} SPEC harness-self-tests.chez.sps
+  LABEL "fingerprint: leading zero bytes stop being significant"
+  FIND [[                           (+ (bytevector-u8-ref bv i) 1))]]
+  REPLACE [[                           (bytevector-u8-ref bv i))]])
 
-  byte_machine_slice5a_algorithm_pass("gambit")
-endif()
+byte_machine_mutation(
+  FILE ${FINGERPRINT} SPEC harness-self-tests.chez.sps
+  LABEL "fingerprint: the seed changes"
+  FIND [[(define harness-fingerprint-seed 14695981039346656)]]
+  REPLACE [[(define harness-fingerprint-seed 14695981039346657)]])
 
-# --- Passes 30 and 31: the hex rendering table -------------------------------
+byte_machine_mutation(
+  FILE ${FINGERPRINT} SPEC harness-self-tests.chez.sps
+  LABEL "fingerprint: the multiplier changes"
+  FIND [[(define harness-fingerprint-multiplier 1000003)]]
+  REPLACE [[(define harness-fingerprint-multiplier 1000033)]])
+
+byte_machine_mutation(
+  FILE ${FINGERPRINT} SPEC harness-self-tests.chez.sps
+  LABEL "fingerprint: the modulus changes"
+  FIND [[(define harness-fingerprint-modulus 2305843009213693951) ; 2^61 - 1]]
+  REPLACE [[(define harness-fingerprint-modulus 2305843009213693907)]])
+
+# Combining becomes a sum, so order stops mattering and the two combine cases
+# collapse to one value.
+byte_machine_mutation(
+  FILE ${FINGERPRINT} SPEC harness-self-tests.chez.sps
+  LABEL "fingerprint: combining stops being order sensitive"
+  FIND [[              (modulo (+ (* h harness-fingerprint-multiplier) (+ (car rest) 1))]]
+  REPLACE [[              (modulo (+ h (+ (car rest) 1))]])
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 25: the hex rendering table -----------------------------------------
 #
-# MEASURED 2026-08-17, AND SYMMETRIC -- NOT THE ASYMMETRIC OUTCOME A FIRST
-# READING OF "fingerprint.scm is also what the build-time expectation loads"
-# SUGGESTS.
-#
-# Neither pass sets a manifest, so provenance is skipped here exactly as it is
-# for every other pass but 32 through 35 below: BYTE_MACHINE_FINGERPRINT_FILES
-# is unset, harness-verify-provenance! returns #t immediately, and the
-# self-tests suite runs its own cases undisturbed. It is the self-tests' own
-# "hex digits are lowercase on every runtime" case that actually witnesses
-# this mutation -- it check-equals fixed literals ("ff", "deadbeef", "0")
-# rather than deriving its expectation from fingerprint.scm, so mutating the
-# digit table fails an ordinary comparison on both runtimes: both processes
-# exit 1 (the harness's
-# own "an assertion failed" status) with a "byte-machine-harness: FAIL " line,
-# which is exactly what EXPECT_STATUS and EXPECT_OUTPUT_MATCHES below assert
-# and exactly what the real run reports caught for both.
-#
-# The asymmetric story -- Chez agreeing with a build-time expectation that
-# moved with it, Gambit alone catching the divergence -- is not demonstrated
-# by any pass in this file, passes 32 through 35 included (none of the four
-# mutates the hex table; that is what this pair alone does). Passes 32 and 33
-# both run Chez only, neither wrapped in if(BYTE_MACHINE_GAMBIT_EXECUTABLE), so
-# neither can be where "Gambit alone catches it" happens. Both compare against
-# a fixed wrong-value fixture rather than a fingerprint recomputed from the
-# mutated tree -- pass 32 against a file holding the literal
-# "not-a-fingerprint", pass 33 against never-produced.fingerprint, a path this
-# suite never writes -- so neither expectation can move with a mutation the
-# way the story requires. (Pass 34's fixture is a correct, not a wrong, value,
-# computed once from the unmutated tree before its own mutation runs; pass 34
-# does not mutate fingerprint.scm either, so this still cannot show the
-# asymmetry.) And harness-hex-digits is the one definition both adapters
-# include verbatim: any pass that did compute its expectation via Chez over
-# the same staged tree the mutation lands on would have that computation read
-# the identical mutated table the runtime under test reads, so the two would
-# agree regardless of runtime. Showing the asymmetry needs a provenance-
-# wrapped verify command whose expectation is built from an *unmutated* tree
-# while the runtime under test sees the mutated one; staging gives every pass
-# one tree, already mutated, so no pass here can offer that.
-#
-# Section 6.1 of the slice-5a design carries the claim instead, in the
-# design's own terms: the cross-runtime guarantee rests on the Gambit lane
-# because the expectation is a Chez computation -- an argument from how the
-# build is wired, not a fact this suite reproves. An earlier draft of this
-# comment reassigned the asymmetric outcome to passes 32 and 33 rather than
-# dropping it; checked against what those two passes actually mutate and
-# compare, that reassignment does not hold either.
+# MEASURED 2026-08-17. No manifest is set, so provenance is skipped here
+# exactly as it is for every other pass but 26 through 29 below:
+# BYTE_MACHINE_FINGERPRINT_FILES is unset, harness-verify-provenance! returns
+# #t immediately, and the self-tests suite runs its own cases undisturbed. It
+# is the self-tests' own "hex digits are lowercase" case that actually
+# witnesses this mutation -- it check-equals fixed literals ("ff", "deadbeef",
+# "0") rather than deriving its expectation from fingerprint.scm, so mutating
+# the digit table fails an ordinary comparison: the process exits 1 (the
+# harness's own "an assertion failed" status) with a "byte-machine-harness:
+# FAIL " line, which is exactly what EXPECT_STATUS and EXPECT_OUTPUT_MATCHES
+# below assert and exactly what the real run reports caught.
 
 set(HEX_MUTATION_FIND [[(define harness-hex-digits "0123456789abcdef")]])
 set(HEX_MUTATION_REPLACE [[(define harness-hex-digits "0123456789ABCDEF")]])
@@ -1603,7 +1339,7 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 
 byte_machine_mutation(
   FILE ${FINGERPRINT} SPEC harness-self-tests.chez.sps
-  LABEL "fingerprint: hex digits become uppercase (Chez)"
+  LABEL "fingerprint: hex digits become uppercase"
   FIND "${HEX_MUTATION_FIND}"
   REPLACE "${HEX_MUTATION_REPLACE}"
   EXPECT_STATUS 1
@@ -1611,32 +1347,12 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
-  byte_machine_mutation_reset()
-
-  set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
-    "${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
-    "-:search=${STAGE_DIR}/test/support/harness/gambit"
-    "-f"
-    "${STAGE_DIR}/test/support/harness/self/harness-self-tests.gambit.scm")
-
-  byte_machine_mutation(
-    FILE ${FINGERPRINT} SPEC harness-self-tests.gambit.scm
-    LABEL "fingerprint: hex digits become uppercase (Gambit)"
-    FIND "${HEX_MUTATION_FIND}"
-    REPLACE "${HEX_MUTATION_REPLACE}"
-    EXPECT_STATUS 1
-    EXPECT_OUTPUT_MATCHES "byte-machine-harness: FAIL ")
-
-  byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
-endif()
-
-# --- Passes 32 and 33: the provenance check itself ---------------------------
+# --- Passes 26 and 27: the provenance check itself ----------------------------
 #
 # Wrapped in the exact-status helper so exit 3 -- the refusal -- is the green
-# baseline, exactly as passes 5 and 6 do for the launcher. A mutation that makes
+# baseline, exactly as passes 4 and 5 do for the launcher. A mutation that makes
 # the check more permissive drops the inner status to 0, the wrapper reports
-# nonzero, and the mutation is caught. Continued below by passes 34 and 35,
+# nonzero, and the mutation is caught. Continued below by passes 28 and 29,
 # which this pair's own comments point to at the place each split off.
 #
 # THE MANIFEST NAMES ONE BODY ON PURPOSE
@@ -1644,8 +1360,8 @@ endif()
 # BYTE_MACHINE_EXPECT_COMMAND packs its argument vector with `|`, which is also
 # the manifest separator, so a two-element manifest would be unpacked as two
 # arguments. One body is enough: these passes test whether the check runs and is
-# consulted, not how values combine, which passes 28 and 29 cover. Passes 34
-# and 35 keep the same one-body manifest for the same reason.
+# consulted, not how values combine, which pass 24 covers. Passes 28 and 29
+# keep the same one-body manifest for the same reason.
 
 set(RUNNER_BODY test/support/harness/shared/harness-runner.scm)
 
@@ -1690,10 +1406,10 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # compares only the number, so both baseline and this mutation satisfy
 # EXPECT_EXIT 3 and the wrapper reports "exited as expected" either way: not
 # caught, not because nothing noticed, but because two different refusals now
-# agree on the one status this vocabulary gives refusals. Moved to pass 34
+# agree on the one status this vocabulary gives refusals. Moved to pass 28
 # below, which is what gives it a baseline the guard cannot also produce.
 
-# Pass 33: the same wrapper, but the expectation file does not exist, so the
+# Pass 27: the same wrapper, but the expectation file does not exist, so the
 # refusal under test is the missing-expectation branch rather than the
 # comparison. Its mutation leaves the guard `(not expected)` matching -- so
 # there is no fallthrough to the next clause -- and changes only what the
@@ -1757,10 +1473,10 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # and this is recorded rather than papered over with an EXPECT_SURVIVES, which
 # AGENTS.md reserves for the genuinely unwitnessable.
 
-# --- Pass 34: the call site, witnessed against a baseline the guard cannot
+# --- Pass 28: the call site, witnessed against a baseline the guard cannot
 # also satisfy -----------------------------------------------------------
 #
-# Continues "provenance: harness-begin stops checking at all" from pass 32,
+# Continues "provenance: harness-begin stops checking at all" from pass 26,
 # with a different baseline. WRONG_FP_FILE cannot be reused: it makes the
 # unmutated lane's correct behaviour exit 3, and after Task 8 this mutation's
 # broken behaviour *also* exits 3 (the reachability guard's own refusal), so a
@@ -1792,7 +1508,7 @@ execute_process(
   ERROR_VARIABLE fp_err)
 if(NOT fp_rc EQUAL 0)
   message(FATAL_ERROR
-    "byte-machine-mutation: could not compute pass 34's baseline fingerprint "
+    "byte-machine-mutation: could not compute pass 28's baseline fingerprint "
     "(exit ${fp_rc}): ${fp_out}${fp_err}")
 endif()
 
@@ -1825,7 +1541,7 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Pass 35: the reachability guard itself -------------------------------
+# --- Pass 29: the reachability guard itself -------------------------------
 #
 # harness-unreached-provenance.scm (test/support/harness/self/) deliberately
 # never calls harness-begin, so its lane's baseline already exits 3 through
@@ -1836,7 +1552,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # independently (V13's own comment: "manifest and not checked?"): the
 # diagnosis can stop firing, or checked? can stop meaning what its name says.
 # Either one drops the baseline's 3 to 0, which EXPECT_EXIT catches cleanly --
-# unlike pass 34, nothing else in this lane's execution can also produce 3, so
+# unlike pass 28, nothing else in this lane's execution can also produce 3, so
 # no separate baseline is needed here.
 set(UNREACHED_PROVENANCE_SPEC byte-machine.harness.unreached-provenance.chez.source)
 
@@ -1875,23 +1591,15 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES_WITH_GAMBIT and friends, and the "THIRTY-FIVE PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "TWENTY-NINE PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.
 byte_machine_mutation_totals(actual_passes actual_mutations)
-if(BYTE_MACHINE_GAMBIT_EXECUTABLE)
-  set(expected_passes "${EXPECTED_PASSES_WITH_GAMBIT}")
-  set(expected_mutations "${EXPECTED_MUTATIONS_WITH_GAMBIT}")
-else()
-  set(expected_passes "${EXPECTED_PASSES_WITHOUT_GAMBIT}")
-  set(expected_mutations "${EXPECTED_MUTATIONS_WITHOUT_GAMBIT}")
-endif()
-if(NOT actual_passes EQUAL expected_passes OR NOT actual_mutations EQUAL expected_mutations)
+if(NOT actual_passes EQUAL EXPECTED_PASSES OR NOT actual_mutations EQUAL EXPECTED_MUTATIONS)
   message(FATAL_ERROR
-    "byte-machine-mutation: expected ${expected_passes} passes / "
-    "${expected_mutations} mutations "
-    "(Gambit discovered: ${BYTE_MACHINE_GAMBIT_EXECUTABLE}), got ${actual_passes} "
+    "byte-machine-mutation: expected ${EXPECTED_PASSES} passes / "
+    "${EXPECTED_MUTATIONS} mutations, got ${actual_passes} "
     "passes / ${actual_mutations} mutations. A byte_machine_mutation_run call -- "
     "a whole pass -- or a byte_machine_mutation() declaration within one was "
     "deleted, or one was added without updating the expected count at the top "
