@@ -21,8 +21,8 @@ include("${CMAKE_CURRENT_LIST_DIR}/ByteMachineTesting.cmake")
 #
 # Map each declared body to the copy a compiled lane's build step wrote into
 # <dir>. Flat and keyed by basename, which is unambiguous because
-# byte_machine_guard_duplicate_basenames forbids two shared bodies sharing one
-# repository-wide. One rule for every compiled lane: protium needs per-lane
+# byte_machine_add_scheme_lane refuses a manifest carrying two entries with
+# one basename. One rule for every compiled lane: protium needs per-lane
 # path logic here precisely because it has no equivalent guard.
 function(byte_machine_lane_measured_copies dir out_var)
   set(copies "")
@@ -31,6 +31,31 @@ function(byte_machine_lane_measured_copies dir out_var)
     list(APPEND copies "${dir}/${name}")
   endforeach()
   set(${out_var} "${copies}" PARENT_SCOPE)
+endfunction()
+
+# byte_machine_lane_duplicate_basenames(<out_duplicates> <path>...)
+#
+# Basenames appearing more than once, each reported once however often they
+# repeat. Narrowed from the retired repository-wide guard (decision 0006) to
+# the one invariant that survives it: byte_machine_lane_measured_copies keys
+# a compiled lane's fingerprint/ copies by basename, so within one lane's
+# manifest a repeated basename would make one copy silently overwrite the
+# other. Compared with the extension, because the extension is part of the
+# copied filename.
+function(byte_machine_lane_duplicate_basenames out_duplicates)
+  set(seen "")
+  set(duplicates "")
+  foreach(path IN LISTS ARGN)
+    get_filename_component(base "${path}" NAME)
+    if(base IN_LIST seen)
+      list(APPEND duplicates "${base}")
+    endif()
+    list(APPEND seen "${base}")
+  endforeach()
+  if(duplicates)
+    list(REMOVE_DUPLICATES duplicates)
+  endif()
+  set(${out_duplicates} "${duplicates}" PARENT_SCOPE)
 endfunction()
 
 # byte_machine_chez_aot_paths(<name> <program> <out_object_dir> <out_compiled>)
@@ -201,6 +226,19 @@ function(byte_machine_add_scheme_lane)
         "${body}.")
     endif()
   endforeach()
+
+  # Within one lane's manifest, basenames must be unique: the flat
+  # fingerprint/ copy directory of the aot branch keys measured copies by
+  # basename. This replaced the repository-wide basename guard when the
+  # include namespace it policed retired (decision 0006).
+  byte_machine_lane_duplicate_basenames(duplicate_basenames ${arg_SHARED_BODIES})
+  if(duplicate_basenames)
+    message(FATAL_ERROR
+      "byte-machine: '${arg_NAME}' declares two sources sharing a basename: "
+      "${duplicate_basenames}. byte_machine_lane_measured_copies keys a "
+      "compiled lane's fingerprint/ copies by basename, so one would "
+      "silently overwrite the other.")
+  endif()
 
   # Within this registrar the name is the single source of the mode, so a
   # registration here cannot claim one lane while running another. It is not the

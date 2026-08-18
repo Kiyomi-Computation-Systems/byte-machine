@@ -72,6 +72,13 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
       PROGRAM "${SPEC_SELF}"
       SHARED_BODIES "${SPEC_SELF}" "/nonexistent/body.scm"
       TIMEOUT 10)
+  elseif(c STREQUAL "lane-rejects-duplicate-source-basename")
+    byte_machine_add_scheme_lane(
+      NAME byte-machine.harness.example.chez.source
+      BACKEND chez
+      PROGRAM "${SPEC_SELF}"
+      SHARED_BODIES "${SPEC_SELF}" "${SPEC_SELF}"
+      TIMEOUT 10)
   elseif(c STREQUAL "lane-rejects-unknown-backend")
     byte_machine_add_scheme_lane(
       NAME byte-machine.harness.example.chez.source
@@ -131,6 +138,15 @@ list(FIND command "--object-guard" guard_index)
 math(EXPR guard_value_index "${guard_index} + 1")
 list(GET command "${guard_value_index}" guard)
 spec_check_equal("${guard}" "/b/guard" "chez lane passes the object guard directory")
+
+# Within one lane, measured copies are keyed by basename in a flat
+# fingerprint/ directory, so a manifest carrying two entries with one
+# basename would let one silently overwrite the other. The pure detector is
+# asserted directly; the registrar's refusal is a rejection case below.
+byte_machine_lane_duplicate_basenames(dups "/a/x.sls" "/b/y.sls")
+spec_check_equal("${dups}" "" "distinct basenames report no duplicates")
+byte_machine_lane_duplicate_basenames(dups "/a/x.sls" "/b/x.sls" "/c/x.sls" "/d/y.sls")
+spec_check_equal("${dups}" "x.sls" "a repeated basename is reported once, however often it repeats")
 
 # --- Rejections ------------------------------------------------------------
 
@@ -455,6 +471,7 @@ spec_expect_all_rejected("${SPEC_SELF}"
   "lane-requires-shared-bodies|SHARED_BODIES is required for byte_machine_add_scheme_lane"
   "lane-requires-existing-program|names a program that does not exist"
   "lane-rejects-missing-shared-body|names a shared body that does not exist"
+  "lane-rejects-duplicate-source-basename|declares two sources sharing a basename"
   "lane-rejects-unknown-backend|is not a Scheme lane backend"
   "lane-rejects-unknown-mode|is not an execution mode this lane module can build a command for")
 

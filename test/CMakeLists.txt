@@ -230,21 +230,6 @@ function(byte_machine_wrong_fingerprint name out_var)
   set(${out_var} "${expect_file}" PARENT_SCOPE)
 endfunction()
 
-# src/common holds bodies included by a library; test/common holds bodies
-# included by a program. Every body from either kind of directory shares one
-# basename namespace, which now spans the harness and src/ for the first
-# time.
-byte_machine_portability_guard(
-  SHARED_DIRS "${BYTE_MACHINE_SRC_COMMON_DIR}"
-  WRAPPED_DIRS "${BYTE_MACHINE_HARNESS_SELF_DIR}" "${BYTE_MACHINE_TEST_COMMON_DIR}")
-
-byte_machine_add_test(
-  NAME byte-machine.harness.cmake-portability-guard.cmake.direct
-  COMMAND "${CMAKE_COMMAND}" -P
-          "${CMAKE_CURRENT_LIST_DIR}/support/cmake/ByteMachinePortabilityGuardSpec.cmake"
-  TIMEOUT 120
-  LABELS unit)
-
 # --- The working-directory matrix ------------------------------------------
 #
 # Three directories, each catching a different failure of the include
