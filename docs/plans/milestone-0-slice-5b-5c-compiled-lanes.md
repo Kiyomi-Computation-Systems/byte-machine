@@ -12,6 +12,17 @@ and `gsc -exe -nopreload`. D5 closes at the end of 5c.
 One document for two slices, because the binding mechanism spans them: 5b introduces it and 5c
 consumes it. Each slice still gets its own implementation plan.
 
+> **Amended 2026-08-18 by [decision 0005](../decisions/0005-chez-only.md): Gambit
+> and R7RS leave the project contract.** This document is a record and keeps all of its Gambit
+> content. What changed *after* it: **slice 5c is cancelled** — Gambit `.o1` and
+> `gsc -exe -nopreload` are not built, so claim 3 ("all four lanes agree on one content
+> fingerprint") closes at the two Chez lanes, which is the weaker statement decision 0005 records
+> as such. **Slice 5b's scope is unchanged**: Chez AOT and the mechanism that binds a fingerprint
+> to an artifact rather than to today's source are exactly what this document specifies, and
+> claims 1, 2, and 4 stand as written for the Chez lanes. Deliverable D5 therefore closes at the
+> end of 5b rather than the end of 5c. See
+> [chez-only-simplification.md](./chez-only-simplification.md).
+
 ## 1. What these slices must prove
 
 Slice 5a built the instrument and proved it falsifiable while nothing depended on it. These two

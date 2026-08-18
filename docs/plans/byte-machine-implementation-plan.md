@@ -21,15 +21,15 @@ This repository will contain a private HTTP request fixture only to prove that t
 The following decisions are fixed for the initial implementation. Changing one requires an explicit plan update.
 
 1. Machine specifications are built with ordinary Scheme procedures into an immutable, inspectable source IR.
-2. A pure verifier/compiler transforms the source IR and an offline generator emits deterministic portable Scheme.
+2. A pure verifier/compiler transforms the source IR and an offline generator emits deterministic R6RS Scheme.
 3. Generated parsers depend only on the small runtime library, never on the builder, verifier, compiler, or reference interpreter.
 4. A reference interpreter is the semantic oracle for generated code.
 5. `define-machine` or other macro sugar is deferred until the procedural API is stable.
 6. The source IR is closed and serializable. It cannot contain opaque Scheme procedures.
 7. Runtime extension points are declared named callbacks bound when a parser is constructed.
 8. The initial production backend emits direct Scheme control flow, not a generic opcode interpreter.
-9. One portable backend targets both Chez and Gambit. Thin implementation-specific library wrappers isolate module and compatibility differences.
-10. Implementation-specific backends are permitted only when reproducible compiled benchmarks demonstrate a material need.
+9. The backend targets Chez Scheme. Libraries are ordinary R6RS `.sls`; no cross-implementation wrapper layer exists. (Amended 2026-08-18 — see [decision 0005](../decisions/0005-chez-only.md).)
+10. Chez-specific emission — fixnum operations, unsafe declarations, or any identifier outside plain R6RS — is permitted only when reproducible compiled benchmarks demonstrate a material need.
 11. Portable alternative layouts such as transition tables, trie specialization, or unrolling are also admitted only when benchmarks justify their complexity.
 12. Structural verification is mandatory before source emission.
 13. Parser fields are fixed-width unsigned integers and bitfields with checked operations.
@@ -56,7 +56,7 @@ The following decisions are fixed for the initial implementation. Changing one r
 - Support efficient counted consumption for fixed-length and chunked bodies.
 - Support explicit EOF behavior, successful stopping, sticky errors, reset, pause, and resume.
 - Verify graph structure before interpretation or source generation.
-- Emit deterministic wrapper-free portable Scheme source.
+- Emit deterministic wrapper-free R6RS Scheme source.
 - Produce behavior equivalent to the reference interpreter.
 
 ### 3.2 Quality goals
@@ -68,7 +68,7 @@ The following decisions are fixed for the initial implementation. Changing one r
 - No hidden environment or filesystem reads in the functional core.
 - Clear, structured, stable diagnostics.
 - Reproducible source generation.
-- Portable behavior across the supported Chez/Gambit and OS/architecture matrix.
+- Portable behavior across the supported OS/architecture matrix on Chez Scheme.
 
 ## 4. Non-goals for v0.1
 
@@ -85,7 +85,7 @@ The following decisions are fixed for the initial implementation. Changing one r
 - A stable macro DSL.
 - Graph visualization tooling.
 - SIMD, unsafe Scheme primitives, native-endian tables, or architecture-specific code.
-- Chez- or Gambit-specific emitters without benchmark evidence.
+- Emitter variants beyond the direct-code backend without benchmark evidence.
 - Resource policies such as maximum header count or body size. Those belong to a parser consumer; fixed-width overflow safety remains a machine concern.
 
 ## 5. Architectural Model
@@ -149,43 +149,23 @@ The imperative shells are limited to:
 
 ### 7.1 Shared implementation subset
 
-The functional core, runtime body, generated body, and shared tests live in wrapper-free `.scm` files using a conservative common subset.
+The functional core, runtime body, generated body, and shared tests live in wrapper-free `.scm` files.
 
 Use:
 
 - ordinary procedures, lexical bindings, lists, vectors, strings, symbols, exact integers, and ports;
 - `make-bytevector`, `bytevector?`, `bytevector-length`, `bytevector-u8-ref`, and `bytevector-u8-set!` through a small compatibility surface;
 - numeric byte constants rather than characters in the IR and hot path;
-- tagged vectors hidden behind accessors for records shared across implementations;
+- tagged vectors hidden behind accessors for records shared across libraries;
 - `dynamic-wind` where parser cleanup must survive a callback escape.
 
-The common arithmetic layer provides specified unsigned `and`, `or`, and `xor` operations without assuming a Scheme-standard bitwise library. The initial shared implementation may use exact-integer arithmetic; any wrapper-specific primitive replacement is an optimization subject to semantic equivalence tests and the benchmark admission policy. Test every operation at all declared widths.
+The common arithmetic layer provides specified unsigned `and`, `or`, and `xor` operations without assuming a Scheme-standard bitwise library. The initial shared implementation may use exact-integer arithmetic; any Chez-specific primitive replacement is an optimization subject to semantic equivalence tests and the benchmark admission policy. Test every operation at all declared widths.
 
-Avoid in shared code:
-
-- R6RS or R7RS library forms;
-- implementation record systems;
-- hash tables;
-- mutable pairs;
-- keyword arguments;
-- `syntax-case`, identifier synthesis, `gensym`, runtime compilation, and `eval`;
-- bytevector literals (`#vu8` versus `#u8` differs by language mode);
-- direct `bytevector-copy!` calls because signatures differ;
-- native-endian integer accessors;
-- Chez fixnum operations, Gambit `##` primitives, unsafe declarations, and assumptions about word size;
-- relying on unspecified argument evaluation order;
-- implementation exception text in behavioral contracts.
+Product code is plain R6RS. Two correctness rules survive from the portability era because they were never about dialect: never rely on unspecified argument evaluation order, and never put implementation exception text in a behavioral contract. Chez extensions are admitted only through §2 decision 10.
 
 ### 7.2 Library wrappers
 
-Expose equivalent public library names through thin wrappers:
-
-- Chez: R6RS `.sls` libraries;
-- Gambit: R7RS `.sld` libraries.
-
-Wrappers provide imports, includes, condition construction, bounded bytevector copying if needed, canonical byte-output operations for generated source, and process/test-runner adapters. They must contain no independent machine semantics.
-
-Each shared body is included by exactly one corresponding implementation library. Other libraries import that owner; they do not include the same body again. This prevents tagged-vector type tags and allocation-free singleton callback outcomes from acquiring different identities across libraries.
+Libraries are R6RS `.sls`. During the transition, the shared-body `include` mechanism and the one-owner rule of decisions 0002/0003 remain in force exactly as decided; the follow-up slice named in [chez-only-simplification.md](./chez-only-simplification.md) §6 retires them by moving each body inline into its owning library.
 
 The internal dependency direction is:
 
@@ -210,30 +190,17 @@ about callback results while both looking correct in isolation — which is
 precisely the class of defect the differential tests exist to catch, so it must
 not be reachable through the library structure.
 
-Implementation libraries may use their implementation's include facility inside the thin wrapper; shared bodies themselves contain no library or include form.
+Chez libraries may use `include` inside the library; shared bodies themselves contain no library or include form.
 
 ### 7.3 Supported platform tiers
 
-Tier 1 release gates:
-
-- Chez and Gambit on Linux amd64;
-- Chez and Gambit on Linux arm64;
-- Chez and Gambit on macOS arm64;
-- Chez and Gambit on Windows amd64;
-- source execution and native compilation wherever the implementation supports both.
-
-Tier 2 portability checks:
-
-- macOS amd64;
-- Windows arm64;
-- additional supported implementation versions;
-- less common compiler configurations.
+Tier 1 release gates: Chez on Linux amd64; Chez on Linux arm64; Chez on macOS arm64; Chez on Windows amd64 — each in both source and AOT execution. Tier 2: macOS amd64, Windows arm64, additional supported Chez versions.
 
 Tier 2 failures are tracked and must not be knowingly introduced, but unavailable runners or unsupported upstream toolchains do not block v0.1.
 
 This is a coverage-based portability claim, not a claim that every OS and architecture pair is release-certified. Tier 1 covers each required operating-system family and both architectures; Tier 2 covers the remaining cross-product cells.
 
-An initial portability spike must pin minimum Chez and Gambit versions and record exact invocation, library-search, include-path, and compiled-artifact behavior on Tier 1 systems.
+An initial portability spike must pin the minimum Chez version and record exact invocation, library-search, include-path, and compiled-artifact behavior on Tier 1 systems.
 
 Every Tier 1 cell is a real release gate. If an upstream toolchain or runner makes one infeasible, the tier must be changed through an explicit update to this plan before release; it cannot be silently waived in release notes.
 
@@ -243,35 +210,13 @@ The precise split may be adjusted during the portability spike, but responsibili
 
 ```text
 src/
-  common/
-    byte-machine/
-      model.scm
-      builder.scm
-      verify.scm
-      normalize.scm
-      interpret.scm
-      emit-scheme.scm
-      runtime.scm
-      result.scm
-      diagnostic.scm
-  chez/
-    byte-machine/
-      graph.sls
-      verify.sls
-      compile.sls
-      interpret.sls
-      runtime.sls
-  gambit/
-    byte-machine/
-      graph.sld
-      verify.sld
-      compile.sld
-      interpret.sld
-      runtime.sld
+  byte-machine/
+    graph.sls
+    verify.sls
+    compile.sls
+    interpret.sls
+    runtime.sls
 test/
-  common/
-  chez/
-  gambit/
   fixtures/
     http-request-machine.scm
 bench/
@@ -285,10 +230,11 @@ docs/
   decisions/
 build/
   chez/
-  gambit/
 ```
 
-`build/` is ignored. Chez and Gambit native artifacts must never be shared between runtimes, runtime versions, operating systems, or architectures.
+`src/common/` and `src/chez/` remain in place until the §6 follow-up slice collapses them; the second-runtime source tree is deleted by [chez-only-simplification.md](./chez-only-simplification.md).
+
+`build/` is ignored. Chez native artifacts must never be shared between runtime versions, operating systems, or architectures.
 
 If cross-library `include` behavior is unreliable, begin with fewer shared files and split them only after the wrapper strategy is proven. Do not duplicate semantic implementations to preserve the proposed directory shape.
 
@@ -431,7 +377,7 @@ These are closed v0.1 enumerations. The verifier enforces exact arity, declared-
 
 `binding` is a symbol and is the single top-level compiled-machine binding defined by the generated wrapper-free body. It must satisfy the portable name grammar and must not collide with the canonical reserved-output-binding set. That set contains:
 
-- every Scheme syntax or declaration identifier reserved by either supported R6RS or R7RS source mode, including library/include forms;
+- every Scheme syntax or declaration identifier reserved by the R6RS source mode, including library and include forms;
 - every identifier exported by `(byte-machine runtime)`, including the generated ABI binding;
 - every top-level or lexical identifier emitted by the canonical source template.
 
@@ -503,7 +449,7 @@ The generated ABI is distinct from the user-facing parser API and is documented 
 
 ### 9.6 Required end-to-end examples
 
-Milestone 1 must add two executable examples—one Chez program and one Gambit program—that use the same shared grammar body and demonstrate:
+Milestone 1 must add one executable Chez example program, run in both the source and AOT lanes, that uses a shared grammar body and demonstrates:
 
 1. constructing a one-byte machine only through `(byte-machine graph)`;
 2. verifying it;
@@ -1086,7 +1032,7 @@ It may not call builder, verifier, normalizer, interpreter, or emitter code.
 
 ## 20. Deterministic Generation
 
-For the same verified machine, compilation options, output binding, and generator version, Chez and Gambit must emit byte-identical UTF-8/LF source.
+For the same verified machine, compilation options, output binding, and generator version, generation must emit byte-identical UTF-8/LF source on every supported platform cell.
 
 Requirements:
 
@@ -1292,7 +1238,7 @@ Tests follow an ownership matrix:
 
 Vendor a small portable test harness rather than rely on SRFI-64 or an implementation package manager.
 
-Shared tests contain assertions and structured results. Thin Chez/Gambit runners provide imports, process exit, and implementation compilation steps.
+Shared tests contain assertions and structured results. A thin Chez runner provides imports, process exit, and compilation steps.
 
 Fixtures construct bytes numerically or from an ASCII helper. Never rely on checkout line endings to preserve HTTP CRLF.
 
@@ -1368,18 +1314,18 @@ These expected HTTP traces are curated test expectations, not copied from or com
 
 - Generate the same machine repeatedly in one process.
 - Generate under separate processes.
-- Generate under Chez and Gambit.
-- Generate in every Tier 1 OS cell and compare output byte for byte across implementations and operating systems.
+- Generate under Chez in both the source and AOT lanes.
+- Generate in every Tier 1 cell and compare output byte for byte across operating systems and architectures.
 - Compile and execute each generated output.
 - Exercise every permitted identifier character plus rejected punctuation, uppercase, non-ASCII names, and non-ASCII static labels.
-- Reject every canonical reserved output binding under both Chez and Gambit, including portable syntax names, runtime exports, and emitter-template identifiers.
+- Reject every canonical reserved output binding under Chez, including portable syntax names, runtime exports, and emitter-template identifiers.
 
 ### 22.10 Test exclusions
 
 - Do not compare implementation exception prose.
 - Do not use benchmark thresholds as correctness assertions in v0.1.
 - Do not make network access part of the normal test suite.
-- Do not require llhttp, Node.js, direct C bindings, or the future HTTP project. Native Gambit compilation may use the compiler toolchain required by Gambit itself.
+- Do not require llhttp, Node.js, direct C bindings, or the future HTTP project.
 
 ## 23. Benchmark and Optimization Policy
 
@@ -1399,7 +1345,7 @@ Measure where supported:
 
 Record:
 
-- Chez/Gambit version;
+- Chez version;
 - source or compiled mode;
 - compiler options;
 - OS and architecture;
@@ -1427,8 +1373,8 @@ The committed baseline artifact includes canonical workload bytes, deterministic
 Transition tables, byte-class tables, trie specialization, sequence unrolling, peephole passes, unsafe primitives, or implementation-specific backends require:
 
 1. a reproducible compiled benchmark showing a repeatable material improvement on representative workloads or remedying a demonstrated performance problem;
-2. results on both Chez and Gambit where the change is portable;
-3. results showing no significant regression on another supported runtime/architecture;
+2. results in both the source and AOT execution lanes;
+3. results showing no significant regression on another supported platform cell;
 4. unchanged public and observable parser semantics;
 5. complete interpreter equivalence and conformance-suite success;
 6. documented complexity and maintenance cost.
@@ -1454,11 +1400,11 @@ Before admitting the first optimization, add a decision record that derives work
 4. In every Tier 1 cell, run shared source/interpreter unit tests.
 5. In every Tier 1 cell, generate the fixture parser and retain its bytes for cross-cell comparison.
 6. In every Tier 1 cell, perform applicable native compilation and run generated conformance/property tests.
-7. Compare generated output across every Tier 1 implementation/OS cell.
+7. Compare generated output across every Tier 1 OS/architecture cell.
 8. Run benchmark smoke checks without pass/fail thresholds.
 9. Build and execute documentation examples.
 
-Tier 1 Gambit native jobs install and pin the C compiler, linker, SDK, and flags required by the selected Gambit release. The dependency-free source suite remains separately runnable without native compilation.
+The dependency-free source suite remains separately runnable without ahead-of-time compilation.
 
 ### 24.3 Artifact discipline
 
@@ -1475,14 +1421,14 @@ Every milestone is a vertical slice with failing tests first. Later sessions sho
 
 Deliver:
 
-- pinned minimum Chez and Gambit versions;
-- confirmed R6RS/R7RS wrapper and include strategy;
-- shared hello-library body loaded through both wrappers;
+- pinned minimum Chez version;
+- confirmed R6RS library and include strategy;
+- shared hello-library body loaded through its owner wrapper;
 - a cross-library smoke path where one provisional owner wrapper constructs a placeholder tagged value, another wrapper recognizes it, and runtime singleton identity is retained across both imports;
 - tiny portable test harness and runners;
 - Scheme source-mode and native compile invocations;
 - Tier 1 CI feasibility notes;
-- deterministic text emission proof across Chez and Gambit;
+- deterministic text emission proof across the Chez source and AOT lanes;
 - identifier repertoire and binary LF emission proof across available operating systems;
 - documented Windows path and LF behavior.
 
@@ -1505,7 +1451,7 @@ Scope:
 - minimal reference interpreter;
 - minimal direct-code emitter and runtime;
 - deterministic output;
-- the required Chez and Gambit end-to-end examples from Section 9.6;
+- the required Chez end-to-end example from Section 9.6;
 
 EOF is declared but not executed in this milestone. `make-machine` requires a machine-wide `default-eof-error` and §16.2 requires the verifier to check EOF targets, so Milestone 1 must construct and verify those declarations — but `parser-finish!` and EOF execution belong to Milestone 2. Keeping that line explicit stops the slice from absorbing EOF semantics along with the declarations that mention them.
 
@@ -1515,7 +1461,7 @@ Exit criteria:
 
 - all 256 byte values tested;
 - interpreter/generated results match;
-- a graph descriptor can be constructed, verified, compiled, emitted, loaded, and run across the public library boundaries on both implementations;
+- a graph descriptor can be constructed, verified, compiled, emitted, loaded, and run across the public library boundaries in both execution lanes;
 - invalid names, targets, overlap, fallback, and terminals are rejected.
 
 ### Milestone 2: Incremental execution and lifecycle
@@ -1630,7 +1576,7 @@ Scope:
 Exit criteria:
 
 - every required diagnostic has positive and negative tests;
-- property suite runs under both implementations;
+- property suite runs in both execution lanes;
 - minimized/reproducible failure fixtures can be saved without external tooling.
 
 ### Milestone 8: Private HTTP fixture
@@ -1660,7 +1606,7 @@ Exit criteria:
 Scope:
 
 - complete Tier 1 CI;
-- source generation equality across implementations;
+- source generation equality across platform cells;
 - documentation and examples;
 - baseline benchmarks;
 - generated source readability review;
@@ -1681,7 +1627,7 @@ Release `0.1.0` only when:
 - lifecycle, callbacks, spans, fields, offsets, errors, EOF, and counted consumption meet this plan;
 - the private HTTP fixture meets its required behavior;
 - representative fixture inputs pass every split point;
-- deterministic generation passes between Chez and Gambit;
+- deterministic generation passes across supported platform cells;
 - every Tier 1 matrix cell passes its required source, generation, native-compilation, and execution checks;
 - compiled benchmark baselines are recorded without speculative optimization;
 - generated per-byte paths contain no deliberate list/vector/string/result construction, and fixnum-sized allocation measurements are recorded with callbacks disabled;
@@ -1701,7 +1647,7 @@ Before v0.1, add:
 - callback/span lifetime reference;
 - field and overflow reference;
 - verifier diagnostic catalog;
-- generated-code integration guide for Chez and Gambit;
+- generated-code integration guide for Chez;
 - grammar-author testing guide;
 - benchmark methodology and baseline report;
 - portability matrix and pinned runtime versions;
@@ -1710,10 +1656,6 @@ Before v0.1, add:
 Examples must use the public procedural API, not private tagged-vector constructors.
 
 ## 28. Risks and Mitigations
-
-### R6RS/R7RS module incompatibility
-
-Mitigation: wrapper-free shared bodies, thin wrappers, and Milestone 0 before substantive code.
 
 ### Direct `case` performance differs between compilers
 
@@ -1766,7 +1708,7 @@ The following require evidence from the separate HTTP project or benchmarks:
 - custom action extension mechanism;
 - transition tables or class tables;
 - sequence/trie specialization and peephole optimization;
-- Chez-specific or Gambit-specific emitters;
+- Chez-specific emitters;
 - unsafe arithmetic or bytevector operations;
 - graph/DOT visualization;
 - a serialized IR format;
@@ -1781,7 +1723,7 @@ Every deferred performance feature is subject to Section 23. Every deferred sema
 
 These are implementation facts to resolve in Milestone 0, not open architecture decisions:
 
-1. Which minimum Chez and Gambit releases reliably provide the selected module/include and bytevector surface?
+1. Which minimum Chez release reliably provides the selected module/include and bytevector surface?
 2. What exact source and native compiler commands work consistently on each Tier 1 platform?
 3. How should relative includes and library search paths be arranged on Windows?
 4. Which portable condition construction is exposed by the wrappers?

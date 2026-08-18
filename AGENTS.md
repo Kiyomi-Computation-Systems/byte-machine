@@ -38,11 +38,11 @@
   bare driver with no harness and false of the shipped harness-integrated lane,
   and it propagated into five documents before review caught it. Decision 0002
   models the handling — re-measure, then state what was measured against what.
-* Shared `.scm` bodies use only the R6RS/R7RS common subset and never name Chez
-  or Gambit; runtime-specific code lives only in the thin `.sls`/`.sld` wrappers.
-  R6RS forbids assigning an exported variable — reach mutable state through
-  procedures.
-* Project should be portable across Chez and Gambit Scheme
+* Libraries are R6RS `.sls`. Until the include-collapse slice lands, shared
+  `.scm` bodies contain no library or include form and are included by exactly
+  one owner library. R6RS forbids assigning an exported variable — reach mutable
+  state through procedures.
+* Project targets Chez Scheme (R6RS) only — see docs/decisions/0005-chez-only.md
 * Project should be portable across macos (darwin), linux, and windows
 * Project should be portable across amd64 and arm64
 * Plans live in `/docs/plans`, decision records in `/docs/decisions`

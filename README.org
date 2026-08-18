@@ -3,11 +3,11 @@
 State machine generator in the manner of [[https://github.com/nodejs/llparse][llparse]].
 
 Byte Machine is a byte-oriented deterministic state-machine generator for Chez
-and Gambit Scheme. Machines are built with ordinary Scheme procedures into an
-immutable, inspectable source IR; a mandatory verifier gates every path to
-output; and an offline generator emits deterministic, portable Scheme. Generated
-parsers depend only on a small runtime library — never on the builder, verifier,
-compiler, or reference interpreter.
+Scheme. Machines are built with ordinary Scheme procedures into an immutable,
+inspectable source IR; a mandatory verifier gates every path to output; and an
+offline generator emits deterministic R6RS Scheme. Generated parsers depend only
+on a small runtime library — never on the builder, verifier, compiler, or
+reference interpreter.
 
 It is a library and source generator, not itself an HTTP parser. A separate
 project will use it to define and generate one.
@@ -21,11 +21,9 @@ architecture, and milestones.
 
 - CMake 3.26 or newer (only 4.3.3 has been exercised so far)
 - Chez Scheme 10.4.1 or newer, full system rather than Petite
-- Gambit 4.9.8 or newer
 
-Both version pins are floors recording what has actually been verified, not
-guesses at what would work; lowering one needs CI evidence from the older
-release.
+The Chez pin is a floor recording what has actually been verified, not a guess
+at what would work; lowering it needs CI evidence from the older release.
 
 Byte Machine locates Gambit by finding =gsi= and deriving =gsc= from the same
 directory. It never searches for =gsc=: Ghostscript installs a binary of that
