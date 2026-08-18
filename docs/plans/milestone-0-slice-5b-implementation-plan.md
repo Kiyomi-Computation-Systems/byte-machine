@@ -800,7 +800,9 @@ The shell half: the custom command that compiles the program and, in the same co
 - Modify: `test/CMakeLists.txt`
 
 **Interfaces:**
-- Consumes: `byte_machine_chez_aot_paths`, `byte_machine_lane_measured_copies` (Task 2); both launchers (Task 3).
+- Consumes: `byte_machine_chez_aot_paths(<lane-name> <program> <out_object_dir> <out_compiled>)` and `byte_machine_lane_measured_copies` (Task 2); both launchers (Task 3).
+
+**Read this before writing the artifact function.** Object directories are keyed on the **lane name**, not the program stem. That is not incidental: this slice registers two `chez.aot` lanes over the *same* program — `byte-machine.harness.self.chez.aot` here, and `byte-machine.harness.stale-artifact.chez.aot` in Task 6, whose whole purpose is to compile that same program from divergent text. Under program-stem keying they share one object directory, one `.so`, and one flat `fingerprint/` directory, so the stale lane's copies overwrite the real lane's and both lanes compile from whichever text won the race. Task 2's review caught this before Task 4 was written; the per-lane key is what makes the pair possible.
 - Produces: `byte_machine_lane_chez_aot_artifacts(<name> <program> <declared-body>...)`, which creates the compile rule and hangs it off the `byte_machine_chez_aot` aggregate target.
 
 - [ ] **Step 1: Write the artifact function**
@@ -821,7 +823,7 @@ Append to `cmake/ByteMachineSchemeLane.cmake`, in the imperative-shell section:
 # through `include` has no timestamp anything consults -- so nothing but this
 # list will notice a body changing after the object was built.
 function(byte_machine_lane_chez_aot_artifacts name program)
-  byte_machine_chez_aot_paths("${program}" object_dir compiled)
+  byte_machine_chez_aot_paths("${name}" "${program}" object_dir compiled)
   byte_machine_lane_measured_copies("${object_dir}/fingerprint" copies ${ARGN})
 
   set(copy_commands "")
@@ -1148,7 +1150,7 @@ and give that function the parameter, prefixing the compile step's source direct
 
 ```cmake
 function(byte_machine_lane_chez_aot_artifacts name program stale_source_dir)
-  byte_machine_chez_aot_paths("${program}" object_dir compiled)
+  byte_machine_chez_aot_paths("${name}" "${program}" object_dir compiled)
   byte_machine_lane_measured_copies("${object_dir}/fingerprint" copies ${ARGN})
 
   # Prefixed, not appended: Chez takes the first match on source-directories,
