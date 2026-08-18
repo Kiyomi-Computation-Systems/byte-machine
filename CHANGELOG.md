@@ -290,12 +290,13 @@ what this milestone delivers.
   re-measured during review with Gambit gone, Chez 10.4.1 exits 255 for the
   same case, and the expectation now reads that value.
 
-  Net across the cut, measured on this branch: registered lanes 49 → 37;
-  the CMake-layer mutation suite 97 → 75, net of one mutation restored with
-  a new registrar-path witness and one added over the unknown-backend
-  message — a pre-existing gap closed during review, not Gambit fallout;
-  the Scheme-layer mutation suite 35 passes/83 mutations → 29 passes/65
-  mutations; the `no-scheme` selection 10 → 9.
+  Net across the cut, measured on this branch: registered lanes drop from
+  49 to 37; the CMake-layer mutation suite drops from 97 to 75, net of one
+  mutation restored with a new registrar-path witness and one added over
+  the unknown-mode message — a pre-existing gap closed during review, not
+  Gambit fallout; the Scheme-layer mutation suite drops from 35 passes/83
+  mutations to 29 passes/65 mutations; the `no-scheme` selection drops from
+  10 to 9.
 
   What stays: [decision 0002](docs/decisions/0002-shared-body-include-mechanism.md)
   and [decision 0003](docs/decisions/0003-cross-library-identity.md) — the
