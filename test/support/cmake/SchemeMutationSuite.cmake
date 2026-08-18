@@ -1088,15 +1088,22 @@ byte_machine_slice3_launcher_pass(
 # against both trees rather than guessed. Before Task 4, harness.sls itself
 # included harness-runner.scm, so an invocation missing --source-dir starved
 # THAT include and crashed before the program ever ran. Task 4 inlined the
-# runner into harness.sls, so the library no longer includes anything; the
-# only include left in this invocation is harness-bootstrap.sps's own
-# "harness-bootstrap.scm", and the launcher always appends the program's own
-# directory to source-directories (see the launcher's comment on that line)
-# -- which is exactly where that file lives. So the mutant now runs the
-# bootstrap program to a clean, passing completion regardless of
-# --source-dir. required-flags' --source-dir entry is still witnessed: the
-# baseline still correctly refuses at EXIT 2 (BYTE_MACHINE_EXPECT_EXIT above),
-# and the mutant does not -- it is just a clean pass now, not a read error.
+# runner into harness.sls, so the library stopped including anything; Task 7
+# (the program merges) then deleted harness-bootstrap.sps's own last include
+# too, folding harness-bootstrap.scm straight into the program itself. No
+# invocation in this suite includes anything any more -- every program
+# carries its own text since the Task 7 merges -- so source-directories, and
+# whatever --source-dir would have contributed to it, has nothing left to
+# resolve. The required-flag refusal this pass names is therefore witnessed
+# purely at the flag-vocabulary level: the baseline invocation (which never
+# passes --source-dir at all) is refused because the flag is required and
+# absent, and the mutant accepts the very same invocation because dropping
+# the entry from required-flags stops asking for it -- the bootstrap program
+# then just runs to a clean, passing completion, with no include left for
+# --source-dir's absence to have starved. required-flags' --source-dir entry
+# is still witnessed: the baseline still correctly refuses at EXIT 2
+# (BYTE_MACHINE_EXPECT_EXIT above), and the mutant does not -- it is just a
+# clean pass now, not a read error.
 byte_machine_slice3_launcher_pass(
   byte-machine.harness.launcher-no-source-dir.chez.source
   "launcher: --source-dir is dropped from required-flags"
