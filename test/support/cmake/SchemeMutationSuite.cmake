@@ -432,9 +432,12 @@ byte_machine_mutation(
   EXPECT_SURVIVES
     "harness-summary, harness-empty-selection-error, and harness-failure-context are referenced only from harness-runner.scm, which `include` splices into the library body, so those references resolve inside the library whatever the export list says; no lane imports the three, so no lane can notice one going missing")
 
-# Load-bearing, unlike the three names in the survivor above: the self-tests
-# call adapter-file-bytes directly rather than only through
-# harness-fingerprint-file, precisely so that dropping its export is visible.
+# Load-bearing, unlike the three names in the survivor above: the fingerprint
+# library now reads files itself (byte-machine test fingerprint), so
+# harness-fingerprint-file no longer reaches adapter-file-bytes at all. The
+# self-tests' own direct call -- reading the fingerprint sample fixture
+# through it -- is the only thing left that makes dropping this export
+# visible.
 byte_machine_mutation(
   FILE ${CHEZ_ADAPTER} SPEC harness-self-tests.chez.sps
   LABEL "chez adapter: adapter-file-bytes is dropped from the export list"
@@ -728,6 +731,15 @@ file(WRITE "${POISON_SOURCE_DIR}/byte-machine/test/harness.sls" "${POISON_MUTATE
 # fix is to make POISON_ROOT self-sufficient: a real, non-stale fingerprint
 # object beside the poisoned harness object, compiled first so harness's
 # object is never older than a library it depends on.
+#
+# One cross-copy invariant this relies on: the compile below resolves
+# fingerprint's import from ${SOURCE_ROOT}/test/support/harness/chez (the
+# real source tree, via library-directories), while the verify run further
+# down resolves the same import from POISON_ROOT's own copy. Compiling
+# against one copy and running against another is safe here only because
+# the file(READ)/file(WRITE) pair immediately below makes the two
+# byte-identical by construction -- the same guarantee the pristine
+# harness.sls copy above already depends on.
 file(READ "${SOURCE_ROOT}/test/support/harness/chez/byte-machine/test/fingerprint.sls"
      POISON_FINGERPRINT_PRISTINE)
 file(WRITE "${POISON_ROOT}/byte-machine/test/fingerprint.sls" "${POISON_FINGERPRINT_PRISTINE}")
@@ -783,7 +795,6 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
   "--library-root" "${POISON_ROOT}"
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
   "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
   "--object-guard" "${POISON_GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")

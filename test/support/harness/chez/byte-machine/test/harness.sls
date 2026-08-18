@@ -41,7 +41,8 @@
     adapter-environment-variable adapter-exit
     adapter-value->string adapter-describe-condition adapter-file-bytes
     adapter-flush-output
-    ;; arithmetic the shared subset uses, which R6RS keeps outside (rnrs)
+    ;; arithmetic harness-self-tests.scm and harness-bootstrap.scm call
+    ;; directly, not the runner body -- R6RS keeps it outside (rnrs)
     modulo quotient remainder)
 
   (import
@@ -147,11 +148,11 @@
         (with-output-to-string (lambda () (display-condition obj)))
         (with-output-to-string (lambda () (write obj)))))
 
-  ;; A binary port, so the value is a fingerprint of bytes rather than of
-  ;; decoded characters -- and so an LF is an LF on a platform whose text ports
-  ;; would translate it. get-bytevector-all returns the EOF object for an empty
-  ;; file rather than a zero-length bytevector, so an empty file fingerprints as
-  ;; the seed instead of raising.
+  ;; A binary port, so the value is bytes rather than decoded characters --
+  ;; and so an LF is an LF on a platform whose text ports would translate it.
+  ;; get-bytevector-all returns the EOF object for an empty file rather than a
+  ;; zero-length bytevector, so an empty expectation file reads as empty
+  ;; rather than raising.
   (define (adapter-file-bytes path)
     (let* ((port (open-file-input-port path))
            (bytes (get-bytevector-all port)))
