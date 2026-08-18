@@ -79,6 +79,24 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
       PROGRAM "${SPEC_SELF}"
       SHARED_BODIES "${SPEC_SELF}"
       TIMEOUT 10)
+  elseif(c STREQUAL "lane-rejects-unknown-mode")
+    # The registrar never compares BACKEND against the NAME's own backend
+    # segment: byte_machine_test_name_parse supplies only lane_mode, and
+    # BACKEND routes byte_machine_scheme_lane_command directly (see that call
+    # in ByteMachineSchemeLane.cmake). A name whose backend segment is cmake
+    # -- so byte_machine_test_name_parse validates "direct" against cmake's
+    # own mode vocabulary and accepts it -- paired with BACKEND chez reaches
+    # the chez branch carrying a mode (direct) it does not build a command
+    # for: unknown-mode, not unknown-backend, and reachable only through the
+    # full registrar this way -- byte_machine_scheme_lane_command's own
+    # unknown-mode case is already covered directly, without a registrar.
+    set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
+    byte_machine_add_scheme_lane(
+      NAME byte-machine.harness.example.cmake.direct
+      BACKEND chez
+      PROGRAM "${SPEC_SELF}"
+      SHARED_BODIES "${SPEC_SELF}"
+      TIMEOUT 10)
   else()
     message(FATAL_ERROR "byte-machine-spec: unknown case '${c}'")
   endif()
@@ -438,6 +456,7 @@ spec_expect_all_rejected("${SPEC_SELF}"
   "lane-requires-shared-bodies|SHARED_BODIES is required for byte_machine_add_scheme_lane"
   "lane-requires-existing-program|names a program that does not exist"
   "lane-rejects-missing-shared-body|names a shared body that does not exist"
-  "lane-rejects-unknown-backend|is not a Scheme lane backend")
+  "lane-rejects-unknown-backend|is not a Scheme lane backend"
+  "lane-rejects-unknown-mode|is not an execution mode this lane module can build a command for")
 
 spec_finish("ByteMachineSchemeLane")

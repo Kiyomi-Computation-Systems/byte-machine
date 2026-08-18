@@ -16,7 +16,7 @@
 # will tell you when a pattern has drifted; it will not tell you when a new,
 # untested decision has been added.
 #
-# ONE PASS, SEVENTY-THREE MUTATIONS
+# ONE PASS, SEVENTY-FIVE MUTATIONS
 #
 # Every mutation above is declared before the single byte_machine_mutation_run
 # call at the end of this file, so this suite is one pass by construction.
@@ -51,28 +51,51 @@
 # witness, since its old witness (a WRAPPED_DIRS body missing a wrapper) went
 # with the rule that reported it.
 #
-# Seventy-three is ninety-four minus twenty-one: the Chez-only simplification's
-# Task 4 removed the second Scheme backend's toolchain layer entirely. Eleven
-# mutations left with its discovery module, deleted outright. Nine more left
-# with its execution branch and search-root helper, removed from
-# ByteMachineSchemeLane.cmake: the initialization-skip flag, the
-# undiscovered-runtime guard, the no-runtime message, the search root's comma
-# and relative-path checks, the search-root separator, the up-front output
-# clear, the check-reordering case, and the guard that narrowed the
-# registration-time status check from four clauses to one -- which lost its
-# witness along with the search-root cases that were the only way to reach a
-# comma-in-path or relative-path status through full registration; a
-# chez-only tree cannot produce either. The last left with the removed
-# backend's own mode-vocabulary entry in ByteMachineTesting.cmake, the
-# variable it mutated. Two mutations were re-anchored rather than removed:
-# "the unknown-backend message is garbled" and "an unknown backend no longer
+# Seventy-five is ninety-four minus twenty plus one: the Chez-only
+# simplification's Task 4 removed the second Scheme backend's toolchain layer
+# entirely. Eleven mutations left with its discovery module, deleted
+# outright. Eight more left with its execution branch and search-root
+# helper, removed from ByteMachineSchemeLane.cmake: the initialization-skip
+# flag, the undiscovered-runtime guard, the no-runtime message, the search
+# root's comma and relative-path checks, the search-root separator, the
+# up-front output clear, and the check-reordering case. The last left with
+# the removed backend's own mode-vocabulary entry in ByteMachineTesting.cmake,
+# the variable it mutated.
+#
+# What did NOT leave: the registration-time status guard narrowed from four
+# clauses to two, not to nothing. comma-in-path and relative-path died with
+# the search function that produced them, and a chez-only tree cannot
+# produce either through any call path -- the two mutations that once
+# exercised them (the removed backend's own search-root full-registration
+# cases) are gone, and rightly so. unknown-mode did not die:
+# byte_machine_add_scheme_lane never compares BACKEND against the NAME's own
+# backend segment, so a name whose backend segment is cmake -- valid, since
+# byte_machine_test_name_parse checks it against cmake's own mode vocabulary
+# -- paired with BACKEND chez still reaches the chez branch carrying a mode
+# it cannot build. A first pass at this removal deleted "a refused search
+# list does not stop registration" outright on the theory that narrowing the
+# guard to unknown-backend alone had nothing left to witness it; that theory
+# was wrong, and "scheme-lane: an unknown mode does not stop registration"
+# restores the coverage on a new witness, ByteMachineSchemeLaneSpec.cmake's
+# "lane-rejects-unknown-mode" case, built on exactly that name/backend
+# mismatch. Two more mutations were re-anchored rather than removed: "the
+# unknown-backend message is garbled" and "an unknown backend no longer
 # stops registration" now match the two-clause guard and the message text
 # chez alone leaves behind.
+#
+# The plus one: "the unknown-mode message is garbled" was missing even
+# before Task 4 -- the "diagnostic wording" comment above claimed a mutation
+# for each of three messages the functional core produces while only
+# covering two, and restoring "an unknown mode does not stop registration"
+# is what made the gap worth closing rather than footnoting, since the
+# unknown-mode message it names is already asserted exactly by
+# ByteMachineSchemeLaneSpec.cmake's "unknown mode message" case. Cheap and
+# genuinely witnessable, so it was added rather than left as a known gap.
 
 cmake_minimum_required(VERSION 3.26)
 
 set(EXPECTED_PASSES 1)
-set(EXPECTED_MUTATIONS 73)
+set(EXPECTED_MUTATIONS 75)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -455,9 +478,9 @@ byte_machine_mutation(
   REPLACE [[  set(${out_status} "ok" PARENT_SCOPE)]])
 
 # Diagnostic wording is asserted exactly (see ByteMachineSchemeLaneSpec.cmake),
-# so each message the functional core can produce gets its own mutation: a
-# dropped interpolation and a one-word typo. Either would otherwise pass every
-# existing assertion undetected.
+# so each of the three messages the functional core can produce gets its own
+# mutation: a dropped interpolation and two one-word typos. Any of the three
+# would otherwise pass every existing assertion undetected.
 #
 # Re-anchored on ${mode}: M0 slice 5b Task 2 replaced the literal "source" in
 # the no-runtime message with the mode argument, so a lane can name the mode
@@ -478,6 +501,12 @@ byte_machine_mutation(
   LABEL "scheme-lane: the unknown-backend message is garbled"
   FIND [[    "'${backend}' is not a Scheme lane backend. Known backends: chez."]]
   REPLACE [[    "'${backend}' is not a Scheme land backend. Known backends: chez."]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: the unknown-mode message is garbled"
+  FIND [[      "'${mode}' is not an execution mode this lane module can build a command for. Known modes: source aot."]]
+  REPLACE [[      "'${mode}' is not an execution mode this land module can build a command for. Known modes: source aot."]])
 
 # byte_machine_add_scheme_lane's own decisions -- argument validation, backend
 # routing, and the environment it hands to the registrar -- had no coverage at
@@ -511,6 +540,25 @@ byte_machine_mutation(
   FIND [[  if(status STREQUAL "unknown-backend"
      OR status STREQUAL "unknown-mode")]]
   REPLACE [[  if(FALSE)]])
+
+# The companion to the mutation above: that one deletes the guard outright,
+# this one narrows it to the single unknown-backend clause, so unknown-mode
+# fails open while unknown-backend stays refused. unknown-mode is still
+# reachable through the full registrar even with one backend, because
+# byte_machine_add_scheme_lane never compares BACKEND against the NAME's own
+# backend segment -- byte_machine_test_name_parse supplies only lane_mode,
+# and BACKEND alone routes byte_machine_scheme_lane_command. NAME
+# '...cmake.direct' (whose "direct" mode byte_machine_test_name_parse
+# accepts, since it validates against cmake's own vocabulary) paired with
+# BACKEND chez reaches the chez branch carrying a mode it cannot build,
+# which is exactly what "lane-rejects-unknown-mode" in
+# ByteMachineSchemeLaneSpec.cmake exercises to witness this.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: an unknown mode does not stop registration"
+  FIND [[  if(status STREQUAL "unknown-backend"
+     OR status STREQUAL "unknown-mode")]]
+  REPLACE [[  if(status STREQUAL "unknown-backend")]])
 
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake

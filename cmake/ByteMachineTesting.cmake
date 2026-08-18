@@ -40,6 +40,11 @@ set(BYTE_MACHINE_TEST_LAYERS
 
 set(BYTE_MACHINE_TEST_BACKENDS chez cmake)
 
+# o1 outlives the backend that owned it: no BYTE_MACHINE_TEST_MODES_<backend>
+# below claims it, so a lane naming it for a backend that does not is caught
+# as an incompatible backend/mode pairing rather than an unrecognized mode --
+# the distinction ByteMachineTestingSpec.cmake's chez.o1 case exists to prove,
+# and removing the token here would collapse it into the wrong error.
 set(BYTE_MACHINE_TEST_MODES source aot o1 direct)
 
 # A backend may only be registered in a mode it can actually execute. Chez has

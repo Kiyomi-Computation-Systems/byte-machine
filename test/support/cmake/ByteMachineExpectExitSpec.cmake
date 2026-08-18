@@ -4,9 +4,10 @@
 # a missing library, or a failure to launch as proof that an assertion failed.
 # This module compares the exact status instead, which means it has to say what
 # the legal statuses even are -- and has to tell an out-of-vocabulary status
-# apart from a wrong one, because those are different defects. A program whose
-# file is missing exits 70; reporting that as "expected 1, got 70" would send a
-# reader looking for a failed assertion that never ran.
+# apart from a wrong one, because those are different defects. Measured
+# 2026-08-18 against Chez 10.4.1: `--script` naming a file that does not exist
+# exits 255; reporting that as "expected 1, got 255" would send a reader
+# looking for a failed assertion that never ran.
 
 cmake_minimum_required(VERSION 3.26)
 
@@ -84,10 +85,10 @@ spec_check_equal("${verdict}" "ok" "verdict: exact match")
 byte_machine_expect_exit_verdict("1" "2" verdict message)
 spec_check_equal("${verdict}" "mismatch" "verdict: a declared but wrong status is a mismatch")
 
-# 70 is out of vocabulary, the same as a crash below. It must not be reported
-# as a wrong assertion outcome.
-byte_machine_expect_exit_verdict("1" "70" verdict message)
-spec_check_equal("${verdict}" "out-of-vocabulary" "verdict: 70 is out of vocabulary")
+# 255 is out of vocabulary, the same as a crash below. It must not be
+# reported as a wrong assertion outcome.
+byte_machine_expect_exit_verdict("1" "255" verdict message)
+spec_check_equal("${verdict}" "out-of-vocabulary" "verdict: 255 is out of vocabulary")
 
 set(verdict "seed")
 byte_machine_expect_exit_verdict("0" "139" verdict message)

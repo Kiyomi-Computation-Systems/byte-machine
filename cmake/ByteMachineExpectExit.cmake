@@ -13,9 +13,10 @@
 #
 # A status outside the declared set means the process died before the harness
 # could report -- an uncaught top-level raise (section 5.4), a crash, or a
-# program file the runtime could not find. Reporting that as "expected 1, got
-# 70" sends the reader looking for a failed assertion that never ran. Naming
-# it separately points at the real defect.
+# program file the runtime could not find (Chez 10.4.1 exits 255 for the
+# last). Reporting that as "expected 1, got 255" sends the reader looking for
+# a failed assertion that never ran. Naming it separately points at the real
+# defect.
 #
 # This file is both the module and the runner. Included, it defines functions.
 # Run with `cmake -P` and -DBYTE_MACHINE_EXPECT_COMMAND=..., it performs the
