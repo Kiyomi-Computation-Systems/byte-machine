@@ -651,6 +651,40 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source")
 endif()
 
+# A lane that is set up correctly never reaches a launcher refusal, so each one
+# needs a lane of its own or a deleted refusal is invisible. The same argument
+# the three chez-source.ss refusals above are registered under.
+#
+# Two lanes, not one per refusal in these files. The flag-vocabulary refusals
+# below the parser are the same code chez-source.ss already carries and whose
+# identical refusals already have lanes; re-proving a verbatim copy buys
+# nothing. These two are the decisions that are new here.
+if(BYTE_MACHINE_CHEZ_EXECUTABLE)
+  byte_machine_add_exit_code_test(
+    NAME byte-machine.harness.chez-aot-launcher-missing-program.cmake.direct
+    COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
+            "${BYTE_MACHINE_HARNESS_CHEZ_AOT_LAUNCHER}"
+            --object-dir "${CMAKE_BINARY_DIR}"
+            --program "${CMAKE_BINARY_DIR}/no-such-program.so"
+    EXPECT_EXIT 2
+    TIMEOUT 60
+    LABELS expected-red)
+
+  byte_machine_add_exit_code_test(
+    NAME byte-machine.harness.chez-compile-launcher-unpaired-roots.cmake.direct
+    COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
+            "${BYTE_MACHINE_HARNESS_CHEZ_COMPILE_LAUNCHER}"
+            --library-root "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+            --library-root "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}"
+            --object-dir "${CMAKE_BINARY_DIR}"
+            --source-dir "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            --program "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            --output "${CMAKE_BINARY_DIR}/unused.so"
+    EXPECT_EXIT 2
+    TIMEOUT 60
+    LABELS expected-red)
+endif()
+
 # --- Mutation proof for the harness ----------------------------------------
 
 # The harness is the instrument every later milestone is measured with, so a
