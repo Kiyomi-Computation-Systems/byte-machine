@@ -593,20 +593,16 @@ byte_machine_add_scheme_lane(
 
 # --- Cross-library identity ------------------------------------------------
 #
-# Slice 4, deliverable D3. One body, two libraries: the owner constructs, the
-# consumer -- which imported the owner rather than including its body again --
-# recognises, and the allocation-free singleton stays one object across both
-# imports.
+# Slice 4, deliverable D3. Two libraries, one placeholder: the owner
+# constructs it, the consumer -- which imports the owner rather than
+# redefining its procedures -- recognises it, and the allocation-free
+# singleton stays one object across both imports.
 #
-# No working-directory matrix here. The consumer adds a second include site but
-# no new resolution mechanism: Chez resolves it by bare filename through
-# source-directories exactly as it resolves the owner's body. Slice 3 proved
-# that mechanism; a second instance of a proven mechanism is not a second proof.
-#
-# Passing here is not yet evidence. What makes it evidence is passes 19 and 20
-# in SchemeMutationSuite.cmake, and in particular the inline-duplication
-# mutation -- under which both cases below answer wrongly, nothing raises, and
-# every other lane in this tree still passes.
+# Passing here is not yet evidence. What makes it evidence is the ownership
+# mutation in SchemeMutationSuite.cmake, where the consumer is rewritten to
+# inline duplicate definitions instead of importing the owner: under that
+# mutation both cases below answer wrongly, nothing raises, and every other
+# lane in this tree still passes.
 byte_machine_add_scheme_lane(
   NAME byte-machine.portability.placeholder-identity.chez.source
   BACKEND chez

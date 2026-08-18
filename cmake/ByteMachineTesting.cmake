@@ -191,7 +191,7 @@ endfunction()
 # The working directory is inside the build tree, never the repository, unless
 # WORKING_DIRECTORY names an existing directory of the caller's choosing. That is
 # not tidiness: it is what keeps a test's outcome independent of where the
-# developer happened to stand, and it predates — and outlives — the include
+# developer happened to stand, and it predates -- and outlives -- the include
 # mechanism whose working-directory hazards first forced it (decision 0006).
 function(byte_machine_add_test)
   cmake_parse_arguments(PARSE_ARGV 0 arg "" "NAME;TIMEOUT;WORKING_DIRECTORY" "COMMAND;LABELS;ENVIRONMENT")

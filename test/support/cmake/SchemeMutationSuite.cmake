@@ -14,9 +14,9 @@
 # deleting the three matrix passes (21 to 23 in the numbering of the tree
 # where this happened) by hand left this file's own suite reporting 37/37
 # elsewhere, with the mutation count silently dropping from 56 to 53 and
-# nothing anywhere noticing. The matrix itself -- 19 to 21 in the numbering
-# just below -- retired outright in this task (decision 0006); see the
-# replacement paragraph where it used to sit.
+# nothing anywhere noticing. The matrix itself -- passes 19 to 21 in the
+# previous numbering -- retired outright in this task (decision 0006); see
+# the replacement paragraph where it used to sit.
 #
 # Pass 1 runs the Chez self-tests lane against the runner.
 #
@@ -1228,7 +1228,9 @@ byte_machine_mutation(
          (= (vector-length x) 2)
          (eq? (vector-ref x 0) placeholder-tag)))
   (define (placeholder-value p) (vector-ref p 1))
-  (define (placeholder-marker) placeholder-marker-object)]])
+  (define (placeholder-marker) placeholder-marker-object)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "byte-machine-harness: FAIL ")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -1290,7 +1292,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # --- Pass 22: the hex rendering table -----------------------------------------
 #
 # MEASURED 2026-08-17. No manifest is set, so provenance is skipped here
-# exactly as it is for every other pass but 26 through 29 below:
+# exactly as it is for every other pass but 23 through 26 below:
 # BYTE_MACHINE_FINGERPRINT_FILES is unset, harness-verify-provenance! returns
 # #t immediately, and the self-tests suite runs its own cases undisturbed. It
 # is the self-tests' own "hex digits render lowercase" case that actually
@@ -1569,7 +1571,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "TWENTY-NINE PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "TWENTY-SIX PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

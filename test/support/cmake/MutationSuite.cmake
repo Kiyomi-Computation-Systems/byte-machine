@@ -644,7 +644,7 @@ byte_machine_mutation(
 # The run directory decides where every lane launches from; the three
 # decisions inside byte_machine_test_run_directory each get their own
 # mutation. (The include-era matrix that first hung off this function is
-# gone — decision 0006 — but an override that silently stops arriving, or
+# gone -- decision 0006 -- but an override that silently stops arriving, or
 # arrives empty, still launches lanes from the wrong place.)
 byte_machine_mutation(
   FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
