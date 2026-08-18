@@ -16,7 +16,7 @@
 # suite reporting 37/37 elsewhere, with the mutation count silently dropping
 # from 56 to 53 and nothing anywhere noticing.
 #
-# Pass 1 runs the Chez self-tests lane against the shared runner body.
+# Pass 1 runs the Chez self-tests lane against the runner.
 #
 # Pass 2 runs the Chez empty-selection lane through the exact-status helper, for
 # the one decision in the runner that no in-process assertion can reach --
@@ -387,41 +387,6 @@ byte_machine_mutation(
   EXPECT_SURVIVES
     "the pass line is the only thing this branch produces, and a line that is not printed changes no counter and no status; byte-machine.harness.verbose.chez.source still proves the branch is reached and does not raise, but only a reader of the log can see the line itself, which is the manual check recorded in spec section 5.3")
 
-# --- The Chez launcher's source path ---------------------------------------
-#
-# Both halves of the append used to be load-bearing and invisible in a passing
-# run: the shared directory was how the library resolved the runner body it
-# included by bare filename, and the program's own directory was how a wrapper
-# resolved the body beside it -- two different directories, so dropping either
-# starved a real include.
-#
-# Task 4 of the include collapse (harness.sls no longer includes anything) and
-# this suite's own --source-dir substitution (shared/ -> self/, since shared/
-# is gone) together collapsed that distinction for this specific invocation:
-# --source-dir is now "${STAGE_DIR}/test/support/harness/self", byte-for-byte
-# the same string as (path-directory program) for harness-self-tests.chez.sps,
-# which lives in that same directory. Both mutations below are MEASURED
-# survivors as a result -- each half of the append still supplies that one
-# directory on its own, so dropping either loses nothing this invocation
-# needed. Kept here, rather than deleted, because --source-dir is still a
-# required flag until Task 8: the decision that a *missing* --source-dir is
-# refused is witnessed separately, by the required-flags mutation below.
-byte_machine_mutation(
-  FILE ${LAUNCHER} SPEC harness-self-tests.chez.sps
-  LABEL "launcher: the shared body directory is off the source path"
-  FIND [[(source-directories (append source-dirs (list (path-directory program))))]]
-  REPLACE [[(source-directories (list (path-directory program)))]]
-  EXPECT_SURVIVES
-    "source-dirs (from --source-dir) and (path-directory program) both resolve to \"${STAGE_DIR}/test/support/harness/self\" for this invocation, so dropping source-dirs from the append leaves (path-directory program) still supplying the one directory this lane's own include (of harness-self-tests.scm) needs; harness.sls itself no longer includes anything for source-dirs to have been resolving in the first place")
-
-byte_machine_mutation(
-  FILE ${LAUNCHER} SPEC harness-self-tests.chez.sps
-  LABEL "launcher: the program's own directory is off the source path"
-  FIND [[(source-directories (append source-dirs (list (path-directory program))))]]
-  REPLACE [[(source-directories source-dirs)]]
-  EXPECT_SURVIVES
-    "the same collapse as the survivor above, from the other side: source-dirs alone is already \"${STAGE_DIR}/test/support/harness/self\", byte-for-byte identical to (path-directory program) for this invocation, so dropping the program's own directory from the append loses nothing -- source-dirs already supplies it")
-
 # --- The Chez adapter's export list ----------------------------------------
 
 byte_machine_mutation(
@@ -442,7 +407,7 @@ byte_machine_mutation(
 # library, this line fails.
 byte_machine_mutation(
   FILE ${CHEZ_ADAPTER} SPEC harness-self-tests.chez.sps
-  LABEL "chez adapter: an export used only inside the spliced body is dropped"
+  LABEL "chez adapter: an export used only inside the runner section is dropped"
   FIND [[    harness-begin harness-finish harness-summary harness-exit-status]]
   REPLACE [[    harness-begin harness-finish harness-exit-status]]
   EXPECT_SURVIVES
@@ -713,8 +678,7 @@ if(POISON_AT EQUAL -1)
 endif()
 string(REPLACE "${POISON_FIND}" "${POISON_REPLACE}" POISON_MUTATED "${POISON_PRISTINE}")
 
-# The pristine source goes down first: Chez prefers the object only while it is
-# *not older* than the source beside it, and the object is written by the
+# The pristine source goes down first, and the object is written by the
 # compile below.
 #
 # The object is preferred only while it is not older than the .sls beside
@@ -891,6 +855,38 @@ byte_machine_mutation(
   placeholder-marker-object)]]
   REPLACE [[(define (placeholder-marker)
   (vector 'byte-machine-marker))]])
+
+# Relocated from pass 1: they lived there until the include collapse (Task 4)
+# emptied that invocation's distinction -- harness.sls stopped including
+# anything, and pass 1's own --source-dir substitution (shared/ -> self/) made
+# source-dirs and (path-directory program) the same directory for
+# harness-self-tests.chez.sps, so dropping either half of the append lost
+# nothing there. Here the two --source-dir entries (.../harness/self,
+# .../src/common/byte-machine) and --program's own directory (test/common) are
+# three genuinely different directories, so each REPLACE below starves a
+# different real include: dropping source-dirs starves
+# src/chez/byte-machine/placeholder.sls's own (include "placeholder.scm")
+# (only source-dirs's src/common/byte-machine entry reaches it); dropping the
+# program's own directory starves this program's own
+# (include "placeholder-tests.scm"). They retire outright in Task 8, when
+# (source-directories '()) deletes the FIND text below along with the flag.
+#
+# --source-dir's harness/self entry is not mere scaffolding meanwhile: it puts
+# real .scm bodies on the source path ahead of the program's own directory in
+# the append, i.e. at the launcher's highest search precedence -- safe only
+# because the portability guard still forbids two shared bodies sharing one
+# basename repository-wide, until Task 5 replaces that guard.
+byte_machine_mutation(
+  FILE ${LAUNCHER} SPEC placeholder-tests.chez.sps
+  LABEL "launcher: the shared body directory is off the source path"
+  FIND [[(source-directories (append source-dirs (list (path-directory program))))]]
+  REPLACE [[(source-directories (list (path-directory program)))]])
+
+byte_machine_mutation(
+  FILE ${LAUNCHER} SPEC placeholder-tests.chez.sps
+  LABEL "launcher: the program's own directory is off the source path"
+  FIND [[(source-directories (append source-dirs (list (path-directory program))))]]
+  REPLACE [[(source-directories source-dirs)]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

@@ -383,9 +383,9 @@
     ;; still load-bearing: the parity argument in spec section 9.1 rests on this
     ;; body referencing every adapter name, and until this case existed
     ;; adapter-exit was the one name it missed -- its only other uses are inside
-    ;; harness-runner.scm, which `include` splices into the library, so they
-    ;; resolve whatever the export list says. Dropping it from one adapter left
-    ;; this body loading and passing on that runtime.
+    ;; the runner section of harness.sls, so they resolve whatever the export
+    ;; list says. Dropping it from one adapter left this body loading and
+    ;; passing on that runtime.
     (harness-case "the adapter can end the process"
       (lambda ()
         (check "adapter-exit is reachable" (procedure? adapter-exit))))

@@ -253,11 +253,13 @@ byte_machine_add_test(
 # launcher mutation in SchemeMutationSuite.cmake, whose expected outcome is
 # asymmetric -- empty and decoy fail, identical passes.
 #
-# Both non-empty directories carry a copy of EVERY body the lane includes, the
-# harness runner included. A directory holding only a placeholder body would
-# fail to build (byte-machine test harness) under that mutation, before reaching
-# the code under test, and all three lanes would fail identically -- destroying
-# the only evidence that the lanes differ.
+# Both non-empty directories carry a copy of placeholder.scm, real or decoy.
+# It is the only body left whose resolution this mutation can redirect: it is
+# included by its owner library through source-dirs, the half of the
+# launcher's append the mutation replaces with the working directory. The
+# program's own body (placeholder-tests.scm) is included through the
+# program's own directory, the half the mutation leaves alone, so its
+# resolution never depends on this decision and it needs no copy here.
 #
 # They live in the build tree, which keeps intact byte_machine_add_test's rule
 # that a test never runs from the repository. They cannot be checked in in any

@@ -4,10 +4,9 @@
 ;;; may appear. Its export list is checked by mutation: deleting a load-bearing
 ;;; export here must make the self-tests fail (spec section 9.1).
 ;;;
-;;; The shared body is included by bare filename and resolved through Chez's
-;;; source-directories, which the launcher sets. That keeps absolute paths out
-;;; of the source tree and keeps the include independent of the working
-;;; directory.
+;;; The library contains its own text -- the adapter section first, the
+;;; runner inlined below it (decision 0006) -- and imports (byte-machine test
+;;; fingerprint). Nothing here resolves through source-directories.
 
 (library (byte-machine test harness)
   (export
