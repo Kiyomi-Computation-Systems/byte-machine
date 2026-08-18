@@ -967,89 +967,29 @@ git commit -m "feat: a Chez ahead-of-time lane over the same three programs"
 
 ---
 
-### Task 5: Measure whether the `source-directories` deletion can be witnessed
+### Task 5: DISCHARGED — the measurement was taken during Task 3's review
 
-Design §5.3. The claim that emptying `source-directories` is what stops the AOT lane expanding source is protium's (P1) and has never been reproduced here. This task answers it against the lane that now exists, before any mutation is written over it.
+**This task requires no work. Do not dispatch an implementer for it.**
 
-**Files:**
-- Modify: `docs/plans/milestone-0-slice-5b-5c-compiled-lanes.md` (§5.3)
+Task 5 existed to answer one question: can a mutation deleting `(source-directories '())` from
+`chez-aot.ss` be witnessed? Task 3's review answered it against a real Chez 10.4.1 before this task
+came up, and its fix wave then changed the code the question was about. Both results are recorded in
+§5.3 of the design.
 
-- [ ] **Step 1: Build the lane, then break the launcher by hand**
+The answer, in short:
 
-```bash
-make build
-cp test/support/launchers/chez-aot.ss /tmp/chez-aot.ss.orig
-```
+- **`(source-directories '())` is inert.** Outcomes are byte-identical with it and with Chez's
+  default, because library resolution runs through `library-directories` and a library's own
+  `include` forms resolve relative to the library file. Deleting it is a declared survivor — C3b —
+  for a reason that is now understood rather than guessed at.
+- **The real defect was elsewhere, and is fixed.** `library-directories` was being handed bare
+  strings, which Chez expands into both halves of a `(source . object)` pair, so every object
+  directory was also a source directory. Each is now paired with an always-empty source guard, the
+  inverse of the source lane's object guard. C3 targets unpairing that guard, which is witnessable
+  and was demonstrated: a mutated source planted in an object directory is read under the old shape
+  and never read under the new one.
 
-Edit `test/support/launchers/chez-aot.ss`, replacing
-
-```scheme
-(source-directories '())
-```
-
-with
-
-```scheme
-(source-directories (list "REPLACE_WITH_ABSOLUTE_PATH_TO/test/support/harness/shared"
-                          "REPLACE_WITH_ABSOLUTE_PATH_TO/src/common/byte-machine"))
-```
-
-using the repository's own absolute paths.
-
-- [ ] **Step 2: Delete one object and run the lane**
-
-```bash
-find build -name 'harness.so' -delete
-ctest --preset pr -R 'harness\.self\.chez\.aot$' -V; echo "exit=$?"
-```
-
-Record what happens. Three outcomes are possible and each means something different:
-
-- The lane **fails** (unbound library, or a launcher/Chez error): the deletion is witnessable by removing the object. Mutation C3 is writable in that form.
-- The lane **passes**, reporting `mode=aot`: Chez expanded the source. The deletion is witnessable, and this is the exact hazard P1 describes.
-- The lane fails for a reason unrelated to source expansion: not yet a witness. Try the second shape below before concluding.
-
-- [ ] **Step 3: Try the second shape — a current object over changed source**
-
-```bash
-cp /tmp/chez-aot.ss.orig test/support/launchers/chez-aot.ss
-make build
-printf '\n;; deliberate edit\n' >> test/support/harness/shared/harness-runner.scm
-```
-
-Re-apply the Step 1 edit to `chez-aot.ss` **without rebuilding the object**, then:
-
-```bash
-ctest --preset pr -R 'harness\.self\.chez\.aot$' -V; echo "exit=$?"
-```
-
-Expected under P1: the lane loads the edited source rather than the object. Under this repository's own timestamp rule it may not.
-
-- [ ] **Step 4: Restore everything**
-
-```bash
-cp /tmp/chez-aot.ss.orig test/support/launchers/chez-aot.ss
-git checkout test/support/harness/shared/harness-runner.scm
-make test
-```
-
-Expected: PASS, 51/51. Confirm `git status` is clean apart from the design document.
-
-- [ ] **Step 5: Record the answer in the design**
-
-Replace §5.3's "**When it is measured**" paragraph with what was observed — the command run, the outcome, and the date — and state one of:
-
-- `C3 is witnessable in the form <the shape that worked>`, or
-- `C3 is a declared survivor: <the reason no lane can witness it>`.
-
-Write what happened, not what was expected to happen. If the measurement contradicts P1, say so plainly and leave P1 in §2.2 marked as protium's claim — this repository's contrary measurement is the more interesting fact, and slice 5c inherits it.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add docs/plans/milestone-0-slice-5b-5c-compiled-lanes.md
-git commit -m "docs: what the aot lane does when source-directories is not empty"
-```
+Task 7 carries both mutations in their settled form. Proceed to Task 6.
 
 ---
 
@@ -1321,48 +1261,51 @@ byte_machine_mutation(
   REPLACE [[    "BYTE_MACHINE_EXECUTION_MODE=source"]])
 ```
 
-- [ ] **Step 4: Add C3, in whichever of these two forms Task 5's measurement licenses**
+- [ ] **Step 4: Add C3 and C3b**
 
-Task 5 answered whether emptying `source-directories` can be witnessed. Add exactly one of the following, and no third thing.
-
-**If Task 5 found the lane fails or silently expands source when `source-directories` is populated** — the deletion is witnessable, so:
+Both are settled — Task 5 records the measurement they come from, taken 2026-08-17 against Chez
+10.4.1. Add both.
 
 ```cmake
-# C3. Emptying source-directories is the whole of this lane's honesty: with a
-# source path populated, Chez can expand a library rather than load its object,
-# and the lane goes on reporting mode=aot while running interpreted source.
-# Witnessed in the shape task 5 measured on <date>; see section 5.3 of the
-# slice design for the observation this expectation is built from.
+# C3. The source guard is what keeps this lane's library path free of source.
+# Chez expands a bare string in library-directories into BOTH halves of a
+# (source . object) pair, so handing it object directories alone makes every
+# one of them a source directory too -- and Chez will find and expand a .sls,
+# .ss, .scm or .sch sitting there. Measured 2026-08-17 against Chez 10.4.1: a
+# mutated copy of a library's own source, planted in the object directory, is
+# read under this mutation and is not read under the paired shape. The lane
+# does not go green either way -- load-program rejects a re-expanded library at
+# 255 -- which is exactly why this needs a mutation rather than trust: 255 is
+# outside the status vocabulary, so the wrapper reports it as a process that
+# died, not as a lane that fell back to source.
 byte_machine_mutation(
   FILE test/support/launchers/chez-aot.ss SPEC harness-self-tests.chez.sps
-  LABEL "chez-aot launcher: source-directories is not emptied"
-  FIND [[(source-directories '())]]
-  REPLACE [[(source-directories (list "REPLACE_WITH_STAGED_SHARED_DIR"))]])
-```
+  LABEL "chez-aot launcher: the source guard is unpaired from the object directories"
+  FIND [[(library-directories (map (lambda (dir) (cons source-guard-dir dir)) object-dirs))]]
+  REPLACE [[(library-directories object-dirs)]])
 
-replacing the placeholder path with the staged shared directory the surrounding pass already uses — `${STAGE_DIR}/test/support/harness/shared`, spelled the way that pass spells it — and setting `EXPECT_STATUS` or `EXPECT_OUTPUT_MATCHES` to the exact signature Task 5 observed, so the mutation is caught for its reason rather than for any failure.
-
-**If Task 5 found no shape in which the deletion changes any observable outcome** — declare it, with Task 5's reason and not a reason invented here:
-
-```cmake
-# C3, DECLARED SURVIVOR. Emptying source-directories changes no observable
-# outcome in this tree, for the reason measured on <date> and recorded in
-# section 5.3 of the slice design: <the measured reason, verbatim>.
+# C3b, DECLARED SURVIVOR. Measured inert 2026-08-17 against Chez 10.4.1:
+# outcomes are byte-identical with this line and with Chez's default. Library
+# resolution runs through library-directories, and a library's own include
+# forms resolve relative to the library file rather than through
+# source-directories -- verified by compiling a library with an include under
+# an empty source-directories, then loading it with the included file's
+# directory on no path at all.
 #
-# Declared rather than deleted, and rather than left unmentioned. The line is
-# still correct and still the mechanism protium relies on; what this repository
-# has measured is that it cannot yet construct the state in which the line is
-# load-bearing. The reopening condition is a lane whose object and source
-# deliberately differ, which slice 5c's staged trees make cheap.
+# Kept rather than deleted: the line still narrows what the process can reach,
+# and its inertness is a fact about Chez's resolution order that a future
+# reader should find recorded rather than rediscover. Reopening condition: a
+# Chez in which a compiled library's includes are re-resolved at load time.
 byte_machine_mutation(
   FILE test/support/launchers/chez-aot.ss SPEC harness-self-tests.chez.sps
   LABEL "chez-aot launcher: source-directories is not emptied"
   FIND [[(source-directories '())]]
-  REPLACE [[(source-directories (list "REPLACE_WITH_STAGED_SHARED_DIR"))]]
+  REPLACE [[(source-directories (list "."))]]
   EXPECT_SURVIVES TRUE)
 ```
 
-Do not add both, and do not add the survivor form because the witnessing form was awkward to write. A survivor declared for convenience is the one kind of entry this suite cannot detect.
+Verify C3's FIND text against the shipped `chez-aot.ss` before committing — the fix wave wrote that
+line, and this plan quotes it from memory of that wave rather than from the file.
 
 - [ ] **Step 5: Update the suite's asserted totals**
 
@@ -1588,7 +1531,7 @@ From design §9, checked before opening a pull request:
 
 - [ ] The three `chez.aot` lanes are green and report the same fingerprint as their `chez.source` counterparts for the same manifest.
 - [ ] `byte-machine.harness.stale-artifact.chez.aot` exits exactly 3, with the mismatch diagnosis.
-- [ ] C1, C2 and C4 are caught for their declared reasons; C3 is caught or is a declared survivor carrying Task 5's measured reason.
+- [ ] C1, C2 and C4 are caught for their declared reasons; C3 is caught; C3b is a declared survivor carrying the measurement Task 5 records.
 - [ ] The `no-scheme` preset is 10/10, and the measured-path computation is exercised under it.
 - [ ] Both mutation suites assert their own totals and those totals match.
 - [ ] Cross-library identity holds on `chez.aot`, discharging slice 4 §10 for Chez.

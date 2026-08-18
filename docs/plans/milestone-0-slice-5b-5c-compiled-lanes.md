@@ -163,19 +163,39 @@ saying so, because they are easy to conflate.
 `chez.aot` × {`bootstrap`, `self`, `placeholder-identity`} = three lanes. The third discharges slice
 4 §10 for Chez.
 
-### 5.3 One thing measured early, not assumed
+### 5.3 Measured, and not what was predicted
 
-Whether a mutation deleting `(source-directories '())` from `chez-aot.ss` can be **witnessed** is
-unknown. P1 is a locatability rule; 0004 documents a timestamp rule; the two are different, and
-neither has been reproduced here. If it cannot be constructed, it becomes a declared survivor with a
-written reason, exactly as slice 5a did for its five.
+The open question was whether a mutation deleting `(source-directories '())` from `chez-aot.ss`
+could be **witnessed**. Measured 2026-08-17 against Chez 10.4.1 (`tarm64osx`, threaded), during
+slice 5b Task 3's review and again in its fix wave: **it cannot, because that line is inert.**
+Outcomes are byte-identical with the line and with Chez's default. Library resolution runs through
+`library-directories`, and a library's own `include` forms resolve relative to the library file
+rather than through `source-directories` — verified by compiling a library with an `include` under
+an empty `source-directories`, then loading it with the included file's directory on no path at all,
+and watching it run.
 
-**When it is measured.** Not before the lane exists: witnessing it needs a compiled artifact and a
-registered lane to run, and a scratch driver would only describe the scratch driver
-(`scratch-fixture-measurements`). It is measured in the task immediately after the `chez.aot` lane
-first runs green, and before the mutation task — early enough to change what this design may assert,
-late enough to be possible. The implementation plan carries it as a task of its own so it cannot be
-folded into the mutation work and quietly answered by whatever the mutation happened to do.
+**What the measurement found instead is the reason this section now exists.** The launcher passed
+bare strings to `library-directories`, and Chez expands a bare string into *both halves* of a
+`(source . object)` pair: `(library-directories '("/a"))` reads back as `(("/a" . "/a"))`. Every
+object directory was therefore also a **source** directory on the library path, and Chez will find
+and expand `.sls`, `.ss`, `.scm` or `.sch` there. The lane was not silently wrong — `load-program`
+rejects a re-expanded library with *"yielded a different compilation instance … from that required
+by compiled program"* and exits 255 — but it was safe by a mechanism nobody had written down,
+while the header claimed a different one that was false.
+
+**The remedy is the exact inverse of the source lane's object guard.** Each object directory is now
+paired with an always-empty source guard: `(guard . object)`. Proven rather than argued — a mutated
+copy of a library's own source was planted in the object directory, and under the old bare-string
+shape Chez read it (the 255 names that file), while under the paired shape it was never read and the
+compiled object loaded clean.
+
+Two consequences carried forward:
+
+- **Mutation C3 changes target.** Deleting `(source-directories '())` is a declared survivor for a
+  now-understood reason. What is witnessable, and proven so, is unpairing the source guard.
+- **A hazard for slice 5c.** `.scm` is a library extension to Chez. Any staging step that copies
+  shared bodies into a tree that is also an object directory puts candidate library source on the
+  library path. 5c stages bodies for both Gambit modes; the same care is owed there.
 
 ## 6. Slice 5c — Gambit `.o1` and `gsc -exe -nopreload`
 
@@ -224,7 +244,8 @@ Each asserts a failure **signature** and the suite's own totals, never merely a 
 | --- | --- | --- | --- | --- |
 | C1 | 5b | `ByteMachineSchemeLane.cmake` | a compiled lane returns the declared list as its measured list (protium's Chez behaviour) | the lane specification fails; end to end, the staleness lane flips 3 → 0 |
 | C2 | 5b | `ByteMachineSchemeLane.cmake` | the measured list is reversed | fingerprint mismatch, exit 3, on any lane whose manifest has at least two bodies — a stale artifact is not needed to witness this one |
-| C3 | 5b | `chez-aot.ss` | `(source-directories '())` deleted | **witnessability unmeasured** — §5.3; a declared survivor with a written reason if it cannot be constructed |
+| C3 | 5b | `chez-aot.ss` | the source guard is unpaired — `library-directories` handed bare object directories again | Chez expands library source planted in an object directory; measured witnessable 2026-08-17, §5.3 |
+| C3b | 5b | `chez-aot.ss` | `(source-directories '())` deleted | **declared survivor**, measured inert 2026-08-17: resolution runs through `library-directories`, and a library's own includes resolve relative to the library file |
 | C4 | 5b | `ByteMachineSchemeLane.cmake` | the mode is emitted as the literal `source` again | the lane specification fails. Not the in-process assertion: under W8 `source` is a member of the vocabulary, so a lane declaring it would pass. The witness is the functional core's name-to-mode mapping, asserted under `cmake -P`, which is also why W7 is not merely a convenience. |
 | C5 | 5c | the staging script | the objects are not touched after the copy | the `.o1` lane interprets, the poison fires, status 2 with the poison's own diagnostic naming the body |
 | C6 | 5c | the staging script | the poison template is emptied | the lane passes where 2 was expected |
