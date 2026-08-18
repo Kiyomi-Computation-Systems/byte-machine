@@ -14,22 +14,24 @@
 
 - Every task ends with the suite green and a Conventional Commit. `make test-all` (preset `release`) is the gate; tasks that change configure inputs (5, 6, 8) run `make clean && make test-all`.
 - Declared pass/mutation totals are updated **in the same commit** as the passes they gain or lose (AGENTS.md). After any change to registrations or exits, the whole mutation suite re-runs and each affected pass must still discriminate for its named reason.
-- Baseline on `main` (76f3238), measured 2026-08-18: **37** release-preset lanes, **10** no-scheme lanes, SchemeMutationSuite **29 passes / 65 mutations**, MutationSuite **1 pass / 75 mutations**. Harness (`cmake/` + `test/support/`) 8,327 lines; `src/` 110 lines.
+- Baseline on `main` (76f3238), measured 2026-08-18: **37** release-preset lanes, **9** no-scheme lanes, SchemeMutationSuite **29 passes / 65 mutations**, MutationSuite **1 pass / 75 mutations**. Harness (`cmake/` + `test/support/`) 8,327 lines; `src/` 110 lines. (No-scheme corrected after Task 5 measured it: the plan first said 10, a count stale since the Chez-only cycle's own module deletion.)
 - Expected counts after each task (the totals gates enforce the mutation columns; a step in each task verifies the lane column):
 
   | After task | Release lanes | Scheme passes/mutations | CMake pass/mutations | no-scheme |
   |---|---|---|---|---|
-  | 1–4 | 37 | 29/65 | 1/75 | 10 |
-  | 5 | 36 | 29/65 | 1/65 | 9 |
-  | 6 | 34 | 26/62 | 1/65 | 9 |
-  | 7 | 34 | 26/62 | 1/65 | 9 |
-  | 8–10 | 33 | 25/60 | 1/65 | 9 |
+  | 1–4 | 37 | 29/65 | 1/75 | 9 |
+  | 5 | 36 | 29/65 | 1/66 | 8 |
+  | 6 | 34 | 26/62 | 1/66 | 8 |
+  | 7 | 34 | 26/62 | 1/66 | 8 |
+  | 8–10 | 33 | 25/60 | 1/66 | 8 |
+
+  (CMake column corrected after Task 5's review: eleven guard mutations died with their namespace, the twelfth — the accumulator-initialization hazard — moved with the function body it protects, so the arithmetic is 75 − 12 + 3 = 66, not the 65 first planned.)
 
 - Exit-status vocabulary is exactly **0, 1, 2, 3**. Launcher diagnostics keep the `byte-machine-launcher: HARNESS-ERROR ` prefix and exit **2**.
 - CMake floor **3.26**: `cmake_parse_arguments` leaves an explicitly-empty one-value keyword undefined (CMP0174 is 3.31+); mutation REPLACEs use `# deleted` comments, never empty strings.
 - The `|` separator for environment-borne path lists; never `:` or `;`.
 - **Inlined bodies keep their text verbatim at column 0** inside the surrounding `library` form. This is load-bearing twice over: ~30 mutation FIND anchors match on exact indentation, and `git blame` follows unchanged lines. Only headers explicitly rewritten by a step change.
-- No new dependencies. Nothing added to the functional core may require a Scheme runtime to specify; the no-scheme preset stays green (10 lanes through Task 4, 9 from Task 5).
+- No new dependencies. Nothing added to the functional core may require a Scheme runtime to specify; the no-scheme preset stays green (9 lanes through Task 4, 8 from Task 5).
 
 ---
 
@@ -878,7 +880,7 @@ git rm cmake/ByteMachinePortabilityGuard.cmake test/support/cmake/ByteMachinePor
 # and added two for the invariant that survives it, narrowed to one lane:
 # byte_machine_lane_duplicate_basenames and the registrar refusal it feeds.
 ```
-Also update the header's guard-history paragraph reference (the "Ninety-four is ninety-seven minus three" paragraph stays — it is history). Sanity-check the declaration count: `rg -c 'byte_machine_mutation\(' test/support/cmake/MutationSuite.cmake` goes 77 → 67 — two of the matches are comment mentions of `byte_machine_mutation()`, so 65 real declarations remain (75 − 12 + 2), which is what the totals gate enforces.
+Also update the header's guard-history paragraph reference (the "Ninety-four is ninety-seven minus three" paragraph stays — it is history). Sanity-check the declaration count: `rg -c 'byte_machine_mutation\(' test/support/cmake/MutationSuite.cmake` goes 77 → 68 — two of the matches are comment mentions of `byte_machine_mutation()`, so 66 real declarations remain (75 − 12 + 3: eleven guard mutations die with their namespace, the accumulator-initialization hazard moves with the function body into the SchemeLane section alongside the two new lane-check mutations, and the spec gains an ambient-seeding assertion to witness it — corrected after Task 5's review found the twelfth mutation's subject line surviving unguarded), which is what the totals gate enforces.
 
 - [ ] **Step 6: Suite, fresh (configure inputs changed)**
 
@@ -887,11 +889,11 @@ make clean && make test-all
 ctest --preset release -N | tail -1
 cmake --preset no-scheme && ctest --preset no-scheme --output-on-failure --no-tests=error
 ```
-Expected: 36/36 release green (`Total Tests: 36`); cmake-mutation lane reports `1 pass, 65 mutations`; no-scheme runs 9/9 green. Also:
+Expected: 36/36 release green (`Total Tests: 36`); cmake-mutation lane reports `1 pass, 66 mutations`; no-scheme runs 8/8 green. Also:
 ```bash
 rg -n 'PortabilityGuard|portability_guard|byte_machine_guard' cmake test CMakeLists.txt
 ```
-Expected: no hits.
+Expected: hits only in `MutationSuite.cmake`'s header prose — the Task 2 history paragraphs and this task's own narrative — never an include, a call, or a declaration. (Corrected after Task 5 landed: "no hits" conflicted with the narrative text this task's own step 5 mandates.)
 
 - [ ] **Step 7: Commit**
 
@@ -1333,7 +1335,7 @@ MutationSuite's scheme-lane FIND texts do not name the keyword (verify: `rg -n '
 make test-all
 rg -n 'SHARED_BODIES' cmake test src CMakeLists.txt --glob '!*.md'
 ```
-Expected: 33/33 green, `1 pass, 65 mutations` / `25 passes, 60 mutations`; the `rg` returns no hits.
+Expected: 33/33 green, `1 pass, 66 mutations` / `25 passes, 60 mutations`; the `rg` returns no hits.
 
 - [ ] **Step 5: Commit**
 
@@ -1374,7 +1376,7 @@ Expected: both empty — zero `include` forms and zero `(only (chezscheme) inclu
 make clean && make test-all
 cmake --preset no-scheme && ctest --preset no-scheme --output-on-failure --no-tests=error
 ```
-Expected: 33/33 release green; 9/9 no-scheme green; scheme-mutation `25 passes, 60 mutations`; cmake-mutation `1 pass, 65 mutations`.
+Expected: 33/33 release green; 8/8 no-scheme green; scheme-mutation `25 passes, 60 mutations`; cmake-mutation `1 pass, 66 mutations`.
 
 - [ ] **Step 4: The measurement (§11 gate 4)**
 
@@ -1430,7 +1432,7 @@ include/source-directories mechanism retires — launchers lose --source-dir,
 the cwd matrix and repository-wide basename guard go, the one-owner rule is
 replaced by an inline-duplication mutation, and a lane's SOURCES manifest now
 covers its program text. Lane matrix: 33 release lanes; SchemeMutationSuite
-25/60; MutationSuite 1/65. The aot lane-command branch is edited but
+25/60; MutationSuite 1/66. The aot lane-command branch is edited but
 lane-unwitnessed until the 5b remainder, as the design records.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
@@ -1444,5 +1446,5 @@ EOF
 ## Self-review notes
 
 - **Spec coverage.** §2's three scope decisions: collapse-first (no task builds body-copy staging; Task 2's 0006 records the carry), merge+rename (Task 7), fingerprint library (Task 3). §5: T3/T4/T6. §6: T7, including the manifest-membership claim (T7 step 5 verifies it against the configured environment). §7: T3 (manifest launcher), T8 (both flag-bearing launchers), chez-aot.ss untouched (no task names it). §8.1: T3/T4/T6/T7 evolve the manifests; T9 renames. §8.2: T5. §8.3: carried by never registering an aot lane; 0006 and the 5b/5c amendment note say so. §9.1: T5 (guard lane), T6 (matrix), T8 (no-source-dir lane). §9.2's four categories: objectless (T6 matrix mutation, T8 source-path pair), unconstructible-with-replacement (T6 step 4.6), retargeted (T3/T4/T6/T7), deleted-with-module (T5). §10: T2 wholesale, CHANGELOG in T10. §11's four gates: T10 steps 1–4. §12's phase rules: every task carries the registration edits its moves force, and each ends with the suite command shown. §14's risks: T1 (import mechanics, with the eval fallback stated), T8 step 6.4 (the one measured-not-guessed expectation), blame via `git mv` of the larger file in T3/T6/T7.
-- **Counts.** Lane arithmetic 37→36 (T5: guard spec lane) →34 (T6: three cwd lanes become one) →33 (T8: no-source-dir refusal). Scheme totals 29/65 →26/62 (T6: −3 matrix passes/mutations; pass 23's rewrite is 1-for-1) →25/60 (T8: −1 pass; −3+1 mutations). CMake totals 75 →65 (T5: −12 guard +2 lane-check). The suites' own totals gates enforce every row.
+- **Counts.** Lane arithmetic 37→36 (T5: guard spec lane) →34 (T6: three cwd lanes become one) →33 (T8: no-source-dir refusal). Scheme totals 29/65 →26/62 (T6: −3 matrix passes/mutations; pass 23's rewrite is 1-for-1) →25/60 (T8: −1 pass; −3+1 mutations). CMake totals 75 →66 (T5: −12 guard, +2 lane-check, +1 carried accumulator hazard — corrected from 65 after Task 5's review). The suites' own totals gates enforce every row.
 - **Type consistency.** The manifest keyword is `SHARED_BODIES` in Tasks 3–8 and `SOURCES` only from Task 9 — every earlier step deliberately uses the old spelling. The fingerprint library's four exports match between T3 (definition), the harness re-export (unchanged export list), and the manifest launcher's calls. The per-lane check is `byte_machine_lane_duplicate_basenames` in T5's function, wiring, spec, and both mutations.
