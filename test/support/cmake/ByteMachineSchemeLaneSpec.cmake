@@ -266,6 +266,22 @@ spec_check_equal("${message}"
   "no Gambit was discovered, so the gambit source lane for '/h/self/p.gambit.scm' is not registered."
   "gambit lane no-runtime message")
 
+# The Gambit half of the same hazard the chez aot case above closes. Both
+# no-runtime messages interpolate ${mode}, and every other assertion over
+# either one is written against a source lane -- so freezing the literal
+# `source` back into the Gambit branch would pass all of them. This is the one
+# assertion that would not. Registered against `o1` rather than `aot` because
+# o1 is Gambit's own mode and the one slice 5c reaches first; the message is
+# built the same way for both.
+set(BYTE_MACHINE_GAMBIT_EXECUTABLE "")
+byte_machine_scheme_lane_command(byte-machine.harness.example.gambit.o1
+  gambit o1 "/h/self/p.gambit.scm" command measured status message)
+spec_check_equal("${status}" "no-runtime" "a gambit o1 lane without a gambit is not registered")
+spec_check_equal("${measured}" "" "a rejected lane measures nothing")
+spec_check_equal("${message}"
+  "no Gambit was discovered, so the gambit o1 lane for '/h/self/p.gambit.scm' is not registered."
+  "gambit lane no-runtime message names the o1 mode, not a hardcoded source")
+
 # --- Declared bodies versus measured bodies --------------------------------
 #
 # A source lane reads the repository sources, so the two lists coincide and
