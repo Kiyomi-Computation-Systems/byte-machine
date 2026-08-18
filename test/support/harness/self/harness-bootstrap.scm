@@ -105,9 +105,8 @@
 ;; Every adapter procedure is called, so a name missing from one runtime's
 ;; export list is a load failure on that runtime rather than a silent gap.
 
-(bootstrap-assert "adapter: runtime name is one of the two"
-                  (or (string=? (adapter-runtime-name) "chez")
-                      (string=? (adapter-runtime-name) "gambit")))
+(bootstrap-assert "adapter: runtime name is chez"
+                  (string=? (adapter-runtime-name) "chez"))
 (bootstrap-assert "adapter: version is non-empty"
                   (> (string-length (adapter-runtime-version)) 0))
 (bootstrap-assert "adapter: machine type is non-empty"

@@ -16,7 +16,7 @@
 # will tell you when a pattern has drifted; it will not tell you when a new,
 # untested decision has been added.
 #
-# ONE PASS, NINETY-FOUR MUTATIONS
+# ONE PASS, SEVENTY-THREE MUTATIONS
 #
 # Every mutation above is declared before the single byte_machine_mutation_run
 # call at the end of this file, so this suite is one pass by construction.
@@ -50,11 +50,29 @@
 # from the shared directories only" survives with a new anchor and a new
 # witness, since its old witness (a WRAPPED_DIRS body missing a wrapper) went
 # with the rule that reported it.
+#
+# Seventy-three is ninety-four minus twenty-one: the Chez-only simplification's
+# Task 4 removed the second Scheme backend's toolchain layer entirely. Eleven
+# mutations left with its discovery module, deleted outright. Nine more left
+# with its execution branch and search-root helper, removed from
+# ByteMachineSchemeLane.cmake: the initialization-skip flag, the
+# undiscovered-runtime guard, the no-runtime message, the search root's comma
+# and relative-path checks, the search-root separator, the up-front output
+# clear, the check-reordering case, and the guard that narrowed the
+# registration-time status check from four clauses to one -- which lost its
+# witness along with the search-root cases that were the only way to reach a
+# comma-in-path or relative-path status through full registration; a
+# chez-only tree cannot produce either. The last left with the removed
+# backend's own mode-vocabulary entry in ByteMachineTesting.cmake, the
+# variable it mutated. Two mutations were re-anchored rather than removed:
+# "the unknown-backend message is garbled" and "an unknown backend no longer
+# stops registration" now match the two-clause guard and the message text
+# chez alone leaves behind.
 
 cmake_minimum_required(VERSION 3.26)
 
 set(EXPECTED_PASSES 1)
-set(EXPECTED_MUTATIONS 94)
+set(EXPECTED_MUTATIONS 73)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -129,72 +147,6 @@ byte_machine_mutation(
   LABEL "chez: version floor removed"
   FIND [[if(version VERSION_LESS BYTE_MACHINE_CHEZ_MINIMUM_VERSION)]]
   REPLACE [[if(FALSE)]])
-
-# --- ByteMachineGambit -----------------------------------------------------
-
-byte_machine_mutation(
-  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
-  LABEL "gambit: identity check removed, so Ghostscript passes as Gambit"
-  FIND [[if(NOT normalized MATCHES "(^|\n)gambit=yes(\n|$)")]]
-  REPLACE [[if(FALSE)]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
-  LABEL "gambit: version floor removed"
-  FIND [[if(version VERSION_LESS BYTE_MACHINE_GAMBIT_MINIMUM_VERSION)]]
-  REPLACE [[if(FALSE)]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
-  LABEL "gambit: 'v' version marker no longer stripped"
-  FIND [[if(raw_version MATCHES "^v(.*)$")]]
-  REPLACE [[if(FALSE)]])
-
-# The whole condition is replaced rather than one clause: CMake's if() binds AND
-# more tightly than OR, so prefixing a single clause with FALSE leaves the other
-# comparisons live and the mutation does nothing.
-byte_machine_mutation(
-  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
-  LABEL "gambit: interpreter/compiler agreement no longer required"
-  FIND [[  if(NOT interp_version STREQUAL compiler_version
-     OR NOT interp_target STREQUAL compiler_target
-     OR NOT interp_stamp STREQUAL compiler_stamp)]]
-  REPLACE [[  if(FALSE)]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
-  LABEL "gambit: compiler derived from a filename that is not gsi"
-  FIND [[if(NOT name MATCHES "^gsi(.*)$")]]
-  REPLACE [[if(FALSE)]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
-  LABEL "gambit: compiler derived from a relative path"
-  FIND [[if(dir STREQUAL "")]]
-  REPLACE [[if(FALSE)]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
-  LABEL "gambit: a hand-set compiler is overwritten by a derivation"
-  FIND [[  if(NOT cached STREQUAL recorded_derivation)]]
-  REPLACE [[  if(FALSE)]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
-  LABEL "gambit: a stale derivation is reused instead of following the interpreter"
-  FIND [[  byte_machine_gambit_compiler_beside("${interpreter}" fresh)
-  set(${out_path} "${fresh}" PARENT_SCOPE)
-  set(${out_derived_from} "${interpreter}" PARENT_SCOPE)
-endfunction()]]
-  REPLACE [[  set(${out_path} "${cached}" PARENT_SCOPE)
-  set(${out_derived_from} "${derived_from}" PARENT_SCOPE)
-endfunction()]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
-  LABEL "gambit: an empty cache is treated as a hand-set compiler"
-  FIND [[  if(NOT cached)]]
-  REPLACE [[  if(FALSE)]])
 
 # --- ByteMachineTesting ----------------------------------------------------
 
@@ -307,12 +259,6 @@ byte_machine_mutation(
   REPLACE [[  if(FALSE)]])
 
 byte_machine_mutation(
-  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
-  LABEL "gambit: absent version floor no longer refused, so the guard fails open"
-  FIND [[  if(NOT BYTE_MACHINE_GAMBIT_MINIMUM_VERSION MATCHES "^[0-9]+\\.[0-9]+")]]
-  REPLACE [[  if(FALSE)]])
-
-byte_machine_mutation(
   FILE test/support/cmake/SpecSupport.cmake SPEC SpecSupportSpec.cmake
   LABEL "spec-support: a failed specification still signs off as verified"
   FIND [[  if(n EQUAL 0)]]
@@ -338,14 +284,6 @@ byte_machine_mutation(
     set(${out_var} "" PARENT_SCOPE)
   endif()]]
   REPLACE [[  endif()]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachineGambit.cmake SPEC ByteMachineGambitSpec.cmake
-  LABEL "gambit: unset GAMBIT_HOME contributes a bare /bin hint outranking PATH"
-  FIND [[  if(DEFINED ENV{GAMBIT_HOME} AND NOT "$ENV{GAMBIT_HOME}" STREQUAL "")]]
-  REPLACE [[  if(TRUE)]]
-  EXPECT_SURVIVES
-    "lives in the discovery macro, which runs processes and reads the real environment; it is covered by configure-time behaviour, not by the cmake -P specifications")
 
 # --- MutationRunner (byte_machine_mutation_verdict and its registration) ---
 #
@@ -506,23 +444,8 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
-  LABEL "scheme-lane: gambit no longer skips .gambini"
-  FIND [[      "-f"
-]]
-  # Same reasoning as the object-guard mutation above.
-  REPLACE [[  # deleted
-]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: an undiscovered chez yields a command with an empty executable"
   FIND [[    if(NOT BYTE_MACHINE_CHEZ_EXECUTABLE)]]
-  REPLACE [[    if(FALSE)]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
-  LABEL "scheme-lane: an undiscovered gambit yields a command with an empty executable"
-  FIND [[    if(NOT BYTE_MACHINE_GAMBIT_EXECUTABLE)]]
   REPLACE [[    if(FALSE)]])
 
 byte_machine_mutation(
@@ -533,18 +456,17 @@ byte_machine_mutation(
 
 # Diagnostic wording is asserted exactly (see ByteMachineSchemeLaneSpec.cmake),
 # so each message the functional core can produce gets its own mutation: a
-# dropped interpolation, a copy-pasted wrong backend name, and a one-word typo.
-# Any of the three would otherwise pass every existing assertion undetected.
+# dropped interpolation and a one-word typo. Either would otherwise pass every
+# existing assertion undetected.
 #
 # Re-anchored on ${mode}: M0 slice 5b Task 2 replaced the literal "source" in
-# both no-runtime messages with the mode argument, so a lane can name the mode
+# the no-runtime message with the mode argument, so a lane can name the mode
 # it actually failed to find a runtime for (see MutationRunner.cmake's SITES
 # comment -- a pattern that stops matching after a refactor must be updated,
 # not deleted). REPLACE is unchanged: both specification cases this mutation
 # is caught by still call with mode `source`, so a REPLACE that hardcodes
 # "source" reproduces exactly the same break -- dropped program interpolation
-# for the Chez message, wrong backend name for the Gambit one -- as before
-# this re-anchoring.
+# -- as before this re-anchoring.
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: the chez no-runtime message drops its program interpolation"
@@ -553,15 +475,9 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
-  LABEL "scheme-lane: the gambit no-runtime message names the wrong backend"
-  FIND [[        "no Gambit was discovered, so the gambit ${mode} lane for '${program}' is not registered."]]
-  REPLACE [[        "no Gambit was discovered, so the chez source lane for '${program}' is not registered."]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: the unknown-backend message is garbled"
-  FIND [[    "'${backend}' is not a Scheme lane backend. Known backends: chez gambit."]]
-  REPLACE [[    "'${backend}' is not a Scheme land backend. Known backends: chez gambit."]])
+  FIND [[    "'${backend}' is not a Scheme lane backend. Known backends: chez."]]
+  REPLACE [[    "'${backend}' is not a Scheme land backend. Known backends: chez."]])
 
 # byte_machine_add_scheme_lane's own decisions -- argument validation, backend
 # routing, and the environment it hands to the registrar -- had no coverage at
@@ -588,18 +504,12 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: an unknown backend no longer stops registration"
-  # Re-anchored a second time, on the four-clause form M0 slice 5b Task 2
-  # added: `unknown-mode` now sits between `unknown-backend` and
-  # `comma-in-path`, so the three-clause pattern this mutation matched since
-  # the Gambit search-root check no longer occurs anywhere in the file (see
+  # Re-anchored on the two-clause form left once the removed backend's
+  # comma-in-path and relative-path statuses left the vocabulary with it (see
   # MutationRunner.cmake's SITES comment -- a pattern that stops matching
-  # after a refactor must be updated, not deleted). REPLACE is unchanged:
-  # this mutation still means "the whole fatal-error guard is gone", which is
-  # a different break than the narrower one below.
+  # after a refactor must be updated, not deleted).
   FIND [[  if(status STREQUAL "unknown-backend"
-     OR status STREQUAL "unknown-mode"
-     OR status STREQUAL "comma-in-path"
-     OR status STREQUAL "relative-path")]]
+     OR status STREQUAL "unknown-mode")]]
   REPLACE [[  if(FALSE)]])
 
 byte_machine_mutation(
@@ -672,110 +582,6 @@ byte_machine_mutation(
   FIND [[  if(arg_WORKING_DIRECTORY)]]
   REPLACE [[  if(TRUE)]])
 
-# A comma in a Gambit search root is not a wrong path but a malformed -:
-# option list: gsi prints its usage banner and runs no Scheme at all, on every
-# Gambit lane at once. A relative root is resolved against gsi's own working
-# directory, so a lane would find its libraries or not depending on where
-# CTest launched it. Both are configure-time refusals, so each gets its own
-# mutation alongside the wrong-separator case, which would corrupt every
-# multi-root search silently rather than refusing it.
-byte_machine_mutation(
-  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
-  LABEL "lane: a comma in a Gambit search root is accepted"
-  FIND [[    if(dir MATCHES ",")]]
-  REPLACE [[    if(FALSE)]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
-  LABEL "lane: the search roots are joined with the wrong separator"
-  FIND [[  list(JOIN parts "," joined)]]
-  REPLACE [[  list(JOIN parts ";" joined)]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
-  LABEL "lane: a relative Gambit search root is accepted"
-  FIND [[    if(NOT IS_ABSOLUTE "${dir}")]]
-  REPLACE [[    if(FALSE)]])
-
-# The two output variables are cleared up front so that a caller-supplied
-# stale value cannot leak through on either the accepted path (which never
-# rewrites the message) or the rejected path (which never rewrites the
-# option). Without this clear, a lane that reused a variable from an earlier
-# call could see the earlier call's answer instead of this one's.
-byte_machine_mutation(
-  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
-  LABEL "lane: the gambit search function's up-front output clear is deleted, so a stale caller-supplied option or message can survive a call"
-  FIND [[  set(${out_option} "" PARENT_SCOPE)
-  set(${out_message} "" PARENT_SCOPE)]]
-  REPLACE [[  ]])
-
-# The comma check must run first: a comma malforms the -: option list and
-# silences gsi -- and therefore every Gambit lane at once -- while a relative
-# root only misleads the one lane that carries it. This mutation keeps both
-# checks intact and only swaps their order, so it is caught solely by the
-# both-defects assertion in the specification; every single-defect case
-# supplies a root with exactly one problem and cannot see the checks
-# reordered.
-byte_machine_mutation(
-  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
-  LABEL "lane: the Gambit search checks are reordered, so a root with both defects reports relative-path instead of comma-in-path"
-  FIND [[    if(dir MATCHES ",")
-      set(${out_status} "comma-in-path" PARENT_SCOPE)
-      set(${out_message}
-        "a Gambit search root must not contain a comma, but '${dir}' does. Gambit's -: options are comma-separated, so gsi would print its usage banner and run no Scheme at all."
-        PARENT_SCOPE)
-      return()
-    endif()
-    if(NOT IS_ABSOLUTE "${dir}")
-      set(${out_status} "relative-path" PARENT_SCOPE)
-      set(${out_message}
-        "a Gambit search root must be absolute, but '${dir}' is not. Gambit resolves a relative root against its own working directory, so the lane would find its libraries or not depending on where it was launched."
-        PARENT_SCOPE)
-      return()
-    endif()]]
-  REPLACE [[    if(NOT IS_ABSOLUTE "${dir}")
-      set(${out_status} "relative-path" PARENT_SCOPE)
-      set(${out_message}
-        "a Gambit search root must be absolute, but '${dir}' is not. Gambit resolves a relative root against its own working directory, so the lane would find its libraries or not depending on where it was launched."
-        PARENT_SCOPE)
-      return()
-    endif()
-    if(dir MATCHES ",")
-      set(${out_status} "comma-in-path" PARENT_SCOPE)
-      set(${out_message}
-        "a Gambit search root must not contain a comma, but '${dir}' does. Gambit's -: options are comma-separated, so gsi would print its usage banner and run no Scheme at all."
-        PARENT_SCOPE)
-      return()
-    endif()]])
-
-# The companion to the re-anchored "an unknown backend no longer stops
-# registration" mutation above: that one deletes the guard outright, this one
-# narrows it back to the single unknown-backend clause that predates M0 slice
-# 3 Task 3 ("A Gambit search root must be absolute and comma-free", which grew
-# this guard from one clause to three), so unknown-mode, comma-in-path, and
-# relative-path would all fail open while unknown-backend stayed refused. Two
-# distinct regressions, so two mutations.
-#
-# Re-anchored on the four-clause form for the same reason as the mutation
-# above (see MutationRunner.cmake's SITES comment). REPLACE is unchanged: it
-# already named only the single unknown-backend clause, so narrowing a
-# four-clause guard down to it is the same regression as narrowing the
-# three-clause guard was, just with one more status now failing open.
-byte_machine_mutation(
-  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
-  LABEL "lane: a refused search list does not stop registration"
-  FIND [[  if(status STREQUAL "unknown-backend"
-     OR status STREQUAL "unknown-mode"
-     OR status STREQUAL "comma-in-path"
-     OR status STREQUAL "relative-path")]]
-  REPLACE [[  if(status STREQUAL "unknown-backend")]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
-  LABEL "testing: gambit's source mode is withdrawn"
-  FIND [[set(BYTE_MACHINE_TEST_MODES_gambit source o1 aot)]]
-  REPLACE [[set(BYTE_MACHINE_TEST_MODES_gambit o1 aot)]])
-
 # The run directory is where slice 3's working-directory matrix hangs: a lane
 # that overrides it is asserting something about where resolution happens, so
 # each of the three decisions inside byte_machine_test_run_directory gets its
@@ -811,7 +617,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
   LABEL "guard: wrapper files are counted as shared bodies"
-  FIND [[  list(FILTER bodies EXCLUDE REGEX "\\.(chez|gambit)\\.(sps|scm)$")]]
+  FIND [[  list(FILTER bodies EXCLUDE REGEX "\\.chez\\.(sps|scm)$")]]
   # Same empty-REPLACE hazard as the expect-exit and scheme-lane mutations
   # above (CMP0174; this project's 3.26 floor leaves an explicitly-empty
   # REPLACE undefined rather than empty -- see those mutations' comments).

@@ -30,8 +30,7 @@
       "binaryDir": "${sourceDir}/build/no-scheme",
       "cacheVariables": {
         "BYTE_MACHINE_BUILD_TESTS": "ON",
-        "BYTE_MACHINE_REQUIRE_CHEZ": "OFF",
-        "BYTE_MACHINE_REQUIRE_GAMBIT": "OFF"
+        "BYTE_MACHINE_REQUIRE_CHEZ": "OFF"
       }
     }
   ],

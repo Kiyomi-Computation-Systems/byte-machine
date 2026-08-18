@@ -2,9 +2,9 @@
 ;;;
 ;;; PORTABILITY CONTRACT
 ;;;
-;;; This file is included verbatim by both the R6RS and the R7RS wrapper. It may
-;;; use only identifiers common to both standards, and must never name Chez or
-;;; Gambit. Everything a runtime does differently arrives through the adapter
+;;; This file is included verbatim by every runtime's wrapper. It may use only
+;;; identifiers common to R6RS and R7RS, and must never name a specific
+;;; runtime. Everything a runtime does differently arrives through the adapter
 ;;; protocol, documented in
 ;;; docs/plans/milestone-0-slice-2-test-harness.md section 6.
 ;;;

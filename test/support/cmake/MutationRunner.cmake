@@ -238,10 +238,9 @@ endfunction()
 # byte_machine_mutation_reset()
 #
 # Discard the declared mutations so a second set can run under a different
-# verify command in the same script. Used by the Scheme suite, which verifies
-# the shared runner on one runtime but must verify each adapter's export list on
-# its own runtime -- a Chez lane cannot notice a name missing from the Gambit
-# library.
+# verify command in the same script. Used by the Scheme suite, which mutates
+# several different files in one pass and must start a fresh batch each time
+# the file being mutated -- and the specification meant to catch it -- changes.
 function(byte_machine_mutation_reset)
   set(_bm_mutation_count 0 PARENT_SCOPE)
 endfunction()

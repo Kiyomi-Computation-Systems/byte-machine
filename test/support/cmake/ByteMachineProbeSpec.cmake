@@ -34,12 +34,13 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
   elseif(c STREQUAL "empty-output")
     byte_machine_probe_field("" "machine-type" value "the chez probe")
   elseif(c STREQUAL "ghostscript-banner")
-    # What Ghostscript actually prints on this development host when it is
-    # mistaken for Gambit's gsc. It exits 0 while doing it, so only the content
-    # of the output can tell the two apart.
+    # What Ghostscript actually prints on this development host: real,
+    # well-formed output from a program that is not the runtime being probed
+    # for. It exits 0 while doing it, so only the content of the output can
+    # tell them apart.
     byte_machine_probe_field("GPL Ghostscript 10.07.1 (2026-05-19)
 Copyright (C) 2026 Artifex Software, Inc.  All rights reserved."
-      "version" value "the gambit probe")
+      "version" value "a probe")
   elseif(c STREQUAL "key-only-a-suffix")
     # 'version' must not be satisfied by the 'full-version' line. A helper that
     # matched anywhere in a line would report Chez's whole banner as the version
@@ -72,8 +73,8 @@ spec_check_equal("${v}" "yes" "value with a stripped carriage return")
 byte_machine_probe_field("threaded=yes\r\nmachine-type=ta6nt\r\n" "machine-type" v "a probe")
 spec_check_equal("${v}" "ta6nt" "second field after a carriage return")
 
-# A value may itself contain '='. Only the first one separates. Gambit's build
-# stamp and configure line both do this.
+# A value may itself contain '='. Only the first one separates. A compiler
+# invocation is a natural example: config=CC=gcc-16 embeds one in the value.
 byte_machine_probe_field("config=CC=gcc-16" "config" v "a probe")
 spec_check_equal("${v}" "CC=gcc-16" "value containing an equals sign")
 
@@ -124,7 +125,7 @@ set(negative_cases
   "missing-field|byte-machine: the chez probe produced no 'architecture' field"
   "empty-value|byte-machine: the chez probe reported an empty 'machine-type' field"
   "empty-output|byte-machine: the chez probe produced no 'machine-type' field"
-  "ghostscript-banner|byte-machine: the gambit probe produced no 'version' field"
+  "ghostscript-banner|byte-machine: a probe produced no 'version' field"
   "key-only-a-suffix|byte-machine: the chez probe produced no 'version' field")
 
 spec_expect_all_rejected("${SPEC_SELF}" ${negative_cases})

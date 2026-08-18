@@ -1,8 +1,7 @@
 ;;; Chez runtime adapter for the byte-machine private test runner.
 ;;;
-;;; This file and its Gambit counterpart are the only places in the harness
-;;; where runtime-specific identifiers may appear, and the two must export
-;;; exactly the same names. That requirement is checked by mutation: deleting an
+;;; This is the only place in the harness where runtime-specific identifiers
+;;; may appear. Its export list is checked by mutation: deleting a load-bearing
 ;;; export here must make the self-tests fail (spec section 9.1).
 ;;;
 ;;; The shared body is included by bare filename and resolved through Chez's

@@ -172,9 +172,9 @@ endif()
 # --- Wrapper files are not shared bodies -----------------------------------
 
 byte_machine_guard_shared_bodies(bodies
-  "/h/self/a.scm" "/h/self/a.gambit.scm" "/h/self/b.scm")
+  "/h/self/a.scm" "/h/self/a.chez.scm" "/h/self/b.scm")
 spec_check_equal("${bodies}" "/h/self/a.scm;/h/self/b.scm"
-  "a Gambit wrapper is not itself a shared body")
+  "a wrapper with a .scm extension is not itself a shared body")
 
 # Chez wrappers end in .sps and so fall outside a *.scm glob already. The rule
 # is stated anyway rather than left to an extension that happens to differ,

@@ -352,8 +352,7 @@
     (harness-case "the adapter reports this runtime"
       (lambda ()
         (check "the runtime names itself"
-               (or (string=? (adapter-runtime-name) "chez")
-                   (string=? (adapter-runtime-name) "gambit")))
+               (string=? (adapter-runtime-name) "chez"))
         (check "the version is bare and non-empty"
                (and (> (string-length (adapter-runtime-version)) 0)
                     (not (harness-string-contains? (adapter-runtime-version) "v"))))
@@ -484,10 +483,10 @@
 
 ;; --- the content fingerprint ------------------------------------------------
 ;;
-;; Every value below was measured on Chez 10.4.1 and Gambit 4.9.8 on
-;; 2026-08-17 and was identical on both. They are literals rather than
-;; recomputations because a test that recomputes the thing under test with the
-;; thing under test asserts only that it is deterministic.
+;; Every value below was measured on Chez 10.4.1 on 2026-08-17. They are
+;; literals rather than recomputations because a test that recomputes the
+;; thing under test with the thing under test asserts only that it is
+;; deterministic.
 
 (harness-group "fingerprint"
   (lambda ()
@@ -531,9 +530,9 @@
                      (harness-fingerprint->string (harness-fingerprint-combine '(2 1)))
                      "3cabbf7df0b874f")))
 
-    ;; Chez renders FF where Gambit renders ff for (number->string 255 16), so
-    ;; the rendering cannot go through a radix conversion. This case is what
-    ;; notices if someone ever changes it back.
+    ;; Chez renders FF, not ff, for (number->string 255 16), so the rendering
+    ;; cannot go through a radix conversion. This case is what notices if
+    ;; someone ever changes it back.
     (harness-case "hex digits are lowercase on every runtime"
       (lambda ()
         (check-equal "255" (harness-fingerprint->string 255) "ff")

@@ -21,11 +21,12 @@
   each affected pass's baseline and mutant still differ for the reason the
   mutation names. A green suite will not tell you.
 * A registration that depends on a tool other than its own backend is gated on
-  that tool, not on the backend. A Gambit lane whose expectation is computed by
-  a Chez process needs `if(BYTE_MACHINE_CHEZ_EXECUTABLE)`; its own no-runtime
-  skip fires on a missing Gambit and says nothing about a missing Chez. Slice 5a
-  shipped this bug twice, on a host where both are installed and neither review
-  could see it without configuring a one-runtime build.
+  that tool, not on the backend. A lane whose expectation is computed by a
+  Chez process needs `if(BYTE_MACHINE_CHEZ_EXECUTABLE)` even when Chez is not
+  its own backend; its own no-runtime skip fires on a missing instance of its
+  own backend and says nothing about a missing Chez. Slice 5a shipped this bug
+  twice, on a host where both were installed and neither review could see it
+  without configuring a one-runtime build.
 * Prefer the mutation form caught by a failed comparison over one caught by a
   raise. A raise-based catch depends on where the mutant happens to crash rather
   than on the assertion naming the decision. Before accepting one, try the

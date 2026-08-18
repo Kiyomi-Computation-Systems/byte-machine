@@ -33,15 +33,6 @@ byte_machine_add_test(
   TIMEOUT 120
   LABELS unit)
 
-# Gambit discovery has to tell Gambit apart from a PostScript interpreter that
-# answers to the same name and exits 0 while doing it.
-byte_machine_add_test(
-  NAME byte-machine.harness.cmake-gambit.cmake.direct
-  COMMAND "${CMAKE_COMMAND}" -P
-          "${CMAKE_CURRENT_LIST_DIR}/support/cmake/ByteMachineGambitSpec.cmake"
-  TIMEOUT 120
-  LABELS unit)
-
 # Every assertion in every specification above routes through SpecSupport, so a
 # silent break there would leave all of them green while checking nothing. This
 # is the only specification that may not use the helpers it tests.

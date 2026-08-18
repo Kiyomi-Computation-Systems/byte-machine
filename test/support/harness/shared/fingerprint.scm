@@ -2,9 +2,9 @@
 ;;;
 ;;; A run reports the digest of the bodies it executed so that a stale
 ;;; artifact, a copied backend-specific variant, or a basename collision is
-;;; detectable rather than merely unlikely. Chez and Gambit must report the
-;;; same value for the same text; that agreement is the claim, and everything
-;;; below is chosen to keep it from depending on anything unspecified.
+;;; detectable rather than merely unlikely. Every runtime must report the same
+;;; value for the same text; that agreement is the claim, and everything below
+;;; is chosen to keep it from depending on anything unspecified.
 ;;;
 ;;; This is a change detector, not a cryptographic digest. It is a polynomial
 ;;; rolling hash modulo the Mersenne prime 2^61-1. Do not use it for anything
@@ -68,12 +68,12 @@
                       harness-fingerprint-modulus)))))
 
 ;; Lowercase hex from an explicit digit table, never number->string with a
-;; radix. Measured 2026-08-17: Chez yields "FF" and Gambit yields "ff" for
-;; (number->string 255 16). Neither is wrong -- the standards do not fix the
-;; case -- so a radix conversion would make the one claim this file exists to
-;; establish depend on a detail these two runtimes already answer differently.
-;; Comparing case-insensitively later would be worse: it would hide exactly the
-;; class of divergence this file exists to expose.
+;; radix. Measured 2026-08-17: Chez yields "FF" for (number->string 255 16).
+;; That is not wrong -- the standards do not fix the case -- so a radix
+;; conversion would make the one claim this file exists to establish depend on
+;; a detail an implementation is free to answer differently. Comparing
+;; case-insensitively later would be worse: it would hide exactly the class of
+;; divergence this file exists to expose.
 (define harness-hex-digits "0123456789abcdef")
 
 (define (harness-fingerprint->string h)

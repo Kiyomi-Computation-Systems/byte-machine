@@ -19,8 +19,9 @@
 ;;;
 ;;; Consequence, recorded because it is not obvious: this runs under Chez, so a
 ;;; Chez lane compares Chez's output against a Chez computation and agrees with
-;;; itself by construction. It is the Gambit lane that makes the comparison
-;;; cross-runtime. See section 6.1 of the slice-5a design.
+;;; itself by construction. With Chez as the only runtime, every lane's
+;;; comparison has this shape; see section 6.1 of the slice-5a design for what
+;;; that does and does not prove.
 
 ;;; Status 2 is the harness's "harness, configuration, or registration error",
 ;;; the same meaning the Chez source launcher gives it.

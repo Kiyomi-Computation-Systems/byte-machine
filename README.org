@@ -25,16 +25,6 @@ architecture, and milestones.
 The Chez pin is a floor recording what has actually been verified, not a guess
 at what would work; lowering it needs CI evidence from the older release.
 
-Byte Machine locates Gambit by finding =gsi= and deriving =gsc= from the same
-directory. It never searches for =gsc=: Ghostscript installs a binary of that
-name, and handed a Scheme file it prints its own banner rather than failing
-usefully. On a host with Ghostscript present, install Gambit and leave it
-unlinked.
-
-Gambit's native lanes invoke a C compiler whose name is fixed when Gambit itself
-was built — the Homebrew build hard-codes =gcc-16= — so that compiler must be on
-=PATH= for those lanes, independently of anything configured here.
-
 ** Building and testing
 
 #+begin_src bash
@@ -45,9 +35,9 @@ make build
 make test
 #+end_src
 
-Other targets: =make doctor= reports the discovered toolchains and stops,
+Other targets: =make doctor= reports the discovered toolchain and stops,
 =make dev= builds and runs the harness selection (the build-layer
-specifications, the Chez and Gambit self-test lanes, and the Scheme mutation
+specifications, the Chez self-test lanes, and the Scheme mutation
 suite), =make test-all= runs the complete selection, =make prod= builds the
 release configuration, and =make clean= removes the build trees. =make help=
 lists them.
@@ -64,14 +54,10 @@ If discovery cannot find a runtime, point it at one explicitly:
 cmake --preset dev -DBYTE_MACHINE_CHEZ_EXECUTABLE=/absolute/path/to/scheme
 #+end_src
 
-#+begin_src bash
-cmake --preset dev -DBYTE_MACHINE_GAMBIT_EXECUTABLE=/absolute/path/to/gsi
-#+end_src
-
-Both =make dev= and =make test= launch real Chez and Gambit processes; neither
-is a CMake-only target. To work on the build layer alone, with no Scheme
-runtime installed, use the =no-scheme= preset instead, which configures and
-runs only the build-layer specifications:
+Both =make dev= and =make test= launch real Chez processes; neither is a
+CMake-only target. To work on the build layer alone, with no Scheme runtime
+installed, use the =no-scheme= preset instead, which configures and runs only
+the build-layer specifications:
 
 #+begin_src bash
 cmake --preset no-scheme && ctest --preset no-scheme

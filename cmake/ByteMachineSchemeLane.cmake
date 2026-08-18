@@ -2,11 +2,10 @@
 #
 # WHY THE COMMAND LINE IS BUILT IN ONE PLACE
 #
-# Ten registrations that each spell out their own invocation drift. The two
-# details most worth not drifting are invisible when they are wrong: Chez's
-# object-guard pair, without which a stale compiled object is silently preferred
-# over the source a "source" lane claims to run, and Gambit's -f, without which
-# a developer's .gambini file participates in every test result.
+# Ten registrations that each spell out their own invocation drift. The detail
+# most worth not drifting is invisible when it is wrong: Chez's object-guard
+# pair, without which a stale compiled object is silently preferred over the
+# source a "source" lane claims to run.
 #
 # Slice 2 registers only source lanes. The compiled lanes arrive in slice 5 and
 # extend this module rather than replacing it.
@@ -17,46 +16,6 @@ include("${CMAKE_CURRENT_LIST_DIR}/ByteMachineExpectExit.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/ByteMachineTesting.cmake")
 
 # --- Functional core -------------------------------------------------------
-
-# byte_machine_scheme_lane_gambit_search(<out_option> <out_status> <out_message>
-#                                        <dir>...)
-#
-# Build Gambit's `-:` runtime-option argument putting every <dir> on the module
-# search path. Status is `ok`, `comma-in-path`, or `relative-path`.
-#
-# The comma check is not defensive programming. Gambit's -: option list is
-# comma-separated, so a root containing one is not a wrong path but a malformed
-# option list: gsi prints its usage banner and runs nothing, on every Gambit
-# lane at once, mentioning nothing this project owns. A checkout under
-# ~/my,projects/ is enough. Refusing at configure time turns that into a
-# sentence naming the directory.
-function(byte_machine_scheme_lane_gambit_search out_option out_status out_message)
-  set(${out_option} "" PARENT_SCOPE)
-  set(${out_message} "" PARENT_SCOPE)
-
-  set(parts "")
-  foreach(dir IN LISTS ARGN)
-    if(dir MATCHES ",")
-      set(${out_status} "comma-in-path" PARENT_SCOPE)
-      set(${out_message}
-        "a Gambit search root must not contain a comma, but '${dir}' does. Gambit's -: options are comma-separated, so gsi would print its usage banner and run no Scheme at all."
-        PARENT_SCOPE)
-      return()
-    endif()
-    if(NOT IS_ABSOLUTE "${dir}")
-      set(${out_status} "relative-path" PARENT_SCOPE)
-      set(${out_message}
-        "a Gambit search root must be absolute, but '${dir}' is not. Gambit resolves a relative root against its own working directory, so the lane would find its libraries or not depending on where it was launched."
-        PARENT_SCOPE)
-      return()
-    endif()
-    list(APPEND parts "search=${dir}")
-  endforeach()
-
-  list(JOIN parts "," joined)
-  set(${out_option} "-:${joined}" PARENT_SCOPE)
-  set(${out_status} "ok" PARENT_SCOPE)
-endfunction()
 
 # byte_machine_lane_measured_copies(<dir> <out_var> <declared-body>...)
 #
@@ -93,9 +52,8 @@ function(byte_machine_chez_aot_paths name program out_object_dir out_compiled)
   set(dir "${BYTE_MACHINE_CHEZ_OBJECT_ROOT}/${name_key}")
   set(${out_object_dir} "${dir}" PARENT_SCOPE)
   # NAME_WLE, not NAME_WE: NAME_WE strips the longest extension, so
-  # harness-self-tests.chez.sps and harness-self-tests.gambit.scm would both
-  # yield the stem harness-self-tests -- harmless now that the directory
-  # above is keyed per lane rather than per program, but NAME_WLE keeps the
+  # harness-self-tests.chez.sps would yield the bare stem harness-self-tests,
+  # dropping which runtime the artifact was built from. NAME_WLE keeps the
   # .chez segment in the artifact's filename, one less thing a reader of the
   # object tree has to reconstruct from the directory name alone.
   get_filename_component(stem "${program}" NAME_WLE)
@@ -107,18 +65,16 @@ endfunction()
 #                                  <out_status> <out_message>
 #                                  <declared-body>...)
 #
-# Status is `ok`, `no-runtime`, `unknown-backend`, `unknown-mode` -- or, for
-# gambit, one of byte_machine_scheme_lane_gambit_search's own statuses
-# (`comma-in-path`, `relative-path`), forwarded unchanged. A missing runtime is
-# not fatal: the CMake-layer specifications must stay runnable on a host with
-# no Scheme installed, so a lane whose runtime was never discovered is skipped
-# with a message rather than failing configuration. The runtime check runs
-# first, ahead of the mode check that can produce `unknown-mode`, for the same
-# reason: a lane naming a mode this module cannot build yet (Gambit's aot and
-# o1, at present -- see the Gambit branch below) must still fail loudly on a
-# host that has the runtime to attempt it, but must not turn `cmake --preset
-# no-scheme` into a configure failure over a backend/mode combination the host
-# was never going to exercise.
+# Status is `ok`, `no-runtime`, `unknown-backend`, or `unknown-mode`. A
+# missing runtime is not fatal: the CMake-layer specifications must stay
+# runnable on a host with no Scheme installed, so a lane whose runtime was
+# never discovered is skipped with a message rather than failing
+# configuration. The runtime check runs first, ahead of the mode check that
+# can produce `unknown-mode`, for the same reason: a lane naming a mode this
+# module cannot build a command for must still fail loudly on a host that has
+# the runtime to attempt it, but must not turn `cmake --preset no-scheme` into
+# a configure failure over a backend/mode combination the host was never
+# going to exercise.
 #
 # <out_measured> is the list of paths the run will fingerprint, in the order
 # the declared bodies were given. For a source lane it is the declared list:
@@ -193,58 +149,15 @@ function(byte_machine_scheme_lane_command name backend mode program
     return()
   endif()
 
-  if(backend STREQUAL "gambit")
-    if(NOT BYTE_MACHINE_GAMBIT_EXECUTABLE)
-      set(${out_status} "no-runtime" PARENT_SCOPE)
-      set(${out_message}
-        "no Gambit was discovered, so the gambit ${mode} lane for '${program}' is not registered."
-        PARENT_SCOPE)
-      return()
-    endif()
-    if(NOT mode STREQUAL "source")
-      set(${out_status} "unknown-mode" PARENT_SCOPE)
-      set(${out_message}
-        "'${mode}' is not an execution mode the gambit backend of this lane module can build a command for yet. Known modes: source. Gambit's compiled modes (o1, aot) arrive in a later slice."
-        PARENT_SCOPE)
-      return()
-    endif()
-
-    # `-:` runtime options must be the first argument, and the option list is
-    # comma-separated: `search=A,search=B` puts two module roots on the path.
-    # Measured, with a control proving the second root is load-bearing
-    # (docs/plans/milestone-0-slice-3-shared-body.md section 2).
-    # `-f` skips .gambini so a developer's personal initialisation cannot change
-    # what a test proves. No launcher is needed: Gambit's include inside
-    # define-library is source-file-relative and needs no ambient state.
-    byte_machine_scheme_lane_gambit_search(search_option search_status search_message
-      "${BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT}"
-      "${BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT}")
-    if(NOT search_status STREQUAL "ok")
-      set(${out_status} "${search_status}" PARENT_SCOPE)
-      set(${out_message} "${search_message}" PARENT_SCOPE)
-      return()
-    endif()
-
-    set(${out_command}
-      "${BYTE_MACHINE_GAMBIT_EXECUTABLE}"
-      "${search_option}"
-      "-f"
-      "${program}"
-      PARENT_SCOPE)
-    set(${out_measured} ${ARGN} PARENT_SCOPE)
-    set(${out_status} "ok" PARENT_SCOPE)
-    return()
-  endif()
-
   set(${out_status} "unknown-backend" PARENT_SCOPE)
   set(${out_message}
-    "'${backend}' is not a Scheme lane backend. Known backends: chez gambit."
+    "'${backend}' is not a Scheme lane backend. Known backends: chez."
     PARENT_SCOPE)
 endfunction()
 
 # --- Imperative shell ------------------------------------------------------
 
-# byte_machine_add_scheme_lane(NAME <name> BACKEND <chez|gambit> PROGRAM <path>
+# byte_machine_add_scheme_lane(NAME <name> BACKEND <chez> PROGRAM <path>
 #                              TIMEOUT <seconds> [EXPECT_EXIT <code>]
 #                              [WORKING_DIRECTORY <dir>]
 #                              [LABELS ...] [ENVIRONMENT ...])
@@ -312,9 +225,7 @@ function(byte_machine_add_scheme_lane)
     command measured status message ${arg_SHARED_BODIES})
 
   if(status STREQUAL "unknown-backend"
-     OR status STREQUAL "unknown-mode"
-     OR status STREQUAL "comma-in-path"
-     OR status STREQUAL "relative-path")
+     OR status STREQUAL "unknown-mode")
     message(FATAL_ERROR "byte-machine: ${message}")
   endif()
   if(status STREQUAL "no-runtime")
@@ -348,14 +259,12 @@ function(byte_machine_add_scheme_lane)
   # is illegal in a Windows path, so it cannot occur inside a member.
   #
   # Gated on a discovered Chez, because byte_machine_expected_fingerprint runs
-  # the expectation launcher under Chez. A host with Gambit but no Chez reaches
-  # this line on every Gambit lane -- that lane's own runtime was found, so it
-  # did not take the no-runtime return above -- and would otherwise build a
-  # custom command whose executable is the empty string. Neither variable is set
-  # in that case, so the harness skips provenance exactly as it does for any
-  # process a lane registration did not start. The lane still runs and still
-  # proves what it proved before this slice; it just carries no fingerprint,
-  # which is the honest outcome when the build cannot compute one.
+  # the expectation launcher under Chez. With chez the only backend this
+  # function routes to `ok`, the guard cannot be false by the time this line
+  # runs -- a chez lane with no discovered Chez already took the no-runtime
+  # return above. It stays explicit rather than assumed: the manifest block
+  # should not depend on control flow elsewhere in this function to know when
+  # a fingerprint can be computed.
   if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     string(JOIN "|" fingerprint_files ${measured})
     if(arg_WRONG_FINGERPRINT)

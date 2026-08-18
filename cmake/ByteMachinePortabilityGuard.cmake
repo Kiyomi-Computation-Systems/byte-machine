@@ -28,11 +28,11 @@ include_guard(GLOBAL)
 # byte_machine_guard_shared_bodies(<out_bodies> <path>...)
 #
 # Drop wrapper files from a glob result. A wrapper declares its runtime in its
-# own name -- harness-failing.chez.sps, harness-failing.gambit.scm -- and exists
-# precisely to hold the import forms a shared body may not have.
+# own name -- harness-failing.chez.sps -- and exists precisely to hold the
+# import forms a shared body may not have.
 function(byte_machine_guard_shared_bodies out_bodies)
   set(bodies ${ARGN})
-  list(FILTER bodies EXCLUDE REGEX "\\.(chez|gambit)\\.(sps|scm)$")
+  list(FILTER bodies EXCLUDE REGEX "\\.chez\\.(sps|scm)$")
   set(${out_bodies} "${bodies}" PARENT_SCOPE)
 endfunction()
 
