@@ -39,6 +39,19 @@
   bare driver with no harness and false of the shipped harness-integrated lane,
   and it propagated into five documents before review caught it. Decision 0002
   models the handling — re-measure, then state what was measured against what.
+* A removal gate that greps the departed name is an inventory check, not a
+  vocabulary check. The Chez-only cut's `rg -i gambit` cleared every file while
+  "both runtimes", "two wrappers", and "parity proof" survived in shared-body
+  headers — live comments asserting a contract the plan had retired. Removing a
+  concept means sweeping its vocabulary too; the chez-only plan's §6 carries the
+  executable form of that sweep.
+* A mutation is not dead just because its witnesses are. The Chez-only cut first
+  deleted "a refused search list does not stop registration" as unwitnessable
+  when its two Gambit fixtures went; its REPLACE still narrowed a two-clause
+  guard, and the surviving clause — unknown-mode at registration — was reachable
+  through a route nothing yet used (a lane NAME carrying one backend's mode
+  while BACKEND names another). Before deleting a mutation, ask what its REPLACE
+  still changes in the surviving tree and whether any input can reach it.
 * Libraries are R6RS `.sls`. Until the include-collapse slice lands, shared
   `.scm` bodies contain no library or include form and are included by exactly
   one owner library. R6RS forbids assigning an exported variable — reach mutable
