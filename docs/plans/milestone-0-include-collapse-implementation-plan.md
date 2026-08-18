@@ -333,7 +333,7 @@ Each is a `>`-quoted block inserted directly under the document's `Date:`/status
 ```markdown
 > Amended 2026-08-18 by [decision 0006](../decisions/0006-inline-libraries.md):
 > the include collapse landed before this document's remaining 5b scope.
-> `chez-compile.ss` no longer takes `--source-dir` (§5.1 item 2 shows it),
+> `chez-compile.ss` no longer takes `--source-dir` (§5.1 item 2 records the flag grammar it followed),
 > `SHARED_BODIES` is now `SOURCES`, and a lane's manifest is its program plus
 > the `.sls` libraries it loads. The provenance discipline, the two-list
 > split, and the C1–C4 mutations are unchanged in intent; their file targets
