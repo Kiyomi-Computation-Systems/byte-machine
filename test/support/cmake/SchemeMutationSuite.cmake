@@ -421,6 +421,16 @@ byte_machine_mutation(
   FIND [[    adapter-value->string adapter-describe-condition adapter-file-bytes]]
   REPLACE [[    adapter-value->string adapter-describe-condition]])
 
+# The line these two retired mutations targeted is gone with the include
+# mechanism; what replaced it is deliberate narrowing, measured inert.
+byte_machine_mutation(
+  FILE ${LAUNCHER} SPEC harness-self-tests.sps
+  LABEL "launcher: source-directories is left at Chez's default instead of emptied"
+  FIND [[(source-directories '())]]
+  REPLACE [[;; deleted]]
+  EXPECT_SURVIVES
+    "measured inert (decision 0006, extending 5b's C3b): no include form exists anywhere, library resolution runs through library-directories, and no lane's outcome differs between an empty source path and Chez's default; the line is kept as narrowing, not as behavior")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Second pass: harness-begin's read of the environment filter -----------
@@ -843,16 +853,6 @@ byte_machine_mutation(
   placeholder-marker-object)]]
   REPLACE [[(define (placeholder-marker)
   (vector 'byte-machine-marker))]])
-
-# The line these two retired mutations targeted is gone with the include
-# mechanism; what replaced it is deliberate narrowing, measured inert.
-byte_machine_mutation(
-  FILE ${LAUNCHER} SPEC harness-self-tests.sps
-  LABEL "launcher: source-directories is left at Chez's default instead of emptied"
-  FIND [[(source-directories '())]]
-  REPLACE [[;; deleted]]
-  EXPECT_SURVIVES
-    "measured inert (decision 0006, extending 5b's C3b): no include form exists anywhere, library resolution runs through library-directories, and no lane's outcome differs between an empty source path and Chez's default; the line is kept as narrowing, not as behavior")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

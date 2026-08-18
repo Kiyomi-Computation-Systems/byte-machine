@@ -140,6 +140,12 @@
 ;; design, docs/plans/milestone-0-slice-5b-5c-compiled-lanes.md section 10.
 (generate-wpo-files #f)
 
+;; Nothing includes, so nothing resolves through source-directories at all
+;; (decision 0006; measured inert for the aot launcher as mutation C3b, and
+;; extended here by the absence of any include form). Emptied rather than
+;; left at Chez's CWD-containing default: it still narrows what a later
+;; top-level load or include added to this file could reach, and an empty
+;; list costs nothing to state.
 (source-directories '())
 (library-directories (map cons library-roots object-dirs))
 

@@ -38,10 +38,10 @@
 ;;; riding on it. The cost is that a build-layer typo is not named at the
 ;;; harness's own status-2 boundary: it surfaces however Chez happens to fail
 ;;; once library-directories can't resolve what was asked of it -- an unbound
-;;; library, a missing include, an uncaught condition -- which is Chez's own
-;;; exit 255, not this launcher's HARNESS-ERROR. Adding the check is a new
-;;; decision needing a new lane and a new mutation, not a fix to something
-;;; this file already tries and fails to do.
+;;; library, an uncaught condition -- which is Chez's own exit 255, not this
+;;; launcher's HARNESS-ERROR. Adding the check is a new decision needing a
+;;; new lane and a new mutation, not a fix to something this file already
+;;; tries and fails to do.
 
 ;; Status 2 is the harness's "harness, configuration, or registration error".
 ;; A launcher that could not set up the lane has not run a test at all, and must
