@@ -96,7 +96,7 @@ that point per the AGENTS.md rule.
   shared-body basename uniqueness, which the flat `source-directories`
   namespace requires; its wrapper-filter regex is already witnessed only by
   the spec's invented paths (chez-only-simplification.md §6 records this as a
-  carry note). The module, its 257-line spec, its spec lane, and its 13
+  carry note). The module, its 257-line spec, its spec lane, and its 12
   declarations in `MutationSuite.cmake` all have exactly one remaining reason
   to exist, and this slice deletes that reason.
 - **`(source-directories '())` is measured-inert where nothing includes.**
@@ -317,7 +317,7 @@ runner and placeholder decision mutations are this category wholesale. The
 provenance passes keep their staged-lane shapes against the re-scoped
 manifest.
 
-**Deleted with their module:** the 13 portability-guard declarations in
+**Deleted with their module:** the 12 portability-guard declarations in
 `MutationSuite.cmake`.
 
 Every retirement, retarget, and replacement updates the owning suite's
@@ -396,7 +396,7 @@ refuses a manifest entry that does not exist.
    `src/common`/`src/chez` deleted, eight programs merged and renamed.
 5. **Launchers and the residue:** flag removals, the `SOURCES` rename,
    cwd-matrix retirement, the per-lane basename check, refusal-lane inventory.
-6. **Guard deletion:** module, spec, spec lane, 13 mutation declarations.
+6. **Guard deletion:** module, spec, spec lane, 12 mutation declarations.
 7. **Mutation-suite rework:** retirements, retargets, the replacement identity
    pass, totals — then the full suite re-run and the discriminating check.
 8. **The gates:** §11's sweeps and measurement, CHANGELOG, PR.
