@@ -92,19 +92,20 @@ Phase A only. Every deletion task follows the same shape: show the thing exists,
 - [ ] Run `make test` — docs must not affect it. Expected: same pass count as before the edits.
 - [ ] Commit: `docs: the plan update — Gambit and R7RS leave the contract`
 
-### Task 2: The pairing guard has nothing left to guard
+### Task 2: The pairing rule has nothing left to guard
 
-The portability guard enforces `.scm`/`.gambit.scm` twinning, which stops being law in Task 1. It goes before any twin file does, so the tree is never in a state the still-registered guard rejects.
+The portability guard enforces **two** rules: `.scm`/`.gambit.scm` twinning (every wrapped body paired), which stops being law in Task 1, and shared-body basename uniqueness, which the Chez `include`/`source-directories` mechanism still requires and which this plan's constraints keep until the §6 follow-up (`ByteMachineSchemeLane.cmake`'s staging comment leans on it by name). So the pairing **rule** is removed from the module, not the module: `byte_machine_guard_duplicate_basenames` and its enforcement stay. The pairing half goes before any twin file does, so the tree is never in a state a still-registered check rejects. (Re-scoped from "delete the module" after Task 1 landed — the original wording contradicted the Phase A protection list.)
 
 **Files:**
-- Delete: `cmake/ByteMachinePortabilityGuard.cmake`, `test/support/cmake/ByteMachinePortabilityGuardSpec.cmake`
-- Modify: `CMakeLists.txt` (drop `include(ByteMachinePortabilityGuard)`), `test/CMakeLists.txt` (guard invocation and the `byte-machine.harness.cmake-portability-guard.cmake.direct` spec lane), mutation-suite passes and declared totals that target the guard
+- Modify: `cmake/ByteMachinePortabilityGuard.cmake` (remove the pairing rule and its reporting; keep basename-uniqueness detection and enforcement; rewrite the header comment for a one-rule guard), `test/support/cmake/ByteMachinePortabilityGuardSpec.cmake` (drop pairing passes, keep uniqueness passes, adjust declared totals), `test/CMakeLists.txt` (pairing-specific guard arguments and fixtures go; the uniqueness invocation and the `byte-machine.harness.cmake-portability-guard.cmake.direct` spec lane stay), mutation-suite passes and declared totals that target the pairing half
+- `CMakeLists.txt` keeps `include(ByteMachinePortabilityGuard)` — the module still exists until the follow-up slice deletes it whole.
 
 **Steps:**
-- [ ] `ctest --preset release -N | rg portability-guard` — expected: the guard lanes print. Then delete the two files and deregister them.
-- [ ] `rg -n -i 'portability.?guard' CMakeLists.txt test/CMakeLists.txt test/support/cmake/` and remove every remaining reference, adjusting each touched spec's declared pass/mutation totals in the same edit.
-- [ ] `make clean && make test-all` — expected: green, no lane matching `portability-guard`, and every mutation pass still shows baseline/mutant differing for its named reason.
-- [ ] Commit: `refactor: remove the pairing guard — the convention it enforced is no longer law`
+- [ ] `ctest --preset release -N | rg portability-guard` — expected: the guard spec lane prints (it stays registered).
+- [ ] Remove the pairing rule per the file list; `rg -n -i 'pair' cmake/ByteMachinePortabilityGuard.cmake` afterwards should show no live pairing logic, while `byte_machine_guard_duplicate_basenames` still exists and is still invoked.
+- [ ] Adjust each touched spec's declared pass/mutation totals in the same edit as the passes they lose.
+- [ ] `make clean && make test-all` — expected: green, the guard spec lane still passes (now over one rule), and every remaining mutation pass still shows baseline/mutant differing for its named reason.
+- [ ] Commit: `refactor: remove the pairing rule — the convention it enforced is no longer law`
 
 ### Task 3: The Gambit lanes and the Gambit halves of the tests
 
