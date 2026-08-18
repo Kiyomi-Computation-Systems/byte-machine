@@ -148,7 +148,7 @@ set(BYTE_MACHINE_TEST_COMMON_DIR "${CMAKE_CURRENT_LIST_DIR}/common")
 # itself would drift, and a manifest that drifts is one that quietly stops
 # describing the run.
 set(BYTE_MACHINE_HARNESS_MANIFEST
-    "${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
+    "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/fingerprint.sls"
     "${BYTE_MACHINE_HARNESS_SHARED_DIR}/harness-runner.scm")
 
 # --- Build-time fingerprint expectations -----------------------------------
@@ -198,12 +198,13 @@ function(byte_machine_expected_fingerprint name out_var)
       COMMAND "${CMAKE_COMMAND}" -E make_directory "${BYTE_MACHINE_FINGERPRINT_DIR}"
       COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
               "${BYTE_MACHINE_FINGERPRINT_LAUNCHER}"
-              "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+              "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+              "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
               "${expect_file}"
               ${ARGN}
       DEPENDS ${ARGN}
               "${BYTE_MACHINE_FINGERPRINT_LAUNCHER}"
-              "${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
+              "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/fingerprint.sls"
       COMMENT "byte-machine: fingerprint manifest ${manifest_key} (first needed by ${name})"
       VERBATIM)
 
@@ -279,13 +280,6 @@ configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/harness-runner.scm"
                "${BYTE_MACHINE_CWD_IDENTICAL_DIR}/harness-runner.scm" COPYONLY)
 configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/harness-runner.scm"
                "${BYTE_MACHINE_CWD_DECOY_DIR}/harness-runner.scm" COPYONLY)
-# fingerprint.scm (M0 slice 5a Task 1) is a second body the harness library
-# includes, alongside harness-runner.scm above. The "every body the lane
-# includes" rule in the comment above this block applies to it identically.
-configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
-               "${BYTE_MACHINE_CWD_IDENTICAL_DIR}/fingerprint.scm" COPYONLY)
-configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
-               "${BYTE_MACHINE_CWD_DECOY_DIR}/fingerprint.scm" COPYONLY)
 
 # The impostor. It implements the complete export list on purpose: an
 # incomplete one would fail the lane at library construction, which is a

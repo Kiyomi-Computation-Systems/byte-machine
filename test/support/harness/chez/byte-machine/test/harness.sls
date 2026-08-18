@@ -46,6 +46,7 @@
 
   (import
     (rnrs)
+    (byte-machine test fingerprint)
     (only (rnrs r5rs) modulo quotient remainder)
     (only (chezscheme)
           include machine-type scheme-version getenv
@@ -159,10 +160,10 @@
 
   (define (adapter-flush-output) (flush-output-port (current-output-port)))
 
-  ;; --- shared bodies -------------------------------------------------------
+  ;; --- shared body ---------------------------------------------------------
   ;;
-  ;; Included by bare filename, resolved through the launcher's
-  ;; source-directories. Nothing below this point is Chez-specific.
+  ;; The runner body, included by bare filename until Task 4 of the include
+  ;; collapse inlines it here. The fingerprint algorithm formerly included
+  ;; beside it is now imported: (byte-machine test fingerprint).
 
-  (include "fingerprint.scm")
   (include "harness-runner.scm"))

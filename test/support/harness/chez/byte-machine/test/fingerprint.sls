@@ -1,34 +1,34 @@
-;;; Content fingerprint for shared test bodies.
+;;; Content fingerprint for the text a lane runs.
 ;;;
-;;; A run reports the digest of the bodies it executed so that a stale
-;;; artifact, a copied backend-specific variant, or a basename collision is
-;;; detectable rather than merely unlikely. Every runtime must report the same
-;;; value for the same text; that agreement is the claim, and everything below
-;;; is chosen to keep it from depending on anything unspecified.
+;;; A run reports the digest of the sources it executed so that a stale
+;;; artifact or a copied variant is detectable rather than merely unlikely. A
+;;; matching fingerprint means the declared text is unchanged -- not that the
+;;; run loaded exactly those files; the manifest is declared, not observed
+;;; (decision 0004, unchanged by the include collapse).
 ;;;
 ;;; This is a change detector, not a cryptographic digest. It is a polynomial
 ;;; rolling hash modulo the Mersenne prime 2^61-1. Do not use it for anything
 ;;; security relevant.
 ;;;
-;;; SHARED BODY CONTRACT
+;;; TWO CONSUMERS, ONE IMPLEMENTATION
 ;;;
-;;; Included verbatim by the Chez adapter, like harness-runner.scm, through the
-;;; same source-directories include -- plain R6RS plus the adapter protocol,
-;;; no library or include form of its own. The arithmetic is deliberately not
-;;; bitwise -- not because bitwise operations are unavailable (R6RS's `(rnrs)`
-;;; composite guarantees them the same as everything else the owner library
-;;; imports), but because the algorithm needs nothing beyond exact integers of
-;;; unbounded range, which plain R6RS also guarantees. Intermediate products
-;;; exceed 64 bits, which is what makes exact bignums load-bearing rather than
-;;; incidental.
+;;; (byte-machine test harness) re-exports this library's surface, and
+;;; fingerprint-manifest.ss imports it to compute build-time expectations.
+;;; That is why this is a library of its own rather than text inlined into
+;;; the harness: the expectation and the runner share one implementation
+;;; through the module system, so they cannot drift apart (decision 0006).
 ;;;
-;;; WHAT THIS CANNOT PROVE
-;;;
-;;; The manifest is declared, not observed. Scheme cannot portably report which
-;;; files an `include` spliced in, so a matching fingerprint means the declared
-;;; text is unchanged -- not that the run included exactly those files. See
-;;; section 5.3 of the slice-5a design.
+;;; The arithmetic is deliberately not bitwise: the algorithm needs nothing
+;;; beyond exact integers of unbounded range, which R6RS guarantees.
+;;; Intermediate products exceed 64 bits, which is what makes exact bignums
+;;; load-bearing rather than incidental.
 
+(library (byte-machine test fingerprint)
+  (export harness-fingerprint-bytevector
+          harness-fingerprint-file
+          harness-fingerprint-combine
+          harness-fingerprint->string)
+  (import (rnrs) (only (rnrs r5rs) modulo quotient remainder))
 (define harness-fingerprint-modulus 2305843009213693951) ; 2^61 - 1
 (define harness-fingerprint-multiplier 1000003)
 (define harness-fingerprint-seed 14695981039346656)
@@ -47,16 +47,22 @@
                            (+ (bytevector-u8-ref bv i) 1))
                         harness-fingerprint-modulus))))))
 
-;; Fingerprints a file's exact bytes, read through adapter-file-bytes (binary
-;; -- see the Chez adapter's definition) and folded through
-;; harness-fingerprint-bytevector, so the same file fingerprints identically
-;; on every run. The adapter-file-bytes dependency is structural, not stylistic:
-;; R6RS requires every free identifier in a library body to be bound, so this
-;; procedure cannot be separated from whatever defines adapter-file-bytes
-;; without failing Chez library construction immediately, whether or not it
-;; is exported or ever called.
+;; Fingerprints a file's exact bytes. A binary port, so the value is a
+;; fingerprint of bytes rather than of decoded characters -- and so an LF is
+;; an LF on a platform whose text ports would translate it.
+;; get-bytevector-all returns the EOF object for an empty file rather than a
+;; zero-length bytevector, so an empty file fingerprints as the seed instead
+;; of raising. This library reads files itself: the adapter-file-bytes
+;; indirection existed for the retired dialect ceiling, and (rnrs io ports)
+;; is all the reader ever needed.
+(define (harness-fingerprint-read-bytes path)
+  (let* ((port (open-file-input-port path))
+         (bytes (get-bytevector-all port)))
+    (close-port port)
+    (if (eof-object? bytes) (make-bytevector 0) bytes)))
+
 (define (harness-fingerprint-file path)
-  (harness-fingerprint-bytevector (adapter-file-bytes path)))
+  (harness-fingerprint-bytevector (harness-fingerprint-read-bytes path)))
 
 ;; Combine per-file fingerprints in the order given. Order is significant, so a
 ;; reordered manifest is a different combined value: the result identifies a
@@ -87,3 +93,4 @@
             (list->string acc)
             (loop (quotient n 16)
                   (cons (string-ref harness-hex-digits (remainder n 16)) acc))))))
+)

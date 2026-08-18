@@ -93,7 +93,7 @@
 # skipped here exactly as it is for every other pass but 26 through 29: what
 # actually catches the mutation is the self-tests' own "hex digits render
 # lowercase" case, which check-equals fixed literals ("ff", "deadbeef", "0")
-# rather than deriving its expectation from fingerprint.scm.
+# rather than deriving its expectation from fingerprint.sls.
 #
 # Passes 26 through 29 are the provenance check and the reachability guard
 # that closes over it (Task 8): 26 is the comparison, 27 the
@@ -711,6 +711,27 @@ string(REPLACE "${POISON_FIND}" "${POISON_REPLACE}" POISON_MUTATED "${POISON_PRI
 file(WRITE "${POISON_ROOT}/byte-machine/test/harness.sls" "${POISON_PRISTINE}")
 file(WRITE "${POISON_SOURCE_DIR}/byte-machine/test/harness.sls" "${POISON_MUTATED}")
 
+# harness.sls now imports (byte-machine test fingerprint) (Task 3 of the
+# include collapse), so the object compiled below has a real library
+# dependency for the first time. MEASURED, not assumed: Chez's staleness
+# check on a compiled library is transitive -- an object is trusted only if
+# every library it imports also resolves to a non-stale compiled object, not
+# bare source. A minimal two-library reproduction confirmed this directly: an
+# importer's freshly compiled object was silently discarded in favour of its
+# own pristine source whenever the imported library resolved to source only,
+# even though the importer's own root was searched first and its object was
+# not stale by itself. Giving fingerprint no compiled object anywhere in this
+# pass's roots (the shape the plan called for, reasoning "the second root
+# exists only to resolve the fingerprint import") reproduces exactly that:
+# the poisoned harness object is silently rejected and the baseline's
+# pristine banner prints instead, so the mutation below goes UNCAUGHT. The
+# fix is to make POISON_ROOT self-sufficient: a real, non-stale fingerprint
+# object beside the poisoned harness object, compiled first so harness's
+# object is never older than a library it depends on.
+file(READ "${SOURCE_ROOT}/test/support/harness/chez/byte-machine/test/fingerprint.sls"
+     POISON_FINGERPRINT_PRISTINE)
+file(WRITE "${POISON_ROOT}/byte-machine/test/fingerprint.sls" "${POISON_FINGERPRINT_PRISTINE}")
+
 set(POISON_COMPILE_SCRIPT "${POISON_DIR}/compile-poisoned-object.ss")
 file(WRITE "${POISON_COMPILE_SCRIPT}"
 ";; Written by SchemeMutationSuite.cmake, never committed. Compiles the
@@ -723,6 +744,12 @@ file(WRITE "${POISON_COMPILE_SCRIPT}"
 ;; the two are byte-identical by construction, and reading the stage would make
 ;; this pass depend on the previous pass having left it in place.
 (source-directories (list \"${SOURCE_ROOT}/test/support/harness/shared\"))
+(library-directories (list (cons \"${SOURCE_ROOT}/test/support/harness/chez\" \"${POISON_GUARD_DIR}\")))
+;; Compiled first, and into POISON_ROOT itself (not the guard): harness's own
+;; object is trusted only if this one is also a real, reachable object by the
+;; time harness compiles, per the transitive staleness note above.
+(compile-library \"${POISON_ROOT}/byte-machine/test/fingerprint.sls\"
+                 \"${POISON_ROOT}/byte-machine/test/fingerprint.so\")
 (compile-library \"${POISON_SOURCE_DIR}/byte-machine/test/harness.sls\"
                  \"${POISON_OBJECT}\")
 ")
@@ -732,24 +759,31 @@ execute_process(
   RESULT_VARIABLE POISON_RC
   OUTPUT_VARIABLE POISON_OUT
   ERROR_VARIABLE POISON_ERR)
-if(NOT POISON_RC EQUAL 0 OR NOT EXISTS "${POISON_OBJECT}")
+if(NOT POISON_RC EQUAL 0 OR NOT EXISTS "${POISON_OBJECT}"
+   OR NOT EXISTS "${POISON_ROOT}/byte-machine/test/fingerprint.so")
   message(FATAL_ERROR
-    "byte-machine-mutation: could not compile the poisoned library object "
-    "(exit ${POISON_RC}). Without a real object in the library root the "
-    "library-directories mutation cannot discriminate, and a run against a "
-    "file Chez cannot read as a library passes either way.\n"
+    "byte-machine-mutation: could not compile the poisoned library root "
+    "(exit ${POISON_RC}). Without a real object for both harness and the "
+    "fingerprint library it now imports, the library-directories mutation "
+    "cannot discriminate, and a run against a file Chez cannot read as a "
+    "library, or a harness object it distrusts for an unresolved import, "
+    "passes either way.\n"
     "${POISON_OUT}${POISON_ERR}")
 endif()
 
 # Makes "not older than the source" true by construction rather than by the
 # compile happening to take a second, which a filesystem with coarse timestamps
-# would not record.
+# would not record. The fingerprint object is touched first, preserving the
+# dependency order the compile above already established: harness's object
+# must never be older than a library it imports.
+file(TOUCH "${POISON_ROOT}/byte-machine/test/fingerprint.so")
 file(TOUCH "${POISON_OBJECT}")
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
   "--library-root" "${POISON_ROOT}"
+  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
   "--source-dir" "${STAGE_DIR}/test/support/harness/shared"
   "--object-guard" "${POISON_GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
@@ -1263,7 +1297,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # The self-tests assert measured literals, so any change to seed, multiplier,
 # modulus, the +1, or the digit table moves at least one of them.
 
-set(FINGERPRINT test/support/harness/shared/fingerprint.scm)
+set(FINGERPRINT test/support/harness/chez/byte-machine/test/fingerprint.sls)
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
@@ -1321,7 +1355,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # #t immediately, and the self-tests suite runs its own cases undisturbed. It
 # is the self-tests' own "hex digits render lowercase" case that actually
 # witnesses this mutation -- it check-equals fixed literals ("ff", "deadbeef",
-# "0") rather than deriving its expectation from fingerprint.scm, so mutating
+# "0") rather than deriving its expectation from fingerprint.sls, so mutating
 # the digit table fails an ordinary comparison: the process exits 1 (the
 # harness's own "an assertion failed" status) with a "byte-machine-harness:
 # FAIL " line, which is exactly what EXPECT_STATUS and EXPECT_OUTPUT_MATCHES
@@ -1375,7 +1409,7 @@ byte_machine_mutation_reset()
 
 string(JOIN "|" PROVENANCE_MISMATCH_COMMAND
   "${CMAKE_COMMAND}" "-E" "env"
-  "BYTE_MACHINE_FINGERPRINT_FILES=${STAGE_DIR}/test/support/harness/shared/fingerprint.scm"
+  "BYTE_MACHINE_FINGERPRINT_FILES=${STAGE_DIR}/test/support/harness/chez/byte-machine/test/fingerprint.sls"
   "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${WRONG_FP_FILE}"
   "--"
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
@@ -1441,7 +1475,7 @@ byte_machine_mutation_reset()
 
 string(JOIN "|" PROVENANCE_ABSENT_COMMAND
   "${CMAKE_COMMAND}" "-E" "env"
-  "BYTE_MACHINE_FINGERPRINT_FILES=${STAGE_DIR}/test/support/harness/shared/fingerprint.scm"
+  "BYTE_MACHINE_FINGERPRINT_FILES=${STAGE_DIR}/test/support/harness/chez/byte-machine/test/fingerprint.sls"
   "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${WORK_DIR}/never-produced.fingerprint"
   "--"
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
@@ -1497,15 +1531,16 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 #
 # byte_machine_expected_fingerprint in test/CMakeLists.txt is a CMake function,
 # unreachable from this standalone script, so the value is produced the same
-# way it is: running fingerprint-manifest.ss over the staged fingerprint.scm.
+# way it is: running fingerprint-manifest.ss over the staged fingerprint.sls.
 # THE ALGORITHM IS NOT REIMPLEMENTED HERE applies here just as it does there.
 set(CORRECT_FP_FILE "${WORK_DIR}/correct.fingerprint")
 execute_process(
   COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" "--script"
           "${STAGE_DIR}/test/support/launchers/fingerprint-manifest.ss"
-          "${STAGE_DIR}/test/support/harness/shared"
+          "${STAGE_DIR}/test/support/harness/chez"
+          "${GUARD_DIR}"
           "${CORRECT_FP_FILE}"
-          "${STAGE_DIR}/test/support/harness/shared/fingerprint.scm"
+          "${STAGE_DIR}/test/support/harness/chez/byte-machine/test/fingerprint.sls"
   RESULT_VARIABLE fp_rc
   OUTPUT_VARIABLE fp_out
   ERROR_VARIABLE fp_err)
@@ -1519,7 +1554,7 @@ byte_machine_mutation_reset()
 
 string(JOIN "|" PROVENANCE_UNCALLED_COMMAND
   "${CMAKE_COMMAND}" "-E" "env"
-  "BYTE_MACHINE_FINGERPRINT_FILES=${STAGE_DIR}/test/support/harness/shared/fingerprint.scm"
+  "BYTE_MACHINE_FINGERPRINT_FILES=${STAGE_DIR}/test/support/harness/chez/byte-machine/test/fingerprint.sls"
   "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${CORRECT_FP_FILE}"
   "--"
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
@@ -1563,7 +1598,7 @@ byte_machine_mutation_reset()
 
 string(JOIN "|" PROVENANCE_REACHABILITY_COMMAND
   "${CMAKE_COMMAND}" "-E" "env"
-  "BYTE_MACHINE_FINGERPRINT_FILES=${STAGE_DIR}/test/support/harness/shared/fingerprint.scm"
+  "BYTE_MACHINE_FINGERPRINT_FILES=${STAGE_DIR}/test/support/harness/chez/byte-machine/test/fingerprint.sls"
   "--"
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
