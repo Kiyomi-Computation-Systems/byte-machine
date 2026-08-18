@@ -1,10 +1,8 @@
 ;;; Shared tests for (byte-machine placeholder).
 ;;;
-;;; PORTABILITY: shared body, common R6RS/R7RS subset only. This file is run
-;;; unchanged on both runtimes through the two wrappers beside it, which is what
-;;; makes it a parity proof rather than two similar test suites: a name missing
-;;; from either owner library is a load failure on that runtime, not a silent
-;;; gap.
+;;; SHARED BODY: included verbatim by placeholder-tests.chez.sps, its sole
+;;; owner wrapper (decisions 0002/0003). A name missing from the owner library
+;;; is a load failure, not a silent gap.
 ;;;
 ;;; Cross-library identity is slice 4's proof and is not attempted here. What
 ;;; this body asserts about the marker is only that it is one object, which is

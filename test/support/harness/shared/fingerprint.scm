@@ -10,21 +10,22 @@
 ;;; rolling hash modulo the Mersenne prime 2^61-1. Do not use it for anything
 ;;; security relevant.
 ;;;
-;;; PORTABILITY CONTRACT
+;;; SHARED BODY CONTRACT
 ;;;
-;;; Included verbatim by both adapters, like harness-runner.scm. Only the
-;;; common R6RS/R7RS subset plus the adapter protocol. The arithmetic is
-;;; deliberately not bitwise: neither standard's base library guarantees
-;;; bitwise operations, and both guarantee exact integers of unbounded range,
-;;; so arithmetic is the portable choice. Intermediate products exceed 64 bits,
-;;; which is what makes exact bignums load-bearing rather than incidental.
+;;; Included verbatim by the Chez adapter, like harness-runner.scm, through the
+;;; same source-directories include -- plain R6RS plus the adapter protocol,
+;;; no library or include form of its own. The arithmetic is deliberately not
+;;; bitwise: it needs only exact integers of unbounded range, which plain R6RS
+;;; guarantees, so nothing here depends on optional bitwise support.
+;;; Intermediate products exceed 64 bits, which is what makes exact bignums
+;;; load-bearing rather than incidental.
 ;;;
 ;;; WHAT THIS CANNOT PROVE
 ;;;
 ;;; The manifest is declared, not observed. Scheme cannot portably report which
 ;;; files an `include` spliced in, so a matching fingerprint means the declared
-;;; text is unchanged and both runtimes read it identically -- not that the run
-;;; included exactly those files. See section 5.3 of the slice-5a design.
+;;; text is unchanged -- not that the run included exactly those files. See
+;;; section 5.3 of the slice-5a design.
 
 (define harness-fingerprint-modulus 2305843009213693951) ; 2^61 - 1
 (define harness-fingerprint-multiplier 1000003)
@@ -45,9 +46,9 @@
                         harness-fingerprint-modulus))))))
 
 ;; Fingerprints a file's exact bytes, read through adapter-file-bytes (binary
-;; on both runtimes -- see each adapter's definition) and folded through
+;; -- see the Chez adapter's definition) and folded through
 ;; harness-fingerprint-bytevector, so the same file fingerprints identically
-;; on both. The adapter-file-bytes dependency is structural, not stylistic:
+;; on every run. The adapter-file-bytes dependency is structural, not stylistic:
 ;; R6RS requires every free identifier in a library body to be bound, so this
 ;; procedure cannot be separated from whatever defines adapter-file-bytes
 ;; without failing Chez library construction immediately, whether or not it

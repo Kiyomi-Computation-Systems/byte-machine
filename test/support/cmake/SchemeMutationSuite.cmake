@@ -361,13 +361,14 @@ byte_machine_mutation(
     "suppression changes only what is printed, never a counter or a status, so no assertion can observe it from inside the process; it is covered by the manual check in the implementation plan's Task 5 step 9, and its real cost -- a log that teaches readers to ignore FAIL lines -- is not machine-checkable")
 
 # The other two print-only decisions, and the same argument. The harness has no
-# portable way to read back what it printed -- string ports are outside the
-# common R6RS/R7RS subset -- and this suite judges a mutation by the verify
-# command's exit status, so an output difference is invisible to it whatever
-# lane it runs. byte-machine.harness.verbose.chez.source closes the half that
-# can be closed: it runs a real body with the variable set, so the path is
-# executed and a break that raises is caught. What no layer checks is that the
-# line was printed. Spec section 5.3 records the manual check that does.
+# way to read back what it printed -- string ports live outside what the
+# shared runner body's owner library imports -- and this suite judges a
+# mutation by the verify command's exit status, so an output difference is
+# invisible to it whatever lane it runs.
+# byte-machine.harness.verbose.chez.source closes the half that can be closed:
+# it runs a real body with the variable set, so the path is executed and a
+# break that raises is caught. What no layer checks is that the line was
+# printed. Spec section 5.3 records the manual check that does.
 byte_machine_mutation(
   FILE ${RUNNER} SPEC harness-self-tests.chez.sps
   LABEL "runner: the value read for BYTE_MACHINE_TEST_VERBOSE is discarded"

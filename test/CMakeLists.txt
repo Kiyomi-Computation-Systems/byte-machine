@@ -374,14 +374,15 @@ byte_machine_add_scheme_lane(
 # rule, and the print itself would first run for whoever turned the variable on,
 # and a typo in any of them would surface there rather than here.
 #
-# One runtime is enough. The decision lives in the shared runner body, which is
-# identical text on both, and that is the same argument the mutation suite's
+# One registration is enough: the decision lives in the shared runner body,
+# which reads nothing runtime-specific to make it, so a second lane would not
+# exercise a different code path -- the same argument the mutation suite's
 # first pass makes for every other decision in it.
 #
-# What this lane cannot check is that the line was printed. The harness has no
-# portable way to read back its own output -- string ports are outside the
-# common R6RS/R7RS subset -- and the registration layer asserts exit status, not
-# output. Both decisions are therefore declared survivors in
+# What this lane cannot check is that the line was printed. The shared runner
+# body has no way to read back its own output -- string ports live outside
+# what its owner library imports -- and the registration layer asserts exit
+# status, not output. Both decisions are therefore declared survivors in
 # SchemeMutationSuite.cmake with their reason recorded, alongside probe output
 # suppression, which is unwitnessable for exactly the same reason.
 byte_machine_add_scheme_lane(

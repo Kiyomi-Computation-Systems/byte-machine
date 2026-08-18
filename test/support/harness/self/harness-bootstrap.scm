@@ -1,7 +1,7 @@
 ;;; Bootstrap verification of the runner's primitives.
 ;;;
-;;; PORTABILITY: a shared body, included verbatim by each runtime's thin
-;;; wrapper. Common R6RS/R7RS subset only.
+;;; SHARED BODY: included verbatim by harness-bootstrap.chez.sps, its sole
+;;; owner wrapper (decisions 0002/0003). Plain R6RS.
 ;;;
 ;;; The runner cannot be the only witness to its own correctness, so this
 ;;; program judges it with raw conditionals and its own counter. It uses no
@@ -117,7 +117,7 @@
                   (not (string=? (adapter-architecture) "unknown")))
 (bootstrap-assert "adapter: execution mode is one the lane vocabulary defines"
                   (harness-member? (adapter-execution-mode)
-                                   (list "source" "aot" "o1")))
+                                   (list "source" "aot")))
 (bootstrap-assert "adapter: an unset variable reads as false"
                   (not (adapter-environment-variable "BYTE_MACHINE_NOT_SET_ANYWHERE")))
 (bootstrap-assert "adapter: value->string writes readably"

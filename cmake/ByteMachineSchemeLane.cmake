@@ -2,7 +2,7 @@
 #
 # WHY THE COMMAND LINE IS BUILT IN ONE PLACE
 #
-# Ten registrations that each spell out their own invocation drift. The detail
+# Registrations that each spell out their own invocation drift. The detail
 # most worth not drifting is invisible when it is wrong: Chez's object-guard
 # pair, without which a stale compiled object is silently preferred over the
 # source a "source" lane claims to run.

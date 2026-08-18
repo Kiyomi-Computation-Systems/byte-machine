@@ -590,12 +590,12 @@ byte_machine_mutation(
   REPLACE [[    # deleted
 ]])
 
-# byte-machine.harness.provenance.*'s four lanes prove the provenance check
-# can fail by asking WRONG_FINGERPRINT to route here to
-# byte_machine_wrong_fingerprint. If this regressed to always calling
-# byte_machine_expected_fingerprint, every one of those lanes would compare
-# its shared bodies' real fingerprint against itself, pass, and stop proving
-# anything -- and only the slow integration lanes would notice, since neither
+# byte-machine.harness.provenance.chez.source, the one lane that proves the
+# provenance check can fail, does it by asking WRONG_FINGERPRINT to route here
+# to byte_machine_wrong_fingerprint. If this regressed to always calling
+# byte_machine_expected_fingerprint, that lane would compare its shared
+# bodies' real fingerprint against itself, pass, and stop proving anything --
+# and only the slow integration lane would notice, since neither
 # ByteMachineSchemeLaneSpec.cmake nor this mutation suite would see anything
 # wrong without this entry.
 byte_machine_mutation(

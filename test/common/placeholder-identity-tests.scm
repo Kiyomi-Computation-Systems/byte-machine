@@ -1,11 +1,11 @@
 ;;; Cross-library identity tests. Milestone 0 slice 4, deliverable D3.
 ;;;
-;;; PORTABILITY: shared body, common R6RS/R7RS subset only. Imports live in the
-;;; two wrappers beside this file, and each imports BOTH libraries -- the owner
-;;; for make-placeholder and placeholder-marker, the consumer for consume.
-;;; Needing both names in scope at once is exactly why these cases cannot live
-;;; in placeholder-tests.scm, whose header says cross-library identity is this
-;;; slice's proof and is not attempted there.
+;;; SHARED BODY: included verbatim by placeholder-identity-tests.chez.sps, its
+;;; sole owner wrapper (decisions 0002/0003), which imports BOTH libraries --
+;;; the owner for make-placeholder and placeholder-marker, the consumer for
+;;; consume. Needing both names in scope at once is exactly why these cases
+;;; cannot live in placeholder-tests.scm, whose header says cross-library
+;;; identity is this slice's proof and is not attempted there.
 ;;;
 ;;; Under a consumer that included the owner's body instead of importing it,
 ;;; both cases below answer wrongly and nothing raises. Every other lane in this

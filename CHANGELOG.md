@@ -260,6 +260,12 @@ what this milestone delivers.
   reporting 37/37 regardless, with the mutation count silently dropping
   underneath that number and nothing noticing; this is what would have
   caught it.
+- `ByteMachineExpectExit`'s comments and specification illustrated the
+  out-of-vocabulary case with Gambit's own missing-file exit number (70); no
+  lane ever declared 70 as an expected exit, and the declared vocabulary was
+  and remains 0/1/2/3. Re-measured with Gambit gone: Chez 10.4.1 exits 255 for
+  a `--script` naming a file that does not exist, and the illustration now
+  uses that measured value.
 
 ### Removed
 
@@ -285,10 +291,6 @@ what this milestone delivers.
   specification and spec lane, and every build-frontend reference to
   Gambit — the `BYTE_MACHINE_REQUIRE_GAMBIT` option, presets, `Makefile`
   text, and backend vocabulary.
-- `ByteMachineExpectExit`'s missing-file exit expectation was encoded
-  against Gambit's own number (70) for a lane that also ran on Chez;
-  re-measured during review with Gambit gone, Chez 10.4.1 exits 255 for the
-  same case, and the expectation now reads that value.
 
   Net across the cut, measured on this branch: registered lanes drop from
   49 to 37; the CMake-layer mutation suite drops from 97 to 75, net of one

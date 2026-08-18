@@ -1,9 +1,8 @@
 ;;; Consumer body for the Milestone 0 cross-library identity proof.
 ;;;
-;;; PORTABILITY: shared body, common R6RS/R7RS subset only. No library form, no
-;;; include, no runtime-specific identifier. Included by exactly one owner
-;;; library per runtime, one such library living in each runtime's own source
-;;; tree.
+;;; SHARED BODY: no library form, no include, no runtime-specific identifier.
+;;; Included by exactly one owner library,
+;;; src/chez/byte-machine/placeholder-consumer.sls (decisions 0002/0003).
 ;;;
 ;;; EVERY IDENTIFIER THIS BODY USES BUT DOES NOT DEFINE COMES FROM ITS OWNER
 ;;; WRAPPER'S IMPORT LIST

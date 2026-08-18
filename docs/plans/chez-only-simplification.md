@@ -64,7 +64,7 @@ Task 1 applies these to `docs/plans/byte-machine-implementation-plan.md`. Normat
   With: "Libraries are R6RS `.sls`. Until the include-collapse slice lands, shared `.scm` bodies contain no library or include form and are included by exactly one owner library. R6RS forbids assigning an exported variable — reach mutable state through procedures."
 - Replace: "Project should be portable across Chez and Gambit Scheme"
   With: "Project targets Chez Scheme (R6RS) only — see docs/decisions/0005-chez-only.md"
-- Keep every lesson bullet unchanged, including the ones whose examples name Gambit (the backend-gating lesson, the slice-5a exit-path lesson). They are history and generalize beyond the runtime that taught them.
+- Keep every lesson bullet unchanged, including the ones whose examples name Gambit (the backend-gating lesson, the slice-5a exit-path lesson). They are history and generalize beyond the runtime that taught them. (Corrected after the final whole-branch review: this held through Task 1, but Task 4's semantic-vocabulary sweep — needed to clear the tree of two-runtime claims, §6 below — necessarily reworded the backend-gating lesson to drop "Gambit lane" from its example while keeping the lesson itself. One lesson bullet changed, not zero as this line implied; decision 0005's Consequences records it as the third of AGENTS.md's three amended bullets.)
 
 ## 4. New decision record
 
@@ -148,10 +148,14 @@ The portability guard enforces **two** rules: `.scm`/`.gambit.scm` twinning (eve
 Out of scope here; it changes design, not just inventory, so per project convention it gets its own design document and implementation plan. Its scope, fixed now so Phase A reviewers know where the line is:
 
 - Move each shared body inline into its owning `.sls`; delete `src/common/` and the harness `shared/` include split.
-- Retire the `include`/`source-directories` mechanism: launchers lose `--source-dir`, the cwd-matrix decoy lanes retire, and the shared-body basename-uniqueness check goes with them.
+- Retire the `include`/`source-directories` mechanism: launchers lose `--source-dir`, the cwd-matrix decoy lanes retire, and the shared-body basename-uniqueness check goes with them. (Sharpened after the final whole-branch review: `byte_machine_guard_shared_bodies`'s wrapper-filter regex is, after this branch, witnessed only by `ByteMachinePortabilityGuardSpec.cmake`'s pure-function assertions against invented paths — no file in the tree matches it for a real configure to exercise. Chez wrappers already fell outside the guard's `*.scm` glob before this branch, and the `.gambit.scm` wrappers that used to be the regex's one real-file match are gone with Gambit. This is a carry note the review established, not a new gap; it means nothing needs to be separately re-proven working before this bullet deletes the check.)
 - Retire the one-owner rule and its mutation passes — with no `include`, the double-instantiation defect class is unconstructible.
 - Re-scope the fingerprint manifest to fingerprint library sources; the declared-manifest and AOT-provenance discipline of decisions 0004/slice 5b is kept.
 - Add supersession headers to decisions 0002 and 0003 pointing at that slice's decision record.
+
+**Acceptance gate, added after the final whole-branch review:** before this slice is called done, re-run the semantic-vocabulary sweep —
+`rg -n -i 'both runtimes|both adapters|both wrappers|two wrappers|each runtime|per runtime|two standards|r7rs|parity proof' src test`
+— and confirm it is clean except deliberate, named survivals. Task 1's `rg -n -i 'gambit|r7rs'` gate and Task 4's `--hidden 'gambit'` gate both matched on literal runtime names; they could not and did not catch a comment that had drifted to describe a two-runtime world without naming either runtime (`both wrappers`, `each runtime`, `parity proof`, and the like) — a whole final review pass was needed to find those by reading, not by grep. Closing this gate by rule rather than by memory is what makes the same gap not recur when this slice collapses the remaining indirection.
 
 Expected end state after both phases, measured from today's baseline: the harness drops from ~9,900 lines toward roughly 4,000–4,500, the lane matrix is exactly `chez.source` and `chez.aot`, and product code is free to use full R6RS.
 
