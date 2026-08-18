@@ -10,8 +10,10 @@ Scope decision: **Milestone 0 only.** No byte-machine semantics (no IR, verifier
 > of its Gambit content — the §2 environment facts, the D1 and D3 findings, and
 > the four-lane model taken from protium were true when they were taken, and a
 > record edited to agree with a later decision stops being evidence of anything.
-> What changed *after* it: deliverable **D5 closes at two lanes**
-> (`chez.source`, `chez.aot`) rather than four, and **slice 5c is cancelled** —
+> What changed *after* it: **D2's `.sld` half is dead** — the shared body now
+> has a single R6RS `.sls` owner, not a paired `.sls`/`.sld`; deliverable
+> **D5 closes at two lanes** (`chez.source`, `chez.aot`) rather than four,
+> and **slice 5c is cancelled** —
 > it existed only to add Gambit's `.o1` and `gsc -exe -nopreload` modes; **D6's**
 > deterministic-emission proof becomes a single-implementation, cross-platform
 > claim rather than a Chez-versus-Gambit one; **D8's CI covers Chez only**.

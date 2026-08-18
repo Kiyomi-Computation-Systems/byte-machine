@@ -154,7 +154,7 @@ The functional core, runtime body, generated body, and shared tests live in wrap
 Use:
 
 - ordinary procedures, lexical bindings, lists, vectors, strings, symbols, exact integers, and ports;
-- `make-bytevector`, `bytevector?`, `bytevector-length`, `bytevector-u8-ref`, and `bytevector-u8-set!` through a small compatibility surface;
+- `make-bytevector`, `bytevector?`, `bytevector-length`, `bytevector-u8-ref`, and `bytevector-u8-set!`, supplied directly by R6RS;
 - numeric byte constants rather than characters in the IR and hot path;
 - tagged vectors hidden behind accessors for records shared across libraries;
 - `dynamic-wind` where parser cleanup must survive a callback escape.
@@ -236,7 +236,7 @@ build/
 
 `build/` is ignored. Chez native artifacts must never be shared between runtime versions, operating systems, or architectures.
 
-If cross-library `include` behavior is unreliable, begin with fewer shared files and split them only after the wrapper strategy is proven. Do not duplicate semantic implementations to preserve the proposed directory shape.
+If cross-library `include` behavior is unreliable, begin with fewer shared files and split them only once that behavior is proven reliable. Do not duplicate semantic implementations to preserve the proposed directory shape.
 
 ## 9. Public Library Surface
 
@@ -439,7 +439,7 @@ Portable API-contract conditions are tagged byte-machine values raised non-conti
 (byte-machine-contract-condition-detail object)
 ```
 
-Codes include invalid argument, invalid slice, invalid output binding, lifecycle violation, reentrancy, poisoned parser, callback binding error, generated-runtime ABI mismatch, and accessor misuse. Tests compare predicates, codes, and payloads across runtimes, never rendered exception prose.
+Codes include invalid argument, invalid slice, invalid output binding, lifecycle violation, reentrancy, poisoned parser, callback binding error, generated-runtime ABI mismatch, and accessor misuse. Tests compare predicates, codes, and payloads across execution lanes, never rendered exception prose.
 
 ### 9.5 Generated runtime ABI
 
@@ -458,7 +458,7 @@ Milestone 1 must add one executable Chez example program, run in both the source
 5. including that generated body from a consumer library wrapper;
 6. importing only `(byte-machine runtime)` in the consumer;
 7. constructing a parser, feeding the exact `[0,1)` slice, and inspecting the result;
-8. compiling and running the consumer natively.
+8. compiling and running the consumer ahead-of-time.
 
 The exact tool commands and include-path setup come from Milestone 0 and are copied verbatim into these examples.
 
@@ -1339,7 +1339,7 @@ Measure where supported:
 - fixture requests per second;
 - allocations or GC activity;
 - generated source size;
-- native compiled artifact size;
+- AOT-compiled artifact size;
 - Scheme compile time;
 - generation time.
 
@@ -1370,7 +1370,7 @@ The committed baseline artifact includes canonical workload bytes, deterministic
 
 ### 23.3 Admission rule
 
-Transition tables, byte-class tables, trie specialization, sequence unrolling, peephole passes, unsafe primitives, or implementation-specific backends require:
+Transition tables, byte-class tables, trie specialization, sequence unrolling, peephole passes, or unsafe primitives require:
 
 1. a reproducible compiled benchmark showing a repeatable material improvement on representative workloads or remedying a demonstrated performance problem;
 2. results in both the source and AOT execution lanes;
@@ -1399,7 +1399,7 @@ Before admitting the first optimization, add a decision record that derives work
 3. In every Tier 1 cell, load values across the graph/verify/compile/runtime library boundaries.
 4. In every Tier 1 cell, run shared source/interpreter unit tests.
 5. In every Tier 1 cell, generate the fixture parser and retain its bytes for cross-cell comparison.
-6. In every Tier 1 cell, perform applicable native compilation and run generated conformance/property tests.
+6. In every Tier 1 cell, perform applicable ahead-of-time compilation and run generated conformance/property tests.
 7. Compare generated output across every Tier 1 OS/architecture cell.
 8. Run benchmark smoke checks without pass/fail thresholds.
 9. Build and execute documentation examples.
@@ -1409,7 +1409,7 @@ The dependency-free source suite remains separately runnable without ahead-of-ti
 ### 24.3 Artifact discipline
 
 - Never commit native compiler output.
-- Keep implementation/version/OS/architecture outputs in distinct build directories.
+- Keep version/OS/architecture outputs in distinct build directories.
 - Commit generated fixture source only if a later workflow demonstrates that review value outweighs stale-artifact risk. v0.1 should generate it during tests by default.
 - CI may retain generated source and diagnostics as failure artifacts.
 
@@ -1426,7 +1426,7 @@ Deliver:
 - shared hello-library body loaded through its owner wrapper;
 - a cross-library smoke path where one provisional owner wrapper constructs a placeholder tagged value, another wrapper recognizes it, and runtime singleton identity is retained across both imports;
 - tiny portable test harness and runners;
-- Scheme source-mode and native compile invocations;
+- Scheme source-mode and ahead-of-time compile invocations;
 - Tier 1 CI feasibility notes;
 - deterministic text emission proof across the Chez source and AOT lanes;
 - identifier repertoire and binary LF emission proof across available operating systems;
@@ -1434,9 +1434,9 @@ Deliver:
 
 Exit criteria:
 
-- the same shared test body passes on both local/runtime environments available to the milestone;
+- the same shared test body passes in both the source and AOT execution lanes;
 - CI design covers unavailable local platforms;
-- no semantic implementation is duplicated in wrappers.
+- the shared body owns the semantics; its owner library adds none.
 
 ### Milestone 1: Minimal executable machine
 
@@ -1628,7 +1628,7 @@ Release `0.1.0` only when:
 - the private HTTP fixture meets its required behavior;
 - representative fixture inputs pass every split point;
 - deterministic generation passes across supported platform cells;
-- every Tier 1 matrix cell passes its required source, generation, native-compilation, and execution checks;
+- every Tier 1 matrix cell passes its required source, generation, AOT-compilation, and execution checks;
 - compiled benchmark baselines are recorded without speculative optimization;
 - generated per-byte paths contain no deliberate list/vector/string/result construction, and fixnum-sized allocation measurements are recorded with callbacks disabled;
 - public libraries and generated-runtime dependency boundaries are documented;
@@ -1726,7 +1726,7 @@ These are implementation facts to resolve in Milestone 0, not open architecture 
 1. Which minimum Chez release reliably provides the selected module/include and bytevector surface?
 2. What exact source and native compiler commands work consistently on each Tier 1 platform?
 3. How should relative includes and library search paths be arranged on Windows?
-4. Which portable condition construction is exposed by the wrappers?
+4. Which condition construction is available to consumers? *(Moot: it is plain R6RS `condition`/`raise`; no wrapper layer exists to expose anything else.)*
 5. Which allocation/GC metrics can the benchmark harness collect consistently?
 6. What identifier length and source-size limits appear in supported compilers?
 7. Does the initial direct `case` layout reveal a correctness-neutral compiler issue requiring an early portable layout adjustment?

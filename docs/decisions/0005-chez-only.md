@@ -8,9 +8,10 @@ Milestone: 0, plan amendment during slice 5b
 
 byte-machine has carried two runtimes since [decision 0001](./0001-toolchain-discovery.md).
 Every program registers two lanes; every shared body is twinned `.scm` /
-`.gambit.scm` behind a pairing guard; all product code is written to the
-R6RS∩R7RS intersection, which is why the parent plan's §7.1 forbade record
-systems, hash tables, bytevector literals, and `bytevector-copy!` outright.
+`.gambit.scm` behind a pairing guard; all product code was required to be
+written to the R6RS∩R7RS intersection, which is why the parent plan's §7.1
+forbade record systems, hash tables, bytevector literals, and
+`bytevector-copy!` outright.
 
 That requirement had exactly one source. protium — the sibling project
 [the milestone plan](../plans/milestone-0-portability-spike.md) §3 takes most of
