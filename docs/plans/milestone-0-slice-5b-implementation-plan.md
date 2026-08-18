@@ -55,7 +55,13 @@
 
 Today `byte_machine_add_scheme_lane` emits the literal `BYTE_MACHINE_EXECUTION_MODE=source`, so a lane named `.chez.aot` would declare itself a source lane. The name already carries the mode and `byte_machine_test_name_parse` already returns it (design M3).
 
-**Considered and cut (YAGNI).** `BACKEND` and the name's backend stay independent, with no guard requiring them to agree. The disagreement is not silent: a lane named `.gambit.source` registered with `BACKEND chez` points at a `.gambit.scm` program that Chez cannot load, so it fails loudly the first time it runs. A configure-time refusal for a loud run-time failure is ceremony, and it would cost a check, a specification rejection case, and a mutation. Reopen if a program ever becomes loadable by both runtimes.
+**Considered and cut (YAGNI), with the cost stated in full.** `BACKEND` and the name's backend stay independent, with no guard requiring them to agree.
+
+The common case is not silent: a lane named `.gambit.source` registered with `BACKEND chez` points at a `.gambit.scm` program Chez cannot load, so it fails loudly the first time it runs. A configure-time refusal for a loud run-time failure is ceremony, and it costs a check, a specification rejection case, and a mutation.
+
+Deriving the mode from the name adds a second consequence that the loudness argument does **not** cover, found in this task's review and recorded rather than glossed: `NAME ...gambit.o1 BACKEND chez` now emits `BYTE_MACHINE_EXECUTION_MODE=o1` on a Chez run, and it passes `byte_machine_test_name_parse`, because `o1` is a valid mode for the `gambit` backend. That registration mislabels its evidence quietly. It is still judged not worth a guard — the same registration also names a Gambit program Chez cannot load, so it fails on its first run for the other reason — but the reasoning now covers the whole case rather than half of it.
+
+Reopen if a program ever becomes loadable by both runtimes, which is the condition under which both halves of this argument stop holding at once.
 
 **Files:**
 - Modify: `cmake/ByteMachineSchemeLane.cmake`
