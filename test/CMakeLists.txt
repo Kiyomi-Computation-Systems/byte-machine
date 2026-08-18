@@ -139,8 +139,7 @@ file(MAKE_DIRECTORY "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}")
 # Read by byte_machine_scheme_lane_command. src/ holds the product libraries;
 # the harness above is test infrastructure. A lane imports from both, which is
 # why the launcher takes repeatable roots.
-set(BYTE_MACHINE_SRC_COMMON_DIR "${CMAKE_SOURCE_DIR}/src/common/byte-machine")
-set(BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT "${CMAKE_SOURCE_DIR}/src/chez")
+set(BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT "${CMAKE_SOURCE_DIR}/src")
 set(BYTE_MACHINE_TEST_COMMON_DIR "${CMAKE_CURRENT_LIST_DIR}/common")
 
 # The bodies every harness lane executes. Named once: a lane that listed them
@@ -229,57 +228,6 @@ function(byte_machine_wrong_fingerprint name out_var)
   file(WRITE "${expect_file}" "not-a-fingerprint")
   set(${out_var} "${expect_file}" PARENT_SCOPE)
 endfunction()
-
-# --- The working-directory matrix ------------------------------------------
-#
-# Three directories, each catching a different failure of the include
-# mechanism. Under a correct mechanism all three lanes pass and the decoy is
-# simply ignored, so the matrix proves nothing on its own: what proves it is the
-# launcher mutation in SchemeMutationSuite.cmake, whose expected outcome is
-# asymmetric -- empty and decoy fail, identical passes.
-#
-# Both non-empty directories carry a copy of placeholder.scm, real or decoy.
-# It is the only body left whose resolution this mutation can redirect: it is
-# included by its owner library through source-dirs, the half of the
-# launcher's append the mutation replaces with the working directory. The
-# program's own body (placeholder-tests.scm) is included through the
-# program's own directory, the half the mutation leaves alone, so its
-# resolution never depends on this decision and it needs no copy here.
-#
-# They live in the build tree, which keeps intact byte_machine_add_test's rule
-# that a test never runs from the repository. They cannot be checked in in any
-# case: they share basenames with real bodies on purpose, and the portability
-# guard forbids exactly that.
-set(BYTE_MACHINE_CWD_MATRIX_DIR "${CMAKE_BINARY_DIR}/cwd-matrix")
-set(BYTE_MACHINE_CWD_IDENTICAL_DIR "${BYTE_MACHINE_CWD_MATRIX_DIR}/same-name-identical")
-set(BYTE_MACHINE_CWD_DECOY_DIR "${BYTE_MACHINE_CWD_MATRIX_DIR}/same-name-decoy")
-set(BYTE_MACHINE_CWD_EMPTY_DIR "${BYTE_MACHINE_CWD_MATRIX_DIR}/empty")
-file(MAKE_DIRECTORY "${BYTE_MACHINE_CWD_IDENTICAL_DIR}")
-file(MAKE_DIRECTORY "${BYTE_MACHINE_CWD_DECOY_DIR}")
-file(MAKE_DIRECTORY "${BYTE_MACHINE_CWD_EMPTY_DIR}")
-
-# COPYONLY rather than file(COPY): configure_file records a dependency, so
-# editing a body re-runs configure and refreshes the copies.
-configure_file("${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder.scm"
-               "${BYTE_MACHINE_CWD_IDENTICAL_DIR}/placeholder.scm" COPYONLY)
-
-# The impostor. It implements the complete export list on purpose: an
-# incomplete one would fail the lane at library construction, which is a
-# different failure. The claim under test is that resolution picked the wrong
-# file, and that is only tested if the wrong file would otherwise work.
-file(WRITE "${BYTE_MACHINE_CWD_DECOY_DIR}/placeholder.scm"
-";;; Impostor placeholder body. Not part of the product.
-;;;
-;;; Shares a basename with src/common/byte-machine/placeholder.scm and answers
-;;; every question wrongly. It is only ever reachable by an include that
-;;; resolved against the process working directory, which is the defect
-;;; byte-machine.portability.placeholder-cwd-decoy.* exists to catch.
-
-(define (make-placeholder value) (vector 'decoy value))
-(define (placeholder? x) #f)
-(define (placeholder-value p) 'decoy)
-(define (placeholder-marker) (vector 'decoy))
-")
 
 # --- Harness lanes ---------------------------------------------------------
 
@@ -620,7 +568,6 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     NAME byte-machine.harness.scheme-mutation.cmake.direct
     COMMAND "${CMAKE_COMMAND}"
             "-DBYTE_MACHINE_CHEZ_EXECUTABLE=${BYTE_MACHINE_CHEZ_EXECUTABLE}"
-            "-DBYTE_MACHINE_CWD_MATRIX_DIR=${BYTE_MACHINE_CWD_MATRIX_DIR}"
             -P "${CMAKE_CURRENT_LIST_DIR}/support/cmake/SchemeMutationSuite.cmake"
     TIMEOUT 900
     LABELS unit
@@ -628,29 +575,21 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
                 "BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin")
 endif()
 
-# --- The placeholder library, from three working directories ---------------
+# --- The placeholder library -------------------------------------------------
 #
-# Same program, same body, three launch directories. See the matrix comment
-# above for what each one catches and why passing here is not yet evidence.
-foreach(cwd_case identical decoy empty)
-  if(cwd_case STREQUAL "identical")
-    set(cwd_dir "${BYTE_MACHINE_CWD_IDENTICAL_DIR}")
-  elseif(cwd_case STREQUAL "decoy")
-    set(cwd_dir "${BYTE_MACHINE_CWD_DECOY_DIR}")
-  else()
-    set(cwd_dir "${BYTE_MACHINE_CWD_EMPTY_DIR}")
-  endif()
-
-  byte_machine_add_scheme_lane(
-    NAME "byte-machine.portability.placeholder-cwd-${cwd_case}.chez.source"
-    BACKEND chez
-    PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.chez.sps"
-    SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                  "${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder.scm"
-                  "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.scm"
-    TIMEOUT 120
-    WORKING_DIRECTORY "${cwd_dir}")
-endforeach()
+# One lane, launched from the default private directory like every other
+# lane. The three-directory working-directory matrix retired with the include
+# mechanism (decision 0006): with absolute library roots and an empty
+# source-directories there is nothing left for a launch directory to change,
+# so cwd-independence is structural rather than empirical.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.portability.placeholder.chez.source
+  BACKEND chez
+  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.chez.sps"
+  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
+                "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder.sls"
+                "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.scm"
+  TIMEOUT 120)
 
 # --- Cross-library identity ------------------------------------------------
 #
@@ -664,17 +603,17 @@ endforeach()
 # source-directories exactly as it resolves the owner's body. Slice 3 proved
 # that mechanism; a second instance of a proven mechanism is not a second proof.
 #
-# Passing here is not yet evidence. What makes it evidence is passes 22 and 23 in
-# SchemeMutationSuite.cmake, and in particular the double-include mutation --
-# under which both cases below answer wrongly, nothing raises, and every other
-# lane in this tree still passes.
+# Passing here is not yet evidence. What makes it evidence is passes 19 and 20
+# in SchemeMutationSuite.cmake, and in particular the inline-duplication
+# mutation -- under which both cases below answer wrongly, nothing raises, and
+# every other lane in this tree still passes.
 byte_machine_add_scheme_lane(
   NAME byte-machine.portability.placeholder-identity.chez.source
   BACKEND chez
   PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.chez.sps"
   SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder.scm"
-                "${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder-consumer.scm"
+                "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder.sls"
+                "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder-consumer.sls"
                 "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.scm"
   TIMEOUT 120)
 

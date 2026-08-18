@@ -641,10 +641,11 @@ byte_machine_mutation(
   FIND [[  if(arg_WORKING_DIRECTORY)]]
   REPLACE [[  if(TRUE)]])
 
-# The run directory is where slice 3's working-directory matrix hangs: a lane
-# that overrides it is asserting something about where resolution happens, so
-# each of the three decisions inside byte_machine_test_run_directory gets its
-# own mutation.
+# The run directory decides where every lane launches from; the three
+# decisions inside byte_machine_test_run_directory each get their own
+# mutation. (The include-era matrix that first hung off this function is
+# gone — decision 0006 — but an override that silently stops arriving, or
+# arrives empty, still launches lanes from the wrong place.)
 byte_machine_mutation(
   FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
   LABEL "testing: WORKING_DIRECTORY names a directory that need not exist"

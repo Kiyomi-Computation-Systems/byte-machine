@@ -1,18 +1,16 @@
-;;; Consumer body for the Milestone 0 cross-library identity proof.
+;;; Consumer library for the Milestone 0 cross-library identity proof.
 ;;;
-;;; SHARED BODY: no library form, no include, no runtime-specific identifier.
-;;; Included by exactly one owner library,
-;;; src/chez/byte-machine/placeholder-consumer.sls (decisions 0002/0003).
+;;; Inline R6RS (decision 0006): the library owns its own text; nothing is
+;;; included.
 ;;;
-;;; EVERY IDENTIFIER THIS BODY USES BUT DOES NOT DEFINE COMES FROM ITS OWNER
-;;; WRAPPER'S IMPORT LIST
-;;;
-;;; placeholder?, placeholder-value and placeholder-marker are free here. They
-;;; are supplied by (byte-machine placeholder), which each wrapper imports --
-;;; never by a second include of that library's body. Replacing the import with
-;;; an include is the defect byte-machine-implementation-plan.md's section 7.2
-;;; forbids, and it is silent: both identity cases simply answer wrongly,
-;;; nothing raises, and every lane that imports only the owner still passes.
+;;; placeholder?, placeholder-value and placeholder-marker come from this
+;;; library's import of (byte-machine placeholder) -- imported, never copied.
+;;; Redefining them here inline is the surviving form of the ownership
+;;; defect decisions 0002/0003 guarded in the include era: the consumer
+;;; would carry its own tag and its own marker, both identity cases would
+;;; answer wrongly, nothing would raise, and every lane that imports only
+;;; the owner would still pass. SchemeMutationSuite.cmake makes exactly that
+;;; edit and requires the identity lane to fail.
 ;;;
 ;;; This is also the mechanism Milestone 1 runs on, where verify.scm calls graph
 ;;; procedures it does not define and verify.sls supplies them by importing
@@ -29,7 +27,11 @@
 ;;;
 ;;; This models section 7.2's rule that interpreted callbacks must return the
 ;;; runtime's own singleton outcome values rather than lookalikes.
+(library (byte-machine placeholder-consumer)
+  (export consume)
+  (import (rnrs) (byte-machine placeholder))
 (define (consume p)
   (if (placeholder? p)
       (placeholder-value p)
       (placeholder-marker)))
+)
