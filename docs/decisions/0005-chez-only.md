@@ -181,13 +181,15 @@ estimate rather than as a measurement, because it is one.
   stages, §25's Milestone 0/1/7/9 items, §26's release criteria, §27's
   documentation deliverables, §28's now-retired R6RS/R7RS module-incompatibility
   risk, §29, §30); AGENTS.md's two contract bullets, plus a third: Task 4's
-  semantic sweep necessarily reworded the backend-gating lesson to drop
-  "Gambit lane" from its example while keeping the lesson itself — three
-  bullets changed in total, not two; `README.org`. The three milestone
-  documents (the milestone plan, the slice 5b/5c design, and the slice 5a
-  design) keep all of their Gambit content and gain only a dated header note
-  — they record what was measured and decided at the time, and a record that
-  is edited to agree with a later decision stops being evidence of anything.
+  literal-token gate (`rg -n -i --hidden 'gambit' --glob '!docs/**' ...`)
+  forced the backend-gating lesson to drop "Gambit lane" from its example
+  while keeping the lesson itself, because AGENTS.md sits outside the gate's
+  `docs/` exclusion — three bullets changed in total, not two; `README.org`.
+  The three milestone documents (the milestone plan, the slice 5b/5c design,
+  and the slice 5a design) keep all of their Gambit content and gain only a
+  dated header note — they record what was measured and decided at the time,
+  and a record that is edited to agree with a later decision stops being
+  evidence of anything.
   The rule for *when* a record earns that note, made explicit here because the
   final whole-branch review had to infer it: a design doc gains an amendment
   note when a claim in it is now false, or when live code points a reader at

@@ -605,11 +605,11 @@ byte_machine_mutation(
   REPLACE [[    if(FALSE)]])
 
 # This is the mutation a whole-branch review found undetectable: delete this
-# block by hand, reconfigure, and the working-directory matrix's six lanes all
-# launch from their derived directories instead of the three fixture
-# directories test/CMakeLists.txt built for them -- six copies of one vacuous
-# lane, and nothing anywhere failed, because neither registrar this block
-# feeds was ever asked whether it received WORKING_DIRECTORY at all.
+# block by hand, reconfigure, and the working-directory matrix's three lanes
+# all launch from their derived directories instead of the three fixture
+# directories test/CMakeLists.txt built for them -- three copies of one
+# vacuous lane, and nothing anywhere failed, because neither registrar this
+# block feeds was ever asked whether it received WORKING_DIRECTORY at all.
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: WORKING_DIRECTORY is parsed and then never forwarded to either registrar"

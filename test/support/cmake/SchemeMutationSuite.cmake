@@ -91,7 +91,7 @@
 #
 # Pass 25 is the hex digit table. It sets no manifest, so provenance is
 # skipped here exactly as it is for every other pass but 26 through 29: what
-# actually catches the mutation is the self-tests' own "hex digits are
+# actually catches the mutation is the self-tests' own "hex digits render
 # lowercase" case, which check-equals fixed literals ("ff", "deadbeef", "0")
 # rather than deriving its expectation from fingerprint.scm.
 #
@@ -360,11 +360,12 @@ byte_machine_mutation(
   EXPECT_SURVIVES
     "suppression changes only what is printed, never a counter or a status, so no assertion can observe it from inside the process; it is covered by the manual check in the implementation plan's Task 5 step 9, and its real cost -- a log that teaches readers to ignore FAIL lines -- is not machine-checkable")
 
-# The other two print-only decisions, and the same argument. The harness has no
-# way to read back what it printed -- string ports live outside what the
-# shared runner body's owner library imports -- and this suite judges a
-# mutation by the verify command's exit status, so an output difference is
-# invisible to it whatever lane it runs.
+# The other two print-only decisions, and the same argument. The adapter
+# protocol exposes no output-capture service, and the shared runner body may
+# not reach past its protocol for one -- so the harness has no way to read
+# back what it printed -- and this suite judges a mutation by the verify
+# command's exit status, so an output difference is invisible to it whatever
+# lane it runs.
 # byte-machine.harness.verbose.chez.source closes the half that can be closed:
 # it runs a real body with the variable set, so the path is executed and a
 # break that raises is caught. What no layer checks is that the line was
@@ -1318,7 +1319,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # exactly as it is for every other pass but 26 through 29 below:
 # BYTE_MACHINE_FINGERPRINT_FILES is unset, harness-verify-provenance! returns
 # #t immediately, and the self-tests suite runs its own cases undisturbed. It
-# is the self-tests' own "hex digits are lowercase" case that actually
+# is the self-tests' own "hex digits render lowercase" case that actually
 # witnesses this mutation -- it check-equals fixed literals ("ff", "deadbeef",
 # "0") rather than deriving its expectation from fingerprint.scm, so mutating
 # the digit table fails an ordinary comparison: the process exits 1 (the

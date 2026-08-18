@@ -379,10 +379,11 @@ byte_machine_add_scheme_lane(
 # exercise a different code path -- the same argument the mutation suite's
 # first pass makes for every other decision in it.
 #
-# What this lane cannot check is that the line was printed. The shared runner
-# body has no way to read back its own output -- string ports live outside
-# what its owner library imports -- and the registration layer asserts exit
-# status, not output. Both decisions are therefore declared survivors in
+# What this lane cannot check is that the line was printed. The adapter
+# protocol exposes no output-capture service, and the shared runner body may
+# not reach past its protocol for one -- so it has no way to read back its own
+# output, and the registration layer asserts exit status, not output. Both
+# decisions are therefore declared survivors in
 # SchemeMutationSuite.cmake with their reason recorded, alongside probe output
 # suppression, which is unwitnessable for exactly the same reason.
 byte_machine_add_scheme_lane(

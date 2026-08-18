@@ -15,10 +15,12 @@
 ;;; Included verbatim by the Chez adapter, like harness-runner.scm, through the
 ;;; same source-directories include -- plain R6RS plus the adapter protocol,
 ;;; no library or include form of its own. The arithmetic is deliberately not
-;;; bitwise: it needs only exact integers of unbounded range, which plain R6RS
-;;; guarantees, so nothing here depends on optional bitwise support.
-;;; Intermediate products exceed 64 bits, which is what makes exact bignums
-;;; load-bearing rather than incidental.
+;;; bitwise -- not because bitwise operations are unavailable (R6RS's `(rnrs)`
+;;; composite guarantees them the same as everything else the owner library
+;;; imports), but because the algorithm needs nothing beyond exact integers of
+;;; unbounded range, which plain R6RS also guarantees. Intermediate products
+;;; exceed 64 bits, which is what makes exact bignums load-bearing rather than
+;;; incidental.
 ;;;
 ;;; WHAT THIS CANNOT PROVE
 ;;;
