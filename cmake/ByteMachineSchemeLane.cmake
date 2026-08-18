@@ -185,10 +185,15 @@ function(byte_machine_add_scheme_lane)
     endif()
   endforeach()
 
-  # The name is the single source of the mode, so a registration cannot claim
-  # one lane while running another. byte_machine_add_test parses the same name
-  # again for its labels; the function is pure, so parsing it twice is cheaper
-  # than passing a parsed field through a registrar that does not need it.
+  # Within this registrar the name is the single source of the mode, so a
+  # registration here cannot claim one lane while running another. It is not the
+  # only place the repository sets BYTE_MACHINE_EXECUTION_MODE: nine
+  # registrations in test/CMakeLists.txt (search that name) bypass this function
+  # and hand-set it directly instead, and today every one of them agrees with
+  # the lane it describes -- nothing enforces that the way this parse does.
+  # byte_machine_add_test parses the same name again for its labels; the
+  # function is pure, so parsing it twice is cheaper than passing a parsed field
+  # through a registrar that does not need it.
   byte_machine_test_name_parse("${arg_NAME}" lane_layer lane_feature
                                lane_backend lane_mode)
 

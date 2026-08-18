@@ -290,48 +290,75 @@ below are copied from that table.
   rather than characterizing a pass, and a claim about what a *passing*
   check proves belongs here, not in a string a Scheme process prints.
 
-- **A caller-supplied `ENVIRONMENT` entry always wins over this function's
-  own defaults, including `BYTE_MACHINE_EXECUTION_MODE` — pre-existing, and
-  today the override is caught, not silent; the real hazard for 5b and 5c
-  is narrower, and different.** `byte_machine_add_scheme_lane` appends
-  `${arg_ENVIRONMENT}` after every default it computes for itself, by
-  design (`cmake/ByteMachineSchemeLane.cmake`, reviewed in Task 5 of this
-  slice): CTest applies repeated `ENVIRONMENT` keys in list order, last one
-  wins. That ordering is what lets
+- **A caller-supplied `ENVIRONMENT` entry always wins over this function's own
+  defaults, including `BYTE_MACHINE_EXECUTION_MODE` — pre-existing, and, after
+  slice 5b's mode-vocabulary generalisation, caught only for a value outside
+  `source`/`aot`/`o1`; a wrong value inside that vocabulary is silent.**
+  `byte_machine_add_scheme_lane` appends `${arg_ENVIRONMENT}` after every
+  default it computes for itself, by design
+  (`cmake/ByteMachineSchemeLane.cmake`, reviewed in Task 5 of this slice):
+  CTest applies repeated `ENVIRONMENT` keys in list order, last one wins. That
+  ordering is what lets
   `byte-machine.harness.provenance-absent-expectation.chez.source` and
-  `byte-machine.harness.provenance-missing-body.chez.source` force a
-  specific, named failure, by overriding
-  `BYTE_MACHINE_EXPECT_FINGERPRINT_FILE` or `BYTE_MACHINE_FINGERPRINT_FILES`
-  after the function has already computed the real ones — the other two
-  mismatch-provenance lanes,
+  `byte-machine.harness.provenance-missing-body.chez.source` force a specific,
+  named failure, by overriding `BYTE_MACHINE_EXPECT_FINGERPRINT_FILE` or
+  `BYTE_MACHINE_FINGERPRINT_FILES` after the function has already computed the
+  real ones — the other two mismatch-provenance lanes,
   `byte-machine.harness.provenance.{chez,gambit}.source`, reach status 3
   through the dedicated `WRONG_FINGERPRINT` keyword instead, which changes
-  what the function computes as its own default, with no caller
-  `ENVIRONMENT` override involved. The same last-wins ordering means a
-  caller's `ENVIRONMENT` could just as freely override
-  `BYTE_MACHINE_EXECUTION_MODE=source`, but that is not the silent hazard
-  it first looks like. `harness-self-tests.scm`'s `check-equal "the mode is
+  what the function computes as its own default, with no caller `ENVIRONMENT`
+  override involved.
+
+  The same last-wins ordering means a caller's `ENVIRONMENT` could just as
+  freely override `BYTE_MACHINE_EXECUTION_MODE=source`. *Measured 2026-08-17,
+  before slice 5b's mode-plumbing commit (6a18d65); preserved here as history,
+  superseded below, not current behavior:* that was not the silent hazard it
+  first looks like. `harness-self-tests.scm`'s `check-equal "the mode is
   declared by the lane registration" (adapter-execution-mode) "source"`
-  (around line 366) and `harness-bootstrap.scm`'s matching
-  `bootstrap-assert` (lines 119-120) both compare `(adapter-execution-mode)`
-  against the literal `"source"` inside a live check, and both already run
-  in ordinary green lanes — the two `harness.self.*` lanes, the two
-  `harness.bootstrap.*` lanes, and `harness.verbose.chez.source`. Checked
-  against the shipped lane, not just the source: rerunning
-  `byte-machine.harness.self.chez.source`'s exact CTest command and
-  environment with only `BYTE_MACHINE_EXECUTION_MODE` changed away from
-  `source` fails outright — `the mode is declared by the lane registration
-  -- expected "source", got "chez-aot"`, exit 1, not 0. Overriding the
-  variable on a source lane does not pass silently today; it turns the lane
-  red. The real hazard 5b and 5c inherit is narrower: both assertions
-  hardcode the comparison to `"source"` itself, so a compiled lane whose
-  registration legitimately declares a different mode — an `aot` build
-  under Chez, an `o1` optimisation level under Gambit — will fail these
-  same checks on its own correct mode string, the day it exists, until the
+  (around line 366) and `harness-bootstrap.scm`'s matching `bootstrap-assert`
+  (lines 119-120) both compare `(adapter-execution-mode)` against the literal
+  `"source"` inside a live check, and both already run in ordinary green lanes
+  — the two `harness.self.*` lanes, the two `harness.bootstrap.*` lanes, and
+  `harness.verbose.chez.source`. Checked against the shipped lane, not just
+  the source: rerunning `byte-machine.harness.self.chez.source`'s exact CTest
+  command and environment with only `BYTE_MACHINE_EXECUTION_MODE` changed away
+  from `source` fails outright — `the mode is declared by the lane
+  registration -- expected "source", got "chez-aot"`, exit 1, not 0.
+  Overriding the variable on a source lane does not pass silently today; it
+  turns the lane red. The real hazard 5b and 5c inherit is narrower: both
+  assertions hardcode the comparison to `"source"` itself, so a compiled lane
+  whose registration legitimately declares a different mode — an `aot` build
+  under Chez, an `o1` optimisation level under Gambit — will fail these same
+  checks on its own correct mode string, the day it exists, until the
   comparison is generalised to check against the mode the lane's own
   registration declares rather than a hardcoded literal. Landing that
-  generalisation is concrete work 5b or 5c owes; it is not a gap either
-  slice can discover by surprise.
+  generalisation is concrete work 5b or 5c owes; it is not a gap either slice
+  can discover by surprise.
+
+  **That generalisation has landed — commit 6a18d65, decision W8 of
+  `docs/plans/milestone-0-slice-5b-5c-compiled-lanes.md` — in a narrower form
+  than the paragraph above asked for.** Both assertions now read
+  `(harness-member? (adapter-execution-mode) (list "source" "aot" "o1"))`
+  (`harness-self-tests.scm` lines 372-374; `harness-bootstrap.scm` lines
+  119-121): a vocabulary check, not the self-referential comparison against
+  "the mode the lane's own registration declares" the paragraph above called
+  for — decision W8 records why that stronger check was rejected, not merely
+  deferred: it would only measure the environment against itself. Re-measured
+  2026-08-17 against the same shipped lane, the same way: an override outside
+  the vocabulary is still caught — `BYTE_MACHINE_EXECUTION_MODE=chez-aot`
+  still fails outright, exit 1 (`the mode is one the lane vocabulary defines
+  -- expected a true value`). An override *inside* it but wrong for the lane
+  is not: the identical rerun with `BYTE_MACHINE_EXECUTION_MODE=aot` on this
+  same source lane now prints `mode=aot` and exits 0 — silent, on a smaller
+  set of values than before 6a18d65, but silent. The narrower, sound claim
+  this bullet always wanted, that *this* lane really is the mode it declares,
+  moved instead to a `cmake -P` specification case that reads the functional
+  core's name-to-mode mapping directly, where there is no live process for an
+  `ENVIRONMENT` override to reach:
+  `test/support/cmake/ByteMachineSchemeLaneSpec.cmake` asserts that a lane
+  named `byte-machine.harness.example.chez.aot` computes
+  `BYTE_MACHINE_EXECUTION_MODE=aot` (lines 366-367), and its `...chez.source`
+  counterpart computes `=source` (lines 377-378).
 
 - **Open question (design §11), carried forward unchanged: should the
   manifest be observed rather than declared?** Closing it needs either a
