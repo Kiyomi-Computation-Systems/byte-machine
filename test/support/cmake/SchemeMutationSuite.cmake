@@ -873,9 +873,14 @@ byte_machine_mutation(
 #
 # --source-dir's harness/self entry is not mere scaffolding meanwhile: it puts
 # real .scm bodies on the source path ahead of the program's own directory in
-# the append, i.e. at the launcher's highest search precedence -- safe only
-# because the portability guard still forbids two shared bodies sharing one
-# basename repository-wide, until Task 5 replaces that guard.
+# the append, i.e. at the launcher's highest search precedence -- safe today
+# because no basename in harness/self (harness-bootstrap.scm,
+# harness-duplicate-case.scm, harness-empty-selection.scm, harness-failing.scm,
+# harness-self-tests.scm, harness-unreached-provenance.scm) collides with
+# placeholder.scm (src/common) or placeholder-tests.scm (test/common), the two
+# bodies this invocation actually includes. That is a fact held by inspection
+# now that the repository-wide guard is gone (Task 5), not by any check -- and
+# one that only has to hold until Task 8 removes the flag.
 byte_machine_mutation(
   FILE ${LAUNCHER} SPEC placeholder-tests.chez.sps
   LABEL "launcher: the shared body directory is off the source path"

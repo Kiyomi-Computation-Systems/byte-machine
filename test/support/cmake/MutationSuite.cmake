@@ -16,7 +16,7 @@
 # will tell you when a pattern has drifted; it will not tell you when a new,
 # untested decision has been added.
 #
-# ONE PASS, SIXTY-FIVE MUTATIONS
+# ONE PASS, SIXTY-SIX MUTATIONS
 #
 # Every mutation above is declared before the single byte_machine_mutation_run
 # call at the end of this file, so this suite is one pass by construction.
@@ -64,12 +64,14 @@
 # the removed backend's own mode-vocabulary entry in ByteMachineTesting.cmake,
 # the variable it mutated.
 #
-# Sixty-five is seventy-five minus twelve plus two: the include collapse
-# (decision 0006) deleted ByteMachinePortabilityGuard.cmake whole -- its
-# twelve mutations tested a repository-wide basename namespace that no
+# Sixty-six is seventy-five minus twelve plus three: the include collapse
+# (decision 0006) deleted ByteMachinePortabilityGuard.cmake whole -- eleven
+# of its twelve mutations tested a repository-wide basename namespace that no
 # longer exists once nothing resolves includes through source-directories --
-# and added two for the invariant that survives it, narrowed to one lane:
-# byte_machine_lane_duplicate_basenames and the registrar refusal it feeds.
+# and added three for what survives it, narrowed to one lane:
+# byte_machine_lane_duplicate_basenames, the registrar refusal it feeds, and
+# the accumulator-initialization hazard that moved with the function's body
+# rather than dying with the module.
 #
 # What did NOT leave: the registration-time status guard narrowed from four
 # clauses to two, not to nothing. comma-in-path and relative-path died with
@@ -104,7 +106,7 @@
 cmake_minimum_required(VERSION 3.26)
 
 set(EXPECTED_PASSES 1)
-set(EXPECTED_MUTATIONS 65)
+set(EXPECTED_MUTATIONS 66)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -680,6 +682,16 @@ byte_machine_mutation(
   LABEL "scheme-lane: a duplicate-basename manifest is registered anyway"
   FIND [[  if(duplicate_basenames)]]
   REPLACE [[  if(FALSE)]])
+
+# Carried over from the deleted guard module rather than dying with it: the
+# initializer it mutates moved verbatim into the per-lane detector, and a
+# mutation is not dead while its REPLACE still changes a live line.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: the duplicate detector leaves a stale value when there are none"
+  FIND [[  set(seen "")
+  set(duplicates "")]]
+  REPLACE [[  set(seen "")]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

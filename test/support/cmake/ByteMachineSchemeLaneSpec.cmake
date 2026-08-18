@@ -148,6 +148,16 @@ spec_check_equal("${dups}" "" "distinct basenames report no duplicates")
 byte_machine_lane_duplicate_basenames(dups "/a/x.sls" "/b/x.sls" "/c/x.sls" "/d/y.sls")
 spec_check_equal("${dups}" "x.sls" "a repeated basename is reported once, however often it repeats")
 
+# CMake resolves an unset local through the calling scope, so if the
+# detector ever loses its own accumulator initialization, it inherits
+# whatever `duplicates` the caller has lying around. Seeded here so that
+# hazard has a witness -- the same assertion the retired repository-wide
+# guard's specification carried for the same two lines.
+set(duplicates "stale-from-caller")
+byte_machine_lane_duplicate_basenames(dups "/a/x.sls" "/b/y.sls")
+spec_check_equal("${dups}" "" "the detector does not inherit the caller's ambient duplicates")
+unset(duplicates)
+
 # --- Rejections ------------------------------------------------------------
 
 # Diagnostics carry a stable prefix precisely so a specification can assert the
