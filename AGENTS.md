@@ -52,10 +52,10 @@
   through a route nothing yet used (a lane NAME carrying one backend's mode
   while BACKEND names another). Before deleting a mutation, ask what its REPLACE
   still changes in the surviving tree and whether any input can reach it.
-* Libraries are R6RS `.sls`. Until the include-collapse slice lands, shared
-  `.scm` bodies contain no library or include form and are included by exactly
-  one owner library. R6RS forbids assigning an exported variable — reach mutable
-  state through procedures.
+* Libraries are R6RS `.sls`; libraries and programs contain their own code —
+  no shared include bodies (docs/decisions/0006-inline-libraries.md). R6RS
+  forbids assigning an exported variable — reach mutable state through
+  procedures.
 * Project targets Chez Scheme (R6RS) only — see docs/decisions/0005-chez-only.md
 * Project should be portable across macos (darwin), linux, and windows
 * Project should be portable across amd64 and arm64

@@ -165,7 +165,7 @@ Product code is plain R6RS. Two correctness rules survive from the portability e
 
 ### 7.2 Library wrappers
 
-Libraries are R6RS `.sls`. During the transition, the shared-body `include` mechanism and the one-owner rule of decisions 0002/0003 remain in force exactly as decided; the follow-up slice named in [chez-only-simplification.md](./chez-only-simplification.md) §6 retires them by moving each body inline into its owning library.
+Libraries are R6RS `.sls`; each library and each test program contains its own code. No Scheme file in this repository includes another — the transitional shared-body mechanism of decisions 0002/0003 was retired by [decision 0006](../decisions/0006-inline-libraries.md).
 
 The internal dependency direction is:
 
@@ -189,8 +189,6 @@ Were they distinct objects, interpreter and generated execution would disagree
 about callback results while both looking correct in isolation — which is
 precisely the class of defect the differential tests exist to catch, so it must
 not be reachable through the library structure.
-
-Chez libraries may use `include` inside the library; shared bodies themselves contain no library or include form.
 
 ### 7.3 Supported platform tiers
 
@@ -232,11 +230,7 @@ build/
   chez/
 ```
 
-`src/common/` and `src/chez/` remain in place until the §6 follow-up slice collapses them; the second-runtime source tree is deleted by [chez-only-simplification.md](./chez-only-simplification.md).
-
 `build/` is ignored. Chez native artifacts must never be shared between runtime versions, operating systems, or architectures.
-
-If cross-library `include` behavior is unreliable, begin with fewer shared files and split them only once that behavior is proven reliable. Do not duplicate semantic implementations to preserve the proposed directory shape.
 
 ## 9. Public Library Surface
 
@@ -1436,7 +1430,7 @@ Exit criteria:
 
 - the same shared test body passes in both the source and AOT execution lanes;
 - CI design covers unavailable local platforms;
-- the shared body owns the semantics; its owner library adds none.
+- each library owns its own code — no shared include bodies ([decision 0006](../decisions/0006-inline-libraries.md)).
 
 ### Milestone 1: Minimal executable machine
 

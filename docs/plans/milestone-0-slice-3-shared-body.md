@@ -7,6 +7,12 @@ Milestone plan: [`milestone-0-portability-spike.md`](./milestone-0-portability-s
 Previous slice: [`milestone-0-slice-2-test-harness.md`](./milestone-0-slice-2-test-harness.md)
 Scope: **the include mechanism for product code.** One placeholder body, one owner library per runtime, and the working-directory proof. Cross-library identity is slice 4; compiled lanes are slice 5.
 
+> Amended 2026-08-18 by [decision 0006](../decisions/0006-inline-libraries.md):
+> the include mechanism this slice designed and proved is retired — bodies now
+> live inline in their owning libraries, launchers take no `--source-dir`, and
+> the working-directory matrix (§7.4) is gone. This document records how the
+> mechanism worked and how it earned trust while it was law.
+
 ## 1. What this slice must prove
 
 The milestone plan states the bar in one sentence: *an identical shared body loads through both

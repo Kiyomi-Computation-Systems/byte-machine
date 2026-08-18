@@ -4,6 +4,12 @@ Date: 2026-08-17
 Status: accepted
 Milestone: 0, slice 4
 
+Superseded: 2026-08-18 by [0006](./0006-inline-libraries.md) — the one-owner
+rule and its import-vs-include mutation are retired with the include
+mechanism. The identity lane itself survives, witnessed by 0006's replacement
+mutation (a consumer inlining duplicate definitions instead of importing the
+owner).
+
 ## Context
 
 Parent plan [byte-machine-implementation-plan.md](../plans/byte-machine-implementation-plan.md)

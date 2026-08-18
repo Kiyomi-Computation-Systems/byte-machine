@@ -4,6 +4,11 @@ Date: 2026-08-16
 Status: accepted
 Milestone: 0, slice 3
 
+Superseded: 2026-08-18 by [0006](./0006-inline-libraries.md) — the include
+mechanism this record decides is retired; bodies now live inline in their
+owning libraries. The measurements and the repeatable-flags decision remain
+valid history (the flag protocol survives; `--source-dir` itself does not).
+
 ## Context
 
 Milestone 0 decision D6 chose `source-directories` plus bare filenames for

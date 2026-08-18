@@ -20,6 +20,13 @@ Scope decision: **Milestone 0 only.** No byte-machine semantics (no IR, verifier
 > Slice 5b's scope is unchanged. See
 > [chez-only-simplification.md](./chez-only-simplification.md).
 
+> Amended 2026-08-18 by [decision 0006](../decisions/0006-inline-libraries.md):
+> the shared-body include mechanism (§5's D6, `source-directories` plus bare
+> filenames) is retired — libraries are inline `.sls` and nothing resolves
+> through `source-directories`. §9 question 3's Chez half, already closed by
+> construction under repeatable flags, is now closed by absence: there is no
+> include left to resolve.
+
 ## 1. Why this milestone exists
 
 Section 7 of the parent plan asserts a portability contract — wrapper-free shared `.scm` bodies, thin Chez `.sls` / Gambit `.sld` wrappers, singleton identity preserved across library boundaries, byte-identical deterministic emission — but nothing in this repository proves it. Milestone 1 depends on that contract holding end to end, including §9.6 item 8 ("compile and run the consumer natively").

@@ -145,6 +145,12 @@ The portability guard enforces **two** rules: `.scm`/`.gambit.scm` twinning (eve
 
 ## 6. The named follow-up: collapsing the single-runtime indirection
 
+> Delivered: designed by
+> [milestone-0-include-collapse.md](./milestone-0-include-collapse.md),
+> implemented by
+> [milestone-0-include-collapse-implementation-plan.md](./milestone-0-include-collapse-implementation-plan.md),
+> recorded as [decision 0006](../decisions/0006-inline-libraries.md).
+
 Out of scope here; it changes design, not just inventory, so per project convention it gets its own design document and implementation plan. Its scope, fixed now so Phase A reviewers know where the line is:
 
 - Move each shared body inline into its owning `.sls`; delete `src/common/` and the harness `shared/` include split.
