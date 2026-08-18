@@ -105,6 +105,38 @@ set(BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT "${BYTE_MACHINE_HARNESS_DIR}/gambit
 set(BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER
     "${CMAKE_CURRENT_LIST_DIR}/support/launchers/chez-source.ss")
 
+# Per-runtime, per-machine object roots for the AOT lane. Keyed this way so a
+# parallel build cannot race and an object built by one Chez is never loaded by
+# another; nothing is written into the source tree.
+set(BYTE_MACHINE_CHEZ_OBJECT_ROOT
+    "${CMAKE_BINARY_DIR}/chez-objects/${BYTE_MACHINE_CHEZ_VERSION}/${BYTE_MACHINE_CHEZ_MACHINE_TYPE}")
+# The keying above is only as real as these two variables. Empty, every Chez
+# version and every machine type would share one object root, a `.so` built by
+# a different Chez could be loaded as though it were current, and every AOT
+# lane would stay green while proving nothing about the runtime that actually
+# ran it -- the exact defect this slice exists to prevent. No task in its plan
+# re-derives BYTE_MACHINE_CHEZ_VERSION or BYTE_MACHINE_CHEZ_MACHINE_TYPE to
+# catch a regression here, so this is the one place that can. Guarded on
+# BYTE_MACHINE_CHEZ_EXECUTABLE: on a host with no Chez neither variable is
+# ever set, no AOT lane is registered, and an empty root is inert rather than
+# a keying failure.
+if(BYTE_MACHINE_CHEZ_EXECUTABLE)
+  if(NOT BYTE_MACHINE_CHEZ_VERSION OR NOT BYTE_MACHINE_CHEZ_MACHINE_TYPE)
+    message(FATAL_ERROR
+      "byte-machine: BYTE_MACHINE_CHEZ_VERSION ('${BYTE_MACHINE_CHEZ_VERSION}') "
+      "and BYTE_MACHINE_CHEZ_MACHINE_TYPE ('${BYTE_MACHINE_CHEZ_MACHINE_TYPE}') "
+      "must both be non-empty once a Chez has been discovered. They key "
+      "BYTE_MACHINE_CHEZ_OBJECT_ROOT so a compiled object can never outlive "
+      "the runtime that produced it; empty, every AOT lane would share one "
+      "root across every Chez version and machine type ever built here, and a "
+      "stale object could load silently while every lane stayed green.")
+  endif()
+endif()
+set(BYTE_MACHINE_HARNESS_CHEZ_AOT_LAUNCHER
+    "${CMAKE_CURRENT_LIST_DIR}/support/launchers/chez-aot.ss")
+set(BYTE_MACHINE_HARNESS_CHEZ_COMPILE_LAUNCHER
+    "${CMAKE_CURRENT_LIST_DIR}/support/launchers/chez-compile.ss")
+
 # The object guard is what makes the Chez source lane honest: Chez looks for a
 # compiled library only in the object half of a library-directories pair, so
 # pairing the source root with a directory that is always empty makes a stale
@@ -617,6 +649,63 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     TIMEOUT 120
     LABELS expected-red
     ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source")
+endif()
+
+# A lane that is set up correctly never reaches a launcher refusal, so each one
+# needs a lane of its own or a deleted refusal is invisible. The same argument
+# the ten chez-source.ss refusals above are registered under.
+#
+# Three lanes, not one per refusal in these files. The flag-vocabulary
+# refusals below the parser, and --source-guard's own absent-directory check,
+# are the same shape as refusals chez-source.ss already carries and already
+# has lanes for; re-proving a verbatim shape in a new file buys nothing. These
+# three are what is actually new here: chez-aot.ss's missing-program check,
+# chez-compile.ss's unpaired-roots check, and --source-guard's non-empty-guard
+# check -- the one that most directly proves the hazard the flag exists to
+# close.
+if(BYTE_MACHINE_CHEZ_EXECUTABLE)
+  byte_machine_add_exit_code_test(
+    NAME byte-machine.harness.chez-aot-launcher-missing-program.chez.aot
+    COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
+            "${BYTE_MACHINE_HARNESS_CHEZ_AOT_LAUNCHER}"
+            --object-dir "${CMAKE_BINARY_DIR}"
+            --source-guard "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
+            --program "${CMAKE_BINARY_DIR}/no-such-program.so"
+    EXPECT_EXIT 2
+    TIMEOUT 60
+    LABELS expected-red)
+
+  byte_machine_add_exit_code_test(
+    NAME byte-machine.harness.chez-compile-launcher-unpaired-roots.chez.aot
+    COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
+            "${BYTE_MACHINE_HARNESS_CHEZ_COMPILE_LAUNCHER}"
+            --library-root "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+            --library-root "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}"
+            --object-dir "${CMAKE_BINARY_DIR}"
+            --source-dir "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+            --program "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            --output "${CMAKE_BINARY_DIR}/unused.so"
+    EXPECT_EXIT 2
+    TIMEOUT 60
+    LABELS expected-red)
+
+  # The one new decision --source-guard's own checks add over chez-source.ss's
+  # object-guard shape: chez-source.ss's launcher-dirty-guard.chez.source lane
+  # already proves this die branch works when a guard has acquired a file, but
+  # only for chez-source.ss's own copy of the check. Reuses
+  # BYTE_MACHINE_HARNESS_DIRTY_GUARD_DIR rather than declaring a second dirty
+  # directory: both are the same fixture -- a build-tree directory holding one
+  # stray file for the sole purpose of not being empty.
+  byte_machine_add_exit_code_test(
+    NAME byte-machine.harness.chez-aot-launcher-dirty-source-guard.chez.aot
+    COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
+            "${BYTE_MACHINE_HARNESS_CHEZ_AOT_LAUNCHER}"
+            --object-dir "${CMAKE_BINARY_DIR}"
+            --source-guard "${BYTE_MACHINE_HARNESS_DIRTY_GUARD_DIR}"
+            --program "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+    EXPECT_EXIT 2
+    TIMEOUT 60
+    LABELS expected-red)
 endif()
 
 # --- Mutation proof for the harness ----------------------------------------

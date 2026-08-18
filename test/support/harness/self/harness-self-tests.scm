@@ -362,8 +362,21 @@
         (check-not-equal "the os is identified" (adapter-os) "unknown")
         (check-not-equal "the architecture is identified"
                          (adapter-architecture) "unknown")
-        (check-equal "the mode is declared by the lane registration"
-                     (adapter-execution-mode) "source")))
+        ;; The vocabulary, not a fixed mode. Slice 5b gives this body more than
+        ;; one lane to run under, so an equality against any single mode would
+        ;; be false on some lane that is behaving correctly. The narrower claim
+        ;; -- that this lane really is the mode it declares -- is not made here:
+        ;; this same body is also staged and run under the Scheme mutation
+        ;; suite, inside byte-machine.harness.scheme-mutation.cmake.direct,
+        ;; whose registration hand-sets BYTE_MACHINE_EXECUTION_MODE=source no
+        ;; matter what it stages (test/CMakeLists.txt, ~line 645). A
+        ;; name-versus-mode check here would be red on every mutation pass's
+        ;; baseline, not only a broken one. The claim is carried instead by the
+        ;; lane's structure (an aot lane cannot expand source) and proved by
+        ;; mutation C4 against the registration's own mapping.
+        (check "the mode is one the lane vocabulary defines"
+               (harness-member? (adapter-execution-mode)
+                                (list "source" "aot" "o1")))))
 
     ;; adapter-exit ends the process, so no assertion may call it. Naming it is
     ;; still load-bearing: the parity argument in spec section 9.1 rests on this

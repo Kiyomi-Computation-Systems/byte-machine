@@ -108,6 +108,9 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
 endif()
 
 set(BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER "/h/launchers/chez-source.ss")
+set(BYTE_MACHINE_CHEZ_OBJECT_ROOT "/objects")
+set(BYTE_MACHINE_HARNESS_CHEZ_AOT_LAUNCHER "/launchers/chez-aot.ss")
+set(BYTE_MACHINE_HARNESS_CHEZ_COMPILE_LAUNCHER "/launchers/chez-compile.ss")
 set(BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT "/h/chez")
 set(BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT "/h/gambit")
 set(BYTE_MACHINE_HARNESS_SHARED_DIR "/h/shared")
@@ -119,7 +122,8 @@ set(BYTE_MACHINE_SRC_COMMON_DIR "/s/common/byte-machine")
 # --- Chez ------------------------------------------------------------------
 
 set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
-byte_machine_scheme_lane_command(chez "/h/self/p.chez.sps" command status message)
+byte_machine_scheme_lane_command(byte-machine.harness.example.chez.source
+  chez source "/h/self/p.chez.sps" command measured status message)
 spec_check_equal("${status}" "ok" "chez lane classifies")
 spec_check_equal("${command}"
   "/opt/chez;--script;/h/launchers/chez-source.ss;--library-root;/h/chez;--library-root;/s/chez;--source-dir;/h/shared;--source-dir;/s/common/byte-machine;--object-guard;/b/guard;--program;/h/self/p.chez.sps"
@@ -137,7 +141,8 @@ spec_check_equal("${guard}" "/b/guard" "chez lane passes the object guard direct
 # --- Gambit ----------------------------------------------------------------
 
 set(BYTE_MACHINE_GAMBIT_EXECUTABLE "/opt/gsi")
-byte_machine_scheme_lane_command(gambit "/h/self/p.gambit.scm" command status message)
+byte_machine_scheme_lane_command(byte-machine.harness.example.gambit.source
+  gambit source "/h/self/p.gambit.scm" command measured status message)
 spec_check_equal("${status}" "ok" "gambit lane classifies")
 spec_check_equal("${command}"
   "/opt/gsi;-:search=/h/gambit,search=/s/gambit;-f;/h/self/p.gambit.scm"
@@ -223,26 +228,103 @@ spec_check_equal("${option}" "" "a rejected search list clears the option")
 # exact wording, not merely a nonzero status. Asserted here for all three
 # messages the functional core can produce: a typo, a dropped interpolation, or
 # a garbled string would otherwise pass every existing assertion undetected.
-byte_machine_scheme_lane_command(guile "/h/self/p.scm" command status message)
+byte_machine_scheme_lane_command(byte-machine.harness.example.guile.source
+  guile source "/h/self/p.scm" command measured status message)
 spec_check_equal("${status}" "unknown-backend" "an unknown backend is rejected")
 spec_check_equal("${message}"
   "'guile' is not a Scheme lane backend. Known backends: chez gambit."
   "unknown backend message")
 
 set(BYTE_MACHINE_CHEZ_EXECUTABLE "")
-byte_machine_scheme_lane_command(chez "/h/self/p.chez.sps" command status message)
+byte_machine_scheme_lane_command(byte-machine.harness.example.chez.source
+  chez source "/h/self/p.chez.sps" command measured status message)
 spec_check_equal("${status}" "no-runtime" "a chez lane without a chez is not registered")
 spec_check_equal("${command}" "" "a rejected lane returns no command")
 spec_check_equal("${message}"
   "no Chez was discovered, so the chez source lane for '/h/self/p.chez.sps' is not registered."
   "chez lane no-runtime message")
 
+# Both no-runtime REPLACEs in MutationSuite.cmake hardcode the literal
+# "source" (see that file's own comment on this exact hazard), so a mutation
+# that reverted ${mode} back to a hardcoded "source" would pass every
+# assertion above -- every one of them calls with mode source. Asserted here
+# with mode aot instead, the one mode value able to tell the fixed code from
+# the reverted one.
+byte_machine_scheme_lane_command(byte-machine.harness.example.chez.aot
+  chez aot "/h/self/p.chez.sps" command measured status message)
+spec_check_equal("${status}" "no-runtime" "a chez aot lane without a chez is not registered")
+spec_check_equal("${command}" "" "a rejected lane returns no command")
+spec_check_equal("${message}"
+  "no Chez was discovered, so the chez aot lane for '/h/self/p.chez.sps' is not registered."
+  "chez lane no-runtime message names the aot mode, not a hardcoded source")
+
 set(BYTE_MACHINE_GAMBIT_EXECUTABLE "")
-byte_machine_scheme_lane_command(gambit "/h/self/p.gambit.scm" command status message)
+byte_machine_scheme_lane_command(byte-machine.harness.example.gambit.source
+  gambit source "/h/self/p.gambit.scm" command measured status message)
 spec_check_equal("${status}" "no-runtime" "a gambit lane without a gambit is not registered")
 spec_check_equal("${message}"
   "no Gambit was discovered, so the gambit source lane for '/h/self/p.gambit.scm' is not registered."
   "gambit lane no-runtime message")
+
+# The Gambit half of the same hazard the chez aot case above closes. Both
+# no-runtime messages interpolate ${mode}, and every other assertion over
+# either one is written against a source lane -- so freezing the literal
+# `source` back into the Gambit branch would pass all of them. This is the one
+# assertion that would not. Registered against `o1` rather than `aot` because
+# o1 is Gambit's own mode and the one slice 5c reaches first; the message is
+# built the same way for both.
+set(BYTE_MACHINE_GAMBIT_EXECUTABLE "")
+byte_machine_scheme_lane_command(byte-machine.harness.example.gambit.o1
+  gambit o1 "/h/self/p.gambit.scm" command measured status message)
+spec_check_equal("${status}" "no-runtime" "a gambit o1 lane without a gambit is not registered")
+spec_check_equal("${measured}" "" "a rejected lane measures nothing")
+spec_check_equal("${message}"
+  "no Gambit was discovered, so the gambit o1 lane for '/h/self/p.gambit.scm' is not registered."
+  "gambit lane no-runtime message names the o1 mode, not a hardcoded source")
+
+# --- Declared bodies versus measured bodies --------------------------------
+#
+# A source lane reads the repository sources, so the two lists coincide and
+# the distinction is invisible. It is not invisible for a compiled lane, where
+# the expectation is computed from the originals and the run must read what
+# the artifact was actually built from -- and this is the one place a
+# specification can see the rule with no runtime present.
+set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
+byte_machine_scheme_lane_command(byte-machine.harness.example.chez.source
+  chez source "/h/self/p.chez.sps"
+  command measured status message "/h/shared/a.scm" "/h/shared/b.scm")
+spec_check_equal("${status}" "ok" "a chez source lane is accepted")
+spec_check_equal("${measured}" "/h/shared/a.scm;/h/shared/b.scm"
+  "a source lane measures the bodies it declares, in the declared order")
+
+byte_machine_scheme_lane_command(byte-machine.harness.example.chez.unknown-mode-name
+  chez unknown-mode-name "/h/self/p.chez.sps"
+  command measured status message "/h/shared/a.scm")
+spec_check_equal("${status}" "unknown-mode" "an unregistered mode is rejected")
+spec_check_equal("${command}" "" "a rejected lane returns no command")
+spec_check_equal("${measured}" "" "a rejected lane measures nothing")
+spec_check_equal("${message}"
+  "'unknown-mode-name' is not an execution mode this lane module can build a command for. Known modes: source aot."
+  "unknown mode message")
+
+# --- Gambit's narrower mode vocabulary --------------------------------------
+#
+# .gambit.aot and .gambit.o1 are legal lane names -- BYTE_MACHINE_TEST_MODES_gambit
+# in ByteMachineTesting.cmake accepts both -- so both reach this branch, even
+# though this module can only build a Gambit command for source today. Tested
+# with mode aot specifically, because that is the self-refuting case for the
+# message the Chez and Gambit branches used to share: it named its own
+# rejected mode among the "known" modes it listed. The Gambit branch's message
+# is backend-scoped now, so it cannot make that claim.
+set(BYTE_MACHINE_GAMBIT_EXECUTABLE "/opt/gsi")
+byte_machine_scheme_lane_command(byte-machine.harness.example.gambit.aot
+  gambit aot "/h/self/p.gambit.scm" command measured status message)
+spec_check_equal("${status}" "unknown-mode" "gambit rejects a mode it cannot build yet")
+spec_check_equal("${command}" "" "a rejected lane returns no command")
+spec_check_equal("${measured}" "" "a rejected lane measures nothing")
+spec_check_equal("${message}"
+  "'aot' is not an execution mode the gambit backend of this lane module can build a command for yet. Known modes: source. Gambit's compiled modes (o1, aot) arrive in a later slice."
+  "gambit's unknown-mode message names only what gambit can build today, not the mode it just rejected")
 
 # --- Registration (byte_machine_add_scheme_lane) ----------------------------
 #
@@ -345,6 +427,47 @@ get_property(environment GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT)
 spec_check_equal("${environment}"
   "BYTE_MACHINE_EXECUTION_MODE=source;BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin;BYTE_MACHINE_FINGERPRINT_FILES=${SPEC_SELF};BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=/fingerprints/byte-machine.harness.example.chez.source.fingerprint;FOO=bar"
   "plain registration carries every default ahead of caller-supplied entries, which are appended last so they can override a default")
+
+# --- The mode is the name's, not a literal ---------------------------------
+#
+# A lane that declares a mode it is not running is the defect this whole slice
+# exists to prevent, and the declaration is what every other lane's evidence
+# is labelled with. Asserted over a name that is not `source`, because the
+# literal it replaced was `source`: a mutation restoring the literal passes
+# every assertion written over a source lane.
+set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "none")
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.example.chez.aot
+  BACKEND chez
+  PROGRAM "${SPEC_SELF}"
+  SHARED_BODIES "${SPEC_SELF}"
+  TIMEOUT 10)
+get_property(environment GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT)
+list(GET environment 0 mode_entry)
+spec_check_equal("${mode_entry}" "BYTE_MACHINE_EXECUTION_MODE=aot"
+  "an aot lane declares the aot mode, read from its own name")
+
+# The full list, not just the mode entry above: BYTE_MACHINE_FINGERPRINT_FILES
+# here is the measured copy's path under the per-lane object directory, while
+# BYTE_MACHINE_EXPECT_FINGERPRINT_FILE is still keyed by the lane's own name --
+# the expectation comes from the declared body, the run's environment from the
+# measured one. This assertion is the declared/measured asymmetry itself, the
+# whole mechanism this task adds, visible here with no Scheme runtime present.
+spec_check_equal("${environment}"
+  "BYTE_MACHINE_EXECUTION_MODE=aot;BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin;BYTE_MACHINE_FINGERPRINT_FILES=/objects/byte-machine_harness_example_chez_aot/fingerprint/ByteMachineSchemeLaneSpec.cmake;BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=/fingerprints/byte-machine.harness.example.chez.aot.fingerprint"
+  "an aot lane's environment carries the measured copy's path in BYTE_MACHINE_FINGERPRINT_FILES, not the declared body's own path")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.example.chez.source
+  BACKEND chez
+  PROGRAM "${SPEC_SELF}"
+  SHARED_BODIES "${SPEC_SELF}"
+  TIMEOUT 10)
+get_property(environment GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT)
+list(GET environment 0 mode_entry)
+spec_check_equal("${mode_entry}" "BYTE_MACHINE_EXECUTION_MODE=source"
+  "a source lane still declares source")
 
 # WRONG_FINGERPRINT chooses which function computes expect_file for the
 # manifest block: present, byte_machine_wrong_fingerprint; absent,

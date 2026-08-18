@@ -521,16 +521,26 @@ byte_machine_mutation(
 # so each message the functional core can produce gets its own mutation: a
 # dropped interpolation, a copy-pasted wrong backend name, and a one-word typo.
 # Any of the three would otherwise pass every existing assertion undetected.
+#
+# Re-anchored on ${mode}: M0 slice 5b Task 2 replaced the literal "source" in
+# both no-runtime messages with the mode argument, so a lane can name the mode
+# it actually failed to find a runtime for (see MutationRunner.cmake's SITES
+# comment -- a pattern that stops matching after a refactor must be updated,
+# not deleted). REPLACE is unchanged: both specification cases this mutation
+# is caught by still call with mode `source`, so a REPLACE that hardcodes
+# "source" reproduces exactly the same break -- dropped program interpolation
+# for the Chez message, wrong backend name for the Gambit one -- as before
+# this re-anchoring.
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: the chez no-runtime message drops its program interpolation"
-  FIND [[        "no Chez was discovered, so the chez source lane for '${program}' is not registered."]]
+  FIND [[        "no Chez was discovered, so the chez ${mode} lane for '${program}' is not registered."]]
   REPLACE [[        "no Chez was discovered, so the chez source lane is not registered."]])
 
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: the gambit no-runtime message names the wrong backend"
-  FIND [[        "no Gambit was discovered, so the gambit source lane for '${program}' is not registered."]]
+  FIND [[        "no Gambit was discovered, so the gambit ${mode} lane for '${program}' is not registered."]]
   REPLACE [[        "no Gambit was discovered, so the chez source lane for '${program}' is not registered."]])
 
 byte_machine_mutation(
@@ -564,13 +574,16 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: an unknown backend no longer stops registration"
-  # Re-anchored on the three-clause form the Gambit search-root check added:
-  # the single-clause pattern this mutation used to match no longer occurs
-  # anywhere in the file (see MutationRunner.cmake's SITES comment -- a pattern
-  # that stops matching after a refactor must be updated, not deleted). REPLACE
-  # is unchanged: this mutation still means "the whole fatal-error guard is
-  # gone", which is a different break than the narrower one below.
+  # Re-anchored a second time, on the four-clause form M0 slice 5b Task 2
+  # added: `unknown-mode` now sits between `unknown-backend` and
+  # `comma-in-path`, so the three-clause pattern this mutation matched since
+  # the Gambit search-root check no longer occurs anywhere in the file (see
+  # MutationRunner.cmake's SITES comment -- a pattern that stops matching
+  # after a refactor must be updated, not deleted). REPLACE is unchanged:
+  # this mutation still means "the whole fatal-error guard is gone", which is
+  # a different break than the narrower one below.
   FIND [[  if(status STREQUAL "unknown-backend"
+     OR status STREQUAL "unknown-mode"
      OR status STREQUAL "comma-in-path"
      OR status STREQUAL "relative-path")]]
   REPLACE [[  if(FALSE)]])
@@ -592,14 +605,15 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
-  # Re-anchored on the multi-line set(environment ...) form M0 slice 5a Task 2
-  # introduced for the fingerprint fixture path (see MutationRunner.cmake's
-  # SITES comment -- a pattern that stops matching after a refactor must be
-  # updated, not deleted). REPLACE still means only "the execution mode entry
-  # is gone"; the fingerprint-sample entry and arg_ENVIRONMENT are untouched,
-  # exactly as the single-line FIND/REPLACE this replaces did.
+  # Re-anchored on ${lane_mode}: M0 slice 5b Task 1 replaced the literal
+  # "source" with the mode byte_machine_test_name_parse reads from the lane's
+  # own name (see MutationRunner.cmake's SITES comment -- a pattern that stops
+  # matching after a refactor must be updated, not deleted). REPLACE still
+  # means only "the execution mode entry is gone"; the fingerprint-sample
+  # entry and arg_ENVIRONMENT are untouched, exactly as before this
+  # re-anchoring.
   LABEL "scheme-lane: the source execution mode is no longer declared in the environment"
-  FIND [[    "BYTE_MACHINE_EXECUTION_MODE=source"
+  FIND [[    "BYTE_MACHINE_EXECUTION_MODE=${lane_mode}"
 ]]
   REPLACE [[    # deleted
 ]])
@@ -722,13 +736,22 @@ byte_machine_mutation(
 
 # The companion to the re-anchored "an unknown backend no longer stops
 # registration" mutation above: that one deletes the guard outright, this one
-# narrows it back to the pre-Task-3 single clause, so comma-in-path and
-# relative-path would fail open while unknown-backend stayed refused. Two
+# narrows it back to the single unknown-backend clause that predates M0 slice
+# 3 Task 3 ("A Gambit search root must be absolute and comma-free", which grew
+# this guard from one clause to three), so unknown-mode, comma-in-path, and
+# relative-path would all fail open while unknown-backend stayed refused. Two
 # distinct regressions, so two mutations.
+#
+# Re-anchored on the four-clause form for the same reason as the mutation
+# above (see MutationRunner.cmake's SITES comment). REPLACE is unchanged: it
+# already named only the single unknown-backend clause, so narrowing a
+# four-clause guard down to it is the same regression as narrowing the
+# three-clause guard was, just with one more status now failing open.
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "lane: a refused search list does not stop registration"
   FIND [[  if(status STREQUAL "unknown-backend"
+     OR status STREQUAL "unknown-mode"
      OR status STREQUAL "comma-in-path"
      OR status STREQUAL "relative-path")]]
   REPLACE [[  if(status STREQUAL "unknown-backend")]])
