@@ -16,7 +16,7 @@
 # will tell you when a pattern has drifted; it will not tell you when a new,
 # untested decision has been added.
 #
-# ONE PASS, NINETY-SEVEN MUTATIONS
+# ONE PASS, NINETY-FOUR MUTATIONS
 #
 # Every mutation above is declared before the single byte_machine_mutation_run
 # call at the end of this file, so this suite is one pass by construction.
@@ -28,7 +28,7 @@
 # which SITES cannot see either, since a missing declaration is not a pattern
 # that failed to match.
 #
-# Ninety-seven is eighty-nine plus eight: five for MutationRunner's own
+# Ninety-seven was eighty-nine plus eight: five for MutationRunner's own
 # verdict decision and the registration guard beside it (the "MutationRunner"
 # section below), two for the other direction of the WORKING_DIRECTORY
 # forwarding conditional in ByteMachineExpectExit.cmake and
@@ -36,11 +36,25 @@
 # half of its two mutations, and one for the WRONG_FINGERPRINT branch in
 # ByteMachineSchemeLane.cmake's manifest block, which had no mutation until a
 # review found the routing decision unwitnessed.
+#
+# Ninety-four is ninety-seven minus three: the pairing rule's own mutations
+# left with the rule they tested, when the Chez-only simplification's Task 2
+# removed byte_machine_guard_missing_wrappers and its enforcement from
+# ByteMachinePortabilityGuard.cmake. "guard: only the Chez wrapper is
+# required" mutated a foreach that no longer exists, "guard: a missing
+# wrapper is reported without stopping the build" mutated a FATAL_ERROR that
+# no longer exists, and "guard: wrappers are demanded of the shared
+# directories, not the wrapped ones" mutated the WRAPPED_DIRS-only
+# accumulator branch that fed that FATAL_ERROR -- also gone. The basename-
+# uniqueness rule's own mutations are untouched; "guard: bodies are collected
+# from the shared directories only" survives with a new anchor and a new
+# witness, since its old witness (a WRAPPED_DIRS body missing a wrapper) went
+# with the rule that reported it.
 
 cmake_minimum_required(VERSION 3.26)
 
 set(EXPECTED_PASSES 1)
-set(EXPECTED_MUTATIONS 97)
+set(EXPECTED_MUTATIONS 94)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -813,12 +827,6 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
-  LABEL "guard: only the Chez wrapper is required"
-  FIND [[    foreach(wrapper "${dir}/${base}.chez.sps" "${dir}/${base}.gambit.scm")]]
-  REPLACE [[    foreach(wrapper "${dir}/${base}.chez.sps")]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
   LABEL "guard: the duplicate accessor leaves a stale value when there are none"
   FIND [[  set(seen "")
   set(duplicates "")]]
@@ -887,25 +895,10 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
-  LABEL "guard: a missing wrapper is reported without stopping the build"
-  FIND [[    message(FATAL_ERROR
-      "byte-machine: every shared test body needs a wrapper for each runtime, "]]
-  REPLACE [[    message(STATUS
-      "byte-machine: every shared test body needs a wrapper for each runtime, "]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
-  LABEL "guard: wrappers are demanded of the shared directories, not the wrapped ones"
-  FIND [[      if(keyword STREQUAL "WRAPPED_DIRS")]]
-  REPLACE [[      if(keyword STREQUAL "SHARED_DIRS")]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
   LABEL "guard: only the top level of a declared directory is searched"
   # The whole point of the recursion. Without it a body in a subdirectory is
-  # not rejected -- it is unseen, so it is neither checked for a colliding
-  # basename nor required to have wrappers, and the banner covers a file that
-  # was never read.
+  # not rejected -- it is unseen, so it is never checked for a colliding
+  # basename, and the banner covers a file that was never read.
   FIND [[      file(GLOB_RECURSE dir_globbed ${glob_depends} "${dir}/*.scm")]]
   REPLACE [[      file(GLOB dir_globbed ${glob_depends} "${dir}/*.scm")]])
 
@@ -923,10 +916,12 @@ byte_machine_mutation(
   FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
   LABEL "guard: bodies are collected from the shared directories only"
   # Anchored on the preceding line, for the same reason as the entry-check loop
-  # above: the two loops iterate the same two keywords.
-  FIND [[  set(wrapped "")
+  # above: the two loops iterate the same two keywords, so a bare `foreach`
+  # matches both and the SITES check rejects it. `set(bodies "")` is unique to
+  # this loop's start.
+  FIND [[  set(bodies "")
   foreach(keyword IN ITEMS SHARED_DIRS WRAPPED_DIRS)]]
-  REPLACE [[  set(wrapped "")
+  REPLACE [[  set(bodies "")
   foreach(keyword IN ITEMS SHARED_DIRS)]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")

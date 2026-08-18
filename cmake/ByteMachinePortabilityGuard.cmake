@@ -1,17 +1,15 @@
-# Guard the two rules that keep shared bodies shared.
+# Guard the rule that keeps shared bodies shared: one basename, one body.
 #
-# WHY THESE TWO FAILURES NEED A GUARD RATHER THAN A TEST
+# WHY THIS FAILURE NEEDS A GUARD RATHER THAN A TEST
 #
-# Both are silent. A body with only one wrapper is proven on one runtime while
-# the tree suggests two: nothing fails, there is simply one fewer lane than
-# there appears to be. Two bodies with the same basename collapse into one file,
-# because Chez resolves includes through source-directories -- one flat,
-# process-global namespace, shared with src/common once Milestone 1 lands -- and
-# the build stays green with one body never executed again.
+# Two bodies with the same basename collapse into one file, because Chez
+# resolves includes through source-directories -- one flat, process-global
+# namespace, shared with src/common once Milestone 1 lands -- and the build
+# stays green with one body never executed again.
 #
-# Neither can be caught by a test that runs, because in both cases the thing
-# that should have run is exactly the thing that does not. So they are configure
-# failures: a violation stops the build.
+# It cannot be caught by a test that runs, because the thing that should have
+# run is exactly the thing that does not. So it is a configure failure: a
+# violation stops the build.
 #
 # The glob is CONFIGURE_DEPENDS wherever there is a build system to honour the
 # keyword -- script mode is the sole exception, explained at the glob itself --
@@ -59,34 +57,15 @@ function(byte_machine_guard_duplicate_basenames out_duplicates)
   set(${out_duplicates} "${duplicates}" PARENT_SCOPE)
 endfunction()
 
-# byte_machine_guard_missing_wrappers(<out_missing> <body>...)
-#
-# Bodies lacking a wrapper, reported as `<body>|<missing wrapper>` so the
-# diagnostic can name the file that should exist rather than only the one that
-# does.
-function(byte_machine_guard_missing_wrappers out_missing)
-  set(missing "")
-  foreach(body IN LISTS ARGN)
-    get_filename_component(dir "${body}" DIRECTORY)
-    # NAME_WE strips from the first dot, so `x.gambit.scm` and `x.scm` both
-    # yield `x`. That is what makes the sibling names below correct.
-    get_filename_component(base "${body}" NAME_WE)
-    foreach(wrapper "${dir}/${base}.chez.sps" "${dir}/${base}.gambit.scm")
-      if(NOT EXISTS "${wrapper}")
-        list(APPEND missing "${body}|${wrapper}")
-      endif()
-    endforeach()
-  endforeach()
-  set(${out_missing} "${missing}" PARENT_SCOPE)
-endfunction()
-
 # --- Imperative shell ------------------------------------------------------
 
 # byte_machine_portability_guard(SHARED_DIRS <dir>... WRAPPED_DIRS <dir>...)
 #
-# SHARED_DIRS hold bodies included by a library; they need no wrappers.
-# WRAPPED_DIRS hold bodies included by a program; each needs both wrappers.
-# Every body from either kind of directory shares one basename namespace.
+# SHARED_DIRS hold bodies included by a library; WRAPPED_DIRS hold bodies
+# included by a program. The distinction is kept for callers to document what
+# a directory is for, but every body from either kind of directory shares one
+# basename namespace, and that shared namespace is the only thing this guard
+# enforces.
 #
 # Every <dir> must be absolute. The two things this function does with a
 # directory disagree about what a relative one means: the `if(IS_DIRECTORY)`
@@ -167,12 +146,11 @@ function(byte_machine_portability_guard)
   #
   # And the glob recurses, so a body in a subdirectory is a body. A
   # non-recursive glob does not fail on one -- it does not see it. The body is
-  # then neither checked for a colliding basename nor required to have
-  # wrappers, and the success banner covers a file nobody read. Both halves are
-  # the header's "a guard that silently skips new files is worse than no guard
-  # at all", which is a claim about this loop and nothing else.
+  # then never checked for a colliding basename, and the success banner covers
+  # a file nobody read. Both halves are the header's "a guard that silently
+  # skips new files is worse than no guard at all", which is a claim about
+  # this loop and nothing else.
   set(bodies "")
-  set(wrapped "")
   foreach(keyword IN ITEMS SHARED_DIRS WRAPPED_DIRS)
     foreach(dir IN LISTS arg_${keyword})
       file(GLOB_RECURSE dir_globbed ${glob_depends} "${dir}/*.scm")
@@ -190,13 +168,6 @@ function(byte_machine_portability_guard)
       endif()
 
       list(APPEND bodies ${dir_bodies})
-
-      # SHARED_DIRS hold bodies a *library* includes, and a library carries its
-      # own imports, so it has no wrapper and its bodies owe none. Only the
-      # wrapped directories, whose bodies are included by a program, owe a pair.
-      if(keyword STREQUAL "WRAPPED_DIRS")
-        list(APPEND wrapped ${dir_bodies})
-      endif()
     endforeach()
   endforeach()
 
@@ -226,16 +197,8 @@ function(byte_machine_portability_guard)
       "stays green with one of them never executed again.")
   endif()
 
-  byte_machine_guard_missing_wrappers(missing ${wrapped})
-  if(missing)
-    message(FATAL_ERROR
-      "byte-machine: every shared test body needs a wrapper for each runtime, "
-      "or it is proven on one runtime while looking as though it is proven on "
-      "two. Missing (body|wrapper): ${missing}")
-  endif()
-
   list(LENGTH bodies body_count)
   message(STATUS
     "byte-machine portability guard: ${body_count} shared bodies, "
-    "unique basenames, every wrapped body paired")
+    "unique basenames")
 endfunction()

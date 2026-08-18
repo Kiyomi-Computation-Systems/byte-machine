@@ -242,16 +242,16 @@ function(byte_machine_wrong_fingerprint name out_var)
 endfunction()
 
 # Checked before any lane is registered, and before the working-directory
-# matrix's own fixture copies below: a body missing a wrapper must stop the
-# build with this guard's own named diagnostic, not with a bare
-# configure_file error from a copy step that has no idea why the file it
-# wanted is missing. This call used to sit after that copy step; moved here,
-# removing a shared body reports "every shared test body needs a wrapper..."
-# instead of "configure_file Problem opening file for copying".
-# src/common holds bodies included by a library, so they owe no program
-# wrapper; test/common holds bodies included by a program, so each owes both.
-# Every body from either kind of directory shares one basename namespace, which
-# now spans the harness and src/ for the first time.
+# matrix's own fixture copies below: a colliding basename must stop the build
+# with this guard's own named diagnostic, not with a bare configure_file
+# error from a copy step that has no idea why the file it wanted collided
+# with another. This call used to sit after that copy step; moved here, a
+# colliding basename reports "shared body basenames must be unique..."
+# instead of a configure_file failure that names neither offender.
+# src/common holds bodies included by a library; test/common holds bodies
+# included by a program. Every body from either kind of directory shares one
+# basename namespace, which now spans the harness and src/ for the first
+# time.
 byte_machine_portability_guard(
   SHARED_DIRS "${BYTE_MACHINE_HARNESS_SHARED_DIR}" "${BYTE_MACHINE_SRC_COMMON_DIR}"
   WRAPPED_DIRS "${BYTE_MACHINE_HARNESS_SELF_DIR}" "${BYTE_MACHINE_TEST_COMMON_DIR}")

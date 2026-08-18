@@ -1,10 +1,6 @@
 # Specification for cmake/ByteMachinePortabilityGuard.cmake.
 #
-# Two rules, both about failures that are silent by construction.
-#
-# A shared body with only one wrapper is proven on one runtime while looking
-# like it is proven on two. Nothing fails; there is simply one fewer lane than
-# the tree suggests.
+# One rule, about a failure that is silent by construction.
 #
 # Two shared bodies with the same basename collapse into one file, because Chez
 # resolves includes through source-directories -- a single flat namespace shared
@@ -20,12 +16,12 @@ set(SPEC_SELF "${CMAKE_CURRENT_LIST_FILE}")
 
 # --- Fixture ---------------------------------------------------------------
 #
-# Both the wrapper rule and the guard itself are about what is on disk -- the
-# guard only ever learns of a body by globbing a directory -- so both are
-# checked against real files rather than invented path strings. The staging is
-# written into the test's own temporary directory, and is rebuilt by every
-# process that runs this file: the driver below, and each rejection case it
-# re-invokes. No case depends on another having run first.
+# The guard is about what is on disk -- it only ever learns of a body by
+# globbing a directory -- so it is checked against real files rather than
+# invented path strings. The staging is written into the test's own temporary
+# directory, and is rebuilt by every process that runs this file: the driver
+# below, and each rejection case it re-invokes. No case depends on another
+# having run first.
 
 if(DEFINED ENV{BYTE_MACHINE_TEST_TMPDIR})
   set(fixture "$ENV{BYTE_MACHINE_TEST_TMPDIR}/guard-fixture")
@@ -35,19 +31,11 @@ endif()
 file(REMOVE_RECURSE "${fixture}")
 file(MAKE_DIRECTORY "${fixture}")
 
-# Bodies for the wrapper-pairing assertions, which are handed paths directly.
-file(WRITE "${fixture}/both.scm" "")
-file(WRITE "${fixture}/both.chez.sps" "")
-file(WRITE "${fixture}/both.gambit.scm" "")
-file(WRITE "${fixture}/chez-only.scm" "")
-file(WRITE "${fixture}/chez-only.chez.sps" "")
-file(WRITE "${fixture}/neither.scm" "")
-
-# Directories for the guard itself, which is handed directories and globs them.
+# Directories for the guard, which is handed directories and globs them.
 # `empty` holds no body at all. `twin-a` and `twin-b` hold one basename between
-# them. `paired` holds a body with both wrappers and `unpaired` a body with
-# neither, so a guard that demanded wrappers of the *shared* directories instead
-# of the wrapped ones would find nothing to complain about and pass.
+# them. `paired` and `unpaired` hold nothing the surviving rule cares about --
+# each is just a directory with one body in it, used below wherever a case
+# needs a populated directory that is not the one under test.
 file(MAKE_DIRECTORY "${fixture}/empty")
 file(MAKE_DIRECTORY "${fixture}/twin-a")
 file(MAKE_DIRECTORY "${fixture}/twin-b")
@@ -56,28 +44,20 @@ file(MAKE_DIRECTORY "${fixture}/unpaired")
 file(WRITE "${fixture}/twin-a/twin.scm" "")
 file(WRITE "${fixture}/twin-b/twin.scm" "")
 file(WRITE "${fixture}/paired/paired-body.scm" "")
-file(WRITE "${fixture}/paired/paired-body.chez.sps" "")
-file(WRITE "${fixture}/paired/paired-body.gambit.scm" "")
 file(WRITE "${fixture}/unpaired/unpaired-body.scm" "")
 
-# Nested bodies, for the rules that only bite if the glob descends. Each
+# Nested bodies, for the rule that only bites if the glob descends. The
 # directory holds a top-level body as well, so a non-recursive glob finds
 # something there and passes the per-directory contribution check -- otherwise
-# these cases would be rejected for emptiness and prove nothing about depth.
+# this case would be rejected for emptiness and prove nothing about depth.
 #
-# `nested-dup/deep/twin.scm` repeats the basename in `twin-a`, and
-# `nested-unpaired/deep/deep-body.scm` has neither wrapper. Both violations are
-# invisible to a glob that stops at the top level, which is the whole point: a
-# body in a subdirectory would be neither checked nor reported, and the tree
-# would be called portable without it having been looked at.
+# `nested-dup/deep/twin.scm` repeats the basename in `twin-a`, invisible to a
+# glob that stops at the top level, which is the whole point: a body in a
+# subdirectory would be neither checked nor reported, and the tree would be
+# called portable without it having been looked at.
 file(MAKE_DIRECTORY "${fixture}/nested-dup/deep")
 file(WRITE "${fixture}/nested-dup/surface.scm" "")
 file(WRITE "${fixture}/nested-dup/deep/twin.scm" "")
-file(MAKE_DIRECTORY "${fixture}/nested-unpaired/deep")
-file(WRITE "${fixture}/nested-unpaired/surface-body.scm" "")
-file(WRITE "${fixture}/nested-unpaired/surface-body.chez.sps" "")
-file(WRITE "${fixture}/nested-unpaired/surface-body.gambit.scm" "")
-file(WRITE "${fixture}/nested-unpaired/deep/deep-body.scm" "")
 
 # --- Rejection cases -------------------------------------------------------
 #
@@ -93,10 +73,10 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
   set(c "${BYTE_MACHINE_SPEC_CASE}")
 
   if(c STREQUAL "guard-rejects-an-unexpected-argument")
-    # SHARED_DIRS is deliberately valid and complete, so nothing else here can
+    # SHARED_DIRS is deliberately valid and unique, so nothing else here can
     # stop the build: a guard that does not reject the stray token globs the one
     # directory it did understand, finds no violation, and prints the success
-    # banner -- claiming the wrapper rule held for a WRAPPED_DIRS it never
+    # banner -- claiming the tree was checked for a WRAPPED_DIRS it never
     # received. The stray token leads, because a misspelt keyword *after* a
     # multi-value one is absorbed as a directory rather than left unparsed.
     byte_machine_portability_guard(
@@ -108,7 +88,7 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
     # so a typo there lands *after* SHARED_DIRS and is absorbed into its value
     # -- arg_UNPARSED_ARGUMENTS is empty and the case above cannot see it. What
     # stops it is that `WRAPPED_DIR` is not a directory. SHARED_DIRS is again
-    # deliberately complete, so a guard that does not check its entries globs
+    # deliberately unique, so a guard that does not check its entries globs
     # `paired/`, finds no violation, and prints the success banner for a
     # WRAPPED_DIRS it never received.
     byte_machine_portability_guard(
@@ -126,8 +106,8 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
     # skipped the entry check would then die on the duplicate rule instead of
     # returning -- the case would pass for a reason that has nothing to do with
     # what it is written to prove. With `empty`, a guard that skips the check
-    # globs one body from `paired/`, finds it unique and both-wrapped, and
-    # prints the success banner.
+    # globs one body from `paired/`, finds it unique, and prints the success
+    # banner.
     byte_machine_portability_guard(
       WRAPPED_DIRS "${fixture}/paired"
       SHARED_DIR "${fixture}/empty")
@@ -147,12 +127,6 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
     # contributed, and never sees `deep/twin.scm` colliding with `twin-a`.
     byte_machine_portability_guard(
       SHARED_DIRS "${fixture}/twin-a" "${fixture}/nested-dup")
-  elseif(c STREQUAL "guard-rejects-a-nested-missing-wrapper")
-    # The same descent, for the other rule, and the only case that exercises
-    # byte_machine_guard_missing_wrappers deriving sibling wrapper paths for a
-    # body that is not at the top of its declared directory.
-    byte_machine_portability_guard(
-      WRAPPED_DIRS "${fixture}/nested-unpaired")
   elseif(c STREQUAL "guard-rejects-an-empty-glob")
     # A guard that finds nothing must say so. Reporting a tree it never looked
     # at as portable is worse than not guarding it, because it is reported as
@@ -170,12 +144,18 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
   elseif(c STREQUAL "guard-rejects-a-duplicate-basename")
     byte_machine_portability_guard(
       SHARED_DIRS "${fixture}/twin-a" "${fixture}/twin-b")
-  elseif(c STREQUAL "guard-rejects-a-missing-wrapper")
-    # The shared directory is deliberately complete, so this case fails only if
-    # the pairing rule is applied to WRAPPED_DIRS.
+  elseif(c STREQUAL "guard-rejects-a-duplicate-basename-spanning-shared-and-wrapped-dirs")
+    # Uniqueness spans both directory kinds, not just one: a body collected
+    # only from WRAPPED_DIRS still lands in the same Chez source-directories
+    # namespace as one from SHARED_DIRS. twin-a and twin-b already hold one
+    # basename between them (the case above puts both under SHARED_DIRS);
+    # splitting them across the two keywords here is what proves the guard's
+    # body-collection loop still visits WRAPPED_DIRS -- a guard that only
+    # collected SHARED_DIRS bodies would glob twin-b, discard the result
+    # unused, and find nothing to complain about.
     byte_machine_portability_guard(
-      SHARED_DIRS "${fixture}/paired"
-      WRAPPED_DIRS "${fixture}/unpaired")
+      SHARED_DIRS "${fixture}/twin-a"
+      WRAPPED_DIRS "${fixture}/twin-b")
   else()
     message(FATAL_ERROR "byte-machine-spec: unknown case '${c}'")
   endif()
@@ -238,39 +218,26 @@ spec_check_equal("${dupes}" ""
   "no duplicates does not leak an ambient 'duplicates' variable")
 unset(duplicates)
 
-# --- Missing wrappers ------------------------------------------------------
-
-byte_machine_guard_missing_wrappers(missing "${fixture}/both.scm")
-spec_check_equal("${missing}" "" "a body with both wrappers is complete")
-
-byte_machine_guard_missing_wrappers(missing "${fixture}/chez-only.scm")
-spec_check_equal("${missing}" "${fixture}/chez-only.scm|${fixture}/chez-only.gambit.scm"
-  "a body with no Gambit wrapper is reported")
-
-byte_machine_guard_missing_wrappers(missing "${fixture}/neither.scm")
-list(LENGTH missing missing_count)
-spec_check_equal("${missing_count}" "2" "a body with no wrappers reports both")
-
 # --- The guard itself ------------------------------------------------------
 #
 # Each fragment names wording the module controls, so replacing a FATAL_ERROR
 # with a differently worded message is a failure rather than something that
-# passes on "an error happened". Four of them reach past the wording to the
-# text the diagnostic must interpolate -- the wrapper it should have demanded,
-# and the stray token it should have refused, named once where the parser left
-# it unparsed and once for each keyword that can absorb it -- because a guard
-# that checked the wrong thing would still be able to produce the first half of
-# any of those sentences. The two absorbed-token fragments differ only in which
-# keyword is reported about which token, and that is the point: each is
-# satisfied only by the half of the entry check that runs over its keyword.
+# passes on "an error happened". Most of them reach past the wording to the
+# text the diagnostic must interpolate -- the stray token it should have
+# refused, named once where the parser left it unparsed and once for each
+# keyword that can absorb it, and the basename it found repeated -- because a
+# guard that checked the wrong thing would still be able to produce the first
+# half of any of those sentences. The two absorbed-token fragments differ only
+# in which keyword is reported about which token, and that is the point: each
+# is satisfied only by the half of the entry check that runs over its keyword.
 #
 # These are regular expressions (spec_expect_rejected matches with MATCHES), so
 # every `.` in a filename is escaped: an unescaped one is a wildcard that would
-# also match, say, `twinxscm`. The `.*` in the wrapper fragment is the one
-# deliberate metacharacter, bridging two halves of a sentence whose middle
-# contains `Missing (body|wrapper):` -- `|` is this helper's own entry separator
-# and `()` are metacharacters, so that middle cannot be written out. Bridging is
-# safe because spec_flatten collapses the diagnostic to a single line first.
+# also match, say, `twinxscm`. The two `.*` fragments below (the directories
+# that contribute nothing) are the only place a deliberate metacharacter is
+# needed, bridging the fixed diagnostic text to a directory path this
+# specification does not otherwise name. Bridging is safe because spec_flatten
+# collapses the diagnostic to a single line first.
 
 spec_expect_all_rejected("${SPEC_SELF}"
   "guard-rejects-an-unexpected-argument|unexpected arguments to byte_machine_portability_guard: WRAPPED_DIR"
@@ -278,10 +245,9 @@ spec_expect_all_rejected("${SPEC_SELF}"
   "guard-rejects-a-misspelt-keyword-after-wrapped-dirs|WRAPPED_DIRS was given 'SHARED_DIR', which is not an existing directory"
   "guard-rejects-a-directory-that-contributes-nothing|contributed no shared body: .*/empty"
   "guard-rejects-a-nested-duplicate-basename|basenames must be unique across every shared body directory, but these repeat: twin\\.scm"
-  "guard-rejects-a-nested-missing-wrapper|every shared test body needs a wrapper for each runtime.*deep-body\\.gambit\\.scm"
   "guard-rejects-an-empty-glob|contributed no shared body: .*/empty"
   "guard-rejects-a-call-declaring-no-directories|was given no directories to check"
   "guard-rejects-a-duplicate-basename|basenames must be unique across every shared body directory, but these repeat: twin\\.scm"
-  "guard-rejects-a-missing-wrapper|every shared test body needs a wrapper for each runtime.*unpaired-body\\.gambit\\.scm")
+  "guard-rejects-a-duplicate-basename-spanning-shared-and-wrapped-dirs|basenames must be unique across every shared body directory, but these repeat: twin\\.scm")
 
 spec_finish("ByteMachinePortabilityGuard")
