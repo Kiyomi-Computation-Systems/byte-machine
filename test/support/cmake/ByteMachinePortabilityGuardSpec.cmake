@@ -105,9 +105,13 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
     # `paired` would repeat the basename `paired-body.scm` and a guard that
     # skipped the entry check would then die on the duplicate rule instead of
     # returning -- the case would pass for a reason that has nothing to do with
-    # what it is written to prove. With `empty`, a guard that skips the check
-    # globs one body from `paired/`, finds it unique, and prints the success
-    # banner.
+    # what it is written to prove. With `empty`, a guard that skips the entry
+    # check still does not reach a success banner: `SHARED_DIR` and `empty` are
+    # both absorbed into WRAPPED_DIRS, so the body-collection loop globs
+    # `SHARED_DIR` as a directory in its own right, finds nothing there, and
+    # dies on the per-directory "contributed no shared body" check instead --
+    # caught, but for a diagnostic that does not match the one this case
+    # declares, which is what the message assertion below actually proves.
     byte_machine_portability_guard(
       WRAPPED_DIRS "${fixture}/paired"
       SHARED_DIR "${fixture}/empty")

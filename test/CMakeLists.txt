@@ -241,13 +241,6 @@ function(byte_machine_wrong_fingerprint name out_var)
   set(${out_var} "${expect_file}" PARENT_SCOPE)
 endfunction()
 
-# Checked before any lane is registered, and before the working-directory
-# matrix's own fixture copies below: a colliding basename must stop the build
-# with this guard's own named diagnostic, not with a bare configure_file
-# error from a copy step that has no idea why the file it wanted collided
-# with another. This call used to sit after that copy step; moved here, a
-# colliding basename reports "shared body basenames must be unique..."
-# instead of a configure_file failure that names neither offender.
 # src/common holds bodies included by a library; test/common holds bodies
 # included by a program. Every body from either kind of directory shares one
 # basename namespace, which now spans the harness and src/ for the first
