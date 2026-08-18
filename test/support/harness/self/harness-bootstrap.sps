@@ -1,3 +1,11 @@
+;;; The bootstrap body, as a program. Merged from its .chez.sps wrapper by
+;;; the include collapse (decision 0006).
+;;;
+;;; harness-begin is deliberately not called: the bootstrap judges the
+;;; runner without using its suite lifecycle.
+
+(import (rnrs) (byte-machine test harness))
+
 ;;; Bootstrap verification of the runner's primitives.
 ;;;
 ;;; SHARED BODY: included verbatim by harness-bootstrap.chez.sps, its sole

@@ -177,7 +177,7 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--library-root" "${STAGE_DIR}/test/support/harness"
   "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
 
 set(RUNNER test/support/harness/byte-machine/test/harness.sls)
 set(CHEZ_ADAPTER test/support/harness/byte-machine/test/harness.sls)
@@ -186,7 +186,7 @@ set(LAUNCHER test/support/launchers/chez-source.ss)
 # --- Assertions ------------------------------------------------------------
 
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER} SPEC harness-self-tests.sps
   LABEL "runner: check passes whatever it is given"
   FIND [[(define (check what value)
   (harness-count-check!)
@@ -200,44 +200,44 @@ byte_machine_mutation(
 # built on this would print no FAIL line, count no failure, and exit 0 while
 # every assertion in it "failed".
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER} SPEC harness-self-tests.sps
   LABEL "runner: a false check counts but records no failure"
   FIND [[      (begin (harness-record-failure! what "expected a true value") #f)))]]
   REPLACE [[      #f))]])
 
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER} SPEC harness-self-tests.sps
   LABEL "runner: check-equal compares identity instead of structure"
   FIND [[  (if (equal? actual expected)]]
   REPLACE [[  (if (eq? actual expected)]])
 
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER} SPEC harness-self-tests.sps
   LABEL "runner: check-not-equal is no longer the inverse"
   FIND [[  (if (equal? actual unexpected)]]
   REPLACE [[  (if (not (equal? actual unexpected))]])
 
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER} SPEC harness-self-tests.sps
   LABEL "runner: check-fail records nothing"
   FIND [[  (harness-record-failure! what detail)
   #f)]]
   REPLACE [[  #f)]])
 
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER} SPEC harness-self-tests.sps
   LABEL "runner: check-raises accepts a thunk that returned normally"
   FIND [[      ((eq? (car outcome) 'returned)]]
   REPLACE [[      ((eq? (car outcome) 'never-happens)]])
 
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER} SPEC harness-self-tests.sps
   LABEL "runner: a failure never marks its case as failed"
   FIND [[  (set! harness-current-case-failed #t)]]
   REPLACE [[  (set! harness-current-case-failed #f)]])
 
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER} SPEC harness-self-tests.sps
   LABEL "runner: a duplicate case id is silently accepted, making one registration unreachable"
   FIND [[      ((harness-member? id harness-case-ids)]]
   REPLACE [[      (#f]])
@@ -247,7 +247,7 @@ byte_machine_mutation(
 # would mutate the arity rather than the classification, and the arity violation
 # is caught by a different assertion than the one this line claims to exercise.
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER} SPEC harness-self-tests.sps
   LABEL "runner: a raise inside a case is recorded as an error rather than that case's failure"
   FIND [[                   (harness-record-failure!
                     "case raised"
@@ -267,7 +267,7 @@ byte_machine_mutation(
 # to be witnessed on its own, and the group one stayed uncaught until
 # "a group re-raises its body's condition" was added to the self-tests.
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER} SPEC harness-self-tests.sps
   LABEL "runner: a group swallows its body's condition instead of re-raising it"
   FIND [[    (set! harness-group-stack (cdr harness-group-stack))
     (if (eq? (car outcome) 'raised)
@@ -277,7 +277,7 @@ byte_machine_mutation(
         (raise (car (cdr outcome)))]])
 
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER} SPEC harness-self-tests.sps
   LABEL "runner: with-cleanup swallows its body's condition instead of re-raising it"
   FIND [[             (adapter-describe-condition (car (cdr cleanup-outcome)))))))
     (if (eq? (car outcome) 'raised)
@@ -287,7 +287,7 @@ byte_machine_mutation(
         (raise (car (cdr outcome)))]])
 
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER} SPEC harness-self-tests.sps
   LABEL "runner: cleanup never runs"
   FIND [[    (let ((cleanup-outcome (guard (e (#t (list 'raised e)))
                              (list 'value (cleanup)))))]]
@@ -299,7 +299,7 @@ byte_machine_mutation(
 # line down, onto their own matching indentation; anchoring on those two lines
 # alone is what survives a further clause ever being added the same way again.
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER} SPEC harness-self-tests.sps
   LABEL "runner: a failure outranks a harness error in the exit status"
   FIND [[        ((> harness-error-count 0) harness-status-harness-error)
         ((> harness-failure-count 0) harness-status-failed)]]
@@ -315,7 +315,7 @@ byte_machine_mutation(
 # is left undefined by cmake_parse_arguments at the 3.26 floor this project
 # declares (CMP0174 is 3.31+), and REPLACE is required.
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER} SPEC harness-self-tests.sps
   LABEL "runner: a probe does not restore the state it displaced"
   FIND [[        (harness-restore-state! saved)
 ]]
@@ -327,7 +327,7 @@ byte_machine_mutation(
 # variable: harness-set-filter! and harness-begin both assign harness-filter,
 # and a bare pattern would start matching one of them after an innocuous edit.
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER} SPEC harness-self-tests.sps
   LABEL "runner: a probe inherits the ambient filter and skips its own cases"
   FIND [[  (set! harness-failures '())
   (set! harness-filter #f))]]
@@ -336,13 +336,13 @@ byte_machine_mutation(
 # --- Empty selection -------------------------------------------------------
 
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER} SPEC harness-self-tests.sps
   LABEL "runner: an empty selection is not diagnosed"
   FIND [[    ((> case-count 0) #f)]]
   REPLACE [[    ((> case-count -1) #f)]])
 
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER} SPEC harness-self-tests.sps
   LABEL "runner: a filtered-out run is diagnosed as having registered nothing"
   FIND [[    ((> skipped-count 0)]]
   REPLACE [[    (#f]])
@@ -350,7 +350,7 @@ byte_machine_mutation(
 # --- Output ----------------------------------------------------------------
 
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER} SPEC harness-self-tests.sps
   LABEL "runner: probe output suppression is removed"
   FIND [[(define (harness-quiet?) (> harness-probe-depth 0))]]
   REPLACE [[(define (harness-quiet?) #f)]]
@@ -368,7 +368,7 @@ byte_machine_mutation(
 # break that raises is caught. What no layer checks is that the line was
 # printed. Spec section 5.3 records the manual check that does.
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER} SPEC harness-self-tests.sps
   LABEL "runner: the value read for BYTE_MACHINE_TEST_VERBOSE is discarded"
   FIND [[    (set! harness-verbose (if (and v (not (string=? v ""))) #t #f)))]]
   REPLACE [[    (set! harness-verbose #f))]]
@@ -376,7 +376,7 @@ byte_machine_mutation(
     "the verify command that judges this mutation does not set the variable, so both runs take the same branch -- harness-verbose ends up #f either way -- and the two are byte-identical, not merely indistinguishable by exit status. In a process that does set it the whole difference is one printed line per passing case: no counter, no case count, no status moves, and this suite judges by exit status. byte-machine.harness.verbose.chez.source proves the read happens and does not raise; that the value read is honoured is covered by the manual check recorded in spec section 5.3 -- either self-tests lane with BYTE_MACHINE_TEST_VERBOSE=1 prints one pass line per case and none without it")
 
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-self-tests.chez.sps
+  FILE ${RUNNER} SPEC harness-self-tests.sps
   LABEL "runner: a passing case is never announced under verbose"
   FIND [[                 (if harness-verbose
                      (harness-say (string-append "byte-machine-harness: pass " id))))]]
@@ -387,7 +387,7 @@ byte_machine_mutation(
 # --- The Chez adapter's export list ----------------------------------------
 
 byte_machine_mutation(
-  FILE ${CHEZ_ADAPTER} SPEC harness-self-tests.chez.sps
+  FILE ${CHEZ_ADAPTER} SPEC harness-self-tests.sps
   LABEL "chez adapter: an exported adapter name is dropped"
   FIND [[    adapter-os adapter-architecture adapter-execution-mode]]
   REPLACE [[    adapter-architecture adapter-execution-mode]])
@@ -403,7 +403,7 @@ byte_machine_mutation(
 # than remembered, and so the day one of them acquires a caller outside the
 # library, this line fails.
 byte_machine_mutation(
-  FILE ${CHEZ_ADAPTER} SPEC harness-self-tests.chez.sps
+  FILE ${CHEZ_ADAPTER} SPEC harness-self-tests.sps
   LABEL "chez adapter: an export used only inside the runner section is dropped"
   FIND [[    harness-begin harness-finish harness-summary harness-exit-status]]
   REPLACE [[    harness-begin harness-finish harness-exit-status]]
@@ -417,7 +417,7 @@ byte_machine_mutation(
 # through it -- is the only thing left that makes dropping this export
 # visible.
 byte_machine_mutation(
-  FILE ${CHEZ_ADAPTER} SPEC harness-self-tests.chez.sps
+  FILE ${CHEZ_ADAPTER} SPEC harness-self-tests.sps
   LABEL "chez adapter: adapter-file-bytes is dropped from the export list"
   FIND [[    adapter-value->string adapter-describe-condition adapter-file-bytes]]
   REPLACE [[    adapter-value->string adapter-describe-condition]])
@@ -447,7 +447,7 @@ string(JOIN "|" EMPTY_SELECTION_COMMAND
   "--library-root" "${STAGE_DIR}/test/support/harness"
   "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-empty-selection.chez.sps")
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-empty-selection.sps")
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${CMAKE_COMMAND}" -E env
@@ -458,7 +458,7 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   -P "${STAGE_DIR}/cmake/ByteMachineExpectExit.cmake")
 
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-empty-selection.chez.sps
+  FILE ${RUNNER} SPEC harness-empty-selection.sps
   LABEL "runner: harness-begin ignores BYTE_MACHINE_TEST_FILTER"
   FIND [[  (set! harness-filter
         (harness-normalize-filter
@@ -485,10 +485,10 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--library-root" "${STAGE_DIR}/test/support/harness"
   "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps")
 
 byte_machine_mutation(
-  FILE ${RUNNER} SPEC harness-bootstrap.chez.sps
+  FILE ${RUNNER} SPEC harness-bootstrap.sps
   LABEL "runner: a recorded failure is never counted, so a failing suite exits 0"
   FIND [[  (set! harness-failure-count (+ harness-failure-count 1))]]
   REPLACE [[  (set! harness-failure-count harness-failure-count)]])
@@ -526,7 +526,7 @@ string(JOIN "|" LAUNCHER_ABSENT_GUARD_COMMAND
   "--library-root" "${STAGE_DIR}/test/support/harness"
   "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${ABSENT_GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps")
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${CMAKE_COMMAND}"
@@ -558,7 +558,7 @@ string(JOIN "|" LAUNCHER_DIRTY_GUARD_COMMAND
   "--library-root" "${STAGE_DIR}/test/support/harness"
   "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${DIRTY_GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps")
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${CMAKE_COMMAND}"
@@ -601,7 +601,7 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--library-root" "${STAGE_DIR}/test/support/harness"
   "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${COMPILE_GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps")
 
 byte_machine_mutation(
   FILE ${LAUNCHER} SPEC byte-machine.harness.bootstrap.chez.source
@@ -769,7 +769,7 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--library-root" "${POISON_ROOT}"
   "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${POISON_GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
 
 # EXPECT_OUTPUT_MATCHES turns the paragraph above's claim -- that the mutated
 # run "says so in its banner, its FAIL-CONTEXT line, and its summary" -- into
@@ -779,7 +779,7 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 # unrelated crash) is reported caught-for-the-wrong-reason instead of caught.
 byte_machine_mutation(
   FILE ${LAUNCHER}
-  SPEC "harness-self-tests.chez.sps against a library root holding a compiled object"
+  SPEC "harness-self-tests.sps against a library root holding a compiled object"
   LABEL "launcher: the library root is no longer paired with the object guard"
   FIND [[(library-directories
  (map (lambda (root) (cons root object-guard-dir)) library-roots))]]
@@ -803,12 +803,12 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--library-root" "${STAGE_DIR}/src"
   "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/common/placeholder-tests.chez.sps")
+  "--program" "${STAGE_DIR}/test/common/placeholder-tests.sps")
 
 byte_machine_mutation_reset()
 
 byte_machine_mutation(
-  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.chez.sps
+  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.sps
   LABEL "placeholder: anything is a vector"
   FIND [[  (and (vector? x)]]
   REPLACE [[  (and #t]])
@@ -818,19 +818,19 @@ byte_machine_mutation(
 # length-3 vector carrying the real tag -- reachable through vector-ref on a
 # legitimately built placeholder, which is why this is witnessable at all.
 byte_machine_mutation(
-  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.chez.sps
+  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.sps
   LABEL "placeholder: the length is not checked at all"
   FIND [[       (= (vector-length x) 2)]]
   REPLACE [[       #t]])
 
 byte_machine_mutation(
-  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.chez.sps
+  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.sps
   LABEL "placeholder: the length check accepts the wrong length"
   FIND [[       (= (vector-length x) 2)]]
   REPLACE [[       (= (vector-length x) 3)]])
 
 byte_machine_mutation(
-  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.chez.sps
+  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.sps
   LABEL "placeholder: the tag is not checked"
   FIND [[       (eq? (vector-ref x 0) placeholder-tag)))]]
   REPLACE [[       #t))]])
@@ -839,13 +839,13 @@ byte_machine_mutation(
 # assertion in the suite still passes except the one written for this, and
 # slice 4's identity test would become incapable of failing.
 byte_machine_mutation(
-  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.chez.sps
+  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.sps
   LABEL "placeholder: the tag is an interned symbol"
   FIND [[(define placeholder-tag (vector 'byte-machine-placeholder))]]
   REPLACE [[(define placeholder-tag 'byte-machine-placeholder)]])
 
 byte_machine_mutation(
-  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.chez.sps
+  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.sps
   LABEL "placeholder: the marker is allocated per call"
   FIND [[(define (placeholder-marker)
   placeholder-marker-object)]]
@@ -856,51 +856,61 @@ byte_machine_mutation(
 # emptied that invocation's distinction -- harness.sls stopped including
 # anything, and pass 1's own --source-dir substitution (shared/ -> self/) made
 # source-dirs and (path-directory program) the same directory for
-# harness-self-tests.chez.sps, so dropping either half of the append lost
+# harness-self-tests.sps, so dropping either half of the append lost
 # nothing there.
 #
-# Task 6 (the src collapse) narrowed what these two REPLACEs can still prove.
-# --source-dir now carries one entry, test/support/harness/self (Step 3's
-# transitional value -- the flag stays required until Task 8 removes it, but
-# nothing this invocation includes lives there); --program's own directory is
-# test/common. MEASURED 2026-08-18, against the collapsed tree: "the program's
-# own directory is off the source path" still starves this program's own
-# (include "placeholder-tests.scm") and is caught exactly as before --
-# "Exception in include: file "placeholder-tests.scm" not found in source
-# directories", exit 255. "the shared body directory is off the source path"
-# no longer starves anything: the include it used to starve -- the deleted
-# owner wrapper's own (include "placeholder.scm"), git rm'd in this task's
-# Step 1 -- does not exist any more; this task inlined that body straight
-# into the library src/byte-machine/placeholder.sls now owns, and there is
-# no other include left for source-dirs to reach. The mutant and the baseline are
-# byte-identical, both exit 0, so this mutation is declared EXPECT_SURVIVES
-# below instead of failing the suite as uncaught. Both FIND texts, and the
-# --source-dir flag they read, retire outright in Task 8, when
-# (source-directories '()) deletes them.
+# Task 6 (the src collapse) narrowed what these two REPLACEs could still
+# prove. --source-dir carried one entry, test/support/harness/self (Step 3's
+# transitional value); --program's own directory was test/common. MEASURED
+# then, against the src-collapsed tree: "the program's own directory is off
+# the source path" still starved this program's own (include
+# "placeholder-tests.scm") and was caught -- "Exception in include: file
+# "placeholder-tests.scm" not found in source directories", exit 255. "the
+# shared body directory is off the source path" no longer starved anything,
+# because the include it used to starve -- the deleted owner wrapper's own
+# include of placeholder.scm, git rm'd in Task 6's Step 1 -- no longer
+# existed: that task inlined the body straight into
+# src/byte-machine/placeholder.sls, leaving no second include for
+# source-dirs to reach. Declared EXPECT_SURVIVES for that reason; its
+# sibling stayed caught, for one task more.
 #
-# --source-dir's one remaining entry is not mere scaffolding meanwhile: it
-# puts real .scm bodies on the source path ahead of the program's own
-# directory in the append, i.e. at the launcher's highest search precedence --
-# safe today because no basename in harness/self (harness-bootstrap.scm,
-# harness-duplicate-case.scm, harness-empty-selection.scm, harness-failing.scm,
-# harness-self-tests.scm, harness-unreached-provenance.scm) collides with
-# placeholder-tests.scm (test/common), the one body this invocation still
-# includes. That is a fact held by inspection now that the repository-wide
-# guard is gone (Task 5), not by any check -- and one that only has to hold
-# until Task 8 removes the flag.
+# Task 7 (this task, the program merges) removes what Task 6 left standing.
+# placeholder-tests.chez.sps -- the wrapper whose own (include
+# "placeholder-tests.scm") was the last thing "the program's own directory is
+# off the source path" could still starve -- is deleted in Step 1; its body
+# is now placeholder-tests.sps itself, with no include form anywhere in it.
+# MEASURED 2026-08-18, against the merged tree: the mutation runner reports
+# this mutation UNCAUGHT -- "placeholder-tests.sps still passes with
+# test/support/launchers/chez-source.ss broken. That specification is not
+# testing this behaviour." -- because nothing in this invocation calls
+# include any more, so dropping (path-directory program) from the append is
+# now unobservable, exactly as dropping source-dirs already was. Both
+# mutations are declared EXPECT_SURVIVES below for that one shared reason.
+#
+# --source-dir's one remaining entry, and --program's own directory, are
+# therefore inert rather than merely safe: self/ carries no .scm file at all
+# after this task -- every body that lived there became a .sps program in
+# Step 1 -- so there is no basename left for either source-directories entry
+# to resolve, in the mutant or the baseline. The precedence question the
+# pre-Task-7 version of this comment answered by inspection does not arise
+# any more; that sentence, like the flag it described, expires in Task 8,
+# when (source-directories '()) deletes both entries and both FIND texts
+# alike.
 byte_machine_mutation(
-  FILE ${LAUNCHER} SPEC placeholder-tests.chez.sps
+  FILE ${LAUNCHER} SPEC placeholder-tests.sps
   LABEL "launcher: the shared body directory is off the source path"
   FIND [[(source-directories (append source-dirs (list (path-directory program))))]]
   REPLACE [[(source-directories (list (path-directory program)))]]
   EXPECT_SURVIVES
-    "measured 2026-08-18, after this task's own collapse: this REPLACE drops source-dirs -- by now just test/support/harness/self -- from the append, but nothing on the source path needs it any more. The include this mutation used to starve was the deleted owner wrapper's own include of placeholder.scm, git rm'd in this task's Step 1; this task (Task 6 of the include collapse) inlined that body straight into the library, so src/byte-machine/placeholder.sls includes nothing and there is no second include left for source-dirs to reach. The only include remaining in this invocation is placeholder-tests.chez.sps's own include of placeholder-tests.scm, which resolves through the program's own directory -- the half of the append this REPLACE keeps -- so the mutant and the baseline are byte-identical and both exit 0. The FIND text itself, and the --source-dir flag it reads, retire outright in Task 8's (source-directories '()).")
+    "measured 2026-08-18: this REPLACE drops source-dirs -- by now just test/support/harness/self -- from the append. Task 6 inlined placeholder.scm into src/byte-machine/placeholder.sls, leaving no include there for source-dirs to reach; Task 7 (this task) then deleted placeholder-tests.chez.sps, the wrapper whose own include of placeholder-tests.scm was the append's other half's last reason to matter -- the merged placeholder-tests.sps that replaced it contains no include form at all. With nothing in this invocation calling include any more, the mutant and the baseline are byte-identical and both exit 0. The FIND text itself, and the --source-dir flag it reads, retire outright in Task 8's (source-directories '()).")
 
 byte_machine_mutation(
-  FILE ${LAUNCHER} SPEC placeholder-tests.chez.sps
+  FILE ${LAUNCHER} SPEC placeholder-tests.sps
   LABEL "launcher: the program's own directory is off the source path"
   FIND [[(source-directories (append source-dirs (list (path-directory program))))]]
-  REPLACE [[(source-directories source-dirs)]])
+  REPLACE [[(source-directories source-dirs)]]
+  EXPECT_SURVIVES
+    "measured 2026-08-18, after this task's own merge: through Task 6 this REPLACE -- dropping (path-directory program), placeholder-tests.sps's own directory -- still starved placeholder-tests.chez.sps's own include of placeholder-tests.scm and was caught at exit 255. Task 7 (this task) deletes that wrapper in Step 1 and folds its body into placeholder-tests.sps directly, which contains no include form. The mutation runner now reports it UNCAUGHT: \"placeholder-tests.sps still passes with test/support/launchers/chez-source.ss broken. That specification is not testing this behaviour.\" Declared a survivor for the same reason as its sibling above, rather than left failing the suite. The FIND text itself, and the --source-dir flag it reads, retire outright in Task 8's (source-directories '()).")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -917,7 +927,7 @@ set(LAUNCHER_BASE_ARGS
   "--library-root" "${STAGE_DIR}/test/support/harness"
   "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps")
 
 # byte_machine_slice3_launcher_pass(<lane> <label> <find> <replace>
 #                                   <expect_output_matches> <arg>...)
@@ -997,7 +1007,7 @@ byte_machine_slice3_launcher_pass(
   [[   (if #f]]
   "bootstrap: failures=0"
   ${LAUNCHER_BASE_ARGS}
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
 
 # SPEC must name a lane `ctest -N` actually lists: it is the transcript name a
 # real invocation is judged under, and once a verify command is set (as every
@@ -1026,7 +1036,7 @@ byte_machine_slice3_launcher_pass(
   [[library \(byte-machine test harness\) not found]]
   "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps")
 
 # Four more: one per entry in required-flags. The check above is one decision,
 # but the list it walks is four, and an entry dropped from it is invisible to
@@ -1050,7 +1060,7 @@ byte_machine_slice3_launcher_pass(
   "Exception in car"
   "--library-root" "${STAGE_DIR}/test/support/harness"
   "--source-dir" "${STAGE_DIR}/test/support/harness/self"
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps")
 
 byte_machine_slice3_launcher_pass(
   byte-machine.harness.launcher-no-library-root.chez.source
@@ -1060,7 +1070,7 @@ byte_machine_slice3_launcher_pass(
   [[library \(byte-machine test harness\) not found]]
   "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps")
 
 # --source-dir is the last entry in required-flags, so its source line ends
 # with two closing parens -- the list's and the define's -- rather than one.
@@ -1079,7 +1089,7 @@ byte_machine_slice3_launcher_pass(
 # included harness-runner.scm, so an invocation missing --source-dir starved
 # THAT include and crashed before the program ever ran. Task 4 inlined the
 # runner into harness.sls, so the library no longer includes anything; the
-# only include left in this invocation is harness-bootstrap.chez.sps's own
+# only include left in this invocation is harness-bootstrap.sps's own
 # "harness-bootstrap.scm", and the launcher always appends the program's own
 # directory to source-directories (see the launcher's comment on that line)
 # -- which is exactly where that file lives. So the mutant now runs the
@@ -1096,7 +1106,7 @@ byte_machine_slice3_launcher_pass(
   "bootstrap: failures=0"
   "--library-root" "${STAGE_DIR}/test/support/harness"
   "--object-guard" "${GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.chez.sps")
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps")
 
 # Two more, for single-valued-flags. --object-guard has never been exercised as
 # a repeated flag: the general check just above is witnessed only through
@@ -1142,7 +1152,7 @@ byte_machine_slice3_launcher_pass(
   (list "--object-guard"))]]
   "bootstrap: failures=0"
   ${LAUNCHER_BASE_ARGS}
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
 
 # --- Pass 19: the consumer body's decisions ---------------------------------
 #
@@ -1159,7 +1169,7 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--library-root" "${STAGE_DIR}/src"
   "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/common/placeholder-identity-tests.chez.sps")
+  "--program" "${STAGE_DIR}/test/common/placeholder-identity-tests.sps")
 
 byte_machine_mutation_reset()
 
@@ -1171,13 +1181,13 @@ byte_machine_mutation_reset()
 # this comparison-based witness was found. See section 5.3 of the slice-4
 # design.
 byte_machine_mutation(
-  FILE ${CONSUMER_BODY} SPEC placeholder-identity-tests.chez.sps
+  FILE ${CONSUMER_BODY} SPEC placeholder-identity-tests.sps
   LABEL "consumer: the argument is not checked at all"
   FIND [[  (if (placeholder? p)]]
   REPLACE [[  (if #f]])
 
 byte_machine_mutation(
-  FILE ${CONSUMER_BODY} SPEC placeholder-identity-tests.chez.sps
+  FILE ${CONSUMER_BODY} SPEC placeholder-identity-tests.sps
   LABEL "consumer: the recognised branch yields the marker, not the value"
   FIND [[      (placeholder-value p)]]
   REPLACE [[      (placeholder-marker)]])
@@ -1186,7 +1196,7 @@ byte_machine_mutation(
 # still works, and the outcome is merely a different object that prints the
 # same. This is the one an eq?-free test would miss entirely.
 byte_machine_mutation(
-  FILE ${CONSUMER_BODY} SPEC placeholder-identity-tests.chez.sps
+  FILE ${CONSUMER_BODY} SPEC placeholder-identity-tests.sps
   LABEL "consumer: the outcome is a lookalike, not the owner's singleton"
   FIND [[      (placeholder-marker)))]]
   REPLACE [[      (vector 'byte-machine-marker)))]])
@@ -1213,10 +1223,10 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--library-root" "${STAGE_DIR}/src"
   "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/common/placeholder-identity-tests.chez.sps")
+  "--program" "${STAGE_DIR}/test/common/placeholder-identity-tests.sps")
 
 byte_machine_mutation(
-  FILE ${CONSUMER_BODY} SPEC placeholder-identity-tests.chez.sps
+  FILE ${CONSUMER_BODY} SPEC placeholder-identity-tests.sps
   LABEL "consumer library: inlines duplicate definitions instead of importing the owner"
   FIND [[  (import (rnrs) (byte-machine placeholder))]]
   REPLACE [[  (import (rnrs))
@@ -1247,7 +1257,7 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--library-root" "${STAGE_DIR}/test/support/harness"
   "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
 
 byte_machine_mutation_reset()
 
@@ -1256,25 +1266,25 @@ byte_machine_mutation_reset()
 # literals could survive if the literals happened not to include a NUL --
 # which is why they do.
 byte_machine_mutation(
-  FILE ${FINGERPRINT} SPEC harness-self-tests.chez.sps
+  FILE ${FINGERPRINT} SPEC harness-self-tests.sps
   LABEL "fingerprint: leading zero bytes stop being significant"
   FIND [[                           (+ (bytevector-u8-ref bv i) 1))]]
   REPLACE [[                           (bytevector-u8-ref bv i))]])
 
 byte_machine_mutation(
-  FILE ${FINGERPRINT} SPEC harness-self-tests.chez.sps
+  FILE ${FINGERPRINT} SPEC harness-self-tests.sps
   LABEL "fingerprint: the seed changes"
   FIND [[(define harness-fingerprint-seed 14695981039346656)]]
   REPLACE [[(define harness-fingerprint-seed 14695981039346657)]])
 
 byte_machine_mutation(
-  FILE ${FINGERPRINT} SPEC harness-self-tests.chez.sps
+  FILE ${FINGERPRINT} SPEC harness-self-tests.sps
   LABEL "fingerprint: the multiplier changes"
   FIND [[(define harness-fingerprint-multiplier 1000003)]]
   REPLACE [[(define harness-fingerprint-multiplier 1000033)]])
 
 byte_machine_mutation(
-  FILE ${FINGERPRINT} SPEC harness-self-tests.chez.sps
+  FILE ${FINGERPRINT} SPEC harness-self-tests.sps
   LABEL "fingerprint: the modulus changes"
   FIND [[(define harness-fingerprint-modulus 2305843009213693951) ; 2^61 - 1]]
   REPLACE [[(define harness-fingerprint-modulus 2305843009213693907)]])
@@ -1282,7 +1292,7 @@ byte_machine_mutation(
 # Combining becomes a sum, so order stops mattering and the two combine cases
 # collapse to one value.
 byte_machine_mutation(
-  FILE ${FINGERPRINT} SPEC harness-self-tests.chez.sps
+  FILE ${FINGERPRINT} SPEC harness-self-tests.sps
   LABEL "fingerprint: combining stops being order sensitive"
   FIND [[              (modulo (+ (* h harness-fingerprint-multiplier) (+ (car rest) 1))]]
   REPLACE [[              (modulo (+ h (+ (car rest) 1))]])
@@ -1314,10 +1324,10 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--library-root" "${STAGE_DIR}/test/support/harness"
   "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
 
 byte_machine_mutation(
-  FILE ${FINGERPRINT} SPEC harness-self-tests.chez.sps
+  FILE ${FINGERPRINT} SPEC harness-self-tests.sps
   LABEL "fingerprint: hex digits become uppercase"
   FIND "${HEX_MUTATION_FIND}"
   REPLACE "${HEX_MUTATION_REPLACE}"
@@ -1359,7 +1369,7 @@ string(JOIN "|" PROVENANCE_MISMATCH_COMMAND
   "--library-root" "${STAGE_DIR}/test/support/harness"
   "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${CMAKE_COMMAND}"
@@ -1425,7 +1435,7 @@ string(JOIN "|" PROVENANCE_ABSENT_COMMAND
   "--library-root" "${STAGE_DIR}/test/support/harness"
   "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${CMAKE_COMMAND}"
@@ -1504,7 +1514,7 @@ string(JOIN "|" PROVENANCE_UNCALLED_COMMAND
   "--library-root" "${STAGE_DIR}/test/support/harness"
   "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.chez.sps")
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${CMAKE_COMMAND}"
@@ -1547,7 +1557,7 @@ string(JOIN "|" PROVENANCE_REACHABILITY_COMMAND
   "--library-root" "${STAGE_DIR}/test/support/harness"
   "--source-dir" "${STAGE_DIR}/test/support/harness/self"
   "--object-guard" "${GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/support/harness/self/harness-unreached-provenance.chez.sps")
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-unreached-provenance.sps")
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${CMAKE_COMMAND}"

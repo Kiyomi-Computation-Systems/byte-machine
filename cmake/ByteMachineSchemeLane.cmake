@@ -76,11 +76,9 @@ function(byte_machine_chez_aot_paths name program out_object_dir out_compiled)
   string(REPLACE "." "_" name_key "${name}")
   set(dir "${BYTE_MACHINE_CHEZ_OBJECT_ROOT}/${name_key}")
   set(${out_object_dir} "${dir}" PARENT_SCOPE)
-  # NAME_WLE, not NAME_WE: NAME_WE strips the longest extension, so
-  # harness-self-tests.chez.sps would yield the bare stem harness-self-tests,
-  # dropping which runtime the artifact was built from. NAME_WLE keeps the
-  # .chez segment in the artifact's filename, one less thing a reader of the
-  # object tree has to reconstruct from the directory name alone.
+  # NAME_WLE strips one extension: harness-self-tests.sps yields
+  # harness-self-tests. (The .chez filename infix this comment once preserved
+  # retired with the merged wrappers -- decision 0006.)
   get_filename_component(stem "${program}" NAME_WLE)
   set(${out_compiled} "${dir}/${stem}.so" PARENT_SCOPE)
 endfunction()

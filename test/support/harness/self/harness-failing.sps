@@ -1,3 +1,10 @@
+;;; The failing body, as a program. Merged from its .chez.sps wrapper by the
+;;; include collapse (decision 0006).
+
+(import (rnrs) (byte-machine test harness))
+
+(harness-begin "harness.failing")
+
 ;;; Deliberately fails one assertion so the process exits with status 1.
 ;;;
 ;;; A program cannot report its own exit status, so this body only fails; the
@@ -8,3 +15,5 @@
 (harness-case "an assertion that is meant to fail"
   (lambda ()
     (check "this check fails on purpose" #f)))
+
+(harness-finish)

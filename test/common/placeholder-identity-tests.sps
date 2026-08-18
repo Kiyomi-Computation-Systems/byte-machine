@@ -1,3 +1,15 @@
+;;; The cross-library identity tests, as a program. Merged from its
+;;; .chez.sps wrapper by the include collapse (decision 0006). Both
+;;; libraries are imported here, never copied: importing the owner is the
+;;; claim under test.
+
+(import (rnrs)
+        (byte-machine test harness)
+        (byte-machine placeholder)
+        (byte-machine placeholder-consumer))
+
+(harness-begin "portability.placeholder-identity")
+
 ;;; Cross-library identity tests. Milestone 0 slice 4, deliverable D3.
 ;;;
 ;;; SHARED BODY: included verbatim by placeholder-identity-tests.chez.sps, its
@@ -32,3 +44,5 @@
         ;; silently depend on the recognition claim above already holding.
         (check "the consumer's outcome is the owner's own object"
                (eq? (consume 7) (placeholder-marker)))))))
+
+(harness-finish)

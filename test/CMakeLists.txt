@@ -237,9 +237,9 @@ endfunction()
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.failing-body.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.chez.sps"
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.sps"
   SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.scm"
+                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.sps"
   EXPECT_EXIT 1
   TIMEOUT 120
   LABELS expected-red)
@@ -249,9 +249,9 @@ byte_machine_add_scheme_lane(
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.bootstrap.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
   SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.scm"
+                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
   TIMEOUT 120)
 
 # The runner tested with the runner. Safe only because the bootstrap already
@@ -260,9 +260,9 @@ byte_machine_add_scheme_lane(
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.self.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.scm"
+                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   TIMEOUT 120)
 
 # A duplicate id is a defect in the suite, not a failing assertion: one
@@ -270,9 +270,9 @@ byte_machine_add_scheme_lane(
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.duplicate-case.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-duplicate-case.chez.sps"
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-duplicate-case.sps"
   SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-duplicate-case.scm"
+                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-duplicate-case.sps"
   EXPECT_EXIT 2
   TIMEOUT 120
   LABELS expected-red)
@@ -282,9 +282,9 @@ byte_machine_add_scheme_lane(
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.empty-selection.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-empty-selection.chez.sps"
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-empty-selection.sps"
   SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-empty-selection.scm"
+                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-empty-selection.sps"
   EXPECT_EXIT 2
   TIMEOUT 120
   LABELS expected-red
@@ -313,9 +313,9 @@ byte_machine_add_scheme_lane(
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.verbose.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.scm"
+                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   TIMEOUT 120
   ENVIRONMENT "BYTE_MACHINE_TEST_VERBOSE=1")
 
@@ -372,7 +372,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
             "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_ABSENT_GUARD_DIR}"
-            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
     EXPECT_EXIT 2
     TIMEOUT 120
     LABELS expected-red
@@ -385,7 +385,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
             "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_DIRTY_GUARD_DIR}"
-            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
     EXPECT_EXIT 2
     TIMEOUT 120
     LABELS expected-red
@@ -403,7 +403,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
             "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
             "--librarie-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
     EXPECT_EXIT 2
     TIMEOUT 120
     LABELS expected-red
@@ -430,8 +430,8 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
             "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
-            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
-            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
     EXPECT_EXIT 2
     TIMEOUT 120
     LABELS expected-red
@@ -449,7 +449,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
             "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
-            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
     EXPECT_EXIT 2
     TIMEOUT 120
     LABELS expected-red
@@ -464,7 +464,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
-            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
     EXPECT_EXIT 2
     TIMEOUT 120
     LABELS expected-red
@@ -476,7 +476,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
-            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
     EXPECT_EXIT 2
     TIMEOUT 120
     LABELS expected-red
@@ -488,7 +488,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
             "--source-dir" "${BYTE_MACHINE_HARNESS_SELF_DIR}"
-            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
     EXPECT_EXIT 2
     TIMEOUT 120
     LABELS expected-red
@@ -527,7 +527,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
             --library-root "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}"
             --object-dir "${CMAKE_BINARY_DIR}"
             --source-dir "${BYTE_MACHINE_HARNESS_SELF_DIR}"
-            --program "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            --program "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
             --output "${CMAKE_BINARY_DIR}/unused.so"
     EXPECT_EXIT 2
     TIMEOUT 60
@@ -546,7 +546,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
             "${BYTE_MACHINE_HARNESS_CHEZ_AOT_LAUNCHER}"
             --object-dir "${CMAKE_BINARY_DIR}"
             --source-guard "${BYTE_MACHINE_HARNESS_DIRTY_GUARD_DIR}"
-            --program "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            --program "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
     EXPECT_EXIT 2
     TIMEOUT 60
     LABELS expected-red)
@@ -585,10 +585,10 @@ endif()
 byte_machine_add_scheme_lane(
   NAME byte-machine.portability.placeholder.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.chez.sps"
+  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.sps"
   SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
                 "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder.sls"
-                "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.scm"
+                "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.sps"
   TIMEOUT 120)
 
 # --- Cross-library identity ------------------------------------------------
@@ -606,11 +606,11 @@ byte_machine_add_scheme_lane(
 byte_machine_add_scheme_lane(
   NAME byte-machine.portability.placeholder-identity.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.chez.sps"
+  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.sps"
   SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
                 "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder.sls"
                 "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder-consumer.sls"
-                "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.scm"
+                "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.sps"
   TIMEOUT 120)
 
 # --- Provenance ------------------------------------------------------------
@@ -627,9 +627,9 @@ byte_machine_add_scheme_lane(
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.provenance.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.scm"
+                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   WRONG_FINGERPRINT
   EXPECT_EXIT 3
   TIMEOUT 120
@@ -647,9 +647,9 @@ byte_machine_add_scheme_lane(
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.provenance-absent-expectation.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.scm"
+                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   EXPECT_EXIT 3
   TIMEOUT 120
   LABELS expected-red
@@ -660,9 +660,9 @@ byte_machine_add_scheme_lane(
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.provenance-missing-body.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.scm"
+                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   EXPECT_EXIT 3
   TIMEOUT 120
   LABELS expected-red
@@ -684,9 +684,9 @@ byte_machine_add_scheme_lane(
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.unreached-provenance.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.chez.sps"
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.sps"
   SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.scm"
+                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.sps"
   EXPECT_EXIT 3
   TIMEOUT 120
   LABELS expected-red)

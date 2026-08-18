@@ -1,3 +1,12 @@
+;;; The placeholder tests, as a program. Merged from its .chez.sps wrapper by
+;;; the include collapse (decision 0006).
+
+(import (rnrs)
+        (byte-machine test harness)
+        (byte-machine placeholder))
+
+(harness-begin "portability.placeholder")
+
 ;;; Shared tests for (byte-machine placeholder).
 ;;;
 ;;; SHARED BODY: included verbatim by placeholder-tests.chez.sps, its sole
@@ -50,3 +59,5 @@
       (lambda ()
         (check "eq? to itself across two calls"
                (eq? (placeholder-marker) (placeholder-marker)))))))
+
+(harness-finish)

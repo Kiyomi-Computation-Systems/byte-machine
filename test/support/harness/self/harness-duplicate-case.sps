@@ -1,3 +1,10 @@
+;;; The duplicate-case body, as a program. Merged from its .chez.sps wrapper
+;;; by the include collapse (decision 0006).
+
+(import (rnrs) (byte-machine test harness))
+
+(harness-begin "harness.duplicate-case")
+
 ;;; Triggers a harness error so the process exits with status 2.
 ;;;
 ;;; A duplicate case id means one registration silently became unreachable,
@@ -7,3 +14,5 @@
 
 (harness-case "duplicated" (lambda () (check "this one runs" #t)))
 (harness-case "duplicated" (lambda () (check "this one never runs" #t)))
+
+(harness-finish)

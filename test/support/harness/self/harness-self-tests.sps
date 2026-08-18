@@ -1,3 +1,10 @@
+;;; The runner's self-tests, as a program. Merged from its .chez.sps wrapper
+;;; by the include collapse (decision 0006).
+
+(import (rnrs) (byte-machine test harness))
+
+(harness-begin "harness.self")
+
 ;;; Self-tests for the byte-machine private test runner.
 ;;;
 ;;; SHARED BODY: included verbatim by harness-self-tests.chez.sps, its sole
@@ -633,3 +640,5 @@
       (lambda ()
         (check "absent" (not (harness-provenance-reachability-diagnosis #f #f)))
         (check "empty" (not (harness-provenance-reachability-diagnosis "" #f)))))))
+
+(harness-finish)

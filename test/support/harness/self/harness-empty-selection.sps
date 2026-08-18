@@ -1,3 +1,10 @@
+;;; The empty-selection body, as a program. Merged from its .chez.sps
+;;; wrapper by the include collapse (decision 0006).
+
+(import (rnrs) (byte-machine test harness))
+
+(harness-begin "harness.empty-selection")
+
 ;;; Registers one case that the ambient filter cannot select, so the run
 ;;; selects nothing and must exit 2.
 ;;;
@@ -6,3 +13,5 @@
 ;;; arrives from BYTE_MACHINE_TEST_FILTER, set by this lane's registration.
 
 (harness-case "never-selected" (lambda () (check "unreachable" #t)))
+
+(harness-finish)
