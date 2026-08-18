@@ -105,6 +105,16 @@ set(BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT "${BYTE_MACHINE_HARNESS_DIR}/gambit
 set(BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER
     "${CMAKE_CURRENT_LIST_DIR}/support/launchers/chez-source.ss")
 
+# Per-runtime, per-machine object roots for the AOT lane. Keyed this way so a
+# parallel build cannot race and an object built by one Chez is never loaded by
+# another; nothing is written into the source tree.
+set(BYTE_MACHINE_CHEZ_OBJECT_ROOT
+    "${CMAKE_BINARY_DIR}/chez-objects/${BYTE_MACHINE_CHEZ_VERSION}/${BYTE_MACHINE_CHEZ_MACHINE_TYPE}")
+set(BYTE_MACHINE_HARNESS_CHEZ_AOT_LAUNCHER
+    "${CMAKE_CURRENT_LIST_DIR}/support/launchers/chez-aot.ss")
+set(BYTE_MACHINE_HARNESS_CHEZ_COMPILE_LAUNCHER
+    "${CMAKE_CURRENT_LIST_DIR}/support/launchers/chez-compile.ss")
+
 # The object guard is what makes the Chez source lane honest: Chez looks for a
 # compiled library only in the object half of a library-directories pair, so
 # pairing the source root with a directory that is always empty makes a stale

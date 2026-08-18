@@ -58,42 +58,102 @@ function(byte_machine_scheme_lane_gambit_search out_option out_status out_messag
   set(${out_status} "ok" PARENT_SCOPE)
 endfunction()
 
-# byte_machine_scheme_lane_command(<backend> <program>
-#                                  <out_command> <out_status> <out_message>)
+# byte_machine_lane_measured_copies(<dir> <out_var> <declared-body>...)
 #
-# Status is `ok`, `no-runtime`, or `unknown-backend` -- or, for gambit, one of
-# byte_machine_scheme_lane_gambit_search's own statuses (`comma-in-path`,
-# `relative-path`), forwarded unchanged. A missing runtime is not fatal: the
-# CMake-layer specifications must stay runnable on a host with no Scheme
-# installed, so a lane whose runtime was never discovered is skipped with a
-# message rather than failing configuration.
-function(byte_machine_scheme_lane_command backend program
-         out_command out_status out_message)
+# Map each declared body to the copy a compiled lane's build step wrote into
+# <dir>. Flat and keyed by basename, which is unambiguous because
+# byte_machine_guard_duplicate_basenames forbids two shared bodies sharing one
+# repository-wide. One rule for every compiled lane: protium needs per-lane
+# path logic here precisely because it has no equivalent guard.
+function(byte_machine_lane_measured_copies dir out_var)
+  set(copies "")
+  foreach(body IN LISTS ARGN)
+    get_filename_component(name "${body}" NAME)
+    list(APPEND copies "${dir}/${name}")
+  endforeach()
+  set(${out_var} "${copies}" PARENT_SCOPE)
+endfunction()
+
+# byte_machine_chez_aot_paths(<program> <out_object_dir> <out_compiled>)
+#
+# Where one AOT lane's artifacts live. Keyed by Chez version and machine type
+# so a parallel build cannot race and no object outlives the runtime that
+# produced it, and by program stem so two lanes over one program share nothing.
+function(byte_machine_chez_aot_paths program out_object_dir out_compiled)
+  get_filename_component(stem "${program}" NAME_WE)
+  set(dir "${BYTE_MACHINE_CHEZ_OBJECT_ROOT}/${stem}")
+  set(${out_object_dir} "${dir}" PARENT_SCOPE)
+  set(${out_compiled} "${dir}/${stem}.so" PARENT_SCOPE)
+endfunction()
+
+# byte_machine_scheme_lane_command(<backend> <mode> <program>
+#                                  <out_command> <out_measured>
+#                                  <out_status> <out_message>
+#                                  <declared-body>...)
+#
+# Status is `ok`, `no-runtime`, `unknown-backend`, `unknown-mode` -- or, for
+# gambit, one of byte_machine_scheme_lane_gambit_search's own statuses
+# (`comma-in-path`, `relative-path`), forwarded unchanged.
+#
+# <out_measured> is the list of paths the run will fingerprint, in the order
+# the declared bodies were given. For a source lane it is the declared list:
+# the repository sources are the only text there is. For a compiled lane it is
+# the copies the build wrote beside the artifact, so a fingerprint describes
+# what the artifact was built from rather than what is on disk now.
+#
+# Order is load-bearing. harness-fingerprint-combine is order-sensitive by
+# design, so measured[i] must correspond to declared[i]; the mapping below
+# walks the declared list rather than partitioning and rejoining it.
+function(byte_machine_scheme_lane_command backend mode program
+         out_command out_measured out_status out_message)
   set(${out_command} "" PARENT_SCOPE)
+  set(${out_measured} "" PARENT_SCOPE)
   set(${out_message} "" PARENT_SCOPE)
 
   if(backend STREQUAL "chez")
     if(NOT BYTE_MACHINE_CHEZ_EXECUTABLE)
       set(${out_status} "no-runtime" PARENT_SCOPE)
       set(${out_message}
-        "no Chez was discovered, so the chez source lane for '${program}' is not registered."
+        "no Chez was discovered, so the chez ${mode} lane for '${program}' is not registered."
         PARENT_SCOPE)
       return()
     endif()
-    # Flags, not positions: a lane names one library root per library family it
-    # imports and one source directory per shared-body directory, and both
-    # counts grow with each slice.
-    set(${out_command}
-      "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
-      "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
-      "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-      "--library-root" "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}"
-      "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
-      "--source-dir" "${BYTE_MACHINE_SRC_COMMON_DIR}"
-      "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
-      "--program" "${program}"
+
+    if(mode STREQUAL "source")
+      set(${out_command}
+        "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+        "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
+        "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+        "--library-root" "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}"
+        "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+        "--source-dir" "${BYTE_MACHINE_SRC_COMMON_DIR}"
+        "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
+        "--program" "${program}"
+        PARENT_SCOPE)
+      set(${out_measured} ${ARGN} PARENT_SCOPE)
+      set(${out_status} "ok" PARENT_SCOPE)
+      return()
+    endif()
+
+    if(mode STREQUAL "aot")
+      byte_machine_chez_aot_paths("${program}" object_dir compiled)
+      set(${out_command}
+        "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+        "--script" "${BYTE_MACHINE_HARNESS_CHEZ_AOT_LAUNCHER}"
+        "--object-dir" "${object_dir}/harness"
+        "--object-dir" "${object_dir}/src"
+        "--program" "${compiled}"
+        PARENT_SCOPE)
+      byte_machine_lane_measured_copies("${object_dir}/fingerprint" measured ${ARGN})
+      set(${out_measured} ${measured} PARENT_SCOPE)
+      set(${out_status} "ok" PARENT_SCOPE)
+      return()
+    endif()
+
+    set(${out_status} "unknown-mode" PARENT_SCOPE)
+    set(${out_message}
+      "'${mode}' is not an execution mode this lane module can build a command for. Known modes: source aot."
       PARENT_SCOPE)
-    set(${out_status} "ok" PARENT_SCOPE)
     return()
   endif()
 
@@ -101,17 +161,18 @@ function(byte_machine_scheme_lane_command backend program
     if(NOT BYTE_MACHINE_GAMBIT_EXECUTABLE)
       set(${out_status} "no-runtime" PARENT_SCOPE)
       set(${out_message}
-        "no Gambit was discovered, so the gambit source lane for '${program}' is not registered."
+        "no Gambit was discovered, so the gambit ${mode} lane for '${program}' is not registered."
         PARENT_SCOPE)
       return()
     endif()
-    # `-:` runtime options must be the first argument, and the option list is
-    # comma-separated: `search=A,search=B` puts two module roots on the path.
-    # Measured, with a control proving the second root is load-bearing
-    # (docs/plans/milestone-0-slice-3-shared-body.md section 2).
-    # `-f` skips .gambini so a developer's personal initialisation cannot change
-    # what a test proves. No launcher is needed: Gambit's include inside
-    # define-library is source-file-relative and needs no ambient state.
+    if(NOT mode STREQUAL "source")
+      set(${out_status} "unknown-mode" PARENT_SCOPE)
+      set(${out_message}
+        "'${mode}' is not an execution mode this lane module can build a command for. Known modes: source aot."
+        PARENT_SCOPE)
+      return()
+    endif()
+
     byte_machine_scheme_lane_gambit_search(search_option search_status search_message
       "${BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT}"
       "${BYTE_MACHINE_SRC_GAMBIT_LIBRARY_ROOT}")
@@ -127,6 +188,7 @@ function(byte_machine_scheme_lane_command backend program
       "-f"
       "${program}"
       PARENT_SCOPE)
+    set(${out_measured} ${ARGN} PARENT_SCOPE)
     set(${out_status} "ok" PARENT_SCOPE)
     return()
   endif()
@@ -203,9 +265,11 @@ function(byte_machine_add_scheme_lane)
                                lane_backend lane_mode)
 
   byte_machine_scheme_lane_command(
-    "${arg_BACKEND}" "${arg_PROGRAM}" command status message)
+    "${arg_BACKEND}" "${lane_mode}" "${arg_PROGRAM}"
+    command measured status message ${arg_SHARED_BODIES})
 
   if(status STREQUAL "unknown-backend"
+     OR status STREQUAL "unknown-mode"
      OR status STREQUAL "comma-in-path"
      OR status STREQUAL "relative-path")
     message(FATAL_ERROR "byte-machine: ${message}")
@@ -250,7 +314,7 @@ function(byte_machine_add_scheme_lane)
   # proves what it proved before this slice; it just carries no fingerprint,
   # which is the honest outcome when the build cannot compute one.
   if(BYTE_MACHINE_CHEZ_EXECUTABLE)
-    string(JOIN "|" fingerprint_files ${arg_SHARED_BODIES})
+    string(JOIN "|" fingerprint_files ${measured})
     if(arg_WRONG_FINGERPRINT)
       byte_machine_wrong_fingerprint("${arg_NAME}" expect_file)
     else()

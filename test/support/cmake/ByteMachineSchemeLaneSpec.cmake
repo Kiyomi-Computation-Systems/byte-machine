@@ -108,6 +108,9 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
 endif()
 
 set(BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER "/h/launchers/chez-source.ss")
+set(BYTE_MACHINE_CHEZ_OBJECT_ROOT "/objects")
+set(BYTE_MACHINE_HARNESS_CHEZ_AOT_LAUNCHER "/launchers/chez-aot.ss")
+set(BYTE_MACHINE_HARNESS_CHEZ_COMPILE_LAUNCHER "/launchers/chez-compile.ss")
 set(BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT "/h/chez")
 set(BYTE_MACHINE_HARNESS_GAMBIT_LIBRARY_ROOT "/h/gambit")
 set(BYTE_MACHINE_HARNESS_SHARED_DIR "/h/shared")
@@ -119,7 +122,7 @@ set(BYTE_MACHINE_SRC_COMMON_DIR "/s/common/byte-machine")
 # --- Chez ------------------------------------------------------------------
 
 set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
-byte_machine_scheme_lane_command(chez "/h/self/p.chez.sps" command status message)
+byte_machine_scheme_lane_command(chez source "/h/self/p.chez.sps" command measured status message)
 spec_check_equal("${status}" "ok" "chez lane classifies")
 spec_check_equal("${command}"
   "/opt/chez;--script;/h/launchers/chez-source.ss;--library-root;/h/chez;--library-root;/s/chez;--source-dir;/h/shared;--source-dir;/s/common/byte-machine;--object-guard;/b/guard;--program;/h/self/p.chez.sps"
@@ -137,7 +140,7 @@ spec_check_equal("${guard}" "/b/guard" "chez lane passes the object guard direct
 # --- Gambit ----------------------------------------------------------------
 
 set(BYTE_MACHINE_GAMBIT_EXECUTABLE "/opt/gsi")
-byte_machine_scheme_lane_command(gambit "/h/self/p.gambit.scm" command status message)
+byte_machine_scheme_lane_command(gambit source "/h/self/p.gambit.scm" command measured status message)
 spec_check_equal("${status}" "ok" "gambit lane classifies")
 spec_check_equal("${command}"
   "/opt/gsi;-:search=/h/gambit,search=/s/gambit;-f;/h/self/p.gambit.scm"
@@ -223,14 +226,14 @@ spec_check_equal("${option}" "" "a rejected search list clears the option")
 # exact wording, not merely a nonzero status. Asserted here for all three
 # messages the functional core can produce: a typo, a dropped interpolation, or
 # a garbled string would otherwise pass every existing assertion undetected.
-byte_machine_scheme_lane_command(guile "/h/self/p.scm" command status message)
+byte_machine_scheme_lane_command(guile source "/h/self/p.scm" command measured status message)
 spec_check_equal("${status}" "unknown-backend" "an unknown backend is rejected")
 spec_check_equal("${message}"
   "'guile' is not a Scheme lane backend. Known backends: chez gambit."
   "unknown backend message")
 
 set(BYTE_MACHINE_CHEZ_EXECUTABLE "")
-byte_machine_scheme_lane_command(chez "/h/self/p.chez.sps" command status message)
+byte_machine_scheme_lane_command(chez source "/h/self/p.chez.sps" command measured status message)
 spec_check_equal("${status}" "no-runtime" "a chez lane without a chez is not registered")
 spec_check_equal("${command}" "" "a rejected lane returns no command")
 spec_check_equal("${message}"
@@ -238,11 +241,34 @@ spec_check_equal("${message}"
   "chez lane no-runtime message")
 
 set(BYTE_MACHINE_GAMBIT_EXECUTABLE "")
-byte_machine_scheme_lane_command(gambit "/h/self/p.gambit.scm" command status message)
+byte_machine_scheme_lane_command(gambit source "/h/self/p.gambit.scm" command measured status message)
 spec_check_equal("${status}" "no-runtime" "a gambit lane without a gambit is not registered")
 spec_check_equal("${message}"
   "no Gambit was discovered, so the gambit source lane for '/h/self/p.gambit.scm' is not registered."
   "gambit lane no-runtime message")
+
+# --- Declared bodies versus measured bodies --------------------------------
+#
+# A source lane reads the repository sources, so the two lists coincide and
+# the distinction is invisible. It is not invisible for a compiled lane, where
+# the expectation is computed from the originals and the run must read what
+# the artifact was actually built from -- and this is the one place a
+# specification can see the rule with no runtime present.
+set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
+byte_machine_scheme_lane_command(chez source "/h/self/p.chez.sps"
+  command measured status message "/h/shared/a.scm" "/h/shared/b.scm")
+spec_check_equal("${status}" "ok" "a chez source lane is accepted")
+spec_check_equal("${measured}" "/h/shared/a.scm;/h/shared/b.scm"
+  "a source lane measures the bodies it declares, in the declared order")
+
+byte_machine_scheme_lane_command(chez unknown-mode-name "/h/self/p.chez.sps"
+  command measured status message "/h/shared/a.scm")
+spec_check_equal("${status}" "unknown-mode" "an unregistered mode is rejected")
+spec_check_equal("${command}" "" "a rejected lane returns no command")
+spec_check_equal("${measured}" "" "a rejected lane measures nothing")
+spec_check_equal("${message}"
+  "'unknown-mode-name' is not an execution mode this lane module can build a command for. Known modes: source aot."
+  "unknown mode message")
 
 # --- Registration (byte_machine_add_scheme_lane) ----------------------------
 #
