@@ -424,8 +424,9 @@ Then edit the new file. Replace the header comment (lines 1–30, everything abo
           harness-fingerprint-file
           harness-fingerprint-combine
           harness-fingerprint->string)
-  (import (rnrs))
+  (import (rnrs) (only (rnrs r5rs) modulo quotient remainder))
 ```
+(Corrected after Task 3 landed: the algorithm uses `modulo`/`quotient`/`remainder`, which R6RS keeps outside `(rnrs)` in a strict library body — the same `only` clause `harness.sls` carries for the same reason. The plan's first draft said bare `(import (rnrs))`, which does not compile.)
 
 Keep everything from `(define harness-fingerprint-modulus …)` to the end of the file **verbatim at column 0** (mutation FIND anchors and blame depend on it), with two exceptions. First, replace the comment-plus-definition of `harness-fingerprint-file` (the comment beginning `;; Fingerprints a file's exact bytes, read through adapter-file-bytes …` and the two-line define under it) with:
 
@@ -608,16 +609,7 @@ execute_process(
   OUTPUT_VARIABLE fp_out
   ERROR_VARIABLE fp_err)
 ```
-4. The library-directories poison pass compiles a copy of `harness.sls`, which now imports the fingerprint library, so the compile script and the verify command must both be able to resolve it. In the `POISON_COMPILE_SCRIPT` `file(WRITE …)`, replace the `(source-directories …)` line with:
-```scheme
-(source-directories (list \"${SOURCE_ROOT}/test/support/harness/shared\"))
-(library-directories (list (cons \"${SOURCE_ROOT}/test/support/harness/chez\" \"${POISON_GUARD_DIR}\")))
-```
-and add a second library root to the pass's verify command, after `"--library-root" "${POISON_ROOT}"`:
-```cmake
-  "--library-root" "${STAGE_DIR}/test/support/harness/chez"
-```
-(The poisoned object still shadows the pristine source for `(byte-machine test harness)` because Chez searches roots in order and `POISON_ROOT` is first; the second root exists only to resolve the fingerprint import.)
+4. The library-directories poison pass compiles a copy of `harness.sls`, which now imports the fingerprint library. **Superseded as measured during Task 3** — the shape first planned here (fingerprint resolvable as source via a second root) leaves the mutation UNCAUGHT: Chez's staleness check on a compiled library is transitive, so a harness object whose fingerprint import resolves only to bare source is silently discarded in favour of the pristine harness source, and the baseline banner prints under the mutant too. What landed instead, recorded in the block's own comments: a pristine `fingerprint.sls` is copied into `POISON_ROOT` by the same `file(READ)`/`file(WRITE)` discipline as the harness copy, the compile script compiles it to `fingerprint.so` **first** (into `POISON_ROOT` itself), then compiles the poisoned harness; both objects are `file(TOUCH)`ed fingerprint-first; the compile-failure guard checks both objects exist; no second `--library-root` is added to the verify command (measured inert — `POISON_ROOT` alone resolves both libraries in both runs).
 
 - [ ] **Step 6: Suite**
 
@@ -717,16 +709,21 @@ set(CHEZ_ADAPTER test/support/harness/byte-machine/test/harness.sls)
 (and later `set(RUNNER_BODY …)` and `set(FINGERPRINT …)` to the same moved root: `test/support/harness/byte-machine/test/harness.sls` and `test/support/harness/byte-machine/test/fingerprint.sls`). Every runner FIND/REPLACE is unchanged — the text moved verbatim.
 2. Every `--library-root "${STAGE_DIR}/test/support/harness/chez"` → `--library-root "${STAGE_DIR}/test/support/harness"` (all verify commands, including the poison pass's second root added in Task 3).
 3. Every `--source-dir "${STAGE_DIR}/test/support/harness/shared"` → `--source-dir "${STAGE_DIR}/test/support/harness/self"` (required flag, inert value, same substitution rule as the registrations).
-4. The poison block: the compile script drops its `(source-directories …)` line entirely (the library no longer includes anything) and its library-directories root moves up:
+4. The poison block (whose shape now includes Task 3's measured transitive-staleness fix — a pristine `fingerprint.so` compiled into `POISON_ROOT` first): three path updates and one comment retirement.
+   - The pristine-fingerprint copy: `file(READ "${SOURCE_ROOT}/test/support/harness/chez/byte-machine/test/fingerprint.sls" …)` → `…/test/support/harness/byte-machine/test/fingerprint.sls`.
+   - In the compile script: delete the `(source-directories …)` line entirely (the library no longer includes anything) and move the library-directories root up:
 ```scheme
 (library-directories (list (cons \"${SOURCE_ROOT}/test/support/harness\" \"${POISON_GUARD_DIR}\")))
 ```
-Delete the comment paragraph beginning `# There is a SECOND staleness input, and it is not local to this directory:` (the include re-resolution it documents no longer exists) and replace with:
+   - In the transitive-staleness comment, the named compile-resolution path `${SOURCE_ROOT}/test/support/harness/chez` → `${SOURCE_ROOT}/test/support/harness`.
+   - Delete the comment paragraph beginning `# There is a SECOND staleness input, and it is not local to this directory:` (the include re-resolution it documents no longer exists) and replace with:
 ```cmake
-# One staleness input: the object is preferred only while it is not older
-# than the .sls beside it. The library includes nothing, so no second file's
-# mtime participates -- the include-era caveat about the staged runner's
-# timestamp died with the include (decision 0006).
+# The object is preferred only while it is not older than the .sls beside
+# it -- and, transitively, while its imported fingerprint library also
+# resolves to a non-stale object (the MEASURED note below). What died with
+# the include (decision 0006) is the include-era caveat this paragraph used
+# to carry: no STAGED file's mtime participates any more, because the
+# library no longer re-resolves harness-runner.scm at load time.
 ```
 5. The two adapter export-list mutations and the `EXPECT_SURVIVES` note about names "referenced only from harness-runner.scm, which `include` splices into the library body" — the mechanism changed (same file now), so update that survivor's reason text to:
 ```
