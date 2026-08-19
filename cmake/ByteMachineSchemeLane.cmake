@@ -187,20 +187,20 @@ endfunction()
 function(byte_machine_add_scheme_lane)
   cmake_parse_arguments(PARSE_ARGV 0 arg "WRONG_FINGERPRINT"
     "NAME;BACKEND;PROGRAM;TIMEOUT;EXPECT_EXIT;WORKING_DIRECTORY"
-    "LABELS;ENVIRONMENT;SHARED_BODIES")
+    "LABELS;ENVIRONMENT;SOURCES")
 
   if(arg_UNPARSED_ARGUMENTS)
     message(FATAL_ERROR
       "byte-machine: unexpected arguments to byte_machine_add_scheme_lane: ${arg_UNPARSED_ARGUMENTS}")
   endif()
-  # SHARED_BODIES is required, not optional. The property worth having is not
-  # "the lanes have provenance" but "a lane cannot be added without it" -- and
-  # this configure-time check is the whole of that guarantee, because the
-  # harness skips provenance rather than refusing when no manifest reaches it.
-  # It matters little here, where every lane is a source lane, and a great deal
-  # in slices 5b and 5c, where a lane registered without provenance is exactly
-  # the lane that can silently fall back to source.
-  foreach(required NAME BACKEND PROGRAM TIMEOUT SHARED_BODIES)
+  # SOURCES is required, not optional. The property worth having is not "the
+  # lanes have provenance" but "a lane cannot be added without its manifest"
+  # -- and this configure-time check is the whole of that guarantee, because
+  # the harness skips provenance rather than refusing when no manifest reaches
+  # it. It matters little here, where every lane is a source lane, and a great
+  # deal in slices 5b and 5c, where a lane registered without provenance is
+  # exactly the lane that can silently fall back to source.
+  foreach(required NAME BACKEND PROGRAM TIMEOUT SOURCES)
     if(NOT arg_${required})
       message(FATAL_ERROR
         "byte-machine: ${required} is required for byte_machine_add_scheme_lane ('${arg_NAME}').")
@@ -215,10 +215,10 @@ function(byte_machine_add_scheme_lane)
   # A manifest entry that does not exist would be a provenance failure at run
   # time, reported by the harness as though the build tree were incomplete. It
   # is a registration mistake, and it is cheaper to say so here.
-  foreach(body IN LISTS arg_SHARED_BODIES)
+  foreach(body IN LISTS arg_SOURCES)
     if(NOT EXISTS "${body}")
       message(FATAL_ERROR
-        "byte-machine: '${arg_NAME}' names a shared body that does not exist: "
+        "byte-machine: '${arg_NAME}' names a source that does not exist: "
         "${body}.")
     endif()
   endforeach()
@@ -227,7 +227,7 @@ function(byte_machine_add_scheme_lane)
   # fingerprint/ copy directory of the aot branch keys measured copies by
   # basename. This replaced the repository-wide basename guard when the
   # include namespace it policed retired (decision 0006).
-  byte_machine_lane_duplicate_basenames(duplicate_basenames ${arg_SHARED_BODIES})
+  byte_machine_lane_duplicate_basenames(duplicate_basenames ${arg_SOURCES})
   if(duplicate_basenames)
     message(FATAL_ERROR
       "byte-machine: '${arg_NAME}' declares two sources sharing a basename: "
@@ -255,7 +255,7 @@ function(byte_machine_add_scheme_lane)
 
   byte_machine_scheme_lane_command(
     "${arg_NAME}" "${arg_BACKEND}" "${lane_mode}" "${arg_PROGRAM}"
-    command measured status message ${arg_SHARED_BODIES})
+    command measured status message ${arg_SOURCES})
 
   if(status STREQUAL "unknown-backend"
      OR status STREQUAL "unknown-mode")
@@ -304,7 +304,7 @@ function(byte_machine_add_scheme_lane)
       byte_machine_wrong_fingerprint("${arg_NAME}" expect_file)
     else()
       byte_machine_expected_fingerprint("${arg_NAME}" expect_file
-                                        ${arg_SHARED_BODIES})
+                                        ${arg_SOURCES})
     endif()
     list(APPEND environment
       "BYTE_MACHINE_FINGERPRINT_FILES=${fingerprint_files}"

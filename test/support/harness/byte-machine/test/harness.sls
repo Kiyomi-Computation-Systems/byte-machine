@@ -292,7 +292,7 @@
 
 ;; A lane whose build declared a manifest, in a run where nothing verified it.
 ;;
-;; SHARED_BODIES being required makes the environment unforgeable; it says
+;; SOURCES being required makes the environment unforgeable; it says
 ;; nothing about whether anything read it. The check is reached from
 ;; harness-begin, or by a hand-placed call -- which is what harness-bootstrap
 ;; needed, having deliberately no harness-begin. Forget that line in a future
@@ -709,7 +709,7 @@
 ;; verify commands with no environment at all, so refusing here would fail
 ;; every one of the mutation suite's baselines before a single mutation ran.
 ;;
-;; Nothing is lost by skipping. SHARED_BODIES is a required argument of
+;; Nothing is lost by skipping. SOURCES is a required argument of
 ;; byte_machine_add_scheme_lane, so a registered lane always has a manifest and
 ;; there is no reachable path by which a real lane silently loses provenance.
 ;; The guarantee lives at configure time, where it cannot be forged; a run-time

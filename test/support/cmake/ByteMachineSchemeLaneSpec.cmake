@@ -52,7 +52,7 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
       NAME byte-machine.harness.example.chez.source
       BACKEND chez
       PROGRAM "${SPEC_SELF}")
-  elseif(c STREQUAL "lane-requires-shared-bodies")
+  elseif(c STREQUAL "lane-requires-sources")
     byte_machine_add_scheme_lane(
       NAME byte-machine.harness.example.chez.source
       BACKEND chez
@@ -63,28 +63,28 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
       NAME byte-machine.harness.example.chez.source
       BACKEND chez
       PROGRAM "/h/self/does-not-exist.chez.sps"
-      SHARED_BODIES "${SPEC_SELF}"
+      SOURCES "${SPEC_SELF}"
       TIMEOUT 10)
-  elseif(c STREQUAL "lane-rejects-missing-shared-body")
+  elseif(c STREQUAL "lane-rejects-missing-source")
     byte_machine_add_scheme_lane(
       NAME byte-machine.harness.example.chez.source
       BACKEND chez
       PROGRAM "${SPEC_SELF}"
-      SHARED_BODIES "${SPEC_SELF}" "/nonexistent/body.scm"
+      SOURCES "${SPEC_SELF}" "/nonexistent/body.scm"
       TIMEOUT 10)
   elseif(c STREQUAL "lane-rejects-duplicate-source-basename")
     byte_machine_add_scheme_lane(
       NAME byte-machine.harness.example.chez.source
       BACKEND chez
       PROGRAM "${SPEC_SELF}"
-      SHARED_BODIES "${SPEC_SELF}" "${SPEC_SELF}"
+      SOURCES "${SPEC_SELF}" "${SPEC_SELF}"
       TIMEOUT 10)
   elseif(c STREQUAL "lane-rejects-unknown-backend")
     byte_machine_add_scheme_lane(
       NAME byte-machine.harness.example.chez.source
       BACKEND guile
       PROGRAM "${SPEC_SELF}"
-      SHARED_BODIES "${SPEC_SELF}"
+      SOURCES "${SPEC_SELF}"
       TIMEOUT 10)
   elseif(c STREQUAL "lane-rejects-unknown-mode")
     # The registrar never compares BACKEND against the NAME's own backend
@@ -102,7 +102,7 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
       NAME byte-machine.harness.example.cmake.direct
       BACKEND chez
       PROGRAM "${SPEC_SELF}"
-      SHARED_BODIES "${SPEC_SELF}"
+      SOURCES "${SPEC_SELF}"
       TIMEOUT 10)
   else()
     message(FATAL_ERROR "byte-machine-spec: unknown case '${c}'")
@@ -292,7 +292,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10
   EXPECT_EXIT 1
   ENVIRONMENT "FOO=bar")
@@ -310,7 +310,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10
   ENVIRONMENT "FOO=bar")
 get_property(registrar GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR)
@@ -333,7 +333,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.aot
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10)
 get_property(environment GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT)
 list(GET environment 0 mode_entry)
@@ -354,7 +354,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10)
 get_property(environment GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT)
 list(GET environment 0 mode_entry)
@@ -371,7 +371,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10
   WRONG_FINGERPRINT)
 get_property(fingerprint_function GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION)
@@ -383,7 +383,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10)
 get_property(fingerprint_function GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION)
 spec_check_equal("${fingerprint_function}" "expected"
@@ -402,7 +402,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10
   WORKING_DIRECTORY "/h/run")
 get_property(wd GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY)
@@ -419,7 +419,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10)
 get_property(wd_keyword GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD)
 spec_check_equal("${wd_keyword}" "absent"
@@ -432,7 +432,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10
   EXPECT_EXIT 1
   WORKING_DIRECTORY "/h/run")
@@ -450,7 +450,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10
   EXPECT_EXIT 1)
 get_property(wd_keyword GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD)
@@ -466,7 +466,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10)
 get_property(registrar GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR)
 spec_check_equal("${registrar}" "none" "a no-runtime backend registers nothing and does not raise")
@@ -477,9 +477,9 @@ spec_expect_all_rejected("${SPEC_SELF}"
   "lane-requires-backend|BACKEND is required for byte_machine_add_scheme_lane"
   "lane-requires-program|PROGRAM is required for byte_machine_add_scheme_lane"
   "lane-requires-timeout|TIMEOUT is required for byte_machine_add_scheme_lane"
-  "lane-requires-shared-bodies|SHARED_BODIES is required for byte_machine_add_scheme_lane"
+  "lane-requires-sources|SOURCES is required for byte_machine_add_scheme_lane"
   "lane-requires-existing-program|names a program that does not exist"
-  "lane-rejects-missing-shared-body|names a shared body that does not exist"
+  "lane-rejects-missing-source|names a source that does not exist"
   "lane-rejects-duplicate-source-basename|declares two sources sharing a basename"
   "lane-rejects-unknown-backend|is not a Scheme lane backend"
   "lane-rejects-unknown-mode|is not an execution mode this lane module can build a command for")

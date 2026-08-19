@@ -142,9 +142,10 @@ file(MAKE_DIRECTORY "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}")
 set(BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT "${CMAKE_SOURCE_DIR}/src")
 set(BYTE_MACHINE_TEST_COMMON_DIR "${CMAKE_CURRENT_LIST_DIR}/common")
 
-# The bodies every harness lane executes. Named once: a lane that listed them
-# itself would drift, and a manifest that drifts is one that quietly stops
-# describing the run.
+# The sources every harness lane executes -- the two libraries; each lane
+# appends its own program. Named once: a lane that listed them itself would
+# drift, and a manifest that drifts is one that quietly stops describing the
+# run.
 set(BYTE_MACHINE_HARNESS_MANIFEST
     "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/fingerprint.sls"
     "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/harness.sls")
@@ -238,8 +239,8 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.failing-body.chez.source
   BACKEND chez
   PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.sps"
   EXPECT_EXIT 1
   TIMEOUT 120
   LABELS expected-red)
@@ -250,8 +251,8 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.bootstrap.chez.source
   BACKEND chez
   PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
   TIMEOUT 120)
 
 # The runner tested with the runner. Safe only because the bootstrap already
@@ -261,8 +262,8 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.self.chez.source
   BACKEND chez
   PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   TIMEOUT 120)
 
 # A duplicate id is a defect in the suite, not a failing assertion: one
@@ -271,8 +272,8 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.duplicate-case.chez.source
   BACKEND chez
   PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-duplicate-case.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-duplicate-case.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-duplicate-case.sps"
   EXPECT_EXIT 2
   TIMEOUT 120
   LABELS expected-red)
@@ -283,8 +284,8 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.empty-selection.chez.source
   BACKEND chez
   PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-empty-selection.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-empty-selection.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-empty-selection.sps"
   EXPECT_EXIT 2
   TIMEOUT 120
   LABELS expected-red
@@ -314,8 +315,8 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.verbose.chez.source
   BACKEND chez
   PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   TIMEOUT 120
   ENVIRONMENT "BYTE_MACHINE_TEST_VERBOSE=1")
 
@@ -565,9 +566,9 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.portability.placeholder.chez.source
   BACKEND chez
   PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder.sls"
-                "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder.sls"
+          "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.sps"
   TIMEOUT 120)
 
 # --- Cross-library identity ------------------------------------------------
@@ -586,10 +587,10 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.portability.placeholder-identity.chez.source
   BACKEND chez
   PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder.sls"
-                "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder-consumer.sls"
-                "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder.sls"
+          "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder-consumer.sls"
+          "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.sps"
   TIMEOUT 120)
 
 # --- Provenance ------------------------------------------------------------
@@ -607,8 +608,8 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.provenance.chez.source
   BACKEND chez
   PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   WRONG_FINGERPRINT
   EXPECT_EXIT 3
   TIMEOUT 120
@@ -627,8 +628,8 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.provenance-absent-expectation.chez.source
   BACKEND chez
   PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   EXPECT_EXIT 3
   TIMEOUT 120
   LABELS expected-red
@@ -640,14 +641,14 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.provenance-missing-body.chez.source
   BACKEND chez
   PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   EXPECT_EXIT 3
   TIMEOUT 120
   LABELS expected-red
   ENVIRONMENT "BYTE_MACHINE_FINGERPRINT_FILES=${CMAKE_BINARY_DIR}/fingerprints/no-such-body.scm")
 
-# Provenance configured and never performed. SHARED_BODIES guarantees the
+# Provenance configured and never performed. SOURCES guarantees the
 # environment carries a manifest; nothing until now guaranteed anything read
 # it. This body reaches harness-summary without ever reaching
 # harness-verify-provenance!, which is precisely the shape harness-bootstrap
@@ -664,8 +665,8 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.unreached-provenance.chez.source
   BACKEND chez
   PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.sps"
   EXPECT_EXIT 3
   TIMEOUT 120
   LABELS expected-red)
