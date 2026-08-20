@@ -1,6 +1,6 @@
 # Milestone 0: Portability and Harness Spike
 
-Status: ready to implement; all decisions closed
+Status: in progress — slices 1 through 5a delivered; slice 5b's first half delivered 2026-08-18 (PR #6), its remainder planned in [milestone-0-slice-5b-remainder-implementation-plan.md](./milestone-0-slice-5b-remainder-implementation-plan.md); slice 5c cancelled by decision 0005 (amendment notes below)
 Date: 2026-08-15
 Parent plan: [`byte-machine-implementation-plan.md`](./byte-machine-implementation-plan.md) §25 Milestone 0
 Scope decision: **Milestone 0 only.** No byte-machine semantics (no IR, verifier, interpreter, emitter, or runtime) are implemented in this milestone.

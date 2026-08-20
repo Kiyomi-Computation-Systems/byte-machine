@@ -1,5 +1,7 @@
 # Milestone 0 Slice 4: Cross-Library Identity — Implementation Plan
 
+Status: executed; delivered 2026-08-17
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Prove that a value built through one library wrapper is recognised by a second wrapper that imported the first, and that an allocation-free singleton keeps `eq?` identity across both imports, on Chez and on Gambit.

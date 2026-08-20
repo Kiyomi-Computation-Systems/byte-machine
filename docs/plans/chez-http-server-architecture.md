@@ -1,5 +1,7 @@
 # Chez Scheme HTTP/1 Server Architecture
 
+Status: reference — target architecture for the Chez-only libuv HTTP stack that replaces protium (see decision 0005); not a milestone 0 document
+
 ## Goal
 
 Build a small, composable HTTP/1.x server stack for Chez Scheme with clear separation between:

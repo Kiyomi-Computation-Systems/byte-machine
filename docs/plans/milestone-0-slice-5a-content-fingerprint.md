@@ -1,6 +1,6 @@
 # Milestone 0, Slice 5a: Content fingerprint and lane provenance
 
-Status: design agreed; ready for an implementation plan
+Status: accepted; delivered 2026-08-17; amended after delivery (dated note below)
 Date: 2026-08-17
 Parent plan: [`byte-machine-implementation-plan.md`](./byte-machine-implementation-plan.md) §22.2, §24.2
 Milestone plan: [`milestone-0-portability-spike.md`](./milestone-0-portability-spike.md) — deliverable D5, work-order item 5

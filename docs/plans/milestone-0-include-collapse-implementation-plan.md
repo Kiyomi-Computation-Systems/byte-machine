@@ -1,5 +1,7 @@
 # Milestone 0, The Include Collapse — Implementation Plan
 
+Status: executed; delivered 2026-08-20 (decision 0006, PR #8)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Remove every `include` form from the repository: each library becomes an ordinary inline R6RS `.sls`, each test program a plain `.sps`, and the `include`/`source-directories` mechanism — launchers' `--source-dir`, the cwd matrix, the repository-wide basename guard, the one-owner rule — retires with its subject.

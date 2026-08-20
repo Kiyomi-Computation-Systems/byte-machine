@@ -1,6 +1,6 @@
 # Milestone 0, Slice 2: Portable test harness and thin runners
 
-Status: design agreed; ready for an implementation plan
+Status: accepted; delivered 2026-08-16 by [its implementation plan](./milestone-0-slice-2-implementation-plan.md)
 Date: 2026-08-16
 Parent plan: [`byte-machine-implementation-plan.md`](./byte-machine-implementation-plan.md) §22.2, §24
 Milestone plan: [`milestone-0-portability-spike.md`](./milestone-0-portability-spike.md) — deliverable D4, work-order item 2
