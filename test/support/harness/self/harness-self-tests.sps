@@ -368,18 +368,19 @@
         (check-not-equal "the os is identified" (adapter-os) "unknown")
         (check-not-equal "the architecture is identified"
                          (adapter-architecture) "unknown")
-        ;; The vocabulary, not a fixed mode. Slice 5b gives this program more than
-        ;; one lane to run under, so an equality against any single mode would
-        ;; be false on some lane that is behaving correctly. The narrower claim
-        ;; -- that this lane really is the mode it declares -- is not made here:
-        ;; this same program is also staged and run under the Scheme mutation
-        ;; suite, inside byte-machine.harness.scheme-mutation.cmake.direct,
-        ;; whose registration hand-sets BYTE_MACHINE_EXECUTION_MODE=source no
-        ;; matter what it stages (test/CMakeLists.txt, ~line 645). A
-        ;; name-versus-mode check here would be red on every mutation pass's
-        ;; baseline, not only a broken one. The claim is carried instead by the
-        ;; lane's structure (an aot lane cannot expand source) and proved by
-        ;; mutation C4 against the registration's own mapping.
+        ;; The vocabulary, not a fixed mode. Slice 5b gives this program more
+        ;; than one lane to run under, so an equality against any single mode
+        ;; would be false on some lane that is behaving correctly. The narrower
+        ;; claim -- that this lane really is the mode it declares -- is not
+        ;; made here: this same program is also staged and run under the Scheme
+        ;; mutation suite, inside
+        ;; byte-machine.harness.scheme-mutation.cmake.direct, whose
+        ;; registration hand-sets BYTE_MACHINE_EXECUTION_MODE=source no matter
+        ;; what it stages (test/CMakeLists.txt, ~line 645). A name-versus-mode
+        ;; check here would be red on every mutation pass's baseline, not only
+        ;; a broken one. The claim is carried instead by the lane's structure
+        ;; (an aot lane cannot expand source) and proved by mutation C4 against
+        ;; the registration's own mapping.
         (check "the mode is one the lane vocabulary defines"
                (harness-member? (adapter-execution-mode)
                                 (list "source" "aot")))))
@@ -549,8 +550,8 @@
     ;; adapter-file-bytes is called directly here, not only through
     ;; harness-fingerprint-file. A name used only inside harness.sls's own
     ;; runner section resolves internally regardless of the export list, so
-    ;; testing it only
-    ;; indirectly would make its export-list mutation undetectable.
+    ;; testing it only indirectly would make its export-list mutation
+    ;; undetectable.
     (harness-case "a file is read as its exact bytes"
       (lambda ()
         (let ((bv (adapter-file-bytes

@@ -311,15 +311,16 @@ what this milestone delivers.
   and [decision 0003](docs/decisions/0003-cross-library-identity.md) — the
   shared-body `include` mechanism and its one-owner rule — remain in force,
   unchanged by this cut. The follow-up slice named in
-  [the removal plan](docs/plans/chez-only-simplification.md)'s §6, not yet
-  designed, collapses that indirection into inline R6RS libraries; until it
-  lands, both decisions govern exactly as before.
+  [the removal plan](docs/plans/chez-only-simplification.md)'s §6 (since
+  designed and landed — see the include-collapse entries above and below)
+  collapses that indirection into inline R6RS libraries; until it lands, both
+  decisions govern exactly as before.
 - The shared-body include mechanism and everything that kept it honest: the
   launchers' `--source-dir`, the working-directory matrix and its asymmetric
   mutation, the repository-wide basename guard
   (`ByteMachinePortabilityGuard.cmake`, its specification, and its twelve
   mutations — replaced by a per-lane basename check in the registrar), and
-  the one-owner rule with its import-vs-include mutations (replaced by an
+  the one-owner rule with its import-vs-include mutation (replaced by an
   inline-duplication mutation the identity lane catches). Decisions 0002 and
   0003 are superseded by 0006. The harness stands at 7,713 lines against the
   8,327-line pre-collapse baseline (`src/`: 84 against 110).

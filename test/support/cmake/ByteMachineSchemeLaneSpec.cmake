@@ -343,9 +343,10 @@ spec_check_equal("${mode_entry}" "BYTE_MACHINE_EXECUTION_MODE=aot"
 # The full list, not just the mode entry above: BYTE_MACHINE_FINGERPRINT_FILES
 # here is the measured copy's path under the per-lane object directory, while
 # BYTE_MACHINE_EXPECT_FINGERPRINT_FILE is still keyed by the lane's own name --
-# the expectation comes from the declared source, the run's environment from the
-# measured one. This assertion is the declared/measured asymmetry itself, the
-# whole mechanism this task adds, visible here with no Scheme runtime present.
+# the expectation comes from the declared source, the run's environment from
+# the measured one. This assertion is the declared/measured asymmetry itself,
+# the whole mechanism this task adds, visible here with no Scheme runtime
+# present.
 spec_check_equal("${environment}"
   "BYTE_MACHINE_EXECUTION_MODE=aot;BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin;BYTE_MACHINE_FINGERPRINT_FILES=/objects/byte-machine_harness_example_chez_aot/fingerprint/ByteMachineSchemeLaneSpec.cmake;BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=/fingerprints/byte-machine.harness.example.chez.aot.fingerprint"
   "an aot lane's environment carries the measured copy's path in BYTE_MACHINE_FINGERPRINT_FILES, not the declared source's own path")

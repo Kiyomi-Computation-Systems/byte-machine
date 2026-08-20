@@ -176,8 +176,8 @@ function(byte_machine_expected_fingerprint name out_var)
   if(NOT ARGN)
     message(FATAL_ERROR
       "byte-machine: '${name}' asked for a fingerprint expectation over no "
-      "sources. An empty manifest fingerprints to the seed on every lane, which "
-      "would compare equal forever and check nothing.")
+      "sources. An empty manifest fingerprints to the seed on every lane, "
+      "which would compare equal forever and check nothing.")
   endif()
 
   string(JOIN "|" manifest ${ARGN})
@@ -233,8 +233,8 @@ endfunction()
 # --- Harness lanes ---------------------------------------------------------
 
 # The harness must be able to fail before it can be trusted to pass. This is
-# that proof: a program that fails one assertion, with the exact status compared
-# from outside, because a program cannot report its own exit status.
+# that proof: a program that fails one assertion, with the exact status
+# compared from outside, because a program cannot report its own exit status.
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.failing-body.chez.source
   BACKEND chez
@@ -307,10 +307,10 @@ byte_machine_add_scheme_lane(
 # What this lane cannot check is that the line was printed. The adapter
 # protocol exposes no output-capture service, and the runner may not reach past
 # its protocol for one -- so it has no way to read back its own output, and the
-# registration layer asserts exit status, not output. Both
-# decisions are therefore declared survivors in
-# SchemeMutationSuite.cmake with their reason recorded, alongside probe output
-# suppression, which is unwitnessable for exactly the same reason.
+# registration layer asserts exit status, not output. Both decisions are
+# therefore declared survivors in SchemeMutationSuite.cmake with their reason
+# recorded, alongside probe output suppression, which is unwitnessable for
+# exactly the same reason.
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.verbose.chez.source
   BACKEND chez

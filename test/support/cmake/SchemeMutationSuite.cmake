@@ -67,10 +67,10 @@
 # there is no resolution step left for a launch directory to change, so the
 # claim the matrix witnessed empirically is now structural.
 #
-# Pass 18 is the consumer library's three decisions. All three are now caught by a
-# failed comparison. The first used to be caught by an induced raise instead
-# -- weaker, and weighed and accepted -- before a comparison-based witness
-# replaced it.
+# Pass 18 is the consumer library's three decisions. All three are now caught
+# by a failed comparison. The first used to be caught by an induced raise
+# instead -- weaker, and weighed and accepted -- before a comparison-based
+# witness replaced it.
 #
 # Pass 19 is the slice's reason for existing, reconstructed for the inline
 # tree: the consumer defines its own copies of the owner's procedures instead
@@ -395,12 +395,12 @@ byte_machine_mutation(
 # comfortable lie. harness-summary, harness-empty-selection-error, and
 # harness-failure-context are used only from the runner section of harness.sls
 # itself, inlined there by the include collapse (decision 0006); an internal
-# reference resolves against the definition, never through the export list. Dropping
-# any of the three therefore changes nothing any lane can observe -- the parity
-# argument for these names rests on the two export lists being read side by
-# side, not on this suite. Recorded here so the blind spot is asserted rather
-# than remembered, and so the day one of them acquires a caller outside the
-# library, this line fails.
+# reference resolves against the definition, never through the export list.
+# Dropping any of the three therefore changes nothing any lane can observe --
+# the parity argument for these names rests on the two export lists being read
+# side by side, not on this suite. Recorded here so the blind spot is asserted
+# rather than remembered, and so the day one of them acquires a caller outside
+# the library, this line fails.
 byte_machine_mutation(
   FILE ${CHEZ_ADAPTER} SPEC harness-self-tests.sps
   LABEL "chez adapter: an export used only inside the runner section is dropped"

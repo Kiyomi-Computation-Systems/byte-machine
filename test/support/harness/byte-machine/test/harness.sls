@@ -296,9 +296,9 @@
 ;; nothing about whether anything read it. The check is reached from
 ;; harness-begin, or by a hand-placed call -- which is what harness-bootstrap
 ;; needed, having deliberately no harness-begin. Forget that line in a future
-;; program and the lane runs un-provenanced with nothing failing, which is the one
-;; remaining way V9's guarantee can be true at configure time and false at run
-;; time.
+;; program and the lane runs un-provenanced with nothing failing, which is the
+;; one remaining way V9's guarantee can be true at configure time and false at
+;; run time.
 ;;
 ;; Pure, and separate from the summary's read of the live flag, for the reason
 ;; harness-empty-selection-diagnosis is: a run in this state cannot assert
@@ -648,12 +648,13 @@
 ;; ---------------------------------------------------------------------------
 ;;
 ;; A provenance failure ends the run there and then, rather than recording an
-;; error and continuing. Recording is not enough, for the reason status 3 exists
-;; at all: a program that goes on to hang satisfies a timeout expectation whether
-;; or not an error was recorded first, so a recorded-and-continued failure is
-;; invisible to every lane whose expected outcome does not depend on reaching
-;; the summary. Beyond that, continuing is pointless -- a run that cannot show
-;; it is executing the intended text says nothing meaningful afterwards.
+;; error and continuing. Recording is not enough, for the reason status 3
+;; exists at all: a program that goes on to hang satisfies a timeout
+;; expectation whether or not an error was recorded first, so a
+;; recorded-and-continued failure is invisible to every lane whose expected
+;; outcome does not depend on reaching the summary. Beyond that, continuing is
+;; pointless -- a run that cannot show it is executing the intended text says
+;; nothing meaningful afterwards.
 
 (define (harness-provenance-failure! detail)
   (harness-say-always

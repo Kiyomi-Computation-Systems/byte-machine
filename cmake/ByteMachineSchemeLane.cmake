@@ -64,7 +64,7 @@ endfunction()
 # (BYTE_MACHINE_CHEZ_OBJECT_ROOT) so a parallel build cannot race and no
 # object outlives the runtime that produced it, and by LANE NAME -- not
 # program -- so two lanes that build the same program from different text
-# share nothing. That is not hypothetical: this slice registers
+# share nothing. That is not hypothetical: slice 5b's remainder registers
 # byte-machine.harness.self.chez.aot and
 # byte-machine.harness.stale-artifact.chez.aot over the same PROGRAM,
 # harness-self-tests.sps, and the second exists to compile it from

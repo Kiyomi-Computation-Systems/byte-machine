@@ -76,10 +76,9 @@
 ;;; goes through library-directories, not source-directories, and no Scheme
 ;;; file in this tree includes another (decision 0006) -- so nothing this
 ;;; launcher does today depends on the line above. It is kept anyway: it
-;;; still narrows
-;;; what a `load` or top-level `include` added to this file later could
-;;; reach, and an empty list costs nothing to state. It is not, on its own,
-;;; what makes this lane honest -- the source guard above is.
+;;; still narrows what a `load` or top-level `include` added to this file
+;;; later could reach, and an empty list costs nothing to state. It is not,
+;;; on its own, what makes this lane honest -- the source guard above is.
 
 ;; Status 2 is the harness's "harness, configuration, or registration error".
 ;; A launcher that could not set up the lane has not run a test at all, and

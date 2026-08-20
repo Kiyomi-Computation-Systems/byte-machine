@@ -615,12 +615,20 @@ byte_machine_mutation(
   FIND [[    if(arg_WRONG_FINGERPRINT)]]
   REPLACE [[    if(FALSE)]])
 
-# This is the mutation a whole-branch review found undetectable: delete this
-# block by hand, reconfigure, and the working-directory matrix's three lanes
-# all launch from their derived directories instead of the three fixture
-# directories test/CMakeLists.txt built for them -- three copies of one
-# vacuous lane, and nothing anywhere failed, because neither registrar this
-# block feeds was ever asked whether it received WORKING_DIRECTORY at all.
+# This is the mutation a whole-branch review found undetectable. The incident,
+# as history: with this block deleted by hand and the configure re-run, the
+# include-era working-directory matrix's three lanes all launched from their
+# derived directories instead of the three fixture directories
+# test/CMakeLists.txt had built for them -- three copies of one vacuous lane,
+# and nothing anywhere failed, because neither registrar this block feeds was
+# ever asked whether it received WORKING_DIRECTORY at all.
+#
+# That matrix retired with the include mechanism (decision 0006), and no lane
+# overrides its run directory today, so a forwarding break is now invisible to
+# every registration in the tree. What can still see it is exactly what the
+# incident proved was missing: ByteMachineSchemeLaneSpec.cmake's absent/present
+# assertions on the keyword, which this mutation and the one below hold in
+# place.
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: WORKING_DIRECTORY is parsed and then never forwarded to either registrar"
