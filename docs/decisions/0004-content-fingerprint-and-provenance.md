@@ -4,6 +4,14 @@ Date: 2026-08-17
 Status: accepted
 Milestone: 0, slice 5a
 
+> Amended 2026-08-18 by [decision 0006](./0006-inline-libraries.md): the
+> include collapse renamed `SHARED_BODIES` to `SOURCES` (decision 3 below
+> names the old spelling) and replaced `fingerprint-manifest.ss`'s verbatim
+> `load` with an import of `(byte-machine test fingerprint)` (decision 4
+> records the `load` mechanism). Both disciplines those decisions state —
+> the manifest is declared and required at registration; provenance is
+> skipped, never refused, at run time — are unchanged.
+
 ## Context
 
 Milestone plan work-order item 5 requires "all four lanes green over the same

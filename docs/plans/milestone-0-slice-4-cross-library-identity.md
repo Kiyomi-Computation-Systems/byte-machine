@@ -7,6 +7,13 @@ Milestone plan: [`milestone-0-portability-spike.md`](./milestone-0-portability-s
 Previous slice: [`milestone-0-slice-3-shared-body.md`](./milestone-0-slice-3-shared-body.md)
 Scope: **one body, two libraries, one runtime at a time.** A second wrapper per runtime that imports the owner instead of re-including the body, and the identity proof that distinguishes those two. Compiled lanes are slice 5.
 
+> Amended 2026-08-18 by [decision 0006](../decisions/0006-inline-libraries.md):
+> the one-owner rule this slice enforced by mutation is retired with the
+> include mechanism. The identity lane and the consumer's import-the-owner
+> shape survive; the mutation that replaced an import with an include is
+> unconstructible against the inline tree and was replaced by an
+> inline-duplication form (0006 decision 5).
+
 ## 1. What this slice must prove
 
 The milestone plan states D3 as: *an owner wrapper constructs a placeholder tagged value, a second

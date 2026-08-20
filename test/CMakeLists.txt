@@ -89,9 +89,8 @@ byte_machine_add_test(
 # --- Harness paths ---------------------------------------------------------
 
 set(BYTE_MACHINE_HARNESS_DIR "${CMAKE_CURRENT_LIST_DIR}/support/harness")
-set(BYTE_MACHINE_HARNESS_SHARED_DIR "${BYTE_MACHINE_HARNESS_DIR}/shared")
 set(BYTE_MACHINE_HARNESS_SELF_DIR "${BYTE_MACHINE_HARNESS_DIR}/self")
-set(BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT "${BYTE_MACHINE_HARNESS_DIR}/chez")
+set(BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT "${BYTE_MACHINE_HARNESS_DIR}")
 set(BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER
     "${CMAKE_CURRENT_LIST_DIR}/support/launchers/chez-source.ss")
 
@@ -140,16 +139,16 @@ file(MAKE_DIRECTORY "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}")
 # Read by byte_machine_scheme_lane_command. src/ holds the product libraries;
 # the harness above is test infrastructure. A lane imports from both, which is
 # why the launcher takes repeatable roots.
-set(BYTE_MACHINE_SRC_COMMON_DIR "${CMAKE_SOURCE_DIR}/src/common/byte-machine")
-set(BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT "${CMAKE_SOURCE_DIR}/src/chez")
+set(BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT "${CMAKE_SOURCE_DIR}/src")
 set(BYTE_MACHINE_TEST_COMMON_DIR "${CMAKE_CURRENT_LIST_DIR}/common")
 
-# The bodies every harness lane executes. Named once: a lane that listed them
-# itself would drift, and a manifest that drifts is one that quietly stops
-# describing the run.
+# The sources every harness lane executes -- the two libraries; each lane
+# appends its own program. Named once: a lane that listed them itself would
+# drift, and a manifest that drifts is one that quietly stops describing the
+# run.
 set(BYTE_MACHINE_HARNESS_MANIFEST
-    "${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
-    "${BYTE_MACHINE_HARNESS_SHARED_DIR}/harness-runner.scm")
+    "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/fingerprint.sls"
+    "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/harness.sls")
 
 # --- Build-time fingerprint expectations -----------------------------------
 
@@ -157,15 +156,15 @@ set(BYTE_MACHINE_FINGERPRINT_LAUNCHER
     "${CMAKE_CURRENT_LIST_DIR}/support/launchers/fingerprint-manifest.ss")
 set(BYTE_MACHINE_FINGERPRINT_DIR "${CMAKE_BINARY_DIR}/fingerprints")
 
-# byte_machine_expected_fingerprint(<name> <out_var> <body>...)
+# byte_machine_expected_fingerprint(<name> <out_var> <source>...)
 #
 # Produce, at build time, the combined fingerprint the named lane must report,
 # and set <out_var> to the file holding it.
 #
 # A build output rather than a configure-time value, because a registration's
 # environment is fixed when CMake configures and this must be recomputed
-# whenever a body changes -- which is precisely the case it exists to catch.
-# The DEPENDS list is what makes that true, so a body added to a manifest
+# whenever a source changes -- which is precisely the case it exists to catch.
+# The DEPENDS list is what makes that true, so a source added to a manifest
 # without being added there produces an expectation that silently never
 # refreshes.
 #
@@ -177,8 +176,8 @@ function(byte_machine_expected_fingerprint name out_var)
   if(NOT ARGN)
     message(FATAL_ERROR
       "byte-machine: '${name}' asked for a fingerprint expectation over no "
-      "bodies. An empty manifest fingerprints to the seed on every lane, which "
-      "would compare equal forever and check nothing.")
+      "sources. An empty manifest fingerprints to the seed on every lane, "
+      "which would compare equal forever and check nothing.")
   endif()
 
   string(JOIN "|" manifest ${ARGN})
@@ -198,12 +197,13 @@ function(byte_machine_expected_fingerprint name out_var)
       COMMAND "${CMAKE_COMMAND}" -E make_directory "${BYTE_MACHINE_FINGERPRINT_DIR}"
       COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
               "${BYTE_MACHINE_FINGERPRINT_LAUNCHER}"
-              "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
+              "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+              "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
               "${expect_file}"
               ${ARGN}
       DEPENDS ${ARGN}
               "${BYTE_MACHINE_FINGERPRINT_LAUNCHER}"
-              "${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
+              "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/fingerprint.sls"
       COMMENT "byte-machine: fingerprint manifest ${manifest_key} (first needed by ${name})"
       VERBATIM)
 
@@ -230,92 +230,17 @@ function(byte_machine_wrong_fingerprint name out_var)
   set(${out_var} "${expect_file}" PARENT_SCOPE)
 endfunction()
 
-# src/common holds bodies included by a library; test/common holds bodies
-# included by a program. Every body from either kind of directory shares one
-# basename namespace, which now spans the harness and src/ for the first
-# time.
-byte_machine_portability_guard(
-  SHARED_DIRS "${BYTE_MACHINE_HARNESS_SHARED_DIR}" "${BYTE_MACHINE_SRC_COMMON_DIR}"
-  WRAPPED_DIRS "${BYTE_MACHINE_HARNESS_SELF_DIR}" "${BYTE_MACHINE_TEST_COMMON_DIR}")
-
-byte_machine_add_test(
-  NAME byte-machine.harness.cmake-portability-guard.cmake.direct
-  COMMAND "${CMAKE_COMMAND}" -P
-          "${CMAKE_CURRENT_LIST_DIR}/support/cmake/ByteMachinePortabilityGuardSpec.cmake"
-  TIMEOUT 120
-  LABELS unit)
-
-# --- The working-directory matrix ------------------------------------------
-#
-# Three directories, each catching a different failure of the include
-# mechanism. Under a correct mechanism all three lanes pass and the decoy is
-# simply ignored, so the matrix proves nothing on its own: what proves it is the
-# launcher mutation in SchemeMutationSuite.cmake, whose expected outcome is
-# asymmetric -- empty and decoy fail, identical passes.
-#
-# Both non-empty directories carry a copy of EVERY body the lane includes, the
-# harness runner included. A directory holding only a placeholder body would
-# fail to build (byte-machine test harness) under that mutation, before reaching
-# the code under test, and all three lanes would fail identically -- destroying
-# the only evidence that the lanes differ.
-#
-# They live in the build tree, which keeps intact byte_machine_add_test's rule
-# that a test never runs from the repository. They cannot be checked in in any
-# case: they share basenames with real bodies on purpose, and the portability
-# guard forbids exactly that.
-set(BYTE_MACHINE_CWD_MATRIX_DIR "${CMAKE_BINARY_DIR}/cwd-matrix")
-set(BYTE_MACHINE_CWD_IDENTICAL_DIR "${BYTE_MACHINE_CWD_MATRIX_DIR}/same-name-identical")
-set(BYTE_MACHINE_CWD_DECOY_DIR "${BYTE_MACHINE_CWD_MATRIX_DIR}/same-name-decoy")
-set(BYTE_MACHINE_CWD_EMPTY_DIR "${BYTE_MACHINE_CWD_MATRIX_DIR}/empty")
-file(MAKE_DIRECTORY "${BYTE_MACHINE_CWD_IDENTICAL_DIR}")
-file(MAKE_DIRECTORY "${BYTE_MACHINE_CWD_DECOY_DIR}")
-file(MAKE_DIRECTORY "${BYTE_MACHINE_CWD_EMPTY_DIR}")
-
-# COPYONLY rather than file(COPY): configure_file records a dependency, so
-# editing a body re-runs configure and refreshes the copies.
-configure_file("${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder.scm"
-               "${BYTE_MACHINE_CWD_IDENTICAL_DIR}/placeholder.scm" COPYONLY)
-configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/harness-runner.scm"
-               "${BYTE_MACHINE_CWD_IDENTICAL_DIR}/harness-runner.scm" COPYONLY)
-configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/harness-runner.scm"
-               "${BYTE_MACHINE_CWD_DECOY_DIR}/harness-runner.scm" COPYONLY)
-# fingerprint.scm (M0 slice 5a Task 1) is a second body the harness library
-# includes, alongside harness-runner.scm above. The "every body the lane
-# includes" rule in the comment above this block applies to it identically.
-configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
-               "${BYTE_MACHINE_CWD_IDENTICAL_DIR}/fingerprint.scm" COPYONLY)
-configure_file("${BYTE_MACHINE_HARNESS_SHARED_DIR}/fingerprint.scm"
-               "${BYTE_MACHINE_CWD_DECOY_DIR}/fingerprint.scm" COPYONLY)
-
-# The impostor. It implements the complete export list on purpose: an
-# incomplete one would fail the lane at library construction, which is a
-# different failure. The claim under test is that resolution picked the wrong
-# file, and that is only tested if the wrong file would otherwise work.
-file(WRITE "${BYTE_MACHINE_CWD_DECOY_DIR}/placeholder.scm"
-";;; Impostor placeholder body. Not part of the product.
-;;;
-;;; Shares a basename with src/common/byte-machine/placeholder.scm and answers
-;;; every question wrongly. It is only ever reachable by an include that
-;;; resolved against the process working directory, which is the defect
-;;; byte-machine.portability.placeholder-cwd-decoy.* exists to catch.
-
-(define (make-placeholder value) (vector 'decoy value))
-(define (placeholder? x) #f)
-(define (placeholder-value p) 'decoy)
-(define (placeholder-marker) (vector 'decoy))
-")
-
 # --- Harness lanes ---------------------------------------------------------
 
 # The harness must be able to fail before it can be trusted to pass. This is
-# that proof: a body that fails one assertion, with the exact status compared
-# from outside, because a program cannot report its own exit status.
+# that proof: a program that fails one assertion, with the exact status
+# compared from outside, because a program cannot report its own exit status.
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.failing-body.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.chez.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.scm"
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-failing.sps"
   EXPECT_EXIT 1
   TIMEOUT 120
   LABELS expected-red)
@@ -325,9 +250,9 @@ byte_machine_add_scheme_lane(
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.bootstrap.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.scm"
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
   TIMEOUT 120)
 
 # The runner tested with the runner. Safe only because the bootstrap already
@@ -336,9 +261,9 @@ byte_machine_add_scheme_lane(
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.self.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.scm"
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   TIMEOUT 120)
 
 # A duplicate id is a defect in the suite, not a failing assertion: one
@@ -346,9 +271,9 @@ byte_machine_add_scheme_lane(
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.duplicate-case.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-duplicate-case.chez.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-duplicate-case.scm"
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-duplicate-case.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-duplicate-case.sps"
   EXPECT_EXIT 2
   TIMEOUT 120
   LABELS expected-red)
@@ -358,9 +283,9 @@ byte_machine_add_scheme_lane(
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.empty-selection.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-empty-selection.chez.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-empty-selection.scm"
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-empty-selection.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-empty-selection.sps"
   EXPECT_EXIT 2
   TIMEOUT 120
   LABELS expected-red
@@ -374,24 +299,24 @@ byte_machine_add_scheme_lane(
 # rule, and the print itself would first run for whoever turned the variable on,
 # and a typo in any of them would surface there rather than here.
 #
-# One registration is enough: the decision lives in the shared runner body,
-# which reads nothing runtime-specific to make it, so a second lane would not
-# exercise a different code path -- the same argument the mutation suite's
-# first pass makes for every other decision in it.
+# One registration is enough: the decision lives in the runner section of
+# harness.sls, which reads nothing runtime-specific to make it, so a second lane
+# would not exercise a different code path -- the same argument the mutation
+# suite's first pass makes for every other decision in it.
 #
 # What this lane cannot check is that the line was printed. The adapter
-# protocol exposes no output-capture service, and the shared runner body may
-# not reach past its protocol for one -- so it has no way to read back its own
-# output, and the registration layer asserts exit status, not output. Both
-# decisions are therefore declared survivors in
-# SchemeMutationSuite.cmake with their reason recorded, alongside probe output
-# suppression, which is unwitnessable for exactly the same reason.
+# protocol exposes no output-capture service, and the runner may not reach past
+# its protocol for one -- so it has no way to read back its own output, and the
+# registration layer asserts exit status, not output. Both decisions are
+# therefore declared survivors in SchemeMutationSuite.cmake with their reason
+# recorded, alongside probe output suppression, which is unwitnessable for
+# exactly the same reason.
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.verbose.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.scm"
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   TIMEOUT 120
   ENVIRONMENT "BYTE_MACHINE_TEST_VERBOSE=1")
 
@@ -446,9 +371,8 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_ABSENT_GUARD_DIR}"
-            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
     EXPECT_EXIT 2
     TIMEOUT 120
     LABELS expected-red
@@ -459,9 +383,8 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_DIRTY_GUARD_DIR}"
-            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
     EXPECT_EXIT 2
     TIMEOUT 120
     LABELS expected-red
@@ -476,10 +399,9 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
             "--librarie-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
     EXPECT_EXIT 2
     TIMEOUT 120
     LABELS expected-red
@@ -492,7 +414,6 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
             "--program"
     EXPECT_EXIT 2
@@ -504,10 +425,9 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
-            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
-            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
     EXPECT_EXIT 2
     TIMEOUT 120
     LABELS expected-red
@@ -522,10 +442,9 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
-            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
     EXPECT_EXIT 2
     TIMEOUT 120
     LABELS expected-red
@@ -538,21 +457,8 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     NAME byte-machine.harness.launcher-no-library-root.chez.source
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
             "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
-            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
-    EXPECT_EXIT 2
-    TIMEOUT 120
-    LABELS expected-red
-    ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source")
-
-  byte_machine_add_exit_code_test(
-    NAME byte-machine.harness.launcher-no-source-dir.chez.source
-    COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
-            "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
-            "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
-            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
     EXPECT_EXIT 2
     TIMEOUT 120
     LABELS expected-red
@@ -563,8 +469,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
             "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
-            "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
-            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            "--program" "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
     EXPECT_EXIT 2
     TIMEOUT 120
     LABELS expected-red
@@ -573,7 +478,7 @@ endif()
 
 # A lane that is set up correctly never reaches a launcher refusal, so each one
 # needs a lane of its own or a deleted refusal is invisible. The same argument
-# the ten chez-source.ss refusals above are registered under.
+# the nine chez-source.ss refusals above are registered under.
 #
 # Three lanes, not one per refusal in these files. The flag-vocabulary
 # refusals below the parser, and --source-guard's own absent-directory check,
@@ -602,8 +507,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
             --library-root "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
             --library-root "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}"
             --object-dir "${CMAKE_BINARY_DIR}"
-            --source-dir "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
-            --program "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            --program "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
             --output "${CMAKE_BINARY_DIR}/unused.so"
     EXPECT_EXIT 2
     TIMEOUT 60
@@ -622,7 +526,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
             "${BYTE_MACHINE_HARNESS_CHEZ_AOT_LAUNCHER}"
             --object-dir "${CMAKE_BINARY_DIR}"
             --source-guard "${BYTE_MACHINE_HARNESS_DIRTY_GUARD_DIR}"
-            --program "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.chez.sps"
+            --program "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
     EXPECT_EXIT 2
     TIMEOUT 60
     LABELS expected-red)
@@ -644,7 +548,6 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     NAME byte-machine.harness.scheme-mutation.cmake.direct
     COMMAND "${CMAKE_COMMAND}"
             "-DBYTE_MACHINE_CHEZ_EXECUTABLE=${BYTE_MACHINE_CHEZ_EXECUTABLE}"
-            "-DBYTE_MACHINE_CWD_MATRIX_DIR=${BYTE_MACHINE_CWD_MATRIX_DIR}"
             -P "${CMAKE_CURRENT_LIST_DIR}/support/cmake/SchemeMutationSuite.cmake"
     TIMEOUT 900
     LABELS unit
@@ -652,54 +555,42 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
                 "BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin")
 endif()
 
-# --- The placeholder library, from three working directories ---------------
+# --- The placeholder library -------------------------------------------------
 #
-# Same program, same body, three launch directories. See the matrix comment
-# above for what each one catches and why passing here is not yet evidence.
-foreach(cwd_case identical decoy empty)
-  if(cwd_case STREQUAL "identical")
-    set(cwd_dir "${BYTE_MACHINE_CWD_IDENTICAL_DIR}")
-  elseif(cwd_case STREQUAL "decoy")
-    set(cwd_dir "${BYTE_MACHINE_CWD_DECOY_DIR}")
-  else()
-    set(cwd_dir "${BYTE_MACHINE_CWD_EMPTY_DIR}")
-  endif()
-
-  byte_machine_add_scheme_lane(
-    NAME "byte-machine.portability.placeholder-cwd-${cwd_case}.chez.source"
-    BACKEND chez
-    PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.chez.sps"
-    SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                  "${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder.scm"
-                  "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.scm"
-    TIMEOUT 120
-    WORKING_DIRECTORY "${cwd_dir}")
-endforeach()
+# One lane, launched from the default private directory like every other
+# lane. The three-directory working-directory matrix retired with the include
+# mechanism (decision 0006): with absolute library roots and an empty
+# source-directories there is nothing left for a launch directory to change,
+# so cwd-independence is structural rather than empirical.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.portability.placeholder.chez.source
+  BACKEND chez
+  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder.sls"
+          "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.sps"
+  TIMEOUT 120)
 
 # --- Cross-library identity ------------------------------------------------
 #
-# Slice 4, deliverable D3. One body, two libraries: the owner constructs, the
-# consumer -- which imported the owner rather than including its body again --
-# recognises, and the allocation-free singleton stays one object across both
-# imports.
+# Slice 4, deliverable D3. Two libraries, one placeholder: the owner
+# constructs it, the consumer -- which imports the owner rather than
+# redefining its procedures -- recognises it, and the allocation-free
+# singleton stays one object across both imports.
 #
-# No working-directory matrix here. The consumer adds a second include site but
-# no new resolution mechanism: Chez resolves it by bare filename through
-# source-directories exactly as it resolves the owner's body. Slice 3 proved
-# that mechanism; a second instance of a proven mechanism is not a second proof.
-#
-# Passing here is not yet evidence. What makes it evidence is passes 22 and 23 in
-# SchemeMutationSuite.cmake, and in particular the double-include mutation --
-# under which both cases below answer wrongly, nothing raises, and every other
+# Passing here is not yet evidence. What makes it evidence is the ownership
+# mutation in SchemeMutationSuite.cmake, where the consumer is rewritten to
+# inline duplicate definitions instead of importing the owner: under that
+# mutation both cases below answer wrongly, nothing raises, and every other
 # lane in this tree still passes.
 byte_machine_add_scheme_lane(
   NAME byte-machine.portability.placeholder-identity.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.chez.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder.scm"
-                "${BYTE_MACHINE_SRC_COMMON_DIR}/placeholder-consumer.scm"
-                "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.scm"
+  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder.sls"
+          "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder-consumer.sls"
+          "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.sps"
   TIMEOUT 120)
 
 # --- Provenance ------------------------------------------------------------
@@ -716,9 +607,9 @@ byte_machine_add_scheme_lane(
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.provenance.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.scm"
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   WRONG_FINGERPRINT
   EXPECT_EXIT 3
   TIMEOUT 120
@@ -736,30 +627,30 @@ byte_machine_add_scheme_lane(
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.provenance-absent-expectation.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.scm"
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   EXPECT_EXIT 3
   TIMEOUT 120
   LABELS expected-red
   ENVIRONMENT "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${CMAKE_BINARY_DIR}/fingerprints/never-produced.fingerprint")
 
-# A manifest naming a body that is not there. What fails is reading the text,
+# A manifest naming a source that is not there. What fails is reading the text,
 # before any comparison happens.
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.provenance-missing-body.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.chez.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.scm"
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   EXPECT_EXIT 3
   TIMEOUT 120
   LABELS expected-red
   ENVIRONMENT "BYTE_MACHINE_FINGERPRINT_FILES=${CMAKE_BINARY_DIR}/fingerprints/no-such-body.scm")
 
-# Provenance configured and never performed. SHARED_BODIES guarantees the
+# Provenance configured and never performed. SOURCES guarantees the
 # environment carries a manifest; nothing until now guaranteed anything read
-# it. This body reaches harness-summary without ever reaching
+# it. This program reaches harness-summary without ever reaching
 # harness-verify-provenance!, which is precisely the shape harness-bootstrap
 # would have had if its hand-placed call had been forgotten -- and that would
 # have run un-provenanced with nothing failing.
@@ -773,9 +664,9 @@ byte_machine_add_scheme_lane(
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.unreached-provenance.chez.source
   BACKEND chez
-  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.chez.sps"
-  SHARED_BODIES ${BYTE_MACHINE_HARNESS_MANIFEST}
-                "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.scm"
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-unreached-provenance.sps"
   EXPECT_EXIT 3
   TIMEOUT 120
   LABELS expected-red)

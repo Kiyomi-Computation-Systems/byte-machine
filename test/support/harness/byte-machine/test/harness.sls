@@ -1,29 +1,184 @@
-;;; byte-machine private portable test runner.
+;;; Chez runtime adapter for the byte-machine private test runner.
 ;;;
-;;; SHARED BODY CONTRACT
+;;; This is the only place in the harness where runtime-specific identifiers
+;;; may appear. Its export list is checked by mutation: deleting a load-bearing
+;;; export here must make the self-tests fail (spec section 9.1).
 ;;;
-;;; Included verbatim by the Chez adapter's wrapper (harness.sls), its sole
-;;; owner library (decisions 0002/0003). No library or include form of its
-;;; own, and must never name a specific runtime -- everything the adapter does
-;;; differently arrives through the adapter protocol, documented in
-;;; docs/plans/milestone-0-slice-2-test-harness.md section 6.
-;;;
-;;; Plain R6RS. define-record-type, string ports, error, condition accessors,
-;;; hash tables, and sorting are all available under R6RS alone, and nothing
-;;; here forbids them; this body still avoids them and keeps records as plain
-;;; lists behind accessors because nothing has needed to change since the
-;;; portability era, not because a rule still requires it (AGENTS.md; decision
-;;; 0005).
-;;;
-;;; PROCESS STATUS (spec section 5.2)
-;;;
-;;;   0  every selected case passed
-;;;   1  one or more assertions failed
-;;;   2  harness, configuration, or registration error
-;;;   3  reserved: the run could not confirm it executed the intended text
-;;;
-;;; Status is computed once, at the end, rather than chosen at each throw site,
-;;; so a new error path cannot forget to change it.
+;;; The library contains its own text -- the adapter section first, the
+;;; runner inlined below it (decision 0006) -- and imports (byte-machine test
+;;; fingerprint). Nothing here resolves through source-directories.
+
+(library (byte-machine test harness)
+  (export
+    ;; suite lifecycle
+    harness-begin harness-finish harness-summary harness-exit-status
+    harness-status-pass harness-status-failed
+    harness-status-harness-error harness-status-provenance
+    harness-empty-selection-error harness-empty-selection-diagnosis
+    ;; structure
+    harness-group harness-case
+    ;; assertions
+    check check-equal check-not-equal check-fail check-raises with-cleanup
+    ;; self-testing
+    harness-probe harness-set-filter!
+    probe-cases probe-failed-cases probe-checks probe-failures
+    probe-errors probe-skipped probe-cleanup-failures probe-raised?
+    probe-failure-records
+    failure-record-id failure-record-what failure-record-detail
+    ;; pure helpers, exported so the runner's own tests can reach them
+    harness-string-contains? harness-join harness-split harness-take
+    harness-member? harness-failure-context harness-normalize-filter
+    harness-counters harness-restore-counters! harness-capture-state
+    ;; content fingerprint and provenance
+    harness-fingerprint-bytevector harness-fingerprint-combine
+    harness-fingerprint->string harness-fingerprint-file
+    harness-bytes->string harness-provenance-diagnosis
+    harness-verify-provenance! harness-provenance-reachability-diagnosis
+    ;; adapter protocol
+    adapter-runtime-name adapter-runtime-version adapter-machine-type
+    adapter-os adapter-architecture adapter-execution-mode
+    adapter-environment-variable adapter-exit
+    adapter-value->string adapter-describe-condition adapter-file-bytes
+    adapter-flush-output
+    ;; arithmetic harness-self-tests.sps and harness-bootstrap.sps call
+    ;; directly, not the runner section below -- R6RS keeps it outside (rnrs)
+    modulo quotient remainder)
+
+  (import
+    (rnrs)
+    (byte-machine test fingerprint)
+    (only (rnrs r5rs) modulo quotient remainder)
+    (only (chezscheme)
+          machine-type scheme-version getenv
+          with-output-to-string display-condition))
+
+  ;; --- runtime identity ----------------------------------------------------
+
+  (define (adapter-runtime-name) "chez")
+
+  ;; (scheme-version) is "Chez Scheme Version 10.4.1"; evidence records compare
+  ;; the bare number, so take the final whitespace-delimited token.
+  (define (adapter-runtime-version)
+    (let* ((full (scheme-version))
+           (n (string-length full)))
+      (let loop ((i (- n 1)))
+        (cond ((< i 0) full)
+              ((char=? (string-ref full i) #\space) (substring full (+ i 1) n))
+              (else (loop (- i 1)))))))
+
+  (define (adapter-machine-type) (symbol->string (machine-type)))
+
+  ;; --- OS and architecture, derived from the machine type ------------------
+  ;;
+  ;; Chez's machine type names the target the runtime was actually built for,
+  ;; which is what a portability claim needs: an observed architecture, not a
+  ;; configure-time guess. A threaded build carries a leading "t".
+
+  (define (adapter-machine-type-body)
+    (let ((m (adapter-machine-type)))
+      (if (and (> (string-length m) 0) (char=? (string-ref m 0) #\t))
+          (substring m 1 (string-length m))
+          m)))
+
+  (define (adapter-string-starts-with? s prefix)
+    (let ((sn (string-length s)) (pn (string-length prefix)))
+      (and (>= sn pn)
+           (string=? (substring s 0 pn) prefix))))
+
+  (define adapter-architecture-table
+    '(("arm64" . "arm64")
+      ("arm32" . "arm32")
+      ("a6" . "amd64")
+      ("i3" . "x86")
+      ("ppc32" . "ppc32")
+      ("rv64" . "riscv64")
+      ("la64" . "loongarch64")))
+
+  (define adapter-os-table
+    '(("le" . "linux")
+      ("osx" . "darwin")
+      ("nt" . "windows")
+      ("fb" . "freebsd")
+      ("ob" . "openbsd")
+      ("nb" . "netbsd")
+      ("s2" . "solaris")
+      ("qnx" . "qnx")
+      ("ti" . "ios")
+      ("a" . "android")))
+
+  (define (adapter-lookup-prefix table s)
+    (cond ((null? table) #f)
+          ((adapter-string-starts-with? s (car (car table))) (car table))
+          (else (adapter-lookup-prefix (cdr table) s))))
+
+  (define (adapter-architecture)
+    (let ((hit (adapter-lookup-prefix adapter-architecture-table
+                                      (adapter-machine-type-body))))
+      (if hit (cdr hit) "unknown")))
+
+  (define (adapter-os)
+    (let* ((body (adapter-machine-type-body))
+           (arch-hit (adapter-lookup-prefix adapter-architecture-table body)))
+      (if (not arch-hit)
+          "unknown"
+          (let* ((rest (substring body (string-length (car arch-hit))
+                                  (string-length body)))
+                 (os-hit (adapter-lookup-prefix adapter-os-table rest)))
+            (if os-hit (cdr os-hit) "unknown")))))
+
+  ;; The lane registration declares the execution mode; the launcher never
+  ;; touches this variable. The launcher's object guard is what makes the
+  ;; declaration unfalsifiable: it makes a compiled object impossible to load.
+  (define (adapter-execution-mode)
+    (let ((m (getenv "BYTE_MACHINE_EXECUTION_MODE")))
+      (if (and m (not (string=? m ""))) m "unknown")))
+
+  ;; --- services ------------------------------------------------------------
+
+  (define (adapter-environment-variable name) (getenv name))
+
+  (define (adapter-exit code) (exit code))
+
+  (define (adapter-value->string v)
+    (with-output-to-string (lambda () (write v))))
+
+  (define (adapter-describe-condition obj)
+    (if (condition? obj)
+        (with-output-to-string (lambda () (display-condition obj)))
+        (with-output-to-string (lambda () (write obj)))))
+
+  ;; A binary port, so the value is bytes rather than decoded characters --
+  ;; and so an LF is an LF on a platform whose text ports would translate it.
+  ;; get-bytevector-all returns the EOF object for an empty file rather than a
+  ;; zero-length bytevector, so an empty expectation file reads as empty
+  ;; rather than raising.
+  (define (adapter-file-bytes path)
+    (let* ((port (open-file-input-port path))
+           (bytes (get-bytevector-all port)))
+      (close-port port)
+      (if (eof-object? bytes) (make-bytevector 0) bytes)))
+
+  (define (adapter-flush-output) (flush-output-port (current-output-port)))
+
+;; ---------------------------------------------------------------------------
+;; The runner. Inlined here by the include collapse (decision 0006); formerly
+;; test/support/harness/shared/harness-runner.scm, this library's sole
+;; included body. Everything below stays plain R6RS out of habit and
+;; stability, not law: records as tagged lists, no hash tables, no
+;; define-record-type -- nothing has needed to change since the portability
+;; era. Free identifiers used below and defined above (the adapter
+;; procedures) or imported (the fingerprint library, r5rs arithmetic) are
+;; bound by this library; a name bound nowhere kills the library at import.
+;;
+;; PROCESS STATUS (spec section 5.2)
+;;
+;;   0  every selected case passed
+;;   1  one or more assertions failed
+;;   2  harness, configuration, or registration error
+;;   3  reserved: the run could not confirm it executed the intended text
+;;
+;; Status is computed once, at the end, rather than chosen at each throw site,
+;; so a new error path cannot forget to change it.
 
 (define harness-status-pass 0)
 (define harness-status-failed 1)
@@ -137,13 +292,13 @@
 
 ;; A lane whose build declared a manifest, in a run where nothing verified it.
 ;;
-;; SHARED_BODIES being required makes the environment unforgeable; it says
+;; SOURCES being required makes the environment unforgeable; it says
 ;; nothing about whether anything read it. The check is reached from
 ;; harness-begin, or by a hand-placed call -- which is what harness-bootstrap
 ;; needed, having deliberately no harness-begin. Forget that line in a future
-;; body and the lane runs un-provenanced with nothing failing, which is the one
-;; remaining way V9's guarantee can be true at configure time and false at run
-;; time.
+;; program and the lane runs un-provenanced with nothing failing, which is the
+;; one remaining way V9's guarantee can be true at configure time and false at
+;; run time.
 ;;
 ;; Pure, and separate from the summary's read of the live flag, for the reason
 ;; harness-empty-selection-diagnosis is: a run in this state cannot assert
@@ -493,12 +648,13 @@
 ;; ---------------------------------------------------------------------------
 ;;
 ;; A provenance failure ends the run there and then, rather than recording an
-;; error and continuing. Recording is not enough, for the reason status 3 exists
-;; at all: a body that goes on to hang satisfies a timeout expectation whether
-;; or not an error was recorded first, so a recorded-and-continued failure is
-;; invisible to every lane whose expected outcome does not depend on reaching
-;; the summary. Beyond that, continuing is pointless -- a run that cannot show
-;; it is executing the intended text says nothing meaningful afterwards.
+;; error and continuing. Recording is not enough, for the reason status 3
+;; exists at all: a program that goes on to hang satisfies a timeout
+;; expectation whether or not an error was recorded first, so a
+;; recorded-and-continued failure is invisible to every lane whose expected
+;; outcome does not depend on reaching the summary. Beyond that, continuing is
+;; pointless -- a run that cannot show it is executing the intended text says
+;; nothing meaningful afterwards.
 
 (define (harness-provenance-failure! detail)
   (harness-say-always
@@ -514,9 +670,9 @@
   (adapter-flush-output)
   (adapter-exit harness-status-provenance))
 
-;; A body named in the manifest that cannot be read is a provenance failure, not
-;; an I/O accident to propagate. Without this the raise escapes the runner and
-;; takes the process out through a status outside this file's four-value
+;; A source named in the manifest that cannot be read is a provenance failure,
+;; not an I/O accident to propagate. Without this the raise escapes the runner
+;; and takes the process out through a status outside this file's four-value
 ;; vocabulary, with no summary line and a message about a file handle -- which
 ;; the exact-status helper would then report as an out-of-vocabulary status, a
 ;; true statement about the wrong thing.
@@ -554,7 +710,7 @@
 ;; verify commands with no environment at all, so refusing here would fail
 ;; every one of the mutation suite's baselines before a single mutation ran.
 ;;
-;; Nothing is lost by skipping. SHARED_BODIES is a required argument of
+;; Nothing is lost by skipping. SOURCES is a required argument of
 ;; byte_machine_add_scheme_lane, so a registered lane always has a manifest and
 ;; there is no reachable path by which a real lane silently loses provenance.
 ;; The guarantee lives at configure time, where it cannot be forged; a run-time
@@ -611,7 +767,7 @@
 ;;
 ;; The two are distinguished because they are different bugs: a filter that
 ;; matched nothing is usually a typo in the invocation, while a suite with no
-;; cases at all is usually a body that failed to load what it meant to.
+;; cases at all is usually a program that failed to load what it meant to.
 (define (harness-empty-selection-diagnosis case-count skipped-count)
   (cond
     ((> case-count 0) #f)
@@ -661,3 +817,4 @@
 ;; Print the summary and exit with the status it reports.
 (define (harness-finish)
   (adapter-exit (harness-summary)))
+)

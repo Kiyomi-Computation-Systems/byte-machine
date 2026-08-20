@@ -12,12 +12,11 @@
 ;;; --script program has nowhere to `load` a shared file from. Measured
 ;;; against Chez 10.4.1 on 2026-08-17: under --script, (car (command-line))
 ;;; is this script's own path, so the absolute directory to `load` a sibling
-;;; file from is derivable with no bootstrap argument. The real reason is
-;;; that Chez's own defaults for both library-directories and
-;;; source-directories are CWD-relative -- (("." . ".")) and (".")
-;;; respectively, measured the same day -- and this suite deliberately varies
-;;; the working directory a lane is launched from (the matrix in
-;;; test/CMakeLists.txt). Sharing this block would make every launcher's
+;;; file from is derivable with no bootstrap argument. Chez's own defaults
+;;; for both library-directories and source-directories are CWD-relative --
+;;; (("." . ".")) and (".") respectively, measured 2026-08-17 -- and a
+;;; launcher must never inherit either, whatever directory a lane happens to
+;;; launch from. Sharing this block would make every launcher's
 ;;; correctness depend on `load`ing another launcher file: a load-order
 ;;; dependency between files that stand alone today, with its own new failure
 ;;; mode -- a `load` of the wrong file rather than a named refusal. That is
@@ -74,13 +73,12 @@
 ;;; Measured against Chez 10.4.1 on 2026-08-17: this launcher's own load,
 ;;; run once with (source-directories '()) and once left at Chez's unset
 ;;; default ((".")), produces byte-identical outcomes. Library resolution
-;;; goes through library-directories, not source-directories, and a
-;;; library's own `include` forms resolve relative to the library file
-;;; itself, not through this parameter -- so nothing this launcher does
-;;; today depends on the line above. It is kept anyway: it still narrows
-;;; what a `load` or top-level `include` added to this file later could
-;;; reach, and an empty list costs nothing to state. It is not, on its own,
-;;; what makes this lane honest -- the source guard above is.
+;;; goes through library-directories, not source-directories, and no Scheme
+;;; file in this tree includes another (decision 0006) -- so nothing this
+;;; launcher does today depends on the line above. It is kept anyway: it
+;;; still narrows what a `load` or top-level `include` added to this file
+;;; later could reach, and an empty list costs nothing to state. It is not,
+;;; on its own, what makes this lane honest -- the source guard above is.
 
 ;; Status 2 is the harness's "harness, configuration, or registration error".
 ;; A launcher that could not set up the lane has not run a test at all, and

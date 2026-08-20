@@ -1,7 +1,11 @@
-;;; Self-tests for the byte-machine private test runner.
-;;;
-;;; SHARED BODY: included verbatim by harness-self-tests.chez.sps, its sole
-;;; owner wrapper (decisions 0002/0003). Plain R6RS.
+;;; The runner's self-tests, as a program. Merged from its .chez.sps wrapper
+;;; by the include collapse (decision 0006).
+
+(import (rnrs) (byte-machine test harness))
+
+(harness-begin "harness.self")
+
+;;; Self-tests for the byte-machine private test runner. Plain R6RS.
 ;;;
 ;;; Every deliberate failure below runs inside harness-probe, which gives it a
 ;;; fresh isolated result state and suppresses its output. Without that, a
@@ -13,11 +17,12 @@
 ;;; 9.1).
 
 ;; Construct a bytevector from a length and a list of byte values, by hand
-;; rather than through u8-list->bytevector. Under the portability era this
-;; avoided a spelling only one of R6RS and R7RS defined; under R6RS alone,
-;; which is all that remains, u8-list->bytevector would do the same job just
-;; as well. Kept as written because nothing depends on changing it, not
-;; because anything still forbids the alternative.
+;; rather than through u8-list->bytevector. The hand-rolled form is a holdover
+;; from the retired portability era, which avoided spellings not every dialect
+;; it targeted defined; under R6RS alone, which is all that remains,
+;; u8-list->bytevector would do the same job just as well. Kept as written
+;; because nothing depends on changing it, not because anything still forbids
+;; the alternative.
 (define (harness-bytes length bytes)
   (let ((bv (make-bytevector length 0)))
     (let loop ((i 0) (rest bytes))
@@ -363,29 +368,30 @@
         (check-not-equal "the os is identified" (adapter-os) "unknown")
         (check-not-equal "the architecture is identified"
                          (adapter-architecture) "unknown")
-        ;; The vocabulary, not a fixed mode. Slice 5b gives this body more than
-        ;; one lane to run under, so an equality against any single mode would
-        ;; be false on some lane that is behaving correctly. The narrower claim
-        ;; -- that this lane really is the mode it declares -- is not made here:
-        ;; this same body is also staged and run under the Scheme mutation
-        ;; suite, inside byte-machine.harness.scheme-mutation.cmake.direct,
-        ;; whose registration hand-sets BYTE_MACHINE_EXECUTION_MODE=source no
-        ;; matter what it stages (test/CMakeLists.txt, ~line 645). A
-        ;; name-versus-mode check here would be red on every mutation pass's
-        ;; baseline, not only a broken one. The claim is carried instead by the
-        ;; lane's structure (an aot lane cannot expand source) and proved by
-        ;; mutation C4 against the registration's own mapping.
+        ;; The vocabulary, not a fixed mode. Slice 5b gives this program more
+        ;; than one lane to run under, so an equality against any single mode
+        ;; would be false on some lane that is behaving correctly. The narrower
+        ;; claim -- that this lane really is the mode it declares -- is not
+        ;; made here: this same program is also staged and run under the Scheme
+        ;; mutation suite, inside
+        ;; byte-machine.harness.scheme-mutation.cmake.direct, whose
+        ;; registration hand-sets BYTE_MACHINE_EXECUTION_MODE=source no matter
+        ;; what it stages (its registration in test/CMakeLists.txt). A
+        ;; name-versus-mode check here would be red on every baseline, not only
+        ;; a broken one. The claim is carried instead by the lane's structure
+        ;; (an aot lane cannot expand source) and proved by mutation C4 against
+        ;; the registration's own mapping.
         (check "the mode is one the lane vocabulary defines"
                (harness-member? (adapter-execution-mode)
                                 (list "source" "aot")))))
 
     ;; adapter-exit ends the process, so no assertion may call it. Naming it is
     ;; still load-bearing: the parity argument in spec section 9.1 rests on this
-    ;; body referencing every adapter name, and until this case existed
+    ;; program referencing every adapter name, and until this case existed
     ;; adapter-exit was the one name it missed -- its only other uses are inside
-    ;; harness-runner.scm, which `include` splices into the library, so they
-    ;; resolve whatever the export list says. Dropping it from one adapter left
-    ;; this body loading and passing on that runtime.
+    ;; the runner section of harness.sls, so they resolve whatever the export
+    ;; list says. Dropping it from the export list left this program loading
+    ;; and passing regardless.
     (harness-case "the adapter can end the process"
       (lambda ()
         (check "adapter-exit is reachable" (procedure? adapter-exit))))
@@ -414,7 +420,7 @@
         (check-equal "remainder" (remainder 7 2) 1)
         (check-equal "modulo" (modulo -7 2) 1)))
 
-    ;; A literal #t can never fail, so the old body only "passed" because a
+    ;; A literal #t can never fail, so the old case only "passed" because a
     ;; raise would have unwound past the check entirely, not because the
     ;; check evaluated anything. Wrapping the flush in a probe makes the
     ;; assertion depend on what adapter-flush-output actually does.
@@ -478,7 +484,7 @@
                (harness-string-contains?
                 (harness-empty-selection-diagnosis 0 4) "4"))
         ;; The two empty states must not report the same thing: one is a typo in
-        ;; the invocation, the other a body that failed to load.
+        ;; the invocation, the other a program that failed to load.
         (check-not-equal "the two empty states read differently"
                          (harness-empty-selection-diagnosis 0 0)
                          (harness-empty-selection-diagnosis 0 4))))))
@@ -542,9 +548,10 @@
         (check-equal "zero" (harness-fingerprint->string 0) "0")))
 
     ;; adapter-file-bytes is called directly here, not only through
-    ;; harness-fingerprint-file. A name used only inside the shared runner body
-    ;; resolves internally regardless of the export list, so testing it only
-    ;; indirectly would make its export-list mutation undetectable.
+    ;; harness-fingerprint-file. A name used only inside harness.sls's own
+    ;; runner section resolves internally regardless of the export list, so
+    ;; testing it only indirectly would make its export-list mutation
+    ;; undetectable.
     (harness-case "a file is read as its exact bytes"
       (lambda ()
         (let ((bv (adapter-file-bytes
@@ -633,3 +640,5 @@
       (lambda ()
         (check "absent" (not (harness-provenance-reachability-diagnosis #f #f)))
         (check "empty" (not (harness-provenance-reachability-diagnosis "" #f)))))))
+
+(harness-finish)

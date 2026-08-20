@@ -42,7 +42,6 @@ if(BYTE_MACHINE_BUILD_TESTS)
   include(ByteMachineTesting)
   include(ByteMachineExpectExit)
   include(ByteMachineSchemeLane)
-  include(ByteMachinePortabilityGuard)
   add_subdirectory(test)
 endif()
 

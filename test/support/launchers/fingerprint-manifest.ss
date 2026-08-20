@@ -1,9 +1,9 @@
 ;;; Compute the expected combined fingerprint of a manifest, at build time.
 ;;;
 ;;; Usage:
-;;;   fingerprint-manifest.ss <shared-dir> <output> <body>...
+;;;   fingerprint-manifest.ss <library-root> <object-guard> <output> <source>...
 ;;;
-;;; A lane prints the combined fingerprint of the bodies it executed. Until
+;;; A lane prints the combined fingerprint of the sources it executed. Until
 ;;; something reads that value back it is a claim, not a check: two lanes can
 ;;; print different digests for text both say they ran, and a suite that only
 ;;; prints stays green. This produces the value each lane must agree with,
@@ -12,16 +12,13 @@
 ;;;
 ;;; THE ALGORITHM IS NOT REIMPLEMENTED HERE
 ;;;
-;;; fingerprint.scm is loaded verbatim, so this program and the runner cannot
-;;; drift apart. A second implementation agreeing with the first is the kind of
-;;; proof that proves nothing -- and when it stopped agreeing, the disagreement
-;;; would look exactly like the defect this file exists to detect.
-;;;
-;;; Consequence, recorded because it is not obvious: this runs under Chez, so a
-;;; Chez lane compares Chez's output against a Chez computation and agrees with
-;;; itself by construction. With Chez as the only runtime, every lane's
-;;; comparison has this shape; see section 6.1 of the slice-5a design for what
-;;; that does and does not prove.
+;;; (byte-machine test fingerprint) is imported -- the same library the
+;;; harness re-exports to every lane -- so this program and the runner cannot
+;;; drift apart. The import mechanism (library-directories set first, import
+;;; mid-file under --script) is measured in decision 0006. The root is paired
+;;; with the always-empty object guard for the same reason chez-source.ss
+;;; pairs its roots: the expectation must be computed from source text, and a
+;;; compiled object beside the source must have nowhere to load from.
 
 ;;; Status 2 is the harness's "harness, configuration, or registration error",
 ;;; the same meaning the Chez source launcher gives it.
@@ -33,28 +30,39 @@
 
 (define args (command-line-arguments))
 
-(if (< (length args) 3)
-    (die "usage: fingerprint-manifest.ss <shared-dir> <output> <body>..."))
+(if (< (length args) 4)
+    (die "usage: fingerprint-manifest.ss <library-root> <object-guard> <output> <source>..."))
 
-(define shared-dir (list-ref args 0))
-(define output (list-ref args 1))
-(define bodies (list-tail args 2))
+(define library-root (list-ref args 0))
+(define object-guard-dir (list-ref args 1))
+(define output (list-ref args 2))
+(define sources (list-tail args 3))
 
-;; The adapter protocol's one member this program needs. Defined before the
-;; load, because the loaded body calls it.
-(define (adapter-file-bytes path)
-  (if (not (file-exists? path))
-      (die (string-append "manifest body does not exist: " path)))
-  (let* ((port (open-file-input-port path))
-         (bytes (get-bytevector-all port)))
-    (close-port port)
-    (if (eof-object? bytes) (make-bytevector 0) bytes)))
+(if (not (file-directory? object-guard-dir))
+    (die (string-append "object guard directory does not exist: " object-guard-dir)))
 
-(load (string-append shared-dir "/fingerprint.scm"))
+;; Asserted, not assumed, exactly as the launchers assert it: a guard
+;; directory that has acquired a file is no longer a guard, and the
+;; expectation would be computed from whatever was put there.
+(if (not (null? (directory-list object-guard-dir)))
+    (die (string-append "object guard directory must be empty but is not: "
+                        object-guard-dir)))
+
+(for-each
+ (lambda (source)
+   (if (not (file-exists? source))
+       (die (string-append "manifest source does not exist: " source))))
+ sources)
+
+(compile-imported-libraries #f)
+(source-directories '())
+(library-directories (list (cons library-root object-guard-dir)))
+
+(import (byte-machine test fingerprint))
 
 (define combined
   (harness-fingerprint->string
-   (harness-fingerprint-combine (map harness-fingerprint-file bodies))))
+   (harness-fingerprint-combine (map harness-fingerprint-file sources))))
 
 ;; No trailing newline. The reader trims whitespace anyway, but writing exactly
 ;; the value keeps the file's bytes equal to the string it represents.

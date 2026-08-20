@@ -165,10 +165,12 @@ endfunction()
 # repository could load a body the build never staged, and would keep passing
 # after that body stopped being staged correctly.
 #
-# A lane that overrides this is making a claim about where resolution happens,
-# which is what the working-directory matrix in test/CMakeLists.txt exists to
-# check. Pure, so that the choice can be specified without registering a test or
-# creating a directory.
+# A lane that overrides this is making a claim about where it must launch
+# from; none currently does (the include-era working-directory matrix retired
+# with decision 0006), and the never-from-the-repository default stays
+# because it costs nothing and forecloses a class of accident. Pure, so that
+# the choice can be specified without registering a test or creating a
+# directory.
 function(byte_machine_test_run_directory name override out_dir)
   if(override)
     set(${out_dir} "${override}" PARENT_SCOPE)
@@ -188,10 +190,9 @@ endfunction()
 #
 # The working directory is inside the build tree, never the repository, unless
 # WORKING_DIRECTORY names an existing directory of the caller's choosing. That is
-# not tidiness: Chez resolves `include` against the process working directory
-# (see docs/plans/milestone-0-portability-spike.md section 2), so a test allowed
-# to run from the repository root could load a shared body the build never
-# staged, and would keep passing after that body stopped being staged correctly.
+# not tidiness: it is what keeps a test's outcome independent of where the
+# developer happened to stand, and it predates -- and outlives -- the include
+# mechanism whose working-directory hazards first forced it (decision 0006).
 function(byte_machine_add_test)
   cmake_parse_arguments(PARSE_ARGV 0 arg "" "NAME;TIMEOUT;WORKING_DIRECTORY" "COMMAND;LABELS;ENVIRONMENT")
 

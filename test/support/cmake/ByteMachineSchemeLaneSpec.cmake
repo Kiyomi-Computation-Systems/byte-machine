@@ -52,7 +52,7 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
       NAME byte-machine.harness.example.chez.source
       BACKEND chez
       PROGRAM "${SPEC_SELF}")
-  elseif(c STREQUAL "lane-requires-shared-bodies")
+  elseif(c STREQUAL "lane-requires-sources")
     byte_machine_add_scheme_lane(
       NAME byte-machine.harness.example.chez.source
       BACKEND chez
@@ -63,21 +63,28 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
       NAME byte-machine.harness.example.chez.source
       BACKEND chez
       PROGRAM "/h/self/does-not-exist.chez.sps"
-      SHARED_BODIES "${SPEC_SELF}"
+      SOURCES "${SPEC_SELF}"
       TIMEOUT 10)
-  elseif(c STREQUAL "lane-rejects-missing-shared-body")
+  elseif(c STREQUAL "lane-rejects-missing-source")
     byte_machine_add_scheme_lane(
       NAME byte-machine.harness.example.chez.source
       BACKEND chez
       PROGRAM "${SPEC_SELF}"
-      SHARED_BODIES "${SPEC_SELF}" "/nonexistent/body.scm"
+      SOURCES "${SPEC_SELF}" "/nonexistent/body.scm"
+      TIMEOUT 10)
+  elseif(c STREQUAL "lane-rejects-duplicate-source-basename")
+    byte_machine_add_scheme_lane(
+      NAME byte-machine.harness.example.chez.source
+      BACKEND chez
+      PROGRAM "${SPEC_SELF}"
+      SOURCES "${SPEC_SELF}" "${SPEC_SELF}"
       TIMEOUT 10)
   elseif(c STREQUAL "lane-rejects-unknown-backend")
     byte_machine_add_scheme_lane(
       NAME byte-machine.harness.example.chez.source
       BACKEND guile
       PROGRAM "${SPEC_SELF}"
-      SHARED_BODIES "${SPEC_SELF}"
+      SOURCES "${SPEC_SELF}"
       TIMEOUT 10)
   elseif(c STREQUAL "lane-rejects-unknown-mode")
     # The registrar never compares BACKEND against the NAME's own backend
@@ -95,7 +102,7 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
       NAME byte-machine.harness.example.cmake.direct
       BACKEND chez
       PROGRAM "${SPEC_SELF}"
-      SHARED_BODIES "${SPEC_SELF}"
+      SOURCES "${SPEC_SELF}"
       TIMEOUT 10)
   else()
     message(FATAL_ERROR "byte-machine-spec: unknown case '${c}'")
@@ -109,10 +116,8 @@ set(BYTE_MACHINE_CHEZ_OBJECT_ROOT "/objects")
 set(BYTE_MACHINE_HARNESS_CHEZ_AOT_LAUNCHER "/launchers/chez-aot.ss")
 set(BYTE_MACHINE_HARNESS_CHEZ_COMPILE_LAUNCHER "/launchers/chez-compile.ss")
 set(BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT "/h/chez")
-set(BYTE_MACHINE_HARNESS_SHARED_DIR "/h/shared")
 set(BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR "/b/guard")
 set(BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT "/s/chez")
-set(BYTE_MACHINE_SRC_COMMON_DIR "/s/common/byte-machine")
 
 # --- Chez ------------------------------------------------------------------
 
@@ -121,7 +126,7 @@ byte_machine_scheme_lane_command(byte-machine.harness.example.chez.source
   chez source "/h/self/p.chez.sps" command measured status message)
 spec_check_equal("${status}" "ok" "chez lane classifies")
 spec_check_equal("${command}"
-  "/opt/chez;--script;/h/launchers/chez-source.ss;--library-root;/h/chez;--library-root;/s/chez;--source-dir;/h/shared;--source-dir;/s/common/byte-machine;--object-guard;/b/guard;--program;/h/self/p.chez.sps"
+  "/opt/chez;--script;/h/launchers/chez-source.ss;--library-root;/h/chez;--library-root;/s/chez;--object-guard;/b/guard;--program;/h/self/p.chez.sps"
   "chez lane command line")
 
 # The guard directory is the entire mechanism that stops a stale .so from being
@@ -132,6 +137,25 @@ list(FIND command "--object-guard" guard_index)
 math(EXPR guard_value_index "${guard_index} + 1")
 list(GET command "${guard_value_index}" guard)
 spec_check_equal("${guard}" "/b/guard" "chez lane passes the object guard directory")
+
+# Within one lane, measured copies are keyed by basename in a flat
+# fingerprint/ directory, so a manifest carrying two entries with one
+# basename would let one silently overwrite the other. The pure detector is
+# asserted directly; the registrar's refusal is a rejection case below.
+byte_machine_lane_duplicate_basenames(dups "/a/x.sls" "/b/y.sls")
+spec_check_equal("${dups}" "" "distinct basenames report no duplicates")
+byte_machine_lane_duplicate_basenames(dups "/a/x.sls" "/b/x.sls" "/c/x.sls" "/d/y.sls")
+spec_check_equal("${dups}" "x.sls" "a repeated basename is reported once, however often it repeats")
+
+# CMake resolves an unset local through the calling scope, so if the
+# detector ever loses its own accumulator initialization, it inherits
+# whatever `duplicates` the caller has lying around. Seeded here so that
+# hazard has a witness -- the same assertion the retired repository-wide
+# guard's specification carried for the same two lines.
+set(duplicates "stale-from-caller")
+byte_machine_lane_duplicate_basenames(dups "/a/x.sls" "/b/y.sls")
+spec_check_equal("${dups}" "" "the detector does not inherit the caller's ambient duplicates")
+unset(duplicates)
 
 # --- Rejections ------------------------------------------------------------
 
@@ -169,7 +193,7 @@ spec_check_equal("${message}"
   "no Chez was discovered, so the chez aot lane for '/h/self/p.chez.sps' is not registered."
   "chez lane no-runtime message names the aot mode, not a hardcoded source")
 
-# --- Declared bodies versus measured bodies --------------------------------
+# --- Declared sources versus measured sources ------------------------------
 #
 # A source lane reads the repository sources, so the two lists coincide and
 # the distinction is invisible. It is not invisible for a compiled lane, where
@@ -182,7 +206,7 @@ byte_machine_scheme_lane_command(byte-machine.harness.example.chez.source
   command measured status message "/h/shared/a.scm" "/h/shared/b.scm")
 spec_check_equal("${status}" "ok" "a chez source lane is accepted")
 spec_check_equal("${measured}" "/h/shared/a.scm;/h/shared/b.scm"
-  "a source lane measures the bodies it declares, in the declared order")
+  "a source lane measures the sources it declares, in the declared order")
 
 byte_machine_scheme_lane_command(byte-machine.harness.example.chez.unknown-mode-name
   chez unknown-mode-name "/h/self/p.chez.sps"
@@ -268,7 +292,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10
   EXPECT_EXIT 1
   ENVIRONMENT "FOO=bar")
@@ -286,7 +310,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10
   ENVIRONMENT "FOO=bar")
 get_property(registrar GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR)
@@ -309,7 +333,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.aot
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10)
 get_property(environment GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT)
 list(GET environment 0 mode_entry)
@@ -319,18 +343,19 @@ spec_check_equal("${mode_entry}" "BYTE_MACHINE_EXECUTION_MODE=aot"
 # The full list, not just the mode entry above: BYTE_MACHINE_FINGERPRINT_FILES
 # here is the measured copy's path under the per-lane object directory, while
 # BYTE_MACHINE_EXPECT_FINGERPRINT_FILE is still keyed by the lane's own name --
-# the expectation comes from the declared body, the run's environment from the
-# measured one. This assertion is the declared/measured asymmetry itself, the
-# whole mechanism this task adds, visible here with no Scheme runtime present.
+# the expectation comes from the declared source, the run's environment from
+# the measured one. This assertion is the declared/measured asymmetry itself,
+# the whole mechanism this task adds, visible here with no Scheme runtime
+# present.
 spec_check_equal("${environment}"
   "BYTE_MACHINE_EXECUTION_MODE=aot;BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin;BYTE_MACHINE_FINGERPRINT_FILES=/objects/byte-machine_harness_example_chez_aot/fingerprint/ByteMachineSchemeLaneSpec.cmake;BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=/fingerprints/byte-machine.harness.example.chez.aot.fingerprint"
-  "an aot lane's environment carries the measured copy's path in BYTE_MACHINE_FINGERPRINT_FILES, not the declared body's own path")
+  "an aot lane's environment carries the measured copy's path in BYTE_MACHINE_FINGERPRINT_FILES, not the declared source's own path")
 
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10)
 get_property(environment GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT)
 list(GET environment 0 mode_entry)
@@ -347,7 +372,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10
   WRONG_FINGERPRINT)
 get_property(fingerprint_function GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION)
@@ -359,7 +384,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10)
 get_property(fingerprint_function GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION)
 spec_check_equal("${fingerprint_function}" "expected"
@@ -378,7 +403,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10
   WORKING_DIRECTORY "/h/run")
 get_property(wd GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY)
@@ -395,7 +420,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10)
 get_property(wd_keyword GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD)
 spec_check_equal("${wd_keyword}" "absent"
@@ -408,7 +433,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10
   EXPECT_EXIT 1
   WORKING_DIRECTORY "/h/run")
@@ -426,7 +451,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10
   EXPECT_EXIT 1)
 get_property(wd_keyword GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD)
@@ -442,7 +467,7 @@ byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
   PROGRAM "${SPEC_SELF}"
-  SHARED_BODIES "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
   TIMEOUT 10)
 get_property(registrar GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR)
 spec_check_equal("${registrar}" "none" "a no-runtime backend registers nothing and does not raise")
@@ -453,9 +478,10 @@ spec_expect_all_rejected("${SPEC_SELF}"
   "lane-requires-backend|BACKEND is required for byte_machine_add_scheme_lane"
   "lane-requires-program|PROGRAM is required for byte_machine_add_scheme_lane"
   "lane-requires-timeout|TIMEOUT is required for byte_machine_add_scheme_lane"
-  "lane-requires-shared-bodies|SHARED_BODIES is required for byte_machine_add_scheme_lane"
+  "lane-requires-sources|SOURCES is required for byte_machine_add_scheme_lane"
   "lane-requires-existing-program|names a program that does not exist"
-  "lane-rejects-missing-shared-body|names a shared body that does not exist"
+  "lane-rejects-missing-source|names a source that does not exist"
+  "lane-rejects-duplicate-source-basename|declares two sources sharing a basename"
   "lane-rejects-unknown-backend|is not a Scheme lane backend"
   "lane-rejects-unknown-mode|is not an execution mode this lane module can build a command for")
 

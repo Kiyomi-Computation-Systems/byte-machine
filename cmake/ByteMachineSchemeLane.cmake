@@ -17,12 +17,12 @@ include("${CMAKE_CURRENT_LIST_DIR}/ByteMachineTesting.cmake")
 
 # --- Functional core -------------------------------------------------------
 
-# byte_machine_lane_measured_copies(<dir> <out_var> <declared-body>...)
+# byte_machine_lane_measured_copies(<dir> <out_var> <declared-source>...)
 #
-# Map each declared body to the copy a compiled lane's build step wrote into
+# Map each declared source to the copy a compiled lane's build step wrote into
 # <dir>. Flat and keyed by basename, which is unambiguous because
-# byte_machine_guard_duplicate_basenames forbids two shared bodies sharing one
-# repository-wide. One rule for every compiled lane: protium needs per-lane
+# byte_machine_add_scheme_lane refuses a manifest carrying two entries with
+# one basename. One rule for every compiled lane: protium needs per-lane
 # path logic here precisely because it has no equivalent guard.
 function(byte_machine_lane_measured_copies dir out_var)
   set(copies "")
@@ -33,16 +33,41 @@ function(byte_machine_lane_measured_copies dir out_var)
   set(${out_var} "${copies}" PARENT_SCOPE)
 endfunction()
 
+# byte_machine_lane_duplicate_basenames(<out_duplicates> <path>...)
+#
+# Basenames appearing more than once, each reported once however often they
+# repeat. Narrowed from the retired repository-wide guard (decision 0006) to
+# the one invariant that survives it: byte_machine_lane_measured_copies keys
+# a compiled lane's fingerprint/ copies by basename, so within one lane's
+# manifest a repeated basename would make one copy silently overwrite the
+# other. Compared with the extension, because the extension is part of the
+# copied filename.
+function(byte_machine_lane_duplicate_basenames out_duplicates)
+  set(seen "")
+  set(duplicates "")
+  foreach(path IN LISTS ARGN)
+    get_filename_component(base "${path}" NAME)
+    if(base IN_LIST seen)
+      list(APPEND duplicates "${base}")
+    endif()
+    list(APPEND seen "${base}")
+  endforeach()
+  if(duplicates)
+    list(REMOVE_DUPLICATES duplicates)
+  endif()
+  set(${out_duplicates} "${duplicates}" PARENT_SCOPE)
+endfunction()
+
 # byte_machine_chez_aot_paths(<name> <program> <out_object_dir> <out_compiled>)
 #
 # Where one AOT lane's artifacts live. Keyed by Chez version and machine type
 # (BYTE_MACHINE_CHEZ_OBJECT_ROOT) so a parallel build cannot race and no
 # object outlives the runtime that produced it, and by LANE NAME -- not
 # program -- so two lanes that build the same program from different text
-# share nothing. That is not hypothetical: this slice registers
+# share nothing. That is not hypothetical: slice 5b's remainder registers
 # byte-machine.harness.self.chez.aot and
 # byte-machine.harness.stale-artifact.chez.aot over the same PROGRAM,
-# harness-self-tests.chez.sps, and the second exists to compile it from
+# harness-self-tests.sps, and the second exists to compile it from
 # deliberately divergent text. Keyed by program stem instead, both would
 # resolve to one object directory, one compiled .so, and one flat
 # fingerprint/ directory, so the stale lane's copies would silently overwrite
@@ -51,11 +76,9 @@ function(byte_machine_chez_aot_paths name program out_object_dir out_compiled)
   string(REPLACE "." "_" name_key "${name}")
   set(dir "${BYTE_MACHINE_CHEZ_OBJECT_ROOT}/${name_key}")
   set(${out_object_dir} "${dir}" PARENT_SCOPE)
-  # NAME_WLE, not NAME_WE: NAME_WE strips the longest extension, so
-  # harness-self-tests.chez.sps would yield the bare stem harness-self-tests,
-  # dropping which runtime the artifact was built from. NAME_WLE keeps the
-  # .chez segment in the artifact's filename, one less thing a reader of the
-  # object tree has to reconstruct from the directory name alone.
+  # NAME_WLE strips one extension: harness-self-tests.sps yields
+  # harness-self-tests. (The .chez filename infix this comment once preserved
+  # retired with the merged wrappers -- decision 0006.)
   get_filename_component(stem "${program}" NAME_WLE)
   set(${out_compiled} "${dir}/${stem}.so" PARENT_SCOPE)
 endfunction()
@@ -63,7 +86,7 @@ endfunction()
 # byte_machine_scheme_lane_command(<name> <backend> <mode> <program>
 #                                  <out_command> <out_measured>
 #                                  <out_status> <out_message>
-#                                  <declared-body>...)
+#                                  <declared-source>...)
 #
 # Status is `ok`, `no-runtime`, `unknown-backend`, or `unknown-mode`. A
 # missing runtime is not fatal: the CMake-layer specifications must stay
@@ -77,7 +100,7 @@ endfunction()
 # going to exercise.
 #
 # <out_measured> is the list of paths the run will fingerprint, in the order
-# the declared bodies were given. For a source lane it is the declared list:
+# the declared sources were given. For a source lane it is the declared list:
 # the repository sources are the only text there is. For a compiled lane it is
 # the copies the build wrote beside the artifact, so a fingerprint describes
 # what the artifact was built from rather than what is on disk now.
@@ -101,16 +124,13 @@ function(byte_machine_scheme_lane_command name backend mode program
     endif()
 
     if(mode STREQUAL "source")
-      # Flags, not positions: a lane names one library root per library family it
-      # imports and one source directory per shared-body directory, and both
-      # counts grow with each slice.
+      # Flags, not positions: a lane names one library root per library
+      # family it imports, and the count grows with each slice.
       set(${out_command}
         "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
         "--script" "${BYTE_MACHINE_HARNESS_CHEZ_LAUNCHER}"
         "--library-root" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
         "--library-root" "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}"
-        "--source-dir" "${BYTE_MACHINE_HARNESS_SHARED_DIR}"
-        "--source-dir" "${BYTE_MACHINE_SRC_COMMON_DIR}"
         "--object-guard" "${BYTE_MACHINE_HARNESS_OBJECT_GUARD_DIR}"
         "--program" "${program}"
         PARENT_SCOPE)
@@ -167,20 +187,20 @@ endfunction()
 function(byte_machine_add_scheme_lane)
   cmake_parse_arguments(PARSE_ARGV 0 arg "WRONG_FINGERPRINT"
     "NAME;BACKEND;PROGRAM;TIMEOUT;EXPECT_EXIT;WORKING_DIRECTORY"
-    "LABELS;ENVIRONMENT;SHARED_BODIES")
+    "LABELS;ENVIRONMENT;SOURCES")
 
   if(arg_UNPARSED_ARGUMENTS)
     message(FATAL_ERROR
       "byte-machine: unexpected arguments to byte_machine_add_scheme_lane: ${arg_UNPARSED_ARGUMENTS}")
   endif()
-  # SHARED_BODIES is required, not optional. The property worth having is not
-  # "the lanes have provenance" but "a lane cannot be added without it" -- and
-  # this configure-time check is the whole of that guarantee, because the
-  # harness skips provenance rather than refusing when no manifest reaches it.
-  # It matters little here, where every lane is a source lane, and a great deal
-  # in slices 5b and 5c, where a lane registered without provenance is exactly
-  # the lane that can silently fall back to source.
-  foreach(required NAME BACKEND PROGRAM TIMEOUT SHARED_BODIES)
+  # SOURCES is required, not optional. The property worth having is not "the
+  # lanes have provenance" but "a lane cannot be added without its manifest"
+  # -- and this configure-time check is the whole of that guarantee, because
+  # the harness skips provenance rather than refusing when no manifest reaches
+  # it. It matters little here, where every lane is a source lane, and a great
+  # deal in slices 5b and 5c, where a lane registered without provenance is
+  # exactly the lane that can silently fall back to source.
+  foreach(required NAME BACKEND PROGRAM TIMEOUT SOURCES)
     if(NOT arg_${required})
       message(FATAL_ERROR
         "byte-machine: ${required} is required for byte_machine_add_scheme_lane ('${arg_NAME}').")
@@ -195,13 +215,26 @@ function(byte_machine_add_scheme_lane)
   # A manifest entry that does not exist would be a provenance failure at run
   # time, reported by the harness as though the build tree were incomplete. It
   # is a registration mistake, and it is cheaper to say so here.
-  foreach(body IN LISTS arg_SHARED_BODIES)
+  foreach(body IN LISTS arg_SOURCES)
     if(NOT EXISTS "${body}")
       message(FATAL_ERROR
-        "byte-machine: '${arg_NAME}' names a shared body that does not exist: "
+        "byte-machine: '${arg_NAME}' names a source that does not exist: "
         "${body}.")
     endif()
   endforeach()
+
+  # Within one lane's manifest, basenames must be unique: the flat
+  # fingerprint/ copy directory of the aot branch keys measured copies by
+  # basename. This replaced the repository-wide basename guard when the
+  # include namespace it policed retired (decision 0006).
+  byte_machine_lane_duplicate_basenames(duplicate_basenames ${arg_SOURCES})
+  if(duplicate_basenames)
+    message(FATAL_ERROR
+      "byte-machine: '${arg_NAME}' declares two sources sharing a basename: "
+      "${duplicate_basenames}. byte_machine_lane_measured_copies keys a "
+      "compiled lane's fingerprint/ copies by basename, so one would "
+      "silently overwrite the other.")
+  endif()
 
   # Within this registrar the name is the single source of the mode, so a
   # registration here cannot claim one lane while running another. It is not the
@@ -222,7 +255,7 @@ function(byte_machine_add_scheme_lane)
 
   byte_machine_scheme_lane_command(
     "${arg_NAME}" "${arg_BACKEND}" "${lane_mode}" "${arg_PROGRAM}"
-    command measured status message ${arg_SHARED_BODIES})
+    command measured status message ${arg_SOURCES})
 
   if(status STREQUAL "unknown-backend"
      OR status STREQUAL "unknown-mode")
@@ -239,8 +272,8 @@ function(byte_machine_add_scheme_lane)
   # impossible to load.
   #
   # The fixture is immutable and lives in the source tree; a lane only ever
-  # reads it. Set for every lane rather than only the self-tests, so a body that
-  # starts needing it does not also need a registration change.
+  # reads it. Set for every lane rather than only the self-tests, so a program
+  # that starts needing it does not also need a registration change.
   #
   # arg_ENVIRONMENT is deliberately not spliced in here: CTest applies
   # ENVIRONMENT entries in list order, so for a repeated key the last one wins.
@@ -271,7 +304,7 @@ function(byte_machine_add_scheme_lane)
       byte_machine_wrong_fingerprint("${arg_NAME}" expect_file)
     else()
       byte_machine_expected_fingerprint("${arg_NAME}" expect_file
-                                        ${arg_SHARED_BODIES})
+                                        ${arg_SOURCES})
     endif()
     list(APPEND environment
       "BYTE_MACHINE_FINGERPRINT_FILES=${fingerprint_files}"

@@ -16,7 +16,7 @@
 # will tell you when a pattern has drifted; it will not tell you when a new,
 # untested decision has been added.
 #
-# ONE PASS, SEVENTY-FIVE MUTATIONS
+# ONE PASS, SIXTY-SIX MUTATIONS
 #
 # Every mutation above is declared before the single byte_machine_mutation_run
 # call at the end of this file, so this suite is one pass by construction.
@@ -46,10 +46,12 @@
 # no longer exists, and "guard: wrappers are demanded of the shared
 # directories, not the wrapped ones" mutated the WRAPPED_DIRS-only
 # accumulator branch that fed that FATAL_ERROR -- also gone. The basename-
-# uniqueness rule's own mutations are untouched; "guard: bodies are collected
-# from the shared directories only" survives with a new anchor and a new
-# witness, since its old witness (a WRAPPED_DIRS body missing a wrapper) went
-# with the rule that reported it.
+# uniqueness rule's own mutations were untouched by Task 2; "guard: bodies
+# are collected from the shared directories only" survived it with a new
+# anchor and a new witness, since its old witness (a WRAPPED_DIRS body
+# missing a wrapper) went with the rule that reported it. It did not survive
+# Task 5: the guard it belonged to left whole with the include collapse
+# (decision 0006), named below.
 #
 # Seventy-five is ninety-four minus twenty plus one: the Chez-only
 # simplification's Task 4 removed the second Scheme backend's toolchain layer
@@ -61,6 +63,15 @@
 # up-front output clear, and the check-reordering case. The last left with
 # the removed backend's own mode-vocabulary entry in ByteMachineTesting.cmake,
 # the variable it mutated.
+#
+# Sixty-six is seventy-five minus twelve plus three: the include collapse
+# (decision 0006) deleted ByteMachinePortabilityGuard.cmake whole -- eleven
+# of its twelve mutations tested a repository-wide basename namespace that no
+# longer exists once nothing resolves includes through source-directories --
+# and added three for what survives it, narrowed to one lane:
+# byte_machine_lane_duplicate_basenames, the registrar refusal it feeds, and
+# the accumulator-initialization hazard that moved with the function's body
+# rather than dying with the module.
 #
 # What did NOT leave: the registration-time status guard narrowed from four
 # clauses to two, not to nothing. comma-in-path and relative-path died with
@@ -95,7 +106,7 @@
 cmake_minimum_required(VERSION 3.26)
 
 set(EXPECTED_PASSES 1)
-set(EXPECTED_MUTATIONS 75)
+set(EXPECTED_MUTATIONS 66)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -593,8 +604,8 @@ byte_machine_mutation(
 # byte-machine.harness.provenance.chez.source, the one lane that proves the
 # provenance check can fail, does it by asking WRONG_FINGERPRINT to route here
 # to byte_machine_wrong_fingerprint. If this regressed to always calling
-# byte_machine_expected_fingerprint, that lane would compare its shared
-# bodies' real fingerprint against itself, pass, and stop proving anything --
+# byte_machine_expected_fingerprint, that lane would compare its declared
+# sources' real fingerprint against itself, pass, and stop proving anything --
 # and only the slow integration lane would notice, since neither
 # ByteMachineSchemeLaneSpec.cmake nor this mutation suite would see anything
 # wrong without this entry.
@@ -604,12 +615,20 @@ byte_machine_mutation(
   FIND [[    if(arg_WRONG_FINGERPRINT)]]
   REPLACE [[    if(FALSE)]])
 
-# This is the mutation a whole-branch review found undetectable: delete this
-# block by hand, reconfigure, and the working-directory matrix's three lanes
-# all launch from their derived directories instead of the three fixture
-# directories test/CMakeLists.txt built for them -- three copies of one
-# vacuous lane, and nothing anywhere failed, because neither registrar this
-# block feeds was ever asked whether it received WORKING_DIRECTORY at all.
+# This is the mutation a whole-branch review found undetectable. The incident,
+# as history: with this block deleted by hand and the configure re-run, the
+# include-era working-directory matrix's three lanes all launched from their
+# derived directories instead of the three fixture directories
+# test/CMakeLists.txt had built for them -- three copies of one vacuous lane,
+# and nothing anywhere failed, because neither registrar this block feeds was
+# ever asked whether it received WORKING_DIRECTORY at all.
+#
+# That matrix retired with the include mechanism (decision 0006), and no lane
+# overrides its run directory today, so a forwarding break is now invisible to
+# every registration in the tree. What can still see it is exactly what the
+# incident proved was missing: ByteMachineSchemeLaneSpec.cmake's absent/present
+# assertions on the keyword, which this mutation and the one below hold in
+# place.
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: WORKING_DIRECTORY is parsed and then never forwarded to either registrar"
@@ -630,10 +649,11 @@ byte_machine_mutation(
   FIND [[  if(arg_WORKING_DIRECTORY)]]
   REPLACE [[  if(TRUE)]])
 
-# The run directory is where slice 3's working-directory matrix hangs: a lane
-# that overrides it is asserting something about where resolution happens, so
-# each of the three decisions inside byte_machine_test_run_directory gets its
-# own mutation.
+# The run directory decides where every lane launches from; the three
+# decisions inside byte_machine_test_run_directory each get their own
+# mutation. (The include-era matrix that first hung off this function is
+# gone -- decision 0006 -- but an override that silently stops arriving, or
+# arrives empty, still launches lanes from the wrong place.)
 byte_machine_mutation(
   FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
   LABEL "testing: WORKING_DIRECTORY names a directory that need not exist"
@@ -660,123 +680,27 @@ byte_machine_mutation(
   FIND [[  if(override)]]
   REPLACE [[  if(TRUE)]])
 
-# --- ByteMachinePortabilityGuard --------------------------------------------
-
 byte_machine_mutation(
-  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
-  LABEL "guard: wrapper files are counted as shared bodies"
-  FIND [[  list(FILTER bodies EXCLUDE REGEX "\\.chez\\.(sps|scm)$")]]
-  # Same empty-REPLACE hazard as the expect-exit and scheme-lane mutations
-  # above (CMP0174; this project's 3.26 floor leaves an explicitly-empty
-  # REPLACE undefined rather than empty -- see those mutations' comments).
-  # FIND's match ends at the statement's own closing paren, not the line's
-  # trailing newline, so the comment needs none of its own.
-  REPLACE [[  # deleted]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
-  LABEL "guard: a repeated basename is not reported"
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: a repeated basename is not detected"
   FIND [[    if(base IN_LIST seen)]]
   REPLACE [[    if(FALSE)]])
 
 byte_machine_mutation(
-  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
-  LABEL "guard: the duplicate accessor leaves a stale value when there are none"
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: a duplicate-basename manifest is registered anyway"
+  FIND [[  if(duplicate_basenames)]]
+  REPLACE [[  if(FALSE)]])
+
+# Carried over from the deleted guard module rather than dying with it: the
+# initializer it mutates moved verbatim into the per-lane detector, and a
+# mutation is not dead while its REPLACE still changes a live line.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: the duplicate detector leaves a stale value when there are none"
   FIND [[  set(seen "")
   set(duplicates "")]]
   REPLACE [[  set(seen "")]])
-
-# The imperative shell. Every decision it makes is observable only as a dead
-# process -- a guard that returns has, by construction, found nothing to say --
-# so each of these is caught by a rejection case in the specification rather
-# than by an assertion on a returned value. The script-mode mutation is what
-# proves those cases reach the guard at all: with that branch gone,
-# CONFIGURE_DEPENDS makes the function uncallable under `cmake -P` and every
-# case dies before reaching the decision it was written for.
-
-byte_machine_mutation(
-  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
-  LABEL "guard: unexpected arguments to the guard are accepted"
-  FIND [[  if(arg_UNPARSED_ARGUMENTS)]]
-  REPLACE [[  if(FALSE)]])
-
-# The companion to the one above: the check that catches a mistyped keyword the
-# parser has already absorbed into the preceding keyword's value, where
-# arg_UNPARSED_ARGUMENTS is empty and cannot see it.
-byte_machine_mutation(
-  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
-  LABEL "guard: an entry that is not a directory is accepted"
-  FIND [[      if(NOT IS_DIRECTORY "${entry}")]]
-  REPLACE [[      if(FALSE)]])
-
-# ...and the reach of that check. Deleting the condition (above) and narrowing
-# the set of keywords it runs over (here) are two decisions, so they get two
-# mutations: a single combined one would prove only that at least one of them
-# was noticed.
-byte_machine_mutation(
-  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
-  LABEL "guard: only SHARED_DIRS entries are checked for being directories"
-  # Anchored on the preceding line: the body-collecting loop below iterates the
-  # same two keywords, so the bare `foreach` matches two sites and the SITES
-  # check rejects it. The two loops are deliberately separate -- every entry has
-  # to be judged a directory before any of them is globbed, or a bad entry
-  # sitting after a good one would be reported as having contributed nothing
-  # rather than as not being a directory at all.
-  FIND [[  # what makes the second form reachable; both forms have a rejection case.
-  foreach(keyword IN ITEMS SHARED_DIRS WRAPPED_DIRS)]]
-  REPLACE [[  # what makes the second form reachable; both forms have a rejection case.
-  foreach(keyword IN ITEMS SHARED_DIRS)]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
-  LABEL "guard: the glob asks for a build-system re-check where there is no build system"
-  FIND [[  if(CMAKE_SCRIPT_MODE_FILE)]]
-  REPLACE [[  if(FALSE)]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
-  LABEL "guard: a call naming no directories at all is accepted"
-  FIND [[  if(NOT bodies)]]
-  REPLACE [[  if(FALSE)]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
-  LABEL "guard: a duplicate basename is reported without stopping the build"
-  FIND [[    message(FATAL_ERROR
-      "byte-machine: shared body basenames must be unique across every shared "]]
-  REPLACE [[    message(STATUS
-      "byte-machine: shared body basenames must be unique across every shared "]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
-  LABEL "guard: only the top level of a declared directory is searched"
-  # The whole point of the recursion. Without it a body in a subdirectory is
-  # not rejected -- it is unseen, so it is never checked for a colliding
-  # basename, and the banner covers a file that was never read.
-  FIND [[      file(GLOB_RECURSE dir_globbed ${glob_depends} "${dir}/*.scm")]]
-  REPLACE [[      file(GLOB dir_globbed ${glob_depends} "${dir}/*.scm")]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
-  LABEL "guard: a declared directory that yields no body is accepted"
-  # Distinct from the whole-call check below, which sees only that *everything*
-  # found nothing: this is what notices one empty directory standing beside a
-  # populated one, and it is the check slice 3 needs when src/common joins the
-  # guard holding only a .gitkeep.
-  FIND [[      if(NOT dir_bodies)]]
-  REPLACE [[      if(FALSE)]])
-
-byte_machine_mutation(
-  FILE cmake/ByteMachinePortabilityGuard.cmake SPEC ByteMachinePortabilityGuardSpec.cmake
-  LABEL "guard: bodies are collected from the shared directories only"
-  # Anchored on the preceding line, for the same reason as the entry-check loop
-  # above: the two loops iterate the same two keywords, so a bare `foreach`
-  # matches both and the SITES check rejects it. `set(bodies "")` is unique to
-  # this loop's start.
-  FIND [[  set(bodies "")
-  foreach(keyword IN ITEMS SHARED_DIRS WRAPPED_DIRS)]]
-  REPLACE [[  set(bodies "")
-  foreach(keyword IN ITEMS SHARED_DIRS)]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
