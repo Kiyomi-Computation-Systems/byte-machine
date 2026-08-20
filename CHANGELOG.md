@@ -322,8 +322,9 @@ what this milestone delivers.
   mutations — replaced by a per-lane basename check in the registrar), and
   the one-owner rule with its import-vs-include mutation (replaced by an
   inline-duplication mutation the identity lane catches). Decisions 0002 and
-  0003 are superseded by 0006. The harness stands at 7,713 lines against the
-  8,327-line pre-collapse baseline (`src/`: 84 against 110).
+  0003 are superseded by 0006. The harness stands at 7,724 lines against the
+  8,327-line pre-collapse baseline (`src/`: 87 against 110), re-measured at
+  the branch head after the final review's own prose fixes.
 
 ### Fixed
 

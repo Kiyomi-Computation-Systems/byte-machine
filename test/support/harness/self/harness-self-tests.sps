@@ -376,8 +376,8 @@
         ;; mutation suite, inside
         ;; byte-machine.harness.scheme-mutation.cmake.direct, whose
         ;; registration hand-sets BYTE_MACHINE_EXECUTION_MODE=source no matter
-        ;; what it stages (test/CMakeLists.txt, ~line 645). A name-versus-mode
-        ;; check here would be red on every mutation pass's baseline, not only
+        ;; what it stages (its registration in test/CMakeLists.txt). A
+        ;; name-versus-mode check here would be red on every baseline, not only
         ;; a broken one. The claim is carried instead by the lane's structure
         ;; (an aot lane cannot expand source) and proved by mutation C4 against
         ;; the registration's own mapping.

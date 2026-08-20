@@ -1,6 +1,6 @@
 # Milestone 0, the include collapse: every library owns its own text
 
-Status: draft; awaiting review
+Status: accepted; delivered 2026-08-18 (decision 0006; §6 of chez-only-simplification.md carries the delivery note and measured outcome)
 Date: 2026-08-18
 Parent plan: [`chez-only-simplification.md`](./chez-only-simplification.md) §6 — this is the design document that section requires; its scope bullets are contract here, not suggestions
 Governing plan: [`byte-machine-implementation-plan.md`](./byte-machine-implementation-plan.md) §7.2 and §8, whose transition notes this slice discharges

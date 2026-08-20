@@ -65,7 +65,11 @@ unless stated.
    measured copies by basename, so within one lane's SOURCES basenames must
    be unique; `byte_machine_add_scheme_lane` refuses violations at configure
    time. The repository-wide guard, its specification, and its twelve
-   mutations are deleted with the include namespace they policed.
+   mutations are deleted with the include namespace they policed. (As landed:
+   eleven died with that namespace; the twelfth — the accumulator-
+   initialization hazard, never about the namespace — moved with the
+   relocated detector and was re-declared beside the two new lane-check
+   mutations. MutationSuite's header records the 75 − 12 + 3 arithmetic.)
 5. **The one-owner rule is retired as unconstructible; its defect class
    keeps a witness.** With no `include` form, "a second library includes the
    body" cannot be written. The surviving form of the defect — a consumer
