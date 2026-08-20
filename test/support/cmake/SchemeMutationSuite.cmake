@@ -397,10 +397,10 @@ byte_machine_mutation(
 # itself, inlined there by the include collapse (decision 0006); an internal
 # reference resolves against the definition, never through the export list.
 # Dropping any of the three therefore changes nothing any lane can observe --
-# the parity argument for these names rests on the two export lists being read
-# side by side, not on this suite. Recorded here so the blind spot is asserted
-# rather than remembered, and so the day one of them acquires a caller outside
-# the library, this line fails.
+# and with one adapter there is no second export list to keep in step with, so
+# the export is a tripwire, not a contract. Recorded here so the blind spot is
+# asserted rather than remembered, and so the day one of them acquires a
+# caller outside the library, this line fails.
 byte_machine_mutation(
   FILE ${CHEZ_ADAPTER} SPEC harness-self-tests.sps
   LABEL "chez adapter: an export used only inside the runner section is dropped"

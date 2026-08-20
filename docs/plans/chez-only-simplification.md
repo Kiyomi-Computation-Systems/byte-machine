@@ -150,6 +150,12 @@ The portability guard enforces **two** rules: `.scm`/`.gambit.scm` twinning (eve
 > implemented by
 > [milestone-0-include-collapse-implementation-plan.md](./milestone-0-include-collapse-implementation-plan.md),
 > recorded as [decision 0006](../decisions/0006-inline-libraries.md).
+> Measured outcome, 2026-08-18, at that slice's exit gate: the harness landed
+> at 7,713 lines (`cmake/` + `test/support/`; 8,327 after this plan's own cut,
+> ~9,858 before it) and `src/` at 84. This section's 4,000–4,500 estimate was
+> wrong about where the harness's weight lives — the mutation suite's decision
+> coverage, which both slices deliberately keep, was always the bulk, and the
+> include-era machinery a smaller share than estimated.
 
 Out of scope here; it changes design, not just inventory, so per project convention it gets its own design document and implementation plan. Its scope, fixed now so Phase A reviewers know where the line is:
 
