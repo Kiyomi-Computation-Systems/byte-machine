@@ -12,6 +12,8 @@ Status: ready to execute (regenerated 2026-08-20 against the post-0005/post-0006
 
 **Design:** [`milestone-0-slice-5b-5c-compiled-lanes.md`](./milestone-0-slice-5b-5c-compiled-lanes.md) — read its two amendment blocks first: decision 0005 cancelled slice 5c (D5 closes at the end of this remainder, at the two Chez lanes), and decision 0006 moved every file target onto the inline libraries. Decision labels `W1`–`W12` and mutation labels `C1`–`C4`/`C3b` below refer to that document. This plan replaces Tasks 4 and 6–9 of [`milestone-0-slice-5b-implementation-plan.md`](./milestone-0-slice-5b-implementation-plan.md), whose remaining tasks were written against the pre-0005/pre-0006 tree; its Tasks 1–3 were delivered by PR #6 and survive as shipped code, and its Task 5 stays discharged (design §5.3).
 
+**Carries:** the cycle ledger (`.superpowers/sdd/progress.md`, end of the include-collapse section) names three carries into this remainder, all from the include collapse's final review. Each is discharged at a named step: the **aot command-array spec gap** (Task 1 Step 5's full-command assertion), the **`.chez.sps` spec fixture strings** (Task 1 Step 5's rename), and the **`byte_machine_chez_aot_paths` comment describing its lanes in the future tense** (Task 3 Step 6).
+
 ## Global Constraints
 
 - CMake floor is **3.26**. `cmake_parse_arguments` unsets a one-value keyword given `""`; CMP0174 is 3.31+ and may not be relied on. Forward optional single-value keywords conditionally, never empty.
@@ -299,6 +301,8 @@ spec_check_equal("${command}"
 ```
 
 Run `cmake -P test/support/cmake/ByteMachineSchemeLaneSpec.cmake`. Expected: PASS immediately — the pure core already does this; the case exists to make C1/C2 catchable, and if it fails instead, stop: the assertion text above was derived from `byte_machine_chez_aot_paths` (`.` → `_` in the name key, `NAME_WLE` stem) and the mismatch is between this plan and the shipped code, which must be resolved by reading the code, not by editing it.
+
+This step also discharges two ledger carries from the include collapse's final review. First, the **aot command-array spec gap**: the full-command assertion above is the first spec of the aot branch's complete command line. Second, the **`.chez.sps` fixture strings**: the spec's invented program paths (`/h/self/p.chez.sps`, in the source-mode cases and the two no-runtime message assertions that interpolate them) still carry the wrapper-era `.chez` infix that retired with decision 0006. Rename every occurrence in this spec file to `p.sps`, updating the two no-runtime message assertions in the same edit — they quote the path verbatim, so a half-done rename fails loudly here rather than silently anywhere. Re-run the spec after the rename: PASS, and `rg -n 'chez\.sps' test/support/cmake/ByteMachineSchemeLaneSpec.cmake` comes back empty. (`rg -n 'chez\.sps'` across the repository then reports only historical prose in `docs/`, if anything; source and specs are clean.)
 
 - [ ] **Step 6: Register the three lanes**
 
@@ -632,6 +636,8 @@ byte_machine_add_scheme_lane(
   TIMEOUT 120
   LABELS expected-red)
 ```
+
+Registering this lane also discharges the ledger's third carry: `byte_machine_chez_aot_paths`'s header comment (around `cmake/ByteMachineSchemeLane.cmake:66`) justifies lane-name keying by saying "slice 5b's remainder registers byte-machine.harness.self.chez.aot and byte-machine.harness.stale-artifact.chez.aot" — future tense, attributed to a slice that is now this one. Reword that sentence to present tense ("That is not hypothetical: two registered lanes share this PROGRAM — …self.chez.aot and …stale-artifact.chez.aot, and the second compiles it from deliberately divergent text"), so the comment describes the tree instead of predicting it.
 
 ```bash
 make build && ctest --preset pr -R 'stale-artifact' -V
@@ -1131,4 +1137,5 @@ From design §9 (5b), adjusted by 0005's closure of D5 at two lanes; checked bef
 - [ ] Both mutation suites assert their own totals and those totals match: CMake **1/72**, Scheme **30/68**.
 - [ ] Cross-library identity holds on `chez.aot` (`placeholder-identity.chez.aot` green), discharging slice 4 §10 for Chez.
 - [ ] Design §5.3 carries the remainder's re-measured addendum and §11 the build-cost number; 0004 carries the closure amendment; the milestone plan records D5 closed.
+- [ ] The ledger's three carries are discharged: the aot command line is spec-asserted in full, `rg 'chez\.sps'` finds nothing in specs or source, and the aot-paths comment speaks in the present tense.
 - [ ] Lane count 37 in `pr` and `release`; the four new lanes are the only registration delta.
