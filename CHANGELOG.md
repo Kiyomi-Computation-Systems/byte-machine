@@ -266,6 +266,13 @@ what this milestone delivers.
   and remains 0/1/2/3. Re-measured with Gambit gone: Chez 10.4.1 exits 255 for
   a `--script` naming a file that does not exist, and the illustration now
   uses that measured value.
+- Every library is an ordinary inline R6RS `.sls` and every test program a
+  plain `.sps`; no Scheme file includes another. The fingerprint algorithm is
+  its own library, `(byte-machine test fingerprint)`, imported by the harness
+  and by the build-time expectation alike. A lane's manifest (`SOURCES`,
+  formerly `SHARED_BODIES`) is its program plus every library it loads, so
+  every byte of Scheme a lane runs is fingerprinted — wrapper text never was,
+  before. See [decision 0006](docs/decisions/0006-inline-libraries.md).
 
 ### Removed
 
@@ -307,6 +314,15 @@ what this milestone delivers.
   [the removal plan](docs/plans/chez-only-simplification.md)'s §6, not yet
   designed, collapses that indirection into inline R6RS libraries; until it
   lands, both decisions govern exactly as before.
+- The shared-body include mechanism and everything that kept it honest: the
+  launchers' `--source-dir`, the working-directory matrix and its asymmetric
+  mutation, the repository-wide basename guard
+  (`ByteMachinePortabilityGuard.cmake`, its specification, and its twelve
+  mutations — replaced by a per-lane basename check in the registrar), and
+  the one-owner rule with its import-vs-include mutations (replaced by an
+  inline-duplication mutation the identity lane catches). Decisions 0002 and
+  0003 are superseded by 0006. The harness stands at 7,713 lines against the
+  8,327-line pre-collapse baseline (`src/`: 84 against 110).
 
 ### Fixed
 
