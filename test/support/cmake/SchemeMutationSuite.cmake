@@ -50,7 +50,7 @@
 # else; the pass therefore builds a root that does have one, and runs the
 # self-tests lane against it.
 #
-# Pass 8 is the placeholder body's own decisions -- tag, length, vector-ness,
+# Pass 8 is the placeholder library's own decisions -- tag, length, vector-ness,
 # symbol-vs-fresh-allocation identity.
 #
 # Passes 9 to 17 are the launcher's parse decisions: an unknown flag, a flag
@@ -67,7 +67,7 @@
 # there is no resolution step left for a launch directory to change, so the
 # claim the matrix witnessed empirically is now structural.
 #
-# Pass 18 is the consumer body's three decisions. All three are now caught by a
+# Pass 18 is the consumer library's three decisions. All three are now caught by a
 # failed comparison. The first used to be caught by an induced raise instead
 # -- weaker, and weighed and accepted -- before a comparison-based witness
 # replaced it.
@@ -97,7 +97,7 @@
 # diagnosis itself, each witnessed through the exact-status helper so that
 # exit 3 -- the refusal -- is the green baseline, exactly as passes 4 and 5 do
 # for the launcher's guard-directory refusals. A third refusal -- a manifest
-# naming an unreadable body -- has no mutation; see the stated blind spot
+# naming an unreadable source -- has no mutation; see the stated blind spot
 # recorded beside pass 23 below. Pass 24 was pass 22's second mutation until
 # Task 8: see the detail beside its declaration for why the reachability guard
 # made WRONG_FP_FILE's exit-3 baseline ambiguous for that one mutation and not
@@ -357,13 +357,13 @@ byte_machine_mutation(
     "suppression changes only what is printed, never a counter or a status, so no assertion can observe it from inside the process; it is covered by the manual check in the implementation plan's Task 5 step 9, and its real cost -- a log that teaches readers to ignore FAIL lines -- is not machine-checkable")
 
 # The other two print-only decisions, and the same argument. The adapter
-# protocol exposes no output-capture service, and the shared runner body may
-# not reach past its protocol for one -- so the harness has no way to read
+# protocol exposes no output-capture service, and the runner may not reach
+# past its protocol for one -- so the harness has no way to read
 # back what it printed -- and this suite judges a mutation by the verify
 # command's exit status, so an output difference is invisible to it whatever
 # lane it runs.
 # byte-machine.harness.verbose.chez.source closes the half that can be closed:
-# it runs a real body with the variable set, so the path is executed and a
+# it runs a real program with the variable set, so the path is executed and a
 # break that raises is caught. What no layer checks is that the line was
 # printed. Spec section 5.3 records the manual check that does.
 byte_machine_mutation(
@@ -395,7 +395,7 @@ byte_machine_mutation(
 # comfortable lie. harness-summary, harness-empty-selection-error, and
 # harness-failure-context are used only from the runner section of harness.sls
 # itself, inlined there by the include collapse (decision 0006); an internal
-# reference resolves against the body, never through the export list. Dropping
+# reference resolves against the definition, never through the export list. Dropping
 # any of the three therefore changes nothing any lane can observe -- the parity
 # argument for these names rests on the two export lists being read side by
 # side, not on this suite. Recorded here so the blind spot is asserted rather
@@ -521,9 +521,9 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # itself still runs, unchanged, as a real regression test -- it is just no
 # longer this suite's witness.
 #
-# SPEC names the registered lane rather than a body basename, because the
+# SPEC names the registered lane rather than a program basename, because the
 # witness is a whole invocation and not a program: "passing" means the named
-# body never ran.
+# program never ran.
 
 byte_machine_mutation_reset()
 
@@ -727,7 +727,7 @@ file(WRITE "${POISON_COMPILE_SCRIPT}"
 ;; poisoned adapter copy into the library root that holds the pristine source,
 ;; so a launcher which stops pairing that root with an empty object directory
 ;; loads the object instead of the source. This is a per-runtime staging file,
-;; not a shared body, so naming Chez here is allowed.
+;; not harness text, so naming Chez here is allowed.
 ;;
 ;; Both halves of the poison are read from the source tree, not from the stage:
 ;; the two are byte-identical by construction, and reading the stage would make
@@ -791,9 +791,9 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Pass 8: the placeholder body's decisions -------------------------------
+# --- Pass 8: the placeholder library's decisions ----------------------------
 #
-# placeholder-tests.scm already checks each of these decisions directly; this
+# placeholder-tests.sps already checks each of these decisions directly; this
 # pass proves those checks are not vacuous by breaking the decision underneath
 # and requiring the checks to notice.
 
@@ -1066,9 +1066,9 @@ byte_machine_slice3_launcher_pass(
   ${LAUNCHER_BASE_ARGS}
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
 
-# --- Pass 18: the consumer body's decisions ---------------------------------
+# --- Pass 18: the consumer library's decisions ------------------------------
 #
-# Same argument as pass 8, for a second body: placeholder-identity-tests.scm
+# Same argument as pass 8, for a second library: placeholder-identity-tests.sps
 # already checks each of these decisions directly; this pass proves those
 # checks are not vacuous.
 
@@ -1252,13 +1252,13 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # nonzero, and the mutation is caught. Continued below by passes 24 and 25,
 # which this pair's own comments point to at the place each split off.
 #
-# THE MANIFEST NAMES ONE BODY ON PURPOSE
+# THE MANIFEST NAMES ONE SOURCE ON PURPOSE
 #
 # BYTE_MACHINE_EXPECT_COMMAND packs its argument vector with `|`, which is also
 # the manifest separator, so a two-element manifest would be unpacked as two
-# arguments. One body is enough: these passes test whether the check runs and is
-# consulted, not how values combine, which pass 20 covers. Passes 24 and 25
-# keep the same one-body manifest for the same reason.
+# arguments. One source is enough: these passes test whether the check runs and
+# is consulted, not how values combine, which pass 20 covers. Passes 24 and 25
+# keep the same one-source manifest for the same reason.
 
 set(RUNNER_BODY test/support/harness/byte-machine/test/harness.sls)
 
@@ -1361,7 +1361,7 @@ byte_machine_mutation(
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # A stated blind spot: the third refusal -- a manifest naming an unreadable
-# body -- has no mutation here. Making it witnessable would need an
+# source -- has no mutation here. Making it witnessable would need an
 # expectation crafted to equal what the mutant computes after the read fails,
 # which is a value with no meaning outside that mutation. It is covered by its
 # registered lane, byte-machine.harness.provenance-missing-body.chez.source,
@@ -1384,7 +1384,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # stays #f, the guard still refuses, and the lane still exits 3 -- now cleanly
 # distinct from the 0 baseline instead of coinciding with the old one.
 #
-# THE MANIFEST NAMES ONE BODY, AS ABOVE, AND ITS EXPECTATION IS COMPUTED, NOT
+# THE MANIFEST NAMES ONE SOURCE, AS ABOVE, AND ITS EXPECTATION IS COMPUTED, NOT
 # WRITTEN BY HAND
 #
 # byte_machine_expected_fingerprint in test/CMakeLists.txt is a CMake function,
@@ -1438,7 +1438,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 25: the reachability guard itself -------------------------------
 #
-# harness-unreached-provenance.scm (test/support/harness/self/) deliberately
+# harness-unreached-provenance.sps (test/support/harness/self/) deliberately
 # never calls harness-begin, so its lane's baseline already exits 3 through
 # the guard alone -- no WRONG_FP_FILE trick needed, and no
 # BYTE_MACHINE_EXPECT_FINGERPRINT_FILE either, since nothing in this lane's

@@ -12,17 +12,16 @@
 
 ;;; Cross-library identity tests. Milestone 0 slice 4, deliverable D3.
 ;;;
-;;; SHARED BODY: included verbatim by placeholder-identity-tests.chez.sps, its
-;;; sole owner wrapper (decisions 0002/0003), which imports BOTH libraries --
-;;; the owner for make-placeholder and placeholder-marker, the consumer for
-;;; consume. Needing both names in scope at once is exactly why these cases
-;;; cannot live in placeholder-tests.scm, whose header says cross-library
-;;; identity is this slice's proof and is not attempted there.
+;;; This program imports BOTH libraries -- the owner for make-placeholder and
+;;; placeholder-marker, the consumer for consume. Needing both names in scope at
+;;; once is exactly why these cases cannot live in placeholder-tests.sps, whose
+;;; header says cross-library identity is this slice's proof and is not
+;;; attempted there.
 ;;;
-;;; Under a consumer that included the owner's body instead of importing it,
-;;; both cases below answer wrongly and nothing raises. Every other lane in this
-;;; tree still passes, because every other lane imports only the owner. That is
-;;; the whole reason this file exists.
+;;; Under a consumer that defined its own copies of the owner's procedures
+;;; instead of importing them, both cases below answer wrongly and nothing
+;;; raises. Every other lane in this tree still passes, because every other lane
+;;; imports only the owner. That is the whole reason this file exists.
 
 (harness-group "placeholder-identity"
   (lambda ()
@@ -30,9 +29,9 @@
     (harness-case "recognition crosses a library boundary"
       (lambda ()
         ;; Built through the owner, read through the consumer. A second copy of
-        ;; the body would give the consumer its own tag, so the owner's value
-        ;; would stop matching and consume would return the consumer's marker
-        ;; instead of 7.
+        ;; the owner's definitions would give the consumer its own tag, so the
+        ;; owner's value would stop matching and consume would return the
+        ;; consumer's marker instead of 7.
         (check-equal "the owner built it and the consumer read it"
                      (consume (make-placeholder 7))
                      7)))

@@ -156,15 +156,15 @@ set(BYTE_MACHINE_FINGERPRINT_LAUNCHER
     "${CMAKE_CURRENT_LIST_DIR}/support/launchers/fingerprint-manifest.ss")
 set(BYTE_MACHINE_FINGERPRINT_DIR "${CMAKE_BINARY_DIR}/fingerprints")
 
-# byte_machine_expected_fingerprint(<name> <out_var> <body>...)
+# byte_machine_expected_fingerprint(<name> <out_var> <source>...)
 #
 # Produce, at build time, the combined fingerprint the named lane must report,
 # and set <out_var> to the file holding it.
 #
 # A build output rather than a configure-time value, because a registration's
 # environment is fixed when CMake configures and this must be recomputed
-# whenever a body changes -- which is precisely the case it exists to catch.
-# The DEPENDS list is what makes that true, so a body added to a manifest
+# whenever a source changes -- which is precisely the case it exists to catch.
+# The DEPENDS list is what makes that true, so a source added to a manifest
 # without being added there produces an expectation that silently never
 # refreshes.
 #
@@ -176,7 +176,7 @@ function(byte_machine_expected_fingerprint name out_var)
   if(NOT ARGN)
     message(FATAL_ERROR
       "byte-machine: '${name}' asked for a fingerprint expectation over no "
-      "bodies. An empty manifest fingerprints to the seed on every lane, which "
+      "sources. An empty manifest fingerprints to the seed on every lane, which "
       "would compare equal forever and check nothing.")
   endif()
 
@@ -233,7 +233,7 @@ endfunction()
 # --- Harness lanes ---------------------------------------------------------
 
 # The harness must be able to fail before it can be trusted to pass. This is
-# that proof: a body that fails one assertion, with the exact status compared
+# that proof: a program that fails one assertion, with the exact status compared
 # from outside, because a program cannot report its own exit status.
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.failing-body.chez.source
@@ -299,15 +299,15 @@ byte_machine_add_scheme_lane(
 # rule, and the print itself would first run for whoever turned the variable on,
 # and a typo in any of them would surface there rather than here.
 #
-# One registration is enough: the decision lives in the shared runner body,
-# which reads nothing runtime-specific to make it, so a second lane would not
-# exercise a different code path -- the same argument the mutation suite's
-# first pass makes for every other decision in it.
+# One registration is enough: the decision lives in the runner section of
+# harness.sls, which reads nothing runtime-specific to make it, so a second lane
+# would not exercise a different code path -- the same argument the mutation
+# suite's first pass makes for every other decision in it.
 #
 # What this lane cannot check is that the line was printed. The adapter
-# protocol exposes no output-capture service, and the shared runner body may
-# not reach past its protocol for one -- so it has no way to read back its own
-# output, and the registration layer asserts exit status, not output. Both
+# protocol exposes no output-capture service, and the runner may not reach past
+# its protocol for one -- so it has no way to read back its own output, and the
+# registration layer asserts exit status, not output. Both
 # decisions are therefore declared survivors in
 # SchemeMutationSuite.cmake with their reason recorded, alongside probe output
 # suppression, which is unwitnessable for exactly the same reason.
@@ -635,7 +635,7 @@ byte_machine_add_scheme_lane(
   LABELS expected-red
   ENVIRONMENT "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${CMAKE_BINARY_DIR}/fingerprints/never-produced.fingerprint")
 
-# A manifest naming a body that is not there. What fails is reading the text,
+# A manifest naming a source that is not there. What fails is reading the text,
 # before any comparison happens.
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.provenance-missing-body.chez.source
@@ -650,7 +650,7 @@ byte_machine_add_scheme_lane(
 
 # Provenance configured and never performed. SOURCES guarantees the
 # environment carries a manifest; nothing until now guaranteed anything read
-# it. This body reaches harness-summary without ever reaching
+# it. This program reaches harness-summary without ever reaching
 # harness-verify-provenance!, which is precisely the shape harness-bootstrap
 # would have had if its hand-placed call had been forgotten -- and that would
 # have run un-provenanced with nothing failing.

@@ -40,8 +40,8 @@
     adapter-environment-variable adapter-exit
     adapter-value->string adapter-describe-condition adapter-file-bytes
     adapter-flush-output
-    ;; arithmetic harness-self-tests.scm and harness-bootstrap.scm call
-    ;; directly, not the runner body -- R6RS keeps it outside (rnrs)
+    ;; arithmetic harness-self-tests.sps and harness-bootstrap.sps call
+    ;; directly, not the runner section below -- R6RS keeps it outside (rnrs)
     modulo quotient remainder)
 
   (import
@@ -296,7 +296,7 @@
 ;; nothing about whether anything read it. The check is reached from
 ;; harness-begin, or by a hand-placed call -- which is what harness-bootstrap
 ;; needed, having deliberately no harness-begin. Forget that line in a future
-;; body and the lane runs un-provenanced with nothing failing, which is the one
+;; program and the lane runs un-provenanced with nothing failing, which is the one
 ;; remaining way V9's guarantee can be true at configure time and false at run
 ;; time.
 ;;
@@ -649,7 +649,7 @@
 ;;
 ;; A provenance failure ends the run there and then, rather than recording an
 ;; error and continuing. Recording is not enough, for the reason status 3 exists
-;; at all: a body that goes on to hang satisfies a timeout expectation whether
+;; at all: a program that goes on to hang satisfies a timeout expectation whether
 ;; or not an error was recorded first, so a recorded-and-continued failure is
 ;; invisible to every lane whose expected outcome does not depend on reaching
 ;; the summary. Beyond that, continuing is pointless -- a run that cannot show
@@ -669,9 +669,9 @@
   (adapter-flush-output)
   (adapter-exit harness-status-provenance))
 
-;; A body named in the manifest that cannot be read is a provenance failure, not
-;; an I/O accident to propagate. Without this the raise escapes the runner and
-;; takes the process out through a status outside this file's four-value
+;; A source named in the manifest that cannot be read is a provenance failure,
+;; not an I/O accident to propagate. Without this the raise escapes the runner
+;; and takes the process out through a status outside this file's four-value
 ;; vocabulary, with no summary line and a message about a file handle -- which
 ;; the exact-status helper would then report as an out-of-vocabulary status, a
 ;; true statement about the wrong thing.
@@ -766,7 +766,7 @@
 ;;
 ;; The two are distinguished because they are different bugs: a filter that
 ;; matched nothing is usually a typo in the invocation, while a suite with no
-;; cases at all is usually a body that failed to load what it meant to.
+;; cases at all is usually a program that failed to load what it meant to.
 (define (harness-empty-selection-diagnosis case-count skipped-count)
   (cond
     ((> case-count 0) #f)

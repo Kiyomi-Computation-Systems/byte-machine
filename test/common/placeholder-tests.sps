@@ -7,15 +7,12 @@
 
 (harness-begin "portability.placeholder")
 
-;;; Shared tests for (byte-machine placeholder).
-;;;
-;;; SHARED BODY: included verbatim by placeholder-tests.chez.sps, its sole
-;;; owner wrapper (decisions 0002/0003). A name missing from the owner library
-;;; is a load failure, not a silent gap.
+;;; Tests for (byte-machine placeholder), which this program imports: a name
+;;; missing from that library is a load failure, not a silent gap.
 ;;;
 ;;; Cross-library identity is slice 4's proof and is not attempted here. What
-;;; this body asserts about the marker is only that it is one object, which is
-;;; what a fresh allocation buys and an interned symbol would have given for
+;;; this program asserts about the marker is only that it is one object, which
+;;; is what a fresh allocation buys and an interned symbol would have given for
 ;;; free.
 
 (harness-group "placeholder"
@@ -37,7 +34,7 @@
 
     (harness-case "placeholder? rejects a same-shaped vector with a symbol tag"
       (lambda ()
-        ;; The executable form of the rule in placeholder.scm's header. The tag
+        ;; The executable form of the rule in placeholder.sls's header. The tag
         ;; is a freshly allocated vector precisely so that a symbol spelled like
         ;; it is not it; if the tag ever becomes a symbol, this case fails, and
         ;; with it the representation slice 4's identity test depends on.
@@ -50,7 +47,7 @@
         ;; placeholder hands it over through ordinary vector-ref. So the length
         ;; check is witnessable from outside the library after all, and deleting
         ;; it outright -- not merely perturbing its constant -- is a mutation
-        ;; this body catches.
+        ;; this program catches.
         (let ((real-tag (vector-ref (make-placeholder 0) 0)))
           (check "a length-3 vector carrying the real tag is not a placeholder"
                  (not (placeholder? (vector real-tag 1 2)))))))

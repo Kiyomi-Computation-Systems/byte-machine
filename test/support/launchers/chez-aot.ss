@@ -73,10 +73,10 @@
 ;;; Measured against Chez 10.4.1 on 2026-08-17: this launcher's own load,
 ;;; run once with (source-directories '()) and once left at Chez's unset
 ;;; default ((".")), produces byte-identical outcomes. Library resolution
-;;; goes through library-directories, not source-directories, and a
-;;; library's own `include` forms resolve relative to the library file
-;;; itself, not through this parameter -- so nothing this launcher does
-;;; today depends on the line above. It is kept anyway: it still narrows
+;;; goes through library-directories, not source-directories, and no Scheme
+;;; file in this tree includes another (decision 0006) -- so nothing this
+;;; launcher does today depends on the line above. It is kept anyway: it
+;;; still narrows
 ;;; what a `load` or top-level `include` added to this file later could
 ;;; reach, and an empty list costs nothing to state. It is not, on its own,
 ;;; what makes this lane honest -- the source guard above is.

@@ -1,7 +1,7 @@
 ;;; Compute the expected combined fingerprint of a manifest, at build time.
 ;;;
 ;;; Usage:
-;;;   fingerprint-manifest.ss <library-root> <object-guard> <output> <body>...
+;;;   fingerprint-manifest.ss <library-root> <object-guard> <output> <source>...
 ;;;
 ;;; A lane prints the combined fingerprint of the sources it executed. Until
 ;;; something reads that value back it is a claim, not a check: two lanes can
@@ -31,12 +31,12 @@
 (define args (command-line-arguments))
 
 (if (< (length args) 4)
-    (die "usage: fingerprint-manifest.ss <library-root> <object-guard> <output> <body>..."))
+    (die "usage: fingerprint-manifest.ss <library-root> <object-guard> <output> <source>..."))
 
 (define library-root (list-ref args 0))
 (define object-guard-dir (list-ref args 1))
 (define output (list-ref args 2))
-(define bodies (list-tail args 3))
+(define sources (list-tail args 3))
 
 (if (not (file-directory? object-guard-dir))
     (die (string-append "object guard directory does not exist: " object-guard-dir)))
@@ -49,10 +49,10 @@
                         object-guard-dir)))
 
 (for-each
- (lambda (body)
-   (if (not (file-exists? body))
-       (die (string-append "manifest body does not exist: " body))))
- bodies)
+ (lambda (source)
+   (if (not (file-exists? source))
+       (die (string-append "manifest source does not exist: " source))))
+ sources)
 
 (compile-imported-libraries #f)
 (source-directories '())
@@ -62,7 +62,7 @@
 
 (define combined
   (harness-fingerprint->string
-   (harness-fingerprint-combine (map harness-fingerprint-file bodies))))
+   (harness-fingerprint-combine (map harness-fingerprint-file sources))))
 
 ;; No trailing newline. The reader trims whitespace anyway, but writing exactly
 ;; the value keeps the file's bytes equal to the string it represents.

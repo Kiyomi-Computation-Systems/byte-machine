@@ -6,10 +6,7 @@
 
 (import (rnrs) (byte-machine test harness))
 
-;;; Bootstrap verification of the runner's primitives.
-;;;
-;;; SHARED BODY: included verbatim by harness-bootstrap.chez.sps, its sole
-;;; owner wrapper (decisions 0002/0003). Plain R6RS.
+;;; Bootstrap verification of the runner's primitives. Plain R6RS.
 ;;;
 ;;; The runner cannot be the only witness to its own correctness, so this
 ;;; program judges it with raw conditionals and its own counter. It uses no
@@ -29,7 +26,7 @@
         (set! bootstrap-failures (+ bootstrap-failures 1))
         (display "bootstrap: FAIL ") (display name) (newline))))
 
-;; The one runner facility this body uses before judging any of them. It is here
+;; The one runner facility this program uses before judging any of them. It is here
 ;; because the bootstrap does not call harness-begin -- the suite lifecycle is
 ;; among the things it is not allowed to trust -- and a provenance check that
 ;; lived only in harness-begin would leave these two lanes the only ones in the
@@ -110,8 +107,8 @@
 
 ;; --- adapter protocol -------------------------------------------------------
 ;;
-;; Every adapter procedure is called, so a name missing from one runtime's
-;; export list is a load failure on that runtime rather than a silent gap.
+;; Every adapter procedure is called, so a name missing from the adapter's
+;; export list is a load failure rather than a silent gap.
 
 (bootstrap-assert "adapter: runtime name is chez"
                   (string=? (adapter-runtime-name) "chez"))

@@ -12,8 +12,8 @@
 ;;; the owner would still pass. SchemeMutationSuite.cmake makes exactly that
 ;;; edit and requires the identity lane to fail.
 ;;;
-;;; This is also the mechanism Milestone 1 runs on, where verify.scm calls graph
-;;; procedures it does not define and verify.sls supplies them by importing
+;;; This is also the mechanism Milestone 1 runs on, where the verifier calls
+;;; graph procedures it does not define and gets them by importing
 ;;; (byte-machine graph).
 ;;;
 ;;; This carries no byte-machine semantics and is deleted in Milestone 1

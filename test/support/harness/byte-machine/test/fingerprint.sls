@@ -66,7 +66,7 @@
 
 ;; Combine per-file fingerprints in the order given. Order is significant, so a
 ;; reordered manifest is a different combined value: the result identifies a
-;; sequence of bodies, not a set of them.
+;; sequence of sources, not a set of them.
 (define (harness-fingerprint-combine fingerprints)
   (let loop ((rest fingerprints)
              (h (modulo harness-fingerprint-seed harness-fingerprint-modulus)))

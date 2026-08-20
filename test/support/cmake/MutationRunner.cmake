@@ -29,8 +29,8 @@ set(_bm_mutation_count 0)
 
 # Which trees are copied into the scratch tree. The default is what the
 # CMake-layer suite needs; the Scheme suite adds the harness and the launchers,
-# whose includes resolve against their relative layout and would break if the
-# tree were flattened.
+# whose library roots and program paths resolve against their relative layout
+# and would break if the tree were flattened.
 set(BYTE_MACHINE_MUTATION_STAGE_DIRS "cmake" "test/support/cmake")
 
 # What decides whether a mutation was caught. Empty keeps the original
@@ -40,9 +40,12 @@ set(BYTE_MACHINE_MUTATION_STAGE_DIRS "cmake" "test/support/cmake")
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND "")
 
 # Where the verify command runs. Empty means the stage directory, which is what
-# every pass wanted until slice 3. The working-directory matrix needs a pass per
-# launch directory, because what it asserts is that the launch directory does
-# not matter -- a claim no command run from one fixed place can make.
+# every pass wants. The one caller that ever set it was the include-era
+# working-directory matrix, which needed a pass per launch directory because
+# what it asserted was that the launch directory does not matter -- a claim no
+# command run from one fixed place can make. That matrix retired with the
+# include mechanism (decision 0006); the hook is kept for the next caller that
+# has to run a verify command from somewhere other than the stage.
 set(BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY "")
 
 # byte_machine_mutation(FILE <repo-relative> SPEC <spec basename> LABEL <text>
@@ -126,7 +129,7 @@ endfunction()
 # byte_machine_mutation_stage(<source_root> <stage_dir>)
 #
 # Copy every declared tree into a scratch tree, preserving the relative layout
-# the specifications' and the libraries' includes depend on.
+# the specifications' includes and the libraries' resolution depend on.
 function(byte_machine_mutation_stage source_root stage_dir)
   file(REMOVE_RECURSE "${stage_dir}")
 
@@ -141,7 +144,7 @@ function(byte_machine_mutation_stage source_root stage_dir)
         "exists to eliminate.")
     endif()
     # Directories are copied whole, so a tree such as the harness keeps the
-    # layout its relative includes resolve against.
+    # layout its library roots resolve against.
     file(COPY ${entries} DESTINATION "${stage_dir}/${rel}")
   endforeach()
 endfunction()

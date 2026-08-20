@@ -17,9 +17,9 @@ include("${CMAKE_CURRENT_LIST_DIR}/ByteMachineTesting.cmake")
 
 # --- Functional core -------------------------------------------------------
 
-# byte_machine_lane_measured_copies(<dir> <out_var> <declared-body>...)
+# byte_machine_lane_measured_copies(<dir> <out_var> <declared-source>...)
 #
-# Map each declared body to the copy a compiled lane's build step wrote into
+# Map each declared source to the copy a compiled lane's build step wrote into
 # <dir>. Flat and keyed by basename, which is unambiguous because
 # byte_machine_add_scheme_lane refuses a manifest carrying two entries with
 # one basename. One rule for every compiled lane: protium needs per-lane
@@ -67,7 +67,7 @@ endfunction()
 # share nothing. That is not hypothetical: this slice registers
 # byte-machine.harness.self.chez.aot and
 # byte-machine.harness.stale-artifact.chez.aot over the same PROGRAM,
-# harness-self-tests.chez.sps, and the second exists to compile it from
+# harness-self-tests.sps, and the second exists to compile it from
 # deliberately divergent text. Keyed by program stem instead, both would
 # resolve to one object directory, one compiled .so, and one flat
 # fingerprint/ directory, so the stale lane's copies would silently overwrite
@@ -86,7 +86,7 @@ endfunction()
 # byte_machine_scheme_lane_command(<name> <backend> <mode> <program>
 #                                  <out_command> <out_measured>
 #                                  <out_status> <out_message>
-#                                  <declared-body>...)
+#                                  <declared-source>...)
 #
 # Status is `ok`, `no-runtime`, `unknown-backend`, or `unknown-mode`. A
 # missing runtime is not fatal: the CMake-layer specifications must stay
@@ -100,7 +100,7 @@ endfunction()
 # going to exercise.
 #
 # <out_measured> is the list of paths the run will fingerprint, in the order
-# the declared bodies were given. For a source lane it is the declared list:
+# the declared sources were given. For a source lane it is the declared list:
 # the repository sources are the only text there is. For a compiled lane it is
 # the copies the build wrote beside the artifact, so a fingerprint describes
 # what the artifact was built from rather than what is on disk now.
@@ -272,8 +272,8 @@ function(byte_machine_add_scheme_lane)
   # impossible to load.
   #
   # The fixture is immutable and lives in the source tree; a lane only ever
-  # reads it. Set for every lane rather than only the self-tests, so a body that
-  # starts needing it does not also need a registration change.
+  # reads it. Set for every lane rather than only the self-tests, so a program
+  # that starts needing it does not also need a registration change.
   #
   # arg_ENVIRONMENT is deliberately not spliced in here: CTest applies
   # ENVIRONMENT entries in list order, so for a repeated key the last one wins.

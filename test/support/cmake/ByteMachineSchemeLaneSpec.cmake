@@ -193,7 +193,7 @@ spec_check_equal("${message}"
   "no Chez was discovered, so the chez aot lane for '/h/self/p.chez.sps' is not registered."
   "chez lane no-runtime message names the aot mode, not a hardcoded source")
 
-# --- Declared bodies versus measured bodies --------------------------------
+# --- Declared sources versus measured sources ------------------------------
 #
 # A source lane reads the repository sources, so the two lists coincide and
 # the distinction is invisible. It is not invisible for a compiled lane, where
@@ -206,7 +206,7 @@ byte_machine_scheme_lane_command(byte-machine.harness.example.chez.source
   command measured status message "/h/shared/a.scm" "/h/shared/b.scm")
 spec_check_equal("${status}" "ok" "a chez source lane is accepted")
 spec_check_equal("${measured}" "/h/shared/a.scm;/h/shared/b.scm"
-  "a source lane measures the bodies it declares, in the declared order")
+  "a source lane measures the sources it declares, in the declared order")
 
 byte_machine_scheme_lane_command(byte-machine.harness.example.chez.unknown-mode-name
   chez unknown-mode-name "/h/self/p.chez.sps"
@@ -343,12 +343,12 @@ spec_check_equal("${mode_entry}" "BYTE_MACHINE_EXECUTION_MODE=aot"
 # The full list, not just the mode entry above: BYTE_MACHINE_FINGERPRINT_FILES
 # here is the measured copy's path under the per-lane object directory, while
 # BYTE_MACHINE_EXPECT_FINGERPRINT_FILE is still keyed by the lane's own name --
-# the expectation comes from the declared body, the run's environment from the
+# the expectation comes from the declared source, the run's environment from the
 # measured one. This assertion is the declared/measured asymmetry itself, the
 # whole mechanism this task adds, visible here with no Scheme runtime present.
 spec_check_equal("${environment}"
   "BYTE_MACHINE_EXECUTION_MODE=aot;BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin;BYTE_MACHINE_FINGERPRINT_FILES=/objects/byte-machine_harness_example_chez_aot/fingerprint/ByteMachineSchemeLaneSpec.cmake;BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=/fingerprints/byte-machine.harness.example.chez.aot.fingerprint"
-  "an aot lane's environment carries the measured copy's path in BYTE_MACHINE_FINGERPRINT_FILES, not the declared body's own path")
+  "an aot lane's environment carries the measured copy's path in BYTE_MACHINE_FINGERPRINT_FILES, not the declared source's own path")
 
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
