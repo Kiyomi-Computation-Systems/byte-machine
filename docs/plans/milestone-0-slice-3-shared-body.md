@@ -1,6 +1,6 @@
 # Milestone 0, Slice 3: One shared body through both wrappers
 
-Status: design agreed; ready for an implementation plan
+Status: accepted; delivered 2026-08-17; amended after delivery (dated note below) — decision 0006 retired the shared-body mechanism this slice built
 Date: 2026-08-16
 Parent plan: [`byte-machine-implementation-plan.md`](./byte-machine-implementation-plan.md) §7.2, §8
 Milestone plan: [`milestone-0-portability-spike.md`](./milestone-0-portability-spike.md) — deliverable D2, work-order item 3

@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# TWENTY-FIVE PASSES, BECAUSE TWENTY-FIVE DIFFERENT WITNESSES ARE NEEDED
+# THIRTY-ONE PASSES, BECAUSE THIRTY-ONE DIFFERENT WITNESSES ARE NEEDED
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -103,6 +103,46 @@
 # made WRONG_FP_FILE's exit-3 baseline ambiguous for that one mutation and not
 # for pass 22's own.
 #
+# Pass 26 is the aot launcher's own library-path pairing (C3) and its
+# source-directories narrowing (C3b) -- the mechanism that makes `mode=aot`
+# an honest claim, the same argument pass 7 already makes for `mode=source`.
+# The objects it exercises are compiled once, from the staged tree, into this
+# pass's own work directory, and reused by passes 27 to 29 below. C3 is
+# witnessed against a divergent library source planted where only an
+# unpaired object directory would read it; C3b is EXPECT_SURVIVES, for the
+# reason recorded beside it.
+#
+# Passes 27 to 29 are the aot-side launchers' three genuinely new refusals --
+# chez-aot.ss's missing-program check, chez-aot.ss's dirty-source-guard
+# check, and chez-compile.ss's unpaired-roots check -- each witnessed the
+# same way passes 9 to 17 witness chez-source.ss's parse decisions: a
+# deliberately wrong invocation through the exact-status helper, since a
+# correctly set-up lane never reaches a refusal on its own. The flag-block
+# copies both files carry from chez-source.ss are deliberately not re-proven
+# here; each launcher's own header records what that leaves unwitnessed.
+#
+# Pass 30 is design W9's first half: the two decisions inside
+# harness-verify-provenance! that no one-source manifest can witness -- the
+# split character and the combining order. Passes 22 to 25 pack their verify
+# command through BYTE_MACHINE_EXPECT_COMMAND, whose | packing forbids a
+# multi-source manifest, so this pass runs the lane command bare instead:
+# its baseline is a passing provenance run (exit 0), and each catchable
+# mutation turns that into the mismatch refusal (exit 3), with no wrapper
+# needed. Its manifest deliberately excludes harness.sls, the file both
+# mutations edit -- an earlier version included it, and an inert one-byte
+# edit nowhere near either decision was enough to trip the identical
+# refusal, which proved the catch was not discriminating anything.
+#
+# Pass 31 is design W9's second half, and needs the opposite manifest.
+# harness-provenance-failure!'s single shared exit line is reachable only
+# from a run whose own provenance has already failed, so witnessing it means
+# deliberately naming harness.sls -- the file this mutation edits -- in the
+# very manifest that checks it. What the plan first carried as a structural
+# survivor for this constant turned out to be witnessable once self-
+# reference was treated as the mechanism rather than the mistake pass 30 had
+# to avoid; AGENTS.md is explicit that a decision which can be witnessed
+# does not get an EXPECT_SURVIVES.
+#
 # WHAT THIS SUITE NEEDS FROM ITS ENVIRONMENT
 #
 # The self-tests assert that the lane declared its execution mode, that the
@@ -117,12 +157,19 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "TWENTY-FIVE PASSES..." above. Declared here, rather than only in prose,
-# so the count enforced at the bottom of this file is the same text a reader
-# checks by eye at the top -- one number to keep in sync, not two that can
-# quietly disagree.
-set(EXPECTED_PASSES 25)
-set(EXPECTED_MUTATIONS 60)
+# See "THIRTY-ONE PASSES..." above. Declared here, rather than only in
+# prose, so the count enforced at the bottom of this file is the same text a
+# reader checks by eye at the top -- one number to keep in sync, not two
+# that can quietly disagree. 25 passes / 60 mutations before the aot task;
+# pass 26 adds two (C3, C3b) and passes 27 to 29 add one each, so 25 + 4 =
+# 29 passes and 60 + 2 + 1 + 1 + 1 = 65 mutations before this task; W9 adds
+# three mutations across two passes, not one -- pass 30 (the split
+# character, the combining order) and pass 31 (the exit constant, which
+# turned out witnessable after all once its manifest was allowed to be
+# self-referential on purpose, superseding the declared survivor the plan
+# first carried for it) -- so 29 + 2 = 31 passes and 65 + 3 = 68 mutations.
+set(EXPECTED_PASSES 31)
+set(EXPECTED_MUTATIONS 68)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -1483,9 +1530,399 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
+# --- Pass 26: the aot launcher's library-path pairing ------------------------
+#
+# C3 and C3b, measured 2026-08-17 and re-measured against the shipped lane
+# (design section 5.3, remainder addendum). The objects are compiled once,
+# here, from the staged tree; the plant is a byte-divergent copy of the
+# harness library dropped at its library-relative path inside the object
+# directory, touched newer than the objects. Under the shipped pairing the
+# plant sits in a directory Chez consults only for objects and is never
+# read; under C3's unpaired shape every object directory is also a source
+# directory, Chez finds the newer source, re-expands it, and load-program
+# refuses the different compilation instance at 255 -- outside the status
+# vocabulary, reported as a process that died, which is the honest shape of
+# this defect.
+byte_machine_mutation_reset()
+
+set(AOT_PASS_DIR "${WORK_DIR}/aot-pairing")
+file(MAKE_DIRECTORY "${AOT_PASS_DIR}/harness" "${AOT_PASS_DIR}/src"
+     "${AOT_PASS_DIR}/source-guard")
+execute_process(
+  COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
+          "${STAGE_DIR}/test/support/launchers/chez-compile.ss"
+          --library-root "${STAGE_DIR}/test/support/harness"
+          --object-dir "${AOT_PASS_DIR}/harness"
+          --library-root "${STAGE_DIR}/src"
+          --object-dir "${AOT_PASS_DIR}/src"
+          --program "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps"
+          --output "${AOT_PASS_DIR}/harness-bootstrap.so"
+  RESULT_VARIABLE aot_compile_rc)
+if(NOT aot_compile_rc EQUAL 0)
+  message(FATAL_ERROR
+    "byte-machine-mutation: pass 26 could not compile its artifacts (rc "
+    "${aot_compile_rc}); nothing this pass reports would mean anything.")
+endif()
+file(MAKE_DIRECTORY "${AOT_PASS_DIR}/harness/byte-machine/test")
+file(COPY_FILE
+  "${STAGE_DIR}/test/support/harness/byte-machine/test/harness.sls"
+  "${AOT_PASS_DIR}/harness/byte-machine/test/harness.sls")
+file(APPEND "${AOT_PASS_DIR}/harness/byte-machine/test/harness.sls"
+  "\n;; planted: only an unpaired library path can read this file\n")
+file(TOUCH "${AOT_PASS_DIR}/harness/byte-machine/test/harness.sls")
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${CMAKE_COMMAND}" "-E" "env" "BYTE_MACHINE_EXECUTION_MODE=aot" "--"
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}" "--script"
+  "${STAGE_DIR}/test/support/launchers/chez-aot.ss"
+  "--object-dir" "${AOT_PASS_DIR}/harness"
+  "--object-dir" "${AOT_PASS_DIR}/src"
+  "--source-guard" "${AOT_PASS_DIR}/source-guard"
+  "--program" "${AOT_PASS_DIR}/harness-bootstrap.so")
+
+# EXPECT_STATUS and EXPECT_OUTPUT_MATCHES are exactly what this pass's own
+# verify command produced against the mutated launcher, run once and read
+# before this narrowing was added: rc 255 and, on stdout,
+# "Exception: loading .../harness.sls yielded a different compilation
+# instance of (byte-machine test harness) from that required by compiled
+# program" -- Chez's own load-program refusal, reached because the plant is
+# now the newer file in a directory the mutated library-directories call
+# also treats as a source directory. Matches the header's measured
+# prediction; EXPECT_OUTPUT_MATCHES anchors on the stable substring rather
+# than the full sentence, which embeds this machine's absolute build path.
+byte_machine_mutation(
+  FILE test/support/launchers/chez-aot.ss SPEC byte-machine.harness.self.chez.aot
+  LABEL "chez-aot launcher: the source guard is unpaired from the object directories"
+  FIND [[(library-directories
+ (map (lambda (dir) (cons source-guard-dir dir)) object-dirs))]]
+  REPLACE [[(library-directories object-dirs)]]
+  EXPECT_STATUS 255
+  EXPECT_OUTPUT_MATCHES "different compilation instance")
+
+# FIND carries its own trailing newline, which the plan text's version of this
+# mutation did not: the bare pattern also opens the "WHY source-directories IS
+# ALSO EMPTIED" paragraph's own worked example above ("run once with
+# (source-directories '()) and once left at Chez's unset default"), so without
+# the newline the pattern matches twice -- code once, prose once -- and the
+# SITES-count guard in byte_machine_mutation refuses it (found 2, expected 1)
+# rather than silently mutating the comment along with the code. Confirmed
+# against the shipped file: the comment's occurrence is followed by " and",
+# never by end-of-line, so anchoring on the trailing newline is precise, not
+# merely convenient.
+byte_machine_mutation(
+  FILE test/support/launchers/chez-aot.ss SPEC byte-machine.harness.self.chez.aot
+  LABEL "chez-aot launcher: source-directories is not emptied"
+  FIND [[(source-directories '())
+]]
+  REPLACE [[(source-directories (list "."))
+]]
+  EXPECT_SURVIVES
+    "measured inert 2026-08-17 and re-measured through the shipped lane: library resolution runs through library-directories, no file in the inline tree includes another (decision 0006), so this line narrows nothing reachable today; kept in the launcher because it costs one line and guards a future load or include added to the launcher itself. Reopening condition: a Chez that re-resolves a compiled library's sources at load time.")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Passes 27 to 29: the aot-side launchers' new refusals -------------------
+#
+# The same argument as passes 9-17: a correctly set-up lane never reaches a
+# refusal, so only a deliberately wrong invocation can notice one being
+# deleted. Three passes, matching the three registered refusal lanes -- the
+# decisions genuinely new in these files. The verbatim flag-block copies
+# are deliberately not re-proven here; the launchers' own headers record
+# what is and is not witnessed per copy.
+#
+# Unlike byte_machine_slice3_launcher_pass above, EXPECT_STATUS and
+# EXPECT_OUTPUT_MATCHES are optional here rather than a fixed positional
+# parameter: passes 9-17 were each written with their narrowing already
+# known, but these three are narrowed only after being run once and read (see
+# the call sites below), so the helper has to accept an invocation carrying
+# neither, either, or both. cmake_parse_arguments pulls them out of ARGN
+# ahead of the launcher's own command-line arguments -- none of which is
+# spelled "EXPECT_STATUS" or "EXPECT_OUTPUT_MATCHES" -- and each is forwarded
+# to byte_machine_mutation only when given, the same CMP0174-motivated
+# reasoning as byte_machine_add_exit_code_test's WORKING_DIRECTORY
+# (ByteMachineExpectExit.cmake): a keyword forwarded with an empty value
+# would parse as though it were never given at this project's 3.26 floor, but
+# silently, since CMP0174 does not warn about it before 3.31.
+#
+# The reset, the declaration and the run all happen inside this function on
+# purpose, the same reason byte_machine_slice3_launcher_pass's header gives.
+function(byte_machine_slice5b_launcher_pass launcher_file lane label find replace)
+  cmake_parse_arguments(pass "" "EXPECT_STATUS;EXPECT_OUTPUT_MATCHES" "" ${ARGN})
+
+  byte_machine_mutation_reset()
+
+  string(JOIN "|" packed
+    "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+    "--script" "${STAGE_DIR}/${launcher_file}"
+    ${pass_UNPARSED_ARGUMENTS})
+
+  set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+    "${CMAKE_COMMAND}"
+    "-DBYTE_MACHINE_EXPECT_EXIT=2"
+    "-DBYTE_MACHINE_EXPECT_COMMAND=${packed}"
+    -P "${STAGE_DIR}/cmake/ByteMachineExpectExit.cmake")
+
+  set(narrow_args "")
+  if(DEFINED pass_EXPECT_STATUS)
+    list(APPEND narrow_args EXPECT_STATUS "${pass_EXPECT_STATUS}")
+  endif()
+  if(DEFINED pass_EXPECT_OUTPUT_MATCHES)
+    list(APPEND narrow_args EXPECT_OUTPUT_MATCHES "${pass_EXPECT_OUTPUT_MATCHES}")
+  endif()
+
+  byte_machine_mutation(
+    FILE ${launcher_file} SPEC "${lane}"
+    LABEL "${label}"
+    FIND "${find}"
+    REPLACE "${replace}"
+    ${narrow_args})
+
+  byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+endfunction()
+
+# Run once and read before narrowing, the same discipline as C3 above.
+# EXPECT_STATUS is not used: this pass runs through ByteMachineExpectExit.cmake,
+# same as every byte_machine_slice3_launcher_pass call above, and that
+# wrapper's own message(FATAL_ERROR) always exits 1 on a non-matching real
+# status -- 255 included -- so EXPECT_STATUS could only ever see 0 or 1 here
+# and would narrow nothing; passes 9-17's header makes the identical point.
+# What is real evidence is the wrapper's echoed command output: with the
+# existence check gone, load-program itself is handed a path that is not
+# there and Chez's own file layer refuses it directly --
+# "Exception in load-program: failed for .../no-such-program.so: no such
+# file or directory", observed on the wrapper's echoed stdout.
+byte_machine_slice5b_launcher_pass(
+  test/support/launchers/chez-aot.ss
+  byte-machine.harness.chez-aot-launcher-missing-program.chez.aot
+  "chez-aot launcher: a missing compiled program is accepted"
+  [[(if (not (file-exists? program))]]
+  [[(if #f]]
+  "--object-dir" "${AOT_PASS_DIR}/harness"
+  "--source-guard" "${AOT_PASS_DIR}/source-guard"
+  "--program" "${AOT_PASS_DIR}/no-such-program.so"
+  EXPECT_OUTPUT_MATCHES "Exception in load-program")
+
+# Run once and read, as above; no EXPECT_STATUS, for the same wrapper reason
+# given above the missing-program pass. Reusing the harness object directory
+# as the guard (see the rationale where this pass is called) reproduces C3's
+# own scenario by a different route: the guard is the harness's object
+# directory, so once the emptiness check stops blocking it, that same
+# directory's library-directories pairing makes it a source directory too,
+# and Chez's load-program hits the identical "different compilation
+# instance" refusal C3 does -- two different deleted checks, coincident only
+# in this fixture because both ultimately leave the harness object directory
+# readable as a source directory.
+byte_machine_slice5b_launcher_pass(
+  test/support/launchers/chez-aot.ss
+  byte-machine.harness.chez-aot-launcher-dirty-source-guard.chez.aot
+  "chez-aot launcher: a dirty source guard is accepted"
+  [[(if (not (null? (directory-list source-guard-dir)))]]
+  [[(if #f]]
+  "--object-dir" "${AOT_PASS_DIR}/harness"
+  "--object-dir" "${AOT_PASS_DIR}/src"
+  "--source-guard" "${AOT_PASS_DIR}/harness"
+  "--program" "${AOT_PASS_DIR}/harness-bootstrap.so"
+  EXPECT_OUTPUT_MATCHES "different compilation instance")
+
+# Run once and read, as above; no EXPECT_STATUS, for the same wrapper reason
+# given above the missing-program pass. R6RS's map requires its argument
+# lists to be the same length; with the pairing-count refusal gone, (map
+# cons library-roots object-dirs) is handed a 2-element and a 1-element list
+# and Chez's own map refuses them directly, observed on the wrapper's echoed
+# stdout as "Exception in map: lists (...) and (...) differ in length".
+byte_machine_slice5b_launcher_pass(
+  test/support/launchers/chez-compile.ss
+  byte-machine.harness.chez-compile-launcher-unpaired-roots.chez.aot
+  "chez-compile launcher: unpaired roots are accepted"
+  [[(if (not (= (length library-roots) (length object-dirs)))]]
+  [[(if #f]]
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-dir" "${AOT_PASS_DIR}/harness"
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps"
+  "--output" "${AOT_PASS_DIR}/unpaired.so"
+  EXPECT_OUTPUT_MATCHES "Exception in map")
+
+# --- Pass 30: the provenance decisions a one-source manifest cannot witness --
+#
+# Passes 22-25 pack their verify commands through BYTE_MACHINE_EXPECT_COMMAND,
+# whose | packing forbids a multi-source manifest -- their manifests name one
+# source on purpose, so the split character and the combining order have
+# never had a witness. This pass runs the lane command bare: its baseline is
+# a PASSING provenance run (exit 0), and each catchable mutation turns that
+# into the mismatch refusal (exit 3), so no wrapper is needed and the
+# two-source manifest rides in an ordinary env entry.
+#
+# NEITHER MANIFEST FILE IS ONE THIS PASS MUTATES
+#
+# An earlier version of this pass fingerprinted fingerprint.sls and
+# harness.sls -- the file both mutations below edit, since
+# harness-verify-provenance! lives there. Measured against the shipped
+# suite: with harness.sls one of the two fingerprinted sources, editing it
+# at all fails the comparison before the mutated logic is even relevant, so
+# EXPECT_STATUS 3 was catching "harness.sls changed", not the decision each
+# mutation names. Proven with a control, not just argued: an inert trailing
+# space added to an unrelated comment at the top of the file, nowhere near
+# provenance, split, or combine, tripped the identical PROVENANCE-ERROR
+# refusal. A catch that catches anything discriminates nothing (AGENTS.md).
+# This pass fingerprints fingerprint.sls and harness-self-tests.sps instead
+# -- two real files a real lane's manifest would name, neither touched by
+# any mutation below -- so a mismatch can now only come from the split or
+# combine logic itself. Pass 31 needs the opposite choice for the one
+# decision this manifest shape cannot reach.
+byte_machine_mutation_reset()
+
+set(W9_MANIFEST
+  "${STAGE_DIR}/test/support/harness/byte-machine/test/fingerprint.sls|${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
+set(W9_EXPECT_FILE "${WORK_DIR}/w9-split-combine.fingerprint")
+execute_process(
+  COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
+          "${STAGE_DIR}/test/support/launchers/fingerprint-manifest.ss"
+          "${STAGE_DIR}/test/support/harness"
+          "${GUARD_DIR}"
+          "${W9_EXPECT_FILE}"
+          "${STAGE_DIR}/test/support/harness/byte-machine/test/fingerprint.sls"
+          "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps"
+  RESULT_VARIABLE w9_expect_rc)
+if(NOT w9_expect_rc EQUAL 0)
+  message(FATAL_ERROR
+    "byte-machine-mutation: pass 30 could not compute its two-source "
+    "expectation (rc ${w9_expect_rc}). The expectation must come from the "
+    "staged copies -- the stage is what the run reads -- so nothing this "
+    "pass reports would mean anything without it.")
+endif()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${CMAKE_COMMAND}" "-E" "env"
+  "BYTE_MACHINE_FINGERPRINT_FILES=${W9_MANIFEST}"
+  "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${W9_EXPECT_FILE}"
+  "--"
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
+
+set(RUNNER_BODY test/support/harness/byte-machine/test/harness.sls)
+
+# The manifest arrives |-joined. Split on anything else and the whole
+# two-source string is one path naming no file, so the run refuses with the
+# unreadable-source diagnosis -- still 3, still caught, and the label says
+# which decision died. Measured: "PROVENANCE-ERROR cannot read
+# <fingerprint.sls's path>|<harness-self-tests.sps's path>, which this run
+# is supposed to have executed." -- the | that should have separated two
+# paths is embedded in the one bogus path the comma-split produces.
+byte_machine_mutation(
+  FILE ${RUNNER_BODY} SPEC byte-machine.harness.provenance.chez.source
+  LABEL "runner: the manifest is split on the wrong character"
+  FIND [[        (let loop ((rest (harness-split raw #\|)) (acc '()))]]
+  REPLACE [[        (let loop ((rest (harness-split raw #\,)) (acc '()))]]
+  EXPECT_STATUS 3
+  EXPECT_OUTPUT_MATCHES "PROVENANCE-ERROR cannot read")
+
+# Combining is order-sensitive by design (slice 5a, mutation F5), so
+# accumulating in reverse computes a different digest over the same two
+# fingerprints -- both individually unchanged, since neither manifest file
+# is edited by this mutation, so the mismatch below can only come from the
+# order they were combined in, not from either file's own bytes. Measured:
+# "PROVENANCE-ERROR fingerprint mismatch: the build expected <combined
+# forward> but this run computed <combined reversed>."
+byte_machine_mutation(
+  FILE ${RUNNER_BODY} SPEC byte-machine.harness.provenance.chez.source
+  LABEL "runner: the manifest digests combine in reverse order"
+  FIND [[                               (harness-fingerprint-combine (reverse acc)))))]]
+  REPLACE [[                               (harness-fingerprint-combine acc))))]]
+  EXPECT_STATUS 3
+  EXPECT_OUTPUT_MATCHES "PROVENANCE-ERROR fingerprint mismatch")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 31: the provenance exit constant, witnessed through a deliberately
+# self-referential manifest --------------------------------------------------
+#
+# The one decision pass 30 cannot carry: harness-provenance-failure!'s single
+# shared exit line, (adapter-exit harness-status-provenance). Wrong that
+# constant and a provenance failure exits indistinguishably from an
+# assertion failure -- the whole reason status 3 was reserved -- but under
+# pass 30's own manifest (fingerprint.sls and harness-self-tests.sps,
+# neither edited by this mutation) provenance keeps succeeding, so the line
+# is never reached there: a passing baseline is byte_machine_mutation_run's
+# own precondition, no pass may deliberately fail provenance, and a mutation
+# whose only effect follows a failure that never happens would report as an
+# unwitnessed EXPECT_SURVIVES.
+#
+# The way to reach the line is the manifest pass 30 deliberately avoids: name
+# harness.sls itself -- the file this mutation, like both of pass 30's,
+# edits. That self-reference was pass 30's bug (its header records the
+# control that proved it); here it is the mechanism. Any edit to harness.sls
+# staled against a manifest that fingerprints harness.sls fails provenance
+# on its own -- exactly a run whose own text no longer matches what the
+# build measured, which is what a real stale artifact looks like, not a
+# contrived path to this line. That failure calls
+# harness-provenance-failure!, which reaches the mutated line and exits
+# harness-status-failed (1) instead of harness-status-provenance (3) -- the
+# summary text printed just above the exit call still names status 3, built
+# from the untouched constant, but the process's actual exit code is 1, so a
+# caller reading only the exit status draws exactly the
+# indistinguishable-from-an-assertion-failure conclusion this constant
+# exists to prevent.
+#
+# This supersedes the plan's declared survivor for this line. AGENTS.md: a
+# decision that can be witnessed does not get an EXPECT_SURVIVES.
+byte_machine_mutation_reset()
+
+set(W9_EXIT_MANIFEST
+  "${STAGE_DIR}/test/support/harness/byte-machine/test/fingerprint.sls|${STAGE_DIR}/test/support/harness/byte-machine/test/harness.sls")
+set(W9_EXIT_EXPECT_FILE "${WORK_DIR}/w9-exit-constant.fingerprint")
+execute_process(
+  COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
+          "${STAGE_DIR}/test/support/launchers/fingerprint-manifest.ss"
+          "${STAGE_DIR}/test/support/harness"
+          "${GUARD_DIR}"
+          "${W9_EXIT_EXPECT_FILE}"
+          "${STAGE_DIR}/test/support/harness/byte-machine/test/fingerprint.sls"
+          "${STAGE_DIR}/test/support/harness/byte-machine/test/harness.sls"
+  RESULT_VARIABLE w9_exit_expect_rc)
+if(NOT w9_exit_expect_rc EQUAL 0)
+  message(FATAL_ERROR
+    "byte-machine-mutation: pass 31 could not compute its two-source "
+    "expectation (rc ${w9_exit_expect_rc}). The expectation must come from "
+    "the staged copies -- the stage is what the run reads -- so nothing "
+    "this pass reports would mean anything without it.")
+endif()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${CMAKE_COMMAND}" "-E" "env"
+  "BYTE_MACHINE_FINGERPRINT_FILES=${W9_EXIT_MANIFEST}"
+  "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${W9_EXIT_EXPECT_FILE}"
+  "--"
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
+
+set(RUNNER_BODY test/support/harness/byte-machine/test/harness.sls)
+
+# Measured: the mutated harness.sls fails its own fingerprint comparison --
+# "PROVENANCE-ERROR fingerprint mismatch: the build expected <digest of the
+# pristine pair> but this run computed <digest with the mutated harness.sls>"
+# -- and the process exits 1 (harness-status-failed, what the mutation put
+# in the exit call), not 3 (harness-status-provenance, what the unmutated
+# line calls and what the summary text printed just above it still names).
+byte_machine_mutation(
+  FILE ${RUNNER_BODY} SPEC byte-machine.harness.provenance.chez.source
+  LABEL "runner: a provenance failure exits as an assertion failure"
+  FIND [[  (adapter-exit harness-status-provenance))]]
+  REPLACE [[  (adapter-exit harness-status-failed))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "PROVENANCE-ERROR fingerprint mismatch")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "TWENTY-FIVE PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "THIRTY-ONE PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

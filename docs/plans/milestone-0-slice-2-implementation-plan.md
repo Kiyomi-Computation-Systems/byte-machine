@@ -1,5 +1,7 @@
 # Milestone 0 Slice 2 — Test Harness Implementation Plan
 
+Status: executed; delivered 2026-08-16
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a dependency-free portable Scheme test harness that runs one shared body on Chez and Gambit, proves it can fail before it is trusted to pass, and is itself covered by mutation testing.

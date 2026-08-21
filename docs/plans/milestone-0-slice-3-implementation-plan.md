@@ -1,5 +1,7 @@
 # Milestone 0 Slice 3 — Shared Body Through Both Wrappers, Implementation Plan
 
+Status: executed; delivered 2026-08-17 (the mechanism it built was later retired by decision 0006)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Put the first files in `src/`: one wrapper-free shared body included by exactly one thin library per runtime, exercised by one shared test body on both runtimes from three working directories chosen so each catches a different failure of the include mechanism.

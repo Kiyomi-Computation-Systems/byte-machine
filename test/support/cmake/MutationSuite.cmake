@@ -16,7 +16,7 @@
 # will tell you when a pattern has drifted; it will not tell you when a new,
 # untested decision has been added.
 #
-# ONE PASS, SIXTY-SIX MUTATIONS
+# ONE PASS, SEVENTY-TWO MUTATIONS
 #
 # Every mutation above is declared before the single byte_machine_mutation_run
 # call at the end of this file, so this suite is one pass by construction.
@@ -102,11 +102,28 @@
 # unknown-mode message it names is already asserted exactly by
 # ByteMachineSchemeLaneSpec.cmake's "unknown mode message" case. Cheap and
 # genuinely witnessable, so it was added rather than left as a known gap.
+#
+# Seventy-two is sixty-six plus six: the slice 5b remainder plan's Task 4
+# added one mutation per decision the three aot lanes and the staleness lane
+# (Tasks 1 and 3) put into ByteMachineSchemeLane.cmake. C1 turns off
+# fingerprinting the build's own copies, so a compiled lane's measurement
+# collapses back onto the declared sources -- Protium's actual defect,
+# decision record 0004. C2 reverses the order
+# byte_machine_lane_measured_copies builds its list in, witnessed only by a
+# two-or-more-source manifest. C4 puts the literal "source" back as the
+# environment's execution mode for every lane, aot included, the mode
+# plumbing's own regression case. The builder call-site guard gets both
+# directions, per the WORKING_DIRECTORY precedent: if(FALSE) so no aot lane
+# ever reaches byte_machine_lane_chez_aot_artifacts, if(TRUE) so every source
+# lane does. The last drops STALE_LIBRARY_ROOT between parsing it and
+# forwarding it to that same builder -- exactly the forwarding bug that would
+# let the permanently-registered staleness lane compile the real text and
+# exit 0.
 
 cmake_minimum_required(VERSION 3.26)
 
 set(EXPECTED_PASSES 1)
-set(EXPECTED_MUTATIONS 66)
+set(EXPECTED_MUTATIONS 72)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -701,6 +718,78 @@ byte_machine_mutation(
   FIND [[  set(seen "")
   set(duplicates "")]]
   REPLACE [[  set(seen "")]])
+
+# M0 slice 5b remainder, Task 4: every decision the three aot lanes and the
+# staleness lane (Tasks 1 and 3) added to ByteMachineSchemeLane.cmake, broken
+# on a staged copy. What is deliberately *not* mutated here: the builder's
+# own body (the copy-source-of-record logic, the DEPENDS list, the prefix
+# order). Those live inside `add_custom_command` arguments the spec's stub
+# never executes; their end-to-end witness is the staleness lane itself,
+# permanently registered and asserting exit 3 -- which is exactly the
+# division of labour W12 prescribes.
+
+# C1. Protium's actual behaviour for its Chez aot lane: fingerprint the
+# repository originals. Under it the staleness lane's expectation and its
+# measurement read the same files again, they agree, and the lane that
+# exists to exit 3 exits 0 -- the whole defect decision record 0004
+# demonstrated and this slice closes. Witnessed with no runtime present by
+# the spec's two-source aot case and its one-source registration case.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: a compiled lane measures the repository originals"
+  FIND [[      byte_machine_lane_measured_copies("${object_dir}/fingerprint" measured ${ARGN})
+      set(${out_measured} ${measured} PARENT_SCOPE)]]
+  REPLACE [[      set(${out_measured} ${ARGN} PARENT_SCOPE)]])
+
+# C2. harness-fingerprint-combine is order-sensitive by design, so a
+# reordered measured list computes a different digest over the same bytes.
+# Only a two-or-more-source manifest can see this, which is what the spec's
+# example-two case exists for.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: the measured list is built in reverse"
+  FIND [[    list(APPEND copies "${dir}/${name}")]]
+  REPLACE [[    list(PREPEND copies "${dir}/${name}")]])
+
+# C4. The literal the mode plumbing replaced. Distinct from the deletion
+# mutation above ("the source execution mode is no longer declared"): this
+# one keeps the entry and makes it wrong, which is the defect a compiled
+# lane actually suffers. Not caught by the harness's own assertion -- under
+# W8 that assertion accepts any vocabulary member and `source` is one -- but
+# by the spec's "an aot lane declares the aot mode" case, asserted with no
+# runtime present, which is why the mode logic lives in the registrar
+# rather than in the custom command.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: the execution mode is the literal source again"
+  FIND [[    "BYTE_MACHINE_EXECUTION_MODE=${lane_mode}"]]
+  REPLACE [[    "BYTE_MACHINE_EXECUTION_MODE=source"]])
+
+# The builder call-site guard, in both directions, per the
+# WORKING_DIRECTORY precedent: one direction only tests half a conditional.
+# if(FALSE): no aot lane ever gets an artifact -- the spec's "reaches the
+# artifacts builder" case fails. if(TRUE): every source lane acquires a
+# compile step it must not have -- the spec's "never reaches" case fails.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: the artifacts builder is never called"
+  FIND [[  if(lane_mode STREQUAL "aot")]]
+  REPLACE [[  if(FALSE)]])
+
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: the artifacts builder is called for every lane"
+  FIND [[  if(lane_mode STREQUAL "aot")]]
+  REPLACE [[  if(TRUE)]])
+
+# The stale root is parsed and then not forwarded, so the staleness lane
+# would silently compile from the real text and exit 0. The spec's
+# "STALE_LIBRARY_ROOT reaches the artifacts builder" case fails.
+byte_machine_mutation(
+  FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
+  LABEL "scheme-lane: STALE_LIBRARY_ROOT is parsed and never forwarded"
+  FIND [[      "${arg_NAME}" "${arg_PROGRAM}" "${arg_STALE_LIBRARY_ROOT}" ${arg_SOURCES})]]
+  REPLACE [[      "${arg_NAME}" "${arg_PROGRAM}" "" ${arg_SOURCES})]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

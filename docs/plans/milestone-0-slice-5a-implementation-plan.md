@@ -1,5 +1,7 @@
 # Milestone 0 Slice 5a — Content Fingerprint and Lane Provenance: Implementation Plan
 
+Status: executed; delivered 2026-08-17
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Give every Scheme lane a content fingerprint of the shared bodies it ran, checked against a value the build computed, so that a lane which executed different or stale text exits 3 instead of reporting success.

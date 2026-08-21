@@ -62,7 +62,7 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
     byte_machine_add_scheme_lane(
       NAME byte-machine.harness.example.chez.source
       BACKEND chez
-      PROGRAM "/h/self/does-not-exist.chez.sps"
+      PROGRAM "/h/self/does-not-exist.sps"
       SOURCES "${SPEC_SELF}"
       TIMEOUT 10)
   elseif(c STREQUAL "lane-rejects-missing-source")
@@ -123,10 +123,10 @@ set(BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT "/s/chez")
 
 set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
 byte_machine_scheme_lane_command(byte-machine.harness.example.chez.source
-  chez source "/h/self/p.chez.sps" command measured status message)
+  chez source "/h/self/p.sps" command measured status message)
 spec_check_equal("${status}" "ok" "chez lane classifies")
 spec_check_equal("${command}"
-  "/opt/chez;--script;/h/launchers/chez-source.ss;--library-root;/h/chez;--library-root;/s/chez;--object-guard;/b/guard;--program;/h/self/p.chez.sps"
+  "/opt/chez;--script;/h/launchers/chez-source.ss;--library-root;/h/chez;--library-root;/s/chez;--object-guard;/b/guard;--program;/h/self/p.sps"
   "chez lane command line")
 
 # The guard directory is the entire mechanism that stops a stale .so from being
@@ -172,11 +172,11 @@ spec_check_equal("${message}"
 
 set(BYTE_MACHINE_CHEZ_EXECUTABLE "")
 byte_machine_scheme_lane_command(byte-machine.harness.example.chez.source
-  chez source "/h/self/p.chez.sps" command measured status message)
+  chez source "/h/self/p.sps" command measured status message)
 spec_check_equal("${status}" "no-runtime" "a chez lane without a chez is not registered")
 spec_check_equal("${command}" "" "a rejected lane returns no command")
 spec_check_equal("${message}"
-  "no Chez was discovered, so the chez source lane for '/h/self/p.chez.sps' is not registered."
+  "no Chez was discovered, so the chez source lane for '/h/self/p.sps' is not registered."
   "chez lane no-runtime message")
 
 # Both no-runtime REPLACEs in MutationSuite.cmake hardcode the literal
@@ -186,11 +186,11 @@ spec_check_equal("${message}"
 # with mode aot instead, the one mode value able to tell the fixed code from
 # the reverted one.
 byte_machine_scheme_lane_command(byte-machine.harness.example.chez.aot
-  chez aot "/h/self/p.chez.sps" command measured status message)
+  chez aot "/h/self/p.sps" command measured status message)
 spec_check_equal("${status}" "no-runtime" "a chez aot lane without a chez is not registered")
 spec_check_equal("${command}" "" "a rejected lane returns no command")
 spec_check_equal("${message}"
-  "no Chez was discovered, so the chez aot lane for '/h/self/p.chez.sps' is not registered."
+  "no Chez was discovered, so the chez aot lane for '/h/self/p.sps' is not registered."
   "chez lane no-runtime message names the aot mode, not a hardcoded source")
 
 # --- Declared sources versus measured sources ------------------------------
@@ -202,14 +202,30 @@ spec_check_equal("${message}"
 # specification can see the rule with no runtime present.
 set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
 byte_machine_scheme_lane_command(byte-machine.harness.example.chez.source
-  chez source "/h/self/p.chez.sps"
+  chez source "/h/self/p.sps"
   command measured status message "/h/shared/a.scm" "/h/shared/b.scm")
 spec_check_equal("${status}" "ok" "a chez source lane is accepted")
 spec_check_equal("${measured}" "/h/shared/a.scm;/h/shared/b.scm"
   "a source lane measures the sources it declares, in the declared order")
 
+# The aot half of the same rule, over two sources, because a one-source
+# manifest cannot witness order: the measured list must be the fingerprint/
+# copies, in the declared order. This is the assertion mutations C1 (measured
+# collapses to declared) and C2 (measured built in reverse) break.
+set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
+byte_machine_scheme_lane_command(byte-machine.harness.example-two.chez.aot
+  chez aot "/h/self/p.sps"
+  command measured status message "/h/shared/a.scm" "/h/shared/b.scm")
+spec_check_equal("${status}" "ok" "a two-source chez aot lane is accepted")
+spec_check_equal("${measured}"
+  "/objects/byte-machine_harness_example-two_chez_aot/fingerprint/a.scm;/objects/byte-machine_harness_example-two_chez_aot/fingerprint/b.scm"
+  "an aot lane measures the fingerprint copies, in the declared order")
+spec_check_equal("${command}"
+  "/opt/chez;--script;/launchers/chez-aot.ss;--object-dir;/objects/byte-machine_harness_example-two_chez_aot/harness;--object-dir;/objects/byte-machine_harness_example-two_chez_aot/src;--source-guard;/b/guard;--program;/objects/byte-machine_harness_example-two_chez_aot/p.so"
+  "chez aot lane command line")
+
 byte_machine_scheme_lane_command(byte-machine.harness.example.chez.unknown-mode-name
-  chez unknown-mode-name "/h/self/p.chez.sps"
+  chez unknown-mode-name "/h/self/p.sps"
   command measured status message "/h/shared/a.scm")
 spec_check_equal("${status}" "unknown-mode" "an unregistered mode is rejected")
 spec_check_equal("${command}" "" "a rejected lane returns no command")
@@ -260,6 +276,17 @@ function(byte_machine_add_exit_code_test)
   else()
     set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "present")
   endif()
+endfunction()
+
+# The aot artifacts builder is imperative shell (add_custom_command is not
+# scriptable under cmake -P), so it is stubbed the same way the two
+# registrars are: recorded, not run. What the spec can see is the routing
+# decision -- an aot registration must reach it, a source registration must
+# not -- and the arguments it was reached with, which is where Task 3's
+# stale-root forwarding becomes assertable with no Scheme present.
+function(byte_machine_lane_chez_aot_artifacts name program stale_library_root)
+  set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_AOT_BUILDER_NAME "${name}")
+  set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_AOT_BUILDER_STALE "${stale_library_root}")
 endfunction()
 
 # byte_machine_expected_fingerprint and byte_machine_wrong_fingerprint are
@@ -329,6 +356,7 @@ spec_check_equal("${environment}"
 # every assertion written over a source lane.
 set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
 set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "none")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_AOT_BUILDER_NAME "none")
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.aot
   BACKEND chez
@@ -350,7 +378,14 @@ spec_check_equal("${mode_entry}" "BYTE_MACHINE_EXECUTION_MODE=aot"
 spec_check_equal("${environment}"
   "BYTE_MACHINE_EXECUTION_MODE=aot;BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin;BYTE_MACHINE_FINGERPRINT_FILES=/objects/byte-machine_harness_example_chez_aot/fingerprint/ByteMachineSchemeLaneSpec.cmake;BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=/fingerprints/byte-machine.harness.example.chez.aot.fingerprint"
   "an aot lane's environment carries the measured copy's path in BYTE_MACHINE_FINGERPRINT_FILES, not the declared source's own path")
+get_property(builder_name GLOBAL PROPERTY BYTE_MACHINE_SPEC_AOT_BUILDER_NAME)
+spec_check_equal("${builder_name}" "byte-machine.harness.example.chez.aot"
+  "an aot registration reaches the artifacts builder with its own lane name")
+get_property(builder_stale GLOBAL PROPERTY BYTE_MACHINE_SPEC_AOT_BUILDER_STALE)
+spec_check_equal("${builder_stale}" ""
+  "a lane without STALE_LIBRARY_ROOT hands the builder an empty stale root")
 
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_AOT_BUILDER_NAME "none")
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.example.chez.source
   BACKEND chez
@@ -361,6 +396,9 @@ get_property(environment GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT)
 list(GET environment 0 mode_entry)
 spec_check_equal("${mode_entry}" "BYTE_MACHINE_EXECUTION_MODE=source"
   "a source lane still declares source")
+get_property(builder_name GLOBAL PROPERTY BYTE_MACHINE_SPEC_AOT_BUILDER_NAME)
+spec_check_equal("${builder_name}" "none"
+  "a source registration never reaches the artifacts builder")
 
 # WRONG_FINGERPRINT chooses which function computes expect_file for the
 # manifest block: present, byte_machine_wrong_fingerprint; absent,
@@ -389,6 +427,34 @@ byte_machine_add_scheme_lane(
 get_property(fingerprint_function GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION)
 spec_check_equal("${fingerprint_function}" "expected"
   "a registration WITHOUT WRONG_FINGERPRINT routes to byte_machine_expected_fingerprint")
+
+# STALE_LIBRARY_ROOT changes what is compiled, never what is declared or
+# run. If it reached the declared list the expectation would move with the
+# artifact, the two would agree, and the lane that exists to fail would
+# pass; if it changed the run command the lane would stop being the same
+# lane it is the stale twin of. Three assertions, one per invariant.
+set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "none")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION "none")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_AOT_BUILDER_STALE "unset")
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.example-stale.chez.aot
+  BACKEND chez
+  PROGRAM "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
+  STALE_LIBRARY_ROOT "/fixtures/stale-root"
+  EXPECT_EXIT 3
+  TIMEOUT 10)
+get_property(builder_stale GLOBAL PROPERTY BYTE_MACHINE_SPEC_AOT_BUILDER_STALE)
+spec_check_equal("${builder_stale}" "/fixtures/stale-root"
+  "STALE_LIBRARY_ROOT reaches the artifacts builder")
+get_property(fingerprint_function GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION)
+spec_check_equal("${fingerprint_function}" "expected"
+  "a stale lane still computes the real expectation from its declared sources")
+get_property(environment GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT)
+list(GET environment 0 mode_entry)
+spec_check_equal("${mode_entry}" "BYTE_MACHINE_EXECUTION_MODE=aot"
+  "a stale lane is an ordinary aot lane to everything downstream of the builder")
 
 # WORKING_DIRECTORY must be forwarded to whichever registrar the lane routed
 # to, with its value, when the lane was given one -- and the keyword must not

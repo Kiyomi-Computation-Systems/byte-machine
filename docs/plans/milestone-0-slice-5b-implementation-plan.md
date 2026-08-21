@@ -1,5 +1,17 @@
 # Milestone 0 Slice 5b: Chez AOT and artifact binding — Implementation Plan
 
+> **Status (2026-08-20): partially executed, then superseded for the remainder — do not dispatch any task from this file.**
+> Tasks 1–3 were delivered 2026-08-18 (PR #6: mode plumbing, the declared/measured
+> split, and both Chez launchers) and survive as shipped code; Task 5 stays
+> discharged by measurement (design §5.3). Tasks 4 and 6–9 were written against
+> the pre-0005/pre-0006 tree — Gambit present, the include mechanism present,
+> `SHARED_BODIES`, the repository-wide basename guard, a `--source-dir` staleness
+> mechanism, and a 46/46 / 97 / 83-in-35 baseline, all since removed — so they
+> read plausibly and reference a tree that no longer exists. Their regenerated
+> form is
+> [`milestone-0-slice-5b-remainder-implementation-plan.md`](./milestone-0-slice-5b-remainder-implementation-plan.md).
+> This document keeps its full text as the record of what Tasks 1–3 built and why.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add the Chez ahead-of-time execution lane, and make a compiled lane's content fingerprint describe the text its artifact was built from rather than the text on disk when it ran.

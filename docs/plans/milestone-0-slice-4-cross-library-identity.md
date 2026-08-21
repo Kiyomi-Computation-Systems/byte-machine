@@ -1,6 +1,6 @@
 # Milestone 0, Slice 4: Cross-library identity
 
-Status: design agreed; ready for an implementation plan
+Status: accepted; delivered 2026-08-17; amended after delivery (dated note below)
 Date: 2026-08-17
 Parent plan: [`byte-machine-implementation-plan.md`](./byte-machine-implementation-plan.md) §7.2, §25
 Milestone plan: [`milestone-0-portability-spike.md`](./milestone-0-portability-spike.md) — deliverable D3, work-order item 4

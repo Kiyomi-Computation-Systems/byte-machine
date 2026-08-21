@@ -210,6 +210,68 @@ what this milestone delivers.
   including the bound the manifest does not close — a matching fingerprint
   proves the declared text is unchanged, not that the run included exactly
   those files — and the open question that reopens it.
+- A Chez ahead-of-time lane for each of three programs the source lanes
+  already run — `bootstrap`, `self`, and `placeholder-identity`, the last
+  discharging slice 4's deferred compiled-lane identity claim for Chez. Each
+  pair verifies against the same expectation file as its `chez.source`
+  counterpart, since both declare the same manifest and the expectation is
+  keyed by it. The compiled program is loaded with every object directory
+  paired against an always-empty source guard, so nothing on the library
+  path can be expanded from source behind the artifact's back; a guard that
+  has acquired a file is refused at status 2 by a lane of its own, because a
+  correctly configured lane never reaches that refusal.
+- A compiled lane's fingerprint now describes the text its artifact was
+  built from rather than the text on disk when it ran. The build command
+  that compiles the artifact also writes, in the same command, a copy of
+  every declared source as that compile resolved it; the lane measures those
+  copies, while the expectation stays computed from the repository
+  originals. A source lane's declared and measured lists are the same list,
+  since current disk contents are the only text a source lane has; a
+  compiled lane's are two, and the measured one describes what its artifact
+  was compiled from. That difference is the whole of the change.
+  `byte-machine.harness.stale-artifact.chez.aot` is what makes the
+  disagreement reachable rather than argued: it declares the same manifest
+  as `byte-machine.harness.self.chez.source` and is checked against the same
+  expectation, while its artifact is compiled against a divergent fixture
+  copy of `(byte-machine test harness)` — so it exits 3 with the fingerprint
+  mismatch diagnosis instead of passing. This closes the gap decision 0004
+  recorded for slice 5b, by the alternative that record dismissed rather
+  than by the build-time literal it proposed, and 0004 now carries the
+  amendment saying so.
+
+  Two bounds, stated because neither is closed. A lane is still not shown to
+  touch exactly the files it names — the manifest is declared, not observed,
+  and nothing here narrows that. And the copies sit *beside* the artifact
+  rather than inside it: one producer means the build cannot leave them
+  separately stale, but the artifact's own bytes enter neither side of the
+  comparison, so a build tree disturbed by hand can desynchronise them. A
+  value compiled into the object would be strictly stronger, and is recorded
+  as the shape that reopens this.
+- Mutations for every decision the compiled lanes added, each asserting a
+  failure signature rather than a nonzero exit. In the build layer, caught
+  by the lane specification under `cmake -P` with no Scheme runtime present:
+  a compiled lane measuring the repository originals, the measured list
+  built in reverse, the execution mode emitted as the literal `source`
+  again, and the three ways the artifacts builder can be miswired — never
+  called, called for every lane, and the stale root parsed and never
+  forwarded. In the Scheme layer: unpairing the aot launcher's source guard,
+  which makes Chez expand a library planted in an object directory and
+  `load-program` refuse at 255; a pass for each of the three refusals the
+  two compiled-lane launchers add — a missing compiled program, a source
+  guard that has acquired a file, and a `--library-root` left unpaired with
+  an `--object-dir`; and slice 5a's three carried provenance decisions —
+  the manifest separator, the digest combination order, and the status a
+  provenance failure exits with. Leaving `source-directories` unemptied in
+  the aot launcher is a declared survivor carrying its measured reason:
+  resolution runs through `library-directories`, and decision 0006 leaves no
+  `include` for it to resolve. The last carried decision was planned as a
+  survivor too and shipped caught instead — a manifest that fingerprints the
+  mutated body makes any edit to it fail provenance on its own, which is
+  what reaches the exit line, and the mutant exits 1 while the summary
+  printed immediately above still names status 3. The CMake suite stands at
+  1 pass / 72 mutations and the Scheme suite at 31 passes / 68 mutations,
+  each asserting its own totals; the pull-request and release selections
+  stand at 37 lanes and `no-scheme` at 8.
 
 ### Changed
 

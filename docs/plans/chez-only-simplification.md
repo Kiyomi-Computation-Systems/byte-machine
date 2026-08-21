@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Status: draft; awaiting review
+Status: executed; delivered 2026-08-18 (PR #7). §6's named follow-up, the include collapse, delivered 2026-08-20 (decision 0006, PR #8) — §6 carries the delivery note and measured outcome
 Date: 2026-08-18
 Parent plan: [`byte-machine-implementation-plan.md`](./byte-machine-implementation-plan.md) — this document is the "explicit plan update" its §2 requires before a fixed decision changes
 Milestone plan: [`milestone-0-portability-spike.md`](./milestone-0-portability-spike.md) — amended by Task 1, not rewritten

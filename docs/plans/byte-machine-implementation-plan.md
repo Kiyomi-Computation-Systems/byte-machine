@@ -1,6 +1,6 @@
 # Byte Machine Implementation Plan
 
-Status: architecture decisions approved; implementation roadmap ready for review
+Status: milestone 0 in progress (see [milestone-0-portability-spike.md](./milestone-0-portability-spike.md)); decisions amended by 0005 (Chez-only) via [chez-only-simplification.md](./chez-only-simplification.md) §2, and by 0006 (inline libraries)
 
 Date: 2026-08-15
 
