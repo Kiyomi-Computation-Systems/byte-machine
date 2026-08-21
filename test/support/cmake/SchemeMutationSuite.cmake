@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# TWENTY-NINE PASSES, BECAUSE TWENTY-NINE DIFFERENT WITNESSES ARE NEEDED
+# THIRTY-ONE PASSES, BECAUSE THIRTY-ONE DIFFERENT WITNESSES ARE NEEDED
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -121,6 +121,28 @@
 # copies both files carry from chez-source.ss are deliberately not re-proven
 # here; each launcher's own header records what that leaves unwitnessed.
 #
+# Pass 30 is design W9's first half: the two decisions inside
+# harness-verify-provenance! that no one-source manifest can witness -- the
+# split character and the combining order. Passes 22 to 25 pack their verify
+# command through BYTE_MACHINE_EXPECT_COMMAND, whose | packing forbids a
+# multi-source manifest, so this pass runs the lane command bare instead:
+# its baseline is a passing provenance run (exit 0), and each catchable
+# mutation turns that into the mismatch refusal (exit 3), with no wrapper
+# needed. Its manifest deliberately excludes harness.sls, the file both
+# mutations edit -- an earlier version included it, and an inert one-byte
+# edit nowhere near either decision was enough to trip the identical
+# refusal, which proved the catch was not discriminating anything.
+#
+# Pass 31 is design W9's second half, and needs the opposite manifest.
+# harness-provenance-failure!'s single shared exit line is reachable only
+# from a run whose own provenance has already failed, so witnessing it means
+# deliberately naming harness.sls -- the file this mutation edits -- in the
+# very manifest that checks it. What the plan first carried as a structural
+# survivor for this constant turned out to be witnessable once self-
+# reference was treated as the mechanism rather than the mistake pass 30 had
+# to avoid; AGENTS.md is explicit that a decision which can be witnessed
+# does not get an EXPECT_SURVIVES.
+#
 # WHAT THIS SUITE NEEDS FROM ITS ENVIRONMENT
 #
 # The self-tests assert that the lane declared its execution mode, that the
@@ -135,14 +157,19 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "TWENTY-NINE PASSES..." above. Declared here, rather than only in prose,
-# so the count enforced at the bottom of this file is the same text a reader
-# checks by eye at the top -- one number to keep in sync, not two that can
-# quietly disagree. 25 passes / 60 mutations before this task; pass 26 adds
-# two (C3, C3b) and passes 27 to 29 add one each, so 25 + 4 = 29 passes and
-# 60 + 2 + 1 + 1 + 1 = 65 mutations.
-set(EXPECTED_PASSES 29)
-set(EXPECTED_MUTATIONS 65)
+# See "THIRTY-ONE PASSES..." above. Declared here, rather than only in
+# prose, so the count enforced at the bottom of this file is the same text a
+# reader checks by eye at the top -- one number to keep in sync, not two
+# that can quietly disagree. 25 passes / 60 mutations before the aot task;
+# pass 26 adds two (C3, C3b) and passes 27 to 29 add one each, so 25 + 4 =
+# 29 passes and 60 + 2 + 1 + 1 + 1 = 65 mutations before this task; W9 adds
+# three mutations across two passes, not one -- pass 30 (the split
+# character, the combining order) and pass 31 (the exit constant, which
+# turned out witnessable after all once its manifest was allowed to be
+# self-referential on purpose, superseding the declared survivor the plan
+# first carried for it) -- so 29 + 2 = 31 passes and 65 + 3 = 68 mutations.
+set(EXPECTED_PASSES 31)
+set(EXPECTED_MUTATIONS 68)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -1716,9 +1743,186 @@ byte_machine_slice5b_launcher_pass(
   "--output" "${AOT_PASS_DIR}/unpaired.so"
   EXPECT_OUTPUT_MATCHES "Exception in map")
 
+# --- Pass 30: the provenance decisions a one-source manifest cannot witness --
+#
+# Passes 22-25 pack their verify commands through BYTE_MACHINE_EXPECT_COMMAND,
+# whose | packing forbids a multi-source manifest -- their manifests name one
+# source on purpose, so the split character and the combining order have
+# never had a witness. This pass runs the lane command bare: its baseline is
+# a PASSING provenance run (exit 0), and each catchable mutation turns that
+# into the mismatch refusal (exit 3), so no wrapper is needed and the
+# two-source manifest rides in an ordinary env entry.
+#
+# NEITHER MANIFEST FILE IS ONE THIS PASS MUTATES
+#
+# An earlier version of this pass fingerprinted fingerprint.sls and
+# harness.sls -- the file both mutations below edit, since
+# harness-verify-provenance! lives there. Measured against the shipped
+# suite: with harness.sls one of the two fingerprinted sources, editing it
+# at all fails the comparison before the mutated logic is even relevant, so
+# EXPECT_STATUS 3 was catching "harness.sls changed", not the decision each
+# mutation names. Proven with a control, not just argued: an inert trailing
+# space added to an unrelated comment at the top of the file, nowhere near
+# provenance, split, or combine, tripped the identical PROVENANCE-ERROR
+# refusal. A catch that catches anything discriminates nothing (AGENTS.md).
+# This pass fingerprints fingerprint.sls and harness-self-tests.sps instead
+# -- two real files a real lane's manifest would name, neither touched by
+# any mutation below -- so a mismatch can now only come from the split or
+# combine logic itself. Pass 31 needs the opposite choice for the one
+# decision this manifest shape cannot reach.
+byte_machine_mutation_reset()
+
+set(W9_MANIFEST
+  "${STAGE_DIR}/test/support/harness/byte-machine/test/fingerprint.sls|${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
+set(W9_EXPECT_FILE "${WORK_DIR}/w9-split-combine.fingerprint")
+execute_process(
+  COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
+          "${STAGE_DIR}/test/support/launchers/fingerprint-manifest.ss"
+          "${STAGE_DIR}/test/support/harness"
+          "${GUARD_DIR}"
+          "${W9_EXPECT_FILE}"
+          "${STAGE_DIR}/test/support/harness/byte-machine/test/fingerprint.sls"
+          "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps"
+  RESULT_VARIABLE w9_expect_rc)
+if(NOT w9_expect_rc EQUAL 0)
+  message(FATAL_ERROR
+    "byte-machine-mutation: pass 30 could not compute its two-source "
+    "expectation (rc ${w9_expect_rc}). The expectation must come from the "
+    "staged copies -- the stage is what the run reads -- so nothing this "
+    "pass reports would mean anything without it.")
+endif()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${CMAKE_COMMAND}" "-E" "env"
+  "BYTE_MACHINE_FINGERPRINT_FILES=${W9_MANIFEST}"
+  "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${W9_EXPECT_FILE}"
+  "--"
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
+
+set(RUNNER_BODY test/support/harness/byte-machine/test/harness.sls)
+
+# The manifest arrives |-joined. Split on anything else and the whole
+# two-source string is one path naming no file, so the run refuses with the
+# unreadable-source diagnosis -- still 3, still caught, and the label says
+# which decision died. Measured: "PROVENANCE-ERROR cannot read
+# <fingerprint.sls's path>|<harness-self-tests.sps's path>, which this run
+# is supposed to have executed." -- the | that should have separated two
+# paths is embedded in the one bogus path the comma-split produces.
+byte_machine_mutation(
+  FILE ${RUNNER_BODY} SPEC byte-machine.harness.provenance.chez.source
+  LABEL "runner: the manifest is split on the wrong character"
+  FIND [[        (let loop ((rest (harness-split raw #\|)) (acc '()))]]
+  REPLACE [[        (let loop ((rest (harness-split raw #\,)) (acc '()))]]
+  EXPECT_STATUS 3
+  EXPECT_OUTPUT_MATCHES "PROVENANCE-ERROR cannot read")
+
+# Combining is order-sensitive by design (slice 5a, mutation F5), so
+# accumulating in reverse computes a different digest over the same two
+# fingerprints -- both individually unchanged, since neither manifest file
+# is edited by this mutation, so the mismatch below can only come from the
+# order they were combined in, not from either file's own bytes. Measured:
+# "PROVENANCE-ERROR fingerprint mismatch: the build expected <combined
+# forward> but this run computed <combined reversed>."
+byte_machine_mutation(
+  FILE ${RUNNER_BODY} SPEC byte-machine.harness.provenance.chez.source
+  LABEL "runner: the manifest digests combine in reverse order"
+  FIND [[                               (harness-fingerprint-combine (reverse acc)))))]]
+  REPLACE [[                               (harness-fingerprint-combine acc))))]]
+  EXPECT_STATUS 3
+  EXPECT_OUTPUT_MATCHES "PROVENANCE-ERROR fingerprint mismatch")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 31: the provenance exit constant, witnessed through a deliberately
+# self-referential manifest --------------------------------------------------
+#
+# The one decision pass 30 cannot carry: harness-provenance-failure!'s single
+# shared exit line, (adapter-exit harness-status-provenance). Wrong that
+# constant and a provenance failure exits indistinguishably from an
+# assertion failure -- the whole reason status 3 was reserved -- but under
+# pass 30's own manifest (fingerprint.sls and harness-self-tests.sps,
+# neither edited by this mutation) provenance keeps succeeding, so the line
+# is never reached there: a passing baseline is byte_machine_mutation_run's
+# own precondition, no pass may deliberately fail provenance, and a mutation
+# whose only effect follows a failure that never happens would report as an
+# unwitnessed EXPECT_SURVIVES.
+#
+# The way to reach the line is the manifest pass 30 deliberately avoids: name
+# harness.sls itself -- the file this mutation, like both of pass 30's,
+# edits. That self-reference was pass 30's bug (its header records the
+# control that proved it); here it is the mechanism. Any edit to harness.sls
+# staled against a manifest that fingerprints harness.sls fails provenance
+# on its own -- exactly a run whose own text no longer matches what the
+# build measured, which is what a real stale artifact looks like, not a
+# contrived path to this line. That failure calls
+# harness-provenance-failure!, which reaches the mutated line and exits
+# harness-status-failed (1) instead of harness-status-provenance (3) -- the
+# summary text printed just above the exit call still names status 3, built
+# from the untouched constant, but the process's actual exit code is 1, so a
+# caller reading only the exit status draws exactly the
+# indistinguishable-from-an-assertion-failure conclusion this constant
+# exists to prevent.
+#
+# This supersedes the plan's declared survivor for this line. AGENTS.md: a
+# decision that can be witnessed does not get an EXPECT_SURVIVES.
+byte_machine_mutation_reset()
+
+set(W9_EXIT_MANIFEST
+  "${STAGE_DIR}/test/support/harness/byte-machine/test/fingerprint.sls|${STAGE_DIR}/test/support/harness/byte-machine/test/harness.sls")
+set(W9_EXIT_EXPECT_FILE "${WORK_DIR}/w9-exit-constant.fingerprint")
+execute_process(
+  COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
+          "${STAGE_DIR}/test/support/launchers/fingerprint-manifest.ss"
+          "${STAGE_DIR}/test/support/harness"
+          "${GUARD_DIR}"
+          "${W9_EXIT_EXPECT_FILE}"
+          "${STAGE_DIR}/test/support/harness/byte-machine/test/fingerprint.sls"
+          "${STAGE_DIR}/test/support/harness/byte-machine/test/harness.sls"
+  RESULT_VARIABLE w9_exit_expect_rc)
+if(NOT w9_exit_expect_rc EQUAL 0)
+  message(FATAL_ERROR
+    "byte-machine-mutation: pass 31 could not compute its two-source "
+    "expectation (rc ${w9_exit_expect_rc}). The expectation must come from "
+    "the staged copies -- the stage is what the run reads -- so nothing "
+    "this pass reports would mean anything without it.")
+endif()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${CMAKE_COMMAND}" "-E" "env"
+  "BYTE_MACHINE_FINGERPRINT_FILES=${W9_EXIT_MANIFEST}"
+  "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${W9_EXIT_EXPECT_FILE}"
+  "--"
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
+
+set(RUNNER_BODY test/support/harness/byte-machine/test/harness.sls)
+
+# Measured: the mutated harness.sls fails its own fingerprint comparison --
+# "PROVENANCE-ERROR fingerprint mismatch: the build expected <digest of the
+# pristine pair> but this run computed <digest with the mutated harness.sls>"
+# -- and the process exits 1 (harness-status-failed, what the mutation put
+# in the exit call), not 3 (harness-status-provenance, what the unmutated
+# line calls and what the summary text printed just above it still names).
+byte_machine_mutation(
+  FILE ${RUNNER_BODY} SPEC byte-machine.harness.provenance.chez.source
+  LABEL "runner: a provenance failure exits as an assertion failure"
+  FIND [[  (adapter-exit harness-status-provenance))]]
+  REPLACE [[  (adapter-exit harness-status-failed))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "PROVENANCE-ERROR fingerprint mismatch")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "TWENTY-NINE PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "THIRTY-ONE PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.
