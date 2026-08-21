@@ -532,6 +532,43 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     LABELS expected-red)
 endif()
 
+# --- Chez ahead-of-time lanes ----------------------------------------------
+#
+# Three of the programs the source lanes run, compiled. Nothing about the
+# sources changes; what changes is that the text reaching the process came
+# out of objects built earlier, which is why these lanes measure the copies
+# the compile step kept rather than the repository sources. Three lanes, not
+# one per source lane: bootstrap (the runner's primitives with no runner),
+# self (the runner on itself), and placeholder-identity (slice 4 section 10
+# deferred cross-library identity under compiled lanes to exactly here --
+# separate instantiation is a modelled risk in source mode and a real one
+# once each library is compiled into its own object).
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.bootstrap.chez.aot
+  BACKEND chez
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-bootstrap.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.self.chez.aot
+  BACKEND chez
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.portability.placeholder-identity.chez.aot
+  BACKEND chez
+  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder.sls"
+          "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder-consumer.sls"
+          "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.sps"
+  TIMEOUT 120)
+
 # --- Mutation proof for the harness ----------------------------------------
 
 # The harness is the instrument every later milestone is measured with, so a

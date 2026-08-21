@@ -177,6 +177,125 @@ endfunction()
 
 # --- Imperative shell ------------------------------------------------------
 
+# byte_machine_lane_chez_aot_artifacts(<name> <program> <stale_library_root>
+#                                      <declared-source>...)
+#
+# Build one aot lane's compiled program and, in the SAME custom command, the
+# fingerprint/ copies of the sources it was built from. One command is the
+# whole of decision W6: the object and the copies then have one producer and
+# cannot be separately stale, which is what makes the copies evidence about
+# the artifact rather than a second reading of the source tree.
+#
+# The DEPENDS list is the other half. Every .sls under both library roots is
+# a compile input (compile-imported-libraries), so every one of them must be
+# able to re-trigger this command; a library missing from this list would
+# leave the artifact -- and its copies -- describing the previous text, which
+# is the exact defect class decision 0004 demonstrated.
+#
+# <stale_library_root> is empty for every lane that is meant to pass. When it
+# is set (the staleness lane, Task 3 of the remainder plan), it is prefixed
+# as one extra (source root -> object dir) pair sharing the harness object
+# directory, so a library present there at its library-relative path is the
+# one compiled in -- and the copy step below takes each declared source from
+# wherever the compile found it, so the measured copies stay evidence about
+# the artifact under staleness too. The declared list, and therefore the
+# expectation, is never touched by this parameter.
+function(byte_machine_lane_chez_aot_artifacts name program stale_library_root)
+  byte_machine_chez_aot_paths("${name}" "${program}" object_dir compiled)
+
+  # Prefixed, not appended: Chez consults library-directories entries in
+  # order and takes the first source it can resolve (measured for this exact
+  # shape -- design section 5.3's remainder addendum), so a library present
+  # in the stale root shadows the real one for the compile while every
+  # library absent there still resolves from the real roots.
+  set(stale_pair_args "")
+  if(stale_library_root)
+    list(APPEND stale_pair_args
+      --library-root "${stale_library_root}"
+      --object-dir "${object_dir}/harness")
+  endif()
+
+  # The copy step takes each declared source from wherever the compile step
+  # will have found it. A declared source is shadowed exactly when the stale
+  # root holds a file at the same path relative to the harness library root;
+  # sources outside that root (the program, src/ libraries) are never
+  # shadowed, because the stale pair above is the harness pair's shadow and
+  # nothing else's.
+  set(sources_of_record "")
+  foreach(body IN LISTS ARGN)
+    set(source_of_record "${body}")
+    if(stale_library_root)
+      string(FIND "${body}" "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/" at)
+      if(at EQUAL 0)
+        string(REPLACE "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/" ""
+               relative "${body}")
+        if(EXISTS "${stale_library_root}/${relative}")
+          set(source_of_record "${stale_library_root}/${relative}")
+        endif()
+      endif()
+    endif()
+    list(APPEND sources_of_record "${source_of_record}")
+  endforeach()
+
+  byte_machine_lane_measured_copies("${object_dir}/fingerprint" copies ${ARGN})
+  set(copy_commands "")
+  list(LENGTH ARGN source_count)
+  math(EXPR last "${source_count} - 1")
+  foreach(i RANGE 0 ${last})
+    list(GET sources_of_record ${i} source_of_record)
+    list(GET copies ${i} copy)
+    list(APPEND copy_commands
+      COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+              "${source_of_record}" "${copy}")
+  endforeach()
+
+  # Configure-time glob, deliberately without CONFIGURE_DEPENDS: a new
+  # library arrives with a SOURCES edit in test/CMakeLists.txt, which forces
+  # the reconfigure this glob needs anyway. Empty is a fatal error, not a
+  # lane with no dependencies: a lane that depends on nothing goes on
+  # passing against the previous text.
+  file(GLOB_RECURSE chez_library_sources
+    "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/*.sls"
+    "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/*.sls")
+  if(NOT chez_library_sources)
+    message(FATAL_ERROR
+      "byte-machine: no Chez library sources were found under "
+      "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT} or "
+      "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}. That means this glob is wrong, "
+      "not that the aot lane has nothing to depend on.")
+  endif()
+
+  add_custom_command(
+    OUTPUT "${compiled}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${object_dir}/harness"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${object_dir}/src"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${object_dir}/fingerprint"
+    COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
+            "${BYTE_MACHINE_HARNESS_CHEZ_COMPILE_LAUNCHER}"
+            ${stale_pair_args}
+            --library-root "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+            --object-dir "${object_dir}/harness"
+            --library-root "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}"
+            --object-dir "${object_dir}/src"
+            --program "${program}"
+            --output "${compiled}"
+    ${copy_commands}
+    DEPENDS "${program}"
+            "${BYTE_MACHINE_HARNESS_CHEZ_COMPILE_LAUNCHER}"
+            "${BYTE_MACHINE_HARNESS_CHEZ_AOT_LAUNCHER}"
+            ${chez_library_sources}
+            ${sources_of_record}
+    COMMENT "byte-machine: Chez aot compile for ${name}"
+    VERBATIM)
+
+  string(REPLACE "." "_" stem "${name}")
+  add_custom_target("byte_machine_chez_aot_${stem}" DEPENDS "${compiled}")
+  if(NOT TARGET byte_machine_chez_aot)
+    add_custom_target(byte_machine_chez_aot ALL)
+  endif()
+  add_dependencies(byte_machine_chez_aot "byte_machine_chez_aot_${stem}")
+endfunction()
+
 # byte_machine_add_scheme_lane(NAME <name> BACKEND <chez> PROGRAM <path>
 #                              TIMEOUT <seconds> [EXPECT_EXIT <code>]
 #                              [WORKING_DIRECTORY <dir>]
@@ -264,6 +383,14 @@ function(byte_machine_add_scheme_lane)
   if(status STREQUAL "no-runtime")
     message(STATUS "byte-machine: skipping ${arg_NAME} -- ${message}")
     return()
+  endif()
+
+  # The shell half of the aot lane. Guarded on the mode rather than on the
+  # backend, so adding a backend does not silently acquire this rule; by this
+  # point status is `ok`, so a chez executable is known to exist.
+  if(lane_mode STREQUAL "aot")
+    byte_machine_lane_chez_aot_artifacts(
+      "${arg_NAME}" "${arg_PROGRAM}" "" ${arg_SOURCES})
   endif()
 
   # The lane registration declares the execution mode; the launcher never

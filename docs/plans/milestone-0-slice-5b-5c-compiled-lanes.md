@@ -345,6 +345,17 @@ own artifact, could dominate `make test`. Measured through the real harness earl
 `scratch-fixture-measurements` standard. If the number is bad, the mitigation is a preset or label
 split for compiled lanes, decided on the number rather than in advance.
 
+Measured 2026-08-21 against Chez 10.4.1 (Darwin, tarm64osx), through the real harness rather than a
+scratch driver: the three `chez.aot` lanes the remainder's Task 1 registers bring a clean `make test`
+(configure, build, `ctest --preset pr`, 36/36) to 22.2 s wall-clock — ctest's own reported test time
+19.5 s — against the 2026-08-20 baseline's 14.4 s `release`-preset figure (global-constraints.md; that
+number is ctest-only and predates these lanes entirely, so the comparison is approximate, not a clean
+before/after on one preset). Each new lane's own ctest execution costs about 0.06 s, since `make
+build` has already produced the artifact by the time ctest runs; the added weight is almost entirely
+the three `add_custom_command` compiles, which complete alongside the eight pre-existing
+fingerprint-manifest computations with no visible added latency in the build log. Affordable as
+measured — no preset split is warranted by this number.
+
 **The compiled lanes have never run on Linux.** Slice 7 is the first time, and also the first
 exercise of W11's skip path. W7 is the cheap partial mitigation: keeping the registration logic in
 the functional core means slice 7 inherits something already specified rather than something only
