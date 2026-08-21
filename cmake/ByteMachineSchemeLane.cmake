@@ -64,14 +64,12 @@ endfunction()
 # (BYTE_MACHINE_CHEZ_OBJECT_ROOT) so a parallel build cannot race and no
 # object outlives the runtime that produced it, and by LANE NAME -- not
 # program -- so two lanes that build the same program from different text
-# share nothing. That is not hypothetical: slice 5b's remainder registers
-# byte-machine.harness.self.chez.aot and
-# byte-machine.harness.stale-artifact.chez.aot over the same PROGRAM,
-# harness-self-tests.sps, and the second exists to compile it from
-# deliberately divergent text. Keyed by program stem instead, both would
-# resolve to one object directory, one compiled .so, and one flat
-# fingerprint/ directory, so the stale lane's copies would silently overwrite
-# the real lane's.
+# share nothing. That is not hypothetical: two registered lanes share this
+# PROGRAM -- ...self.chez.aot and ...stale-artifact.chez.aot, and the second
+# compiles it from deliberately divergent text. Keyed by program stem
+# instead, both would resolve to one object directory, one compiled .so, and
+# one flat fingerprint/ directory, so the stale lane's copies would silently
+# overwrite the real lane's.
 function(byte_machine_chez_aot_paths name program out_object_dir out_compiled)
   string(REPLACE "." "_" name_key "${name}")
   set(dir "${BYTE_MACHINE_CHEZ_OBJECT_ROOT}/${name_key}")
@@ -297,15 +295,27 @@ function(byte_machine_lane_chez_aot_artifacts name program stale_library_root)
 endfunction()
 
 # byte_machine_add_scheme_lane(NAME <name> BACKEND <chez> PROGRAM <path>
-#                              TIMEOUT <seconds> [EXPECT_EXIT <code>]
+#                              TIMEOUT <seconds> SOURCES <path>...
+#                              [EXPECT_EXIT <code>] [WRONG_FINGERPRINT]
+#                              [STALE_LIBRARY_ROOT <dir>]
 #                              [WORKING_DIRECTORY <dir>]
 #                              [LABELS ...] [ENVIRONMENT ...])
+#
+# NAME, BACKEND, PROGRAM, TIMEOUT and SOURCES are required. The name's
+# fifth field is the execution mode; the registrar derives it, so a
+# registration here cannot claim one lane while running another.
+#
+# WRONG_FINGERPRINT hands the lane an expectation the run cannot match, and
+# STALE_LIBRARY_ROOT compiles the artifact from any library the given root
+# holds at its library-relative path while the declared SOURCES keep naming
+# the real one. Both exist to make a passing provenance check falsifiable;
+# neither belongs on a lane that is meant to pass.
 #
 # With EXPECT_EXIT the lane is registered through the exact-status helper;
 # without it, a nonzero exit fails the test in the ordinary way.
 function(byte_machine_add_scheme_lane)
   cmake_parse_arguments(PARSE_ARGV 0 arg "WRONG_FINGERPRINT"
-    "NAME;BACKEND;PROGRAM;TIMEOUT;EXPECT_EXIT;WORKING_DIRECTORY"
+    "NAME;BACKEND;PROGRAM;TIMEOUT;EXPECT_EXIT;WORKING_DIRECTORY;STALE_LIBRARY_ROOT"
     "LABELS;ENVIRONMENT;SOURCES")
 
   if(arg_UNPARSED_ARGUMENTS)
@@ -390,7 +400,7 @@ function(byte_machine_add_scheme_lane)
   # point status is `ok`, so a chez executable is known to exist.
   if(lane_mode STREQUAL "aot")
     byte_machine_lane_chez_aot_artifacts(
-      "${arg_NAME}" "${arg_PROGRAM}" "" ${arg_SOURCES})
+      "${arg_NAME}" "${arg_PROGRAM}" "${arg_STALE_LIBRARY_ROOT}" ${arg_SOURCES})
   endif()
 
   # The lane registration declares the execution mode; the launcher never

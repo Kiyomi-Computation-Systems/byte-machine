@@ -707,3 +707,23 @@ byte_machine_add_scheme_lane(
   EXPECT_EXIT 3
   TIMEOUT 120
   LABELS expected-red)
+
+# An artifact built from text this registration does not declare. The
+# expectation comes from the real harness.sls; the compile step resolves
+# (byte-machine test harness) from a divergent fixture copy instead and
+# keeps that copy as what the run measures. The two disagree, so the lane
+# exits 3. This is the only lane in the tree that can fail when a compiled
+# lane's fingerprint stops describing its artifact -- a lane rather than a
+# mutation because the Scheme mutation suite stages one already-mutated
+# tree per pass and cannot express "built before the edit, run after it"
+# (design W12, slice 5a task 6).
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.stale-artifact.chez.aot
+  BACKEND chez
+  PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
+  STALE_LIBRARY_ROOT "${CMAKE_CURRENT_LIST_DIR}/fixtures/stale-root"
+  EXPECT_EXIT 3
+  TIMEOUT 120
+  LABELS expected-red)

@@ -428,6 +428,34 @@ get_property(fingerprint_function GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_
 spec_check_equal("${fingerprint_function}" "expected"
   "a registration WITHOUT WRONG_FINGERPRINT routes to byte_machine_expected_fingerprint")
 
+# STALE_LIBRARY_ROOT changes what is compiled, never what is declared or
+# run. If it reached the declared list the expectation would move with the
+# artifact, the two would agree, and the lane that exists to fail would
+# pass; if it changed the run command the lane would stop being the same
+# lane it is the stale twin of. Three assertions, one per invariant.
+set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "none")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION "none")
+set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_AOT_BUILDER_STALE "unset")
+byte_machine_add_scheme_lane(
+  NAME byte-machine.harness.example-stale.chez.aot
+  BACKEND chez
+  PROGRAM "${SPEC_SELF}"
+  SOURCES "${SPEC_SELF}"
+  STALE_LIBRARY_ROOT "/fixtures/stale-root"
+  EXPECT_EXIT 3
+  TIMEOUT 10)
+get_property(builder_stale GLOBAL PROPERTY BYTE_MACHINE_SPEC_AOT_BUILDER_STALE)
+spec_check_equal("${builder_stale}" "/fixtures/stale-root"
+  "STALE_LIBRARY_ROOT reaches the artifacts builder")
+get_property(fingerprint_function GLOBAL PROPERTY BYTE_MACHINE_SPEC_FINGERPRINT_FUNCTION)
+spec_check_equal("${fingerprint_function}" "expected"
+  "a stale lane still computes the real expectation from its declared sources")
+get_property(environment GLOBAL PROPERTY BYTE_MACHINE_SPEC_ENVIRONMENT)
+list(GET environment 0 mode_entry)
+spec_check_equal("${mode_entry}" "BYTE_MACHINE_EXECUTION_MODE=aot"
+  "a stale lane is an ordinary aot lane to everything downstream of the builder")
+
 # WORKING_DIRECTORY must be forwarded to whichever registrar the lane routed
 # to, with its value, when the lane was given one -- and the keyword must not
 # reach the registrar at all when it was not. Both directions, through both
