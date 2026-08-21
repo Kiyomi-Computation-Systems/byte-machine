@@ -52,6 +52,18 @@
   through a route nothing yet used (a lane NAME carrying one backend's mode
   while BACKEND names another). Before deleting a mutation, ask what its REPLACE
   still changes in the surviving tree and whether any input can reach it.
+* A mutation pass's provenance manifest must not cover the file the pass
+  mutates — unless self-reference is the declared mechanism. The 5b remainder's
+  W9 pass as planned fingerprinted the same file every mutation in its group
+  edited, so any edit tripped a generic mismatch: one mutation was "caught"
+  without discriminating its decision, and the pass's declared survivor was
+  reached and caught, falsifying its written reason — proven by a control (an
+  inert comment edit flipped the lane identically). The corrected split is the
+  rule: witness content decisions under a manifest that excludes the mutated
+  file, and use a deliberately self-referential manifest only as its own named
+  mechanism — it is exactly what makes an exit-path constant witnessable,
+  because the mutation stales its own manifest and drives the run down the
+  failure path whose constant it changed (SchemeMutationSuite passes 30/31).
 * Libraries are R6RS `.sls`; libraries and programs contain their own code —
   no shared include bodies (docs/decisions/0006-inline-libraries.md). R6RS
   forbids assigning an exported variable — reach mutable state through
