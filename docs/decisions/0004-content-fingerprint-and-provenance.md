@@ -286,6 +286,75 @@ below are copied from that table.
   from staged copies" is not a distinction this function's inputs can
   express yet.
 
+  > **Amended 2026-08-21 by the slice 5b remainder: this gap is closed — by
+  > the alternative the paragraph above dismisses, not by the literal it
+  > proposes.** The paragraph stays as written rather than being corrected
+  > into agreement: a record edited to agree with a later decision stops
+  > being evidence of anything, and what was believed here is part of what
+  > this amendment records. A compiled lane's fingerprint is computed over
+  > copies of its declared sources, written by the *same*
+  > `add_custom_command` that produces the artifact and taken from the text
+  > that command actually resolved (`byte_machine_lane_chez_aot_artifacts`,
+  > `cmake/ByteMachineSchemeLane.cmake`); the expectation stays computed
+  > from the repository originals, so the two lists differ for a compiled
+  > lane and are the same list for a source lane. A stale artifact therefore
+  > carries stale copies, the two sides disagree, and the lane exits 3.
+  > `byte-machine.harness.stale-artifact.chez.aot` is the registered proof:
+  > its artifact is compiled against a divergent fixture library while its
+  > manifest declares the real one. Measured 2026-08-21 through the shipped
+  > lane — `PROVENANCE-ERROR fingerprint mismatch: the build expected
+  > c96837130346f54 but this run computed 17b8f9ee3463e6de`, `status=3`,
+  > `cases=0`; it is green as an `EXPECT_EXIT 3` lane in both the `pr` and
+  > `release` selections. See decisions W2, W3, W5 and W6 of
+  > [the compiled-lanes design](../plans/milestone-0-slice-5b-5c-compiled-lanes.md).
+  >
+  > **The objection above was about a signature, not a principle.**
+  > "Nowhere to enter this tree today … one list, not two" described
+  > `byte_machine_scheme_lane_command` as it then stood; the two-list split
+  > gave that function an `<out_measured>` beside its `<out_command>`, and a
+  > compiled lane's measured list is its `fingerprint/` copies, walked in
+  > declared order because `harness-fingerprint-combine` is order-sensitive.
+  > The asymmetry is asserted with no Scheme runtime present, under
+  > `cmake -P` in `test/support/cmake/ByteMachineSchemeLaneSpec.cmake` — "a
+  > source lane measures the sources it declares, in the declared order",
+  > "an aot lane measures the fingerprint copies, in the declared order",
+  > and "an aot lane's environment carries the measured copy's path in
+  > BYTE_MACHINE_FINGERPRINT_FILES, not the declared source's own path".
+  > Measured the same day on the shipped registrations:
+  > `byte-machine.harness.self.chez.source` and
+  > `byte-machine.harness.self.chez.aot` carry the identical
+  > `BYTE_MACHINE_EXPECT_FINGERPRINT_FILE`
+  > (`fingerprints/9571bb88651dd209.fingerprint`) and different
+  > `BYTE_MACHINE_FINGERPRINT_FILES` — repository originals for the first,
+  > the per-lane `fingerprint/` copies for the second.
+  >
+  > **W6's bound, stated rather than glossed: the copies sit beside the
+  > artifact, not inside it.** One producer means the build cannot leave
+  > them separately stale — nothing refreshes the copies without
+  > recompiling, and nothing recompiles without refreshing them — but the
+  > artifact's own bytes enter neither side of the comparison, so what the
+  > copies witness is the command that produced the artifact rather than the
+  > artifact, and a build tree disturbed by hand can desynchronise the two.
+  > The direction the paragraph above records is strictly stronger, the
+  > value being carried inside the object, and it is kept as the reopening
+  > shape under the design's own condition: a build tree that can be
+  > disturbed so copies and artifact diverge without the build noticing.
+  > Its cost analysis (W3) does not decide that reopening — half of it was
+  > Gambit's source-file-relative `include`, moot since
+  > [decision 0005](./0005-chez-only.md) took Gambit out of the contract,
+  > and the Chez half was estimated and never paid.
+  >
+  > **One sentence in the demonstration above is include-era.** "A body
+  > reached only through `include` has no timestamp of its own that anything
+  > consults" describes the tree before
+  > [decision 0006](./0006-inline-libraries.md); no Scheme file includes
+  > another now, so that particular route to an object Chez still calls
+  > current is gone. The defect class survives in its general form — an
+  > artifact built before an edit and run after it — which is exactly what
+  > the staleness lane constructs on purpose, and what the aot command's
+  > `DEPENDS` list (the program, both launchers, every `.sls` under both
+  > library roots, and every declared source) exists to prevent by accident.
+
   One note on how to read this record's own language now:
   `harness-provenance-diagnosis`'s mismatch message (`harness-runner.scm`,
   line 133) offers "or it is running a stale artifact" as a reading of a

@@ -157,6 +157,33 @@ Each is a testable artifact, not a note.
 - **D3 — Cross-library identity smoke path.** Owner wrapper constructs a placeholder tagged vector; a second wrapper recognises it; an allocation-free singleton retains `eq?` identity across both imports. Runs in every execution lane.
 - **D4 — Portable test harness + thin runners.** Dependency-free (no SRFI-64, no package manager) per §22.2: shared assertion/result code, thin Chez and Gambit adapters owning imports, process exit codes, and compilation steps. Mirrors protium's harness structure; adapters on both runtimes must export exactly the same names.
 - **D5 — Execution lanes.** Chez source, Chez AOT, Gambit `.o1`, Gambit `-exe -nopreload`. Compiled lanes must be unable to silently fall back to source.
+
+  > **Amended 2026-08-21 by the slice 5b remainder: D5 closes here, at two
+  > lanes.** The remainder puts `chez.aot` beside `chez.source` for three
+  > programs — `bootstrap`, `self`, and `placeholder-identity`, the third
+  > discharging slice 4 §10 for Chez — and each pair verifies against one
+  > content fingerprint computed from its one declared manifest: measured
+  > 2026-08-21, `byte-machine.harness.self.chez.source` and
+  > `byte-machine.harness.self.chez.aot` carry the identical
+  > `BYTE_MACHINE_EXPECT_FINGERPRINT_FILE`, while the compiled lane measures
+  > the `fingerprint/` copies its own build command wrote. The compiled half
+  > runs its artifact rather than falling back: `chez-aot.ss` `load-program`s
+  > the compiled program with every object directory paired against an
+  > always-empty source guard, unpairing that guard is a caught mutation, and
+  > a guard that has acquired a file is refused at status 2 by a lane of its
+  > own. Falsifiability is `byte-machine.harness.stale-artifact.chez.aot`,
+  > whose artifact is compiled from a divergent fixture library while its
+  > manifest declares the real one, and which exits 3 with the mismatch
+  > diagnosis. Two lanes, not the four this entry names, and a
+  > single-implementation claim rather than the Chez-versus-Gambit one — the
+  > weaker statement [decision 0005](../decisions/0005-chez-only.md) recorded
+  > when it cancelled slice 5c. Re-measured the same day: `pr` and `release`
+  > 37/37, `no-scheme` 8/8. See
+  > [the compiled-lanes design](./milestone-0-slice-5b-5c-compiled-lanes.md),
+  > [its remainder plan](./milestone-0-slice-5b-remainder-implementation-plan.md),
+  > and [decision 0004](../decisions/0004-content-fingerprint-and-provenance.md)'s
+  > 2026-08-21 amendment for what a compiled lane's fingerprint now describes
+  > and what it still does not.
 - **D6 — Deterministic text emission proof.** Both implementations write byte-identical canonical UTF-8/LF output through a project-owned writer; compared by fingerprint, never via implementation `write` formatting.
 - **D7 — Identifier repertoire and binary LF proof.** Permitted `[a-z][a-z0-9-]*` names accepted; uppercase, non-ASCII, and punctuation rejected. LF bytes survive a binary port unmodified — the Windows CRLF-translation trap.
 - **D8 — CI (macOS arm64 + Linux amd64, both implementations)** plus written feasibility notes for the four deferred Tier 1 cells.
