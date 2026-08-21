@@ -1,6 +1,6 @@
 # Milestone 0, Slices 5b and 5c: The compiled execution lanes
 
-Status: accepted; 5b's first half delivered 2026-08-18 (PR #6); the remainder is planned in [milestone-0-slice-5b-remainder-implementation-plan.md](./milestone-0-slice-5b-remainder-implementation-plan.md); 5c cancelled by decision 0005 (amendment blocks below)
+Status: accepted; 5b delivered in full — first half 2026-08-18 (PR #6), remainder 2026-08-21 by [milestone-0-slice-5b-remainder-implementation-plan.md](./milestone-0-slice-5b-remainder-implementation-plan.md) — and D5 closed at the two Chez lanes; 5c cancelled by decision 0005 (amendment blocks below)
 Date: 2026-08-17
 Parent plan: [`byte-machine-implementation-plan.md`](./byte-machine-implementation-plan.md) §22.2, §24.2
 Milestone plan: [`milestone-0-portability-spike.md`](./milestone-0-portability-spike.md) — deliverable D5, work-order item 5

@@ -1,6 +1,6 @@
 # Milestone 0 Slice 5b Remainder: the real aot lanes, the staleness lane, C1–C4, and the 0004 amendment — Implementation Plan
 
-Status: ready to execute (regenerated 2026-08-20 against the post-0005/post-0006 tree, replacing Tasks 4 and 6–9 of [milestone-0-slice-5b-implementation-plan.md](./milestone-0-slice-5b-implementation-plan.md))
+Status: executed; delivered 2026-08-21 (regenerated 2026-08-20 against the post-0005/post-0006 tree, replacing Tasks 4 and 6–9 of [milestone-0-slice-5b-implementation-plan.md](./milestone-0-slice-5b-implementation-plan.md); Task 6's pass design was corrected during execution and its section records the corrected form)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

@@ -309,8 +309,9 @@ below are copied from that table.
   > [the compiled-lanes design](../plans/milestone-0-slice-5b-5c-compiled-lanes.md).
   >
   > **The objection above was about a signature, not a principle.**
-  > "Nowhere to enter this tree today … one list, not two" described
-  > `byte_machine_scheme_lane_command` as it then stood; the two-list split
+  > "Nowhere to enter this tree today … one list, not two" described the
+  > call site `byte_machine_expected_fingerprint` sits in, where
+  > `byte_machine_scheme_lane_command` returned one list; the two-list split
   > gave that function an `<out_measured>` beside its `<out_command>`, and a
   > compiled lane's measured list is its `fingerprint/` copies, walked in
   > declared order because `harness-fingerprint-combine` is order-sensitive.
