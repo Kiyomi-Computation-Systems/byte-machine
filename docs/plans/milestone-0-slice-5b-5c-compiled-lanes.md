@@ -216,6 +216,50 @@ Two consequences carried forward:
   shared bodies into a tree that is also an object directory puts candidate library source on the
   library path. 5c stages bodies for both Gambit modes; the same care is owed there.
 
+Measured 2026-08-21 against Chez 10.4.1 (Darwin, tarm64osx), through Task 1's shipped
+`byte-machine.harness.self.chez.aot` lane rather than the scratch library above: re-taking C3 against
+its object directory (`build/dev/chez-objects/10.4.1/tarm64osx/byte-machine_harness_self_chez_aot`),
+using the exact command and `ENVIRONMENT` that `ctest --preset pr -R 'harness\.self\.chez\.aot$'
+--show-only=json-v1` reports for it, replicated by hand (`BYTE_MACHINE_EXECUTION_MODE=aot` and the
+fingerprint variables included — without them provenance and mode checks intervene before the
+library path is ever consulted). A mutated copy of the real `harness.sls` (the shipped file plus a
+trailing comment), touched newer than the `harness.so` beside it, was planted at
+`harness/byte-machine/test/harness.sls` inside that object directory.
+
+- **Shipped launcher.** The plant is not read. The lane completes as if it were absent —
+  `cases=45 failed-cases=0 checks=113 failures=0 cleanup-failures=0 skipped=0 errors=0 status=0`,
+  fingerprint verified against the build manifest — for two independent structural reasons: the
+  paired source guard means the object directory is never consulted as a source half at all (this
+  section's existing text above), and the fingerprint is measured from the separate `fingerprint/`
+  copy directory (W5/W6, §3), which the plant was never placed in.
+- **Unpaired copy.** `chez-aot.ss` with its `library-directories` call's
+  `(map (lambda (dir) (cons source-guard-dir dir)) object-dirs)` replaced by bare `object-dirs` —
+  reproducing the pre-fix shape this section already describes — reads the planted source, and
+  `load-program` refuses: `Exception: loading .../harness/byte-machine/test/harness.sls yielded a
+  different compilation instance of (byte-machine test harness) from that required by compiled
+  program`, exit **255**. The same diagnosis this section already records, reproduced here against a
+  shipped artifact rather than the scratch library that first found it.
+
+C3 is now caught for its declared reason on the shipped tree.
+
+**C3b, unchanged.** Not re-run, because there is nothing new to run it against: the launcher's own
+header (`chez-aot.ss`, "WHY `source-directories` IS ALSO EMPTIED") already records
+`source-directories` emptiness as measured inert, and decision 0006's inline-libraries rule means
+nothing in this repository's tree — shipped or scratch — resolves through it today. Deleting
+`(source-directories '())` remains a declared survivor for the reason already on record.
+
+**Library-directories ordering, measured for Task 3's stale-pair shape.** Two library roots (`a`,
+`b`), each holding a library `(x lib)` with a divergent body (`"first"`, `"second"`), both
+`--library-root` entries compiled through the shipped `chez-compile.ss` into **one shared**
+`--object-dir`, then loaded through the shipped `chez-aot.ss`: `chez-compile.ss` reports compiling
+only `a/x/lib.sls` into the shared object directory's `x/lib.so` — root `a`, listed first, is the one
+resolved — and running the compiled program prints `first`. The earlier `--library-root`/
+`--object-dir` pair wins when both pairs share one object directory, which is the exact shape Task
+3's stale pair takes. Measured against a scratch fixture, not the shipped tree, because this
+repository's own manifests have no two roots naming one library today; the staleness lane's own
+exit-3 gate (Task 3 step 6) re-proves the same fact end to end through the real harness, which is
+what lets a scratch measurement be recorded at all.
+
 ## 6. Slice 5c — Gambit `.o1` and `gsc -exe -nopreload`
 
 5c cannot start before 5b lands: it consumes the two-list split and the mode plumbing.
