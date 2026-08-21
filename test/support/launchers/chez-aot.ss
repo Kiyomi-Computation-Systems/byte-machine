@@ -24,12 +24,16 @@
 ;;;
 ;;; The cost of the copy is that a flag-vocabulary decision fixed in one
 ;;; launcher is not fixed in the others: the copies are independent
-;;; decisions, not one decision spelled three times. That independence is a
-;;; fact about the code today, not yet something a suite proves -- neither
-;;; this file nor chez-compile.ss has a mutation of its own yet
-;;; (MutationSuite.cmake and SchemeMutationSuite.cmake name chez-source.ss
-;;; only). Mutating each copy separately is intended work for the slice that
-;;; wires a real chez.aot lane, not a claim this commit can make.
+;;; decisions, not one decision spelled three times. That independence is
+;;; now partially witnessed: SchemeMutationSuite.cmake mutates this file's
+;;; own refusals and decisions -- passes 26-28: the library-path pairing and
+;;; source-directories (pass 26), the missing-program refusal (pass 27), and
+;;; the dirty-source-guard refusal (pass 28). Pass 29, chez-compile.ss's
+;;; unpaired-roots refusal, mutates that file instead. The verbatim
+;;; flag-block loops below these decisions remain witnessed only in
+;;; chez-source.ss's copy; a defect introduced into one copy alone would not
+;;; be caught here, and that residual is accepted, recorded here rather than
+;;; left implied.
 ;;;
 ;;; WHY THE LIBRARY PATH PAIRS EVERY OBJECT DIRECTORY WITH AN EMPTY SOURCE
 ;;; GUARD
