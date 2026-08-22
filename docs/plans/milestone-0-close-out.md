@@ -388,11 +388,17 @@ criterion 2, spike §7 D8's "written feasibility notes" half, and parent §25:14
      `CHEZSCHEMELIBDIRS` variable — the *string* form. Cite Chez 10.4.1's own man
      page (`chez.1`, the `--libdirs` section), installed on this host.
    - **This project never uses that form.** All four Scheme entry points set the
-     `library-directories` *parameter* with a Scheme list of pairs, built from
-     repeatable command-line flags: `chez-source.ss:139–140`, `chez-aot.ss:183–184`,
-     `chez-compile.ss:153`, `fingerprint-manifest.ss:59`. So the separator is
-     recorded as background about the runtime, not as behavior byte-machine
-     depends on.
+     `library-directories` *parameter* with a Scheme list of pairs:
+     `chez-source.ss:139–140`, `chez-aot.ss:183–184`, `chez-compile.ss:153`,
+     `fingerprint-manifest.ss:59`. Every root arrives as its own argv entry and is
+     never split — the three lane launchers take repeatable flags collected by
+     `flag-values` (`chez-source.ss:89–93`), which is what
+     [0002](../decisions/0002-shared-body-include-mechanism.md)'s closure names,
+     while `fingerprint-manifest.ss` takes its root and guard **positionally**
+     (`:31–37`, usage at `:4`) and so splits nothing either. Do not carry 0002's
+     "repeatable flags" phrasing onto the fourth site: it has no flags. The
+     separator is recorded as background about the runtime, not as behavior
+     byte-machine depends on.
    - Chez joins the components of a *library name* with `/` to build a partial
      path — `(a b)` becomes `a/b` — and appends it to each root before trying
      each extension. That is library-name resolution, not a separator behavior,
