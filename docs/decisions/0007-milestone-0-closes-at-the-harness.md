@@ -13,27 +13,27 @@ cannot be executed, and the reason is not that it is hard.
 
 Spike §7 D6 is stated four incompatible ways, and all four are live in the tree:
 
-- **spike:187**, the deliverable itself: "Both implementations write
+- **spike §7 D6**, the deliverable itself: "Both implementations write
   byte-identical canonical UTF-8/LF output through a project-owned writer".
-- **spike:201**, work-order item 6's exit condition: "byte-identical output
+- **spike §8**, work-order item 6's exit condition: "byte-identical output
   across implementations; every rejection case rejected".
-- **spike:17–19**, the 2026-08-18 amendment note, restating D6's
+- **the spike header note**, amended 2026-08-18, restating D6's
   deterministic-emission proof as "a single-implementation, cross-platform
   claim" (the phrase wraps a line break in the source).
-- **parent §25:1425**, the Milestone 0 Deliver line: "deterministic text
+- **parent §25**, the Milestone 0 Deliver line: "deterministic text
   emission proof across the Chez source and AOT lanes".
 
 The first two name a second implementation. [Decision 0005](./0005-chez-only.md)
 removed it. There is no longer anything for the output to be identical *to*, so
 item 6's exit condition is not unmet — it is unsatisfiable as written.
 
-The third is honest, and this host cannot discharge it either. Parent §7.3:195
+The third is honest, and this host cannot discharge it either. Parent §7.3
 names four Tier 1 platforms — Chez on Linux amd64, Linux arm64, macOS arm64, and
 Windows amd64 — each required in both source and AOT execution. One platform
 exists locally, in both lanes (macOS arm64; the Measurements host below). A
 second, Linux amd64, arrives with spike §7 D8's pipeline; the remaining two
 platforms, in both lanes each, are the four deferred cells D8's written
-feasibility notes are about (spike:189). A cross-platform claim needs cells, and
+feasibility notes are about (spike §7 D8). A cross-platform claim needs cells, and
 the cells arrive with a deliverable this milestone has not delivered.
 
 The fourth — the parent plan's weaker two-lane formulation — is the substitution
@@ -47,8 +47,8 @@ cross-platform restatement above.
 Underneath the wording problem is a structural one. D6 and D7 are both
 properties of an emitter — D6 of what a writer writes, D7 of which names it
 accepts and which bytes survive the port — and the spike's own scope decision
-forbids building one. spike:6: "No byte-machine semantics (no IR, verifier,
-interpreter, emitter, or runtime) are implemented in this milestone." Slice 6 as
+forbids building one: "No byte-machine semantics (no IR, verifier, interpreter,
+emitter, or runtime) are implemented in this milestone." Slice 6 as
 specified would build a placeholder writer for the sole purpose of having a
 subject, prove a determinism claim about the placeholder, and hand Milestone 1
 an emitter that must prove it again about the real thing.
@@ -104,9 +104,9 @@ predates that directory gaining this slice's own two documents.
 - **All 87 lines of `src/` are placeholder.** `src/byte-machine/` contains
   exactly `placeholder.sls` and `placeholder-consumer.sls` — spike §7 D3's
   tagged value and the second library that recognises it. Spike §11 schedules
-  the tagged value for deletion in Milestone 1 and names only it (spike:230);
+  the tagged value for deletion in Milestone 1 and names only it (spike §11);
   the library that recognises it goes with its subject, but the spike does not
-  say so. No byte-machine semantics ship, by spike:6.
+  say so. No byte-machine semantics ship, by the spike's scope decision.
 
 These numbers are recorded because they are what the close is weighed against,
 not as a complaint about what came before. Every layer above `src/` was earned:
@@ -118,9 +118,9 @@ product — by construction, because it has no product to be about.
 ## Decision
 
 1. **Milestone 0 closes.** Its work order ends at item 5 as delivered. Spike §8
-   item 6 (D6, D7) is not executed as written; item 7 (D8, D9 — spike:202)
+   item 6 (D6, D7) is not executed as written; item 7 (D8, D9 — spike §8)
    splits. Its D9 half — decision records in `docs/decisions/` and an initial
-   `CHANGELOG.md` (spike:190) — **is** delivered: seven records and a
+   `CHANGELOG.md` (spike §7 D9) — **is** delivered: seven records and a
    `CHANGELOG.md` ship, this record among them. Its D8 half is what point 4
    below moves. What Milestone 0 shipped is the harness, the build layer, the
    two Chez execution lanes, the provenance discipline around them, and the
@@ -128,13 +128,13 @@ product — by construction, because it has no product to be about.
    and it stops there.
 
 2. **Spike §7 D6 moves to parent §25's Milestone 1 Scope line "deterministic
-   output"** (parent §25:1447). The emitter Milestone 1 builds is the writer
+   output"** (parent §25). The emitter Milestone 1 builds is the writer
    whose determinism D6 is a claim about, so in Milestone 1 the claim has a
    subject.
 
 3. **Spike §7 D7 moves to Milestone 1's "symbolic name resolution"** (parent
-   §25:1440) **and "generated-name safety for every construct present"** (parent
-   §25:1444). The `[a-z][a-z0-9-]*` repertoire is what name resolution validates
+   §25) **and "generated-name safety for every construct present"** (parent
+   §25). The `[a-z][a-z0-9-]*` repertoire is what name resolution validates
    against; the binary-LF half rides with the emitter's output port.
 
 4. **Spike §7 D8's CI pipeline moves to Milestone 1 alongside D6's cross-cell
@@ -151,7 +151,7 @@ product — by construction, because it has no product to be about.
    pipeline is the exception: Milestone 1's Scope has no CI entry, so the
    pipeline rides D6's cross-cell axis rather than a line of its own. Parent
    §25's **Milestone 9** already carries "complete Tier 1 CI" and "source
-   generation equality across platform cells" (§25:1602–1603) — the same two
+   generation equality across platform cells" (§25, Milestone 9) — the same two
    obligations. The division that makes both true: Milestone 1 stands the
    pipeline up over the emitter, on the cells it can get, and Milestone 9
    completes the Tier 1 matrix. "Complete" presupposes something to complete,
@@ -162,8 +162,8 @@ product — by construction, because it has no product to be about.
 ## Parent plan §30 questions 1–4
 
 This is why the closure needs a record rather than only a plan section: spike
-§12's ninth exit criterion (spike:244) requires that "§30 questions 1–4 are
-answered in `docs/decisions/` and backed by tests", and spike:216 calls 1–4 hard
+§12's ninth exit criterion requires that "§30 questions 1–4 are
+answered in `docs/decisions/` and backed by tests", and spike §9 calls 1–4 hard
 requirements. Each answer below states its evidence level, because "answered" and
 "answered by a measurement" are not the same claim.
 
@@ -201,17 +201,17 @@ requirements. Each answer below states its evidence level, because "answered" an
    counts as an absolute pathname — and that one is unmeasured and rides with the
    Windows cell.
 
-4. **Condition construction available to consumers** (parent §30:1723). Closed
+4. **Condition construction available to consumers** (parent §30 question 4). Closed
    by [0005](./0005-chez-only.md): one implementation, plain R6RS conditions,
    and no portability layer left to expose anything else. Parent §30 already
    carries its own annotation on this one — "*(Moot: it is plain R6RS
    `condition`/`raise`; no wrapper layer exists to expose anything else.)*" — so
-   this record confirms that annotation rather than establishing it. Spike
-   §9:211 restates the question as "Portable condition construction exposed by
-   the wrappers", and the layer that phrasing names is the one 0005 removed.
+   this record confirms that annotation rather than establishing it. Spike §9
+   question 4 restates the question as "Portable condition construction exposed
+   by the wrappers", and the layer that phrasing names is the one 0005 removed.
    A **closure by decision**, not a deferral.
 
-Questions 5–7 are the spike's own "deferred, with rationale" cases (spike:216);
+Questions 5–7 are the spike's own "deferred, with rationale" cases (spike §9);
 question 6 — identifier length and source-size limits in supported compilers —
 is D7's companion and rides with it, because the grammar imposes no maximum and
 measuring compiler limits before there is generated source to hit them measures
@@ -247,7 +247,7 @@ nothing.
   over the emitter protects the byte-identity claim that is D6's whole point.
 
 - **Parent §25's Milestone 0 exit criteria are three, and D6 and D7 appear in
-  none of them.** They are (parent §25:1431–1433): "the same shared test body
+  none of them.** They are (parent §25): "the same shared test body
   passes in both the source and AOT execution lanes" (met before this slice);
   "CI design covers unavailable local platforms"; and "each library owns its own
   code — no shared include bodies", met by [0006](./0006-inline-libraries.md) —

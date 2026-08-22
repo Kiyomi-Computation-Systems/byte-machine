@@ -16,7 +16,7 @@
 - **Match on text, never on line number.** Line numbers shift as earlier rows land within the same file. Every edit below gives a unique FIND string.
 - **Never cite a line number in a file this slice edits.** The two governing plans — `byte-machine-implementation-plan.md` and `milestone-0-portability-spike.md` — are edited by Tasks 3 and 4, and every insertion or deletion shifts every line below it. A `§25:1425` written before those tasks is wrong after them, and neither the vocabulary grep nor the link check can see it. **Cite the section only** (`parent §25`, `spike §7 D6`) for those two files. Line numbers remain correct and expected for files this slice does not edit: the launchers, the harness, the CMake modules, and decisions 0002–0006. Decision 0001 is only appended to, so citations into it are safe.
   Row P14 shipped this defect once and it was corrected in `0867e66`/`6c38ddf`: Milestone 9's Scope lines moved from :1602–1603 to :1615–1616 under Task 3's own edits. **Task 7 Step 0 sweeps the rest**, after Task 4 has finished shifting the spike.
-- **Dated notes take one of four forms**, matching spike §7 D5's existing note (`milestone-0-portability-spike.md:160`): a blockquote beginning `> **Amended YYYY-MM-DD by …`, `> **Moved YYYY-MM-DD by …`, `> **Retired YYYY-MM-DD …`, or `> **Dispositioned YYYY-MM-DD …`. The date is **2026-08-22** throughout.
+- **Dated notes take one of four forms**, matching spike §7 D5's existing note: a blockquote beginning `> **Amended YYYY-MM-DD by …`, `> **Moved YYYY-MM-DD by …`, `> **Retired YYYY-MM-DD …`, or `> **Dispositioned YYYY-MM-DD …`. The date is **2026-08-22** throughout.
 - **Records are never edited.** Spike §2's environment-facts table (including its Gambit rows and its "1 of 8" count), spike §5's D6 row, spike §6, `CHANGELOG.md`'s `### Added` / `### Changed` / `### Removed` / `### Fixed` entries, and `docs/decisions/` bodies other than the annotation in row R1. If a step seems to require editing one of these, stop and report it.
 - **`CHANGELOG.md` has 28 historical Gambit mentions in its `### Added` and `### Removed` sections.** They are records of what shipped and what was cut. Do not touch them. Only the preamble (row C1) and new `[Unreleased]` entries (row C2) are in scope.
 - **The full test matrix runs in Task 5 and Task 7 only.** Tasks 1–4 and 6 touch no file CMake reads.
@@ -79,9 +79,9 @@ Milestone: 0, close-out
 ```
 
 **Context** must state:
-- The four incompatible live statements of spike §7 D6, with their locations: spike:187 ("Both implementations write byte-identical…"), spike:201 (work-order item 6's exit), the spike header note's restatement as "a single-implementation, cross-platform claim", and parent §25:1425 ("across the Chez source and AOT lanes").
+- The four incompatible live statements of spike §7 D6, with their locations: spike §7 D6 ("Both implementations write byte-identical…"), spike §8 item 6 (its exit condition), the spike header note's restatement as "a single-implementation, cross-platform claim", and parent §25 ("across the Chez source and AOT lanes").
 - That the first two name a second implementation [decision 0005](./0005-chez-only.md) removed; that the third needs cells this host does not have (one of parent §7.3's four Tier 1 cells exists locally); and that 0005 refused the same shape of substitution one deliverable over, writing of a two-lane agreement that it "is a weaker statement, and slice 5b already owns it under its own name" (0005:159–165).
-- The structural fact: D6 and D7 are properties of an emitter, and spike:6 forbids one — "No byte-machine semantics (no IR, verifier, interpreter, emitter, or runtime) are implemented in this milestone."
+- The structural fact: D6 and D7 are properties of an emitter, and the spike's scope decision forbids one — "No byte-machine semantics (no IR, verifier, interpreter, emitter, or runtime) are implemented in this milestone."
 
 **Measurements** carries the Step 2 numbers, the commit, and the host, in 0005's style. State that all of `src/` is placeholder.
 
@@ -129,7 +129,7 @@ Expected: `broken: 0`.
 
 - [ ] **Step 5: Verify every quotation against its source**
 
-For each of the four quoted strings (0005:159–165, spike:5, 0002:143–147, and any parent §25 Scope line names), run `rg -n` for the exact string in the named file and confirm one hit. A quotation that differs by a word is a defect — the design document was corrected for exactly this class four times.
+For each of the four quoted strings (0005:159–165, the spike's scope decision, 0002:143–147, and any parent §25 Scope line names), run `rg -n` for the exact string in the named file and confirm one hit. A quotation that differs by a word is a defect — the design document was corrected for exactly this class four times.
 
 ```bash
 python3 -c '
@@ -375,7 +375,7 @@ Apply these nine, in order. All FIND strings are unique.
 | S10 | `Both implementations write byte-identical canonical UTF-8/LF output through a project-owned writer; compared by fingerprint, never via implementation \`write\` formatting.` | `Byte-identical canonical UTF-8/LF output through a project-owned writer; compared by fingerprint, never via implementation \`write\` formatting.` |
 | S12 | `- **D8 — CI (macOS arm64 + Linux amd64, both implementations)** plus written feasibility notes for the four deferred Tier 1 cells.` | `- **D8 — CI (macOS arm64 + Linux amd64)** plus written feasibility notes for the two deferred Tier 1 cells.` |
 
-Then add these dated notes, each directly beneath the entry it annotates, indented as a blockquote inside the list item (matching D5's existing note at `:160`):
+Then add these dated notes, each directly beneath the entry it annotates, indented as a blockquote inside the list item (matching D5's existing note):
 
 **Beneath D0 (row S4):**
 ```markdown

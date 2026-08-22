@@ -35,7 +35,7 @@ this host also cannot discharge: one of four Tier 1 cells exists locally
 remaining two, Linux arm64 and Windows amd64, are D8's own deferred cells.
 
 That leaves the parent plan's weaker formulation, "deterministic text emission
-proof across the Chez source and AOT lanes" (parent §25:1425). Decision 0005
+proof across the Chez source and AOT lanes" (parent §25). Decision 0005
 refused the same shape of substitution one deliverable over. Of a two-lane
 agreement standing in for the content fingerprint's lost cross-runtime claim, it
 wrote that such an agreement "is a weaker statement, and slice 5b already owns it
@@ -116,7 +116,7 @@ tree at `ceb0894`. Spike §7 series.
 | D2 | Shared body through both wrappers | delivered in slice 3, **retired** by [0006](../decisions/0006-inline-libraries.md) |
 | D3 | Cross-library identity smoke path | delivered — both Chez lanes |
 | D4 | Portable test harness + thin runners | delivered |
-| D5 | Execution lanes | closed at two lanes — dated note already at spike:160–186 |
+| D5 | Execution lanes | closed at two lanes — dated note already at spike §7 D5 |
 | D6 | Deterministic text emission proof | **moves to Milestone 1** |
 | D7 | Identifier repertoire and binary LF proof | **moves to Milestone 1** |
 | D8 | CI + feasibility notes | notes delivered here; **pipeline moves to Milestone 1** |
@@ -128,18 +128,18 @@ The move is not a deferral to "later". Each lands on a named line of parent §25
 Milestone 1 **Scope** list, and §6.1 row P14 adds the dated note that records the
 arrival there.
 
-- **D6 → "deterministic output"** (parent §25:1447). The emitter Milestone 1
+- **D6 → "deterministic output"** (parent §25). The emitter Milestone 1
   builds is the writer parent §20 requires. Its determinism is then testable
   against something real, along the first five of the seven checks parent §22.9
   enumerates: repeat in one process, repeat across processes, both Chez lanes,
   every Tier 1 cell byte-for-byte, and compile-and-execute the result. Only the
   fourth needs D8. Parent §22.9's remaining two bullets are D7's, not D6's.
-- **D7 → "symbolic name resolution"** (parent §25:1440) **and "generated-name
-  safety for every construct present"** (parent §25:1444). The `[a-z][a-z0-9-]*`
-  grammar (parent §10.1:478) is what name resolution validates against; the
+- **D7 → "symbolic name resolution"** (parent §25) **and "generated-name
+  safety for every construct present"** (parent §25). The `[a-z][a-z0-9-]*`
+  grammar (parent §10.1) is what name resolution validates against; the
   second repertoire in the same sentence — printable ASCII plus LF for embedded
   labels and reasons — is what the emitter escapes against. The binary-LF write
-  half rides with `emit-machine`, whose contract parent §20:1046 fixes: writes
+  half rides with `emit-machine`, whose contract parent §20 fixes: writes
   only to the supplied binary output port.
 - **D8 → Milestone 1, bound to D6's cross-cell axis.** These need the same four
   cells. Splitting them is what made slice 6 unresolvable, so they land together
@@ -159,7 +159,7 @@ D7 carries one scope note into Milestone 1 that this slice records rather than
 solves: parent §9.2's reserved-output-binding set has three members — R6RS
 source-mode syntax and declaration identifiers, `(byte-machine runtime)`'s
 exports, and the emitter template's own identifiers. Only the first is
-enumerable before Milestone 1 exists. Parent §22.9:1315's "Reject every canonical
+enumerable before Milestone 1 exists. Parent §22.9's "Reject every canonical
 reserved output binding under Chez" is therefore not a Milestone 0 obligation
 under any reading, and Milestone 1 should scope the test to the members that
 exist when it runs.
@@ -199,7 +199,7 @@ reason §5 gives.
 The house rule to date is that a decision record is not edited when a later
 decision changes the world; it gains an amendment note, because "a record edited
 to agree with a later decision stops being evidence of anything" (the spike's own
-header note, spike:11–12; [0005](../decisions/0005-chez-only.md):190–191 states
+header note; [0005](../decisions/0005-chez-only.md):190–191 states
 the same rule in slightly different words).
 
 That rule is correct and this slice keeps it. But it does not cover every stale
@@ -219,11 +219,11 @@ instruct an impossible exit. Four categories, not two:
    it is cited as evidence for that record's own consequences. Category 1's
    justification does not reach it. **Annotated, never silently fixed**, and the
    note says *this was never true* rather than *this changed*.
-4. **Status and orientation — what is true now.** `spike:3`, `CHANGELOG.md:9–13`,
-   and parent §25's open Deliver list. These are the sentences that tell the next
-   reader what remains, and they are the ones this slice's own goal contradicts
-   most directly. **Corrected in place**, and a slice that closes a milestone is
-   not finished until all three say so.
+4. **Status and orientation — what is true now.** The spike's status line,
+   `CHANGELOG.md`'s status paragraph, and parent §25's open Deliver list. These
+   are the sentences that tell the next reader what remains, and they are the
+   ones this slice's own goal contradicts most directly. **Corrected in place**,
+   and a slice that closes a milestone is not finished until all three say so.
 
 **A record document may contain instruction sentences.** The spike's header note
 pledges "This document is a record and keeps all of its Gambit content", and §6.2
@@ -231,8 +231,8 @@ then makes edits inside it. That is not a contradiction, but it must be said out
 loud: the pledge covers the spike's §2 environment facts and its findings, not
 its §5 decision table, §7 deliverable entries, §8 work order, §11 scope bullet,
 §12 criteria, or §13 sequencing. §6.2 row S2 amends the header to carve that out.
-Conversely, a record's own reasoning may contain imperatives — spike:43's "Probe
-by banner", spike:45's "never search for `gsc`" — and those stay. §11's criterion
+Conversely, a record's own reasoning may contain imperatives — spike §2's "Probe
+by banner" and its "never search for `gsc`" — and those stay. §11's criterion
 is scoped by document role accordingly.
 
 **An exit criterion changes category when its milestone closes.** While the
@@ -241,7 +241,7 @@ record of what was demanded. This slice does both at once, so spike §12 gets
 dated dispositions and no rewriting. Rewording "all four execution lanes agree on
 a content fingerprint" to "met at two lanes" would edit the bar to match the
 result, which is precisely the failure the rule exists to prevent. The right
-instrument already exists in the same file: spike §7 D5's dated note (spike:160–186)
+instrument already exists in the same file: spike §7 D5's dated note
 states what was achieved without touching what was asked.
 
 This rule is added to AGENTS.md as a project standard. Per that file's own
@@ -264,18 +264,18 @@ Dated notes use the form spike §7 D5 already models: a blockquote beginning
 
 | Row | Site | Disposition |
 | --- | --- | --- |
-| **P1** | §7.1:152 "The functional core, runtime body, generated body, and shared tests live in wrapper-free `.scm` files." | Correct the settled halves only: **"The functional core and the tests are inline R6RS `.sls` libraries and `.sps` programs ([decision 0006](../decisions/0006-inline-libraries.md)). The form of the runtime and *generated* bodies is fixed by §9.6 and is Milestone 1's to settle — see §9 of the close-out."** |
-| **P2** | §9.6:450 item 5, "including that generated body from a consumer library wrapper" | **Annotate, do not rewrite** — the correct replacement is a Milestone 1 design call (§9). Append: **"— this conflicts with §7.2's 'No Scheme file in this repository includes another'; Milestone 1 must resolve it (see [the close-out](./milestone-0-close-out.md) §9)."** |
-| **P3** | §20:1038 "rejection of output bindings that collide with portable Scheme syntax, runtime exports, or emitted internal identifiers" | **"…that collide with syntax or declaration identifiers reserved by the R6RS source mode, runtime exports, or emitted internal identifiers"** — aligns with §9.2:374, which was corrected while §20 was not. |
-| **P4** | §20:1046 "`emit-machine` writes only to the supplied binary output port through a portability shim (`put-u8` versus `write-u8`)." | **"`emit-machine` writes only to the supplied binary output port with `put-u8`."** `write-u8` is the R7RS spelling; under Chez-only there is one branch and no shim. Rest of the paragraph unchanged. |
-| **P5** | §25:1419 "confirmed R6RS library and include strategy" | **"confirmed R6RS library strategy — inline `.sls`, no includes ([decision 0006](../decisions/0006-inline-libraries.md))"** |
-| **P6** | §25:1420 "shared hello-library body loaded through its owner wrapper" | **Delete the bullet.** Spike §7 D2 is retired; inventing a replacement deliverable would assert something nobody shipped. Recorded in CHANGELOG. |
-| **P7** | §25:1421 "one provisional owner wrapper constructs a placeholder tagged value, another wrapper recognizes it" | **"one provisional library constructs a placeholder tagged value, a second library recognizes it"** — same retired vocabulary as the bullet above it. |
-| **P8** | §25:1422 "Tier 1 CI feasibility notes" | Append **"(discharged by [the CI feasibility note](./milestone-0-ci-feasibility.md))"**. |
-| **P9** | §25:1425 "deterministic text emission proof across the Chez source and AOT lanes" | **Delete from Milestone 0's Deliver list.** Milestone 1 has no Deliver list; its **Scope** list already carries "deterministic output" (:1447). Recorded by row P14. |
-| **P10** | §25:1426 "identifier repertoire and binary LF emission proof across available operating systems" | **Delete from Milestone 0's Deliver list.** Milestone 1's Scope already carries "symbolic name resolution" (:1440) and "generated-name safety for every construct present" (:1444). Recorded by row P14. |
-| **P11** | §25:1427 "documented Windows path and LF behavior" | Append **"(discharged by [the CI feasibility note](./milestone-0-ci-feasibility.md))"**. |
-| **P12** | §25:1431 exit criterion 1, "the same shared test body passes in both the source and AOT execution lanes" | **"the same test program passes in both the source and AOT execution lanes"** — pure vocabulary repair. |
+| **P1** | §7.1 "The functional core, runtime body, generated body, and shared tests live in wrapper-free `.scm` files." | Correct the settled halves only: **"The functional core and the tests are inline R6RS `.sls` libraries and `.sps` programs ([decision 0006](../decisions/0006-inline-libraries.md)). The form of the runtime and *generated* bodies is fixed by §9.6 and is Milestone 1's to settle — see §9 of the close-out."** |
+| **P2** | §9.6 item 5, "including that generated body from a consumer library wrapper" | **Annotate, do not rewrite** — the correct replacement is a Milestone 1 design call (§9). Append: **"— this conflicts with §7.2's 'No Scheme file in this repository includes another'; Milestone 1 must resolve it (see [the close-out](./milestone-0-close-out.md) §9)."** |
+| **P3** | §20 "rejection of output bindings that collide with portable Scheme syntax, runtime exports, or emitted internal identifiers" | **"…that collide with syntax or declaration identifiers reserved by the R6RS source mode, runtime exports, or emitted internal identifiers"** — aligns with §9.2, which was corrected while §20 was not. |
+| **P4** | §20 "`emit-machine` writes only to the supplied binary output port through a portability shim (`put-u8` versus `write-u8`)." | **"`emit-machine` writes only to the supplied binary output port with `put-u8`."** `write-u8` is the R7RS spelling; under Chez-only there is one branch and no shim. Rest of the paragraph unchanged. |
+| **P5** | §25 "confirmed R6RS library and include strategy" | **"confirmed R6RS library strategy — inline `.sls`, no includes ([decision 0006](../decisions/0006-inline-libraries.md))"** |
+| **P6** | §25 "shared hello-library body loaded through its owner wrapper" | **Delete the bullet.** Spike §7 D2 is retired; inventing a replacement deliverable would assert something nobody shipped. Recorded in CHANGELOG. |
+| **P7** | §25 "one provisional owner wrapper constructs a placeholder tagged value, another wrapper recognizes it" | **"one provisional library constructs a placeholder tagged value, a second library recognizes it"** — same retired vocabulary as the bullet above it. |
+| **P8** | §25 "Tier 1 CI feasibility notes" | Append **"(discharged by [the CI feasibility note](./milestone-0-ci-feasibility.md))"**. |
+| **P9** | §25 "deterministic text emission proof across the Chez source and AOT lanes" | **Delete from Milestone 0's Deliver list.** Milestone 1 has no Deliver list; its **Scope** list already carries "deterministic output". Recorded by row P14. |
+| **P10** | §25 "identifier repertoire and binary LF emission proof across available operating systems" | **Delete from Milestone 0's Deliver list.** Milestone 1's Scope already carries "symbolic name resolution" and "generated-name safety for every construct present". Recorded by row P14. |
+| **P11** | §25 "documented Windows path and LF behavior" | Append **"(discharged by [the CI feasibility note](./milestone-0-ci-feasibility.md))"**. |
+| **P12** | §25 exit criterion 1, "the same shared test body passes in both the source and AOT execution lanes" | **"the same test program passes in both the source and AOT execution lanes"** — pure vocabulary repair. |
 | **P13** | §25, after Milestone 0's exit criteria | **Add the close note** (category 4 — the milestone is not closed until the governing document says so): <br>**"> Closed 2026-08-22 by [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md). D6, D7, and D8 move to Milestone 1; see [the close-out](./milestone-0-close-out.md)."** |
 | **P14** | §25, at the head of Milestone 1's Scope list | **Add the arrival note**, so the move has a destination record: <br>**"> Amended 2026-08-22 by [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md): Milestone 0's D6, D7, and D8 land here. D6 on 'deterministic output'; D7 on 'symbolic name resolution' and 'generated-name safety for every construct present' — those two lines already exist and now carry Milestone 0's obligations too. D8's CI pipeline has no Scope line of its own and rides D6's cross-cell axis, because both need the same Tier 1 cells: Milestone 1 stands the pipeline up over the emitter, and Milestone 9 below — whose Scope already owns 'complete Tier 1 CI' and 'source generation equality across platform cells' — completes it. 'Complete' presupposes something to complete."** |
 
@@ -283,21 +283,21 @@ Dated notes use the form spike §7 D5 already models: a blockquote beginning
 
 | Row | Site | Disposition |
 | --- | --- | --- |
-| **S1** | `:3` Status line, "slices 6–7 not started" (category 4) | **"Status: closed 2026-08-22 — slices 1 through 5 delivered; slice 5c cancelled by [decision 0005](../decisions/0005-chez-only.md); §7 deliverables D6, D7, and D8 moved to Milestone 1 by [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md). [The close-out](./milestone-0-close-out.md) records what closed and what moved."** Keep the existing 5b/5c clauses. |
-| **S2** | `:8–14` header amendment note | **Append one sentence carving out instructions:** "This pledge covers the document's **records** — the §2 environment facts and the §3 findings. Its **instructions** — the §5 decision table, the §7 deliverable entries, the §8 work order, the §11 scope bullet, the §12 exit criteria, and §13 — are corrected in place when they would misdirect, each correction dated. See [the close-out](./milestone-0-close-out.md) §5." |
-| **S3** | §5 decision table D2, `:106` "CI now covers macOS arm64 + Linux amd64 for both implementations; full 8-cell Tier 1 matrix lands in Milestone 9" | Correct the tense and the arithmetic: **"CI is to cover macOS arm64 + Linux amd64; the remaining Tier 1 cells land in Milestone 9."** Add a dated line under the table: **"> 2026-08-22: no CI exists in any commit of this repository. D8 moved to Milestone 1 by [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md). Under Chez-only, Tier 1 is four cells, not eight (parent §7.3): D8's CI covers two, and two — Linux arm64 and Windows amd64 — are deferred."** |
-| **S4** | §7 D0, `:154` "Probe-based detection for both runtimes" | **"Probe-based detection, banner-verified, rejecting Petite and GhostScript. Pinned minimum version recorded."** Dated note: one runtime, not two (0005). **The GhostScript classification is not removed** — it survives the Gambit cut and is still specified and mutation-tested at `test/support/cmake/ByteMachineChezSpec.cmake:51–53, :118, :162`. |
-| **S5** | §7 D1, `:155` "`src/common/`, `src/chez/`, `src/gambit/`" | **"`src/byte-machine/`, `test/`, `build/` (gitignored), `docs/decisions/`."** |
-| **S6** | §7 D2, `:156` shared body / `.sld` / repository-wide basename check | Mark the entry **"*(Retired — see note.)*"** and add: **"> Retired 2026-08-22, effective [decision 0006](../decisions/0006-inline-libraries.md): there is no shared body and no `.sld`, and the repository-wide basename check narrowed to `byte_machine_add_scheme_lane`'s per-lane uniqueness check. Delivered in slice 3 and dismantled by the include collapse; the entry stays because the slice that shipped it is real history."** |
-| **S7** | §7 D3, `:157` "Owner wrapper constructs … a second wrapper recognises it" | **"One library constructs a placeholder tagged vector; a second library recognises it; an allocation-free singleton retains `eq?` identity across both imports. Runs in every execution lane."** |
-| **S8** | §7 D4, `:158` "thin Chez and Gambit adapters owning imports … adapters on both runtimes must export exactly the same names" | **"Dependency-free (no SRFI-64, no package manager) per parent §22.2: assertion and result code in one library, a thin Chez runner owning imports, process exit codes, and compilation steps. Mirrors protium's harness structure."** The two-runtime `must` is a live instruction naming a retired contract. |
-| **S9** | §7 D5, `:159` "Chez source, Chez AOT, Gambit `.o1`, Gambit `-exe -nopreload`." | **"Chez source and Chez AOT. Compiled lanes must be unable to silently fall back to source."** The existing dated note at `:160–186` stays untouched — it is the record of how D5 closed. |
-| **S10** | §7 D6, `:187` "Both implementations write byte-identical…" | **"Byte-identical canonical UTF-8/LF output through a project-owned writer; compared by fingerprint, never via implementation `write` formatting."** Dated note: **"> Moved to Milestone 1 on 2026-08-22 by [decision 0007](…). A writer belongs to an emitter, and Milestone 0 ships no emitter (§11). Milestone 1's Scope already carries 'deterministic output'; the cross-cell half of the claim rides with D8."** |
-| **S11** | §7 D7, `:188` | Entry text unchanged — it names no retired concept. Dated note recording the move to Milestone 1's "symbolic name resolution" and "generated-name safety" lines, and that parent §9.2's reserved-binding members 2 and 3 are unenumerable until Milestone 1 exists. |
-| **S12** | §7 D8, `:189` "CI (macOS arm64 + Linux amd64, both implementations) plus written feasibility notes for the four deferred Tier 1 cells" | **"CI (macOS arm64 + Linux amd64) plus written feasibility notes for the two deferred Tier 1 cells."** **One** dated note covering both halves: the pipeline moves to Milestone 1; the notes are discharged by [the CI feasibility note](./milestone-0-ci-feasibility.md); the "four" was written against a four-platform × two-runtime matrix. |
+| **S1** | Status line, "slices 6–7 not started" (category 4) | **"Status: closed 2026-08-22 — slices 1 through 5 delivered; slice 5c cancelled by [decision 0005](../decisions/0005-chez-only.md); §7 deliverables D6, D7, and D8 moved to Milestone 1 by [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md). [The close-out](./milestone-0-close-out.md) records what closed and what moved."** Keep the existing 5b/5c clauses. |
+| **S2** | header amendment note | **Append one sentence carving out instructions:** "This pledge covers the document's **records** — the §2 environment facts and the §3 findings. Its **instructions** — the §5 decision table, the §7 deliverable entries, the §8 work order, the §11 scope bullet, the §12 exit criteria, and §13 — are corrected in place when they would misdirect, each correction dated. See [the close-out](./milestone-0-close-out.md) §5." |
+| **S3** | §5 decision table D2, "CI now covers macOS arm64 + Linux amd64 for both implementations; full 8-cell Tier 1 matrix lands in Milestone 9" | Correct the tense and the arithmetic: **"CI is to cover macOS arm64 + Linux amd64; the remaining Tier 1 cells land in Milestone 9."** Add a dated line under the table: **"> 2026-08-22: no CI exists in any commit of this repository. D8 moved to Milestone 1 by [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md). Under Chez-only, Tier 1 is four cells, not eight (parent §7.3): D8's CI covers two, and two — Linux arm64 and Windows amd64 — are deferred."** |
+| **S4** | §7 D0, "Probe-based detection for both runtimes" | **"Probe-based detection, banner-verified, rejecting Petite and GhostScript. Pinned minimum version recorded."** Dated note: one runtime, not two (0005). **The GhostScript classification is not removed** — it survives the Gambit cut and is still specified and mutation-tested at `test/support/cmake/ByteMachineChezSpec.cmake:51–53, :118, :162`. |
+| **S5** | §7 D1, "`src/common/`, `src/chez/`, `src/gambit/`" | **"`src/byte-machine/`, `test/`, `build/` (gitignored), `docs/decisions/`."** |
+| **S6** | §7 D2, shared body / `.sld` / repository-wide basename check | Mark the entry **"*(Retired — see note.)*"** and add: **"> Retired 2026-08-22, effective [decision 0006](../decisions/0006-inline-libraries.md): there is no shared body and no `.sld`, and the repository-wide basename check narrowed to `byte_machine_add_scheme_lane`'s per-lane uniqueness check. Delivered in slice 3 and dismantled by the include collapse; the entry stays because the slice that shipped it is real history."** |
+| **S7** | §7 D3, "Owner wrapper constructs … a second wrapper recognises it" | **"One library constructs a placeholder tagged vector; a second library recognises it; an allocation-free singleton retains `eq?` identity across both imports. Runs in every execution lane."** |
+| **S8** | §7 D4, "thin Chez and Gambit adapters owning imports … adapters on both runtimes must export exactly the same names" | **"Dependency-free (no SRFI-64, no package manager) per parent §22.2: assertion and result code in one library, a thin Chez runner owning imports, process exit codes, and compilation steps. Mirrors protium's harness structure."** The two-runtime `must` is a live instruction naming a retired contract. |
+| **S9** | §7 D5, "Chez source, Chez AOT, Gambit `.o1`, Gambit `-exe -nopreload`." | **"Chez source and Chez AOT. Compiled lanes must be unable to silently fall back to source."** The existing dated note stays untouched — it is the record of how D5 closed. |
+| **S10** | §7 D6, "Both implementations write byte-identical…" | **"Byte-identical canonical UTF-8/LF output through a project-owned writer; compared by fingerprint, never via implementation `write` formatting."** Dated note: **"> Moved to Milestone 1 on 2026-08-22 by [decision 0007](…). A writer belongs to an emitter, and Milestone 0 ships no emitter (§11). Milestone 1's Scope already carries 'deterministic output'; the cross-cell half of the claim rides with D8."** |
+| **S11** | §7 D7 | Entry text unchanged — it names no retired concept. Dated note recording the move to Milestone 1's "symbolic name resolution" and "generated-name safety" lines, and that parent §9.2's reserved-binding members 2 and 3 are unenumerable until Milestone 1 exists. |
+| **S12** | §7 D8, "CI (macOS arm64 + Linux amd64, both implementations) plus written feasibility notes for the four deferred Tier 1 cells" | **"CI (macOS arm64 + Linux amd64) plus written feasibility notes for the two deferred Tier 1 cells."** **One** dated note covering both halves: the pipeline moves to Milestone 1; the notes are discharged by [the CI feasibility note](./milestone-0-ci-feasibility.md); the "four" was written against a four-platform × two-runtime matrix. |
 | **S13** | §8 work order items 6 and 7 | **Replace both with one item 6:** "**Milestone 0 close-out** (spike §7 D6, D7, D8 moved to Milestone 1; D9 completed). Exit: both governing documents record the milestone as closed, the three moved deliverables land on named Milestone 1 Scope lines, and no instruction outside a dated record names a retired concept. See [the close-out](./milestone-0-close-out.md)." |
-| **S14** | §9 questions list, `:204–216` | **Do not rewrite the questions.** Add a dated disposition block after the list, pointing at §8 of this document and at [0007](../decisions/0007-milestone-0-closes-at-the-harness.md), which carries the answers to questions 1–4. |
-| **S15** | §11, `:230` "and the full 8-cell matrix" | **"and the full Tier 1 matrix"** — the eight-cell arithmetic is the two-runtime one. |
+| **S14** | §9 questions list | **Do not rewrite the questions.** Add a dated disposition block after the list, pointing at §8 of this document and at [0007](../decisions/0007-milestone-0-closes-at-the-harness.md), which carries the answers to questions 1–4. |
+| **S15** | §11, "and the full 8-cell matrix" | **"and the full Tier 1 matrix"** — the eight-cell arithmetic is the two-runtime one. |
 | **S16** | §12, all nine exit criteria | **Do not rewrite (see §5).** Add one dated disposition block after the list, reproduced in §6.5 below. |
 | **S18** | §8 work-order items 1–5, which still name two runtimes, two wrappers, and four lanes | **Do not rewrite.** Completed instructions are the record of what was asked (§5). Dated disposition block beneath item 6, in §6.5's form. |
 | **S19** | §5 decision table's **D5** row, "protium's four-lane model, plus byte-machine's own cross-implementation generated-source comparison" | **Do not rewrite.** Same reason; two lines appended to row S3's dated block under the §5 table, pointing at §7 D5's own note for where lanes actually closed. |
@@ -355,7 +355,7 @@ Named so a reader can tell these were read rather than missed.
   **D5** is not exempt and is handled by row S19 — the 0006 note covers D6 only.
 - **Spike §6**, the recorded-not-used `include-relative` macro. A record of a
   path not taken.
-- **Parent §24.2's per-Tier-1-cell CI stages** (`:1392`–`:1396`). Future CI
+- **Parent §24.2's per-Tier-1-cell CI stages** (items 2–6). Future CI
   instructions, still correct as intent. §24 is titled "CI and Build Strategy"
   and §24.2 "CI stages" — they are CI stages, not release stages.
 - **`test/support/cmake/MutationRunner.cmake`:6, "runnable in CI".** A
@@ -373,7 +373,7 @@ Named so a reader can tell these were read rather than missed.
 ## 7. The CI feasibility note
 
 `docs/plans/milestone-0-ci-feasibility.md`. It discharges parent §25's exit
-criterion 2, spike §7 D8's "written feasibility notes" half, and parent §25:1427's
+criterion 2, spike §7 D8's "written feasibility notes" half, and parent §25's
 "documented Windows path and LF behavior". Required content:
 
 1. **The four Tier 1 cells** (parent §7.3), each with: how Chez is obtained, what
@@ -491,7 +491,7 @@ Recorded so Milestone 1 finds them rather than rediscovering them.
 - **Parent §9.6's "shared grammar body"** and **§7.1's surviving "generated body
   … wrapper-free `.scm`"** (row P1). Both depend on the resolution above.
 - **Two `fingerprint` meanings.** The harness's content fingerprint (rolling hash
-  mod 2^61−1, shipped) and parent §20:1041's embedded fingerprint of canonical
+  mod 2^61−1, shipped) and parent §20's embedded fingerprint of canonical
   normalized IR (permitted to be 64-bit FNV-1a) are different objects under one
   word. Milestone 1 introduces the second; it should say which it means at every
   site.

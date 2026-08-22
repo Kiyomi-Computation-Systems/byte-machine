@@ -5,7 +5,7 @@ Date: 2026-08-22
 Parent plan: [`byte-machine-implementation-plan.md`](./byte-machine-implementation-plan.md) §7.3 (the Tier 1 matrix) and §25 Milestone 0
 Governing plan: [`milestone-0-portability-spike.md`](./milestone-0-portability-spike.md) §7 D8
 Design document: [`milestone-0-close-out.md`](./milestone-0-close-out.md) §7, which specifies this note's required content
-Discharges: parent §25 exit criterion 2 ("CI design covers unavailable local platforms"); spike §7 D8's **written feasibility notes** half; parent §25:1427 "documented Windows path and LF behavior"
+Discharges: parent §25 exit criterion 2 ("CI design covers unavailable local platforms"); spike §7 D8's **written feasibility notes** half; parent §25 "documented Windows path and LF behavior"
 
 **Goal:** state what a Tier 1 CI matrix would cover, cell by cell, at the level
 of evidence each statement actually has. This is a design, not a pipeline. Spike
@@ -44,7 +44,7 @@ that matrix both come to eight, and they are not the same eight. Four platforms 
 source/AOT is eight **lane instances**, which
 [0005](../decisions/0005-chez-only.md) did not reduce — under Chez alone both
 lanes are still Chez lanes. Four platforms × two implementations was the spike's
-eight **cells** (spike §7 D8:189, "both implementations"; spike §11:230, "the
+eight **cells** (spike §7 D8, "both implementations"; spike §11, "the
 full 8-cell matrix"), and that is the eight 0005 halved, to the four cells
 tabulated below (corrected by the close-out's §6.2 rows S12 and S15). "Cell"
 below always means one of those four.
@@ -170,9 +170,10 @@ leaves open.
 
 ## 2. Windows path and LF behavior
 
-This section discharges parent §25:1427. The interesting fact is that the
-exposure most readers reach for first was designed out of this project two
-decisions ago, so §§2.1–2.4 are ordered to say that rather than to bury it.
+This section discharges parent §25's "documented Windows path and LF
+behavior". The interesting fact is that the exposure most readers reach for
+first was designed out of this project two decisions ago, so §§2.1–2.4 are
+ordered to say that rather than to bury it.
 
 Man-page citations below are to Chez Scheme 10.4.1's `chez.1` as installed on
 this host at `/opt/homebrew/share/man/man1/chez.1.gz` (resolved with `man -w
@@ -329,7 +330,7 @@ The **write** side does not exist. Spike §7 D7 — "LF bytes survive a binary p
 unmodified — the Windows CRLF-translation trap" — is a property of an emitter,
 Milestone 0 ships no emitter (spike §11), and
 [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md) moved D7
-to Milestone 1 with the emitter's `emit-machine` contract, which parent §20:1046
+to Milestone 1 with the emitter's `emit-machine` contract, which parent §20
 already fixes in the terms this note needs — it "writes only to the supplied
 binary output port", and "Generated source is canonical UTF-8 with LF bytes even
 on Windows". That is the requirement stated; nothing implements it yet, and no
@@ -379,11 +380,11 @@ pipeline has to do rather than only where it runs. The shipped assertions are
 that `adapter-os` and `adapter-architecture` differ from `"unknown"`. A cell
 therefore witnesses that its machine type resolves to *something*, not that it
 resolves to the right thing: a table row mapping `nt` to the wrong name would
-still pass on Windows. Parent §24.2:1392 (item 2 of the CI stages list, whose
-heading is at parent :1389) asks for more than that — "In every Tier 1 cell,
-assert the expected runtime, OS, and architecture" — so standing the
-matrix up includes tightening those two assertions to compare against the value
-the cell declares. Getting the runner is necessary and not sufficient.
+still pass on Windows. Parent §24.2 (item 2 of the CI stages list) asks for
+more than that — "In every Tier 1 cell, assert the expected runtime, OS, and
+architecture" — so standing the matrix up includes tightening those two
+assertions to compare against the value the cell declares. Getting the runner
+is necessary and not sufficient.
 
 ## 4. What is not proposed
 
