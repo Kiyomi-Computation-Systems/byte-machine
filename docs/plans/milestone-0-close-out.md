@@ -340,6 +340,10 @@ Named so a reader can tell these were read rather than missed.
   Milestone 1.
 - **The `o1` mode token.** It carries an in-code rationale for its own retention
   at `cmake/ByteMachineTesting.cmake:46–50`.
+- **`CHANGELOG.md`'s `### Added`, `### Changed`, `### Removed`, and `### Fixed`
+  entries** — 28 mentions of Gambit among them. A changelog entry is a record of
+  a change that happened; sweeping it would rewrite history rather than correct
+  an instruction. Only the preamble (row C1) is category 4.
 
 ## 7. The CI feasibility note
 
@@ -495,13 +499,18 @@ deletion of the spike §7 D3 placeholders.
   knows about has not happened.
 - **The three moved deliverables have a destination record** — row P14 — not just
   a departure note.
-- **Scoped sweep gate.** After the sweep, this command returns no hit outside a
-  dated record or spike §2's table:
+- **Scoped sweep gate.** Scoped to the two governing plan documents, the CMake
+  tree, and AGENTS.md. `CHANGELOG.md` is **excluded**: its `### Added` and
+  `### Removed` sections are records of what shipped and what was cut, carrying
+  28 legitimate historical Gambit mentions; only its preamble is in scope, and
+  row C1 checks that. After the sweep this command returns no hit outside a
+  dated record:
   ```bash
-  rg -n -i "gambit|\.sld|both implementations|both runtimes|two runtimes|four (execution )?lanes|shared (body|test body|grammar body)|owner wrapper|source-directories|8-cell|runs in CI" docs/plans/byte-machine-implementation-plan.md docs/plans/milestone-0-portability-spike.md cmake test/CMakeLists.txt CHANGELOG.md AGENTS.md
+  rg -n -i "gambit|\.sld|both implementations|both runtimes|two runtimes|four (execution )?lanes|shared (body|test body|grammar body)|owner wrapper|source-directories|8-cell|runs in CI" docs/plans/byte-machine-implementation-plan.md docs/plans/milestone-0-portability-spike.md cmake test/CMakeLists.txt AGENTS.md
   ```
-  Hits inside spike §2, spike §5's D6 row, spike §6, and any blockquote beginning
-  "Amended"/"Moved"/"Retired"/"Dispositioned" are expected and are not failures.
+  Hits inside spike §2, spike §3, spike §5's D6 row, spike §6, AGENTS.md's own
+  new bullet, and any blockquote beginning "Amended"/"Moved"/"Retired"/
+  "Dispositioned" are expected and are not failures.
   The gate is a grep, so it is an inventory check, not a vocabulary check — the
   slice also requires a reading pass over the two governing documents end to end,
   and the implementer records that it happened.
