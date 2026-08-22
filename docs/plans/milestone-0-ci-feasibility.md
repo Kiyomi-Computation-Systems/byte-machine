@@ -393,8 +393,8 @@ above, and no cell is scheduled.
 Those are spike §7 D8's other half, which
 [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md) moved to
 Milestone 1, where it rides spike §7 D6's cross-cell axis because both need these
-same four cells — and where parent §25's Milestone 9 already owns "complete Tier 1
-CI" (§25:1602). "Complete" presupposes something to complete, which is the
+same four cells — and where parent §25's Milestone 9 Scope already owns "complete
+Tier 1 CI". "Complete" presupposes something to complete, which is the
 division: Milestone 1 stands the matrix up on the cells it can get, Milestone 9
 finishes it.
 
