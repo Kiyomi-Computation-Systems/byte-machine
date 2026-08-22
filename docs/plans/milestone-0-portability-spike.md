@@ -44,10 +44,10 @@ Scope decision: **Milestone 0 only.** No byte-machine semantics (no IR, verifier
 
 Section 7 of the parent plan asserts a portability contract — wrapper-free shared `.scm` bodies, thin Chez `.sls` / Gambit `.sld` wrappers, singleton identity preserved across library boundaries, byte-identical deterministic emission — but nothing in this repository proves it. Milestone 1 depends on that contract holding end to end, including §9.6 item 8 ("compiling and running the consumer ahead-of-time").
 
-> **Amended 2026-08-22:** parent §7 no longer asserts this contract. §7.1's
-> wrapper-free `.scm` bodies went with
+> **Amended 2026-08-22:** parent §7 no longer asserts this contract. Parent
+> §7.1's wrapper-free `.scm` bodies went with
 > [decision 0006](../decisions/0006-inline-libraries.md) and the Gambit `.sld`
-> wrapper with [decision 0005](../decisions/0005-chez-only.md); §7.2 now states
+> wrapper with [decision 0005](../decisions/0005-chez-only.md); parent §7.2 states
 > that no Scheme file in this repository includes another. The sentence is left
 > as written because it records why this milestone was opened. What the
 > milestone proved of it is at §7 D3 and D5; what it did not is at §7 D6 and D7,
@@ -212,7 +212,7 @@ Each is a testable artifact, not a note.
   > per-lane uniqueness check. Delivered in slice 3 and dismantled by the include
   > collapse. The entry stays because the slice that shipped it is real history.
 - **D3 — Cross-library identity smoke path.** One library constructs a placeholder tagged vector; a second library recognises it; an allocation-free singleton retains `eq?` identity across both imports. Runs in every execution lane.
-- **D4 — Portable test harness + thin runners.** Dependency-free (no SRFI-64, no package manager) per §22.2: assertion and result code in one library, a thin Chez runner owning imports, process exit codes, and compilation steps. Mirrors protium's harness structure.
+- **D4 — Portable test harness + thin runners.** Dependency-free (no SRFI-64, no package manager) per parent §22.2: assertion and result code in one library, a thin Chez runner owning imports, process exit codes, and compilation steps. Mirrors protium's harness structure.
 - **D5 — Execution lanes.** Chez source and Chez AOT. Compiled lanes must be unable to silently fall back to source.
 
   > **Amended 2026-08-21 by the slice 5b remainder: D5 closes here, at two

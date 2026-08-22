@@ -1,10 +1,11 @@
 # Milestone 0 close-out: the harness is the deliverable
 
-Status: proposed
+Status: accepted; delivered 2026-08-22 by [its implementation plan](./milestone-0-close-out-implementation-plan.md) (decision 0007)
 Date: 2026-08-22
 Reading note: **this document describes the tree at `ceb0894`**, the branch's merge
 base. Where it quotes a sentence it is about to change — parent §25's exit criteria
-in §4, and every FIND string in §6 — that is the pre-sweep text, not what a reader
+in §4, and every FIND and REPLACE string in §6 — that is pre-sweep or prescribed
+text, not what a reader
 will find at HEAD. The decision record it produces, 0007, discloses the same split
 in its own dated note.
 Parent plan: [`byte-machine-implementation-plan.md`](./byte-machine-implementation-plan.md) §25 Milestone 0
@@ -236,7 +237,8 @@ instruct an impossible exit. Four categories, not two:
 **A record document may contain instruction sentences.** The spike's header note
 pledges "This document is a record and keeps all of its Gambit content", and §6.2
 then makes edits inside it. That is not a contradiction, but it must be said out
-loud: the pledge covers the spike's §2 environment facts and its findings, not
+loud: the pledge covers the spike's §1 motivation, §2 environment facts, §3
+findings, and §4 resolutions, not
 its §5 decision table, §7 deliverable entries, §8 work order, §11 scope bullet,
 §12 criteria, or §13 sequencing. §6.2 row S2 amends the header to carve that out.
 Conversely, a record's own reasoning may contain imperatives — spike §2's "Probe
@@ -292,7 +294,7 @@ Dated notes use the form spike §7 D5 already models: a blockquote beginning
 | Row | Site | Disposition |
 | --- | --- | --- |
 | **S1** | Status line, "slices 6–7 not started" (category 4) | **"Status: closed 2026-08-22 — slices 1 through 5 delivered; slice 5c cancelled by [decision 0005](../decisions/0005-chez-only.md); §7 deliverables D6, D7, and D8 moved to Milestone 1 by [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md). [The close-out](./milestone-0-close-out.md) records what closed and what moved."** Keep the existing 5b/5c clauses. |
-| **S2** | header amendment note | **Append one sentence carving out instructions:** "This pledge covers the document's **records** — the §2 environment facts and the §3 findings. Its **instructions** — the §5 decision table, the §7 deliverable entries, the §8 work order, the §11 scope bullet, the §12 exit criteria, and §13 — are corrected in place when they would misdirect, each correction dated. See [the close-out](./milestone-0-close-out.md) §5." |
+| **S2** | header amendment note | **Append one sentence carving out instructions:** "This pledge covers the document's **records** — the §1 motivation, the §2 environment facts, the §3 findings, and the §4 resolutions. Its **instructions** — the §5 decision table, the §7 deliverable entries, the §8 work order, the §11 scope bullet, the §12 exit criteria, and §13 — are corrected in place when they would misdirect, each correction dated. See [the close-out](./milestone-0-close-out.md) §5." |
 | **S3** | §5 decision table D2, "CI now covers macOS arm64 + Linux amd64 for both implementations; full 8-cell Tier 1 matrix lands in Milestone 9" | Correct the tense and the arithmetic: **"CI is to cover macOS arm64 + Linux amd64; the remaining Tier 1 cells land in Milestone 9."** Add a dated line under the table: **"> 2026-08-22: no CI exists in any commit of this repository. D8 moved to Milestone 1 by [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md). Under Chez-only, Tier 1 is four cells, not eight (parent §7.3): D8's CI covers two, and two — Linux arm64 and Windows amd64 — are deferred."** |
 | **S4** | §7 D0, "Probe-based detection for both runtimes" | **"Probe-based detection, banner-verified, rejecting Petite and GhostScript. Pinned minimum version recorded."** Dated note: one runtime, not two (0005). **The GhostScript classification is not removed** — it survives the Gambit cut and is still specified and mutation-tested at `test/support/cmake/ByteMachineChezSpec.cmake:51–53, :118, :162`. |
 | **S5** | §7 D1, "`src/common/`, `src/chez/`, `src/gambit/`" | **"`src/byte-machine/`, `test/`, `build/` (gitignored), `docs/decisions/`."** |

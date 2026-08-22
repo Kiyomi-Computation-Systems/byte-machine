@@ -78,11 +78,12 @@ contract now is.
 > quoted here as they stood at `ceb0894`, which is the tree this decision was
 > taken against.
 >
-> Two statements were instead corrected in place, because each asserts what is
+> Three statements were instead corrected in place, because each asserts what is
 > true now rather than what was read then: the deferred-cell count in the third
-> paragraph above, and Consequences' quotation of parent §25's first exit
-> criterion, which row P12 reworded to "the same test program passes in both the
-> source and AOT execution lanes".
+> paragraph above; Consequences' quotation of parent §25's first exit criterion,
+> which row P12 reworded to "the same test program passes in both the source and
+> AOT execution lanes"; and the sentence introducing the four, whose "are live in
+> the tree" became "were live in the tree when this record was written".
 
 ## Measurements
 
