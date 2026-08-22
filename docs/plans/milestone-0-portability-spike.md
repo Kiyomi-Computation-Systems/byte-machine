@@ -1,6 +1,6 @@
 # Milestone 0: Portability and Harness Spike
 
-Status: in progress — slices 1 through 5b delivered, 5b in two halves (2026-08-18, PR #6; remainder 2026-08-21, [milestone-0-slice-5b-remainder-implementation-plan.md](./milestone-0-slice-5b-remainder-implementation-plan.md)), closing D5 at the two Chez lanes (dated note at D5 below); slice 5c cancelled by decision 0005 (amendment notes below); slices 6–7 not started
+Status: closed 2026-08-22 — slices 1 through 5 delivered, 5b in two halves (2026-08-18, PR #6; remainder 2026-08-21, [milestone-0-slice-5b-remainder-implementation-plan.md](./milestone-0-slice-5b-remainder-implementation-plan.md)), closing D5 at the two Chez lanes (dated note at D5 below); slice 5c cancelled by decision 0005 (amendment notes below); §7 deliverables D6, D7, and D8 moved to Milestone 1 by [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md). [The close-out](./milestone-0-close-out.md) records what closed and what moved.
 Date: 2026-08-15
 Parent plan: [`byte-machine-implementation-plan.md`](./byte-machine-implementation-plan.md) §25 Milestone 0
 Scope decision: **Milestone 0 only.** No byte-machine semantics (no IR, verifier, interpreter, emitter, or runtime) are implemented in this milestone.
@@ -19,6 +19,13 @@ Scope decision: **Milestone 0 only.** No byte-machine semantics (no IR, verifier
 > claim rather than a Chez-versus-Gambit one; **D8's CI covers Chez only**.
 > Slice 5b's scope is unchanged. See
 > [chez-only-simplification.md](./chez-only-simplification.md).
+>
+> **Amended 2026-08-22:** the pledge above covers this document's *records* —
+> the §2 environment facts and the §3 findings. Its *instructions* — the §5
+> decision table, the §7 deliverable entries, the §8 work order, the §11 scope
+> bullet, the §12 exit criteria, and §13 — are corrected in place when they
+> would misdirect, each correction dated. See
+> [the Milestone 0 close-out](./milestone-0-close-out.md) §5.
 
 > Amended 2026-08-18 by [decision 0006](../decisions/0006-inline-libraries.md):
 > the shared-body include mechanism (§5's D6, `source-directories` plus bare
@@ -103,12 +110,18 @@ Both were first answered on the basis of the §2.1 errors, and were reconfirmed 
 | # | Decision | Rationale |
 | --- | --- | --- |
 | D1 | Gambit uses plain R7RS `include`; native links use the §3.1 recipe with `-nopreload` always | Verified working; matches protium |
-| D2 | CI now covers macOS arm64 + Linux amd64 for both implementations; full 8-cell Tier 1 matrix lands in Milestone 9 | Catches portability drift early without blocking on Windows and arm64-Linux runners. Cross-cell byte-identical comparison (§24.2 stage 7) is partial until M9 and must be labelled as such. |
+| D2 | CI is to cover macOS arm64 + Linux amd64; the remaining Tier 1 cells land in Milestone 9 | Catches portability drift early without blocking on Windows and arm64-Linux runners. Cross-cell byte-identical comparison (§24.2 stage 7) is partial until M9 and must be labelled as such. |
 | D3 | Toolchain binaries are discovered by probe, never by bare name; `gsc` is derived from a confirmed `gsi` | Forced by the GhostScript collision and Chez's non-portable binary name. Matches protium exactly. |
 | D4 | Milestone 0 ships no byte-machine semantics | Parent plan §25: "no semantic implementation is duplicated in wrappers." The placeholder tagged value exists only to prove identity across boundaries and is deleted in Milestone 1. |
 | D5 | Execution lanes follow protium's four-lane model, plus byte-machine's own cross-implementation generated-source comparison | §22 and §24 need exactly this; §24.2 stage 7 additionally needs byte-identical *generated* source, which protium has no analogue for. |
 | D6 | Chez shared bodies are included by bare filename, resolved through a launcher-set `source-directories` | Documented public Chez API, no `syntax-case`, and identical to protium so a contributor learns one mechanism across both repos. Consequence: every launcher must set it, and shared-body basenames must be unique across all source directories — enforce that with a build-time check rather than by convention. |
 | D7 | Protium's build and harness patterns are mirrored into byte-machine under its own names: CMake modules, checked-in presets, a thin `Makefile` (`build`/`dev`/`test`/`test-all`/`prod`/`clean`), probe-based toolchain discovery, and the shared-body-plus-adapter harness | Proven against the same two runtimes and the same standards. Accepted cost: real duplication between two repositories, which will drift. Extracting a shared package stays open as later work once both projects' needs are known. |
+
+> **Amended 2026-08-22.** No CI exists in any commit of this repository; D2's
+> present tense above was corrected to the future. D8 moved to Milestone 1 by
+> [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md).
+> Under Chez-only, Tier 1 is four cells and not eight (parent plan §7.3): D8's
+> CI covers two, and two — Linux arm64 and Windows amd64 — are deferred.
 
 ## 6. Chez `include-relative` macro (recorded, not used)
 
@@ -151,12 +164,23 @@ Trade-off against `source-directories`: the macro needs no launcher state and re
 
 Each is a testable artifact, not a note.
 
-- **D0 — Toolchain discovery.** Probe-based detection for both runtimes, banner-verified, rejecting Petite and GhostScript. Pinned minimum versions recorded.
-- **D1 — Repo skeleton.** `src/common/`, `src/chez/`, `src/gambit/`, `test/`, `build/` (gitignored), `docs/decisions/`.
-- **D2 — Shared body loaded through both wrappers.** One wrapper-free `.scm` body, one `.sls`, one `.sld`, no duplicated semantics. Includes a build-time check that shared-body basenames are unique, since D6 puts them in one flat namespace.
-- **D3 — Cross-library identity smoke path.** Owner wrapper constructs a placeholder tagged vector; a second wrapper recognises it; an allocation-free singleton retains `eq?` identity across both imports. Runs in every execution lane.
-- **D4 — Portable test harness + thin runners.** Dependency-free (no SRFI-64, no package manager) per §22.2: shared assertion/result code, thin Chez and Gambit adapters owning imports, process exit codes, and compilation steps. Mirrors protium's harness structure; adapters on both runtimes must export exactly the same names.
-- **D5 — Execution lanes.** Chez source, Chez AOT, Gambit `.o1`, Gambit `-exe -nopreload`. Compiled lanes must be unable to silently fall back to source.
+- **D0 — Toolchain discovery.** Probe-based detection, banner-verified, rejecting Petite and GhostScript. Pinned minimum version recorded.
+
+  > **Amended 2026-08-22:** one runtime, not two ([decision 0005](../decisions/0005-chez-only.md)).
+  > The GhostScript classification is *not* removed with Gambit: it survives the
+  > cut and is still specified and mutation-tested at
+  > `test/support/cmake/ByteMachineChezSpec.cmake:51-53`, `:118`, and `:162`.
+- **D1 — Repo skeleton.** `src/byte-machine/`, `test/`, `build/` (gitignored), `docs/decisions/`.
+- **D2 — Shared body loaded through both wrappers.** *(Retired — see note below.)* One wrapper-free `.scm` body, one `.sls`, one `.sld`, no duplicated semantics. Includes a build-time check that shared-body basenames are unique, since D6 puts them in one flat namespace.
+
+  > **Retired 2026-08-22, effective [decision 0006](../decisions/0006-inline-libraries.md)
+  > (2026-08-18):** there is no shared body and no `.sld`, and the
+  > repository-wide basename check narrowed to `byte_machine_add_scheme_lane`'s
+  > per-lane uniqueness check. Delivered in slice 3 and dismantled by the include
+  > collapse. The entry stays because the slice that shipped it is real history.
+- **D3 — Cross-library identity smoke path.** One library constructs a placeholder tagged vector; a second library recognises it; an allocation-free singleton retains `eq?` identity across both imports. Runs in every execution lane.
+- **D4 — Portable test harness + thin runners.** Dependency-free (no SRFI-64, no package manager) per §22.2: assertion and result code in one library, a thin Chez runner owning imports, process exit codes, and compilation steps. Mirrors protium's harness structure.
+- **D5 — Execution lanes.** Chez source and Chez AOT. Compiled lanes must be unable to silently fall back to source.
 
   > **Amended 2026-08-21 by the slice 5b remainder: D5 closes here, at two
   > lanes.** The remainder puts `chez.aot` beside `chez.source` for three
@@ -184,9 +208,33 @@ Each is a testable artifact, not a note.
   > and [decision 0004](../decisions/0004-content-fingerprint-and-provenance.md)'s
   > 2026-08-21 amendment for what a compiled lane's fingerprint now describes
   > and what it still does not.
-- **D6 — Deterministic text emission proof.** Both implementations write byte-identical canonical UTF-8/LF output through a project-owned writer; compared by fingerprint, never via implementation `write` formatting.
+- **D6 — Deterministic text emission proof.** Byte-identical canonical UTF-8/LF output through a project-owned writer; compared by fingerprint, never via implementation `write` formatting.
+
+  > **Moved to Milestone 1 on 2026-08-22 by
+  > [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md).** A
+  > writer belongs to an emitter, and Milestone 0 ships no emitter (§11). Parent
+  > plan §25's Milestone 1 Scope already carries "deterministic output". The
+  > cross-cell half of the claim rides with D8, which needs the same cells.
 - **D7 — Identifier repertoire and binary LF proof.** Permitted `[a-z][a-z0-9-]*` names accepted; uppercase, non-ASCII, and punctuation rejected. LF bytes survive a binary port unmodified — the Windows CRLF-translation trap.
-- **D8 — CI (macOS arm64 + Linux amd64, both implementations)** plus written feasibility notes for the four deferred Tier 1 cells.
+
+  > **Moved to Milestone 1 on 2026-08-22 by
+  > [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md).**
+  > Lands on parent plan §25's Milestone 1 Scope lines "symbolic name resolution"
+  > and "generated-name safety for every construct present". Note for Milestone 1:
+  > parent §9.2's reserved-output-binding set has three members, and only the
+  > first — R6RS source-mode syntax and declaration identifiers — is enumerable
+  > before `(byte-machine runtime)` and the emitter template exist, so parent
+  > §22.9's "Reject every canonical reserved output binding" must be scoped to
+  > the members that exist when it runs.
+- **D8 — CI (macOS arm64 + Linux amd64)** plus written feasibility notes for the two deferred Tier 1 cells.
+
+  > **Amended 2026-08-22 by [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md).**
+  > The pipeline moves to Milestone 1, beside D6's cross-cell axis. The written
+  > feasibility notes are discharged by
+  > [the CI feasibility note](./milestone-0-ci-feasibility.md). "Four deferred
+  > cells" was written against a four-platform, two-runtime matrix; Chez-only
+  > Tier 1 is four cells total (parent plan §7.3), so two are deferred — Linux
+  > arm64 and Windows amd64.
 - **D9 — Decision records** in `docs/decisions/` and initial `CHANGELOG.md`.
 
 ## 8. Work order
@@ -198,8 +246,7 @@ Ordered so each slice is independently verifiable, TDD-first per §22.1.
 3. **Shared body through both wrappers** (D2). Exit: identical shared body loads through both wrappers from at least three different working directories.
 4. **Cross-library identity smoke path** (D3). Exit: tagged-value recognition and singleton `eq?` identity hold on both implementations.
 5. **Execution lanes** (D5). Exit: all four lanes green over the same shared body, agreeing on a content fingerprint.
-6. **Deterministic emission + identifier/LF proofs** (D6, D7). Exit: byte-identical output across implementations; every rejection case rejected.
-7. **CI + decision records** (D8, D9). Exit: green on both cells; deferred cells documented, not assumed.
+6. **Milestone 0 close-out** (D9 completed; D6, D7, D8 moved to Milestone 1). Exit: both governing documents record the milestone as closed, the three moved deliverables land on named Milestone 1 Scope lines, and no instruction outside a dated record names a retired concept. See [the close-out](./milestone-0-close-out.md).
 
 ## 9. Questions this milestone must answer
 
@@ -215,6 +262,16 @@ Mapped from parent plan §30. Answers land in `docs/decisions/`, backed by tests
 
 Questions 5–7 may be answered as "deferred, with rationale" if Milestone 0 cannot reach them without implementing semantics; 1–4 are hard requirements.
 
+> **Dispositioned 2026-08-22 at close ([decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md)),
+> which carries the answers.** Questions 1–4 are answered there, each with its
+> evidence level stated — a pin with an open floor (1), the shipped launchers
+> (2), closure by absence and by construction (3), closure by decision (4). Not
+> all four are answered by test, and 0007 says which are not. Question 3's
+> separator half was already closed by construction in
+> [decision 0002](../decisions/0002-shared-body-include-mechanism.md): this
+> project never joins Chez search paths with a separator. Question 6 rides with
+> D7 to Milestone 1.
+
 ## 10. Parent-plan corrections (folded in)
 
 Found while reading; small, but worth fixing before code depends on them. The
@@ -227,7 +284,7 @@ first three have been applied to the implementation plan.
 
 ## 11. Explicitly out of scope
 
-Source IR, constructors, verifier passes, normalizer, interpreter, emitter, runtime, HTTP fixture, benchmarks, and the full 8-cell matrix. The placeholder tagged value from D3 is deleted in Milestone 1.
+Source IR, constructors, verifier passes, normalizer, interpreter, emitter, runtime, HTTP fixture, benchmarks, and the full Tier 1 matrix. The placeholder tagged value from D3 is deleted in Milestone 1.
 
 ## 12. Exit criteria
 
@@ -243,6 +300,20 @@ Per parent plan §25 Milestone 0, plus what the spike added:
 - the four deferred Tier 1 cells have written feasibility notes;
 - §30 questions 1–4 are answered in `docs/decisions/` and backed by tests.
 
+> **Dispositioned 2026-08-22 at close ([decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md)).**
+> These criteria were written before decisions 0005 and 0006. What each came to,
+> in order: (1) **met** on both Chez lanes; the second runtime went with 0005, and
+> the working-directory matrix — an include-resolution proof — with 0006.
+> (2) **met**: each library owns its own code (0006). (3) **met** on both Chez
+> lanes. (4) **met at two lanes**, per D5's note above. (5) **moved** to
+> Milestone 1 — D6. (6) **met**; the GhostScript classification survives the
+> removal of the `gsc` it guarded against and is still specified and
+> mutation-tested. (7) **moved** to Milestone 1 — D8. (8) **met**, at two
+> deferred cells, by [the CI feasibility note](./milestone-0-ci-feasibility.md).
+> (9) **met**: parent plan §30 questions 1–4 are answered in
+> [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md), each
+> with its evidence level stated.
+
 ## 13. Sequencing after Milestone 0
 
-Milestone 1 is the whole architecture end to end in a narrow slice — builder, verifier, interpreter, normalizer, emitter, runtime, deterministic output, and two cross-implementation examples. It should be planned as several sub-slices rather than a single unit, roughly: descriptors and name resolution → minimal verification → reference interpreter → emitter and runtime → the §9.6 examples. Its first proving machine stays exactly as the parent plan specifies: accept one exact byte and stop, reject every other byte at the correct position, across all 256 byte values.
+Milestone 1 is the whole architecture end to end in a narrow slice — builder, verifier, interpreter, normalizer, emitter, runtime, deterministic output, and the parent plan's §9.6 example. It should be planned as several sub-slices rather than a single unit, roughly: descriptors and name resolution → minimal verification → reference interpreter → emitter and runtime → the §9.6 examples. Its first proving machine stays exactly as the parent plan specifies: accept one exact byte and stop, reject every other byte at the correct position, across all 256 byte values.
