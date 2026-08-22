@@ -297,7 +297,9 @@ Dated notes use the form spike §7 D5 already models: a blockquote beginning
 | **S14** | §9 questions list, `:204–216` | **Do not rewrite the questions.** Add a dated disposition block after the list, pointing at §8 of this document and at [0007](../decisions/0007-milestone-0-closes-at-the-harness.md), which carries the answers to questions 1–4. |
 | **S15** | §11, `:230` "and the full 8-cell matrix" | **"and the full Tier 1 matrix"** — the eight-cell arithmetic is the two-runtime one. |
 | **S16** | §12, all nine exit criteria | **Do not rewrite (see §5).** Add one dated disposition block after the list, reproduced in §6.5 below. |
-| **S17** | §13, `:246` "and two cross-implementation examples" | **"and the parent plan's §9.6 example"** — a forward instruction to Milestone 1 naming a retired contract. |
+| **S18** | §8 work-order items 1–5, which still name two runtimes, two wrappers, and four lanes | **Do not rewrite.** Completed instructions are the record of what was asked (§5). Dated disposition block beneath item 6, in §6.5's form. |
+| **S19** | §5 decision table's **D5** row, "protium's four-lane model, plus byte-machine's own cross-implementation generated-source comparison" | **Do not rewrite.** Same reason; two lines appended to row S3's dated block under the §5 table, pointing at §7 D5's own note for where lanes actually closed. |
+| **S17** | §13, "and two cross-implementation examples" | **"and the parent plan's §9.6 example"** — a forward instruction to Milestone 1 naming a retired contract. |
 
 ### 6.3 `docs/decisions/`
 
@@ -345,7 +347,8 @@ Named so a reader can tell these were read rather than missed.
   `gsc`") which are a record's own reasoning and stay — §11's criterion is
   scoped for exactly this.
 - **Spike §5 decision D6** (the include mechanism). Already annotated as retired
-  by the header's 0006 note, including its build-time-check clause.
+  by the header's 0006 note, including its build-time-check clause. Its sibling
+  **D5** is not exempt and is handled by row S19 — the 0006 note covers D6 only.
 - **Spike §6**, the recorded-not-used `include-relative` macro. A record of a
   path not taken.
 - **Parent §24.2's per-Tier-1-cell CI stages** (`:1392`–`:1396`). Future CI

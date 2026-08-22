@@ -442,6 +442,37 @@ REPLACE with the single line:
 6. **Milestone 0 close-out** (D9 completed; D6, D7, D8 moved to Milestone 1). Exit: both governing documents record the milestone as closed, the three moved deliverables land on named Milestone 1 Scope lines, and no instruction outside a dated record names a retired concept. See [the close-out](./milestone-0-close-out.md).
 ```
 
+- [ ] **Step 5b: Disposition the completed work-order items (row S18)**
+
+Items 1 through 5 of §8 still name two runtimes, two wrappers, and four lanes.
+They are *completed* instructions, which by the rule in the design's §5 have
+become the record of what was asked — so they get a dated block and no rewrite,
+exactly as §12's criteria do. Insert directly beneath work-order item 6:
+
+```markdown
+> **Dispositioned 2026-08-22 at close ([decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md)).**
+> Items 1 through 5 are delivered, and their exits are left exactly as written
+> for the reason §12's block gives: a completed instruction is the record of what
+> was asked, and rewording it to match what shipped edits the bar. Each was met
+> under the contract of its day — two runtimes, two wrappers, four lanes — and
+> what survives decisions 0005 and 0006 is stated at the §7 deliverable entries
+> and in §12's dispositions, not here. Item 6 replaces the original items 6 and
+> 7; [the close-out](./milestone-0-close-out.md) §1 says why the original item 6
+> could not be executed.
+```
+
+- [ ] **Step 5c: Extend the §5 note to cover D5 (row S19)**
+
+§5's D5 row reads "Execution lanes follow protium's four-lane model, plus
+byte-machine's own cross-implementation generated-source comparison". Same
+treatment. Append these lines to the dated block Step 3 added under the §5 table:
+
+```markdown
+> D5's row is left as written for the same reason: it records a decision that was
+> taken, and the dated note at §7's D5 entry states where execution lanes
+> actually closed.
+```
+
 - [ ] **Step 6: Add the §9 questions disposition block (row S14)**
 
 Do **not** rewrite the seven questions. FIND `Questions 5–7 may be answered as "deferred, with rationale" if Milestone 0 cannot reach them without implementing semantics; 1–4 are hard requirements.` and insert directly beneath it:
