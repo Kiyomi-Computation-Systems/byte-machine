@@ -14,7 +14,7 @@ of evidence each statement actually has. This is a design, not a pipeline. Spike
 
 ## 0. The evidence vocabulary this note uses
 
-Three claims that are easy to blur and are kept apart throughout:
+Four claims that are easy to blur and are kept apart throughout:
 
 - **Measured** — a command was run on this host and its output is what the
   sentence reports. Every measurement below was taken on Darwin 25.5.0 arm64
@@ -24,6 +24,10 @@ Three claims that are easy to blur and are kept apart throughout:
   packaging convention, or CMake's documented behaviour says so, and no cell
   exists here to confirm it. Nothing in this class is an argument for skipping
   the cell; it is the reason the cell exists.
+- **Uncited** — the sentence is a belief this note holds and cannot attribute:
+  no man page, no upstream convention, and no record in this tree states it. It
+  is weaker than "documented", and it is called out rather than dressed up
+  because the cell that would settle it is the point of naming it.
 - **Closed by construction** — the question has no object left in this tree to
   apply to, so no cell can answer it and none needs to. This is stronger than a
   documented answer and weaker than nothing only in the sense that it proves the
@@ -35,21 +39,27 @@ label. A sentence with no label inherits the section's.
 ## 1. The four Tier 1 cells
 
 Parent §7.3 fixes the matrix: Chez on Linux amd64, Linux arm64, macOS arm64, and
-Windows amd64, **each in both source and AOT execution** — eight lane instances
-over four cells. Under [0005](../decisions/0005-chez-only.md) that is four cells,
-not the eight the spike's pre-Chez-only arithmetic names (spike §7 D8, spike
-§11:230; corrected by the close-out's §6.2 rows S12 and S15).
+Windows amd64, **each in both source and AOT execution**. Two decompositions of
+that matrix both come to eight, and they are not the same eight. Four platforms ×
+source/AOT is eight **lane instances**, which
+[0005](../decisions/0005-chez-only.md) did not reduce — under Chez alone both
+lanes are still Chez lanes. Four platforms × two implementations was the spike's
+eight **cells** (spike §7 D8:189, "both implementations"; spike §11:230, "the
+full 8-cell matrix"), and that is the eight 0005 halved, to the four cells
+tabulated below (corrected by the close-out's §6.2 rows S12 and S15). "Cell"
+below always means one of those four.
 
 | Cell | Chez obtained by | Binary name there | Probe handles it | Machine type | Only witness for |
 | --- | --- | --- | --- | --- | --- |
-| macOS arm64 | Homebrew formula `chezscheme` | `chez` | yes — measured | `tarm64osx` (measured) | nothing; it is the incumbent side of every comparison |
-| Linux amd64 | distribution package or upstream build | `scheme` or `chezscheme` | yes — by name list | `ta6le` (by inspection) | the first cell that makes any cross-cell claim non-vacuous |
+| macOS arm64 | Homebrew formula `chezscheme` | `chez` | yes — measured | `tarm64osx` (measured) | no spike deliverable; the only cell reaching the `chez` name and the `osx` OS row |
+| Linux amd64 | hosted runner; distribution package or upstream build | `scheme` or `chezscheme` | yes — by name list | `ta6le` (by inspection) | the first cell that makes any cross-cell claim non-vacuous |
 | Linux arm64 | hosted arm64 runner **or** emulation; neither priced | `scheme` or `chezscheme` | yes — by name list | `tarm64le` (by inspection) | architecture varied with the OS held fixed |
 | Windows amd64 | upstream Windows distribution | `scheme.exe` | by name plus CMake's suffix rule — documented, not verified | `ta6nt` (by inspection) | CRLF translation (spike §7 D7); Windows path form |
 
 The "probe handles it" column resolves to one line in the shipped tree.
 `cmake/ByteMachineChez.cmake:51` sets the candidate list to `scheme chez
-chezscheme` — every name in the acquisition column above is in it — and identity
+chezscheme` — every binary name in the table above is either in that list or is
+a list entry plus the platform executable suffix (`scheme.exe`, §1.4) — and identity
 is then decided on probe output rather than on which name matched
 (`:92` requires `Chez Scheme` in the banner, `:102` rejects Petite, `:139`
 enforces the 10.4.1 floor). This is the collision
@@ -64,18 +74,23 @@ chezscheme` → `chezscheme 10.4.1`; `chez --version` → `10.4.1`;
 `(machine-type)` → `tarm64osx`). Every measurement in this repository was taken
 here, and this is the only cell any of them describes.
 
-It is the only witness for **nothing**, and that is the point rather than a
-weakness. Every claim it carries is a claim another cell would also carry;
+It is the only witness for **none of spike §7's deliverables**, and that is the
+point rather than a weakness. What it does carry alone is narrower than a
+deliverable: the `chez` candidate name, which no other Tier 1 cell reaches (§3),
+and the `tarm64osx` → arm64/darwin row of `harness.sls`'s OS table
+(`harness.sls:99`), the one row of that table that has ever been evaluated.
+Every *deliverable* claim it carries is a claim another cell would also carry;
 what it cannot carry is any claim of the form "the same on two cells". Spike §7
 D6's byte identity is identity *with* something, and until a second cell exists
 this one supplies only the left-hand side.
 
 ### 1.2 Linux amd64 — the cell that makes cross-cell claims mean anything
 
-**Documented, not verified on hardware.** Chez arrives either from a
-distribution package or from an upstream build; the packaged binary is `scheme`
-on some distributions and `chezscheme` on others. Which distribution uses which
-name is **not verified here** and does not need to be: both names are in the
+**Documented, not verified on hardware.** The machine is a hosted runner, and on
+it Chez arrives either from a distribution package or from an upstream build;
+the packaged binary is `scheme` on some distributions and `chezscheme` on
+others. Which distribution uses which name is **not verified here** and does not
+need to be: both names are in the
 probe's candidate list (`ByteMachineChez.cmake:51`), and the banner test at `:92`
 is what decides identity, so the packaging variance is already absorbed. That
 absorption is the verifiable part; the packaging convention is not.
@@ -135,16 +150,19 @@ verifiable in this tree today:
   `:129` for source). **Measured:** no launcher under
   `test/support/launchers/` carries a `#!` line, and neither `scheme-script` nor
   any shebang appears anywhere in the launchers, `cmake/*.cmake`, or
-  `test/CMakeLists.txt`. The one Chez invocation mechanism that behaves
-  differently on Windows is therefore not used.
-- Chez's compiled-object extension is `.so` on every platform — it names Chez's
-  own object format, not a shared library. **Measured here:**
+  `test/CMakeLists.txt`. The `scheme-script`/`#!` route the manual documents at
+  `chez.1`:515–521 — whose Windows behaviour that passage says nothing about, and
+  would be a separate question — is therefore not used.
+- Chez's compiled-object extension names Chez's own object format, not a shared
+  library, so it is not the host's `.so`-versus-`.dll` distinction at all.
+  **Measured here:**
   `(library-extensions)` returns `((".chezscheme.sls" . ".chezscheme.so")
   (".ss" . ".so") (".sls" . ".so") (".scm" . ".so") (".sch" . ".so"))`, so
   `byte_machine_chez_aot_paths`'s `${stem}.so` (`ByteMachineSchemeLane.cmake:81`)
-  needs no platform branch. The defaults are believed platform-independent;
-  that belief is **documented, not verified on hardware**, and it is a one-line
-  check on the Windows cell.
+  needs no platform branch on this host. That those defaults are the same on
+  every platform is **uncited**: `chez.1` names `library-extensions` at :533,
+  :538, and :572 and nowhere enumerates its defaults, and no record in this tree
+  states them either. It is a one-line check on the Windows cell.
 
 This is the **only** cell that can exhibit the CRLF translation spike §7 D7
 names, and the only cell that can answer the Windows path-form question §2.4
@@ -154,15 +172,14 @@ leaves open.
 
 This section discharges parent §25:1427. The interesting fact is that the
 exposure most readers reach for first was designed out of this project two
-decisions ago, so the four paragraphs are ordered to say that rather than to
-bury it.
+decisions ago, so §§2.1–2.4 are ordered to say that rather than to bury it.
 
 Man-page citations below are to Chez Scheme 10.4.1's `chez.1` as installed on
 this host at `/opt/homebrew/share/man/man1/chez.1.gz` (resolved with `man -w
 chez`); line numbers are lines of the decompressed roff source, so they are
 reproducible with `gunzip -c` and `sed -n`.
 
-### 2.1 The separator exists, in the string form of the option
+### 2.1 The separator exists, in the string forms of Chez's search settings
 
 `chez.1`:548–553 fixes it:
 
@@ -171,22 +188,45 @@ reproducible with `gunzip -c` and `sed -n`.
 > separator character is a colon (:), except under Windows where it is a
 > semi-colon (;).
 
-The same string form reaches Chez through the environment: `chez.1`:565–567 says
-that with no `--libdirs` option present, `CHEZSCHEMELIBDIRS`'s string value is
-treated as if it had been given to `--libdirs`. So the separator is a property of
-exactly two things — the `--libdirs` command-line option and the
-`CHEZSCHEMELIBDIRS` environment variable — both of which take **one string** that
-Chez itself splits. **This project uses neither**, as §2.2 shows at four call
-sites; the paragraph above is a fact about the runtime, recorded so that §2.2 has
-something to deny.
+Note that the quotation already covers `--libexts` as well as `--libdirs`, and
+the same string form reaches Chez through the environment twice over:
+`chez.1`:565–567 says that with no `--libdirs` option present,
+`CHEZSCHEMELIBDIRS`'s string value is treated as if it had been given to
+`--libdirs`, and `:568–570` says the same of `CHEZSCHEMELIBEXTS` and
+`--libexts`. A fifth form governs boot files rather than libraries and carries
+the identical rule: `SCHEMEHEAPDIRS` "should be a colon-separated list of
+directories" (`:684–685`) and "Under Windows, semi-colons are used in place of
+colons" (`:695`, restated in the ENVIRONMENT section at `:750–754`).
 
-### 2.2 This project never uses that form
+So the separator belongs to the *string* forms of Chez's search settings — five
+of them, not two — every one of which takes **one string** that Chez itself
+splits. **This project sets none of them.** §2.2 shows the four call sites that
+set the parameter instead, and re-runs the audit widened to all five names; the
+paragraph above is a fact about the runtime, recorded so that §2.2 has something
+to deny.
 
-**Measured.** No file in this repository passes `--libdirs`, sets
-`CHEZSCHEMELIBDIRS`, or joins any search path with `:` or `;`. `rg -n
-"libdirs|CHEZSCHEMELIBDIRS|libexts"` over the tree returns hits in documentation
-only — [0002](../decisions/0002-shared-body-include-mechanism.md):26, spike:210,
-the close-out §7, and this note.
+### 2.2 This project never uses those forms
+
+**Measured.** No file in this repository passes `--libdirs` or `--libexts`, sets
+`CHEZSCHEMELIBDIRS`, `CHEZSCHEMELIBEXTS`, or `SCHEMEHEAPDIRS`, or joins any
+search path with `:` or `;`. The audit is
+`rg -n -i "libdirs|libexts|CHEZSCHEMELIB|SCHEMEHEAPDIRS"` over the tree —
+case-insensitive, and covering all five forms §2.1 names rather than only the
+two that are easy to think of. It returns hits in documentation only, and this
+is the whole list:
+
+| File | Lines |
+| --- | --- |
+| [`0002`](../decisions/0002-shared-body-include-mechanism.md) | 26 |
+| `milestone-0-portability-spike.md` | 210 |
+| `milestone-0-close-out.md` (§7) | 387–389 |
+| `milestone-0-close-out-implementation-plan.md` | 179, 200, 217 |
+| this note | §2.1, §2.2 |
+
+No hit is in a `.ss`, `.sls`, `.sps`, `.cmake`, or `CMakeLists.txt` file.
+`CHEZSCHEMELIBEXTS` and `SCHEMEHEAPDIRS` occur nowhere in the tree except in
+this note — which is the point of widening: the narrower search could not have
+told the difference between absent and unlooked-for.
 
 What the project does instead is set the `library-directories` **parameter**
 directly, with a Scheme list of pairs, in each of the four Scheme entry points:
@@ -198,21 +238,27 @@ directly, with a Scheme list of pairs, in each of the four Scheme entry points:
 | `test/support/launchers/chez-compile.ss` | 153 | `(map cons library-roots object-dirs)` |
 | `test/support/launchers/fingerprint-manifest.ss` | 59 | `(list (cons library-root object-guard-dir))` |
 
-Every root arrives as its own repeated command-line flag — `--library-root`,
+Every root arrives as its own argv entry and is never split, by two different
+routes. The three lane launchers take repeatable flags — `--library-root`,
 `--object-dir`, `--object-guard`, `--source-guard` — collected by `flag-values`
 (`chez-source.ss:89–93`), which returns each occurrence whole and never splits a
-value on anything. `cmake/ByteMachineSchemeLane.cmake:152–153` shows the build
-side: `--object-dir` appears twice as two separate arguments, not once as a
-joined string. `chez.1`:534 confirms this is the parameter's native shape — "The
-values of both parameters are lists of pairs of strings" — so the flag protocol
-is not a workaround; the string form is the lossy convenience and this project
+value on anything. `fingerprint-manifest.ss` has no flags at all: it takes its
+root and guard **positionally** from `(command-line-arguments)` (`:31–37`, usage
+line at `:4`), and an argv entry read by `list-ref` is no more joined than a flag
+value is. `cmake/ByteMachineSchemeLane.cmake:152–153` shows the build side for
+the flag route: `--object-dir` appears twice as two separate arguments, not once
+as a joined string. `chez.1`:534 confirms this is the parameter's native shape —
+"The values of both parameters are lists of pairs of strings" — so neither route
+is a workaround; the string form is the lossy convenience, and this project
 declines it.
 
 That is why [0002](../decisions/0002-shared-body-include-mechanism.md):143–147
 records the question as **closed by construction**: "because the launcher takes
 repeatable flags, byte-machine never joins Chez search paths with any separator
 on any platform, so the `:` vs `;` question has no Chez-side object left to apply
-to." The closure survives 0002's own retirement by
+to." 0002's "the launcher" is the lane launchers, which is what it measured; the
+fourth site reaches the same closure by the positional route instead, and that
+phrasing is not carried onto it. The closure survives 0002's own retirement by
 [0006](../decisions/0006-inline-libraries.md) — what 0006 removed was
 `--source-dir` and the include mechanism, not the flag protocol, and the four
 sites above are the post-0006 tree.
@@ -233,12 +279,16 @@ other end: the full path is the root, followed by the library-name components
 "prefixed by slashes", with the extension appended.
 
 That `/` is Chez joining *library-name components*, not the host joining *search
-paths*. It is fixed by the library name, is the same character on every platform,
-and is what makes `/`-delimited roots the portable form: a root written with
-forward slashes concatenates correctly with a partial name Chez has already built
-with forward slashes. **Documented, not verified on hardware** for Windows
-specifically — no cell here has exercised it — but it is a resolution rule, not a
-platform-dependent one, and nothing in §2.1's separator clause applies to it.
+paths*. It is fixed by the library name, it is written `/` in both passages just
+cited — the flat statement at `:541–543` and the worked example at `:576–577` —
+and it is what makes
+`/`-delimited roots the portable form: a root written with forward slashes
+concatenates correctly with a partial name Chez has already built with forward
+slashes. That the character is the same on Windows is **uncited**: the manual
+attaches no platform qualification to either passage, but neither does it state
+platform-independence, and no cell here has exercised it. What the manual does
+make clear is that this is a resolution rule rather than an argument-parsing
+one, so nothing in §2.1's separator clause applies to it.
 
 ### 2.4 What genuinely stays open on Windows is path form
 
@@ -307,9 +357,13 @@ consistent with the binary port having been dropped — an unwitnessable decisio
 on this host in exactly AGENTS.md's sense: not "cannot be tested", but "cannot be
 tested *here*", with the witness named.
 
-**The probe's own portability.** Each cell exercises a different row of
-`BYTE_MACHINE_CHEZ_CANDIDATE_NAMES` (`ByteMachineChez.cmake:51`) and a different
-machine type, and the harness's OS/architecture derivation is where that lands.
+**The probe's own portability.** Between them the cells reach more than one row
+of `BYTE_MACHINE_CHEZ_CANDIDATE_NAMES` — but not four, because the list is three
+names for four cells (`ByteMachineChez.cmake:51`, `scheme chez chezscheme`).
+macOS arm64 is the only cell that reaches `chez`; the two Linux cells reach
+`scheme` or `chezscheme` (§1.2), and Windows amd64 reaches `scheme` as
+`scheme.exe` (§1.4). What each cell *does* reach alone is a machine type no other
+cell has, and the harness's OS/architecture derivation is where that lands.
 `harness.sls:88–95` maps machine-type architecture prefixes (`arm64`, `a6`, …)
 and `:97–107` maps operating-system suffixes (`le` → linux, `osx` → darwin,
 `nt` → windows, …); `:114–127` does the two-stage lookup. All four Tier 1 cells
@@ -325,8 +379,9 @@ pipeline has to do rather than only where it runs. The shipped assertions are
 that `adapter-os` and `adapter-architecture` differ from `"unknown"`. A cell
 therefore witnesses that its machine type resolves to *something*, not that it
 resolves to the right thing: a table row mapping `nt` to the wrong name would
-still pass on Windows. Parent §22.9:1392 asks for more than that — "In every
-Tier 1 cell, assert the expected runtime, OS, and architecture" — so standing the
+still pass on Windows. Parent §24.2:1392 (item 2 of the CI stages list, whose
+heading is at parent :1389) asks for more than that — "In every Tier 1 cell,
+assert the expected runtime, OS, and architecture" — so standing the
 matrix up includes tightening those two assertions to compare against the value
 the cell declares. Getting the runner is necessary and not sufficient.
 
