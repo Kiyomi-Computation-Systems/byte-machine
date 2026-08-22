@@ -86,12 +86,15 @@ contract now is.
 
 ## Measurements
 
-Measured 2026-08-22 against the shipped tree at commit `7cd6542` — the commit
-this record's own text was last written against — on branch `docs/m0-close-out`,
-on Darwin 25.5.0 arm64, Chez 10.4.1. AGENTS.md requires a number in a decision
-record to have been re-taken against the shipped artifact; these were re-taken
-here rather than copied from the close-out design, whose `docs/plans` figure
-predates that directory gaining this slice's own two documents.
+Measured 2026-08-22 against the shipped tree at commit `dd813b6`, on branch
+`docs/m0-close-out`, on Darwin 25.5.0 arm64, Chez 10.4.1. AGENTS.md requires a
+number in a decision record to have been re-taken against the shipped artifact,
+so these were taken here rather than copied from the close-out design. Every
+figure below except `docs/plans` is unchanged from the first taking at
+`7cd6542`; `docs/plans` moves with every documentation commit on this branch,
+including the ones that corrected this record, so it was re-taken at the commit
+named — and the commit that carries this re-taking edits no file under
+`docs/plans`.
 
 - **The apparatus outweighs the product it is built around by two orders of
   magnitude.** [0005](./0005-chez-only.md) recorded the same observation on
@@ -119,12 +122,12 @@ predates that directory gaining this slice's own two documents.
         test/support/harness/self/*.sps test/support/launchers/*.ss | wc -l
       2348
   $ cat docs/plans/*.md | wc -l
-     20020
+     20686
   $ git rev-parse --short HEAD
-  7cd6542
+  dd813b6
   ```
 
-  9,176 lines of build layer, harness, and launchers, and 20,020 lines of plans,
+  9,176 lines of build layer, harness, and launchers, and 20,686 lines of plans,
   against 87 lines of product.
 
 - **All 87 lines of `src/` are placeholder.** `src/byte-machine/` contains
