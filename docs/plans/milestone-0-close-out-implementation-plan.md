@@ -14,7 +14,8 @@
 
 - **Prose only.** No new library, no new lane, no new mutation, no new exit status, no CI, no deletion of the spike §7 D3 placeholders. The only non-prose edits in the entire plan are two CMake comments (Task 5, rows L1 and L2).
 - **Match on text, never on line number.** Line numbers shift as earlier rows land within the same file. Every edit below gives a unique FIND string.
-- **Never write a line citation into text inserted in the same file it cites.** An insertion shifts the lines below it, so the citation is stale the moment it lands and no grep or link check catches it. Cite the section by name for intra-document references. (Row P14 shipped this defect once and it was corrected; Milestone 9's Scope lines moved from :1602–1603 to :1615–1616 under this task's own edits.)
+- **Never cite a line number in a file this slice edits.** The two governing plans — `byte-machine-implementation-plan.md` and `milestone-0-portability-spike.md` — are edited by Tasks 3 and 4, and every insertion or deletion shifts every line below it. A `§25:1425` written before those tasks is wrong after them, and neither the vocabulary grep nor the link check can see it. **Cite the section only** (`parent §25`, `spike §7 D6`) for those two files. Line numbers remain correct and expected for files this slice does not edit: the launchers, the harness, the CMake modules, and decisions 0002–0006. Decision 0001 is only appended to, so citations into it are safe.
+  Row P14 shipped this defect once and it was corrected in `0867e66`/`6c38ddf`: Milestone 9's Scope lines moved from :1602–1603 to :1615–1616 under Task 3's own edits. **Task 7 Step 0 sweeps the rest**, after Task 4 has finished shifting the spike.
 - **Dated notes take one of four forms**, matching spike §7 D5's existing note (`milestone-0-portability-spike.md:160`): a blockquote beginning `> **Amended YYYY-MM-DD by …`, `> **Moved YYYY-MM-DD by …`, `> **Retired YYYY-MM-DD …`, or `> **Dispositioned YYYY-MM-DD …`. The date is **2026-08-22** throughout.
 - **Records are never edited.** Spike §2's environment-facts table (including its Gambit rows and its "1 of 8" count), spike §5's D6 row, spike §6, `CHANGELOG.md`'s `### Added` / `### Changed` / `### Removed` / `### Fixed` entries, and `docs/decisions/` bodies other than the annotation in row R1. If a step seems to require editing one of these, stop and report it.
 - **`CHANGELOG.md` has 28 historical Gambit mentions in its `### Added` and `### Removed` sections.** They are records of what shipped and what was cut. Do not touch them. Only the preamble (row C1) and new `[Unreleased]` entries (row C2) are in scope.
@@ -700,6 +701,40 @@ No new content. This task proves the branch met its own exit criteria.
 
 **Files:**
 - Modify: `.superpowers/sdd/progress.md`
+
+- [ ] **Step 0: Re-verify every line citation into the two governing plans, and strip the stale ones**
+
+Tasks 3 and 4 shifted lines throughout `byte-machine-implementation-plan.md` and
+`milestone-0-portability-spike.md`. Every `§N:NNNN` citation into either file,
+written anywhere on this branch, is now suspect. Audit them:
+
+```bash
+python3 -c '
+import re,glob
+tgt={"parent":open("docs/plans/byte-machine-implementation-plan.md").read().split(chr(10)),
+     "spike":open("docs/plans/milestone-0-portability-spike.md").read().split(chr(10))}
+pat=re.compile(r"§\s?(\d+(?:\.\d+)?)\s?:\s?(\d{3,4})")
+for f in glob.glob("docs/**/*.md",recursive=True)+["AGENTS.md","CHANGELOG.md"]:
+    for i,line in enumerate(open(f).read().split(chr(10)),1):
+        for m in pat.finditer(line):
+            print(f"{f}:{i}  {m.group(0)}")
+'
+```
+
+For every hit, open the cited line and check it says what the citing sentence
+claims. Where it does not — or where the citation points into either governing
+plan at all — **replace the line number with the section reference alone**
+(`parent §25`, `spike §7 D6`, `parent §24.2`). Do not renumber to the new line:
+the next edit to those files will break it again.
+
+Leave line citations into files this slice does not edit exactly as they are —
+the launchers, the harness, the CMake modules, and decisions 0002 through 0006.
+Decision 0001 is appended to, not inserted into, so citations into it are safe.
+
+Record in the ledger how many citations you audited, how many you stripped, and
+any whose cited line said something other than what the sentence claimed — that
+last class is a factual defect, not a formatting one, and needs its sentence
+re-checked rather than just its citation removed.
 
 - [ ] **Step 1: Run the scoped sweep gate**
 
