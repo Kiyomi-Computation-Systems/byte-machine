@@ -276,9 +276,12 @@ Immediately after the line `### Milestone 1: Minimal executable machine` and bef
 > **Amended 2026-08-22 by [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md):
 > Milestone 0's D6, D7, and D8 land here.** D6 on "deterministic output"; D7 on
 > "symbolic name resolution" and "generated-name safety for every construct
-> present"; D8's CI pipeline alongside D6's cross-cell axis, which needs the same
-> Tier 1 cells. Nothing is added to the Scope list — the lines already exist and
-> now carry Milestone 0's obligations too.
+> present". Those two lines already exist and now carry Milestone 0's obligations
+> too. D8's CI pipeline has no Scope line of its own and rides D6's cross-cell
+> axis, because both need the same Tier 1 cells: Milestone 1 stands the pipeline
+> up over the emitter, and Milestone 9 — which already owns "complete Tier 1 CI"
+> and "source generation equality across platform cells" (§25:1602–1603) —
+> completes it. "Complete" presupposes something to complete.
 ```
 
 - [ ] **Step 4: Verify the Deliver list still reads correctly and the deletions took**
