@@ -58,8 +58,8 @@ byte_machine_add_test(
 
 # A passing specification proves nothing by itself. This breaks each decision in
 # each module in turn, on a staged copy, and requires the owning specification to
-# notice. It runs in CI because evidence that only exists in someone's terminal
-# cannot fail when the code changes.
+# notice. It runs under `ctest` because evidence that only exists in someone's
+# terminal cannot fail when the code changes.
 byte_machine_add_test(
   NAME byte-machine.harness.cmake-mutation.cmake.direct
   COMMAND "${CMAKE_COMMAND}" -P

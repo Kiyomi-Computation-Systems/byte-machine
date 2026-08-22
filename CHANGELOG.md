@@ -6,7 +6,8 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ## [Unreleased]
 
-Milestone 0 (portability and harness spike) is in progress. No public API
+Milestone 0 (portability and harness spike) closed on 2026-08-22; see
+[the close-out](docs/plans/milestone-0-close-out.md). No public API
 exists yet; see
 [the implementation plan](docs/plans/byte-machine-implementation-plan.md) for
 scope and [the milestone plan](docs/plans/milestone-0-portability-spike.md) for

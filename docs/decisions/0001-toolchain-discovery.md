@@ -121,3 +121,20 @@ Measured on Darwin 25.5.0 arm64, 2026-08-15:
 - A `no-scheme` preset configures and runs the CMake-layer specifications with
   neither runtime installed, so build-layer logic stays testable in environments
   that have no Scheme at all.
+
+## Note added 2026-08-22
+
+The sentence above, "It runs in CI as
+`byte-machine.harness.cmake-mutation.cmake.direct`", **was never true**. No CI
+has existed in any commit of this repository; verified by
+`git log --all --diff-filter=A --name-only` on 2026-08-22. The lane is real and
+runs under `ctest`.
+
+The claim is annotated rather than corrected because it is load-bearing — it is
+offered as evidence for this record's own Consequences, and a reader checking
+that reasoning needs to see what was actually claimed. This is not a
+supersession: nothing changed the world, the sentence was wrong on the day it
+was written.
+
+Deliverable D8 (CI) moved to Milestone 1 by
+[decision 0007](./0007-milestone-0-closes-at-the-harness.md).
