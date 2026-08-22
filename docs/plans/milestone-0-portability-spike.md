@@ -36,10 +36,13 @@ Scope decision: **Milestone 0 only.** No byte-machine semantics (no IR, verifier
 > through `source-directories`. §9 question 3's Chez half, already closed by
 > construction under repeatable flags, is now closed by absence: there is no
 > include left to resolve.
+>
+> Amended 2026-08-22: §4's O1 records the same resolution — "`source-directories`
+> + bare filename, as protium does" — and is retired alongside §5's D6.
 
 ## 1. Why this milestone exists
 
-Section 7 of the parent plan asserts a portability contract — wrapper-free shared `.scm` bodies, thin Chez `.sls` / Gambit `.sld` wrappers, singleton identity preserved across library boundaries, byte-identical deterministic emission — but nothing in this repository proves it. Milestone 1 depends on that contract holding end to end, including §9.6 item 8 ("compile and run the consumer natively").
+Section 7 of the parent plan asserts a portability contract — wrapper-free shared `.scm` bodies, thin Chez `.sls` / Gambit `.sld` wrappers, singleton identity preserved across library boundaries, byte-identical deterministic emission — but nothing in this repository proves it. Milestone 1 depends on that contract holding end to end, including §9.6 item 8 ("compiling and running the consumer ahead-of-time").
 
 A pre-planning spike ran against the real local toolchain. Its findings are in §2. **A sibling project, `~/github/protium`, has already solved most of this milestone**; §3 records what it settled and what byte-machine should take from it.
 
@@ -127,7 +130,10 @@ Both were first answered on the basis of the §2.1 errors, and were reconfirmed 
 > CI covers two, and two — Linux arm64 and Windows amd64 — are deferred.
 > D5's row is left as written for the same reason: it records a decision that was
 > taken, and the dated note at §7's D5 entry states where execution lanes
-> actually closed.
+> actually closed. D1 and D7 are likewise left as written and are likewise moot
+> under [decision 0005](../decisions/0005-chez-only.md): D1 is entirely about
+> Gambit's `include` and native-linking recipe, and D7 cites "the same two
+> runtimes" — both retired along with the second runtime.
 
 ## 6. Chez `include-relative` macro (recorded, not used)
 

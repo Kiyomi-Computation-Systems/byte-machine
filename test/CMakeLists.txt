@@ -2,7 +2,7 @@
 #
 # Milestone 0 slice 1 registers only the CMake-layer specifications: the build's
 # own discovery and registration logic, which decides what every later lane can
-# even see. The portable Scheme harness and its four execution lanes arrive in
+# even see. The portable Scheme harness and its execution lanes arrive in
 # slice 2.
 
 # The registration helper decides which tests exist at all, so its functional

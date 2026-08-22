@@ -443,7 +443,7 @@ The generated ABI is distinct from the user-facing parser API and is documented 
 
 ### 9.6 Required end-to-end examples
 
-Milestone 1 must add one executable Chez example program, run in both the source and AOT lanes, that uses a shared grammar body and demonstrates:
+Milestone 1 must add one executable Chez example program, run in both the source and AOT lanes, that demonstrates:
 
 1. constructing a one-byte machine only through `(byte-machine graph)`;
 2. verifying it;
@@ -454,7 +454,7 @@ Milestone 1 must add one executable Chez example program, run in both the source
 7. constructing a parser, feeding the exact `[0,1)` slice, and inspecting the result;
 8. compiling and running the consumer ahead-of-time.
 
-The exact tool commands and include-path setup come from Milestone 0 and are copied verbatim into these examples.
+The exact tool commands come from Milestone 0 and are copied verbatim into this example. There is no include-path setup: [decision 0006](../decisions/0006-inline-libraries.md) retired the mechanism.
 
 ## 10. Source IR
 
