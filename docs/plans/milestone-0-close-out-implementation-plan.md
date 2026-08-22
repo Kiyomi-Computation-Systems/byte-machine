@@ -863,7 +863,14 @@ print("broken:",len(bad))
 PY
 ```
 
-Expected: `broken: 0`, and no `ABSENT` lines.
+**Expected: not zero.** The checker resolves every markdown link relative to the
+file it appears in, and this plan and the design both *quote* link text destined
+for other directories — a `./0007-…md` written for a note that lands in
+`docs/decisions/` cannot resolve from `docs/plans/`. That pattern is established
+here: `milestone-0-include-collapse-implementation-plan.md`, an already-merged
+slice's plan, carries four such hits. So the criterion is **every hit is a quoted
+link that resolves at its destination**, checked one by one, and no `ABSENT`
+lines. A hit that is a live link, or a placeholder like `(…)`, is a defect.
 
 - [ ] **Step 7: Write the final ledger entry and commit**
 
