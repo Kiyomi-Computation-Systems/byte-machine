@@ -11,7 +11,8 @@ substrate; [the milestone plan](../plans/milestone-0-portability-spike.md) §8's
 work order put item 6 — spike §7's deliverables D6 and D7 — next. That item
 cannot be executed, and the reason is not that it is hard.
 
-Spike §7 D6 is stated four incompatible ways, and all four are live in the tree:
+Spike §7 D6 is stated four incompatible ways, and all four were live in the
+tree when this record was written:
 
 - **spike §7 D6**, the deliverable itself: "Both implementations write
   byte-identical canonical UTF-8/LF output through a project-owned writer".
@@ -31,10 +32,17 @@ The third is honest, and this host cannot discharge it either. Parent §7.3
 names four Tier 1 platforms — Chez on Linux amd64, Linux arm64, macOS arm64, and
 Windows amd64 — each required in both source and AOT execution. One platform
 exists locally, in both lanes (macOS arm64; the Measurements host below). A
-second, Linux amd64, arrives with spike §7 D8's pipeline; the remaining two
-platforms, in both lanes each, are the four deferred cells D8's written
+second, Linux amd64, arrives with spike §7 D8's pipeline; the remaining two —
+Linux arm64 and Windows amd64 — are the deferred Tier 1 cells D8's written
 feasibility notes are about (spike §7 D8). A cross-platform claim needs cells, and
-the cells arrive with a deliverable this milestone has not delivered.
+the cells arrive with a deliverable this milestone has not delivered. D8 named
+*four* deferred cells when this record was written; its own dated note now
+records that "'Four deferred cells' was written against a four-platform,
+two-runtime matrix", and [the close-out](../plans/milestone-0-close-out.md)
+§6.2 row S12 corrects the entry to two. Under Chez-only a cell is a platform:
+four platforms × source/AOT is eight *lane instances*, which 0005 did not
+reduce, whereas four platforms × two implementations was the eight it halved
+— see [the CI feasibility note](../plans/milestone-0-ci-feasibility.md) §1.
 
 The fourth — the parent plan's weaker two-lane formulation — is the substitution
 0005 already refused, one deliverable over. Writing of a `chez.source`/`chez.aot`
@@ -57,6 +65,24 @@ an emitter that must prove it again about the real thing.
 at length, together with the sweep that makes the two governing documents agree
 with it. This record is that design's §8.1 deliverable and states what the
 contract now is.
+
+> **Note added at close 2026-08-22.** The sweep this record authorises has since
+> removed or dispositioned four of the statements in this record — three above,
+> one in the Decision below. Spike §7 D6 lost "Both implementations write"
+> ([the close-out](../plans/milestone-0-close-out.md) §6.2 row S10). Spike §8's
+> items 6 and 7 were replaced by a single item 6, the close-out itself, so both
+> the exit condition quoted above and Decision point 1's "item 7 (D8, D9 — spike
+> §8) splits" describe the work order as it stood rather than as it reads now
+> (row S13). And parent §25's Deliver line "deterministic text emission proof
+> across the Chez source and AOT lanes" was deleted (row P9). All four are
+> quoted here as they stood at `ceb0894`, which is the tree this decision was
+> taken against.
+>
+> Two statements were instead corrected in place, because each asserts what is
+> true now rather than what was read then: the deferred-cell count in the third
+> paragraph above, and Consequences' quotation of parent §25's first exit
+> criterion, which row P12 reworded to "the same test program passes in both the
+> source and AOT execution lanes".
 
 ## Measurements
 
@@ -247,8 +273,8 @@ nothing.
   over the emitter protects the byte-identity claim that is D6's whole point.
 
 - **Parent §25's Milestone 0 exit criteria are three, and D6 and D7 appear in
-  none of them.** They are (parent §25): "the same shared test body
-  passes in both the source and AOT execution lanes" (met before this slice);
+  none of them.** They are (parent §25): "the same test program passes in both
+  the source and AOT execution lanes" (met before this slice);
   "CI design covers unavailable local platforms"; and "each library owns its own
   code — no shared include bodies", met by [0006](./0006-inline-libraries.md) —
   met as a fact about the tree rather than by a gate: `rg '\(include' src test`

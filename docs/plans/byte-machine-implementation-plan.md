@@ -1430,10 +1430,13 @@ Exit criteria:
 - each library owns its own code — no shared include bodies ([decision 0006](../decisions/0006-inline-libraries.md)).
 
 > **Closed 2026-08-22 by [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md).**
-> The three deliverables above that this milestone did not ship — deterministic
-> text emission, the identifier and binary-LF proof, and CI — move to Milestone 1,
+> Three deliverables this milestone did not ship — deterministic text emission,
+> the identifier and binary-LF proof, and the CI pipeline — move to Milestone 1,
 > where each has a subject: Milestone 0 ships no emitter, and the first two are
-> properties of one. See [the close-out](./milestone-0-close-out.md).
+> properties of one. The first two left the Deliver list above with this change;
+> the pipeline never had a line of its own — the list's only CI entry, "Tier 1 CI
+> feasibility notes", is discharged rather than moved. See
+> [the close-out](./milestone-0-close-out.md).
 
 ### Milestone 1: Minimal executable machine
 

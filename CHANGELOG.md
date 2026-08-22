@@ -354,14 +354,17 @@ what this milestone delivers.
   to build; they move to Milestone 1, landing on Scope lines that already
   named them rather than becoming new obligations there. See
   [decision 0007](docs/decisions/0007-milestone-0-closes-at-the-harness.md).
-- The parent implementation plan and the milestone-0-portability-spike plan
-  are swept end to end for sentences the Chez-only cut, the inline-library
-  collapse, and this close left stale: retired two-runtime and shared-body
-  vocabulary, exit criteria and Deliver-list entries superseded by what
-  actually shipped, and each plan's own status line. Every site is corrected
-  in place or given a dated note depending on whether it names a record, an
-  instruction, or a claim that was never true — none is rewritten to agree
-  with the outcome after the fact. Both governing plans now record
+- Both governing plans are swept by grep over their whole text and then read:
+  the milestone-0-portability-spike plan end to end, all thirteen sections; the
+  parent implementation plan at §25 in full, plus §§7.1, 7.3, 9.2, 9.6, 10.1,
+  20, 22.9, 24.2, 29, and 30 — the sections the citation audit reached. What
+  either pass found is corrected: sentences the Chez-only cut, the
+  inline-library collapse, and this close left stale — retired two-runtime and
+  shared-body vocabulary, exit criteria and Deliver-list entries superseded by
+  what actually shipped, and each plan's own status line. Every site is
+  corrected in place or given a dated note depending on whether it names a
+  record, an instruction, or a claim that was never true — none is rewritten to
+  agree with the outcome after the fact. Both governing plans now record
   Milestone 0 as closed.
 - The milestone plan's Tier 1 cell arithmetic is corrected: under Chez-only
   there are four Tier 1 platform cells, not eight, and two of them are

@@ -21,14 +21,14 @@ Scope decision: **Milestone 0 only.** No byte-machine semantics (no IR, verifier
 > [chez-only-simplification.md](./chez-only-simplification.md).
 >
 > **Amended 2026-08-22:** the pledge above covers this document's *records* —
-> the §2 environment facts and the §3 findings. Its *instructions* — the §5
-> decision table, the §7 deliverable entries, the §8 work order, the §11 scope
-> bullet, the §12 exit criteria, and §13 — are corrected in place when they
-> would misdirect, each correction dated. See
-> [the Milestone 0 close-out](./milestone-0-close-out.md) §5.
+> the §1 motivation, the §2 environment facts, the §3 findings, and the §4
+> resolutions. Its *instructions* — the §5 decision table, the §7 deliverable
+> entries, the §8 work order, the §11 scope bullet, the §12 exit criteria, and
+> §13 — are corrected in place when they would misdirect, each correction dated.
+> See [the Milestone 0 close-out](./milestone-0-close-out.md) §5.
 > Where a completed instruction has become the record of what was asked, it gets
-> a dated disposition instead of a correction — §5's D5 row, §8's items 1–5, and
-> §12's criteria.
+> a dated disposition instead of a correction — §5's D5 row (a record, left as
+> written for the same reason), §8's items 1–5, and §12's criteria.
 
 > Amended 2026-08-18 by [decision 0006](../decisions/0006-inline-libraries.md):
 > the shared-body include mechanism (§5's D6, `source-directories` plus bare
@@ -37,12 +37,22 @@ Scope decision: **Milestone 0 only.** No byte-machine semantics (no IR, verifier
 > construction under repeatable flags, is now closed by absence: there is no
 > include left to resolve.
 >
-> Amended 2026-08-22: §4's O1 records the same resolution — "`source-directories`
+> **Amended 2026-08-22:** §4's O1 records the same resolution — "`source-directories`
 > + bare filename, as protium does" — and is retired alongside §5's D6.
 
 ## 1. Why this milestone exists
 
 Section 7 of the parent plan asserts a portability contract — wrapper-free shared `.scm` bodies, thin Chez `.sls` / Gambit `.sld` wrappers, singleton identity preserved across library boundaries, byte-identical deterministic emission — but nothing in this repository proves it. Milestone 1 depends on that contract holding end to end, including §9.6 item 8 ("compiling and running the consumer ahead-of-time").
+
+> **Amended 2026-08-22:** parent §7 no longer asserts this contract. §7.1's
+> wrapper-free `.scm` bodies went with
+> [decision 0006](../decisions/0006-inline-libraries.md) and the Gambit `.sld`
+> wrapper with [decision 0005](../decisions/0005-chez-only.md); §7.2 now states
+> that no Scheme file in this repository includes another. The sentence is left
+> as written because it records why this milestone was opened. What the
+> milestone proved of it is at §7 D3 and D5; what it did not is at §7 D6 and D7,
+> moved to Milestone 1 by
+> [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md).
 
 A pre-planning spike ran against the real local toolchain. Its findings are in §2. **A sibling project, `~/github/protium`, has already solved most of this milestone**; §3 records what it settled and what byte-machine should take from it.
 
@@ -124,16 +134,27 @@ Both were first answered on the basis of the §2.1 errors, and were reconfirmed 
 | D7 | Protium's build and harness patterns are mirrored into byte-machine under its own names: CMake modules, checked-in presets, a thin `Makefile` (`build`/`dev`/`test`/`test-all`/`prod`/`clean`), probe-based toolchain discovery, and the shared-body-plus-adapter harness | Proven against the same two runtimes and the same standards. Accepted cost: real duplication between two repositories, which will drift. Extracting a shared package stays open as later work once both projects' needs are known. |
 
 > **Amended 2026-08-22.** No CI exists in any commit of this repository; D2's
-> present tense above was corrected to the future. D8 moved to Milestone 1 by
+> present tense above was corrected to the future. It was corrected rather than
+> annotated because nothing is cited as resting on it:
+> [0001](../decisions/0001-toolchain-discovery.md)'s identical never-true CI
+> claim is offered as evidence for that record's own Consequences, which is what
+> makes it load-bearing and leaves it annotated in place; D2's is a table cell no
+> later sentence rests on, which makes it merely wrong.
+> D8 moved to Milestone 1 by
 > [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md).
 > Under Chez-only, Tier 1 is four cells and not eight (parent plan §7.3): D8's
 > CI covers two, and two — Linux arm64 and Windows amd64 — are deferred.
-> D5's row is left as written for the same reason: it records a decision that was
-> taken, and the dated note at §7's D5 entry states where execution lanes
-> actually closed. D1 and D7 are likewise left as written and are likewise moot
-> under [decision 0005](../decisions/0005-chez-only.md): D1 is entirely about
-> Gambit's `include` and native-linking recipe, and D7 cites "the same two
-> runtimes" — both retired along with the second runtime.
+> D5's row is left as written under the record/instruction rule: it records a
+> decision that was taken, and the dated note at §7's D5 entry states where
+> execution lanes actually closed. D1 and D7 are likewise left as written. D1 is
+> moot under [decision 0005](../decisions/0005-chez-only.md) — it is entirely
+> about Gambit's `include` and native-linking recipe. D7 is **not** moot: the
+> CMake modules, the checked-in presets, the thin `Makefile`, and the
+> probe-based discovery it decided are all shipped and in force. What is stale
+> in D7 is its rationale's "the same two runtimes", retired with the second
+> runtime, and its "shared-body-plus-adapter harness", which
+> [decision 0006](../decisions/0006-inline-libraries.md) replaced with inline
+> libraries.
 
 ## 6. Chez `include-relative` macro (recorded, not used)
 

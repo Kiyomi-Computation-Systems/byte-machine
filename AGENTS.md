@@ -71,14 +71,20 @@
   a work order, an exit criterion, a Deliver or Scope list, a deliverable
   entry, or a comment in live code saying what the code is for — gets corrected
   in place, because leaving a false one is not preserving evidence, it is
-  leaving a landmine, and what it used to say is in git. Two corollaries the
+  leaving a landmine, and what it used to say is in git. Three corollaries the
   close-out paid for: a record *document* still contains instruction sentences
   (the milestone plan's header pledges it keeps all its Gambit content, and its
   §7 deliverable entries still had to be corrected — so the pledge was scoped
-  to name which sections it covers), and a sentence that was **never true** is
+  to name which sections it covers); a sentence that was **never true** is
   a third case, annotated rather than fixed when it is load-bearing
   (docs/decisions/0001-toolchain-discovery.md's claim of a CI that has never
-  existed). The demonstrated defect: milestone-0-portability-spike.md's
+  existed); and an instruction changes category when its work closes — a
+  completed work-order item, or the exit criterion of a milestone that has just
+  closed, has become the record of what was asked, so it gets a dated
+  disposition and is never reworded to match what shipped, because rewording it
+  edits the bar to fit the result (milestone-0-portability-spike.md's §8 items
+  1–5 and its §12 criteria were dispositioned, not corrected, for exactly that
+  reason). The demonstrated defect: milestone-0-portability-spike.md's
   work-order item 6 instructed an exit — "byte-identical output across
   implementations" — that decision 0005 had made impossible, and it survived
   two further slices — the include collapse (PR #8) and the 5b remainder

@@ -175,9 +175,12 @@ Parent §25's Milestone 0 exit criteria are three:
 **Criterion 1** is met and was met before this slice, though not by every
 program: `placeholder-identity-tests`, `harness-bootstrap`, and
 `harness-self-tests` each run in `.chez.source` and `.chez.aot`;
-`placeholder-tests` has a source lane only, which the `.chez.aot` block's own
-comment at `test/CMakeLists.txt:538–546` states and justifies. Its wording is
-stale — "shared test body" is retired vocabulary — and §6.1 row P12 corrects it.
+`placeholder-tests` has a source lane only. The `.chez.aot` block's own comment
+at `test/CMakeLists.txt:537–545` names the three programs that block compiles —
+bootstrap, self, and placeholder-identity — and justifies the third's inclusion;
+it does not name `placeholder-tests`, so the exclusion is stated here and
+nowhere else. Criterion 1's own wording is stale — "shared test body" is retired
+vocabulary — and §6.1 row P12 corrects it.
 
 **Criterion 3** is met. The underlying fact is verifiable — `rg '\(include' src
 test` returns zero hits — but the 0006 gate is a runnable `rg` acceptance check
@@ -364,7 +367,7 @@ Named so a reader can tell these were read rather than missed.
 - **The spike §7 D3 placeholder libraries.** Spike §11 assigns their deletion to
   Milestone 1.
 - **The `o1` mode token.** It carries an in-code rationale for its own retention
-  at `cmake/ByteMachineTesting.cmake:46–50`.
+  at `cmake/ByteMachineTesting.cmake:43–48`.
 - **`CHANGELOG.md`'s `### Added`, `### Changed`, `### Removed`, and `### Fixed`
   entries** — 28 mentions of Gambit among them. A changelog entry is a record of
   a change that happened; sweeping it would rewrite history rather than correct
@@ -506,9 +509,10 @@ Everything this slice touches. Nothing else.
 | --- | --- |
 | `docs/plans/milestone-0-close-out.md` | this document (new) |
 | `docs/plans/milestone-0-ci-feasibility.md` | new — §7 |
+| `docs/plans/milestone-0-close-out-implementation-plan.md` | new — this design's execution plan |
 | `docs/decisions/0007-milestone-0-closes-at-the-harness.md` | new — §8.1 |
 | `docs/plans/byte-machine-implementation-plan.md` | rows P1–P14 |
-| `docs/plans/milestone-0-portability-spike.md` | rows S1–S17 |
+| `docs/plans/milestone-0-portability-spike.md` | rows S1–S21 |
 | `docs/decisions/0001-toolchain-discovery.md` | row R1 |
 | `cmake/ByteMachineTesting.cmake` | row L1 — one comment |
 | `test/CMakeLists.txt` | row L2 — one comment |
@@ -539,9 +543,17 @@ deletion of the spike §7 D3 placeholders.
   ```bash
   rg -n -i "gambit|\.sld|both implementations|both runtimes|two runtimes|four (execution )?lanes|shared (body|test body|grammar body)|owner wrapper|source-directories|8-cell|runs in CI" docs/plans/byte-machine-implementation-plan.md docs/plans/milestone-0-portability-spike.md cmake test/CMakeLists.txt AGENTS.md
   ```
-  Hits inside spike §2, spike §3, spike §5's D6 row, spike §6, AGENTS.md's own
-  new bullet, and any blockquote beginning "Amended"/"Moved"/"Retired"/
-  "Dispositioned" are expected and are not failures.
+  A hit is expected, and not a failure, when it is inside spike §2, spike §3,
+  spike §5's D6 row, or spike §6; inside any blockquote beginning
+  "Amended"/"Moved"/"Retired"/"Dispositioned"; or immediately governed by a
+  dated block that names it — spike §1's opening sentence, §4's O1 (named in
+  the 0006 header note), §5's rows D1/D2/D5/D7, §7's D2 entry, §8's items 1–5,
+  §9's questions, and §12's criteria. Two further classes are expected:
+  AGENTS.md's bullets quoting the defects that earned them, and a live comment
+  that names a retired mechanism in order to record that it is gone
+  (`test/CMakeLists.txt`'s placeholder-lane block). "Inside a blockquote" alone
+  is the wrong test: most of the surviving vocabulary sits in the very
+  instructions the dated blocks disposition, one line above them.
   The gate is a grep, so it is an inventory check, not a vocabulary check — the
   slice also requires a reading pass over the two governing documents end to end,
   and the implementer records that it happened.
