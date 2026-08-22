@@ -1443,8 +1443,8 @@ Exit criteria:
 > present". Those two lines already exist and now carry Milestone 0's obligations
 > too. D8's CI pipeline has no Scope line of its own and rides D6's cross-cell
 > axis, because both need the same Tier 1 cells: Milestone 1 stands the pipeline
-> up over the emitter, and Milestone 9 — which already owns "complete Tier 1 CI"
-> and "source generation equality across platform cells" (§25:1602–1603) —
+> up over the emitter, and Milestone 9 below — whose Scope already owns "complete
+> Tier 1 CI" and "source generation equality across platform cells" —
 > completes it. "Complete" presupposes something to complete.
 
 Scope:

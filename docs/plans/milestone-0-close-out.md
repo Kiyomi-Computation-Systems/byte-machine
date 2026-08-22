@@ -148,9 +148,9 @@ arrival there.
 
   **D8 is the one of the three with no line already waiting for it.** Milestone
   1's Scope has no CI entry, so D8's pipeline rides D6's cross-cell axis rather
-  than a line of its own. And parent §25's **Milestone 9** already owns "complete
-  Tier 1 CI" and "source generation equality across platform cells"
-  (§25:1602–1603) — the same two obligations. The division that makes both true:
+  than a line of its own. And parent §25's **Milestone 9** Scope already owns
+  "complete Tier 1 CI" and "source generation equality across platform cells" —
+  the same two obligations. The division that makes both true:
   Milestone 1 stands the pipeline up over the emitter, on the cells it can get;
   Milestone 9 completes the Tier 1 matrix. "Complete" presupposes something to
   complete, which is why the pipeline cannot wait for Milestone 9.
@@ -275,7 +275,7 @@ Dated notes use the form spike §7 D5 already models: a blockquote beginning
 | **P11** | §25:1427 "documented Windows path and LF behavior" | Append **"(discharged by [the CI feasibility note](./milestone-0-ci-feasibility.md))"**. |
 | **P12** | §25:1431 exit criterion 1, "the same shared test body passes in both the source and AOT execution lanes" | **"the same test program passes in both the source and AOT execution lanes"** — pure vocabulary repair. |
 | **P13** | §25, after Milestone 0's exit criteria | **Add the close note** (category 4 — the milestone is not closed until the governing document says so): <br>**"> Closed 2026-08-22 by [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md). D6, D7, and D8 move to Milestone 1; see [the close-out](./milestone-0-close-out.md)."** |
-| **P14** | §25, at the head of Milestone 1's Scope list | **Add the arrival note**, so the move has a destination record: <br>**"> Amended 2026-08-22 by [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md): Milestone 0's D6, D7, and D8 land here. D6 on 'deterministic output'; D7 on 'symbolic name resolution' and 'generated-name safety for every construct present' — those two lines already exist and now carry Milestone 0's obligations too. D8's CI pipeline has no Scope line of its own and rides D6's cross-cell axis, because both need the same Tier 1 cells: Milestone 1 stands the pipeline up over the emitter, and Milestone 9 — which already owns 'complete Tier 1 CI' and 'source generation equality across platform cells' (§25:1602-1603) — completes it. 'Complete' presupposes something to complete."** |
+| **P14** | §25, at the head of Milestone 1's Scope list | **Add the arrival note**, so the move has a destination record: <br>**"> Amended 2026-08-22 by [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md): Milestone 0's D6, D7, and D8 land here. D6 on 'deterministic output'; D7 on 'symbolic name resolution' and 'generated-name safety for every construct present' — those two lines already exist and now carry Milestone 0's obligations too. D8's CI pipeline has no Scope line of its own and rides D6's cross-cell axis, because both need the same Tier 1 cells: Milestone 1 stands the pipeline up over the emitter, and Milestone 9 below — whose Scope already owns 'complete Tier 1 CI' and 'source generation equality across platform cells' — completes it. 'Complete' presupposes something to complete."** |
 
 ### 6.2 `docs/plans/milestone-0-portability-spike.md`
 

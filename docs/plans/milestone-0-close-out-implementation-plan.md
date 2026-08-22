@@ -14,6 +14,7 @@
 
 - **Prose only.** No new library, no new lane, no new mutation, no new exit status, no CI, no deletion of the spike §7 D3 placeholders. The only non-prose edits in the entire plan are two CMake comments (Task 5, rows L1 and L2).
 - **Match on text, never on line number.** Line numbers shift as earlier rows land within the same file. Every edit below gives a unique FIND string.
+- **Never write a line citation into text inserted in the same file it cites.** An insertion shifts the lines below it, so the citation is stale the moment it lands and no grep or link check catches it. Cite the section by name for intra-document references. (Row P14 shipped this defect once and it was corrected; Milestone 9's Scope lines moved from :1602–1603 to :1615–1616 under this task's own edits.)
 - **Dated notes take one of four forms**, matching spike §7 D5's existing note (`milestone-0-portability-spike.md:160`): a blockquote beginning `> **Amended YYYY-MM-DD by …`, `> **Moved YYYY-MM-DD by …`, `> **Retired YYYY-MM-DD …`, or `> **Dispositioned YYYY-MM-DD …`. The date is **2026-08-22** throughout.
 - **Records are never edited.** Spike §2's environment-facts table (including its Gambit rows and its "1 of 8" count), spike §5's D6 row, spike §6, `CHANGELOG.md`'s `### Added` / `### Changed` / `### Removed` / `### Fixed` entries, and `docs/decisions/` bodies other than the annotation in row R1. If a step seems to require editing one of these, stop and report it.
 - **`CHANGELOG.md` has 28 historical Gambit mentions in its `### Added` and `### Removed` sections.** They are records of what shipped and what was cut. Do not touch them. Only the preamble (row C1) and new `[Unreleased]` entries (row C2) are in scope.
@@ -279,8 +280,8 @@ Immediately after the line `### Milestone 1: Minimal executable machine` and bef
 > present". Those two lines already exist and now carry Milestone 0's obligations
 > too. D8's CI pipeline has no Scope line of its own and rides D6's cross-cell
 > axis, because both need the same Tier 1 cells: Milestone 1 stands the pipeline
-> up over the emitter, and Milestone 9 — which already owns "complete Tier 1 CI"
-> and "source generation equality across platform cells" (§25:1602–1603) —
+> up over the emitter, and Milestone 9 below — whose Scope already owns "complete
+> Tier 1 CI" and "source generation equality across platform cells" —
 > completes it. "Complete" presupposes something to complete.
 ```
 
