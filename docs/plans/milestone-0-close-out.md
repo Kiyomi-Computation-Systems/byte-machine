@@ -2,6 +2,11 @@
 
 Status: proposed
 Date: 2026-08-22
+Reading note: **this document describes the tree at `ceb0894`**, the branch's merge
+base. Where it quotes a sentence it is about to change — parent §25's exit criteria
+in §4, and every FIND string in §6 — that is the pre-sweep text, not what a reader
+will find at HEAD. The decision record it produces, 0007, discloses the same split
+in its own dated note.
 Parent plan: [`byte-machine-implementation-plan.md`](./byte-machine-implementation-plan.md) §25 Milestone 0
 Governing plan: [`milestone-0-portability-spike.md`](./milestone-0-portability-spike.md) — this slice replaces its §8 work-order items 6 and 7
 Decision record this slice produces: [`docs/decisions/0007-milestone-0-closes-at-the-harness.md`](../decisions/0007-milestone-0-closes-at-the-harness.md)
