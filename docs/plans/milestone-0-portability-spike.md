@@ -122,6 +122,9 @@ Both were first answered on the basis of the §2.1 errors, and were reconfirmed 
 > [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md).
 > Under Chez-only, Tier 1 is four cells and not eight (parent plan §7.3): D8's
 > CI covers two, and two — Linux arm64 and Windows amd64 — are deferred.
+> D5's row is left as written for the same reason: it records a decision that was
+> taken, and the dated note at §7's D5 entry states where execution lanes
+> actually closed.
 
 ## 6. Chez `include-relative` macro (recorded, not used)
 
@@ -247,6 +250,16 @@ Ordered so each slice is independently verifiable, TDD-first per §22.1.
 4. **Cross-library identity smoke path** (D3). Exit: tagged-value recognition and singleton `eq?` identity hold on both implementations.
 5. **Execution lanes** (D5). Exit: all four lanes green over the same shared body, agreeing on a content fingerprint.
 6. **Milestone 0 close-out** (D9 completed; D6, D7, D8 moved to Milestone 1). Exit: both governing documents record the milestone as closed, the three moved deliverables land on named Milestone 1 Scope lines, and no instruction outside a dated record names a retired concept. See [the close-out](./milestone-0-close-out.md).
+
+> **Dispositioned 2026-08-22 at close ([decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md)).**
+> Items 1 through 5 are delivered, and their exits are left exactly as written
+> for the reason §12's block gives: a completed instruction is the record of what
+> was asked, and rewording it to match what shipped edits the bar. Each was met
+> under the contract of its day — two runtimes, two wrappers, four lanes — and
+> what survives decisions 0005 and 0006 is stated at the §7 deliverable entries
+> and in §12's dispositions, not here. Item 6 replaces the original items 6 and
+> 7; [the close-out](./milestone-0-close-out.md) §1 says why the original item 6
+> could not be executed.
 
 ## 9. Questions this milestone must answer
 
