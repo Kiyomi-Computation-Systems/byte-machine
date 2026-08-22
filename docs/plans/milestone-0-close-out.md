@@ -246,8 +246,10 @@ states what was achieved without touching what was asked.
 
 This rule is added to AGENTS.md as a project standard. Per that file's own
 convention, the bullet carries a demonstrated defect rather than a statistic —
-and this slice supplies one: spike §8 item 6 instructed an impossible exit for
-four days and consumed a planning cycle before anyone read it against the tree.
+and this slice supplies one: spike §8 item 6 instructed an impossible exit that
+survived two further slices — the include collapse (PR #8) and the 5b remainder
+(PR #10), each with its own plan, review, and merge — before anyone read it
+against the tree.
 
 ## 6. The sweep
 

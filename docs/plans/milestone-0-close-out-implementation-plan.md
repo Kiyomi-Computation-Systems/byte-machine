@@ -720,8 +720,9 @@ Insert after the bullet ending `(SchemeMutationSuite passes 30/31).` and before 
   existed). The demonstrated defect: milestone-0-portability-spike.md's
   work-order item 6 instructed an exit — "byte-identical output across
   implementations" — that decision 0005 had made impossible, and it survived
-  two slices and consumed a planning cycle before anyone read it against the
-  tree. Status lines are instructions too: a slice that closes a milestone is
+survived two further slices — the include collapse (PR #8) and the 5b
+  remainder (PR #10), each with its own plan, review, and merge — before anyone
+  read it against the tree. Status lines are instructions too: a slice that closes a milestone is
   not done until the milestone plan, the parent plan, and CHANGELOG.md all say
   it closed.
 ```
