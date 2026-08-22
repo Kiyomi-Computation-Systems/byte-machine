@@ -279,9 +279,9 @@ other end: the full path is the root, followed by the library-name components
 "prefixed by slashes", with the extension appended.
 
 That `/` is Chez joining *library-name components*, not the host joining *search
-paths*. It is fixed by the library name, it is written `/` in both passages just
-cited — the flat statement at `:541–543` and the worked example at `:576–577` —
-and it is what makes
+paths*. It is fixed by the library name — described as "slashes" in the flat
+statement at `:541–543`, which uses the word and not the glyph, and written
+literally as `/` in the worked example at `:576–577` — and it is what makes
 `/`-delimited roots the portable form: a root written with forward slashes
 concatenates correctly with a partial name Chez has already built with forward
 slashes. That the character is the same on Windows is **uncited**: the manual
