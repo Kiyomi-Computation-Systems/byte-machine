@@ -64,6 +64,27 @@
   mechanism — it is exactly what makes an exit-path constant witnessable,
   because the mutation stales its own manifest and drives the run down the
   failure path whose constant it changed (SchemeMutationSuite passes 30/31).
+* A stale sentence is corrected or annotated according to what it does, not
+  which file it sits in. A **record** — a measurement, a finding, a decision
+  record's Context — gets an amendment note, because a record edited to agree
+  with a later decision stops being evidence of anything. An **instruction** —
+  a work order, an exit criterion, a Deliver or Scope list, a deliverable
+  entry, or a comment in live code saying what the code is for — gets corrected
+  in place, because leaving a false one is not preserving evidence, it is
+  leaving a landmine, and what it used to say is in git. Two corollaries the
+  close-out paid for: a record *document* still contains instruction sentences
+  (the milestone plan's header pledges it keeps all its Gambit content, and its
+  §7 deliverable entries still had to be corrected — so the pledge was scoped
+  to name which sections it covers), and a sentence that was **never true** is
+  a third case, annotated rather than fixed when it is load-bearing
+  (docs/decisions/0001-toolchain-discovery.md's claim of a CI that has never
+  existed). The demonstrated defect: milestone-0-portability-spike.md's
+  work-order item 6 instructed an exit — "byte-identical output across
+  implementations" — that decision 0005 had made impossible, and it survived
+  two slices and consumed a planning cycle before anyone read it against the
+  tree. Status lines are instructions too: a slice that closes a milestone is
+  not done until the milestone plan, the parent plan, and CHANGELOG.md all say
+  it closed.
 * Libraries are R6RS `.sls`; libraries and programs contain their own code —
   no shared include bodies (docs/decisions/0006-inline-libraries.md). R6RS
   forbids assigning an exported variable — reach mutable state through

@@ -273,6 +273,18 @@ what this milestone delivers.
   1 pass / 72 mutations and the Scheme suite at 31 passes / 68 mutations,
   each asserting its own totals; the pull-request and release selections
   stand at 37 lanes and `no-scheme` at 8.
+- The Milestone 0 close-out design
+  (`docs/plans/milestone-0-close-out.md`), stating what the milestone
+  delivered against its own deliverable list, why three of its deliverables
+  could not be executed as originally specified, and where each lands in
+  Milestone 1 instead.
+- A Tier 1 CI feasibility note (`docs/plans/milestone-0-ci-feasibility.md`),
+  discharging Milestone 0's second exit criterion with a design covering the
+  two Tier 1 platform cells this host cannot run — not a running pipeline.
+- [Decision 0007](docs/decisions/0007-milestone-0-closes-at-the-harness.md),
+  recording that Milestone 0 closes at the harness, and answering the parent
+  plan's four remaining hard questions with each answer's evidence level
+  stated rather than assumed.
 
 ### Changed
 
@@ -336,6 +348,39 @@ what this milestone delivers.
   formerly `SHARED_BODIES`) is its program plus every library it loads, so
   every byte of Scheme a lane runs is fingerprinted — wrapper text never was,
   before. See [decision 0006](docs/decisions/0006-inline-libraries.md).
+- Milestone 0 (portability and harness spike) closes. Its three undelivered
+  deliverables — a determinism proof, an identifier/LF proof, and a CI
+  pipeline — are properties of an emitter this milestone was never scoped
+  to build; they move to Milestone 1, landing on Scope lines that already
+  named them rather than becoming new obligations there. See
+  [decision 0007](docs/decisions/0007-milestone-0-closes-at-the-harness.md).
+- The parent implementation plan and the milestone-0-portability-spike plan
+  are swept end to end for sentences the Chez-only cut, the inline-library
+  collapse, and this close left stale: retired two-runtime and shared-body
+  vocabulary, exit criteria and Deliver-list entries superseded by what
+  actually shipped, and each plan's own status line. Every site is corrected
+  in place or given a dated note depending on whether it names a record, an
+  instruction, or a claim that was never true — none is rewritten to agree
+  with the outcome after the fact. Both governing plans now record
+  Milestone 0 as closed.
+- The milestone plan's Tier 1 cell arithmetic is corrected: under Chez-only
+  there are four Tier 1 platform cells, not eight, and two of them are
+  deferred, not four. The old count dated from when the matrix still
+  multiplied four platforms by two runtimes.
+- The `determinism` mutation-suite layer comment now says byte-identical
+  emission is claimed "across runs, lanes, and platform cells" rather than
+  "across runs and runtimes" — there is no longer a second runtime for that
+  claim to be about, and the entry stays because Milestone 1's determinism
+  lanes will use it.
+- The comment above the `cmake-mutation` lane, which claimed the lane "runs
+  in CI", now says it runs under `ctest`. No CI has existed in any commit of
+  this repository, and the old wording sat a few lines from the exact lane
+  [decision 0001](docs/decisions/0001-toolchain-discovery.md) cites as
+  evidence of one.
+- [Decision 0001](docs/decisions/0001-toolchain-discovery.md) gains a dated
+  annotation on its claim that a lane "runs in CI": that sentence was never
+  true, and it is annotated rather than silently corrected because the
+  record cites it as evidence for its own Consequences.
 
 ### Removed
 
@@ -388,6 +433,16 @@ what this milestone delivers.
   0003 are superseded by 0006. The harness stands at 7,724 lines against the
   8,327-line pre-collapse baseline (`src/`: 87 against 110), re-measured at
   the branch head after the final review's own prose fixes.
+- Three bullets leave Milestone 0's Deliver list. "Shared hello-library body
+  loaded through its owner wrapper" is retired along with the shared-body
+  include mechanism itself — see
+  [decision 0006](docs/decisions/0006-inline-libraries.md). "Deterministic
+  text emission proof across the Chez source and AOT lanes" and "identifier
+  repertoire and binary LF emission proof across available operating
+  systems" are not dropped: both move to Milestone 1, landing on Scope
+  lines that already named them ("deterministic output"; "symbolic name
+  resolution" and "generated-name safety for every construct present"). See
+  [decision 0007](docs/decisions/0007-milestone-0-closes-at-the-harness.md).
 
 ### Fixed
 
