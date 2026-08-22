@@ -28,12 +28,13 @@ removed it. There is no longer anything for the output to be identical *to*, so
 item 6's exit condition is not unmet — it is unsatisfiable as written.
 
 The third is honest, and this host cannot discharge it either. Parent §7.3:195
-names four Tier 1 cells — Chez on Linux amd64, Linux arm64, macOS arm64, and
-Windows amd64, each in both source and AOT execution. Exactly one of the four
-exists locally (macOS arm64; the Measurements host below). A second, Linux
-amd64, arrives with spike §7 D8, and the remaining two are D8's own deferred
-cells. A cross-platform claim needs cells, and the cells arrive with a
-deliverable this milestone has not delivered.
+names four Tier 1 platforms — Chez on Linux amd64, Linux arm64, macOS arm64, and
+Windows amd64 — each required in both source and AOT execution. One platform
+exists locally, in both lanes (macOS arm64; the Measurements host below). A
+second, Linux amd64, arrives with spike §7 D8's pipeline; the remaining two
+platforms, in both lanes each, are the four deferred cells D8's written
+feasibility notes are about (spike:189). A cross-platform claim needs cells, and
+the cells arrive with a deliverable this milestone has not delivered.
 
 The fourth — the parent plan's weaker two-lane formulation — is the substitution
 0005 already refused, one deliverable over. Writing of a `chez.source`/`chez.aot`
@@ -59,21 +60,31 @@ contract now is.
 
 ## Measurements
 
-Measured 2026-08-22 against the shipped tree at commit `bca1422` on branch
-`docs/m0-close-out`, on Darwin 25.5.0 arm64, Chez 10.4.1. AGENTS.md requires a
-number in a decision record to have been re-taken against the shipped artifact;
-these were re-taken here rather than copied from the close-out design, whose
-`docs/plans` figure predates that directory gaining this slice's own two
-documents.
+Measured 2026-08-22 against the shipped tree at commit `7cd6542` — the commit
+this record's own text was last written against — on branch `docs/m0-close-out`,
+on Darwin 25.5.0 arm64, Chez 10.4.1. AGENTS.md requires a number in a decision
+record to have been re-taken against the shipped artifact; these were re-taken
+here rather than copied from the close-out design, whose `docs/plans` figure
+predates that directory gaining this slice's own two documents.
 
 - **The apparatus outweighs the product it is built around by two orders of
   magnitude.** [0005](./0005-chez-only.md) recorded the same observation on
-  2026-08-18 at 9,858 harness lines against 147 product lines. Only the product
-  side of that pair is a like-for-like comparison with what follows — 0005's
-  numerator was `find cmake test/support -type f`, a wider set than the four
-  commands below — so the two ratios are not subtracted from each other here.
+  2026-08-18 at 9,858 harness lines against 147 product lines (0005:41–44).
+  Re-run at this commit, 0005's own two commands give **8,460 against 87** —
+  97:1, where 0005 measured 67:1. The gap widened, and not because the harness
+  grew: it shrank by 1,398 lines when the Chez-only cut landed, and the product
+  shrank faster. The four commands below them are this record's own set, and
+  their total is not subtracted from 0005's — but the difference is not a wider
+  net: both sets are 29 files and 28 are shared, and 0005's includes
+  `cmake/chez-probe.ss` (13 lines) where this one includes `test/CMakeLists.txt`
+  (729), so this set is 716 lines *larger*.
 
   ```
+  $ find cmake test/support -type f | xargs wc -l | tail -1
+      8460 total
+  $ find src -type f | xargs wc -l | tail -1
+        87 total
+
   $ wc -l src/byte-machine/*.sls | tail -1
         87 total
   $ cat cmake/*.cmake test/support/cmake/*.cmake test/CMakeLists.txt | wc -l
@@ -82,19 +93,20 @@ documents.
         test/support/harness/self/*.sps test/support/launchers/*.ss | wc -l
       2348
   $ cat docs/plans/*.md | wc -l
-     19988
+     20020
   $ git rev-parse --short HEAD
-  bca1422
+  7cd6542
   ```
 
-  9,176 lines of build layer, harness, and launchers, and 19,988 lines of plans,
+  9,176 lines of build layer, harness, and launchers, and 20,020 lines of plans,
   against 87 lines of product.
 
 - **All 87 lines of `src/` are placeholder.** `src/byte-machine/` contains
   exactly `placeholder.sls` and `placeholder-consumer.sls` — spike §7 D3's
-  tagged value and the second wrapper that recognises it — which spike §11
-  already schedules for deletion in Milestone 1. No byte-machine semantics ship,
-  by spike:6.
+  tagged value and the second library that recognises it. Spike §11 schedules
+  the tagged value for deletion in Milestone 1 and names only it (spike:230);
+  the library that recognises it goes with its subject, but the spike does not
+  say so. No byte-machine semantics ship, by spike:6.
 
 These numbers are recorded because they are what the close is weighed against,
 not as a complaint about what came before. Every layer above `src/` was earned:
@@ -105,10 +117,15 @@ product — by construction, because it has no product to be about.
 
 ## Decision
 
-1. **Milestone 0 closes.** Its work order ends at item 5 as delivered; spike §8
-   items 6 and 7 are not executed as written. What Milestone 0 shipped is the
-   harness, the build layer, the two Chez execution lanes, and the provenance
-   discipline around them — the spike's stated purpose — and it stops there.
+1. **Milestone 0 closes.** Its work order ends at item 5 as delivered. Spike §8
+   item 6 (D6, D7) is not executed as written; item 7 (D8, D9 — spike:202)
+   splits. Its D9 half — decision records in `docs/decisions/` and an initial
+   `CHANGELOG.md` (spike:190) — **is** delivered: seven records and a
+   `CHANGELOG.md` ship, this record among them. Its D8 half is what point 4
+   below moves. What Milestone 0 shipped is the harness, the build layer, the
+   two Chez execution lanes, the provenance discipline around them, and the
+   decision series that records why each exists — the spike's stated purpose —
+   and it stops there.
 
 2. **Spike §7 D6 moves to parent §25's Milestone 1 Scope line "deterministic
    output"** (parent §25:1447). The emitter Milestone 1 builds is the writer
@@ -121,15 +138,26 @@ product — by construction, because it has no product to be about.
    against; the binary-LF half rides with the emitter's output port.
 
 4. **Spike §7 D8's CI pipeline moves to Milestone 1 alongside D6's cross-cell
-   axis, because both need the same four cells.** Splitting them is what made
-   slice 6 unresolvable, so they land together or not at all. D8's other half,
-   the written feasibility notes, is discharged here by
-   [the CI feasibility note](../plans/milestone-0-ci-feasibility.md).
+   axis, because both need the same four Tier 1 platforms.** Splitting them is
+   what made slice 6 unresolvable, so they land together or not at all. D8's
+   other half, the written feasibility notes, is discharged by
+   [the CI feasibility note](../plans/milestone-0-ci-feasibility.md), which this
+   slice ships.
 
-5. **Milestone 1 has no Deliver list — it has a Scope list, and all three
-   landing lines already exist in it.** Nothing is added to Milestone 1 by this
-   record. Three deliverables stop being owed by a milestone that cannot produce
-   them and start being owed by the milestone that already asks for them.
+5. **Milestone 1 has no Deliver list — it has a Scope list, and two of the three
+   land on lines already written in it.** D6 and D7 stop being owed by a
+   milestone that cannot produce them and start being owed by the milestone that
+   already asks for them; nothing is added to Milestone 1 for either. D8's
+   pipeline is the exception: Milestone 1's Scope has no CI entry, so the
+   pipeline rides D6's cross-cell axis rather than a line of its own. Parent
+   §25's **Milestone 9** already carries "complete Tier 1 CI" and "source
+   generation equality across platform cells" (§25:1602–1603) — the same two
+   obligations. The division that makes both true: Milestone 1 stands the
+   pipeline up over the emitter, on the cells it can get, and Milestone 9
+   completes the Tier 1 matrix. "Complete" presupposes something to complete,
+   which is why the pipeline cannot wait for Milestone 9. It is the one
+   obligation this record places on Milestone 1 that Milestone 1's Scope does not
+   already carry.
 
 ## Parent plan §30 questions 1–4
 
@@ -140,10 +168,11 @@ requirements. Each answer below states its evidence level, because "answered" an
 "answered by a measurement" are not the same claim.
 
 1. **Minimum Chez release.** Pinned at 10.4.1 — verified, and the only version
-   this project has ever run on. The *floor* is unestablished: establishing it
-   needs an older release under CI, which [0001](./0001-toolchain-discovery.md)'s
-   Consequences already say ("lowering these pins is that question's answer and
-   needs CI evidence from the older release"). Evidence: the probe's version gate
+   any measurement in this repository records. The *floor* is unestablished:
+   establishing it needs an older release under CI, which
+   [0001](./0001-toolchain-discovery.md)'s Consequences already say ("lowering
+   these pins is that question's answer and needs CI evidence from the older
+   release"). Evidence: the probe's version gate
    (`cmake/ByteMachineChez.cmake:46`, enforced at :139–142), which is executable
    and mutation-covered — `MutationSuite.cmake` carries "chez: version floor
    removed" and "chez: absent version floor no longer refused, so the guard fails
@@ -172,10 +201,15 @@ requirements. Each answer below states its evidence level, because "answered" an
    counts as an absolute pathname — and that one is unmeasured and rides with the
    Windows cell.
 
-4. **Portable condition construction exposed by the wrappers.** Closed by
-   [0005](./0005-chez-only.md): one implementation, plain R6RS conditions, and no
-   portability layer left to expose anything else. A **closure by decision**, not
-   a deferral — the wrappers the question asks about no longer exist.
+4. **Condition construction available to consumers** (parent §30:1723). Closed
+   by [0005](./0005-chez-only.md): one implementation, plain R6RS conditions,
+   and no portability layer left to expose anything else. Parent §30 already
+   carries its own annotation on this one — "*(Moot: it is plain R6RS
+   `condition`/`raise`; no wrapper layer exists to expose anything else.)*" — so
+   this record confirms that annotation rather than establishing it. Spike
+   §9:211 restates the question as "Portable condition construction exposed by
+   the wrappers", and the layer that phrasing names is the one 0005 removed.
+   A **closure by decision**, not a deferral.
 
 Questions 5–7 are the spike's own "deferred, with rationale" cases (spike:216);
 question 6 — identifier length and source-size limits in supported compilers —
@@ -187,14 +221,16 @@ nothing.
 
 - **What closing buys.** The milestone stops being open on three items that none
   of its own exit criteria demand, and the tree stops instructing the next reader
-  to satisfy an exit condition that no longer has a subject. spike §8 item 6 sat
-  there for four days and consumed a planning cycle before it was read against
-  the tree; leaving it there costs that again.
+  to satisfy an exit condition that no longer has a subject. Spike §8 item 6 has
+  been unsatisfiable since [0005](./0005-chez-only.md) removed the second
+  implementation — four days, 0005's `Date: 2026-08-18` (0005:3) to this
+  record's 2026-08-22 — and it consumed a planning cycle before it was read
+  against the tree; leaving it there costs that again.
 
 - **What it defers, by name.** Deterministic byte-identical emission (spike §7
   D6); the identifier repertoire and binary-LF proofs (spike §7 D7); the running
   CI pipeline and with it the Linux amd64, Linux arm64, and Windows amd64 Tier 1
-  cells (spike §7 D8's pipeline half); the actual Chez version floor (§30
+  platforms (spike §7 D8's pipeline half); the actual Chez version floor (§30
   question 1); per-platform source and AOT command variance (question 2); Windows
   path form (question 3's remainder); and identifier and source-size limits
   (question 6). None is dropped; each is named above with the Milestone 1 line or
@@ -214,9 +250,12 @@ nothing.
   none of them.** They are (parent §25:1431–1433): "the same shared test body
   passes in both the source and AOT execution lanes" (met before this slice);
   "CI design covers unavailable local platforms"; and "each library owns its own
-  code — no shared include bodies", met by [0006](./0006-inline-libraries.md).
-  The second is D8's written-feasibility-notes half, and it is **discharged
-  here** by
-  [the CI feasibility note](../plans/milestone-0-ci-feasibility.md) — a design
-  covering the unavailable cells, which is what the criterion asks for, and not a
-  pipeline, which is what moves.
+  code — no shared include bodies", met by [0006](./0006-inline-libraries.md) —
+  met as a fact about the tree rather than by a gate: `rg '\(include' src test`
+  returns no hits at this commit, but 0006's check is a runnable acceptance
+  check, **not a registered lane**, so nothing in `ctest` fails if an include
+  reappears. The second criterion is D8's written-feasibility-notes half, and it
+  **is discharged by** [the CI feasibility
+  note](../plans/milestone-0-ci-feasibility.md) — a design covering the
+  unavailable cells, which is what the criterion asks for, and not a pipeline,
+  which is what moves.
