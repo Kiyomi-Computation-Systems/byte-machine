@@ -299,6 +299,8 @@ Dated notes use the form spike §7 D5 already models: a blockquote beginning
 | **S16** | §12, all nine exit criteria | **Do not rewrite (see §5).** Add one dated disposition block after the list, reproduced in §6.5 below. |
 | **S18** | §8 work-order items 1–5, which still name two runtimes, two wrappers, and four lanes | **Do not rewrite.** Completed instructions are the record of what was asked (§5). Dated disposition block beneath item 6, in §6.5's form. |
 | **S19** | §5 decision table's **D5** row, "protium's four-lane model, plus byte-machine's own cross-implementation generated-source comparison" | **Do not rewrite.** Same reason; two lines appended to row S3's dated block under the §5 table, pointing at §7 D5's own note for where lanes actually closed. |
+| **S20** | Row S2's own carve-out, which promises in-place correction for §5, §8, and §12 | Append one sentence: where a completed instruction has become the record of what was asked, it gets a dated disposition instead. Rows S16, S18, and S19 are those cases. |
+| **S21** | §13's second sentence, "→ the §9.6 examples" | **"→ the §9.6 example"** — parent §9.6 specifies "one executable Chez example program". Row S17 made the first sentence singular and left this one. |
 | **S17** | §13, "and two cross-implementation examples" | **"and the parent plan's §9.6 example"** — a forward instruction to Milestone 1 naming a retired contract. |
 
 ### 6.3 `docs/decisions/`

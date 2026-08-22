@@ -452,10 +452,14 @@ exactly as §12's criteria do. Insert directly beneath work-order item 6:
 ```markdown
 > **Dispositioned 2026-08-22 at close ([decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md)).**
 > Items 1 through 5 are delivered, and their exits are left exactly as written
-> for the reason §12's block gives: a completed instruction is the record of what
-> was asked, and rewording it to match what shipped edits the bar. Each was met
-> under the contract of its day — two runtimes, two wrappers, four lanes — and
-> what survives decisions 0005 and 0006 is stated at the §7 deliverable entries
+> for the reason [the close-out](./milestone-0-close-out.md) §5 gives: a completed
+> instruction is the record of what was asked, and rewording it to match what
+> shipped edits the bar. Items 1 through 4 were met under the contract of their
+> day — two runtimes, two wrappers — and item 5 closed at **two** of the four
+> lanes it names, per §7 D5's dated note and §12's disposition (4): the two Gambit
+> compiled lanes were cancelled with slice 5c before they existed, and `chez.aot`
+> landed after Gambit was already gone, so the four were never green together.
+> What survives decisions 0005 and 0006 is stated at the §7 deliverable entries
 > and in §12's dispositions, not here. Item 6 replaces the original items 6 and
 > 7; [the close-out](./milestone-0-close-out.md) §1 says why the original item 6
 > could not be executed.
@@ -472,6 +476,29 @@ treatment. Append these lines to the dated block Step 3 added under the §5 tabl
 > taken, and the dated note at §7's D5 entry states where execution lanes
 > actually closed.
 ```
+
+- [ ] **Step 5d: Widen row S2's carve-out (row S20)**
+
+Row S2's amendment tells the reader that §5's decision table, §8's work order,
+and §12's exit criteria "are corrected in place when they would misdirect" —
+but rows S16, S18, and S19 deliberately do not correct those three in place.
+Append one sentence to the S2 blockquote:
+
+```markdown
+> Where a completed instruction has become the record of what was asked, it gets
+> a dated disposition instead of a correction — §5's D5 row, §8's items 1–5, and
+> §12's criteria.
+```
+
+- [ ] **Step 5e: Fix §13's residual plural (row S21)**
+
+Row S17 made §13's first sentence singular, but the same sentence pair still ends
+"→ emitter and runtime → the §9.6 examples". Parent §9.6 specifies "one
+executable Chez example program".
+
+| Row | FIND | REPLACE |
+| --- | --- | --- |
+| S21 | `→ the §9.6 examples.` | `→ the §9.6 example.` |
 
 - [ ] **Step 6: Add the §9 questions disposition block (row S14)**
 
