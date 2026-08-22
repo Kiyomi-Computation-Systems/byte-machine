@@ -18,6 +18,7 @@
 - **Records are never edited.** Spike §2's environment-facts table (including its Gambit rows and its "1 of 8" count), spike §5's D6 row, spike §6, `CHANGELOG.md`'s `### Added` / `### Changed` / `### Removed` / `### Fixed` entries, and `docs/decisions/` bodies other than the annotation in row R1. If a step seems to require editing one of these, stop and report it.
 - **`CHANGELOG.md` has 28 historical Gambit mentions in its `### Added` and `### Removed` sections.** They are records of what shipped and what was cut. Do not touch them. Only the preamble (row C1) and new `[Unreleased]` entries (row C2) are in scope.
 - **The full test matrix runs in Task 5 and Task 7 only.** Tasks 1–4 and 6 touch no file CMake reads.
+- **`.superpowers/sdd/` is git-ignored** (`.superpowers/sdd/.gitignore` is `*`). Update the ledger in place; never `git add` it -- the command fails. No `git add` line in this plan names it.
 - **Every claim written into a document must have been re-read against the tree in this branch**, not copied from the design document's quotation of it. The design document was itself corrected twice for exactly this.
 
 ## File Structure
@@ -78,7 +79,7 @@ Milestone: 0, close-out
 **Context** must state:
 - The four incompatible live statements of spike §7 D6, with their locations: spike:187 ("Both implementations write byte-identical…"), spike:201 (work-order item 6's exit), the spike header note's restatement as "a single-implementation, cross-platform claim", and parent §25:1425 ("across the Chez source and AOT lanes").
 - That the first two name a second implementation [decision 0005](./0005-chez-only.md) removed; that the third needs cells this host does not have (one of parent §7.3's four Tier 1 cells exists locally); and that 0005 refused the same shape of substitution one deliverable over, writing of a two-lane agreement that it "is a weaker statement, and slice 5b already owns it under its own name" (0005:159–165).
-- The structural fact: D6 and D7 are properties of an emitter, and spike:5 forbids one — "No byte-machine semantics (no IR, verifier, interpreter, emitter, or runtime) are implemented in this milestone."
+- The structural fact: D6 and D7 are properties of an emitter, and spike:6 forbids one — "No byte-machine semantics (no IR, verifier, interpreter, emitter, or runtime) are implemented in this milestone."
 
 **Measurements** carries the Step 2 numbers, the commit, and the host, in 0005's style. State that all of `src/` is placeholder.
 
@@ -129,17 +130,27 @@ Expected: `broken: 0`.
 For each of the four quoted strings (0005:159–165, spike:5, 0002:143–147, and any parent §25 Scope line names), run `rg -n` for the exact string in the named file and confirm one hit. A quotation that differs by a word is a defect — the design document was corrected for exactly this class four times.
 
 ```bash
-rg -nF "is a weaker statement, and slice 5b already owns it under its own name" docs/decisions/0005-chez-only.md; rg -nF "No byte-machine semantics" docs/plans/milestone-0-portability-spike.md; rg -nF "byte-machine never joins Chez search paths with any separator on any platform" docs/decisions/0002-shared-body-include-mechanism.md
+python3 -c '
+import re
+pairs=[("docs/decisions/0005-chez-only.md","is a weaker statement, and slice 5b already owns it under its own name"),
+       ("docs/plans/milestone-0-portability-spike.md","No byte-machine semantics (no IR, verifier, interpreter, emitter, or runtime) are implemented in this milestone"),
+       ("docs/decisions/0002-shared-body-include-mechanism.md","byte-machine never joins Chez search paths with any separator on any platform")]
+for f,q in pairs:
+    hay=re.sub(r"\s+"," ",open(f).read())
+    print(hay.count(re.sub(r"\s+"," ",q)), f, q[:40])
+'
 ```
 
-Expected: exactly one hit each.
+Expected: `1` for each. **Do not use `rg -nF`** for this -- every one of these
+quotations wraps a line break in its source, so a literal single-line search
+reports a correct quotation as absent. Normalize whitespace, as above.
 
 - [ ] **Step 6: Append to the ledger and commit**
 
 Append to `.superpowers/sdd/progress.md` a section header for this branch (following the file's existing convention — branch name, plan path, design path, merge base) and `Task 1: COMPLETE` with the commit SHA and the measured numbers.
 
 ```bash
-git add docs/decisions/0007-milestone-0-closes-at-the-harness.md .superpowers/sdd/progress.md
+git add docs/decisions/0007-milestone-0-closes-at-the-harness.md
 git commit -m "docs: record decision 0007, Milestone 0 closes at the harness"
 ```
 
@@ -210,7 +221,7 @@ Read every hit. Each must be scoped to the `--libdirs`/`CHEZSCHEMELIBDIRS` strin
 Run the Step 4 link checker from Task 1 with `docs/plans/milestone-0-ci-feasibility.md` in the file list. Expected `broken: 0`.
 
 ```bash
-git add docs/plans/milestone-0-ci-feasibility.md .superpowers/sdd/progress.md
+git add docs/plans/milestone-0-ci-feasibility.md
 git commit -m "docs: add the Tier 1 CI feasibility note, discharging M0 exit criterion 2"
 ```
 
@@ -291,7 +302,7 @@ Expected: no output. If §7.2's heading "Library wrappers" or §22's "portabilit
 Run the Task 1 link checker with `docs/plans/byte-machine-implementation-plan.md` in the file list. Expected `broken: 0`.
 
 ```bash
-git add docs/plans/byte-machine-implementation-plan.md .superpowers/sdd/progress.md
+git add docs/plans/byte-machine-implementation-plan.md
 git commit -m "docs: sweep the parent plan and close Milestone 0 in it"
 ```
 
@@ -490,7 +501,7 @@ Read every hit. Each must be inside spike §2's table, spike §3, spike §5's D6
 Run the Task 1 link checker with `docs/plans/milestone-0-portability-spike.md` in the file list. Expected `broken: 0`.
 
 ```bash
-git add docs/plans/milestone-0-portability-spike.md .superpowers/sdd/progress.md
+git add docs/plans/milestone-0-portability-spike.md
 git commit -m "docs: sweep the milestone plan and close it at the harness"
 ```
 
@@ -603,7 +614,7 @@ Expected: 1 CMake mutation pass over 72 mutations, and 31 Scheme passes over 68 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add docs/decisions/0001-toolchain-discovery.md cmake/ByteMachineTesting.cmake test/CMakeLists.txt CHANGELOG.md .superpowers/sdd/progress.md
+git add docs/decisions/0001-toolchain-discovery.md cmake/ByteMachineTesting.cmake test/CMakeLists.txt CHANGELOG.md
 git commit -m "docs: annotate the never-true CI claims and correct two live comments"
 ```
 
@@ -673,7 +684,7 @@ Expected: `19`. The file carries 18 bullets before this task (measured 2026-08-2
 - [ ] **Step 5: Commit**
 
 ```bash
-git add AGENTS.md CHANGELOG.md .superpowers/sdd/progress.md
+git add AGENTS.md CHANGELOG.md
 git commit -m "docs: record the record/instruction standard and the close in CHANGELOG"
 ```
 
@@ -761,7 +772,7 @@ Expected: `broken: 0`, and no `ABSENT` lines.
 Record: every row landed, the Step 1 classification, the Step 2 reading pass and its findings, the fresh matrix results, and any row that was changed during execution — with the reason, following this file's convention of recording plan corrections in the ledger rather than only at the site.
 
 ```bash
-git add .superpowers/sdd/progress.md
+git add
 git commit -m "docs: record the close-out verification pass"
 ```
 

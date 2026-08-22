@@ -72,8 +72,13 @@ being returned to the milestone that already asks for them.
 
 [Decision 0005](../decisions/0005-chez-only.md) recorded the same observation two
 slices ago — "the harness outweighs the product it tests by two orders of
-magnitude" — and the gap has widened since. Re-measured against the shipped tree
-at `ceb0894` on 2026-08-22:
+magnitude". Re-run at `bca1422` on 2026-08-22 using 0005's own two commands, so
+the ratio is comparable: `find cmake test/support -type f` now totals **8460**
+lines against `find src -type f`'s **87** — 97:1, where 0005 measured 9858:147,
+or 67:1. The gap widened, but **not because the harness grew**: it shrank by
+1398 lines when the Chez-only cut landed. The product shrank faster. The four
+commands below are this document's own, narrower file set, and are not
+subtracted from 0005's:
 
 ```
 $ wc -l src/byte-machine/*.sls | tail -1
