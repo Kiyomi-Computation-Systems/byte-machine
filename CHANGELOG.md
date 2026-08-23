@@ -303,6 +303,46 @@ what this milestone delivers.
   the new `byte-machine-make-compiled-machine/v1` ABI, and proven to match the
   reference interpreter across all 256 byte values in both the source and AOT
   lanes, plus the §9.6 end-to-end example. Decision 0010 records the ABI.
+- Milestone 1 Phase 3 Slice B: the D6 determinism-hardening and D7
+  identifier-repertoire proofs Slice A's emitter had to satisfy but not yet
+  exhaustively prove, a property-based machine generator, and the member-2
+  runtime-export drift guard. D6 is a determinism spec, registered in both
+  the `chez.source` and `chez.aot` lanes, that emits the fixed one-byte
+  machine twice in one process and asserts byte-equality, compares the
+  emitted bytes to a committed raw-byte golden fixture
+  (`test/fixtures/generated-one-byte.golden.sls`), and compiles and executes
+  the result — comparison is over raw bytes through the project-owned
+  writer, never `write`. Because both CI cells run the same golden
+  comparison in both lanes, cross-process, cross-lane, and cross-cell
+  byte-identity follow transitively; M9 completes the four-cell matrix
+  against the same golden. D7 is an exhaustive accept/reject proof of
+  `[a-z][a-z0-9-]*` at both grammar sites — machine/node/error names
+  (`verify`'s `valid-name?`) and output bindings (`compile`'s
+  reserved-binding predicate) — covering uppercase, non-ASCII, punctuation,
+  and the empty/leading-digit/leading-hyphen/trailing-hyphen boundary cases,
+  diagnostics checked by category rather than prose; plus a binary-LF proof
+  that reads the emitted bytes raw and asserts no CR byte appears and the
+  final byte is LF. As milestone-1-design.md §6 already notes, the genuine
+  Windows CRLF-translation trap only manifests on a Windows cell, which M1 CI
+  does not have, so this proof runs where it is trivially clean; the real
+  Windows proof rides to M9.
+
+  A deterministic in-tree PRNG (`(byte-machine test prng)`) and a bounded,
+  valid-machine generator (`(byte-machine test machine-gen)`) drive the
+  interpreter≡generated differential over 40 generated machines (fixed seed,
+  printed on every run) rather than only the fixed one-byte machine, each
+  checked against all 256 single-byte feeds. A new `property` test label is
+  added to the `pr` preset filter. The member-2 runtime-export drift guard
+  asserts `(environment-symbols (environment '(byte-machine runtime)))` is
+  set-equal to `compile.sls`'s declared `reserved-member-2`, made
+  load-bearing by a mutation that drops one entry, caught on the
+  set-inequality FAIL line rather than by a bare nonzero exit. This ships
+  with no `/v2` runtime export — `/v2` remains gated on benchmark evidence
+  per [decision 0010](docs/decisions/0010-direct-executor-abi.md) §5, which
+  is amended to record that the guard's value does not depend on `/v2`
+  shipping. Measured on the shipped tree: `release` 60/60, `no-scheme` 8/8,
+  the Scheme mutation suite 37 passes/104 mutations, the CMake mutation
+  suite 1 pass/72 mutations.
 
 ### Changed
 
@@ -407,6 +447,25 @@ what this milestone delivers.
   types, and the self-test/bootstrap lanes assert the live values by equality
   when the cell's identity is supplied, replacing the earlier not-"unknown"
   checks.
+- The confirmed Milestone 1 Phase 3 Slice A Minors land in their owning
+  files, TDD where behavior changes: `private/normal-ir.sls`'s node-kind
+  dispatch gains an `else` guard that raises on an unreachable fourth kind,
+  plus a comment documenting why the repertoire is exactly three kinds until
+  EOF execution lands in M2; `normal-state-id` is now asserted directly
+  rather than only exercised indirectly; `normalize-machine`'s combined
+  lowering-and-encoding splits into two focused functions, with the golden
+  IR fingerprint `11963406767470843108` pinned unchanged across the split to
+  prove it is behavior-preserving; `runtime.sls`'s `make-parser` v1 branch
+  reads the compiled-machine through named accessors instead of positional
+  `(vector-ref cm 2/3)`; the Scheme mutation suite's Pass 36 assertion
+  tightens from the loose `EXPECT_OUTPUT_MATCHES "ok"` to `"not ok"`; and
+  the one-byte fixture duplicated across the differential and example test
+  programs collapses into one shared fixture. Two Slice A minors are
+  deferred with a note instead of changed: `id-of`'s linear `assq` scan per
+  call (parent §23 forbids optimizing without a reproducible compiled
+  benchmark showing material improvement, and Slice B builds no benchmark
+  harness) and named accessors for `emission-metadata` (no consumer exists
+  yet beyond the tests that construct it).
 
 ### Removed
 
@@ -469,6 +528,19 @@ what this milestone delivers.
   lines that already named them ("deterministic output"; "symbolic name
   resolution" and "generated-name safety for every construct present"). See
   [decision 0007](docs/decisions/0007-milestone-0-closes-at-the-harness.md).
+- The M0 placeholder libraries `src/byte-machine/placeholder.sls` and
+  `src/byte-machine/placeholder-consumer.sls` (spike §11;
+  milestone-1-design.md §6), along with their test programs
+  (`test/common/placeholder-tests.sps`,
+  `test/common/placeholder-identity-tests.sps`), their lane registrations —
+  including the `placeholder-identity` AOT identity lane — and the ten
+  mutations across three Scheme mutation-suite passes that staged them. They
+  were stand-ins for a real cross-library-identity consumer before the
+  emitter existed; the emitter and its §9.6 end-to-end example now exercise
+  the real public library boundary, so the stand-ins are superseded rather
+  than replaced. `release` drops from 63 to 60 lanes (`no-scheme` is
+  unaffected at 8/8, these were Chez-only lanes) and the Scheme mutation
+  suite from 40 passes/114 mutations to 37 passes/104 mutations.
 
 ### Fixed
 
