@@ -15,46 +15,47 @@ CMAKE ?= cmake
 CTEST ?= ctest
 CTEST_FLAGS ?= --output-on-failure --no-tests=error
 
+# Bare 'make' prints the target list rather than building; 'make all' still builds.
+.DEFAULT_GOAL := help
+
 .PHONY: all help doctor configure build dev test test-all prod clean
 
-all: build
+all: build   ## build the development preset
 
-help:
+# 'help' prints every target that carries a '## ' description by scanning this
+# Makefile itself, so the descriptions live beside the targets they document
+# and cannot drift out of sync with them: add a target with a '## ' note and
+# it appears here automatically.
+help:   ## list these targets (shown when you run a bare 'make')
 	@echo "byte-machine make targets:"
-	@echo "  doctor    report the discovered Chez toolchain, then stop"
-	@echo "  build     configure and build the development preset"
-	@echo "  dev       build, then run the harness and build-layer self-tests"
-	@echo "  test      build, then run the pull-request selection"
-	@echo "  test-all  build, then run the complete selection"
-	@echo "  prod      configure and build the release preset"
-	@echo "  clean     remove all build trees"
+	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z][a-zA-Z_-]*:.*## / {printf "  %-10s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo ""
 	@echo "If discovery cannot find a runtime, point it at one explicitly:"
 	@echo "  cmake --preset dev -DBYTE_MACHINE_CHEZ_EXECUTABLE=/absolute/path/to/scheme"
 
 # Configure is where discovery runs and where every toolchain diagnostic is
 # emitted, so 'doctor' is just a configure whose output is the point.
-doctor:
+doctor:   ## report the discovered Chez toolchain, then stop
 	$(CMAKE) --preset dev
 
-configure:
+configure:   ## configure the development preset without building
 	$(CMAKE) --preset dev
 
-build: configure
+build: configure   ## configure and build the development preset
 	$(CMAKE) --build --preset dev
 
-dev: build
+dev: build   ## build, then run the harness and build-layer self-tests
 	$(CTEST) --preset harness $(CTEST_FLAGS)
 
-test: build
+test: build   ## build, then run the pull-request selection
 	$(CTEST) --preset pr $(CTEST_FLAGS)
 
-test-all: build
+test-all: build   ## build, then run the complete selection
 	$(CTEST) --preset release $(CTEST_FLAGS)
 
-prod:
+prod:   ## configure and build the release preset
 	$(CMAKE) --preset prod
 	$(CMAKE) --build --preset prod
 
-clean:
+clean:   ## remove all build trees
 	$(CMAKE) -E rm -rf build
