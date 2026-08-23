@@ -963,3 +963,24 @@ byte_machine_add_scheme_lane(
           ${BYTE_MACHINE_CORE_EMIT}
           "${CMAKE_SOURCE_DIR}/test/common/identifier-repertoire-tests.sps"
   TIMEOUT 120)
+
+# --- Milestone 1 Phase 3 Slice B: D6 determinism against a committed golden ---
+byte_machine_add_scheme_lane(
+  NAME byte-machine.determinism.one-byte.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/determinism-one-byte-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/determinism-one-byte-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-one-byte.golden.sls")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.determinism.one-byte.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/determinism-one-byte-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/determinism-one-byte-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-one-byte.golden.sls")

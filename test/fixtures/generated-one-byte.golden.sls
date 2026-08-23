@@ -1,0 +1,18 @@
+(library (generated one-byte)
+  (export one-byte-parser)
+  (import (rnrs) (byte-machine runtime))
+  (define (feed state offset bv start end)
+    (let loop ((pos start) (st state) (off offset))
+      (case st
+      ((0)
+       (if (>= pos end)
+           (byte-machine-make-feed-outcome/v1 (quote need-input) pos #f 0 off)
+           (let ((b (bytevector-u8-ref bv pos)))
+             (case b
+               ((0) (loop (+ pos 1) 1 (+ off 1)))
+               (else (loop pos 2 off))))))
+      ((1) (byte-machine-make-feed-outcome/v1 (quote stopped) pos #f 1 off))
+      ((2) (byte-machine-make-feed-outcome/v1 (quote error) pos (quote unexpected-byte) 2 off))
+      (else (assertion-violation (quote feed) "unknown state" st)))))
+  (define one-byte-parser
+    (byte-machine-make-compiled-machine/v1 1 11963406767470843108 0 feed)))
