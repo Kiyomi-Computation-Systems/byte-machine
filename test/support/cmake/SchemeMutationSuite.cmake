@@ -186,8 +186,18 @@ cmake_minimum_required(VERSION 3.26)
 # verifier emits). Pass 34 is the interpreter's TWO decisions -- dispatch
 # matches the byte to the right case, and an unverified machine is refused.
 # So 69 + 3 + 13 + 2 = 87 mutations across the three new passes.
-set(EXPECTED_PASSES 34)
-set(EXPECTED_MUTATIONS 87)
+#
+# Milestone 1 Phase 3 Slice A adds two passes and twenty mutations: Pass 32
+# (runtime) gains four -- v1 variant dispatch, the ABI-version check, the v1
+# result-status read, and v1 stickiness -- so 3 -> 7; Pass 35 (the normalizer)
+# adds six -- the FNV offset, the FNV prime, the byte-mixing XOR, the entry id,
+# the transition sort, and error-code resolution; Pass 36 (the emitter) adds ten
+# -- options validation, the compiled-ok verdict, the unverified-render refusal,
+# the binding grammar, the three reserved-set members, the advance and reexecute
+# loop tails, and the error-arm code. So 34 + 2 = 36 passes and 87 + 20 = 107
+# mutations.
+set(EXPECTED_PASSES 36)
+set(EXPECTED_MUTATIONS 107)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 

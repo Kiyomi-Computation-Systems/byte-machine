@@ -334,6 +334,30 @@ plan.
   that members 2 and 3 are now in force, enumerated next to the template, and covered
   by the runtime-export drift test.
 
+**2026-08-23 reconciliation.** Slice A is closed (Task 5). [Decision
+0010](../decisions/0010-direct-executor-abi.md) is written, recording the
+direct-executor ABI and the retirement of the "identical by construction"
+runtime header comment described above.
+
+§3.2 above says an ABI-version mismatch raises "the portable ABI-mismatch
+condition"; annotated rather than reworded, because what shipped differs and
+this record stays as the design intent, not a description of the artifact.
+Slice A ships `assertion-violation` instead (decision 0010, item 5): a coded
+`generated-runtime-abi-mismatch` condition (parent §9.4) is deferred to avoid
+a runtime→conditions dependency that would duplicate `conditions.sls` in the
+`CORE_ALL` lane manifest. `(byte-machine runtime)` has no import of
+`(byte-machine conditions)` today; adding one only for this one condition
+type was judged not worth the manifest duplication for a Slice A that has no
+caller distinguishing an ABI mismatch from any other assertion failure.
+
+Measured against the shipped artifact (not copied from any plan or task
+brief): `ctest --preset release` reports **55/55 tests passed**; the Scheme
+mutation suite (`byte-machine.harness.scheme-mutation.cmake.direct`) reports
+**"scheme mutation suite complete (36 passes, 107 mutations)"**, matching
+`EXPECTED_PASSES`/`EXPECTED_MUTATIONS` in
+[SchemeMutationSuite.cmake](../../test/support/cmake/SchemeMutationSuite.cmake);
+`ctest --preset no-scheme` stays at **8/8**, unchanged.
+
 ## 7. Handed to writing-plans
 
 - The exact canonical encoding the IR fingerprint is computed over (field order, byte
