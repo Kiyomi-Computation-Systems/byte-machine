@@ -9,7 +9,8 @@
 ;;; emit-machine's port write.
 (library (byte-machine compile)
   (export compile-machine compilation-ok? compilation-diagnostics
-          render-machine emit-machine)
+          render-machine emit-machine
+          reserved-member-2)          ; test-support: the drift guard (§3.4) reads it
   (import (rnrs)
           (byte-machine verify)
           (only (byte-machine private ir) machine-name)
@@ -36,6 +37,10 @@
   (define reserved-member-1
     '(library import export define define-syntax let let* letrec lambda quote
       if begin set! cond case and or when unless do quasiquote unquote))
+  ;; The hand-maintained mirror of (byte-machine runtime)'s exports. Exported
+  ;; solely so reserved-drift-tests.sps can assert it against the runtime's actual
+  ;; environment-symbols: a new runtime export not added here would let the emitter
+  ;; accept a binding that collides with it (Slice B; Slice A design §6).
   (define reserved-member-2
     '(make-compiled-machine compiled-machine?
       byte-machine-make-compiled-machine/v1 byte-machine-make-feed-outcome/v1

@@ -1011,3 +1011,24 @@ byte_machine_add_scheme_lane(
           ${BYTE_MACHINE_CORE_EMIT}
           "${CMAKE_SOURCE_DIR}/test/common/property-differential-tests.sps"
   TIMEOUT 180)
+
+# --- Milestone 1 Phase 3 Slice B: member-2 runtime-export drift guard ---------
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.reserved-drift.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/reserved-drift-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_COMPILE}
+          "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/runtime.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/reserved-drift-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.reserved-drift.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/reserved-drift-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_COMPILE}
+          "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/runtime.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/reserved-drift-tests.sps"
+  TIMEOUT 120)
