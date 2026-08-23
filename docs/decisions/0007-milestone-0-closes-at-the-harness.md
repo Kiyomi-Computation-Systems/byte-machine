@@ -87,15 +87,16 @@ contract now is.
 
 ## Measurements
 
-Measured 2026-08-22 against the shipped tree at commit `dd813b6`, on branch
+Measured 2026-08-22 against the shipped tree at commit `c9af74a`, on branch
 `docs/m0-close-out`, on Darwin 25.5.0 arm64, Chez 10.4.1. AGENTS.md requires a
 number in a decision record to have been re-taken against the shipped artifact,
 so these were taken here rather than copied from the close-out design. Every
 figure below except `docs/plans` is unchanged from the first taking at
 `7cd6542`; `docs/plans` moves with every documentation commit on this branch,
 including the ones that corrected this record, so it was re-taken at the commit
-named — and the commit that carries this re-taking edits no file under
-`docs/plans`.
+named — the branch's last commit to touch that directory. The commit carrying
+this re-taking edits nothing under `docs/plans`, so the figure is exact at the
+branch tip as well.
 
 - **The apparatus outweighs the product it is built around by two orders of
   magnitude.** [0005](./0005-chez-only.md) recorded the same observation on
@@ -123,12 +124,12 @@ named — and the commit that carries this re-taking edits no file under
         test/support/harness/self/*.sps test/support/launchers/*.ss | wc -l
       2348
   $ cat docs/plans/*.md | wc -l
-     20686
+     20693
   $ git rev-parse --short HEAD
-  dd813b6
+  c9af74a
   ```
 
-  9,176 lines of build layer, harness, and launchers, and 20,686 lines of plans,
+  9,176 lines of build layer, harness, and launchers, and 20,693 lines of plans,
   against 87 lines of product.
 
 - **All 87 lines of `src/` are placeholder.** `src/byte-machine/` contains
