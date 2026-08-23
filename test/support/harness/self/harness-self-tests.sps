@@ -365,9 +365,16 @@
                     (not (harness-string-contains? (adapter-runtime-version) "v"))))
         (check "the machine type is reported"
                (> (string-length (adapter-machine-type)) 0))
-        (check-not-equal "the os is identified" (adapter-os) "unknown")
-        (check-not-equal "the architecture is identified"
-                         (adapter-architecture) "unknown")
+        (let ((expect-os (adapter-environment-variable "BYTE_MACHINE_EXPECT_OS"))
+              (expect-arch (adapter-environment-variable "BYTE_MACHINE_EXPECT_ARCH")))
+          (if (and expect-os (> (string-length expect-os) 0))
+              (check-equal "the live os matches the cell" (adapter-os) expect-os)
+              (check-not-equal "the os is identified" (adapter-os) "unknown"))
+          (if (and expect-arch (> (string-length expect-arch) 0))
+              (check-equal "the live architecture matches the cell"
+                           (adapter-architecture) expect-arch)
+              (check-not-equal "the architecture is identified"
+                               (adapter-architecture) "unknown")))
         ;; The vocabulary, not a fixed mode. Slice 5b gives this program more
         ;; than one lane to run under, so an equality against any single mode
         ;; would be false on some lane that is behaving correctly. The narrower
@@ -384,6 +391,19 @@
         (check "the mode is one the lane vocabulary defines"
                (harness-member? (adapter-execution-mode)
                                 (list "source" "aot")))))
+
+    (harness-case "machine types map to the expected os and architecture"
+      (lambda ()
+        (check-equal "tarm64osx arch" (adapter-machine-type->architecture "tarm64osx") "arm64")
+        (check-equal "tarm64osx os"   (adapter-machine-type->os "tarm64osx") "darwin")
+        (check-equal "ta6le arch"     (adapter-machine-type->architecture "ta6le") "amd64")
+        (check-equal "ta6le os"       (adapter-machine-type->os "ta6le") "linux")
+        (check-equal "tarm64le arch"  (adapter-machine-type->architecture "tarm64le") "arm64")
+        (check-equal "tarm64le os"    (adapter-machine-type->os "tarm64le") "linux")
+        (check-equal "ta6nt arch"     (adapter-machine-type->architecture "ta6nt") "amd64")
+        (check-equal "ta6nt os"       (adapter-machine-type->os "ta6nt") "windows")
+        (check-equal "unmapped arch"  (adapter-machine-type->architecture "zz99xx") "unknown")
+        (check-equal "unmapped os"    (adapter-machine-type->os "zz99xx") "unknown")))
 
     ;; adapter-exit ends the process, so no assertion may call it. Naming it is
     ;; still load-bearing: the parity argument in spec section 9.1 rests on this

@@ -40,6 +40,7 @@
     adapter-environment-variable adapter-exit
     adapter-value->string adapter-describe-condition adapter-file-bytes
     adapter-flush-output
+    adapter-machine-type->os adapter-machine-type->architecture
     ;; arithmetic harness-self-tests.sps and harness-bootstrap.sps call
     ;; directly, not the runner section below -- R6RS keeps it outside (rnrs)
     modulo quotient remainder)
@@ -74,11 +75,10 @@
   ;; which is what a portability claim needs: an observed architecture, not a
   ;; configure-time guess. A threaded build carries a leading "t".
 
-  (define (adapter-machine-type-body)
-    (let ((m (adapter-machine-type)))
-      (if (and (> (string-length m) 0) (char=? (string-ref m 0) #\t))
-          (substring m 1 (string-length m))
-          m)))
+  (define (adapter-machine-type-strip-t m)
+    (if (and (> (string-length m) 0) (char=? (string-ref m 0) #\t))
+        (substring m 1 (string-length m))
+        m))
 
   (define (adapter-string-starts-with? s prefix)
     (let ((sn (string-length s)) (pn (string-length prefix)))
@@ -111,13 +111,13 @@
           ((adapter-string-starts-with? s (car (car table))) (car table))
           (else (adapter-lookup-prefix (cdr table) s))))
 
-  (define (adapter-architecture)
+  (define (adapter-machine-type->architecture machine-type)
     (let ((hit (adapter-lookup-prefix adapter-architecture-table
-                                      (adapter-machine-type-body))))
+                                      (adapter-machine-type-strip-t machine-type))))
       (if hit (cdr hit) "unknown")))
 
-  (define (adapter-os)
-    (let* ((body (adapter-machine-type-body))
+  (define (adapter-machine-type->os machine-type)
+    (let* ((body (adapter-machine-type-strip-t machine-type))
            (arch-hit (adapter-lookup-prefix adapter-architecture-table body)))
       (if (not arch-hit)
           "unknown"
@@ -125,6 +125,12 @@
                                   (string-length body)))
                  (os-hit (adapter-lookup-prefix adapter-os-table rest)))
             (if os-hit (cdr os-hit) "unknown")))))
+
+  (define (adapter-architecture)
+    (adapter-machine-type->architecture (adapter-machine-type)))
+
+  (define (adapter-os)
+    (adapter-machine-type->os (adapter-machine-type)))
 
   ;; The lane registration declares the execution mode; the launcher never
   ;; touches this variable. The launcher's object guard is what makes the
