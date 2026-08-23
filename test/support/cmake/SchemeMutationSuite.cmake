@@ -168,8 +168,11 @@ cmake_minimum_required(VERSION 3.26)
 # turned out witnessable after all once its manifest was allowed to be
 # self-referential on purpose, superseding the declared survivor the plan
 # first carried for it) -- so 29 + 2 = 31 passes and 65 + 3 = 68 mutations.
+# Milestone 1 Phase 1's adapter os-table mapping mutation joins the existing
+# self-test batch (pass 31, already declared) rather than opening a new pass,
+# so passes stay at 31 and 68 + 1 = 69 mutations.
 set(EXPECTED_PASSES 31)
-set(EXPECTED_MUTATIONS 68)
+set(EXPECTED_MUTATIONS 69)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -477,6 +480,16 @@ byte_machine_mutation(
   REPLACE [[;; deleted]]
   EXPECT_SURVIVES
     "measured inert (decision 0006, extending 5b's C3b): no include form exists anywhere, library resolution runs through library-directories, and no lane's outcome differs between an empty source path and Chez's default; the line is kept as narrowing, not as behavior")
+
+# --- The adapter's os-table -------------------------------------------------
+
+byte_machine_mutation(
+  FILE ${RUNNER} SPEC harness-self-tests.sps
+  LABEL "adapter: an os-table row maps to the wrong name"
+  FIND [[("osx" . "darwin")]]
+  REPLACE [[("osx" . "linux")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "tarm64osx os")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
