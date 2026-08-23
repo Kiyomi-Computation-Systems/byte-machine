@@ -149,7 +149,7 @@ The imperative shells are limited to:
 
 ### 7.1 Shared implementation subset
 
-The functional core, runtime body, generated body, and shared tests live in wrapper-free `.scm` files.
+The functional core and the tests are inline R6RS `.sls` libraries and `.sps` programs ([decision 0006](../decisions/0006-inline-libraries.md)). The form of the runtime and *generated* bodies is fixed by §9.6 and is Milestone 1's to settle — see [the Milestone 0 close-out](./milestone-0-close-out.md) §9.
 
 Use:
 
@@ -443,18 +443,18 @@ The generated ABI is distinct from the user-facing parser API and is documented 
 
 ### 9.6 Required end-to-end examples
 
-Milestone 1 must add one executable Chez example program, run in both the source and AOT lanes, that uses a shared grammar body and demonstrates:
+Milestone 1 must add one executable Chez example program, run in both the source and AOT lanes, that demonstrates:
 
 1. constructing a one-byte machine only through `(byte-machine graph)`;
 2. verifying it;
 3. compiling it without runtime evaluation;
 4. emitting a generated body to a binary file port;
-5. including that generated body from a consumer library wrapper;
+5. including that generated body from a consumer library wrapper — this conflicts with §7.2's "No Scheme file in this repository includes another", and Milestone 1 must resolve it (see [the Milestone 0 close-out](./milestone-0-close-out.md) §9);
 6. importing only `(byte-machine runtime)` in the consumer;
 7. constructing a parser, feeding the exact `[0,1)` slice, and inspecting the result;
 8. compiling and running the consumer ahead-of-time.
 
-The exact tool commands and include-path setup come from Milestone 0 and are copied verbatim into these examples.
+The exact tool commands come from Milestone 0 and are copied verbatim into this example. There is no include-path setup: [decision 0006](../decisions/0006-inline-libraries.md) retired the mechanism.
 
 ## 10. Source IR
 
@@ -1035,7 +1035,7 @@ Requirements:
 - a project-owned canonical source writer;
 - no dependence on hash iteration, object identity, `gensym`, or implementation `write` formatting;
 - ASCII-safe emitted identifiers and explicit escaping;
-- rejection of output bindings that collide with portable Scheme syntax, runtime exports, or emitted internal identifiers;
+- rejection of output bindings that collide with syntax or declaration identifiers reserved by the R6RS source mode, runtime exports, or emitted internal identifiers;
 - no timestamps, hostnames, usernames, absolute paths, random data, or native details;
 - embedded IR format version and generator version;
 - embedded deterministic non-cryptographic fingerprint of canonical normalized IR and emission options;
@@ -1043,7 +1043,7 @@ Requirements:
 
 The initial fingerprint may use a specified 64-bit FNV-1a calculation over the canonical encoding. It is an identity/debugging aid, not a security primitive.
 
-`emit-machine` writes only to the supplied binary output port through a portability shim (`put-u8` versus `write-u8`). Generated source is canonical UTF-8 with LF bytes even on Windows. Atomic temporary-file creation and replacement belong to the caller's imperative build shell.
+`emit-machine` writes only to the supplied binary output port with `put-u8`. Generated source is canonical UTF-8 with LF bytes even on Windows. Atomic temporary-file creation and replacement belong to the caller's imperative build shell.
 
 ## 21. Private HTTP Request Fixture
 
@@ -1416,23 +1416,39 @@ Every milestone is a vertical slice with failing tests first. Later sessions sho
 Deliver:
 
 - pinned minimum Chez version;
-- confirmed R6RS library and include strategy;
-- shared hello-library body loaded through its owner wrapper;
-- a cross-library smoke path where one provisional owner wrapper constructs a placeholder tagged value, another wrapper recognizes it, and runtime singleton identity is retained across both imports;
+- confirmed R6RS library strategy — inline `.sls`, no includes ([decision 0006](../decisions/0006-inline-libraries.md));
+- a cross-library smoke path where one provisional library constructs a placeholder tagged value, a second library recognizes it, and runtime singleton identity is retained across both imports;
 - tiny portable test harness and runners;
 - Scheme source-mode and ahead-of-time compile invocations;
-- Tier 1 CI feasibility notes;
-- deterministic text emission proof across the Chez source and AOT lanes;
-- identifier repertoire and binary LF emission proof across available operating systems;
-- documented Windows path and LF behavior.
+- Tier 1 CI feasibility notes (discharged by [the CI feasibility note](./milestone-0-ci-feasibility.md));
+- documented Windows path and LF behavior (discharged by [the CI feasibility note](./milestone-0-ci-feasibility.md)).
 
 Exit criteria:
 
-- the same shared test body passes in both the source and AOT execution lanes;
+- the same test program passes in both the source and AOT execution lanes;
 - CI design covers unavailable local platforms;
 - each library owns its own code — no shared include bodies ([decision 0006](../decisions/0006-inline-libraries.md)).
 
+> **Closed 2026-08-22 by [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md).**
+> Three deliverables this milestone did not ship — deterministic text emission,
+> the identifier and binary-LF proof, and the CI pipeline — move to Milestone 1,
+> where each has a subject: Milestone 0 ships no emitter, and the first two are
+> properties of one. The first two left the Deliver list above with this change;
+> the pipeline never had a line of its own — the list's only CI entry, "Tier 1 CI
+> feasibility notes", is discharged rather than moved. See
+> [the close-out](./milestone-0-close-out.md).
+
 ### Milestone 1: Minimal executable machine
+
+> **Amended 2026-08-22 by [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md):
+> Milestone 0's D6, D7, and D8 land here.** D6 on "deterministic output"; D7 on
+> "symbolic name resolution" and "generated-name safety for every construct
+> present". Those two lines already exist and now carry Milestone 0's obligations
+> too. D8's CI pipeline has no Scope line of its own and rides D6's cross-cell
+> axis, because both need the same Tier 1 cells: Milestone 1 stands the pipeline
+> up over the emitter, and Milestone 9 below — whose Scope already owns "complete
+> Tier 1 CI" and "source generation equality across platform cells" —
+> completes it. "Complete" presupposes something to complete.
 
 Scope:
 

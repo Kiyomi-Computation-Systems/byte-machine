@@ -32,7 +32,7 @@ set(BYTE_MACHINE_TEST_LAYERS
   verify        # verifier diagnostics, positive and negative
   differential  # reference interpreter against generated code
   property      # generated machines and inputs
-  determinism   # byte-identical emission across runs and runtimes
+  determinism   # byte-identical emission across runs, lanes, and platform cells
   fixture       # the private HTTP request fixture
   portability   # values crossing library boundaries; runtime identity
   example       # the documented end-to-end examples
