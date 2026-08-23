@@ -762,3 +762,26 @@ byte_machine_add_scheme_lane(
           ${BYTE_MACHINE_CORE_PRIVATE}
           "${CMAKE_SOURCE_DIR}/test/common/ir-tests.sps"
   TIMEOUT 120)
+
+# The public construction façade re-exports the private ir constructors.
+set(BYTE_MACHINE_CORE_GRAPH
+    ${BYTE_MACHINE_CORE_PRIVATE}
+    "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/graph.sls")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.graph.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/graph-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_GRAPH}
+          "${CMAKE_SOURCE_DIR}/test/common/graph-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.graph.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/graph-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_GRAPH}
+          "${CMAKE_SOURCE_DIR}/test/common/graph-tests.sps"
+  TIMEOUT 120)
