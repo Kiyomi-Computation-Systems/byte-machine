@@ -43,3 +43,12 @@ interpreter≡generated differential (parent §18, §22.4) to lowering defects.
   relies on.
 - Slice B may revisit the `feed-outcome` seam under a `/v2` ABI if benchmark
   evidence ever calls for it (parent §23); the version tag exists for exactly that.
+
+## 2026-08-23 (Slice B) — drift guard shipped without /v2
+
+Slice B implements the member-2 runtime-export drift guard
+(reserved-drift-tests.sps: `environment-symbols` of `(byte-machine runtime)`
+asserted equal to `compile.sls`'s exported `reserved-member-2`, witnessed by a
+mutation that drops an entry). It ships **no `/v2` export**: the guard is made
+load-bearing by that mutation, not by the arrival of a new export, so item 5's
+`/v2` remains gated on benchmark evidence exactly as written above.
