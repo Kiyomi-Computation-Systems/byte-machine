@@ -150,6 +150,14 @@ set(BYTE_MACHINE_HARNESS_MANIFEST
     "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/fingerprint.sls"
     "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/harness.sls")
 
+# Milestone 1 semantic-core libraries (Phase 2). Defined here beside the harness
+# manifest so every semantic-core lane below can name the exact .sls set it
+# loads; each fragment grows the previous one in dependency order, mirroring the
+# library dependency direction (parent §7.2): private conditions ← private ir.
+set(BYTE_MACHINE_CORE_PRIVATE
+    "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/private/conditions.sls"
+    "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/private/ir.sls")
+
 # --- Build-time fingerprint expectations -----------------------------------
 
 set(BYTE_MACHINE_FINGERPRINT_LAUNCHER
@@ -727,3 +735,124 @@ byte_machine_add_scheme_lane(
   EXPECT_EXIT 3
   TIMEOUT 120
   LABELS expected-red)
+
+# --- Milestone 1 semantic core (Phase 2) -----------------------------------
+#
+# The in-memory pipeline for the one-byte machine, proven through the reference
+# interpreter across all 256 byte values. Each feature owns a source and an AOT
+# lane; the SOURCES manifest names every .sls the program loads plus the program
+# itself, and basenames are unique within a lane. The core manifest fragments
+# (BYTE_MACHINE_CORE_PRIVATE and its successors) are defined beside the harness
+# manifest above and here, in dependency order.
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.ir.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/ir-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_PRIVATE}
+          "${CMAKE_SOURCE_DIR}/test/common/ir-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.ir.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/ir-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_PRIVATE}
+          "${CMAKE_SOURCE_DIR}/test/common/ir-tests.sps"
+  TIMEOUT 120)
+
+# The public construction façade re-exports the private ir constructors.
+set(BYTE_MACHINE_CORE_GRAPH
+    ${BYTE_MACHINE_CORE_PRIVATE}
+    "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/graph.sls")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.graph.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/graph-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_GRAPH}
+          "${CMAKE_SOURCE_DIR}/test/common/graph-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.graph.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/graph-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_GRAPH}
+          "${CMAKE_SOURCE_DIR}/test/common/graph-tests.sps"
+  TIMEOUT 120)
+
+# The runtime depends on nothing above it (parent §7.2), so its manifest is a
+# single library.
+set(BYTE_MACHINE_CORE_RUNTIME
+    "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/runtime.sls")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.runtime.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/runtime-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_RUNTIME}
+          "${CMAKE_SOURCE_DIR}/test/common/runtime-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.runtime.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/runtime-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_RUNTIME}
+          "${CMAKE_SOURCE_DIR}/test/common/runtime-tests.sps"
+  TIMEOUT 120)
+
+# The verifier reads the IR through the graph façade's constructors.
+set(BYTE_MACHINE_CORE_VERIFY
+    ${BYTE_MACHINE_CORE_GRAPH}
+    "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/verify.sls")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.verify.rejections.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/verify-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_VERIFY}
+          "${CMAKE_SOURCE_DIR}/test/common/verify-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.verify.rejections.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/verify-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_VERIFY}
+          "${CMAKE_SOURCE_DIR}/test/common/verify-tests.sps"
+  TIMEOUT 120)
+
+# The interpreter closes an op over the verified IR and hands it to the runtime,
+# so its manifest unites the verify and runtime cores with interpret.sls.
+set(BYTE_MACHINE_CORE_ALL
+    ${BYTE_MACHINE_CORE_VERIFY}
+    ${BYTE_MACHINE_CORE_RUNTIME}
+    "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/interpret.sls")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.interpret.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/interpret-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${CMAKE_SOURCE_DIR}/test/common/interpret-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.interpret.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/interpret-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${CMAKE_SOURCE_DIR}/test/common/interpret-tests.sps"
+  TIMEOUT 120)

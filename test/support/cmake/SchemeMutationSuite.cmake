@@ -171,8 +171,23 @@ cmake_minimum_required(VERSION 3.26)
 # Milestone 1 Phase 1's adapter os-table mapping mutation joins the existing
 # self-test batch (pass 31, already declared) rather than opening a new pass,
 # so passes stay at 31 and 68 + 1 = 69 mutations.
-set(EXPECTED_PASSES 31)
-set(EXPECTED_MUTATIONS 69)
+#
+# Milestone 1 Phase 2 (semantic core) opens one new pass per executor module,
+# each appended after pass 31 below, for three new passes: 31 + 3 = 34.
+# Pass 32 is the runtime's THREE decisions -- advance consumes a byte, the
+# need-input guard is not a stop, and advance increments the stream offset.
+# Pass 33 is the verifier's THIRTEEN decisions: the eight originally witnessed
+# (reachability, exact-byte overlap, zero-progress detection, the machine-name
+# grammar check, transition missing-target, duplicate-name, undeclared-error-
+# reference, and the default-eof membership check) plus five closed by the
+# Phase-2 review fix-wave (the schema guard, duplicate-error-declaration, the
+# entry site of missing-target, and the node-name and error-code sites of the
+# name-portability check -- each a distinct SITES witness of a decision the
+# verifier emits). Pass 34 is the interpreter's TWO decisions -- dispatch
+# matches the byte to the right case, and an unverified machine is refused.
+# So 69 + 3 + 13 + 2 = 87 mutations across the three new passes.
+set(EXPECTED_PASSES 34)
+set(EXPECTED_MUTATIONS 87)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -1930,6 +1945,198 @@ byte_machine_mutation(
   REPLACE [[  (adapter-exit harness-status-failed))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "PROVENANCE-ERROR fingerprint mismatch")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 32: the runtime parser loop (Milestone 1 Phase 2) ------------------
+#
+# runtime-tests.sps drives the parser lifecycle over a hand-built compiled-
+# machine stub, checking each decision directly; this pass proves those checks
+# are not vacuous by breaking the decision underneath and requiring the checks
+# to notice. The verify command is modelled on the placeholder pass (Pass 8):
+# both library roots -- the harness and src -- an empty object guard, and the
+# runtime program. The baseline runs unmutated and exits 0, so a mutation that
+# breaks a decision turns that into an assertion failure (exit 1).
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/runtime-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: advance does not consume the byte"
+  FIND [[(loop (+ pos 1))]]
+  REPLACE [[(loop pos)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "consumed")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: need-input becomes a spurious stop"
+  FIND [[(make-parser-result 'need-input pos]]
+  REPLACE [[(make-parser-result 'stopped pos]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "need-input")
+
+# The stream-offset increment is a decision distinct from the pos cursor: the
+# accept case pins it to 1, the reject case to 0, so a no-op increment reddens
+# only the accept case (consumed and next stay correct).
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: advance does not increment the stream offset"
+  FIND [[(parser-set-offset! parser (+ 1 (parser-offset parser)))]]
+  REPLACE [[(parser-set-offset! parser (parser-offset parser))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "stream offset")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 33: the verifier's decisions (Milestone 1 Phase 2) -----------------
+#
+# verify-tests.sps asserts the exact diagnostic CODE emitted for each broken
+# variant of the one-byte machine (never rendered text, parent §16.4); this pass
+# proves those code assertions are not vacuous by suppressing the decision that
+# emits each code and requiring the owning case to notice. Verify command
+# modelled on the placeholder pass (Pass 8): both library roots, an empty object
+# guard, and the verify program. Each FIND is a verbatim, unique substring of
+# verify.sls.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/verify-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: reachability never reports an unreachable node"
+  FIND [[(make-diagnostic 'unreachable-node (node-name n) "node is unreachable")]]
+  REPLACE [[#f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "unreachable-node")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: overlap check treats every byte as distinct"
+  FIND [[(if (memv b seen)]]
+  REPLACE [[(if #f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "overlapping-cases")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: zero-progress detection never fires"
+  FIND [[(if (and (byte-dispatch-node? n) (reaches-self? (node-name n)))]]
+  REPLACE [[(if #f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "zero-progress-cycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the machine-name grammar check is suppressed"
+  FIND [[(if (valid-name? (machine-name m)) '()]]
+  REPLACE [[(if #t '()]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid-name")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a missing transition target is not reported"
+  FIND [[(make-diagnostic 'missing-target t "no such node")]]
+  REPLACE [[#f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "missing-target")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a duplicate node name is not reported"
+  FIND [[(cons (make-diagnostic 'duplicate-name nm "duplicate node name") out)]]
+  REPLACE [[out]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "duplicate-name")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an undeclared error reference is not reported"
+  FIND [[(if (and (error-node? n) (not (memq (error-node-error-name n) enames)))]]
+  REPLACE [[(if #f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "missing-error-declaration")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the default-eof-error membership check is suppressed"
+  FIND [[(if (memq (machine-default-eof-error m) (error-names m)) '()]]
+  REPLACE [[(if #t '()]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid-eof-target")
+
+# The remaining five decisions the verifier emits but the first eight mutations
+# did not reach: the schema guard, the duplicate-error-declaration branch, the
+# entry-resolution site of missing-target (distinct from the transition site
+# above), and the node-name and error-code sites of the name-portability check
+# (distinct from the machine-name site above). Each has its own rejection case
+# in verify-tests.sps; the project's own SITES-2 split precedent (harness-group
+# vs with-cleanup) requires each site of a multi-site decision to be witnessed.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the schema guard accepts a non-machine"
+  FIND [[(if (machine? m) '() (list (make-diagnostic 'invalid-shape #f "not a machine")))]]
+  REPLACE [[(if #t '() (list (make-diagnostic 'invalid-shape #f "not a machine")))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid-shape")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a duplicate error-declaration name is not reported"
+  FIND [[(if (memq (car es) seen)]]
+  REPLACE [[(if #f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "duplicate-error-declaration")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an entry that names no node is not reported"
+  FIND [[(if (lookup nodes (machine-entry m)) '()]]
+  REPLACE [[(if #t '()]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "missing-target")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the node-name grammar check is suppressed"
+  FIND [[(if (valid-name? (node-name n)) #f]]
+  REPLACE [[(if #t #f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid-name")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the error-code grammar check is suppressed"
+  FIND [[(valid-name? (error-declaration-code e))]]
+  REPLACE [[#t]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid-name")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 34: the reference interpreter (Milestone 1 Phase 2) ----------------
+#
+# interpret-tests.sps runs the verified one-byte machine over all 256 byte
+# values through the runtime and refuses an unverified machine; this pass proves
+# those checks are not vacuous. The first mutation makes dispatch match every
+# byte to the first case, so bytes 1..255 wrongly accept and the all-256 case
+# fails; the second disarms the unverified-machine refusal, so the refuse case's
+# check-raises sees a normal return. Verify command modelled on the placeholder
+# pass (Pass 8): both library roots, an empty object guard, the interpret
+# program.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/interpret-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
+  LABEL "interpret: dispatch matches every byte to the first case"
+  FIND [[((= byte (exact-byte-matcher-byte (byte-case-matcher (car cs))))]]
+  REPLACE [[(#t]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "no byte in 1..255 misbehaved")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
+  LABEL "interpret: an unverified machine is accepted"
+  FIND [[(unless (verification-ok? verification)]]
+  REPLACE [[(when #f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "refused")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
