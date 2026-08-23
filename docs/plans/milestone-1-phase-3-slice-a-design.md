@@ -205,12 +205,17 @@ the deliberate §9.2 asymmetry with `make-interpreted-machine`: no caller can pa
 verification of one machine with a different machine. `emission-metadata` carries the
 IR fingerprint and the byte count.
 
-**Library name and binding are both caller-supplied** (decision 0008 gives the
-emitter ownership of the library name; the caller is the most explicit, deterministic
-owner — no name-derivation magic). `render-machine` / `emit-machine` validate both
-against the grammar `[a-z][a-z0-9-]*` and the reserved-output-binding set *before*
-writing any bytes, raising an `invalid-output-binding` API-contract condition on
-failure.
+**The binding is caller-supplied; the library name is derived.** Parent §9.2 fixes
+`render-machine`/`emit-machine` at `(compilation binding)` — the `binding` symbol is
+the caller's only naming control, and decision 0008 §4 says a *custom* public library
+name comes from a hand-written re-export wrapper, not from a render-time argument. So
+the emitter owns the library name by a fixed deterministic convention:
+`(generated <machine-name>)` (the machine name is already verified against
+`[a-z][a-z0-9-]*`). `render-machine` / `emit-machine` validate the `binding` against
+that grammar and the reserved-output-binding set *before* writing any bytes, raising an
+`invalid-output-binding` API-contract condition on failure. (An earlier draft of this
+section made the library name caller-supplied; that contradicted §9.2's arity and
+0008 §4 and is corrected here.)
 
 The **reserved-output-binding set** now spans all three members (milestone-1-design.md
 §3.3): member 1 — R6RS source-mode identifiers (already checked in Phase 2); member 2
@@ -225,9 +230,9 @@ inline byte test, loop in `let` locals, plain R6RS (decision 0005 default; no fi
 or unsafe ops without benchmark evidence):
 
 ```scheme
-(library (<caller-library-name>)
+(library (generated <machine-name>)
   (export <binding>)
-  (import (byte-machine runtime))
+  (import (rnrs) (byte-machine runtime))
   (define (feed state offset bv start end)
     (let loop ((pos start) (st state) (off offset))
       (case st
