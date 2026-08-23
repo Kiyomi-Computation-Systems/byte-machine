@@ -367,7 +367,7 @@ These are closed v0.1 enumerations. The verifier enforces exact arity, declared-
 
 `compile-machine` is a pure ahead-of-time transformation from source IR to an emission-ready value. It does not invoke Scheme compilation, load generated code, use `eval`, or write a file. It always performs verification and refuses to expose an emission-ready normalized graph on failure. v0.1 accepts only the empty option list and rejects unknown options; optimization toggles are not hidden in the initial API.
 
-`render-machine` is pure and returns the complete canonical source bytevector. `emit-machine` is a thin imperative convenience that writes exactly that bytevector to the supplied binary port and returns emission metadata containing the fingerprint and byte count.
+`render-machine` is pure and returns the complete canonical source bytevector. `emit-machine` is a thin imperative convenience that writes exactly that bytevector to the supplied binary port and returns emission metadata containing the IR fingerprint and byte count.
 
 `binding` is a symbol and is the single top-level compiled-machine binding defined by the generated wrapper-free body. It must satisfy the portable name grammar and must not collide with the canonical reserved-output-binding set. That set contains:
 
@@ -1038,10 +1038,10 @@ Requirements:
 - rejection of output bindings that collide with syntax or declaration identifiers reserved by the R6RS source mode, runtime exports, or emitted internal identifiers;
 - no timestamps, hostnames, usernames, absolute paths, random data, or native details;
 - embedded IR format version and generator version;
-- embedded deterministic non-cryptographic fingerprint of canonical normalized IR and emission options;
+- embedded deterministic non-cryptographic IR fingerprint (decision 0009) of canonical normalized IR and emission options;
 - a final newline and fixed LF line endings.
 
-The initial fingerprint may use a specified 64-bit FNV-1a calculation over the canonical encoding. It is an identity/debugging aid, not a security primitive.
+The initial IR fingerprint may use a specified 64-bit FNV-1a calculation over the canonical encoding. It is an identity/debugging aid, not a security primitive.
 
 `emit-machine` writes only to the supplied binary output port with `put-u8`. Generated source is canonical UTF-8 with LF bytes even on Windows. Atomic temporary-file creation and replacement belong to the caller's imperative build shell.
 
