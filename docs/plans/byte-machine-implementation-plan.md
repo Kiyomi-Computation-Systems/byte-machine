@@ -377,6 +377,8 @@ These are closed v0.1 enumerations. The verifier enforces exact arity, declared-
 
 The compiler owns this explicit, deterministically ordered set next to the emitter template. Thin runtime wrappers' export lists and the set are checked together by tests so they cannot silently drift. `render-machine` and `emit-machine` validate the binding before producing or writing any bytes and raise an `invalid-output-binding` API-contract condition on failure.
 
+Scoping (Milestone 1, decision lineage milestone-1-design.md §3.3): only member 1 (R6RS source-mode syntax/declaration identifiers) is enumerable before Milestone 1 builds anything. Member 2 (`(byte-machine runtime)` exports) exists once the runtime lands; member 3 (canonical source-template identifiers) once the emitter lands. Generated-name-safety verification checks each member from the phase in which it comes to exist; a test must not assert against a member that does not yet exist.
+
 ### 9.3 Normative runtime calls
 
 ```scheme
@@ -1312,7 +1314,7 @@ These expected HTTP traces are curated test expectations, not copied from or com
 - Generate in every Tier 1 cell and compare output byte for byte across operating systems and architectures.
 - Compile and execute each generated output.
 - Exercise every permitted identifier character plus rejected punctuation, uppercase, non-ASCII names, and non-ASCII static labels.
-- Reject every canonical reserved output binding under Chez, including portable syntax names, runtime exports, and emitter-template identifiers.
+- Reject every canonical reserved output binding under Chez, including portable syntax names, runtime exports, and emitter-template identifiers — scoped to the members that exist when the test runs (see §9.2 scoping note; Phase 2 covers member 1, Phase 3 members 2–3).
 
 ### 22.10 Test exclusions
 
