@@ -2486,7 +2486,7 @@ byte_machine_mutation(
   LABEL "compile: reserved-member-2 drops a runtime export (silent drift)"
   FIND [[make-parser parser? parser-feed!]]
   REPLACE [[make-parser parser?]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "drift")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "no drift between reserved-member-2")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
