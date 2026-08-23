@@ -171,8 +171,13 @@ cmake_minimum_required(VERSION 3.26)
 # Milestone 1 Phase 1's adapter os-table mapping mutation joins the existing
 # self-test batch (pass 31, already declared) rather than opening a new pass,
 # so passes stay at 31 and 68 + 1 = 69 mutations.
-set(EXPECTED_PASSES 31)
-set(EXPECTED_MUTATIONS 69)
+#
+# Milestone 1 Phase 2 (semantic core) opens one new pass per executor module,
+# each appended after pass 31 below. Pass 32 is the runtime's two decisions --
+# advance consumes a byte, and the need-input guard is not a stop -- so 31 + 1 =
+# 32 passes and 69 + 2 = 71 mutations.
+set(EXPECTED_PASSES 32)
+set(EXPECTED_MUTATIONS 71)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -1930,6 +1935,44 @@ byte_machine_mutation(
   REPLACE [[  (adapter-exit harness-status-failed))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "PROVENANCE-ERROR fingerprint mismatch")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 32: the runtime parser loop (Milestone 1 Phase 2) ------------------
+#
+# runtime-tests.sps drives the parser lifecycle over a hand-built compiled-
+# machine stub, checking each decision directly; this pass proves those checks
+# are not vacuous by breaking the decision underneath and requiring the checks
+# to notice. The verify command is modelled on the placeholder pass (Pass 8):
+# both library roots -- the harness and src -- an empty object guard, and the
+# runtime program. The baseline runs unmutated and exits 0, so a mutation that
+# breaks a decision turns that into an assertion failure (exit 1).
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/runtime-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: advance does not consume the byte"
+  FIND [[(loop (+ pos 1))]]
+  REPLACE [[(loop pos)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "consumed")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: need-input becomes a spurious stop"
+  FIND [[(make-parser-result 'need-input pos]]
+  REPLACE [[(make-parser-result 'stopped pos]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "need-input")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

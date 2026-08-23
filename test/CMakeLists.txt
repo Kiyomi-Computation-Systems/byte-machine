@@ -785,3 +785,26 @@ byte_machine_add_scheme_lane(
           ${BYTE_MACHINE_CORE_GRAPH}
           "${CMAKE_SOURCE_DIR}/test/common/graph-tests.sps"
   TIMEOUT 120)
+
+# The runtime depends on nothing above it (parent §7.2), so its manifest is a
+# single library.
+set(BYTE_MACHINE_CORE_RUNTIME
+    "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/runtime.sls")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.runtime.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/runtime-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_RUNTIME}
+          "${CMAKE_SOURCE_DIR}/test/common/runtime-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.runtime.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/runtime-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_RUNTIME}
+          "${CMAKE_SOURCE_DIR}/test/common/runtime-tests.sps"
+  TIMEOUT 120)
