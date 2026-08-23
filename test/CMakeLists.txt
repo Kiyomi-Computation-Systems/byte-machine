@@ -868,6 +868,7 @@ byte_machine_add_scheme_lane(
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-one-byte-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/one-byte-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/differential-one-byte-tests.sps"
   TIMEOUT 120)
 
@@ -877,6 +878,7 @@ byte_machine_add_scheme_lane(
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-one-byte-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/one-byte-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/differential-one-byte-tests.sps"
   TIMEOUT 120)
 
@@ -886,6 +888,7 @@ byte_machine_add_scheme_lane(
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/example-one-byte-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/one-byte-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/example-one-byte-tests.sps"
   TIMEOUT 120)
 
@@ -895,6 +898,7 @@ byte_machine_add_scheme_lane(
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/example-one-byte-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/one-byte-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/example-one-byte-tests.sps"
   TIMEOUT 120)
 

@@ -2151,7 +2151,7 @@ byte_machine_mutation(
   LABEL "compile: an unverified compilation is rendered anyway"
   FIND [[(unless (compilation-ok? compilation)]]
   REPLACE [[(unless #t]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "ok")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "not ok")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source

@@ -57,7 +57,11 @@
       (put-u16be p (bytevector-length b)) (put-bytevector p b)))
   (define (mode->byte m) (if (eq? m 'advance) 0 1))
 
-  (define (normalize-machine machine)
+  ;; The `else` guards below are unreachable-today safety for a fourth node/state
+  ;; kind (EOF execution, Milestone 2); verified by inspection, not mutation.
+
+  ;; Lowering: verified machine -> (values entry states-vector). No encoding.
+  (define (lower-machine machine)
     (let* ((nodes (machine-nodes machine))
            (name->id (let loop ((ns nodes) (i 0) (acc '()))
                        (if (null? ns) (reverse acc)
@@ -86,28 +90,40 @@
                                         (vector ns-tag 'dispatch i trs
                                                 (cons (id-of (edge-target fb)) (edge-mode fb)) #f)))
                                      ((stop-node? n) (vector ns-tag 'stop i #f #f #f))
-                                     ((error-node? n) (vector ns-tag 'error i #f #f (errcode (error-node-error-name n)))))
+                                     ((error-node? n) (vector ns-tag 'error i #f #f (errcode (error-node-error-name n))))
+                                     ;; The M1 repertoire is exactly these three node kinds; EOF
+                                     ;; execution (a fourth kind) is Milestone 2. A future kind
+                                     ;; reaching here must fail loudly, not lower to nothing.
+                                     (else (assertion-violation 'normalize-machine "unknown node kind" n)))
                                    acc))))))))
-      (let ((fp (fnv1a-64
-                 (call-with-bytevector-output-port
-                  (lambda (p)
-                    (put-u8 p 1)
-                    (put-u32be p entry)
-                    (put-u32be p (vector-length states))
-                    (let loop ((i 0))
-                      (when (< i (vector-length states))
-                        (let ((s (vector-ref states i)))
-                          (case (normal-state-kind s)
-                            ((dispatch)
-                             (put-u8 p 0)
-                             (let ((trs (normal-dispatch-transitions s)))
-                               (put-u16be p (length trs))
-                               (for-each (lambda (tr)
-                                           (put-u8 p (car tr)) (put-u32be p (cadr tr))
-                                           (put-u8 p (mode->byte (caddr tr)))) trs))
-                             (let ((fb (normal-dispatch-fallback s)))
-                               (put-u32be p (car fb)) (put-u8 p (mode->byte (cdr fb)))))
-                            ((stop) (put-u8 p 1))
-                            ((error) (put-u8 p 2) (put-symbol p (normal-error-code s)))))
-                        (loop (+ i 1)))))))))
-        (make-normal-machine entry states fp)))))
+      (values entry states)))
+
+  ;; Encoding: (entry, states) -> canonical bytes (decision 0009 layout).
+  (define (encode-normal entry states)
+    (call-with-bytevector-output-port
+     (lambda (p)
+       (put-u8 p 1)
+       (put-u32be p entry)
+       (put-u32be p (vector-length states))
+       (let loop ((i 0))
+         (when (< i (vector-length states))
+           (let ((s (vector-ref states i)))
+             (case (normal-state-kind s)
+               ((dispatch)
+                (put-u8 p 0)
+                (let ((trs (normal-dispatch-transitions s)))
+                  (put-u16be p (length trs))
+                  (for-each (lambda (tr)
+                              (put-u8 p (car tr)) (put-u32be p (cadr tr))
+                              (put-u8 p (mode->byte (caddr tr)))) trs))
+                (let ((fb (normal-dispatch-fallback s)))
+                  (put-u32be p (car fb)) (put-u8 p (mode->byte (cdr fb)))))
+               ((stop) (put-u8 p 1))
+               ((error) (put-u8 p 2) (put-symbol p (normal-error-code s)))
+               (else (assertion-violation 'normalize-machine "unknown state kind"
+                                          (normal-state-kind s)))))
+           (loop (+ i 1)))))))
+
+  (define (normalize-machine machine)
+    (let-values (((entry states) (lower-machine machine)))
+      (make-normal-machine entry states (fnv1a-64 (encode-normal entry states))))))

@@ -45,6 +45,8 @@
     (unless (procedure? feed)
       (assertion-violation 'byte-machine-make-compiled-machine/v1 "feed must be a procedure" feed))
     (vector compiled-machine-tag 'v1 feed entry-state ir-fingerprint))
+  (define (compiled-machine-v1-feed cm) (vector-ref cm 2))
+  (define (compiled-machine-v1-entry-state cm) (vector-ref cm 3))
 
   ;; --- feed outcome (the runtime<-generated seam; accessors private) ---
   (define feed-outcome-tag (tag 'byte-machine-feed-outcome))
@@ -76,8 +78,8 @@
     (if (eq? (compiled-machine-variant compiled-machine) 'op)
         (let ((op (vector-ref compiled-machine 2)))
           (vector parser-tag 'op op (op 'entry) 0 #f))
-        (let ((feed (vector-ref compiled-machine 2))
-              (entry-state (vector-ref compiled-machine 3)))
+        (let ((feed (compiled-machine-v1-feed compiled-machine))
+              (entry-state (compiled-machine-v1-entry-state compiled-machine)))
           (vector parser-tag 'v1 feed entry-state 0 #f))))
   (define (parser? x) (tagged? parser-tag x))
   (define (parser-variant p) (vector-ref p 1))
