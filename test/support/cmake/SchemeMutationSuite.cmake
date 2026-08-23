@@ -215,8 +215,16 @@ cmake_minimum_required(VERSION 3.26)
 # test/fixtures/generated-one-byte.golden.sls and determinism-one-byte-
 # tests.sps's own golden comparison fails. One mutation. So 37 + 1 = 38
 # passes and 111 + 1 = 112 mutations.
-set(EXPECTED_PASSES 38)
-set(EXPECTED_MUTATIONS 112)
+#
+# Slice B's property-generator task adds the last pass, Pass 39 (the property
+# differential is non-vacuous): the dispatch byte test's rendered comparand is
+# shifted by one, mod 256, so every generated executor accepts the byte one
+# above what it should -- re-anchoring Pass 36's advance-arm-lowering mutation
+# against the *property* lane instead of the one fixed machine, so the
+# generated-machine differential is proven to notice divergence too. One
+# mutation. So 38 + 1 = 39 passes and 112 + 1 = 113 mutations.
+set(EXPECTED_PASSES 39)
+set(EXPECTED_MUTATIONS 113)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -2418,6 +2426,41 @@ byte_machine_mutation(
   FIND [["  (export " bstr ")\n"]]
   REPLACE [["  (export  " bstr ")\n"]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "golden")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 39: property differential is non-vacuous (Slice B) ------------------
+#
+# Slice A's Pass 36 already witnesses the advance-arm lowering against one
+# fixed machine; this re-anchors the same lowering mutation against the
+# *property* lane, so the generated-machine differential is proven to notice
+# divergence too, not just the fixed one-byte example. Verify command modelled
+# on the differential/determinism passes above.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/property-differential-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.property.differential.chez.source
+  LABEL "compile: the dispatch byte test is inverted, diverging from the oracle"
+  FIND [[(number->string (car tr)) ") "]]
+  # The brief's own draft used `modulo`; compile.sls imports only (rnrs),
+  # which exports `mod` (not the Chez/R5RS `modulo`), so `modulo` here is an
+  # unbound identifier -- confirmed by reproducing by hand: the mutated
+  # library raised "unbound identifier modulo" at load time and the verify
+  # command exited 255, not the deliberate status-1 harness failure this
+  # mutation is supposed to witness (MutationRunner.cmake's "wrong reason"
+  # check catches exactly this). `mod` is what (rnrs base) actually exports,
+  # confirmed the same way: the same repro then failed cleanly on all 40
+  # generated machines with "byte agreement" in the output and status 1.
+  REPLACE [[(number->string (mod (+ 1 (car tr)) 256)) ") "]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "byte agreement")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
