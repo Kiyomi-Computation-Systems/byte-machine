@@ -186,8 +186,18 @@ cmake_minimum_required(VERSION 3.26)
 # verifier emits). Pass 34 is the interpreter's TWO decisions -- dispatch
 # matches the byte to the right case, and an unverified machine is refused.
 # So 69 + 3 + 13 + 2 = 87 mutations across the three new passes.
-set(EXPECTED_PASSES 34)
-set(EXPECTED_MUTATIONS 87)
+#
+# Milestone 1 Phase 3 Slice A adds two passes and twenty mutations: Pass 32
+# (runtime) gains four -- v1 variant dispatch, the ABI-version check, the v1
+# result-status read, and v1 stickiness -- so 3 -> 7; Pass 35 (the normalizer)
+# adds six -- the FNV offset, the FNV prime, the byte-mixing XOR, the entry id,
+# the transition sort, and error-code resolution; Pass 36 (the emitter) adds ten
+# -- options validation, the compiled-ok verdict, the unverified-render refusal,
+# the binding grammar, the three reserved-set members, the advance and reexecute
+# loop tails, and the error-arm code. So 34 + 2 = 36 passes and 87 + 20 = 107
+# mutations.
+set(EXPECTED_PASSES 36)
+set(EXPECTED_MUTATIONS 107)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -1995,6 +2005,34 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "stream offset")
 
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a v1 machine is driven down the op path"
+  FIND [[(if (eq? (parser-variant parser) 'op)]]
+  REPLACE [[(if #t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "status")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a mismatched generated-runtime ABI version is accepted"
+  FIND [[(unless (and (integer? abi-version) (= abi-version current-abi-version))]]
+  REPLACE [[(unless #t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "refused")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the v1 result status is hard-wired to stopped"
+  FIND [[(status (feed-outcome-status o))]]
+  REPLACE [[(status 'stopped)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "status")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a v1 terminal result is not made sticky"
+  FIND [[(if (or (eq? status 'stopped) (eq? status 'error)) (parser-set-sticky! parser r))]]
+  REPLACE [[(if #f (parser-set-sticky! parser r))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "second")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 33: the verifier's decisions (Milestone 1 Phase 2) -----------------
@@ -2137,6 +2175,158 @@ byte_machine_mutation(
   LABEL "interpret: an unverified machine is accepted"
   FIND [[(unless (verification-ok? verification)]]
   REPLACE [[(when #f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "refused")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 35: the normalizer (Milestone 1 Phase 3 Slice A) --------------------
+#
+# normal-ir-tests.sps pins the IR fingerprint of the one-byte machine (a golden
+# value) and the structural decisions (entry id, transition sort, error-code
+# resolution). This pass proves those checks are not vacuous. Verify command
+# modelled on the placeholder pass (Pass 8): both library roots, an empty object
+# guard, the normal-ir program.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/normal-ir-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the FNV offset basis is changed"
+  FIND [[(define fnv-offset 14695981039346656037)]]
+  REPLACE [[(define fnv-offset 14695981039346656038)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "11963406767470843108")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the FNV prime is changed"
+  FIND [[(define fnv-prime  1099511628211)]]
+  REPLACE [[(define fnv-prime  1099511628212)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "11963406767470843108")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the byte is never mixed into the hash"
+  FIND [[(* (bitwise-xor h (bytevector-u8-ref bv i)) fnv-prime)]]
+  REPLACE [[(* h fnv-prime)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "11963406767470843108")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the entry id is hard-wired to node 0"
+  FIND [[(entry (id-of (machine-entry machine)))]]
+  REPLACE [[(entry 0)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "entry")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: dispatch cases are not sorted ascending by byte"
+  FIND [[(list-sort (lambda (a b) (< (car a) (car b)))]]
+  REPLACE [[(list-sort (lambda (a b) (> (car a) (car b)))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "bytes")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: an error node resolves to the declaration name, not its code"
+  FIND [[(error-declaration-code (car es)) (loop (cdr es))]]
+  REPLACE [[(error-declaration-name (car es)) (loop (cdr es))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "unexpected-byte")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 36: the emitter (Milestone 1 Phase 3 Slice A) ----------------------
+#
+# compile-tests.sps checks the compilation contract, the binding reserved-set
+# (all three members), and the rendered library structure by substring. This
+# pass proves those checks are not vacuous. Verify command modelled on the
+# placeholder pass (Pass 8): both library roots, an empty object guard, the
+# compile program.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/compile-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: a non-empty option list is accepted"
+  FIND [[(unless (null? options)]]
+  REPLACE [[(unless #t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "refused")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: an invalid machine is reported as compiled ok"
+  FIND [[(if (verification-ok? v)]]
+  REPLACE [[(if #t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "not ok")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: an unverified compilation is rendered anyway"
+  FIND [[(unless (compilation-ok? compilation)]]
+  REPLACE [[(unless #t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "ok")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: the binding grammar check is dropped"
+  FIND [[(and (> (string-length s) 0) (lower-alpha? (string-ref s 0))]]
+  REPLACE [[(and #t (lower-alpha? #\a)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "grammar")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: reserved member 1 is not checked"
+  FIND [[(not (memq sym reserved-member-1))]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "member 1")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: reserved member 2 is not checked"
+  FIND [[(not (memq sym reserved-member-2))]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "member 2")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: reserved member 3 is not checked"
+  FIND [[(not (memq sym reserved-member-3))]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "member 3")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: an advance transition is lowered as a reexecute"
+  FIND [[(string-append "(loop (+ pos 1) " (number->string target) " (+ off 1))")]]
+  REPLACE [[(string-append "(loop pos " (number->string target) " off)")]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "advance arm")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: the reexecute fallback is lowered as an advance"
+  FIND [[(string-append "(loop pos " (number->string target) " off)")]]
+  REPLACE [[(string-append "(loop (+ pos 1) " (number->string target) " (+ off 1))")]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fallback")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: the error arm omits the resolved code"
+  FIND [[(symbol->string (normal-error-code s)) ") " id " off))\n")]]
+  REPLACE [["internal" ") " id " off))\n")]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "error arm")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

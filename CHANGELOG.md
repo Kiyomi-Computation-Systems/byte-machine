@@ -296,6 +296,13 @@ what this milestone delivers.
   ("accept one exact byte, reject the rest at position 0") is proven through the
   interpreter across all 256 byte values in both the Chez source and AOT lanes.
   Error references are symbolic; EOF is declared and verified but not executed.
+- Milestone 1 Phase 3 Slice A: the emitter and the interpreter≡generated
+  differential. A verified one-byte machine is normalized to a canonical IR with
+  a 64-bit FNV-1a IR fingerprint, emitted as a complete importable `.sls` that
+  imports only `(byte-machine runtime)` and constructs a direct executor through
+  the new `byte-machine-make-compiled-machine/v1` ABI, and proven to match the
+  reference interpreter across all 256 byte values in both the source and AOT
+  lanes, plus the §9.6 end-to-end example. Decision 0010 records the ABI.
 
 ### Changed
 
