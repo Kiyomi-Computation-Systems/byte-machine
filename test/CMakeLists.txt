@@ -542,15 +542,12 @@ endif()
 
 # --- Chez ahead-of-time lanes ----------------------------------------------
 #
-# Three of the programs the source lanes run, compiled. Nothing about the
+# Two of the programs the source lanes run, compiled. Nothing about the
 # sources changes; what changes is that the text reaching the process came
 # out of objects built earlier, which is why these lanes measure the copies
-# the compile step kept rather than the repository sources. Three lanes, not
-# one per source lane: bootstrap (the runner's primitives with no runner),
-# self (the runner on itself), and placeholder-identity (slice 4 section 10
-# deferred cross-library identity under compiled lanes to exactly here --
-# separate instantiation is a modelled risk in source mode and a real one
-# once each library is compiled into its own object).
+# the compile step kept rather than the repository sources. Two lanes, not
+# one per source lane: bootstrap (the runner's primitives with no runner)
+# and self (the runner on itself).
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.bootstrap.chez.aot
   BACKEND chez
@@ -565,16 +562,6 @@ byte_machine_add_scheme_lane(
   PROGRAM "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
-  TIMEOUT 120)
-
-byte_machine_add_scheme_lane(
-  NAME byte-machine.portability.placeholder-identity.chez.aot
-  BACKEND chez
-  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.sps"
-  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
-          "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder.sls"
-          "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder-consumer.sls"
-          "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.sps"
   TIMEOUT 120)
 
 # --- Mutation proof for the harness ----------------------------------------
@@ -603,44 +590,6 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
                 "BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin"
                 "BYTE_MACHINE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-one-byte.golden.sls")
 endif()
-
-# --- The placeholder library -------------------------------------------------
-#
-# One lane, launched from the default private directory like every other
-# lane. The three-directory working-directory matrix retired with the include
-# mechanism (decision 0006): with absolute library roots and an empty
-# source-directories there is nothing left for a launch directory to change,
-# so cwd-independence is structural rather than empirical.
-byte_machine_add_scheme_lane(
-  NAME byte-machine.portability.placeholder.chez.source
-  BACKEND chez
-  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.sps"
-  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
-          "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder.sls"
-          "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.sps"
-  TIMEOUT 120)
-
-# --- Cross-library identity ------------------------------------------------
-#
-# Slice 4, deliverable D3. Two libraries, one placeholder: the owner
-# constructs it, the consumer -- which imports the owner rather than
-# redefining its procedures -- recognises it, and the allocation-free
-# singleton stays one object across both imports.
-#
-# Passing here is not yet evidence. What makes it evidence is the ownership
-# mutation in SchemeMutationSuite.cmake, where the consumer is rewritten to
-# inline duplicate definitions instead of importing the owner: under that
-# mutation both cases below answer wrongly, nothing raises, and every other
-# lane in this tree still passes.
-byte_machine_add_scheme_lane(
-  NAME byte-machine.portability.placeholder-identity.chez.source
-  BACKEND chez
-  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.sps"
-  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
-          "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder.sls"
-          "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder-consumer.sls"
-          "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.sps"
-  TIMEOUT 120)
 
 # --- Provenance ------------------------------------------------------------
 #

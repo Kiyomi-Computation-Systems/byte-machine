@@ -50,9 +50,6 @@
 # else; the pass therefore builds a root that does have one, and runs the
 # self-tests lane against it.
 #
-# Pass 8 is the placeholder library's own decisions -- tag, length, vector-ness,
-# symbol-vs-fresh-allocation identity.
-#
 # Passes 9 to 17 are the launcher's parse decisions: an unknown flag, a flag
 # with no value, a single-valued flag repeated, a required flag unchecked in
 # general, one entry dropped from each of required-flags' three members, and
@@ -66,19 +63,6 @@
 # (decision 0006): with library roots absolute and source-directories empty,
 # there is no resolution step left for a launch directory to change, so the
 # claim the matrix witnessed empirically is now structural.
-#
-# Pass 18 is the consumer library's three decisions. All three are now caught
-# by a failed comparison. The first used to be caught by an induced raise
-# instead -- weaker, and weighed and accepted -- before a comparison-based
-# witness replaced it.
-#
-# Pass 19 is the slice's reason for existing, reconstructed for the inline
-# tree: the consumer defines its own copies of the owner's procedures instead
-# of importing them, so it gets its own tag and its own marker. Unlike every
-# other mutation in this file, the mutant raises nothing -- it is caught by
-# an ordinary check/check-equal mismatch that exits 1, and it answers both
-# identity claims wrongly while every lane that imports only the owner still
-# passes.
 #
 # Pass 20 is the fingerprint algorithm's own decisions -- the +1 that keeps a
 # leading zero byte significant, the seed, the multiplier, the modulus, and
@@ -229,8 +213,23 @@ cmake_minimum_required(VERSION 3.26)
 # valid-binding? behaviour is unchanged and only the drift set-equality
 # notices), and reserved-drift-tests.sps's check-equal fails on the mismatch.
 # One mutation. So 39 + 1 = 40 passes and 113 + 1 = 114 mutations.
-set(EXPECTED_PASSES 40)
-set(EXPECTED_MUTATIONS 114)
+#
+# Slice B's placeholder-deletion task (Task 5) retires three passes outright
+# instead of adding one: Pass 8 (six mutations -- vector-ness, the length
+# check's two failure modes, the tag check, the tag's symbol-vs-fresh-
+# allocation identity, and per-call marker allocation), Pass 18 (three
+# mutations -- the unchecked argument, the marker-not-value branch, and the
+# lookalike-not-singleton outcome), and Pass 19 (one mutation -- the
+# ownership pass, the slice's reason for existing). All three mutated files
+# left with the M0 placeholder libraries, superseded by the emitter and its
+# end-to-end example, which now exercise the real public library boundary
+# (spike §11; milestone-1-design.md §6) -- so what these passes proved
+# non-vacuous no longer exists to prove anything about. Consistent with the
+# matrix's own retirement above, the surviving passes keep their numbers
+# rather than closing the gap. So 40 - 3 = 37 passes and
+# 114 - (6 + 3 + 1) = 104 mutations.
+set(EXPECTED_PASSES 37)
+set(EXPECTED_MUTATIONS 104)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -270,11 +269,10 @@ if(NOT BYTE_MACHINE_CHEZ_EXECUTABLE)
 endif()
 
 # src is staged whole: --library-root arguments throughout this file resolve
-# both product libraries through it, src/byte-machine/placeholder.sls and
-# src/byte-machine/placeholder-consumer.sls, each of which now owns its own
-# text directly (decision 0006). There is no separate wrapper/body split left
-# to keep reachable together; staging the one directory both live under is
-# enough.
+# every product library through it, each of which now owns its own text
+# directly (decision 0006). There is no separate wrapper/body split left to
+# keep reachable together; staging the one directory every library lives
+# under is enough.
 set(BYTE_MACHINE_MUTATION_STAGE_DIRS
   "cmake" "test/support/cmake" "test/support/harness" "test/support/launchers"
   "src" "test/common")
@@ -909,71 +907,6 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Pass 8: the placeholder library's decisions ----------------------------
-#
-# placeholder-tests.sps already checks each of these decisions directly; this
-# pass proves those checks are not vacuous by breaking the decision underneath
-# and requiring the checks to notice.
-
-set(PLACEHOLDER_BODY src/byte-machine/placeholder.sls)
-
-set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
-  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
-  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "--library-root" "${STAGE_DIR}/test/support/harness"
-  "--library-root" "${STAGE_DIR}/src"
-  "--object-guard" "${GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/common/placeholder-tests.sps")
-
-byte_machine_mutation_reset()
-
-byte_machine_mutation(
-  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.sps
-  LABEL "placeholder: anything is a vector"
-  FIND [[  (and (vector? x)]]
-  REPLACE [[  (and #t]])
-
-# Two mutations, because the length check can fail two ways: it can be absent,
-# or its bound can be wrong. Deleting it is caught by the case that builds a
-# length-3 vector carrying the real tag -- reachable through vector-ref on a
-# legitimately built placeholder, which is why this is witnessable at all.
-byte_machine_mutation(
-  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.sps
-  LABEL "placeholder: the length is not checked at all"
-  FIND [[       (= (vector-length x) 2)]]
-  REPLACE [[       #t]])
-
-byte_machine_mutation(
-  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.sps
-  LABEL "placeholder: the length check accepts the wrong length"
-  FIND [[       (= (vector-length x) 2)]]
-  REPLACE [[       (= (vector-length x) 3)]])
-
-byte_machine_mutation(
-  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.sps
-  LABEL "placeholder: the tag is not checked"
-  FIND [[       (eq? (vector-ref x 0) placeholder-tag)))]]
-  REPLACE [[       #t))]])
-
-# The rule the whole representation rests on. With a symbol tag every
-# assertion in the suite still passes except the one written for this, and
-# slice 4's identity test would become incapable of failing.
-byte_machine_mutation(
-  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.sps
-  LABEL "placeholder: the tag is an interned symbol"
-  FIND [[(define placeholder-tag (vector 'byte-machine-placeholder))]]
-  REPLACE [[(define placeholder-tag 'byte-machine-placeholder)]])
-
-byte_machine_mutation(
-  FILE ${PLACEHOLDER_BODY} SPEC placeholder-tests.sps
-  LABEL "placeholder: the marker is allocated per call"
-  FIND [[(define (placeholder-marker)
-  placeholder-marker-object)]]
-  REPLACE [[(define (placeholder-marker)
-  (vector 'byte-machine-marker))]])
-
-byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
-
 # --- Passes 9 to 17: the launcher's parse decisions -------------------------
 #
 # Deleting a refusal does not produce a wrong answer; it produces an invocation
@@ -1183,94 +1116,6 @@ byte_machine_slice3_launcher_pass(
   "bootstrap: failures=0"
   ${LAUNCHER_BASE_ARGS}
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
-
-# --- Pass 18: the consumer library's decisions ------------------------------
-#
-# Same argument as pass 8, for a second library: placeholder-identity-tests.sps
-# already checks each of these decisions directly; this pass proves those
-# checks are not vacuous.
-
-set(CONSUMER_BODY src/byte-machine/placeholder-consumer.sls)
-
-set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
-  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
-  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "--library-root" "${STAGE_DIR}/test/support/harness"
-  "--library-root" "${STAGE_DIR}/src"
-  "--object-guard" "${GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/common/placeholder-identity-tests.sps")
-
-byte_machine_mutation_reset()
-
-# Caught by comparison, not by a raise: consume always takes the reject
-# branch, so (consume (make-placeholder 7)) returns the marker instead of 7
-# and the recognition case fails an ordinary check-equal. An earlier form
-# used #t instead of #f, driving the same case into placeholder-value on a
-# non-vector and catching it by an induced raise instead -- replaced once
-# this comparison-based witness was found. See section 5.3 of the slice-4
-# design.
-byte_machine_mutation(
-  FILE ${CONSUMER_BODY} SPEC placeholder-identity-tests.sps
-  LABEL "consumer: the argument is not checked at all"
-  FIND [[  (if (placeholder? p)]]
-  REPLACE [[  (if #f]])
-
-byte_machine_mutation(
-  FILE ${CONSUMER_BODY} SPEC placeholder-identity-tests.sps
-  LABEL "consumer: the recognised branch yields the marker, not the value"
-  FIND [[      (placeholder-value p)]]
-  REPLACE [[      (placeholder-marker)]])
-
-# The only mutation that reaches D3's second clause by itself: recognition
-# still works, and the outcome is merely a different object that prints the
-# same. This is the one an eq?-free test would miss entirely.
-byte_machine_mutation(
-  FILE ${CONSUMER_BODY} SPEC placeholder-identity-tests.sps
-  LABEL "consumer: the outcome is a lookalike, not the owner's singleton"
-  FIND [[      (placeholder-marker)))]]
-  REPLACE [[      (vector 'byte-machine-marker)))]])
-
-byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
-
-# --- Pass 19: the ownership pass -- a consumer that copies instead of importing
-#
-# Decisions 0002/0003's one-owner rule is unconstructible against the inline
-# tree -- there is no include form and no body file for a second owner to
-# include. The defect class survives inlining, because copy-paste can
-# reintroduce it: a consumer that defines its own copies of the owner's
-# procedures carries its own tag and its own marker, both identity cases
-# answer wrongly, nothing raises, and every lane that imports only the owner
-# still passes. This is 0003's silent-defect measurement reconstructed for
-# the inline world (decision 0006, decision 5).
-
-byte_machine_mutation_reset()
-
-set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
-  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
-  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
-  "--library-root" "${STAGE_DIR}/test/support/harness"
-  "--library-root" "${STAGE_DIR}/src"
-  "--object-guard" "${GUARD_DIR}"
-  "--program" "${STAGE_DIR}/test/common/placeholder-identity-tests.sps")
-
-byte_machine_mutation(
-  FILE ${CONSUMER_BODY} SPEC placeholder-identity-tests.sps
-  LABEL "consumer library: inlines duplicate definitions instead of importing the owner"
-  FIND [[  (import (rnrs) (byte-machine placeholder))]]
-  REPLACE [[  (import (rnrs))
-  (define placeholder-tag (vector 'byte-machine-placeholder))
-  (define placeholder-marker-object (vector 'byte-machine-marker))
-  (define (make-placeholder value) (vector placeholder-tag value))
-  (define (placeholder? x)
-    (and (vector? x)
-         (= (vector-length x) 2)
-         (eq? (vector-ref x 0) placeholder-tag)))
-  (define (placeholder-value p) (vector-ref p 1))
-  (define (placeholder-marker) placeholder-marker-object)]]
-  EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "byte-machine-harness: FAIL ")
-
-byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 20: the fingerprint algorithm --------------------------------------
 #
@@ -1996,10 +1841,10 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # runtime-tests.sps drives the parser lifecycle over a hand-built compiled-
 # machine stub, checking each decision directly; this pass proves those checks
 # are not vacuous by breaking the decision underneath and requiring the checks
-# to notice. The verify command is modelled on the placeholder pass (Pass 8):
-# both library roots -- the harness and src -- an empty object guard, and the
-# runtime program. The baseline runs unmutated and exits 0, so a mutation that
-# breaks a decision turns that into an assertion failure (exit 1).
+# to notice. The verify command uses both library roots -- the harness and
+# src -- an empty object guard, and the runtime program. The baseline runs
+# unmutated and exits 0, so a mutation that breaks a decision turns that into
+# an assertion failure (exit 1).
 
 byte_machine_mutation_reset()
 
@@ -2074,9 +1919,8 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # variant of the one-byte machine (never rendered text, parent §16.4); this pass
 # proves those code assertions are not vacuous by suppressing the decision that
 # emits each code and requiring the owning case to notice. Verify command
-# modelled on the placeholder pass (Pass 8): both library roots, an empty object
-# guard, and the verify program. Each FIND is a verbatim, unique substring of
-# verify.sls.
+# uses both library roots, an empty object guard, and the verify program.
+# Each FIND is a verbatim, unique substring of verify.sls.
 
 byte_machine_mutation_reset()
 
@@ -2183,9 +2027,8 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # those checks are not vacuous. The first mutation makes dispatch match every
 # byte to the first case, so bytes 1..255 wrongly accept and the all-256 case
 # fails; the second disarms the unverified-machine refusal, so the refuse case's
-# check-raises sees a normal return. Verify command modelled on the placeholder
-# pass (Pass 8): both library roots, an empty object guard, the interpret
-# program.
+# check-raises sees a normal return. Verify command uses both library roots,
+# an empty object guard, the interpret program.
 
 byte_machine_mutation_reset()
 
@@ -2216,8 +2059,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # normal-ir-tests.sps pins the IR fingerprint of the one-byte machine (a golden
 # value) and the structural decisions (entry id, transition sort, error-code
 # resolution). This pass proves those checks are not vacuous. Verify command
-# modelled on the placeholder pass (Pass 8): both library roots, an empty object
-# guard, the normal-ir program.
+# uses both library roots, an empty object guard, the normal-ir program.
 
 byte_machine_mutation_reset()
 
@@ -2277,9 +2119,8 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 #
 # compile-tests.sps checks the compilation contract, the binding reserved-set
 # (all three members), and the rendered library structure by substring. This
-# pass proves those checks are not vacuous. Verify command modelled on the
-# placeholder pass (Pass 8): both library roots, an empty object guard, the
-# compile program.
+# pass proves those checks are not vacuous. Verify command uses both library
+# roots, an empty object guard, the compile program.
 
 byte_machine_mutation_reset()
 

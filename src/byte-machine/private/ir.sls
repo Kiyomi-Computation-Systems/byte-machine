@@ -1,9 +1,9 @@
 ;;; Immutable source-IR descriptors (parent §9.1, §10), M1 subset: the machine,
 ;;; byte-dispatch/stop/error nodes, exact-byte matcher, edge, error
 ;;; declaration, and the verification-result value. Tagged vectors behind
-;;; accessors (like src/byte-machine/placeholder.sls); the tag is a freshly
-;;; allocated vector so a second copy gets a second identity. Constructors
-;;; validate only local shape; graph/cross-reference checks live in verify.
+;;; accessors; the tag is a freshly allocated vector so a second copy gets a
+;;; second identity. Constructors validate only local shape; graph/cross-
+;;; reference checks live in verify.
 ;;; Error references (error nodes, the machine default eof error) are symbolic
 ;;; NAMES resolved by verify against the error declarations (parent §10.1).
 (library (byte-machine private ir)
