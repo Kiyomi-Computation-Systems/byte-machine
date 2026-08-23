@@ -153,7 +153,11 @@
 # CTest supplies all three -- see this suite's registration in
 # test/CMakeLists.txt. Run by hand without them, the baseline fails before any
 # mutation is tried -- which is the designed behaviour, not a bug: an
-# unverifiable baseline makes every mutation look caught.
+# unverifiable baseline makes every mutation look caught. Pass 38's baseline
+# additionally needs BYTE_MACHINE_GOLDEN_FILE (naming
+# test/fixtures/generated-one-byte.golden.sls), which the same ctest
+# registration supplies and which execute_process passes through unmodified
+# to that pass's own verify command.
 
 cmake_minimum_required(VERSION 3.26)
 
@@ -204,8 +208,15 @@ cmake_minimum_required(VERSION 3.26)
 # on the definition that follows to stay unique per file), and the emitter's
 # final-newline CRLF injection. So 36 + 1 = 37 passes and 107 + 4 = 111
 # mutations.
-set(EXPECTED_PASSES 37)
-set(EXPECTED_MUTATIONS 111)
+#
+# Slice B's D6 task adds one more pass, Pass 38 (deterministic emission
+# against the committed golden): the writer's export line loses its exact
+# spacing, so the rendered bytes stop matching
+# test/fixtures/generated-one-byte.golden.sls and determinism-one-byte-
+# tests.sps's own golden comparison fails. One mutation. So 37 + 1 = 38
+# passes and 111 + 1 = 112 mutations.
+set(EXPECTED_PASSES 38)
+set(EXPECTED_MUTATIONS 112)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -2382,6 +2393,31 @@ byte_machine_mutation(
   FIND [[" feed)))\n"))))]]
   REPLACE [[" feed)))\r\n"))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "carriage return")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 38: D6 determinism vs golden (Slice B) -----------------------------
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/determinism-one-byte-tests.sps"
+  # the golden lives in the source tree; the staged program reads it via env
+  # (BYTE_MACHINE_GOLDEN_FILE, supplied by this suite's own ctest registration
+  # and inherited unmodified through execute_process -- see "WHAT THIS SUITE
+  # NEEDS FROM ITS ENVIRONMENT" above)
+  )
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.determinism.one-byte.chez.source
+  LABEL "compile: the writer's export line spacing changes"
+  FIND [["  (export " bstr ")\n"]]
+  REPLACE [["  (export  " bstr ")\n"]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "golden")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

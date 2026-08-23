@@ -587,7 +587,10 @@ byte_machine_add_scheme_lane(
 #
 # The self-tests load the fingerprint fixture through adapter-file-bytes; staged
 # lanes inherit this process's environment through execute_process, so the
-# variable must be set here.
+# variable must be set here. Pass 38 (D6 determinism, Slice B) reads the
+# committed golden the same way, through BYTE_MACHINE_GOLDEN_FILE, so it is
+# set here too rather than inside SchemeMutationSuite.cmake -- the same
+# mechanism, for the same reason, as BYTE_MACHINE_FINGERPRINT_SAMPLE.
 if(BYTE_MACHINE_CHEZ_EXECUTABLE)
   byte_machine_add_test(
     NAME byte-machine.harness.scheme-mutation.cmake.direct
@@ -597,7 +600,8 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     TIMEOUT 900
     LABELS unit
     ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source"
-                "BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin")
+                "BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin"
+                "BYTE_MACHINE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-one-byte.golden.sls")
 endif()
 
 # --- The placeholder library -------------------------------------------------
