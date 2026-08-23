@@ -116,10 +116,16 @@
                   (> (string-length (adapter-runtime-version)) 0))
 (bootstrap-assert "adapter: machine type is non-empty"
                   (> (string-length (adapter-machine-type)) 0))
-(bootstrap-assert "adapter: os is known"
-                  (not (string=? (adapter-os) "unknown")))
-(bootstrap-assert "adapter: architecture is known"
-                  (not (string=? (adapter-architecture) "unknown")))
+(let ((expect-os (adapter-environment-variable "BYTE_MACHINE_EXPECT_OS"))
+      (expect-arch (adapter-environment-variable "BYTE_MACHINE_EXPECT_ARCH")))
+  (bootstrap-assert "adapter: os matches the cell or is at least known"
+                    (if (and expect-os (> (string-length expect-os) 0))
+                        (string=? (adapter-os) expect-os)
+                        (not (string=? (adapter-os) "unknown"))))
+  (bootstrap-assert "adapter: architecture matches the cell or is at least known"
+                    (if (and expect-arch (> (string-length expect-arch) 0))
+                        (string=? (adapter-architecture) expect-arch)
+                        (not (string=? (adapter-architecture) "unknown")))))
 (bootstrap-assert "adapter: execution mode is one the lane vocabulary defines"
                   (harness-member? (adapter-execution-mode)
                                    (list "source" "aot")))

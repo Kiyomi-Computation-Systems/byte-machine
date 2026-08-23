@@ -285,6 +285,9 @@ what this milestone delivers.
   recording that Milestone 0 closes at the harness, and answering the parent
   plan's four remaining hard questions with each answer's evidence level
   stated rather than assumed.
+- Continuous integration on macOS arm64 and Linux amd64 (the first CI in the
+  repository), running the full test suite and asserting each cell's OS and
+  architecture (Milestone 1, Phase 1).
 
 ### Changed
 
@@ -384,6 +387,11 @@ what this milestone delivers.
   annotation on its claim that a lane "runs in CI": that sentence was never
   true, and it is annotated rather than silently corrected because the
   record cites it as evidence for its own Consequences.
+- The harness adapter derives OS and architecture through pure
+  `machine-type->…` functions, tested exhaustively over the Tier-1 machine
+  types, and the self-test/bootstrap lanes assert the live values by equality
+  when the cell's identity is supplied, replacing the earlier not-"unknown"
+  checks.
 
 ### Removed
 
