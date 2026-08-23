@@ -52,15 +52,25 @@
 ;; program reader accepts neither a bare leading-digit/leading-hyphen token
 ;; (ambiguous with number syntax) nor |...| escape syntax in this mode, so
 ;; those candidates are built with string->symbol rather than as literals.
+;; The empty symbol's rejection is retained as by-inspection coverage, not a
+;; mutation witness: valid-name?/valid-binding? short-circuit their `and` on
+;; (> (string-length s) 0) before ever indexing into s, so any mutation that
+;; relaxes that length guard makes the very next (string-ref s 0) raise on
+;; this candidate -- a crash, not an acceptance, i.e. "caught for the wrong
+;; reason" (close-demonstrated-gaps). No honest witnessing mutation exists.
 (define rejected-names
   (list (string->symbol "9a") (string->symbol "-a") 'Ab 'aB
         (string->symbol "a.b") (string->symbol "a_b") (string->symbol "a/b")
-        (string->symbol "a+b") (string->symbol "a b") 'define))
+        (string->symbol "a+b") (string->symbol "a b") 'define
+        (string->symbol "") (string->symbol "a\xe9;b")))
 ;; Bindings additionally reserve runtime exports (member 2) and template ids
-;; (member 3); the grammar-only rejects above still apply.
+;; (member 3); the grammar-only rejects above still apply. 'start' is a valid
+;; verify-site name (see accepted-names) but not a valid binding -- it is
+;; reserved-member-3 -- so it belongs here, not in accepted.
 (define rejected-bindings
   (list (string->symbol "9a") (string->symbol "-a") 'Ab (string->symbol "a.b")
-        'define 'make-compiled-machine 'feed))
+        'define 'make-compiled-machine 'feed 'start
+        (string->symbol "") (string->symbol "a\xe9;b")))
 
 (harness-group "machine names: the verify-site grammar"
   (lambda ()
