@@ -1995,6 +1995,34 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "stream offset")
 
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a v1 machine is driven down the op path"
+  FIND [[(if (eq? (parser-variant parser) 'op)]]
+  REPLACE [[(if #t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "status")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a mismatched generated-runtime ABI version is accepted"
+  FIND [[(unless (and (integer? abi-version) (= abi-version current-abi-version))]]
+  REPLACE [[(unless #t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "refused")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the v1 result status is hard-wired to stopped"
+  FIND [[(status (feed-outcome-status o))]]
+  REPLACE [[(status 'stopped)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "status")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a v1 terminal result is not made sticky"
+  FIND [[(if (or (eq? status 'stopped) (eq? status 'error)) (parser-set-sticky! parser r))]]
+  REPLACE [[(if #f (parser-set-sticky! parser r))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "second")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 33: the verifier's decisions (Milestone 1 Phase 2) -----------------

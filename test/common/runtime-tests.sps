@@ -55,4 +55,55 @@
           (set! returned (parser-result-status (parser-feed! p (make-bytevector 0) 0 0)))
           (check-equal "status" returned 'need-input))))))
 
+;; The direct-executor ABI. A hand-built feed encodes the one-byte machine over
+;; numeric states (0 dispatch, 1 stop, 2 error), so the v1 path is witnessed
+;; independently of the emitter.
+(define (stub-feed state offset bv start end)
+  (let loop ((pos start) (st state) (off offset))
+    (case st
+      ((1) (byte-machine-make-feed-outcome/v1 'stopped pos #f 1 off))
+      ((2) (byte-machine-make-feed-outcome/v1 'error pos 'unexpected-byte 2 off))
+      (else
+       (if (>= pos end)
+           (byte-machine-make-feed-outcome/v1 'need-input pos #f 0 off)
+           (let ((b (bytevector-u8-ref bv pos)))
+             (if (= b 0) (loop (+ pos 1) 1 (+ off 1)) (loop pos 2 off))))))))
+(define (v1-machine) (byte-machine-make-compiled-machine/v1 1 42 0 stub-feed))
+(define (v1-feed-byte b)
+  (parser-feed! (make-parser (v1-machine) '() #f) (make-bytevector 1 b) 0 1))
+
+(harness-group "generated-code ABI (/v1)"
+  (lambda ()
+    (harness-case "the accepted byte stops after consuming one byte"
+      (lambda ()
+        (let ((r (v1-feed-byte 0)))
+          (check-equal "status" (parser-result-status r) 'stopped)
+          (check-equal "consumed" (parser-result-consumed r) 1)
+          (check-equal "stream offset" (parser-result-stream-offset r) 1))))
+    (harness-case "a rejected byte errors at position 0 with the code"
+      (lambda ()
+        (let ((r (v1-feed-byte 65)))
+          (check-equal "status" (parser-result-status r) 'error)
+          (check-equal "stream offset" (parser-result-stream-offset r) 0)
+          (check-equal "error value" (parser-result-error r) 'unexpected-byte))))
+    (harness-case "an empty slice needs input"
+      (lambda ()
+        (let* ((p (make-parser (v1-machine) '() #f))
+               (got 'not-yet))
+          (set! got (parser-result-status (parser-feed! p (make-bytevector 0) 0 0)))
+          (check-equal "status" got 'need-input))))
+    (harness-case "a terminal result is sticky across a second feed"
+      (lambda ()
+        (let* ((p (make-parser (v1-machine) '() #f))
+               (r1 (parser-feed! p (make-bytevector 1 0) 0 1))
+               (r2 (parser-feed! p (make-bytevector 1 0) 0 1)))
+          (check-equal "second next equals first" (parser-result-next r2) (parser-result-next r1))
+          (check-equal "second consumed equals first"
+                       (parser-result-consumed r2) (parser-result-consumed r1)))))
+    (harness-case "a mismatched ABI version is refused"
+      (lambda ()
+        (check-raises "refused"
+                      (lambda (e) #t)
+                      (lambda () (byte-machine-make-compiled-machine/v1 2 42 0 stub-feed)))))))
+
 (harness-finish)
