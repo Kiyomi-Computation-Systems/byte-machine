@@ -450,7 +450,7 @@ Milestone 1 must add one executable Chez example program, run in both the source
 1. constructing a one-byte machine only through `(byte-machine graph)`;
 2. verifying it;
 3. compiling it without runtime evaluation;
-4. emitting a generated body to a binary file port;
+4. emitting the generated library to a binary file port;
 5. importing the generated library from the consumer — the emitter emits a complete importable `.sls` ([decision 0008](../decisions/0008-emitter-emits-importable-library.md)), so no file includes another and §7.2 holds;
 6. importing only `(byte-machine runtime)` in the consumer;
 7. constructing a parser, feeding the exact `[0,1)` slice, and inspecting the result;
@@ -1040,7 +1040,7 @@ Requirements:
 - rejection of output bindings that collide with syntax or declaration identifiers reserved by the R6RS source mode, runtime exports, or emitted internal identifiers;
 - no timestamps, hostnames, usernames, absolute paths, random data, or native details;
 - embedded IR format version and generator version;
-- embedded deterministic non-cryptographic IR fingerprint (decision 0009) of canonical normalized IR and emission options;
+- embedded deterministic non-cryptographic IR fingerprint ([decision 0009](../decisions/0009-content-and-ir-fingerprints.md)) of canonical normalized IR and emission options;
 - a final newline and fixed LF line endings.
 
 The initial IR fingerprint may use a specified 64-bit FNV-1a calculation over the canonical encoding. It is an identity/debugging aid, not a security primitive.
