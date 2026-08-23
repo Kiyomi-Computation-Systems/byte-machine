@@ -196,8 +196,16 @@ cmake_minimum_required(VERSION 3.26)
 # the binding grammar, the three reserved-set members, the advance and reexecute
 # loop tails, and the error-arm code. So 34 + 2 = 36 passes and 87 + 20 = 107
 # mutations.
-set(EXPECTED_PASSES 36)
-set(EXPECTED_MUTATIONS 107)
+#
+# Milestone 1 Phase 3 Slice B's D7 task adds one pass, Pass 37 (the identifier
+# repertoire and binary-LF proof), with four mutations: the verify-site first-
+# char check, the verify-site and compile-site interior-char check (name-char?
+# is shared text between verify.sls and compile.sls, so each mutation anchors
+# on the definition that follows to stay unique per file), and the emitter's
+# final-newline CRLF injection. So 36 + 1 = 37 passes and 107 + 4 = 111
+# mutations.
+set(EXPECTED_PASSES 37)
+set(EXPECTED_MUTATIONS 111)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -2327,6 +2335,53 @@ byte_machine_mutation(
   FIND [[(symbol->string (normal-error-code s)) ") " id " off))\n")]]
   REPLACE [["internal" ") " id " off))\n")]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "error arm")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 37: D7 identifier repertoire + LF (Slice B) -------------------------
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/identifier-repertoire-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
+  LABEL "verify: a name with a non-lowercase first char is accepted"
+  FIND [[(lower-alpha? (string-ref s 0))
+           (let loop ((i 1))]]
+  REPLACE [[#t
+           (let loop ((i 1))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "reject")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
+  LABEL "verify: any interior character is accepted"
+  FIND [[(or (lower-alpha? c) (and (char>=? c #\0) (char<=? c #\9)) (char=? c #\-)))
+  (define (valid-name? sym)]]
+  REPLACE [[#t)
+  (define (valid-name? sym)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "reject")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
+  LABEL "compile: any interior binding character is accepted"
+  FIND [[(or (lower-alpha? c) (and (char>=? c #\0) (char<=? c #\9)) (char=? c #\-)))
+  (define (valid-binding? sym)]]
+  REPLACE [[#t)
+  (define (valid-binding? sym)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "reject")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
+  LABEL "compile: the final newline is emitted as CRLF"
+  FIND [[" feed)))\n"))))]]
+  REPLACE [[" feed)))\r\n"))))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "carriage return")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
