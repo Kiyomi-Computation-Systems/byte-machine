@@ -358,6 +358,21 @@ mutation suite (`byte-machine.harness.scheme-mutation.cmake.direct`) reports
 [SchemeMutationSuite.cmake](../../test/support/cmake/SchemeMutationSuite.cmake);
 `ctest --preset no-scheme` stays at **8/8**, unchanged.
 
+**Runtime-export drift test — deferred to Slice B.** §3.5 and §5 Task 3 above
+promise "a test computes member 2 from the runtime's actual export list and
+asserts it against the declared set, so the two cannot silently drift." The
+final whole-branch review found this was never turned into a concrete Slice A
+task (Task 3 shipped the reserved-set *usage* and its three per-member
+mutations, not the export-list *drift guard*). It ships **no defect in Slice A**:
+the review confirmed `reserved-member-2` in `compile.sls` matches
+`(byte-machine runtime)`'s exports exactly. The guarantee only becomes
+load-bearing when a *new* runtime export appears — which is Slice B's `/v2`
+constructor. It is therefore **deferred to the Slice B plan** (implement via
+Chez `(environment-symbols (environment '(byte-machine runtime)))`, with a
+witnessing mutation that drops a member-2 entry and requires the drift test to
+catch it), so it lands with the work that first makes it matter rather than
+being dropped by omission.
+
 ## 7. Handed to writing-plans
 
 - The exact canonical encoding the IR fingerprint is computed over (field order, byte
