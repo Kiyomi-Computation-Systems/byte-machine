@@ -92,6 +92,30 @@
   against the tree. Status lines are instructions too: a slice that closes a milestone is
   not done until the milestone plan, the parent plan, and CHANGELOG.md all say
   it closed.
+* A disposition is a claim, and "met" is the one easiest to get wrong. The rule
+  above stops you editing a bar down to fit the result; its mirror is asserting
+  the result reached the bar, and the Milestone 0 close-out shipped that twice in
+  one branch. A block dispositioning the milestone plan's §8 said items 1-5 were
+  "each met under the contract of its day — two runtimes, two wrappers, four
+  lanes", when item 5 demanded four green lanes that never existed together: the
+  two Gambit compiled lanes were cancelled with slice 5c before they were built,
+  and `chez.aot` landed three days after Gambit was gone. The same branch called
+  §5's decision D7 "moot" while the CMake modules, presets, Makefile targets, and
+  probe it decided were all shipped and in force — declaring a live contract dead.
+  Before writing "met" or "moot", find the thing in the tree. Then check what the
+  document already says elsewhere: both defects contradicted two other sentences
+  in their own file (§7 D5's dated note, and §12's disposition (4)).
+* A record written in a slice's first task goes stale against that slice's own
+  later tasks. The close-out wrote decision 0007 in task 1 and swept both
+  governing plans in tasks 3 and 4; 0007 was never reconciled, and shipped
+  quoting two sentences with zero live hits, an exit criterion its own row P12
+  had reworded, and — the Critical — "the four deferred cells" citing the very
+  entry row S12 had corrected to two, which is the number Milestone 1 scopes CI
+  against. The fix is not to rewrite the record as though it were written at the
+  end: the tree it was decided against is its evidence. State that tree, then
+  disclose in a dated note what the change it authorised has since altered. And
+  re-read every early artifact against HEAD *before* the final review rather than
+  discovering it there.
 * Libraries are R6RS `.sls`; libraries and programs contain their own code —
   no shared include bodies (docs/decisions/0006-inline-libraries.md). R6RS
   forbids assigning an exported variable — reach mutable state through
