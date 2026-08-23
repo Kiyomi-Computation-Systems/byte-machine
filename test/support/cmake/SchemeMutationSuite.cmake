@@ -173,17 +173,21 @@ cmake_minimum_required(VERSION 3.26)
 # so passes stay at 31 and 68 + 1 = 69 mutations.
 #
 # Milestone 1 Phase 2 (semantic core) opens one new pass per executor module,
-# each appended after pass 31 below. Pass 32 is the runtime's two decisions --
-# advance consumes a byte, and the need-input guard is not a stop -- so 31 + 1 =
-# 32 passes and 69 + 2 = 71 mutations. Pass 33 is the verifier's eight decisions
+# each appended after pass 31 below, for three new passes: 31 + 3 = 34.
+# Pass 32 is the runtime's THREE decisions -- advance consumes a byte, the
+# need-input guard is not a stop, and advance increments the stream offset.
+# Pass 33 is the verifier's THIRTEEN decisions: the eight originally witnessed
 # (reachability, exact-byte overlap, zero-progress detection, the machine-name
-# grammar check, missing-target, duplicate-name, undeclared-error-reference, and
-# the default-eof membership check), so 32 + 1 = 33 passes and 71 + 8 = 79
-# mutations. Pass 34 is the interpreter's two decisions -- dispatch matches the
-# byte to the right case, and an unverified machine is refused -- so 33 + 1 = 34
-# passes and 79 + 2 = 81 mutations.
+# grammar check, transition missing-target, duplicate-name, undeclared-error-
+# reference, and the default-eof membership check) plus five closed by the
+# Phase-2 review fix-wave (the schema guard, duplicate-error-declaration, the
+# entry site of missing-target, and the node-name and error-code sites of the
+# name-portability check -- each a distinct SITES witness of a decision the
+# verifier emits). Pass 34 is the interpreter's TWO decisions -- dispatch
+# matches the byte to the right case, and an unverified machine is refused.
+# So 69 + 3 + 13 + 2 = 87 mutations across the three new passes.
 set(EXPECTED_PASSES 34)
-set(EXPECTED_MUTATIONS 81)
+set(EXPECTED_MUTATIONS 87)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -1980,6 +1984,17 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "need-input")
 
+# The stream-offset increment is a decision distinct from the pos cursor: the
+# accept case pins it to 1, the reject case to 0, so a no-op increment reddens
+# only the accept case (consumed and next stay correct).
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: advance does not increment the stream offset"
+  FIND [[(parser-set-offset! parser (+ 1 (parser-offset parser)))]]
+  REPLACE [[(parser-set-offset! parser (parser-offset parser))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "stream offset")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 33: the verifier's decisions (Milestone 1 Phase 2) -----------------
@@ -2049,6 +2064,44 @@ byte_machine_mutation(
   LABEL "verify: the default-eof-error membership check is suppressed"
   FIND [[(if (memq (machine-default-eof-error m) (error-names m)) '()]]
   REPLACE [[(if #t '()]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid-eof-target")
+
+# The remaining five decisions the verifier emits but the first eight mutations
+# did not reach: the schema guard, the duplicate-error-declaration branch, the
+# entry-resolution site of missing-target (distinct from the transition site
+# above), and the node-name and error-code sites of the name-portability check
+# (distinct from the machine-name site above). Each has its own rejection case
+# in verify-tests.sps; the project's own SITES-2 split precedent (harness-group
+# vs with-cleanup) requires each site of a multi-site decision to be witnessed.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the schema guard accepts a non-machine"
+  FIND [[(if (machine? m) '() (list (make-diagnostic 'invalid-shape #f "not a machine")))]]
+  REPLACE [[(if #t '() (list (make-diagnostic 'invalid-shape #f "not a machine")))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid-shape")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a duplicate error-declaration name is not reported"
+  FIND [[(if (memq (car es) seen)]]
+  REPLACE [[(if #f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "duplicate-error-declaration")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an entry that names no node is not reported"
+  FIND [[(if (lookup nodes (machine-entry m)) '()]]
+  REPLACE [[(if #t '()]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "missing-target")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the node-name grammar check is suppressed"
+  FIND [[(if (valid-name? (node-name n)) #f]]
+  REPLACE [[(if #t #f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid-name")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the error-code grammar check is suppressed"
+  FIND [[(valid-name? (error-declaration-code e))]]
+  REPLACE [[#t]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid-name")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

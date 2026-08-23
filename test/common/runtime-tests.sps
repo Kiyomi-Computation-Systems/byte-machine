@@ -37,7 +37,11 @@
         (let ((r (feed-byte 0)))
           (check-equal "status" (parser-result-status r) 'stopped)
           (check-equal "consumed" (parser-result-consumed r) 1)
-          (check-equal "next" (parser-result-next r) 1))))
+          (check-equal "next" (parser-result-next r) 1)
+          ;; The advance path is the only one that increments the stream offset;
+          ;; the reject case below pins it at 0, so this is where the increment
+          ;; itself is observed.
+          (check-equal "stream offset" (parser-result-stream-offset r) 1))))
     (harness-case "a rejected byte errors at position 0 without consuming"
       (lambda ()
         (let ((r (feed-byte 65)))

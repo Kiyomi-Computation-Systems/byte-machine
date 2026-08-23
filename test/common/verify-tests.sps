@@ -94,6 +94,51 @@
         (check "invalid-name"
                (has-code? (machine* 'One-Byte (one-byte-nodes (make-edge 'reject 'reexecute))
                                     'default-eof)
-                          'invalid-name))))))
+                          'invalid-name))))
+    (harness-case "two error declarations sharing a name is duplicate-error-declaration"
+      (lambda ()
+        (check "duplicate-error-declaration"
+               (has-code?
+                (make-machine 'one-byte 'start '() '() '()
+                              (list eof-decl rej-decl
+                                    (make-error-declaration 'rejected 'unexpected-byte
+                                                            "unexpected byte" #f))
+                              (one-byte-nodes (make-edge 'reject 'reexecute))
+                              'default-eof #f)
+                'duplicate-error-declaration))))
+    (harness-case "a non-machine handed to verify-machine is invalid-shape"
+      (lambda ()
+        (check "invalid-shape" (has-code? 'not-a-machine 'invalid-shape))))
+    (harness-case "an uppercase node name is invalid-name"
+      (lambda ()
+        (check "invalid-name"
+               (has-code?
+                (make-machine 'one-byte 'start '() '() '() errs
+                              (list (dispatch (list (make-byte-case (make-exact-byte-matcher 0)
+                                                                    (make-edge 'S1 'advance) #f))
+                                              (make-edge 'reject 'reexecute))
+                                    (make-stop-node 'S1 #f)
+                                    (make-error-node 'reject 'rejected #f))
+                              'default-eof #f)
+                'invalid-name))))
+    (harness-case "an uppercase error code is invalid-name"
+      (lambda ()
+        (check "invalid-name"
+               (has-code?
+                (make-machine 'one-byte 'start '() '() '()
+                              (list eof-decl
+                                    (make-error-declaration 'rejected 'Unexpected
+                                                            "unexpected byte" #f))
+                              (one-byte-nodes (make-edge 'reject 'reexecute))
+                              'default-eof #f)
+                'invalid-name))))
+    (harness-case "an entry that names no node is missing-target"
+      (lambda ()
+        (check "missing-target"
+               (has-code?
+                (make-machine 'one-byte 'ghost-entry '() '() '() errs
+                              (one-byte-nodes (make-edge 'reject 'reexecute))
+                              'default-eof #f)
+                'missing-target))))))
 
 (harness-finish)
