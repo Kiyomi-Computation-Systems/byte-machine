@@ -808,3 +808,26 @@ byte_machine_add_scheme_lane(
           ${BYTE_MACHINE_CORE_RUNTIME}
           "${CMAKE_SOURCE_DIR}/test/common/runtime-tests.sps"
   TIMEOUT 120)
+
+# The verifier reads the IR through the graph façade's constructors.
+set(BYTE_MACHINE_CORE_VERIFY
+    ${BYTE_MACHINE_CORE_GRAPH}
+    "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/verify.sls")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.verify.rejections.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/verify-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_VERIFY}
+          "${CMAKE_SOURCE_DIR}/test/common/verify-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.verify.rejections.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/verify-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_VERIFY}
+          "${CMAKE_SOURCE_DIR}/test/common/verify-tests.sps"
+  TIMEOUT 120)

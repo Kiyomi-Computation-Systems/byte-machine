@@ -175,9 +175,13 @@ cmake_minimum_required(VERSION 3.26)
 # Milestone 1 Phase 2 (semantic core) opens one new pass per executor module,
 # each appended after pass 31 below. Pass 32 is the runtime's two decisions --
 # advance consumes a byte, and the need-input guard is not a stop -- so 31 + 1 =
-# 32 passes and 69 + 2 = 71 mutations.
-set(EXPECTED_PASSES 32)
-set(EXPECTED_MUTATIONS 71)
+# 32 passes and 69 + 2 = 71 mutations. Pass 33 is the verifier's eight decisions
+# (reachability, exact-byte overlap, zero-progress detection, the machine-name
+# grammar check, missing-target, duplicate-name, undeclared-error-reference, and
+# the default-eof membership check), so 32 + 1 = 33 passes and 71 + 8 = 79
+# mutations.
+set(EXPECTED_PASSES 33)
+set(EXPECTED_MUTATIONS 79)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -1973,6 +1977,76 @@ byte_machine_mutation(
   REPLACE [[(make-parser-result 'stopped pos]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "need-input")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 33: the verifier's decisions (Milestone 1 Phase 2) -----------------
+#
+# verify-tests.sps asserts the exact diagnostic CODE emitted for each broken
+# variant of the one-byte machine (never rendered text, parent §16.4); this pass
+# proves those code assertions are not vacuous by suppressing the decision that
+# emits each code and requiring the owning case to notice. Verify command
+# modelled on the placeholder pass (Pass 8): both library roots, an empty object
+# guard, and the verify program. Each FIND is a verbatim, unique substring of
+# verify.sls.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/verify-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: reachability never reports an unreachable node"
+  FIND [[(make-diagnostic 'unreachable-node (node-name n) "node is unreachable")]]
+  REPLACE [[#f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "unreachable-node")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: overlap check treats every byte as distinct"
+  FIND [[(if (memv b seen)]]
+  REPLACE [[(if #f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "overlapping-cases")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: zero-progress detection never fires"
+  FIND [[(if (and (byte-dispatch-node? n) (reaches-self? (node-name n)))]]
+  REPLACE [[(if #f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "zero-progress-cycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the machine-name grammar check is suppressed"
+  FIND [[(if (valid-name? (machine-name m)) '()]]
+  REPLACE [[(if #t '()]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid-name")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a missing transition target is not reported"
+  FIND [[(make-diagnostic 'missing-target t "no such node")]]
+  REPLACE [[#f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "missing-target")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a duplicate node name is not reported"
+  FIND [[(cons (make-diagnostic 'duplicate-name nm "duplicate node name") out)]]
+  REPLACE [[out]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "duplicate-name")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an undeclared error reference is not reported"
+  FIND [[(if (and (error-node? n) (not (memq (error-node-error-name n) enames)))]]
+  REPLACE [[(if #f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "missing-error-declaration")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the default-eof-error membership check is suppressed"
+  FIND [[(if (memq (machine-default-eof-error m) (error-names m)) '()]]
+  REPLACE [[(if #t '()]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid-eof-target")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
