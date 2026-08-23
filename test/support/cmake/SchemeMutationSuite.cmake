@@ -2140,6 +2140,68 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
+# --- Pass 35: the normalizer (Milestone 1 Phase 3 Slice A) --------------------
+#
+# normal-ir-tests.sps pins the IR fingerprint of the one-byte machine (a golden
+# value) and the structural decisions (entry id, transition sort, error-code
+# resolution). This pass proves those checks are not vacuous. Verify command
+# modelled on the placeholder pass (Pass 8): both library roots, an empty object
+# guard, the normal-ir program.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/normal-ir-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the FNV offset basis is changed"
+  FIND [[(define fnv-offset 14695981039346656037)]]
+  REPLACE [[(define fnv-offset 14695981039346656038)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "11963406767470843108")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the FNV prime is changed"
+  FIND [[(define fnv-prime  1099511628211)]]
+  REPLACE [[(define fnv-prime  1099511628212)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "11963406767470843108")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the byte is never mixed into the hash"
+  FIND [[(* (bitwise-xor h (bytevector-u8-ref bv i)) fnv-prime)]]
+  REPLACE [[(* h fnv-prime)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "11963406767470843108")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the entry id is hard-wired to node 0"
+  FIND [[(entry (id-of (machine-entry machine)))]]
+  REPLACE [[(entry 0)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "entry")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: dispatch cases are not sorted ascending by byte"
+  FIND [[(list-sort (lambda (a b) (< (car a) (car b)))]]
+  REPLACE [[(list-sort (lambda (a b) (> (car a) (car b)))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "bytes")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: an error node resolves to the declaration name, not its code"
+  FIND [[(error-declaration-code (car es)) (loop (cdr es))]]
+  REPLACE [[(error-declaration-name (car es)) (loop (cdr es))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "unexpected-byte")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
 # see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "THIRTY-ONE PASSES"
