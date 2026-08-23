@@ -216,15 +216,21 @@ cmake_minimum_required(VERSION 3.26)
 # tests.sps's own golden comparison fails. One mutation. So 37 + 1 = 38
 # passes and 111 + 1 = 112 mutations.
 #
-# Slice B's property-generator task adds the last pass, Pass 39 (the property
+# Slice B's property-generator task adds another pass, Pass 39 (the property
 # differential is non-vacuous): the dispatch byte test's rendered comparand is
 # shifted by one, mod 256, so every generated executor accepts the byte one
 # above what it should -- re-anchoring Pass 36's advance-arm-lowering mutation
 # against the *property* lane instead of the one fixed machine, so the
 # generated-machine differential is proven to notice divergence too. One
 # mutation. So 38 + 1 = 39 passes and 112 + 1 = 113 mutations.
-set(EXPECTED_PASSES 39)
-set(EXPECTED_MUTATIONS 113)
+#
+# Slice B's member-2 drift task adds the last pass, Pass 40 (the drift guard):
+# reserved-member-2 drops parser-feed! (grammar-invalid as a binding, so
+# valid-binding? behaviour is unchanged and only the drift set-equality
+# notices), and reserved-drift-tests.sps's check-equal fails on the mismatch.
+# One mutation. So 39 + 1 = 40 passes and 113 + 1 = 114 mutations.
+set(EXPECTED_PASSES 40)
+set(EXPECTED_MUTATIONS 114)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -2461,6 +2467,26 @@ byte_machine_mutation(
   # generated machines with "byte agreement" in the output and status 1.
   REPLACE [[(number->string (mod (+ 1 (car tr)) 256)) ") "]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "byte agreement")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 40: member-2 drift guard (Slice B) ---------------------------------
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/reserved-drift-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.reserved-drift.chez.source
+  LABEL "compile: reserved-member-2 drops a runtime export (silent drift)"
+  FIND [[make-parser parser? parser-feed!]]
+  REPLACE [[make-parser parser?]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "drift")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
