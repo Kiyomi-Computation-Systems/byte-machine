@@ -288,6 +288,14 @@ what this milestone delivers.
 - Continuous integration on macOS arm64 and Linux amd64 (the first CI in the
   repository), running the full test suite and asserting each cell's OS and
   architecture (Milestone 1, Phase 1).
+- The semantic core (Milestone 1, Phase 2): immutable source-IR descriptors
+  and the public (byte-machine graph) constructors; a structural verifier
+  (name resolution, exact-byte overlap, reachability, zero-progress cycles,
+  terminal/EOF shape, generated-name safety); a runtime parser lifecycle with
+  the compiled-machine ABI; and a reference interpreter. The one-byte machine
+  ("accept one exact byte, reject the rest at position 0") is proven through the
+  interpreter across all 256 byte values in both the Chez source and AOT lanes.
+  Error references are symbolic; EOF is declared and verified but not executed.
 
 ### Changed
 
