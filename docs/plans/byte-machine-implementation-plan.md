@@ -149,7 +149,7 @@ The imperative shells are limited to:
 
 ### 7.1 Shared implementation subset
 
-The functional core and the tests are inline R6RS `.sls` libraries and `.sps` programs ([decision 0006](../decisions/0006-inline-libraries.md)). The form of the runtime and *generated* bodies is fixed by §9.6 and is Milestone 1's to settle — see [the Milestone 0 close-out](./milestone-0-close-out.md) §9.
+The functional core and the tests are inline R6RS `.sls` libraries and `.sps` programs ([decision 0006](../decisions/0006-inline-libraries.md)). The form of the runtime and generated libraries is fixed by §9.6 and [decision 0008](../decisions/0008-emitter-emits-importable-library.md): the emitter emits a complete importable `.sls`.
 
 Use:
 
@@ -367,7 +367,7 @@ These are closed v0.1 enumerations. The verifier enforces exact arity, declared-
 
 `compile-machine` is a pure ahead-of-time transformation from source IR to an emission-ready value. It does not invoke Scheme compilation, load generated code, use `eval`, or write a file. It always performs verification and refuses to expose an emission-ready normalized graph on failure. v0.1 accepts only the empty option list and rejects unknown options; optimization toggles are not hidden in the initial API.
 
-`render-machine` is pure and returns the complete canonical source bytevector. `emit-machine` is a thin imperative convenience that writes exactly that bytevector to the supplied binary port and returns emission metadata containing the fingerprint and byte count.
+`render-machine` is pure and returns the complete canonical source bytevector. `emit-machine` is a thin imperative convenience that writes exactly that bytevector to the supplied binary port and returns emission metadata containing the IR fingerprint and byte count.
 
 `binding` is a symbol and is the single top-level compiled-machine binding defined by the generated wrapper-free body. It must satisfy the portable name grammar and must not collide with the canonical reserved-output-binding set. That set contains:
 
@@ -376,6 +376,8 @@ These are closed v0.1 enumerations. The verifier enforces exact arity, declared-
 - every top-level or lexical identifier emitted by the canonical source template.
 
 The compiler owns this explicit, deterministically ordered set next to the emitter template. Thin runtime wrappers' export lists and the set are checked together by tests so they cannot silently drift. `render-machine` and `emit-machine` validate the binding before producing or writing any bytes and raise an `invalid-output-binding` API-contract condition on failure.
+
+Scoping (Milestone 1, decision lineage milestone-1-design.md §3.3): only member 1 (R6RS source-mode syntax/declaration identifiers) is enumerable before Milestone 1 builds anything. Member 2 (`(byte-machine runtime)` exports) exists once the runtime lands; member 3 (canonical source-template identifiers) once the emitter lands. Generated-name-safety verification checks each member from the phase in which it comes to exist; a test must not assert against a member that does not yet exist.
 
 ### 9.3 Normative runtime calls
 
@@ -437,7 +439,7 @@ Codes include invalid argument, invalid slice, invalid output binding, lifecycle
 
 ### 9.5 Generated runtime ABI
 
-`(byte-machine runtime)` exports the reserved generated-code ABI binding `byte-machine-make-compiled-machine/v1`. Emitted bodies call that binding and embed the required runtime ABI and IR/emitter versions. This export exists so a generated wrapper-free body works when its consumer imports only `(byte-machine runtime)`; it is not an API for handwritten grammar or application code. Loading or constructing against a mismatched runtime raises the portable ABI-mismatch condition.
+`(byte-machine runtime)` exports the reserved generated-code ABI binding `byte-machine-make-compiled-machine/v1`. Emitted bodies call that binding and embed the required runtime ABI and IR/emitter versions. This export exists so a generated library depends only on `(byte-machine runtime)`: the consumer imports the generated library, whose sole byte-machine import is the runtime ([decision 0008](../decisions/0008-emitter-emits-importable-library.md)); it is not an API for handwritten grammar or application code. Loading or constructing against a mismatched runtime raises the portable ABI-mismatch condition.
 
 The generated ABI is distinct from the user-facing parser API and is documented only in this ABI section and generated-code maintenance notes. It may change before `1.0.0` only with a generated-ABI version bump, deterministic regeneration, and a changelog entry.
 
@@ -448,8 +450,8 @@ Milestone 1 must add one executable Chez example program, run in both the source
 1. constructing a one-byte machine only through `(byte-machine graph)`;
 2. verifying it;
 3. compiling it without runtime evaluation;
-4. emitting a generated body to a binary file port;
-5. including that generated body from a consumer library wrapper — this conflicts with §7.2's "No Scheme file in this repository includes another", and Milestone 1 must resolve it (see [the Milestone 0 close-out](./milestone-0-close-out.md) §9);
+4. emitting the generated library to a binary file port;
+5. importing the generated library from the consumer — the emitter emits a complete importable `.sls` ([decision 0008](../decisions/0008-emitter-emits-importable-library.md)), so no file includes another and §7.2 holds;
 6. importing only `(byte-machine runtime)` in the consumer;
 7. constructing a parser, feeding the exact `[0,1)` slice, and inspecting the result;
 8. compiling and running the consumer ahead-of-time.
@@ -1038,10 +1040,10 @@ Requirements:
 - rejection of output bindings that collide with syntax or declaration identifiers reserved by the R6RS source mode, runtime exports, or emitted internal identifiers;
 - no timestamps, hostnames, usernames, absolute paths, random data, or native details;
 - embedded IR format version and generator version;
-- embedded deterministic non-cryptographic fingerprint of canonical normalized IR and emission options;
+- embedded deterministic non-cryptographic IR fingerprint ([decision 0009](../decisions/0009-content-and-ir-fingerprints.md)) of canonical normalized IR and emission options;
 - a final newline and fixed LF line endings.
 
-The initial fingerprint may use a specified 64-bit FNV-1a calculation over the canonical encoding. It is an identity/debugging aid, not a security primitive.
+The initial IR fingerprint may use a specified 64-bit FNV-1a calculation over the canonical encoding. It is an identity/debugging aid, not a security primitive.
 
 `emit-machine` writes only to the supplied binary output port with `put-u8`. Generated source is canonical UTF-8 with LF bytes even on Windows. Atomic temporary-file creation and replacement belong to the caller's imperative build shell.
 
@@ -1312,7 +1314,7 @@ These expected HTTP traces are curated test expectations, not copied from or com
 - Generate in every Tier 1 cell and compare output byte for byte across operating systems and architectures.
 - Compile and execute each generated output.
 - Exercise every permitted identifier character plus rejected punctuation, uppercase, non-ASCII names, and non-ASCII static labels.
-- Reject every canonical reserved output binding under Chez, including portable syntax names, runtime exports, and emitter-template identifiers.
+- Reject every canonical reserved output binding under Chez, including portable syntax names, runtime exports, and emitter-template identifiers — scoped to the members that exist when the test runs (see §9.2 scoping note; Phase 2 covers member 1, Phase 3 members 2–3).
 
 ### 22.10 Test exclusions
 
