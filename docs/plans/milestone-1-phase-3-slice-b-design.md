@@ -79,6 +79,15 @@ mechanism.
 - **`emission-metadata` named accessors.** No consumer beyond the tests exists
   yet; introducing an accessor surface before a consumer is YAGNI. Recorded, not
   changed.
+- **The property generator's fuller shape (§3.3).** As shipped, the generator
+  emits a single dispatch (entry) node plus the two terminals, and the property
+  differential feeds single bytes only. That is *mutually covering* for the M1
+  repertoire — with one dispatch state, single-byte-from-entry feeds exercise
+  every dispatch transition, and the M1 emitter produces exactly this shape — so
+  the coverage loss is small. The fuller generator §3.3 envisioned (up to a
+  handful of dispatch nodes) and the multi-byte / fragmented feed schedule
+  (parent §22.5) are **deferred to a later slice**, where multi-dispatch-node
+  lowering and mid-stream resumption first become differentially observable.
 
 **Out of Milestone 1 entirely** (milestone-1-design.md §7): EOF *execution* —
 Milestone 2; byte classes, sequences, fields, callbacks, spans, counted

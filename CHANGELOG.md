@@ -332,7 +332,12 @@ what this milestone delivers.
   interpreter≡generated differential over 40 generated machines (fixed seed,
   printed on every run) rather than only the fixed one-byte machine, each
   checked against all 256 single-byte feeds. A new `property` test label is
-  added to the `pr` preset filter. The member-2 runtime-export drift guard
+  added to the `pr` preset filter. The generator emits a single dispatch node
+  plus terminals and the differential feeds single bytes — mutually covering
+  for the M1 repertoire (one dispatch state, single-byte feeds reach every
+  transition); the fuller multi-dispatch-node generator and the multi-byte /
+  fragmented feed schedule (parent §22.5) are deferred to a later slice, where
+  they first become differentially observable. The member-2 runtime-export drift guard
   asserts `(environment-symbols (environment '(byte-machine runtime)))` is
   set-equal to `compile.sls`'s declared `reserved-member-2`, made
   load-bearing by a mutation that drops one entry, caught on the
