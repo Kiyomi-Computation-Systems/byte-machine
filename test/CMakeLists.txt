@@ -988,3 +988,26 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/determinism-one-byte-tests.sps"
   TIMEOUT 120
   ENVIRONMENT "BYTE_MACHINE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-one-byte.golden.sls")
+
+# --- Milestone 1 Phase 3 Slice B: property generator + differential ----------
+byte_machine_add_scheme_lane(
+  NAME byte-machine.property.differential.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/property-differential-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-gen.sls"
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/property-differential-tests.sps"
+  TIMEOUT 180)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.property.differential.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/property-differential-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-gen.sls"
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/property-differential-tests.sps"
+  TIMEOUT 180)
