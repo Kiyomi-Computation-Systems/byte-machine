@@ -2230,6 +2230,96 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
+# --- Pass 36: the emitter (Milestone 1 Phase 3 Slice A) ----------------------
+#
+# compile-tests.sps checks the compilation contract, the binding reserved-set
+# (all three members), and the rendered library structure by substring. This
+# pass proves those checks are not vacuous. Verify command modelled on the
+# placeholder pass (Pass 8): both library roots, an empty object guard, the
+# compile program.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/compile-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: a non-empty option list is accepted"
+  FIND [[(unless (null? options)]]
+  REPLACE [[(unless #t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "refused")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: an invalid machine is reported as compiled ok"
+  FIND [[(if (verification-ok? v)]]
+  REPLACE [[(if #t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "not ok")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: an unverified compilation is rendered anyway"
+  FIND [[(unless (compilation-ok? compilation)]]
+  REPLACE [[(unless #t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "ok")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: the binding grammar check is dropped"
+  FIND [[(and (> (string-length s) 0) (lower-alpha? (string-ref s 0))]]
+  REPLACE [[(and #t (lower-alpha? #\a)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "grammar")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: reserved member 1 is not checked"
+  FIND [[(not (memq sym reserved-member-1))]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "member 1")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: reserved member 2 is not checked"
+  FIND [[(not (memq sym reserved-member-2))]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "member 2")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: reserved member 3 is not checked"
+  FIND [[(not (memq sym reserved-member-3))]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "member 3")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: an advance transition is lowered as a reexecute"
+  FIND [[(string-append "(loop (+ pos 1) " (number->string target) " (+ off 1))")]]
+  REPLACE [[(string-append "(loop pos " (number->string target) " off)")]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "advance arm")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: the reexecute fallback is lowered as an advance"
+  FIND [[(string-append "(loop pos " (number->string target) " off)")]]
+  REPLACE [[(string-append "(loop (+ pos 1) " (number->string target) " (+ off 1))")]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fallback")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: the error arm omits the resolved code"
+  FIND [[(symbol->string (normal-error-code s)) ") " id " off))\n")]]
+  REPLACE [["internal" ") " id " off))\n")]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "error arm")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
 # see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "THIRTY-ONE PASSES"
