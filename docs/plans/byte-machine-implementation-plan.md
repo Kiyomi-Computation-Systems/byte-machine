@@ -149,7 +149,7 @@ The imperative shells are limited to:
 
 ### 7.1 Shared implementation subset
 
-The functional core and the tests are inline R6RS `.sls` libraries and `.sps` programs ([decision 0006](../decisions/0006-inline-libraries.md)). The form of the runtime and *generated* bodies is fixed by §9.6 and is Milestone 1's to settle — see [the Milestone 0 close-out](./milestone-0-close-out.md) §9.
+The functional core and the tests are inline R6RS `.sls` libraries and `.sps` programs ([decision 0006](../decisions/0006-inline-libraries.md)). The form of the runtime and generated libraries is fixed by §9.6 and [decision 0008](../decisions/0008-emitter-emits-importable-library.md): the emitter emits a complete importable `.sls`.
 
 Use:
 
@@ -437,7 +437,7 @@ Codes include invalid argument, invalid slice, invalid output binding, lifecycle
 
 ### 9.5 Generated runtime ABI
 
-`(byte-machine runtime)` exports the reserved generated-code ABI binding `byte-machine-make-compiled-machine/v1`. Emitted bodies call that binding and embed the required runtime ABI and IR/emitter versions. This export exists so a generated wrapper-free body works when its consumer imports only `(byte-machine runtime)`; it is not an API for handwritten grammar or application code. Loading or constructing against a mismatched runtime raises the portable ABI-mismatch condition.
+`(byte-machine runtime)` exports the reserved generated-code ABI binding `byte-machine-make-compiled-machine/v1`. Emitted bodies call that binding and embed the required runtime ABI and IR/emitter versions. This export exists so a generated library depends only on `(byte-machine runtime)`: the consumer imports the generated library, whose sole byte-machine import is the runtime ([decision 0008](../decisions/0008-emitter-emits-importable-library.md)); it is not an API for handwritten grammar or application code. Loading or constructing against a mismatched runtime raises the portable ABI-mismatch condition.
 
 The generated ABI is distinct from the user-facing parser API and is documented only in this ABI section and generated-code maintenance notes. It may change before `1.0.0` only with a generated-ABI version bump, deterministic regeneration, and a changelog entry.
 
@@ -449,7 +449,7 @@ Milestone 1 must add one executable Chez example program, run in both the source
 2. verifying it;
 3. compiling it without runtime evaluation;
 4. emitting a generated body to a binary file port;
-5. including that generated body from a consumer library wrapper — this conflicts with §7.2's "No Scheme file in this repository includes another", and Milestone 1 must resolve it (see [the Milestone 0 close-out](./milestone-0-close-out.md) §9);
+5. importing the generated library from the consumer — the emitter emits a complete importable `.sls` ([decision 0008](../decisions/0008-emitter-emits-importable-library.md)), so no file includes another and §7.2 holds;
 6. importing only `(byte-machine runtime)` in the consumer;
 7. constructing a parser, feeding the exact `[0,1)` slice, and inspecting the result;
 8. compiling and running the consumer ahead-of-time.
