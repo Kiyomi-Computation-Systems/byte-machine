@@ -831,3 +831,28 @@ byte_machine_add_scheme_lane(
           ${BYTE_MACHINE_CORE_VERIFY}
           "${CMAKE_SOURCE_DIR}/test/common/verify-tests.sps"
   TIMEOUT 120)
+
+# The interpreter closes an op over the verified IR and hands it to the runtime,
+# so its manifest unites the verify and runtime cores with interpret.sls.
+set(BYTE_MACHINE_CORE_ALL
+    ${BYTE_MACHINE_CORE_VERIFY}
+    ${BYTE_MACHINE_CORE_RUNTIME}
+    "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/interpret.sls")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.interpret.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/interpret-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${CMAKE_SOURCE_DIR}/test/common/interpret-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.interpret.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/interpret-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${CMAKE_SOURCE_DIR}/test/common/interpret-tests.sps"
+  TIMEOUT 120)

@@ -179,9 +179,11 @@ cmake_minimum_required(VERSION 3.26)
 # (reachability, exact-byte overlap, zero-progress detection, the machine-name
 # grammar check, missing-target, duplicate-name, undeclared-error-reference, and
 # the default-eof membership check), so 32 + 1 = 33 passes and 71 + 8 = 79
-# mutations.
-set(EXPECTED_PASSES 33)
-set(EXPECTED_MUTATIONS 79)
+# mutations. Pass 34 is the interpreter's two decisions -- dispatch matches the
+# byte to the right case, and an unverified machine is refused -- so 33 + 1 = 34
+# passes and 79 + 2 = 81 mutations.
+set(EXPECTED_PASSES 34)
+set(EXPECTED_MUTATIONS 81)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -2047,6 +2049,41 @@ byte_machine_mutation(
   LABEL "verify: the default-eof-error membership check is suppressed"
   FIND [[(if (memq (machine-default-eof-error m) (error-names m)) '()]]
   REPLACE [[(if #t '()]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid-eof-target")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 34: the reference interpreter (Milestone 1 Phase 2) ----------------
+#
+# interpret-tests.sps runs the verified one-byte machine over all 256 byte
+# values through the runtime and refuses an unverified machine; this pass proves
+# those checks are not vacuous. The first mutation makes dispatch match every
+# byte to the first case, so bytes 1..255 wrongly accept and the all-256 case
+# fails; the second disarms the unverified-machine refusal, so the refuse case's
+# check-raises sees a normal return. Verify command modelled on the placeholder
+# pass (Pass 8): both library roots, an empty object guard, the interpret
+# program.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/interpret-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
+  LABEL "interpret: dispatch matches every byte to the first case"
+  FIND [[((= byte (exact-byte-matcher-byte (byte-case-matcher (car cs))))]]
+  REPLACE [[(#t]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "no byte in 1..255 misbehaved")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
+  LABEL "interpret: an unverified machine is accepted"
+  FIND [[(unless (verification-ok? verification)]]
+  REPLACE [[(when #f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "refused")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
