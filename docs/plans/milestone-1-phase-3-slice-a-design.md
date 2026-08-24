@@ -367,11 +367,11 @@ mutations, not the export-list *drift guard*). It ships **no defect in Slice A**
 the review confirmed `reserved-member-2` in `compile.sls` matches
 `(byte-machine runtime)`'s exports exactly. The guarantee only becomes
 load-bearing when a *new* runtime export appears — which is Slice B's `/v2`
-constructor. It is therefore **deferred to the Slice B plan** (implement via
-Chez `(environment-symbols (environment '(byte-machine runtime)))`, with a
-witnessing mutation that drops a member-2 entry and requires the drift test to
-catch it), so it lands with the work that first makes it matter rather than
-being dropped by omission.
+constructor. It was **implemented in Slice B** as `reserved-drift-tests.sps` — set-equality of
+`(environment-symbols (environment '(byte-machine runtime)))` against the exported
+`reserved-member-2`, witnessed by a mutation that drops one entry — **without** a
+`/v2` export: the mutation, not a new export, is what makes the guard load-bearing
+(decision 0010, 2026-08-23 note).
 
 ## 7. Handed to writing-plans
 

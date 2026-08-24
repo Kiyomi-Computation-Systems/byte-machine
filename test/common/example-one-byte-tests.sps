@@ -6,6 +6,7 @@
 (import (rnrs) (rnrs eval)
         (only (chezscheme) load)
         (byte-machine test harness)
+        (byte-machine test one-byte-machine)
         (byte-machine graph)
         (byte-machine verify)
         (byte-machine compile)
@@ -19,16 +20,7 @@
         (assertion-violation 'example "BYTE_MACHINE_TEST_TMPDIR is unset" d))))
 (define genfile (string-append tmpdir "/example-one-byte.sls"))
 
-(define eof-decl (make-error-declaration 'default-eof 'eof "unexpected end of input" #f))
-(define rej-decl (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))
-(define one-byte
-  (make-machine 'one-byte 'start '() '() '() (list eof-decl rej-decl)
-    (list (make-byte-dispatch-node 'start
-            (list (make-byte-case (make-exact-byte-matcher 0) (make-edge 'stop 'advance) #f))
-            (make-edge 'reject 'reexecute) #f #f)
-          (make-stop-node 'stop #f)
-          (make-error-node 'reject 'rejected #f))
-    'default-eof #f))
+(define one-byte (make-one-byte-machine))
 
 (harness-group "construct, verify, compile, emit, import, run"
   (lambda ()

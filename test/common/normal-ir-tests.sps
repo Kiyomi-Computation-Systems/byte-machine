@@ -36,6 +36,12 @@
           (check-equal "state 0 kind" (normal-state-kind (vector-ref s 0)) 'dispatch)
           (check-equal "state 1 kind" (normal-state-kind (vector-ref s 1)) 'stop)
           (check-equal "state 2 kind" (normal-state-kind (vector-ref s 2)) 'error))))
+    (harness-case "state ids are the declaration indices"
+      (lambda ()
+        (let ((s (normal-machine-states n1)))
+          (check-equal "id 0" (normal-state-id (vector-ref s 0)) 0)
+          (check-equal "id 1" (normal-state-id (vector-ref s 1)) 1)
+          (check-equal "id 2" (normal-state-id (vector-ref s 2)) 2))))
     (harness-case "the dispatch state lowers its case and fallback to ids"
       (lambda ()
         (let ((d (vector-ref (normal-machine-states n1) 0)))

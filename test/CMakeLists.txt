@@ -542,15 +542,12 @@ endif()
 
 # --- Chez ahead-of-time lanes ----------------------------------------------
 #
-# Three of the programs the source lanes run, compiled. Nothing about the
+# Two of the programs the source lanes run, compiled. Nothing about the
 # sources changes; what changes is that the text reaching the process came
 # out of objects built earlier, which is why these lanes measure the copies
-# the compile step kept rather than the repository sources. Three lanes, not
-# one per source lane: bootstrap (the runner's primitives with no runner),
-# self (the runner on itself), and placeholder-identity (slice 4 section 10
-# deferred cross-library identity under compiled lanes to exactly here --
-# separate instantiation is a modelled risk in source mode and a real one
-# once each library is compiled into its own object).
+# the compile step kept rather than the repository sources. Two lanes, not
+# one per source lane: bootstrap (the runner's primitives with no runner)
+# and self (the runner on itself).
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.bootstrap.chez.aot
   BACKEND chez
@@ -567,16 +564,6 @@ byte_machine_add_scheme_lane(
           "${BYTE_MACHINE_HARNESS_SELF_DIR}/harness-self-tests.sps"
   TIMEOUT 120)
 
-byte_machine_add_scheme_lane(
-  NAME byte-machine.portability.placeholder-identity.chez.aot
-  BACKEND chez
-  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.sps"
-  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
-          "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder.sls"
-          "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder-consumer.sls"
-          "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.sps"
-  TIMEOUT 120)
-
 # --- Mutation proof for the harness ----------------------------------------
 
 # The harness is the instrument every later milestone is measured with, so a
@@ -587,7 +574,10 @@ byte_machine_add_scheme_lane(
 #
 # The self-tests load the fingerprint fixture through adapter-file-bytes; staged
 # lanes inherit this process's environment through execute_process, so the
-# variable must be set here.
+# variable must be set here. Pass 38 (D6 determinism, Slice B) reads the
+# committed golden the same way, through BYTE_MACHINE_GOLDEN_FILE, so it is
+# set here too rather than inside SchemeMutationSuite.cmake -- the same
+# mechanism, for the same reason, as BYTE_MACHINE_FINGERPRINT_SAMPLE.
 if(BYTE_MACHINE_CHEZ_EXECUTABLE)
   byte_machine_add_test(
     NAME byte-machine.harness.scheme-mutation.cmake.direct
@@ -597,46 +587,9 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     TIMEOUT 900
     LABELS unit
     ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source"
-                "BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin")
+                "BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin"
+                "BYTE_MACHINE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-one-byte.golden.sls")
 endif()
-
-# --- The placeholder library -------------------------------------------------
-#
-# One lane, launched from the default private directory like every other
-# lane. The three-directory working-directory matrix retired with the include
-# mechanism (decision 0006): with absolute library roots and an empty
-# source-directories there is nothing left for a launch directory to change,
-# so cwd-independence is structural rather than empirical.
-byte_machine_add_scheme_lane(
-  NAME byte-machine.portability.placeholder.chez.source
-  BACKEND chez
-  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.sps"
-  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
-          "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder.sls"
-          "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-tests.sps"
-  TIMEOUT 120)
-
-# --- Cross-library identity ------------------------------------------------
-#
-# Slice 4, deliverable D3. Two libraries, one placeholder: the owner
-# constructs it, the consumer -- which imports the owner rather than
-# redefining its procedures -- recognises it, and the allocation-free
-# singleton stays one object across both imports.
-#
-# Passing here is not yet evidence. What makes it evidence is the ownership
-# mutation in SchemeMutationSuite.cmake, where the consumer is rewritten to
-# inline duplicate definitions instead of importing the owner: under that
-# mutation both cases below answer wrongly, nothing raises, and every other
-# lane in this tree still passes.
-byte_machine_add_scheme_lane(
-  NAME byte-machine.portability.placeholder-identity.chez.source
-  BACKEND chez
-  PROGRAM "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.sps"
-  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
-          "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder.sls"
-          "${CMAKE_SOURCE_DIR}/src/byte-machine/placeholder-consumer.sls"
-          "${BYTE_MACHINE_TEST_COMMON_DIR}/placeholder-identity-tests.sps"
-  TIMEOUT 120)
 
 # --- Provenance ------------------------------------------------------------
 #
@@ -915,6 +868,7 @@ byte_machine_add_scheme_lane(
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-one-byte-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/one-byte-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/differential-one-byte-tests.sps"
   TIMEOUT 120)
 
@@ -924,6 +878,7 @@ byte_machine_add_scheme_lane(
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-one-byte-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/one-byte-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/differential-one-byte-tests.sps"
   TIMEOUT 120)
 
@@ -933,6 +888,7 @@ byte_machine_add_scheme_lane(
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/example-one-byte-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/one-byte-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/example-one-byte-tests.sps"
   TIMEOUT 120)
 
@@ -942,5 +898,90 @@ byte_machine_add_scheme_lane(
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/example-one-byte-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/one-byte-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/example-one-byte-tests.sps"
+  TIMEOUT 120)
+
+# --- Milestone 1 Phase 3 Slice B: D7 identifier repertoire + binary LF -------
+byte_machine_add_scheme_lane(
+  NAME byte-machine.verify.identifier-repertoire.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/identifier-repertoire-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/identifier-repertoire-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.verify.identifier-repertoire.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/identifier-repertoire-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/identifier-repertoire-tests.sps"
+  TIMEOUT 120)
+
+# --- Milestone 1 Phase 3 Slice B: D6 determinism against a committed golden ---
+byte_machine_add_scheme_lane(
+  NAME byte-machine.determinism.one-byte.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/determinism-one-byte-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/determinism-one-byte-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-one-byte.golden.sls")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.determinism.one-byte.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/determinism-one-byte-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/determinism-one-byte-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-one-byte.golden.sls")
+
+# --- Milestone 1 Phase 3 Slice B: property generator + differential ----------
+byte_machine_add_scheme_lane(
+  NAME byte-machine.property.differential.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/property-differential-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-gen.sls"
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/property-differential-tests.sps"
+  TIMEOUT 180)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.property.differential.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/property-differential-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-gen.sls"
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/property-differential-tests.sps"
+  TIMEOUT 180)
+
+# --- Milestone 1 Phase 3 Slice B: member-2 runtime-export drift guard ---------
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.reserved-drift.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/reserved-drift-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_COMPILE}
+          "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/runtime.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/reserved-drift-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.reserved-drift.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/reserved-drift-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_COMPILE}
+          "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/runtime.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/reserved-drift-tests.sps"
   TIMEOUT 120)
