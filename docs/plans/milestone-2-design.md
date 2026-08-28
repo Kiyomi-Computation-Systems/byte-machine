@@ -239,13 +239,21 @@ M2 depends on — plus the sticky-repeat feed fix M1 left broken.
   M2** — neither can be triggered without callbacks (an unexpected escape;
   synchronous re-entry), so they ride to M5. A minimal `parser-lifecycle` accessor
   is exposed so the transition-table tests assert the state directly (§9.3).
-- **Fix the sticky-repeat feed bug (§12.2:701).** M1's `parser-feed!` returns the
-  cached result verbatim (`runtime.sls:97`), so a repeated feed in a sticky state
-  reports a stale `next`/`consumed` (indexing the *first* bytevector). §12.2
-  requires `next = the new call's start`, `consumed = 0`, stored stream-offset/error
-  unchanged. Slice ② adds engine code to rebuild a fresh sticky result per repeat,
-  in both lanes, and **overturns** `runtime-tests.sps:95-102`, which currently pins
-  the wrong behavior.
+- **Fix the sticky-repeat feed bug (§12.2:701) by removing the stale cache.** M1's
+  `parser-feed!` returns the cached result verbatim (`runtime.sls:97`), so a repeated
+  feed in a sticky state reports a stale `next`/`consumed` (indexing the *first*
+  bytevector). §12.2 requires `next = the new call's start`, `consumed = 0`, stored
+  stream-offset/error unchanged. **Design refinement (2026-08-28, Slice ②a):** rather
+  than rebuild a fresh *cached* result, Slice ② **removes the sticky cache entirely**
+  and lets `parser-feed!` always run the executor. Re-executing at a terminal is
+  idempotent in M2's callback-free world — the `stop`/`error`/(②b) `finish` arms
+  return exactly the §12.2 sticky-repeat tuple (`next = start`, `consumed = 0`, stored
+  offset) — so the fix holds *by construction*, in both lanes, and **overturns**
+  `runtime-tests.sps:95-102`, which pinned the wrong behavior. A true stored-result
+  short-circuit (needed once callbacks at M5 make re-execution non-idempotent) is
+  deferred to M5; the lifecycle field is observational until then. This deletes the
+  now-unwitnessable `SchemeMutationSuite` "v1 terminal not made sticky" mutation,
+  whose effect idempotent re-execution now provides.
 - **The `finish` node — a new node kind** (`make-finish-node` in graph/ir; a
   normalizer arm with its own canonical tag byte; a `finish` render arm in the
   emitter emitting `finished`; a `finish` kind in the interpreter `op` and the
@@ -440,5 +448,5 @@ paused-feed/paused-finish/resume lifecycle can be exercised now.
 | `private normal-ir` | extend the **dispatch** arm to encode `eof-target` (new imports); replace the `else` guards with **finish** (Slice ②) and **pause** (Slice ③) arms + canonical tag bytes; the IR fingerprint **moves** (re-baseline the golden). |
 | `compile` (emitter) | unified `exec` with a `finish?` branch; distinct `finish` arm emitting `finished`; pause arm; `/v2` constructor call (emit `/v2`, keep `/v1` export); enumerated `reserved-member-2`/`-3` deltas. |
 | `interpret` | `op` gains eof-target/finish messages and `finish`/`pause` handling. |
-| `runtime` | explicit lifecycle-state field + `parser-lifecycle` accessor; **fix sticky-repeat feed**; `parser-finish!` (with sticky short-circuit), `parser-resume!`, `parser-reset!`; `paused`/`finished` statuses; truncation `position-kind = eof` + offset; `/v2` constructor; import `conditions`; coded misuse + invalid-slice conditions; operation-matrix enforcement. |
+| `runtime` | explicit lifecycle-state field + `parser-lifecycle` accessor, **replacing the sticky cache** (removed — idempotent re-execution provides §12.2 sticky-repeat by construction; a stored-result short-circuit returns at M5 with callbacks); `parser-finish!`, `parser-resume!`, `parser-reset!`; `paused`/`finished` statuses; truncation `position-kind = eof` + offset; `/v2` constructor; import `conditions`; coded misuse + invalid-slice conditions; operation-matrix enforcement. |
 | CMake `test/CMakeLists.txt` | shared conditions fragment; de-dup `CORE_ALL`; rewrite `/v1` runtime lane group as `/v2`; new determinism goldens. |
