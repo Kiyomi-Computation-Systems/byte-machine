@@ -44,7 +44,7 @@
   (define reserved-member-2
     '(make-compiled-machine compiled-machine?
       byte-machine-make-compiled-machine/v1 byte-machine-make-feed-outcome/v1
-      make-parser parser? parser-feed! parser-lifecycle parser-reset!
+      make-parser parser? parser-feed! parser-finish! parser-lifecycle parser-reset!
       parser-result? parser-result-status parser-result-next
       parser-result-consumed parser-result-stream-offset parser-result-error
       callback-continue callback-pause))

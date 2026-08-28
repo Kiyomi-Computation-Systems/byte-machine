@@ -11,7 +11,7 @@
   (export make-compiled-machine compiled-machine?
           byte-machine-make-compiled-machine/v1 byte-machine-make-feed-outcome/v1
           make-parser parser?
-          parser-feed! parser-lifecycle parser-reset!
+          parser-feed! parser-finish! parser-lifecycle parser-reset!
           parser-result? parser-result-status parser-result-next
           parser-result-consumed parser-result-stream-offset parser-result-error
           callback-continue callback-pause)
@@ -72,8 +72,8 @@
 
   ;; --- parser (mutable state behind procedures) ---
   ;; (vector tag variant executor entry current offset lifecycle)
-  ;; lifecycle: ready | stopped | error   (finished/paused/finish-ready arrive in
-  ;; Slice ②b/③). There is no cached "sticky" result: a repeat feed on a terminal
+  ;; lifecycle: ready | stopped | error | finished   (paused/finish-ready arrive in
+  ;; Slice ③). There is no cached "sticky" result: a repeat feed on a terminal
   ;; parser re-runs the executor, which is idempotent for stop/error (and, in ②b,
   ;; finish) and returns the §12.2 sticky-repeat tuple by construction. A stored-
   ;; result short-circuit returns at M5, when callbacks make re-execution
@@ -107,7 +107,8 @@
                  (parser-feed-v1! parser bv start end))))
       (case (parser-result-status r)
         ((stopped) (parser-set-lifecycle! parser 'stopped))
-        ((error) (parser-set-lifecycle! parser 'error)))
+        ((error) (parser-set-lifecycle! parser 'error))
+        ((finished) (parser-set-lifecycle! parser 'finished)))
       r))
 
   ;; The interpreter path. stop/error return a fresh result each call — no cache —
@@ -123,6 +124,8 @@
             ((error)
              (make-parser-result 'error pos (- pos start) (parser-offset parser)
                                  (op 'error-value node)))
+            ((finish)
+             (make-parser-result 'finished pos (- pos start) (parser-offset parser) #f))
             ((dispatch)
              (if (>= pos end)
                  (make-parser-result 'need-input pos (- pos start) (parser-offset parser) #f)
@@ -149,6 +152,42 @@
       (parser-set-offset! parser (feed-outcome-offset o))
       (make-parser-result status next (- next start)
                           (feed-outcome-offset o) (feed-outcome-error o))))
+
+  ;; parser-finish! (§12.4): run the executor with input exhausted. From the
+  ;; current state, an exhausted dispatch takes its eof-target (a named node, else
+  ;; the machine default-eof-error); execution continues to a finish node
+  ;; (-> finished), an error node (-> error), or a stop node reached this way is
+  ;; verifier-rejected so it never occurs. No slice, so next/consumed mirror the
+  ;; stream offset / 0. The generated (v1) finish path is Slice ②b-2.
+  (define (parser-finish! parser)
+    (if (eq? (parser-variant parser) 'op)
+        (parser-finish-op! parser)
+        (assertion-violation 'parser-finish! "generated finish path is Slice 2b-2" parser)))
+
+  (define (parser-finish-op! parser)
+    (let ((op (parser-executor parser))
+          (off (parser-offset parser)))
+      (let loop ((node (parser-current parser)))
+        (case (op 'kind node)
+          ((finish)
+           (parser-set-current! parser node)
+           (parser-set-lifecycle! parser 'finished)
+           (make-parser-result 'finished off 0 off #f))
+          ((stop)
+           (parser-set-current! parser node)
+           (parser-set-lifecycle! parser 'stopped)
+           (make-parser-result 'stopped off 0 off #f))
+          ((error)
+           (parser-set-current! parser node)
+           (parser-set-lifecycle! parser 'error)
+           (make-parser-result 'error off 0 off (op 'error-value node)))
+          ((dispatch)
+           (let ((t (op 'eof-target node)))
+             (if t
+                 (begin (parser-set-current! parser t) (loop t))
+                 (begin (parser-set-lifecycle! parser 'error)
+                        (make-parser-result 'error off 0 off (op 'default-eof-value))))))
+          (else (assertion-violation 'parser-finish! "unknown node kind" (op 'kind node)))))))
 
   ;; Full reset (§12.5), M2 subset: entry state, offset 0, lifecycle ready. Field,
   ;; span, pause, finish, poison, and stored-error state do not exist yet (Slice

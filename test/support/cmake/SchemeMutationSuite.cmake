@@ -275,8 +275,17 @@ cmake_minimum_required(VERSION 3.26)
 # cycle). None of the existing Pass 33 mutations above reach pass-eof-
 # execution or eof-terminal, which did not exist before this task. Passes
 # stay at 37 and 109 + 3 = 112 mutations.
+#
+# Slice ②b-1's Task 2 (parser-finish! + eof-target execution through the
+# interpreter) adds one more decision to the existing Pass 34 (the interpreter
+# now reports a finish node as kind 'finish, which parser-finish! branches on)
+# and two more to the existing Pass 32 (the runtime): an exhausted dispatch
+# taking its eof-target, and a dispatch with no eof-target routing to the
+# machine's default-eof error. No new pass opens -- parser-finish! and the
+# `finish` kind are new decisions inside modules both passes already cover.
+# Passes stay at 37 and 112 + 1 + 2 = 115 mutations.
 set(EXPECTED_PASSES 37)
-set(EXPECTED_MUTATIONS 112)
+set(EXPECTED_MUTATIONS 115)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -1933,8 +1942,13 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a v1 machine is driven down the op path"
-  FIND [[(if (eq? (parser-variant parser) 'op)]]
-  REPLACE [[(if #t]]
+  # Widened from the bare `(if (eq? (parser-variant parser) 'op)` once Milestone
+  # 2 Slice ②b-1's Task 2 gave parser-finish! its own, textually distinct
+  # variant check -- the bare pattern now occurs twice in runtime.sls, so this
+  # anchors on parser-feed!'s own call site (the `let` that binds its result)
+  # to stay unique to the decision this mutation actually witnesses.
+  FIND [[(let ((r (if (eq? (parser-variant parser) 'op)]]
+  REPLACE [[(let ((r (if #t]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "status")
 
 byte_machine_mutation(
@@ -1998,6 +2012,24 @@ byte_machine_mutation(
   FIND [[(parser-set-lifecycle! parser 'ready)]]
   REPLACE [[(parser-set-lifecycle! parser 'stopped)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "ready after reset")
+
+# Milestone 2 Slice ②b-1's Task 2 (EOF execution) adds two more decisions to
+# this pass: parser-finish-op!'s eof-target routing and its default-eof
+# fallback. Neither is exercised by any feed-path or reset mutation above --
+# they only run inside parser-finish!, which did not exist before this task.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: an exhausted dispatch does not take its eof-target"
+  FIND [[(op 'eof-target node)]]
+  REPLACE [[#f]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finished")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a dispatch with no eof-target does not route to the default error"
+  FIND [[(make-parser-result 'error off 0 off (op 'default-eof-value))]]
+  REPLACE [[(make-parser-result 'stopped off 0 off (op 'default-eof-value))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "default-eof")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -2163,6 +2195,16 @@ byte_machine_mutation(
   LABEL "interpret: an unverified machine is accepted"
   FIND [[(unless (verification-ok? verification)]]
   REPLACE [[(when #f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "refused")
+
+# Milestone 2 Slice ②b-1's Task 2 (EOF execution): a finish node no longer
+# reports the `finish` kind, so parser-finish! never reaches its `finish` arm
+# and the idle-completion case's "finished" check fails.
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
+  LABEL "interpret: a finish node is not reported as a finish kind"
+  FIND [[((finish-node? n) 'finish)]]
+  REPLACE [[((finish-node? n) 'stop)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finished")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

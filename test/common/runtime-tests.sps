@@ -67,6 +67,58 @@
           (check-equal "second stream offset unchanged"
                        (parser-result-stream-offset r2) (parser-result-stream-offset r1)))))))
 
+;; parser-finish! (§12.4) over hand-built op stubs, independent of the
+;; interpreter -- interpret-tests.sps exercises the full eofm machine through
+;; the real op; these stubs isolate parser-finish-op!'s own two decisions.
+;; eof-target-op's entry node has a truthy eof-target (a finish node);
+;; default-eof-op's has none (#f), which must route to the machine's default-
+;; eof error instead. finish-feed-op starts already parked at a finish node,
+;; witnessing parser-feed-op!'s finish arm (§12.2: finished x feed!).
+(define (eof-target-op msg . args)
+  (case msg
+    ((entry) 's0)
+    ((kind) (case (car args) ((s0) 'dispatch) ((done) 'finish)
+              (else (assertion-violation 'eof-target-op "bad node" (car args)))))
+    ((eof-target) (case (car args) ((s0) 'done) (else #f)))
+    ((default-eof-value) 'eof)
+    (else (assertion-violation 'eof-target-op "bad message" msg))))
+
+(define (default-eof-op msg . args)
+  (case msg
+    ((entry) 's0)
+    ((kind) (case (car args) ((s0) 'dispatch)
+              (else (assertion-violation 'default-eof-op "bad node" (car args)))))
+    ((eof-target) #f)
+    ((default-eof-value) 'eof)
+    (else (assertion-violation 'default-eof-op "bad message" msg))))
+
+(define (finish-feed-op msg . args)
+  (case msg
+    ((entry) 'done)
+    ((kind) (case (car args) ((done) 'finish)
+              (else (assertion-violation 'finish-feed-op "bad node" (car args)))))
+    (else (assertion-violation 'finish-feed-op "bad message" msg))))
+
+(harness-group "parser-finish!"
+  (lambda ()
+    (harness-case "an exhausted dispatch with a truthy eof-target continues to it -> finished"
+      (lambda ()
+        (check-equal "finished"
+                     (parser-result-status
+                      (parser-finish! (make-parser (make-compiled-machine eof-target-op) '() #f)))
+                     'finished)))
+    (harness-case "an exhausted dispatch with no eof-target routes to the default-eof error"
+      (lambda ()
+        (let ((r (parser-finish! (make-parser (make-compiled-machine default-eof-op) '() #f))))
+          (check-equal "default-eof status" (parser-result-status r) 'error)
+          (check-equal "default-eof code" (parser-result-error r) 'eof))))
+    (harness-case "a parser parked at a finish node re-feeds to finished, consuming zero (§12.2)"
+      (lambda ()
+        (let ((r (parser-feed! (make-parser (make-compiled-machine finish-feed-op) '() #f)
+                                (make-bytevector 1 0) 0 1)))
+          (check-equal "status" (parser-result-status r) 'finished)
+          (check-equal "consumed" (parser-result-consumed r) 0))))))
+
 ;; The direct-executor ABI. A hand-built feed encodes the one-byte machine over
 ;; numeric states (0 dispatch, 1 stop, 2 error), so the v1 path is witnessed
 ;; independently of the emitter.
