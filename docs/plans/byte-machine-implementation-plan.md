@@ -439,7 +439,7 @@ Codes include invalid argument, invalid slice, invalid output binding, lifecycle
 
 ### 9.5 Generated runtime ABI
 
-`(byte-machine runtime)` exports the reserved generated-code ABI binding `byte-machine-make-compiled-machine/v1`. Emitted bodies call that binding and embed the required runtime ABI and IR/emitter versions. This export exists so a generated library depends only on `(byte-machine runtime)`: the consumer imports the generated library, whose sole byte-machine import is the runtime ([decision 0008](../decisions/0008-emitter-emits-importable-library.md)); it is not an API for handwritten grammar or application code. Loading or constructing against a mismatched runtime raises the portable ABI-mismatch condition.
+`(byte-machine runtime)` exports the reserved generated-code ABI binding `byte-machine-make-compiled-machine/v1`. Emitted bodies call that binding and embed the required runtime ABI and IR/emitter versions. (Milestone 2 adds `byte-machine-make-compiled-machine/v2` with the finish path — a unified `exec` carrying `finish?`; the emitter emits `/v2`, the runtime keeps the `/v1` export — [decision 0012](../decisions/0012-generated-abi-v2-finish.md).) This export exists so a generated library depends only on `(byte-machine runtime)`: the consumer imports the generated library, whose sole byte-machine import is the runtime ([decision 0008](../decisions/0008-emitter-emits-importable-library.md)); it is not an API for handwritten grammar or application code. Loading or constructing against a mismatched runtime raises the portable ABI-mismatch condition.
 
 The generated ABI is distinct from the user-facing parser API and is documented only in this ABI section and generated-code maintenance notes. It may change before `1.0.0` only with a generated-ABI version bump, deterministic regeneration, and a changelog entry.
 
@@ -724,7 +724,7 @@ The machine entered a declared machine error or callback application error. The 
 
 Every input-dependent state uses either a state-specific EOF edge or the machine's explicitly declared default EOF error. A stream-idle entry state may route EOF to successful `finished`; a partially parsed request routes EOF to a truncation error.
 
-Lowered states inside a sequence inherit the source sequence state's EOF edge. EOF after a nonempty matched prefix therefore reports the source state's EOF policy at the current between-byte stream offset. EOF edges participate in a separate zero-progress-cycle check; EOF processing may not loop indefinitely.
+Lowered states inside a sequence inherit the source sequence state's EOF edge. EOF after a nonempty matched prefix therefore reports the source state's EOF policy at the current between-byte stream offset. EOF edges participate in a separate zero-progress-cycle check; EOF processing may not loop indefinitely. (The EOF traversal is the eof-target chain, terminating at finish/error/pause; execution model in decision 0011.)
 
 EOF processing may invoke callbacks and may pause. A pause during EOF produces `paused-finish`; after resume, a subsequent `parser-finish!` continues the saved EOF path. EOF processing never admits new bytes and must terminate in `finished` or `error` after a finite number of resumes.
 
@@ -744,7 +744,7 @@ HTTP-shaped message loops use explicit field actions to reset message-local valu
 
 ### 12.6 Misuse and poisoning
 
-Prohibited lifecycle operations and reentrant parser operations raise API-contract conditions before further mutation.
+Prohibited lifecycle operations and reentrant parser operations raise API-contract conditions before further mutation. (From Milestone 2 the runtime raises coded `&byte-machine-contract` conditions, the §11.1 invalid-slice contract included — [decision 0013](../decisions/0013-runtime-coded-conditions.md).)
 
 Expected callback failures must use callback result values. If a callback raises an unexpected condition or performs a nonlocal escape, the condition/escape propagates and `dynamic-wind` marks the parser poisoned. Only full reset may reuse it.
 
@@ -904,9 +904,9 @@ The verifier rejects:
 - integer accumulation using an incompatible field or unsupported base;
 - malformed pause continuations;
 - terminal nodes with outgoing transitions;
-- invalid EOF targets or successful EOF with an active span;
+- invalid EOF targets or successful EOF with an active span (EOF *execution*, not just target resolution: decision 0011);
 - EOF-only zero-progress cycles and non-EOF control flow into a finish terminal;
-- EOF-reachable stop terminals: every EOF path must reach finish or error after finitely many explicit pauses;
+- EOF-reachable stop terminals: every EOF path must reach finish or error after finitely many explicit pauses (this and the preceding EOF-cycle / non-EOF-into-finish checks are decision 0011's, each with a diagnostic code);
 - generated identifier collisions;
 - backend limits that would make emission incorrect.
 

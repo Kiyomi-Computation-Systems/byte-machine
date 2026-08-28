@@ -52,3 +52,23 @@ asserted equal to `compile.sls`'s exported `reserved-member-2`, witnessed by a
 mutation that drops an entry). It ships **no `/v2` export**: the guard is made
 load-bearing by that mutation, not by the arrival of a new export, so item 5's
 `/v2` remains gated on benchmark evidence exactly as written above.
+
+## 2026-08-28 (Milestone 2) — the functional /v2 lands
+
+Milestone 2 introduces `byte-machine-make-compiled-machine/v2` (decision 0012) to
+carry `parser-finish!`'s EOF path as a unified `exec` with a `finish?` flag, per
+item 4. The emitter emits `/v2`; the runtime keeps the `/v1` export so a stale v1
+file fails the version check cleanly. This is the *functional* `/v2` item 4
+reserved the version tag for. It is distinct from the benchmark-gated `feed-outcome`
+`/v2` (Consequences / the Slice-B amendment above), which remains gated on §23
+evidence, and from item 5's coded ABI-mismatch condition, which remains deferred.
+
+## 2026-08-28 (Milestone 2) — item 5's manifest blocker discharged
+
+Milestone 2 gives `runtime.sls` a dependency on `(byte-machine private
+conditions)` so lifecycle misuse and the §11.1 invalid-slice contract raise coded
+`&byte-machine-contract` conditions (decision 0013), factoring a shared conditions
+manifest fragment and de-duplicating `CORE_ALL` to resolve the basename collision
+item 5 flagged. Item 5's own deferral — the coded ABI-version-mismatch condition —
+is thereby *unblocked* but not yet taken: the mismatch still raises
+`assertion-violation` until a slice upgrades it.
