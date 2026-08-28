@@ -299,8 +299,19 @@ cmake_minimum_required(VERSION 3.26)
 # is re-anchored in place (parser-feed!'s `if` became a three-way `case` when the
 # /v2 variant landed) -- same decision, same count, so it neither adds nor drops
 # a mutation. Passes stay at 37 and 116 + 2 = 118 mutations.
+#
+# Slice ②b-2's Task 2 (the generation flip) adds one mutation to Pass 35 (the
+# normalizer) and three to Pass 36 (the emitter). Pass 35 gains the dispatch
+# default-eof encoding: the resolved eof routing is now hashed, so dropping the
+# default-eof code from the canonical bytes moves the (re-baselined) one-byte
+# golden. Pass 36 gains the three new emitter decisions, each witnessed by a
+# finish-node fixture (eof-fin) added to compile-tests.sps: the finish terminal
+# arm (renders 'finished, not 'stopped), the exhausted-dispatch eof branch (emits
+# the resolved default-eof code), and the finish? guard (the exhausted dispatch
+# branches on finish?, not a constant). Passes stay at 37 and 118 + 1 + 3 = 122
+# mutations.
 set(EXPECTED_PASSES 37)
-set(EXPECTED_MUTATIONS 118)
+set(EXPECTED_MUTATIONS 122)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -2299,21 +2310,21 @@ byte_machine_mutation(
   LABEL "normal-ir: the FNV offset basis is changed"
   FIND [[(define fnv-offset 14695981039346656037)]]
   REPLACE [[(define fnv-offset 14695981039346656038)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "11963406767470843108")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "4236938459847922092")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: the FNV prime is changed"
   FIND [[(define fnv-prime  1099511628211)]]
   REPLACE [[(define fnv-prime  1099511628212)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "11963406767470843108")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "4236938459847922092")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: the byte is never mixed into the hash"
   FIND [[(* (bitwise-xor h (bytevector-u8-ref bv i)) fnv-prime)]]
   REPLACE [[(* h fnv-prime)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "11963406767470843108")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "4236938459847922092")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
@@ -2335,6 +2346,18 @@ byte_machine_mutation(
   FIND [[(error-declaration-code (car es)) (loop (cdr es))]]
   REPLACE [[(error-declaration-name (car es)) (loop (cdr es))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "unexpected-byte")
+
+# Milestone 2 Slice ②b-2 (Task 2): the dispatch eof routing is now part of the
+# canonical encoding, so a dispatch state's resolved eof (the one-byte machine
+# routes to the default-eof error, code 'eof) is mixed into the fingerprint.
+# Dropping the default-eof code from the encoding moves the one-byte golden, so
+# normal-ir-tests.sps's fingerprint case reddens against the re-baselined value.
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a dispatch's default-eof routing is not encoded into the fingerprint"
+  FIND [[(begin (put-u8 p 1) (put-symbol p (cdr eof)))]]
+  REPLACE [[(begin (put-u8 p 1))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "4236938459847922092")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -2425,6 +2448,32 @@ byte_machine_mutation(
   REPLACE [["internal" ") " id " off))\n")]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "error arm")
 
+# Milestone 2 Slice ②b-2 (Task 2): the emitter renders the /v2 unified `exec`
+# with a finish? EOF branch and a distinct finish terminal arm. compile-tests.sps
+# gains a finish-node fixture (eof-fin) whose entry dispatch routes eof to a
+# finish node, so all three new emitter decisions have a witness in the compile
+# SPEC lane. Each FIND is a unique verbatim substring.
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: a finish node renders the stopped terminal instead of finished"
+  FIND [[(quote finished) pos #f " id " off))\n"]]
+  REPLACE [[(quote stopped) pos #f " id " off))\n"]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish arm")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: the exhausted-dispatch eof branch drops the resolved default-eof code"
+  FIND [[(symbol->string (cdr eof)) ") " id " off)")]]
+  REPLACE [["internal" ") " id " off)")]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "eof routes to the default-eof error")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: the exhausted dispatch does not branch on finish?"
+  FIND [[(if finish?\n"]]
+  REPLACE [[(if #f\n"]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish eof guard")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 37: D7 identifier repertoire + LF (Slice B) -------------------------
@@ -2468,8 +2517,8 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
   LABEL "compile: the final newline is emitted as CRLF"
-  FIND [[" feed)))\n"))))]]
-  REPLACE [[" feed)))\r\n"))))]]
+  FIND [[" exec)))\n"))))]]
+  REPLACE [[" exec)))\r\n"))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "carriage return")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")

@@ -120,8 +120,11 @@
           (check-equal "consumed" (parser-result-consumed r) 0))))))
 
 ;; The direct-executor ABI. A hand-built feed encodes the one-byte machine over
-;; numeric states (0 dispatch, 1 stop, 2 error), so the v1 path is witnessed
-;; independently of the emitter.
+;; numeric states (0 dispatch, 1 stop, 2 error), so the v1 (feed-only) path is
+;; witnessed independently of the emitter. It declares abi 2 -- the current ABI
+;; version -- because /v1's guard checks (= abi current-abi-version): after the
+;; Slice ②b-2 bump, abi 1 is a stale-file mismatch (witnessed by the dedicated
+;; refusal case below), so exercising the v1 code path needs the matching 2.
 (define (stub-feed state offset bv start end)
   (let loop ((pos start) (st state) (off offset))
     (case st
@@ -132,7 +135,7 @@
            (byte-machine-make-feed-outcome/v1 'need-input pos #f 0 off)
            (let ((b (bytevector-u8-ref bv pos)))
              (if (= b 0) (loop (+ pos 1) 1 (+ off 1)) (loop pos 2 off))))))))
-(define (v1-machine) (byte-machine-make-compiled-machine/v1 1 42 0 stub-feed))
+(define (v1-machine) (byte-machine-make-compiled-machine/v1 2 42 0 stub-feed))
 (define (v1-feed-byte b)
   (parser-feed! (make-parser (v1-machine) '() #f) (make-bytevector 1 b) 0 1))
 
@@ -176,11 +179,13 @@
           (let ((q (make-parser (v1-machine) '() #f)))
             (parser-feed! q (make-bytevector 1 65) 0 1)
             (check-equal "error after reject" (parser-lifecycle q) 'error)))))
+    ;; A stale v1 file declares abi 1; after the ②b-2 bump current-abi-version is
+    ;; 2, so /v1 with abi 1 is refused as a clean version mismatch (1 =/= 2).
     (harness-case "a mismatched ABI version is refused"
       (lambda ()
         (check-raises "refused"
                       (lambda (e) #t)
-                      (lambda () (byte-machine-make-compiled-machine/v1 2 42 0 stub-feed)))))))
+                      (lambda () (byte-machine-make-compiled-machine/v1 1 42 0 stub-feed)))))))
 
 ;; The unified-executor ABI (/v2, Slice ②b-2). One `exec` closure carries the
 ;; whole dispatch loop and a `finish?` flag: feed calls it with #f over the real

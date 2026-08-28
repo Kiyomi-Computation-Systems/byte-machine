@@ -54,13 +54,15 @@
     ;; Golden value: measured against this exact encoding (format tag 1; entry and
     ;; state-count as u32be; per dispatch state u16be transition count then each
     ;; (u8 byte, u32be target, u8 mode) ascending by byte, then u32be fallback
-    ;; target + u8 mode; stop = one tag byte; error = tag byte + u16be code-length
-    ;; + UTF-8 code bytes) run through FNV-1a. A change to any FNV constant, the
-    ;; XOR/multiply, or the field layout moves this number.
+    ;; target + u8 mode, then eof routing (tag 0 + u32be node id, or tag 1 +
+    ;; u16be code-length + UTF-8 default-eof code bytes); stop = one tag byte;
+    ;; error = tag byte + u16be code-length + UTF-8 code bytes; finish = one tag
+    ;; byte) run through FNV-1a. A change to any FNV constant, the XOR/multiply,
+    ;; or the field layout (eof routing included) moves this number.
     (harness-case "the IR fingerprint is the measured golden value"
       (lambda ()
         (check-equal "fingerprint" (normal-machine-fingerprint n1)
-                     11963406767470843108)))
+                     4236938459847922092)))
     (harness-case "normalization is deterministic"
       (lambda ()
         (check-equal "same fingerprint twice"

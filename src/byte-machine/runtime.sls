@@ -30,10 +30,11 @@
 
   ;; --- compiled machine: three variants behind one type ---
   ;; op:  (vector tag 'op op-closure)                    -- the reference interpreter
-  ;; v1:  (vector tag 'v1 feed entry-state fingerprint)  -- generated code (feed-only)
+  ;; v1:  (vector tag 'v1 feed entry-state fingerprint)  -- the pre-②b-2 feed-only
+  ;;      ABI, kept only so a stale v1 file (declaring abi 1) is refused cleanly.
   ;; v2:  (vector tag 'v2 exec entry-state fingerprint)  -- generated code, one
-  ;;      unified `exec` closure carrying a finish? flag (Slice ②b-2). Dormant
-  ;;      until Task 2 flips the emitter; the emitter still emits /v1 here.
+  ;;      unified `exec` closure carrying a finish? flag (Slice ②b-2). This is the
+  ;;      ABI the emitter now emits (Task 2 flipped generation).
   (define compiled-machine-tag (tag 'byte-machine-compiled-machine))
   (define (make-compiled-machine op)
     (unless (procedure? op)
@@ -42,7 +43,10 @@
   (define (compiled-machine? x) (tagged? compiled-machine-tag x))
   (define (compiled-machine-variant cm) (vector-ref cm 1))
 
-  (define current-abi-version 1)
+  ;; The ABI version the emitter currently emits. Bumped to 2 when generation
+  ;; flipped to the unified /v2 `exec` (Slice ②b-2); the /v1 constructor checks
+  ;; it, so a stale generated file (which declared abi 1) is now refused cleanly.
+  (define current-abi-version 2)
   (define (byte-machine-make-compiled-machine/v1 abi-version ir-fingerprint entry-state feed)
     (unless (and (integer? abi-version) (= abi-version current-abi-version))
       (assertion-violation 'byte-machine-make-compiled-machine/v1
@@ -56,8 +60,8 @@
   ;; The /v2 constructor (Slice ②b-2). Same shape as /v1, but the executor is a
   ;; finish?-aware `exec` -- (state offset bv start end finish?) -> feed-outcome --
   ;; so one closure serves both parser-feed! (finish? #f) and parser-finish!
-  ;; (finish? #t). current-abi-version stays 1 while the emitter still emits /v1;
-  ;; this constructor checks the literal 2, so Task 2's bump is what makes it live.
+  ;; (finish? #t). It checks the literal 2, matching what the emitter now emits;
+  ;; Task 2's current-abi-version bump made this the live generated ABI.
   (define (byte-machine-make-compiled-machine/v2 abi-version ir-fingerprint entry-state exec)
     (unless (and (integer? abi-version) (= abi-version 2))
       (assertion-violation 'byte-machine-make-compiled-machine/v2
