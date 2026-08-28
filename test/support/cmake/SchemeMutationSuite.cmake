@@ -250,6 +250,22 @@ cmake_minimum_required(VERSION 3.26)
 # returning the lifecycle to ready -- none of which the feed-path mutations
 # above exercise (they run before any reset call exists). Passes stay at 37
 # and 106 + 3 = 109 mutations.
+#
+# Each of the three reset mutations below is individually caught by its own
+# named EXPECT_OUTPUT_MATCHES check for the right reason: does-not-restore-
+# entry by "re-parses from entry" (a status check), does-not-zero-offset by
+# "offset zeroed then advanced by one", and does-not-return-to-ready by
+# "ready after reset". That per-mutation correctness does NOT mean the three
+# checks are mutually isolated, though. Under does-not-restore-entry, the
+# offset check also fails: observing a zeroed offset requires re-parsing
+# from the entry state (the alternative -- reading the offset directly --
+# has no public parser-offset accessor), and that re-parse itself depends on
+# `current` having been restored; with `current` left at the stop terminal,
+# the re-feed hits it and returns without advancing, so the offset comes
+# back 0 instead of the expected 1. The offset check is therefore not an
+# exclusive witness of offset-zeroing on this one-byte stub machine -- it
+# also (correctly) reacts to a broken entry-restore. The lifecycle check is
+# unaffected by the other two mutations, so only this one pair overlaps.
 set(EXPECTED_PASSES 37)
 set(EXPECTED_MUTATIONS 109)
 
