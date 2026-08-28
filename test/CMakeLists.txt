@@ -959,6 +959,30 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-sequence-tests.sps"
   TIMEOUT 180)
 
+# --- Milestone 2 Slice ②b-2: interpreter≡generated differential over EOF ------
+# Proves the generated /v2 finish path (exec closure's finish? EOF branch) equals
+# the interpreter's parser-finish!/eof-target execution over the shared
+# idle-vs-truncation eof-machine, for feed-then-finish across all 256 first bytes.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.eof.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-eof-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/eof-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-eof-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.eof.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-eof-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/eof-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-eof-tests.sps"
+  TIMEOUT 120)
+
 # --- Milestone 1 Phase 3 Slice B: D7 identifier repertoire + binary LF -------
 byte_machine_add_scheme_lane(
   NAME byte-machine.verify.identifier-repertoire.chez.source
