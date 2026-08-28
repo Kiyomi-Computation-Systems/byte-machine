@@ -37,8 +37,12 @@
 (define (list-head-n lst n)
   (if (= n 0) '() (cons (car lst) (list-head-n (cdr lst) (- n 1)))))
 (define (schedule->string cuts)
-  (if (null? cuts) "()"
-      (fold-left (lambda (acc c) (string-append acc " " (number->string c))) "(" cuts)))
+  (string-append
+   "("
+   (fold-left (lambda (acc c)
+                (string-append acc (if (string=? acc "") "" " ") (number->string c)))
+              "" cuts)
+   ")"))
 
 ;; Feed a list of (bv start end) slices through ONE fresh parser; return the
 ;; final parser-result as (status next consumed stream-offset error). Schedules
@@ -116,15 +120,16 @@
       (lambda ()
         (for-each
          (lambda (cuts)
-           (let ()
+           (let ((ri (run-slices cm-ref (slices-for cuts)))
+                 (rg (run-slices cm-gen (slices-for cuts))))
              (check-equal (string-append "interpreter cuts " (schedule->string cuts))
-                          (car (run-slices cm-ref (slices-for cuts))) 'stopped)
+                          (car ri) 'stopped)
              (check-equal (string-append "generated cuts " (schedule->string cuts))
-                          (car (run-slices cm-gen (slices-for cuts))) 'stopped)
+                          (car rg) 'stopped)
              (check-equal (string-append "interpreter stream-offset " (schedule->string cuts))
-                          (cadddr (run-slices cm-ref (slices-for cuts))) 4)
+                          (cadddr ri) 4)
              (check-equal (string-append "generated stream-offset " (schedule->string cuts))
-                          (cadddr (run-slices cm-gen (slices-for cuts))) 4)))
+                          (cadddr rg) 4)))
          all-cut-sets)))
     (harness-case "interpreter and generated agree on every fragmentation"
       (lambda ()
@@ -148,21 +153,24 @@
     (harness-case "a deterministic random multi-split schedule accepts and agrees"
       (lambda ()
         (define seed 20260828)
-        (let loop ((i 0) (s (make-prng seed)))
-          (when (< i 32)
-            (let*-values (((d1 s1) (prng-next s 2))
-                          ((d2 s2) (prng-next s1 2))
-                          ((d3 s3) (prng-next s2 2)))
-              (let ((cuts (append (if (= d1 1) '(1) '())
-                                  (if (= d2 1) '(2) '())
-                                  (if (= d3 1) '(3) '()))))
-                (check-equal (string-append "schedule " (number->string i)
-                                            " (seed " (number->string seed) ")")
-                             (run-slices cm-ref (slices-for cuts))
-                             (run-slices cm-gen (slices-for cuts)))
-                (check-equal (string-append "schedule " (number->string i) " stops")
-                             (car (run-slices cm-gen (slices-for cuts))) 'stopped))
-              (loop (+ i 1) s3))))))))
+        (let loop ((i 0) (s (make-prng seed)) (multi 0))
+          (if (>= i 32)
+              ;; the case name promises multi-split; assert the seed actually
+              ;; produced at least one draw with >= 2 cuts rather than assuming it.
+              (check "at least one draw was a genuine multi-split (>= 2 cuts)" (> multi 0))
+              (let*-values (((d1 s1) (prng-next s 2))
+                            ((d2 s2) (prng-next s1 2))
+                            ((d3 s3) (prng-next s2 2)))
+                (let ((cuts (append (if (= d1 1) '(1) '())
+                                    (if (= d2 1) '(2) '())
+                                    (if (= d3 1) '(3) '()))))
+                  (check-equal (string-append "schedule " (number->string i)
+                                              " (seed " (number->string seed) ")")
+                               (run-slices cm-ref (slices-for cuts))
+                               (run-slices cm-gen (slices-for cuts)))
+                  (check-equal (string-append "schedule " (number->string i) " stops")
+                               (car (run-slices cm-gen (slices-for cuts))) 'stopped)
+                  (loop (+ i 1) s3 (+ multi (if (>= (length cuts) 2) 1 0)))))))))))
 
 ;; --- Task 3: nonzero-offset slices ---
 (harness-group "nonzero-offset slices report exact next / consumed / stream-offset"
