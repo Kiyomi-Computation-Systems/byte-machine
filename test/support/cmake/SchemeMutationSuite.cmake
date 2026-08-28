@@ -284,8 +284,14 @@ cmake_minimum_required(VERSION 3.26)
 # machine's default-eof error. No new pass opens -- parser-finish! and the
 # `finish` kind are new decisions inside modules both passes already cover.
 # Passes stay at 37 and 112 + 1 + 2 = 115 mutations.
+#
+# A code-review fix to Task 2 adds one more mutation to the same Pass 32: the
+# `finish` arm parser-feed-op! itself owns (§12.2 finished x feed! -- a parser
+# already parked at a finish node re-fed returns finished, consuming zero) had
+# a functional test but no witnessing mutation. Passes stay at 37 and
+# 115 + 1 = 116 mutations.
 set(EXPECTED_PASSES 37)
-set(EXPECTED_MUTATIONS 115)
+set(EXPECTED_MUTATIONS 116)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -2030,6 +2036,18 @@ byte_machine_mutation(
   FIND [[(make-parser-result 'error off 0 off (op 'default-eof-value))]]
   REPLACE [[(make-parser-result 'stopped off 0 off (op 'default-eof-value))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "default-eof")
+
+# Code-review fix for Task 2 (§12.2 finished x feed!): parser-feed-op!'s own
+# `finish` arm -- a parser parked at a finish node re-fed returns finished,
+# consuming zero -- had a functional test (finish-feed-op in runtime-tests.sps)
+# but no witnessing mutation. This FIND is textually distinct from parser-
+# finish-op!'s own 'finished result (off/0/off) two mutations above.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a feed on a finished parser does not return finished"
+  FIND [[(make-parser-result 'finished pos (- pos start) (parser-offset parser) #f)]]
+  REPLACE [[(make-parser-result 'stopped pos (- pos start) (parser-offset parser) #f)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "status")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
