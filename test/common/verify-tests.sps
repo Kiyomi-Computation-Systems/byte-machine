@@ -141,4 +141,64 @@
                               'default-eof #f)
                 'missing-target))))))
 
+(harness-group "EOF terminals and eof-target verification (§16.2)"
+  (lambda ()
+    ;; A valid EOF machine: entry reads byte 1 (advance to stop); its eof-target
+    ;; is a FINISH node (idle completion). Fallback -> reject error.
+    (define (eof-ok)
+      (make-machine 'eofok 's0 '() '() '()
+        (list (make-error-declaration 'default-eof 'eof "eof" #f)
+              (make-error-declaration 'rejected 'unexpected-byte "bad" #f))
+        (list (make-byte-dispatch-node 's0
+                (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'stop 'advance) #f))
+                (make-edge 'reject 'reexecute) 'done #f)   ; eof-target -> finish node 'done
+              (make-stop-node 'stop #f)
+              (make-finish-node 'done #f)
+              (make-error-node 'reject 'rejected #f))
+        'default-eof #f))
+    (harness-case "a finish node reachable only via an eof-target verifies"
+      (lambda ()
+        (check "verifies" (verification-ok? (verify-machine (eof-ok))))))
+    ;; §16.2:908 — a BYTE edge into a finish terminal is rejected.
+    (harness-case "a byte case targeting a finish node is rejected (non-eof-into-finish)"
+      (lambda ()
+        (let ((m (make-machine 'bad1 's0 '() '() '()
+                   (list (make-error-declaration 'default-eof 'eof "eof" #f))
+                   (list (make-byte-dispatch-node 's0
+                           (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'done 'advance) #f))
+                           (make-edge 'done 'reexecute) #f #f)   ; byte edges -> finish node
+                         (make-finish-node 'done #f))
+                   'default-eof #f)))
+          (check "has non-eof-into-finish"
+                 (memq 'non-eof-into-finish
+                       (map diagnostic-code (verification-diagnostics (verify-machine m))))))))
+    ;; §16.2:909 — an eof-target chain reaching a STOP terminal is rejected.
+    (harness-case "an eof-target reaching a stop terminal is rejected (eof-reachable-stop)"
+      (lambda ()
+        (let ((m (make-machine 'bad2 's0 '() '() '()
+                   (list (make-error-declaration 'default-eof 'eof "eof" #f))
+                   (list (make-byte-dispatch-node 's0
+                           (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'stop 'advance) #f))
+                           (make-edge 'stop 'reexecute) 'stop #f)   ; eof-target -> stop
+                         (make-stop-node 'stop #f))
+                   'default-eof #f)))
+          (check "has eof-reachable-stop"
+                 (memq 'eof-reachable-stop
+                       (map diagnostic-code (verification-diagnostics (verify-machine m))))))))
+    ;; EOF zero-progress cycle — s0 eof-target s1, s1 eof-target s0.
+    (harness-case "an eof-target cycle is rejected (eof-zero-progress-cycle)"
+      (lambda ()
+        (let ((m (make-machine 'bad3 's0 '() '() '()
+                   (list (make-error-declaration 'default-eof 'eof "eof" #f))
+                   (list (make-byte-dispatch-node 's0
+                           (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 's1 'advance) #f))
+                           (make-edge 's1 'advance) 's1 #f)
+                         (make-byte-dispatch-node 's1
+                           (list (make-byte-case (make-exact-byte-matcher 2) (make-edge 's0 'advance) #f))
+                           (make-edge 's0 'advance) 's0 #f))
+                   'default-eof #f)))
+          (check "has eof-zero-progress-cycle"
+                 (memq 'eof-zero-progress-cycle
+                       (map diagnostic-code (verification-diagnostics (verify-machine m))))))))))
+
 (harness-finish)

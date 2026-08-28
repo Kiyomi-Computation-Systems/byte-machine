@@ -17,6 +17,7 @@
           make-exact-byte-matcher exact-byte-matcher? exact-byte-matcher-byte
           make-edge edge? edge-target edge-mode
           make-stop-node stop-node? stop-node-name
+          make-finish-node finish-node? finish-node-name
           make-error-node error-node? error-node-name error-node-error-name
           make-error-declaration error-declaration? error-declaration-name
           error-declaration-code error-declaration-reason
@@ -92,6 +93,14 @@
   (define (stop-node? x) (tagged? stop-node-tag x))
   (define (stop-node-name n) (vector-ref n 1))
 
+  ;; --- finish node (EOF-only successful terminal, returns finished) ---
+  (define finish-node-tag (tag 'byte-machine-finish-node))
+  (define (make-finish-node name source-label)
+    (require-symbol 'make-finish-node 'name name)
+    (vector finish-node-tag name source-label))
+  (define (finish-node? x) (tagged? finish-node-tag x))
+  (define (finish-node-name n) (vector-ref n 1))
+
   ;; --- error node (references a declaration by NAME) ---
   (define error-node-tag (tag 'byte-machine-error-node))
   (define (make-error-node name error-declaration source-label)
@@ -117,11 +126,12 @@
 
   ;; --- node dispatch ---
   (define (node? x)
-    (or (byte-dispatch-node? x) (stop-node? x) (error-node? x)))
+    (or (byte-dispatch-node? x) (stop-node? x) (error-node? x) (finish-node? x)))
   (define (node-name x)
     (cond ((byte-dispatch-node? x) (byte-dispatch-node-name x))
           ((stop-node? x) (stop-node-name x))
           ((error-node? x) (error-node-name x))
+          ((finish-node? x) (finish-node-name x))
           (else (byte-machine-contract-violation 'node-name 'invalid-argument 'node))))
 
   ;; --- machine (default-eof-error is a declared error NAME) ---

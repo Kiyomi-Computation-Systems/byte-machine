@@ -806,6 +806,7 @@ byte_machine_add_scheme_lane(
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/interpret-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/eof-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/interpret-tests.sps"
   TIMEOUT 120)
 
@@ -815,7 +816,32 @@ byte_machine_add_scheme_lane(
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/interpret-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/eof-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/interpret-tests.sps"
+  TIMEOUT 120)
+
+# Milestone 2 Slice ②b-1 Task 3: the shared idle-vs-truncation proving machine
+# (built only through (byte-machine graph), reused by Slice ②b-2's
+# interpreter≡generated differential) driven exhaustively through the
+# interpreter's parser-finish!/eof-target path.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.eof-interpret.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/eof-interpret-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/eof-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/eof-interpret-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.eof-interpret.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/eof-interpret-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/eof-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/eof-interpret-tests.sps"
   TIMEOUT 120)
 
 # --- Milestone 1 Phase 3 Slice A: normalizer ------------------------------

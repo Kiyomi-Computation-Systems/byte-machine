@@ -34,6 +34,7 @@
           (cond ((byte-dispatch-node? n) 'dispatch)
                 ((stop-node? n) 'stop)
                 ((error-node? n) 'error)
+                ((finish-node? n) 'finish)
                 (else (byte-machine-contract-violation 'interpret 'internal name)))))
       (define (dispatch name byte)
         (let ((n (lookup nodes name)))
@@ -48,6 +49,8 @@
       (define (error-value name)
         (error-declaration-code
          (lookup-error errors (error-node-error-name (lookup nodes name)))))
+      (define (default-eof-value)
+        (error-declaration-code (lookup-error errors (machine-default-eof-error m))))
       (make-compiled-machine
        (lambda (msg . args)
          (case msg
@@ -55,4 +58,6 @@
            ((kind) (kind (car args)))
            ((dispatch) (dispatch (car args) (cadr args)))
            ((error-value) (error-value (car args)))
+           ((eof-target) (byte-dispatch-node-eof-target (lookup nodes (car args))))
+           ((default-eof-value) (default-eof-value))
            (else (byte-machine-contract-violation 'interpret 'internal msg))))))))

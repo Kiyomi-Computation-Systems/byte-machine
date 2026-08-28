@@ -231,6 +231,17 @@ values at each position match; the §9.6 example runs with a nonzero-offset slic
 `parser-finish!`, the **finish** node, and the lifecycle-state field the rest of
 M2 depends on — plus the sticky-repeat feed fix M1 left broken.
 
+> **Sub-split (2026-08-28):** Slice ② was cut into **②a** (lifecycle spine,
+> feed-only — closed, PR #20) and **②b** (EOF execution). ②b is itself cut, along
+> M1's Phase-2/Phase-3 seam, into **②b-1** (EOF semantic core through the
+> *interpreter*: the finish node, the §16.2 EOF checks, `parser-finish!` +
+> eof-target execution, `finished`, idle-vs-truncation — no normalizer/emitter/
+> `/v2`/goldens) and **②b-2** (EOF *generation*: the normalizer finish/eof
+> encoding + the IR-fingerprint move & single golden re-baseline, the emitter
+> finish arm, `/v2`, `position-kind = eof`, and the interpreter≡generated
+> differential over EOF). Everything below is delivered across ②b-1 then ②b-2;
+> `position-kind = eof` lands in ②b-2 with the differential.
+
 **Deliver.**
 
 - **A parser lifecycle-state field** replacing today's bare `sticky`. Slice ②
