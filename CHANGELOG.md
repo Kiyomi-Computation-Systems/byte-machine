@@ -348,6 +348,36 @@ what this milestone delivers.
   shipping. Measured on the shipped tree: `release` 60/60, `no-scheme` 8/8,
   the Scheme mutation suite 37 passes/104 mutations, the CMake mutation
   suite 1 pass/72 mutations.
+- Milestone 2 Slice ②b-2: EOF generation. The emitter now emits the `/v2`
+  generated-runtime ABI, `byte-machine-make-compiled-machine/v2`, and
+  `current-abi-version` bumps to `2`. The generated machine exposes one unified
+  `exec` closure carrying a `finish?` flag — `(state offset bv start end
+  finish?)` — so a single closure serves both `parser-feed!` (`finish?` `#f`)
+  and `parser-finish!` (`finish?` `#t`) rather than two closures. Only the
+  exhausted-dispatch arm branches on the flag: feed still returns `need-input`,
+  while finish takes the dispatch state's resolved eof-target — continuing the
+  eof-target chain to a named node's loop, or routing to the machine default-eof
+  error. Terminal state arms are one-per-kind and distinct: `stop` emits
+  `stopped`, the new `finish` arm emits `finished`, and `error` emits `error`,
+  removing the ABI under-specification the M1 "shared stop arm relabeled on the
+  finish path" model carried. `/v1` is kept only as a runtime *export* — a
+  version-mismatch stub — so a stale generated file embedding abi 1 fails the
+  version check cleanly with an `assertion-violation` rather than an
+  unbound-identifier error; "retire `/v1`" means from emitter output only. The
+  normalizer encodes each dispatch state's eof routing into the canonical bytes,
+  so the one-byte IR fingerprint re-baselines once, from `11963406767470843108`
+  to `4236938459847922092`, at every site that pins it — the IR-fingerprint and
+  emitted-bytes goldens, the normalizer and emitter specs, and the mutation-suite
+  fingerprint anchors — and the generated library is byte-identically
+  regenerated from the verified machine on every run. The reserved-output-binding
+  mirrors track their surface: `reserved-member-2` gains
+  `byte-machine-make-compiled-machine/v2` (keeping `/v1`), and
+  `reserved-member-3`'s generated-local set renames `feed` to `exec` and gains
+  `finish?`. The interpreter≡generated differential is extended to
+  feed-then-finish across all 256 first bytes, distinguishing idle completion
+  (`finished`) from truncation (`error`).
+  [Decision 0010](docs/decisions/0010-direct-executor-abi.md) item 4 governs the
+  `/v2`-constructor-over-arity-break seam.
 
 ### Changed
 
