@@ -310,8 +310,18 @@ cmake_minimum_required(VERSION 3.26)
 # the resolved default-eof code), and the finish? guard (the exhausted dispatch
 # branches on finish?, not a constant). Passes stay at 37 and 118 + 1 + 3 = 122
 # mutations.
+#
+# Slice ②b-2's whole-branch review (item d) adds one more mutation to Pass 35
+# (the normalizer): Task 2's default-eof mutation above witnesses only the
+# DEFAULT eof-encode arm (tag 1 + code symbol), reached by the one-byte machine.
+# The NODE arm (tag 0 + u32be routed node id) had no golden and no mutation
+# because no machine in the SPEC lane routed eof to a named node. normal-ir-
+# tests.sps now pins a second golden over the shared eof-machine (s0/s1 both
+# route eof to named nodes), so dropping the routed node id from the encoding
+# moves that node-routing golden and its fingerprint case catches it. Passes
+# stay at 37 and 122 + 1 = 123 mutations.
 set(EXPECTED_PASSES 37)
-set(EXPECTED_MUTATIONS 122)
+set(EXPECTED_MUTATIONS 123)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -2358,6 +2368,24 @@ byte_machine_mutation(
   FIND [[(begin (put-u8 p 1) (put-symbol p (cdr eof)))]]
   REPLACE [[(begin (put-u8 p 1))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "4236938459847922092")
+
+# Milestone 2 whole-branch review (item d): the NODE-eof encode arm -- tag 0 +
+# u32be routed node id -- had no witnessing mutation and no golden, because no
+# machine in this SPEC lane routed eof to a named node. The mutation above only
+# witnesses the DEFAULT arm (tag 1 + code symbol), reached by the one-byte
+# machine, whose eof goes to the default-eof error. normal-ir-tests.sps now pins
+# a second golden over the shared eof-machine, whose s0/s1 BOTH route eof to
+# named nodes (finish 'done, error 'trunc), so dropping the routed node id from
+# the canonical encoding moves ONLY that node-routing golden (the one-byte golden
+# is untouched) and its fingerprint case is the sole witness. Distinct verbatim
+# FIND from the default arm above (the '(cdr eof)' payload differs by encoder),
+# so SITES stays 1.
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a dispatch's node-eof routing target is not encoded into the fingerprint"
+  FIND [[(begin (put-u8 p 0) (put-u32be p (cdr eof)))]]
+  REPLACE [[(begin (put-u8 p 0))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "9098559711816935340")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

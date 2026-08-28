@@ -206,7 +206,7 @@
     (case (parser-variant parser)
       ((op) (parser-finish-op! parser))
       ((v2) (parser-finish-v2! parser))
-      (else (assertion-violation 'parser-finish! "unknown parser variant" (parser-variant parser)))))
+      (else (assertion-violation 'parser-finish! "v1 has no finish path" (parser-variant parser)))))
 
   ;; The generated /v2 finish path: run exec over the empty slice with finish? #t.
   ;; exec owns the eof-target chain internally (Task 2 lowers it); the runtime just

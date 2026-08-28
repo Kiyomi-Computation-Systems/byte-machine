@@ -20,7 +20,7 @@
   (lambda (p) (emit-machine (compile-machine m '()) 'eof-parser p)))
 (load genfile)
 (define cm-gen (eval 'eof-parser (environment '(generated eofm))))
-;; feed a schedule, then finish; return (feed-fields . finish-fields).
+;; feed the prefix, then finish; return the finish (status stream-offset error).
 (define (rfields cm bytes)
   (let ((p (make-parser cm '() #f)))
     (for-each (lambda (b) (parser-feed! p (make-bytevector 1 b) 0 1)) bytes)
