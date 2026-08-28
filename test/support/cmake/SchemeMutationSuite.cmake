@@ -244,8 +244,14 @@ cmake_minimum_required(VERSION 3.26)
 # distinct decision (recording the terminal state) that the accept/reject cases
 # above them do not otherwise exercise. Passes stay at 37 and
 # 105 - 1 + 2 = 106 mutations.
+#
+# Slice ②a's Task 3 adds parser-reset! to the same Pass 32: three more
+# decisions -- restoring the entry state, zeroing the stream offset, and
+# returning the lifecycle to ready -- none of which the feed-path mutations
+# above exercise (they run before any reset call exists). Passes stay at 37
+# and 106 + 3 = 109 mutations.
 set(EXPECTED_PASSES 37)
-set(EXPECTED_MUTATIONS 106)
+set(EXPECTED_MUTATIONS 109)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -1946,6 +1952,27 @@ byte_machine_mutation(
   FIND [[((error) (parser-set-lifecycle! parser 'error))]]
   REPLACE [[((error) (parser-set-lifecycle! parser 'ready))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "error after reject")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: reset does not restore the entry state"
+  FIND [[(parser-set-current! parser (parser-entry parser))]]
+  REPLACE [[(parser-set-current! parser (parser-current parser))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "re-parses from entry")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: reset does not zero the stream offset"
+  FIND [[(parser-set-offset! parser 0)]]
+  REPLACE [[(parser-set-offset! parser (parser-offset parser))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "offset zeroed then advanced by one")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: reset does not return the lifecycle to ready"
+  FIND [[(parser-set-lifecycle! parser 'ready)]]
+  REPLACE [[(parser-set-lifecycle! parser 'stopped)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "ready after reset")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

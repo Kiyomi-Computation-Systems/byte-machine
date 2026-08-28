@@ -132,4 +132,31 @@
             (parser-feed! (make-parser (make-compiled-machine one-byte-op) '() #f)
                           (make-bytevector 1 0) 0 5)))))))
 
+(harness-group "parser-reset!"
+  (lambda ()
+    ;; Witness current-restoration via a status CHANGE: reach the error terminal,
+    ;; reset, then feed byte 0. From the entry state byte 0 is ACCEPTED (stopped);
+    ;; if reset failed to restore `current`, the parser would still be at the error
+    ;; node and the result would stay 'error. (For an accept-then-accept sequence,
+    ;; both entry and the stop terminal yield 'stopped, so only the offset would
+    ;; differ -- which would witness the wrong decision. Hence error-then-accept.)
+    (harness-case "reset returns to ready and re-parses from the entry state"
+      (lambda ()
+        (let ((p (make-parser (v1-machine) '() #f)))
+          (parser-feed! p (make-bytevector 1 65) 0 1)         ; -> error, parked at the error node
+          (check-equal "error before reset" (parser-lifecycle p) 'error)
+          (parser-reset! p)
+          (check-equal "ready after reset" (parser-lifecycle p) 'ready)
+          (check-equal "re-parses from entry"
+                       (parser-result-status (parser-feed! p (make-bytevector 1 0) 0 1))
+                       'stopped))))
+    (harness-case "reset zeroes the stream offset"
+      (lambda ()
+        (let ((p (make-parser (v1-machine) '() #f)))
+          (parser-feed! p (make-bytevector 1 0) 0 1)          ; advance -> offset 1, stopped
+          (parser-reset! p)
+          (check-equal "offset zeroed then advanced by one"
+                       (parser-result-stream-offset (parser-feed! p (make-bytevector 1 0) 0 1))
+                       1))))))
+
 (harness-finish)

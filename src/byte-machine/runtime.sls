@@ -11,7 +11,7 @@
   (export make-compiled-machine compiled-machine?
           byte-machine-make-compiled-machine/v1 byte-machine-make-feed-outcome/v1
           make-parser parser?
-          parser-feed! parser-lifecycle
+          parser-feed! parser-lifecycle parser-reset!
           parser-result? parser-result-status parser-result-next
           parser-result-consumed parser-result-stream-offset parser-result-error
           callback-continue callback-pause)
@@ -148,4 +148,12 @@
       (parser-set-current! parser (feed-outcome-next-state o))
       (parser-set-offset! parser (feed-outcome-offset o))
       (make-parser-result status next (- next start)
-                          (feed-outcome-offset o) (feed-outcome-error o)))))
+                          (feed-outcome-offset o) (feed-outcome-error o))))
+
+  ;; Full reset (§12.5), M2 subset: entry state, offset 0, lifecycle ready. Field,
+  ;; span, pause, finish, poison, and stored-error state do not exist yet (Slice
+  ;; ②b / M4 / M5). Returns unspecified.
+  (define (parser-reset! parser)
+    (parser-set-current! parser (parser-entry parser))
+    (parser-set-offset! parser 0)
+    (parser-set-lifecycle! parser 'ready)))
