@@ -236,8 +236,16 @@ cmake_minimum_required(VERSION 3.26)
 # 'invalid-slice, who 'parser-feed! -- is a decision the accept/reject/
 # need-input cases above it do not exercise. Passes stay at 37 and
 # 104 + 1 = 105 mutations.
+#
+# Slice ②a's Task 2 replaces the sticky result cache with an explicit lifecycle
+# field on the same Pass 32: -1 sticky, +2 lifecycle. The sticky mutation's FIND
+# anchor is gone (idempotent re-execution replaces the cache, so setting-vs-not-
+# setting it is unobservable); the stopped and error lifecycle arms are each a
+# distinct decision (recording the terminal state) that the accept/reject cases
+# above them do not otherwise exercise. Passes stay at 37 and
+# 105 - 1 + 2 = 106 mutations.
 set(EXPECTED_PASSES 37)
-set(EXPECTED_MUTATIONS 105)
+set(EXPECTED_MUTATIONS 106)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -1912,12 +1920,11 @@ byte_machine_mutation(
   REPLACE [[(status 'stopped)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "status")
 
-byte_machine_mutation(
-  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
-  LABEL "runtime: a v1 terminal result is not made sticky"
-  FIND [[(if (or (eq? status 'stopped) (eq? status 'error)) (parser-set-sticky! parser r))]]
-  REPLACE [[(if #f (parser-set-sticky! parser r))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "second")
+# (removed 2026-08-28, Slice ②a) "a v1 terminal result is not made sticky": the
+# sticky cache was deleted; a repeat feed re-runs the executor, which is idempotent
+# for stop/error, so setting-vs-not-setting a cache is now unobservable in M2's
+# callback-free world. Its intent is re-witnessed by the reset mutations (Task 3),
+# which distinguish current/offset/lifecycle restoration. See design §5.
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -1925,6 +1932,20 @@ byte_machine_mutation(
   FIND [[(unless (and (bytevector? bv) (<= 0 start end (bytevector-length bv)))]]
   REPLACE [[(unless #t]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid slice")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: an accepting feed does not record the stopped lifecycle"
+  FIND [[((stopped) (parser-set-lifecycle! parser 'stopped))]]
+  REPLACE [[((stopped) (parser-set-lifecycle! parser 'ready))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "stopped after accept")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a rejecting feed does not record the error lifecycle"
+  FIND [[((error) (parser-set-lifecycle! parser 'error))]]
+  REPLACE [[((error) (parser-set-lifecycle! parser 'ready))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "error after reject")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

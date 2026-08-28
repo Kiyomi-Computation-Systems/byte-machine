@@ -93,14 +93,26 @@
                (got 'not-yet))
           (set! got (parser-result-status (parser-feed! p (make-bytevector 0) 0 0)))
           (check-equal "status" got 'need-input))))
-    (harness-case "a terminal result is sticky across a second feed"
+    (harness-case "a repeat feed on a terminal parser reports a fresh empty result (§12.2)"
       (lambda ()
         (let* ((p (make-parser (v1-machine) '() #f))
                (r1 (parser-feed! p (make-bytevector 1 0) 0 1))
                (r2 (parser-feed! p (make-bytevector 1 0) 0 1)))
-          (check-equal "second next equals first" (parser-result-next r2) (parser-result-next r1))
-          (check-equal "second consumed equals first"
-                       (parser-result-consumed r2) (parser-result-consumed r1)))))
+          (check-equal "first stopped" (parser-result-status r1) 'stopped)
+          (check-equal "second still stopped" (parser-result-status r2) 'stopped)
+          (check-equal "second next is the new slice start" (parser-result-next r2) 0)
+          (check-equal "second consumed is zero" (parser-result-consumed r2) 0)
+          (check-equal "second stream offset unchanged"
+                       (parser-result-stream-offset r2) (parser-result-stream-offset r1)))))
+    (harness-case "parser-lifecycle tracks ready -> terminal"
+      (lambda ()
+        (let ((p (make-parser (v1-machine) '() #f)))
+          (check-equal "starts ready" (parser-lifecycle p) 'ready)
+          (parser-feed! p (make-bytevector 1 0) 0 1)
+          (check-equal "stopped after accept" (parser-lifecycle p) 'stopped)
+          (let ((q (make-parser (v1-machine) '() #f)))
+            (parser-feed! q (make-bytevector 1 65) 0 1)
+            (check-equal "error after reject" (parser-lifecycle q) 'error)))))
     (harness-case "a mismatched ABI version is refused"
       (lambda ()
         (check-raises "refused"
