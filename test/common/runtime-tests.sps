@@ -182,6 +182,42 @@
                       (lambda (e) #t)
                       (lambda () (byte-machine-make-compiled-machine/v1 2 42 0 stub-feed)))))))
 
+;; The unified-executor ABI (/v2, Slice ②b-2). One `exec` closure carries the
+;; whole dispatch loop and a `finish?` flag: feed calls it with #f over the real
+;; slice, parser-finish! with #t over the empty slice. This stub encodes the
+;; one-byte machine over numeric states (0 dispatch, 1 stop, 2 error); state 0's
+;; exhausted-with-finish? path routes to the machine's default-eof error 'eof,
+;; witnessing the /v2 finish arm independently of the emitter.
+(define (stub-exec state offset bv start end finish?)
+  (let loop ((pos start) (st state) (off offset))
+    (case st
+      ((1) (byte-machine-make-feed-outcome/v1 'stopped pos #f 1 off))
+      ((2) (byte-machine-make-feed-outcome/v1 'error pos 'unexpected-byte 2 off))
+      (else
+       (if (>= pos end)
+           (if finish?
+               (byte-machine-make-feed-outcome/v1 'error pos 'eof 0 off)   ; eof-target #f -> default
+               (byte-machine-make-feed-outcome/v1 'need-input pos #f 0 off))
+           (let ((b (bytevector-u8-ref bv pos)))
+             (if (= b 0) (loop (+ pos 1) 1 (+ off 1)) (loop pos 2 off))))))))
+(define (v2-machine) (byte-machine-make-compiled-machine/v2 2 99 0 stub-exec))
+
+(harness-group "generated-code ABI (/v2): feed and finish"
+  (lambda ()
+    (harness-case "a fed accepted byte stops"
+      (lambda ()
+        (let ((r (parser-feed! (make-parser (v2-machine) '() #f) (make-bytevector 1 0) 0 1)))
+          (check-equal "stopped" (parser-result-status r) 'stopped))))
+    (harness-case "finish with no input routes to the default-eof error"
+      (lambda ()
+        (let ((r (parser-finish! (make-parser (v2-machine) '() #f))))
+          (check-equal "error" (parser-result-status r) 'error)
+          (check-equal "default-eof code" (parser-result-error r) 'eof))))
+    (harness-case "a mismatched /v2 ABI version is refused"
+      (lambda ()
+        (check-raises "refused" (lambda (e) #t)
+                      (lambda () (byte-machine-make-compiled-machine/v2 1 99 0 stub-exec)))))))
+
 (harness-group "invalid feed slices"
   (lambda ()
     (harness-case "a slice past the bytevector end raises a coded contract condition"

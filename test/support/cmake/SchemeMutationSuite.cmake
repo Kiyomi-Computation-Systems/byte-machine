@@ -290,8 +290,17 @@ cmake_minimum_required(VERSION 3.26)
 # already parked at a finish node re-fed returns finished, consuming zero) had
 # a functional test but no witnessing mutation. Passes stay at 37 and
 # 115 + 1 = 116 mutations.
+#
+# Milestone 2 Slice ②b-2's Task 1 (the dormant /v2 runtime machinery) adds two
+# more decisions to the same Pass 32, both witnessed by the new /v2 stub group
+# in runtime-tests.sps: parser-finish-v2! must drive `exec` with finish? #t
+# (not #f), and the /v2 constructor's ABI guard must refuse a version other than
+# the literal 2. The existing "a v1 machine is driven down the op path" mutation
+# is re-anchored in place (parser-feed!'s `if` became a three-way `case` when the
+# /v2 variant landed) -- same decision, same count, so it neither adds nor drops
+# a mutation. Passes stay at 37 and 116 + 2 = 118 mutations.
 set(EXPECTED_PASSES 37)
-set(EXPECTED_MUTATIONS 116)
+set(EXPECTED_MUTATIONS 118)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -1948,13 +1957,17 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a v1 machine is driven down the op path"
-  # Widened from the bare `(if (eq? (parser-variant parser) 'op)` once Milestone
-  # 2 Slice ②b-1's Task 2 gave parser-finish! its own, textually distinct
-  # variant check -- the bare pattern now occurs twice in runtime.sls, so this
-  # anchors on parser-feed!'s own call site (the `let` that binds its result)
-  # to stay unique to the decision this mutation actually witnesses.
-  FIND [[(let ((r (if (eq? (parser-variant parser) 'op)]]
-  REPLACE [[(let ((r (if #t]]
+  # Re-anchored for Milestone 2 Slice ②b-2: parser-feed!'s binary `if` became a
+  # three-way `case` (op / v2 / else=v1) when the /v2 variant landed, so the old
+  # `(if #t ...)` anchor no longer exists. The same decision -- a v1 machine must
+  # NOT be driven through parser-feed-op! -- is now witnessed by redirecting the
+  # v1 (else) arm to the op driver; `parser-feed-v1!` occurs only here as a call
+  # (its definition reads `(define (parser-feed-v1! ...`), so this is unique. The
+  # effect on the suite is identical to the former mutation (v1 stubs raise an
+  # arity error inside parser-feed-op!'s `(op 'kind node)`, recorded as a "case
+  # raised" failure -> exit 1, summary `status=1`), so EXPECT is unchanged.
+  FIND [[(else (parser-feed-v1! parser bv start end))]]
+  REPLACE [[(else (parser-feed-op! parser bv start end))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "status")
 
 byte_machine_mutation(
@@ -1987,15 +2000,28 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: an accepting feed does not record the stopped lifecycle"
-  FIND [[((stopped) (parser-set-lifecycle! parser 'stopped))]]
-  REPLACE [[((stopped) (parser-set-lifecycle! parser 'ready))]]
+  # Re-anchored for Slice ②b-2: parser-finish-v2! commits its own terminal
+  # lifecycle with the same case-arm form, so the bare `((stopped) ...)` arm now
+  # occurs twice. The `(case (parser-result-status r)` discriminator is unique to
+  # parser-feed! (parser-finish-v2! keys on feed-outcome-status), so anchoring on
+  # it keeps this the feed decision it was.
+  FIND [[(case (parser-result-status r)
+        ((stopped) (parser-set-lifecycle! parser 'stopped))]]
+  REPLACE [[(case (parser-result-status r)
+        ((stopped) (parser-set-lifecycle! parser 'ready))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "stopped after accept")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a rejecting feed does not record the error lifecycle"
-  FIND [[((error) (parser-set-lifecycle! parser 'error))]]
-  REPLACE [[((error) (parser-set-lifecycle! parser 'ready))]]
+  # Re-anchored for Slice ②b-2, same reason as the stopped arm above. In
+  # parser-feed! the `((error) ...)` arm is followed by the `((finished) ...)`
+  # arm; parser-finish-v2! orders them differently (finished, then error, then
+  # stopped), so this two-arm sequence is unique to parser-feed!.
+  FIND [[((error) (parser-set-lifecycle! parser 'error))
+        ((finished) (parser-set-lifecycle! parser 'finished))]]
+  REPLACE [[((error) (parser-set-lifecycle! parser 'ready))
+        ((finished) (parser-set-lifecycle! parser 'finished))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "error after reject")
 
 byte_machine_mutation(
@@ -2048,6 +2074,31 @@ byte_machine_mutation(
   FIND [[(make-parser-result 'finished pos (- pos start) (parser-offset parser) #f)]]
   REPLACE [[(make-parser-result 'stopped pos (- pos start) (parser-offset parser) #f)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "status")
+
+# Milestone 2 Slice ②b-2's Task 1 (the dormant /v2 runtime machinery) adds two
+# more decisions to this pass, both proven by the /v2 stub group in
+# runtime-tests.sps. First: parser-finish-v2! must drive exec with finish? #t,
+# not #f -- with #f, the empty-slice dispatch returns need-input instead of the
+# default-eof error, so the finish case's `default-eof code` check reddens. The
+# FIND's `empty-bv 0 0 #t` is unique to the finish driver (parser-feed-v2! calls
+# exec with `bv start end #f`).
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a /v2 finish does not drive exec with finish? true"
+  FIND [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t)))]]
+  REPLACE [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #f)))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "default-eof code")
+
+# Second: the /v2 constructor's ABI-version guard. It checks the literal 2 (the
+# emitter still emits /v1, so current-abi-version stays 1), textually distinct
+# from the /v1 guard's `(= abi-version current-abi-version)` above. Accepting any
+# version lets the /v2 refusal test call it with abi 1 without raising.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a mismatched /v2 ABI version is accepted"
+  FIND [[(unless (and (integer? abi-version) (= abi-version 2))]]
+  REPLACE [[(unless #t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "refused")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
