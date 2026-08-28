@@ -48,7 +48,8 @@ Design authority: [milestone-2-design.md](./milestone-2-design.md) §6 (Slice �
   release/pr, no-scheme, and mutation totals before writing any number into
   `EXPECTED_PASSES`/`EXPECTED_MUTATIONS` (`SchemeMutationSuite.cmake:323-324`),
   the CHANGELOG, or a record. Expected totals after Slice ③ ≈ release 72,
-  passes 38, mutations ~144 — measure.
+  passes 38, mutations ~145-146 (the per-task chain 123 +5 +10 +2 +4 reaches
+  144 at Task 4; Task 6 adds 1-2 Pass 39 mutations) — measure.
 - **No new dependencies.** Only `(rnrs)` + in-repo libraries.
 - **Conditions are asserted by code and who, never rendered text**
   (`conditions.sls` header; decision 0013).
@@ -121,15 +122,26 @@ legally continue into finish (0011:40-43). (c) `eof-terminal` gains a pause arm
 that chains through the continuation with the existing seen-set — an EOF pause
 loop classifies `cycle` → `eof-zero-progress-cycle`, an EOF chain through
 pauses into a stop → `eof-reachable-stop` (§16.2:909 "finitely many explicit
-pauses"). (d) The §909/cycle walk **also runs from the machine entry when the
-entry node is a pause** — the one configuration where `parser-finish!` can
-begin at a parked pause, and an entry-pause chain into a stop would otherwise
-leak `stopped` through the EOF path. (e) PASS 5 zero-progress: pause
-continuations join the zero-width walk (a reexecute/pause-only cycle with no
-advance is rejected — design §6), and pause nodes join the set of walk roots.
-**No new diagnostic codes**: every pause rejection reuses
-`missing-target` / `non-eof-into-finish` / `eof-reachable-stop` /
-`eof-zero-progress-cycle` / `zero-progress-cycle`.
+pauses"). (d) The §909/cycle walk **also runs from every byte-reachable
+pause's continuation**. Under D3 a feed pause parks `current` on its
+continuation and `parser-resume!` returns the row to `ready`, where
+`parser-finish!` may begin EOF processing — so every byte-reachable pause's
+continuation is a possible EOF-processing start, and its chain must reach
+finish or error (a chain into a stop would leak `stopped` through the finish
+path, which §12.1 forbids — finish returns only `paused`/`finished`/`error`).
+Consequence, recorded deliberately: **a byte-reachable pause may not continue
+directly (or through pauses) into a stop terminal** — put a dispatch between
+them or use a finish. An entry pause is byte-reachable by definition, so
+finish!-first machines are covered by the same walk with no special entry
+clause. (e) PASS 5 zero-progress: pause continuations join the zero-width walk
+(a reexecute/pause-only cycle with no advance is rejected — design §6), and
+pause nodes join the set of walk roots. **No new diagnostic codes**: every
+pause rejection reuses `missing-target` / `non-eof-into-finish` /
+`eof-reachable-stop` / `eof-zero-progress-cycle` / `zero-progress-cycle`.
+**Anchor duty**: two existing Pass 33 mutation FINDs sit on lines these edits
+touch or duplicate (`SchemeMutationSuite.cmake:2157-2161` anchors the PASS 5
+guard; `:2234-2239` anchors `(if (and tn (finish-node? tn))`) — Task 1
+re-anchors them in the same commit (Steps 5 and 7).
 
 **D5 — Normalized/generated encoding.** Pause is normalized-state kind
 `'pause`, canonical encode tag byte **4**, payload u32be continuation state id.
@@ -310,14 +322,31 @@ already witnesses that file (32 runtime / 33 verify / 35 normal-ir /
           (check "eof-reachable-stop diagnostic"
                  (exists (lambda (d) (eq? (diagnostic-code d) 'eof-reachable-stop))
                          (verification-diagnostics v))))))
-    (harness-case "an entry pause whose chain reaches a stop leaks stopped through EOF (\x00A7;16.2:909)"
+    (harness-case "a byte-reachable pause into a stop would leak stopped through EOF (\x00A7;16.2:909)"
+      (lambda ()
+        ;; D4(d): after feed pauses at p, current = stop and resume returns to
+        ;; ready, where finish! would begin EOF processing AT the stop.
+        (let ((v (verify-machine
+                  (pause-fixture
+                   (list (make-byte-dispatch-node 'e0
+                           (list (make-byte-case (make-exact-byte-matcher 1)
+                                                 (make-edge 'p 'advance) #f))
+                           (make-edge 'reject 'reexecute) #f #f)
+                         (make-pause-node 'p 'stop #f)
+                         (make-stop-node 'stop #f)
+                         (make-error-node 'reject 'rejected #f))))))
+          (check "rejected" (not (verification-ok? v)))
+          (check "eof-reachable-stop diagnostic"
+                 (exists (lambda (d) (eq? (diagnostic-code d) 'eof-reachable-stop))
+                         (verification-diagnostics v))))))
+    (harness-case "an entry pause is byte-reachable, so its chain is walked too"
       (lambda ()
         (let ((v (verify-machine
                   (pause-fixture
                    (list (make-pause-node 'e0 'stop #f)
                          (make-stop-node 'stop #f))))))
           (check "rejected" (not (verification-ok? v)))
-          (check "eof-reachable-stop diagnostic"
+          (check "entry eof-reachable-stop diagnostic"
                  (exists (lambda (d) (eq? (diagnostic-code d) 'eof-reachable-stop))
                          (verification-diagnostics v))))))
     (harness-case "a reexecute/pause-only cycle with no advance makes no progress"
@@ -415,10 +444,15 @@ already witnesses that file (32 runtime / 33 verify / 35 normal-ir /
   `(and (or (byte-dispatch-node? n) (pause-node? n)) (reaches-self? (node-name n)))`.
   Keep the diagnostic code `'zero-progress-cycle`; reword the message to
   `"a zero-width cycle (reexecute edges/pause continuations) makes no progress"`.
-  **Before editing**, run
-  `rg -n "reexecute-only cycle" test/support/cmake/SchemeMutationSuite.cmake`
-  — if any mutation FIND anchors the old message or the touched lines,
-  re-anchor it in the same commit and record the re-anchor in the ledger.
+  **This edit breaks an existing anchor** (mutations anchor CODE, not
+  messages): the Pass 33 mutation "verify: zero-progress detection never fires"
+  at `SchemeMutationSuite.cmake:2157-2161` FINDs the old guard
+  `(if (and (byte-dispatch-node? n) (reaches-self? (node-name n)))` — after the
+  edit it matches zero times and MutationRunner SEND_ERRORs. Re-anchor its
+  FIND to the new widened guard text in the same commit (its `(if #f` REPLACE
+  still works); confirm with
+  `rg -n "reaches-self" test/support/cmake/SchemeMutationSuite.cmake` that no
+  other anchor touches these lines, and record the re-anchor in the ledger.
 
   (c) `eof-terminal` (:175-188): insert a pause arm after the stop arm:
 
@@ -449,37 +483,51 @@ already witnesses that file (32 runtime / 33 verify / 35 normal-ir /
 ```
 
   Second, inside `pass-eof-execution`'s `append`, add two new clauses after the
-  existing :908 clause and extend the :909 clause:
+  existing :908 clause. Bind the byte-reached set once for both (note the
+  binding is `cn`, not `tn` — the line `(if (and tn (finish-node? tn))` already
+  exists at `verify.sls:201` and is the FIND of the Pass 33 mutation at
+  `SchemeMutationSuite.cmake:2234-2239`; reusing it would make that anchor
+  match twice and SEND_ERROR):
 
 ```scheme
-       ;; :908 for pauses -- a byte-reachable pause whose continuation is a
-       ;; finish terminal delivers feed control flow into it.
+       ;; D4(b)/(d): checks keyed on byte-reachability. A feed pause parks
+       ;; current on its continuation and resume returns the row to ready, so
+       ;; every byte-reachable pause's continuation is both a feed re-entry
+       ;; point (:908 -- it must not be a finish terminal) and a possible EOF-
+       ;; processing start (:909 -- its chain must reach finish or error,
+       ;; never a stop, never a cycle).
        (let ((br (byte-reached m)))
-         (apply append
-                (map (lambda (n)
-                       (if (and (pause-node? n) (memq (node-name n) br))
-                           (let ((tn (lookup nodes (pause-node-continuation n))))
-                             (if (and tn (finish-node? tn))
-                                 (list (make-diagnostic 'non-eof-into-finish (node-name n)
-                                                        "a pause continuation byte-reaches a finish terminal"))
-                                 '()))
-                           '()))
-                     nodes)))
-       ;; :909 from a parked entry pause -- the one node parser-finish! can
-       ;; begin at (make-parser parks current on the entry), so its chain is an
-       ;; EOF path too: through pauses it must reach finish or error.
-       (let ((en (lookup nodes (machine-entry m))))
-         (if (pause-node? en)
-             (case (eof-terminal m (machine-entry m))
-               ((eof-reachable-stop)
-                (list (make-diagnostic 'eof-reachable-stop (machine-entry m)
-                                       "an EOF path reaches a stop terminal")))
-               ((cycle)
-                (list (make-diagnostic 'eof-zero-progress-cycle (machine-entry m)
-                                       "an EOF path cycles without reaching a terminal")))
-               (else '()))
-             '()))
+         (append
+          (apply append
+                 (map (lambda (n)
+                        (if (and (pause-node? n) (memq (node-name n) br))
+                            (let ((cn (lookup nodes (pause-node-continuation n))))
+                              (if (and cn (finish-node? cn))
+                                  (list (make-diagnostic 'non-eof-into-finish (node-name n)
+                                                         "a pause continuation byte-reaches a finish terminal"))
+                                  '()))
+                            '()))
+                      nodes))
+          (apply append
+                 (map (lambda (n)
+                        (if (and (pause-node? n) (memq (node-name n) br))
+                            (case (eof-terminal m (pause-node-continuation n))
+                              ((eof-reachable-stop)
+                               (list (make-diagnostic 'eof-reachable-stop (node-name n)
+                                                      "an EOF path reaches a stop terminal")))
+                              ((cycle)
+                               (list (make-diagnostic 'eof-zero-progress-cycle (node-name n)
+                                                      "an EOF path cycles without reaching a terminal")))
+                              (else '()))
+                            '()))
+                      nodes))))
 ```
+
+  (An entry pause is byte-reachable by definition — the DFS starts at the
+  entry — so no separate entry clause exists; a byte-reachable pause whose
+  continuation legally chains into a finish node is impossible, but the walk
+  classifying it `'finish` falls to the else while the :908 clause above
+  rejects it, so the two clauses never disagree.)
 
 - [ ] **Step 6: Run the tests green.**
   `ctest --preset release -R 'byte-machine.verify.rejections' --output-on-failure`
@@ -511,8 +559,8 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a byte-reachable pause into finish is rejected"
-  FIND [[(if (and (pause-node? n) (memq (node-name n) br))]]
-  REPLACE [[(if (and (pause-node? n) #f (memq (node-name n) br))]]
+  FIND [[(if (and cn (finish-node? cn))]]
+  REPLACE [[(if (and cn #f (finish-node? cn))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "non-eof-into-finish")
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -524,17 +572,20 @@ byte_machine_mutation(
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "zero-progress-cycle")
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: an entry pause opens an EOF path of its own"
-  FIND [[(if (pause-node? en)]]
-  REPLACE [[(if (and #f (pause-node? en))]]
+  LABEL "verify: a byte-reachable pause's continuation chain is an EOF path"
+  FIND [[(case (eof-terminal m (pause-node-continuation n))]]
+  REPLACE [[(case 'finish]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "eof-reachable-stop")
 ```
 
-  Note the first and fourth FINDs are textually identical arms in two different
-  functions — MutationRunner FIND must be unique per file, so **widen each FIND
-  with its surrounding line** (e.g. include the preceding comment line of the
-  respective function) until `rg -F` counts exactly one occurrence of each.
-  Bump `EXPECTED_MUTATIONS` `:324` by the number added (123→128 predicted);
+  The first and fourth FINDs are the same arm text in two different functions,
+  but their second lines differ in indentation (10 vs 14 spaces, matching the
+  Step 5 snippets), so as written each already occurs exactly once — the
+  binding gate is `rg -F` counting exactly one occurrence of every FIND (old
+  Pass 33 anchors included: re-check `:2157` and `:2234` per Step 5) before
+  running the suite; widen any FIND that double-matches with its preceding
+  line. Bump `EXPECTED_MUTATIONS` `:324` by the number added (123→128
+  predicted);
   update the header running-count narrative in the same style as the ②b
   paragraphs (~:233-321). Run
   `ctest --preset release -R 'scheme-mutation' --output-on-failure` — all
@@ -688,6 +739,17 @@ git commit -m "feat: pause node in source IR + verifier pause checks (M2 Slice 3
             (check-equal "consumed zero" (parser-result-consumed r) 0))
           (check-equal "finish on stopped returns stopped"
                        (parser-result-status (parser-finish! p)) 'stopped))))
+    (harness-case "the error row returns the stored error after a feed error"
+      (lambda ()
+        ;; Witnesses parser-feed!'s own store (the finish-path store below is a
+        ;; separate site with its own mutation).
+        (let ((p (make-parser (make-compiled-machine one-byte-op) '() #f)))
+          (parser-feed! p (make-bytevector 1 65) 0 1)            ; -> error
+          (let ((r (parser-feed! p (make-bytevector 1 0) 0 1)))
+            (check-equal "sticky status" (parser-result-status r) 'error)
+            (check-equal "feed-stored error value" (parser-result-error r) 'unexpected-byte))
+          (check-equal "finish repeats the feed-stored error"
+                       (parser-result-error (parser-finish! p)) 'unexpected-byte))))
     (harness-case "the error row returns the stored error after a default-EOF truncation"
       (lambda ()
         ;; Closes the \x2461;b-2 carry: with default-eof-op (eof-target #f), finish!
@@ -932,7 +994,7 @@ byte_machine_mutation(
   FIND [[((error) (parser-set-lifecycle! parser 'error)
                     (parser-set-stored-error! parser (parser-result-error r)))]]
   REPLACE [[((error) (parser-set-lifecycle! parser 'error))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "stored error value")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "feed-stored error value")
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a feed pause maps to paused-feed, not paused-finish"
@@ -963,15 +1025,26 @@ byte_machine_mutation(
 ```
 
   **Then the AGENTS.md exit-path rule:** this task adds three raise sites and a
-  short-circuit that bypasses executor arms — run the FULL mutation suite and
-  re-examine every pre-existing Pass 32 mutation whose witness fed a terminal
-  parser (notably "a feed on a finished parser does not return finished",
-  ~:2092-2097, whose witness path now short-circuits, and the sticky-repeat
-  witnesses). For each one now caught for a different reason or uncaught:
-  re-anchor the mutation or its witness so it still discriminates its named
-  decision, and record what moved in the ledger. Bump `EXPECTED_MUTATIONS`
-  (predicted 128→138) and the header narrative; re-run
-  `ctest --preset release -R 'scheme-mutation'` to green.
+  short-circuit that bypasses executor arms — run the FULL mutation suite. Four
+  pre-existing Pass 32 anchors are broken **textually** by Step 3 and must be
+  re-anchored in the same commit (MutationRunner SEND_ERRORs on FIND count ≠ 1):
+  the stopped-lifecycle mutation (~:2021, its FIND at :2029-2030 anchors
+  `(case (parser-result-status r)` at the OLD indentation — Step 3(c) re-nests
+  it under the `else` arm); the error-lifecycle mutation (~:2035, FIND at
+  :2042-2043 anchors the old two-line error/finished arms — the error arm now
+  stores the value); the default-eof routing mutation (~:2080, FIND at :2083
+  anchors `(make-parser-result 'error off 0 off (op 'default-eof-value))`,
+  which Step 3(g)'s let-bound rewrite deletes); and the reset-ready mutation
+  (~:2062, FIND `(parser-set-lifecycle! parser 'ready)` — unique today, but
+  `parser-resume!` adds a second occurrence, so widen it with the preceding
+  `(parser-set-offset! parser 0)` line). ("a feed on a finished parser does not
+  return finished", ~:2092, is NOT affected: its witness feeds a FRESH parser
+  parked at a finish node, lifecycle `ready`, so the short-circuit never
+  fires.) Then re-examine the rest of Pass 32 for semantic disarms: for each
+  mutation now caught for a different reason or uncaught, re-anchor it or its
+  witness so it still discriminates its named decision, and record what moved
+  in the ledger. Bump `EXPECTED_MUTATIONS` (predicted 128→138) and the header
+  narrative; re-run `ctest --preset release -R 'scheme-mutation'` to green.
 
 - [ ] **Step 7: Full suite + commit.** `make test` 66/66; no-scheme preset 8/8.
 
@@ -1109,11 +1182,12 @@ git commit -m "feat: full operation matrix, parser-resume!, sticky short-circuit
                     (check-equal "offset" (parser-result-stream-offset r) 0))))
             (loop (+ b 1))))))))
 
-(harness-end)
+(harness-finish)
 ```
 
-  Check how the other `.sps` programs end (`harness-end` vs an exit call) and
-  match exactly.
+  (`harness-finish` is the terminator every `.sps` program in `test/common/`
+  ends with — e.g. `eof-interpret-tests.sps:112`; the harness exports no
+  `harness-end`.)
 
 - [ ] **Step 3: Lane pair.** After the eof-interpret pair
   (`test/CMakeLists.txt:845`), mirroring its exact shape:
@@ -1160,11 +1234,13 @@ byte_machine_add_scheme_lane(
   expected 68/68 (66 + the new pair; **measure**, record actual).
 
 - [ ] **Step 6: New mutation Pass 41.** Model its skeleton on Pass 34
-  (~:2257): `byte_machine_mutation_reset()`, a verify command naming the staged
-  launcher + library roots + `test/common/pause-interpret-tests.sps` (copy Pass
-  34's command form, swapping the program and adding the pause-machine fixture
-  to its staged library root the same way Pass 34 stages eof-machine — read
-  Pass 34's stanza first and mirror it exactly), then:
+  (~:2257): `byte_machine_mutation_reset()`, then a verify command copied from
+  Pass 34's stanza (~:2267-2275) with `--program` swapped to
+  `"${STAGE_DIR}/test/common/pause-interpret-tests.sps"`. No fixture-staging
+  step exists or is needed: the suite stages `test/support/harness` and
+  `test/common` whole (`BYTE_MACHINE_MUTATION_STAGE_DIRS`,
+  `SchemeMutationSuite.cmake:368-370`), so pause-machine.sls and the new
+  program arrive automatically. Then:
 
 ```cmake
 byte_machine_mutation(
@@ -1219,7 +1295,12 @@ git commit -m "feat: interpreter pause kind + shared pause-machine fixture + lan
 
 - [ ] **Step 1: Failing tests.** (a) `normal-ir-tests.sps`: add a group after
   the node-routing golden block (:95-115), importing
-  `(byte-machine test pause-machine)` beside the existing eof-machine import:
+  `(byte-machine test pause-machine)` beside the existing eof-machine import —
+  **and, in this same step, add**
+  `"${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/pause-machine.sls"`
+  to both normal-ir lane SOURCES (after the eof-machine lines,
+  `test/CMakeLists.txt:858` and `:868`), or the Step-2 red run dies at import
+  (library not found) instead of at the normalizer:
 
 ```scheme
 (harness-group "pause normalization (Slice ③)"
@@ -1240,35 +1321,40 @@ git commit -m "feat: interpreter pause kind + shared pause-machine fixture + lan
       (lambda ()
         ;; MEASURED through the shipped normalizer once the encode arm lands
         ;; (Step 5) -- the ②b-2 node-routing golden's measure-then-pin protocol.
-        ;; First red run asserts a number exists; the literal replaces it.
-        (check "pause fingerprint is computed"
-               (number? (normal-machine-fingerprint
-                         (normalize-machine
-                          (verification-machine
-                           (verify-machine (make-pause-machine)))))))))))
+        ;; The literal 0 below is deliberately wrong so the first post-encode
+        ;; run FAILS printing expected-vs-actual; pin the printed actual.
+        (check-equal "pause fingerprint"
+                     (normal-machine-fingerprint
+                      (normalize-machine
+                       (verification-machine
+                        (verify-machine (make-pause-machine)))))
+                     0)))))
 ```
 
   Follow the file's actual normalize/verify call chain (:95-115 shows whether
   it goes through `verify-machine` or hands the machine straight to
   `normalize-machine`) — copy that chain, not this sketch's. After Step 5's
-  measurement, replace the `number?` case body with a `check-equal` against
-  the measured literal and record the value in the ledger.
+  measurement, replace the wrong literal with the measured one and record the
+  value in the ledger.
   (b) `compile-tests.sps`: add a case rendering the pause machine — inline the
   same graph as the shared fixture with a comment naming
   `(byte-machine test pause-machine)` as the source of truth (the ②b-2
   `eof-fin` inline-fixture precedent; the compile lanes carry no fixture
-  libraries today). Assert the rendered text contains the pause arm for p1
-  using the file's existing substring-check helper (the `:94` idiom — reuse
-  its helper name, not a new one; there is no R6RS `string-contains`):
+  libraries today). **Render-substring assertions only** — this file's charter
+  is the rendered text, not execution (header :1-5: "the generated parser's
+  behaviour is proven end-to-end in the differential and example lanes"), and
+  its CORE_COMPILE lane manifest carries no `runtime.sls`, so a compile+eval
+  case cannot even load the generated library here. The execution walks
+  (feed 1 → paused / resume / feed 2 → stopped; finish → paused / resume /
+  finished) are Task 5's, in the CORE_EMIT lanes. Assert, via the file's
+  existing substring-check helper (the `:94` idiom — reuse its helper name;
+  there is no R6RS `string-contains`), that the rendered text contains both
+  pause arms:
 
 ```text
 ((1) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f 2 off))
+((3) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f 5 off))
 ```
-
-  and an execution case: compile+eval the generated library (the file's
-  existing eval pattern), feed byte 1 → `paused` with `next` 1 / lifecycle
-  `paused-feed`, resume → `feed-ready`, feed byte 2 → `stopped`; then a
-  finish-path walk → `paused` / resume `finish-ready` / `finished`.
 
 - [ ] **Step 2: Run red.** Normal-ir source lane and compile source lane both
   FAIL (`assertion-violation 'normalize-machine "unknown node kind"`).
@@ -1315,12 +1401,16 @@ git commit -m "feat: interpreter pause kind + shared pause-machine fixture + lan
                                    (normal-state-kind s))))))
 ```
 
-- [ ] **Step 5: Wire the fixture + goldens.** Add
-  `"${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/pause-machine.sls"`
-  to both normal-ir lane SOURCES (after the eof-machine line, :858 and :868;
-  and to the compile lanes iff Step 1(b) chose the import route). Run the
-  normal-ir lane, read the measured pause fingerprint from the failure output,
-  pin it as the golden, re-run green. Run compile lanes green.
+  Paren accounting: the dispatch arm's current last line (:113) ends with the
+  closers for `case`/`let`/`define` as well as its own — adding an `else`
+  clause after it means those three outer closers move from :113's tail onto
+  the guard line above. Rebalance accordingly (a slip fails loudly at compile,
+  so this costs time, not correctness).
+
+- [ ] **Step 5: Measure + pin the golden.** (SOURCES wiring landed in Step 1.)
+  Run the normal-ir lane: the structural checks pass, the deliberately-wrong
+  `check-equal ... 0` FAILS printing the measured pause fingerprint; pin that
+  literal, re-run green. Run compile lanes green.
   **Assert the no-move constraint:** `rg -c '4236938459847922092' test/ src/`
   and `rg -c '9098559711816935340' test/` — unchanged counts; the one-byte and
   eof lanes plus `determinism.one-byte` all green (`make test`, expected 68/68
@@ -1434,12 +1524,24 @@ byte_machine_add_scheme_lane(
 
   (plus its `.aot` twin, and the determinism pair with
   `ENVIRONMENT "BYTE_MACHINE_PAUSE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-pause.golden.sls"`
-  on both). Confirm the golden file is in **no** SOURCES manifest
+  on both). **The determinism.pause lanes do NOT mirror their one-byte
+  neighbors' SOURCES**: the neighbors build their machine inline and carry no
+  fixture library, but `determinism-pause-tests.sps` imports
+  `(byte-machine test pause-machine)`, and an aot lane resolves libraries only
+  through objects compiled from its own SOURCES (the source-guard blocks
+  fallback) — so both determinism.pause lanes list
+  `"${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/pause-machine.sls"`
+  in SOURCES exactly as the differential block above does. Confirm the golden
+  file is in **no** SOURCES manifest
   (`rg generated-pause.golden test/CMakeLists.txt` → the two ENVIRONMENT lines
   only).
-- [ ] **Step 4: Red→green.** Register lanes first (red: missing programs),
-  then land the programs + golden; both pairs green in source and aot.
-  `make test` — expected 72/72 (**measure**).
+- [ ] **Step 4: Red→green.** Land the two `.sps` programs (failing stubs are
+  fine) and the golden **before** registering the lanes —
+  `byte_machine_add_scheme_lane` FATAL_ERRORs at configure time on a missing
+  PROGRAM or SOURCES entry, so registration-first yields a broken configure,
+  not a red lane. Then register, drive red→green through the program content;
+  both pairs green in source and aot. `make test` — expected 72/72
+  (**measure**).
 - [ ] **Step 5: Commit.**
 
 ```bash
@@ -1461,36 +1563,48 @@ git commit -m "test: pause differential + determinism golden lanes (M2 Slice 3 T
 - Consumes: `make-pause-node`/`make-finish-node` via graph; runtime pause
   lifecycle.
 - Produces: `gen-machine` optionally emitting (a) an entry eof-target at a
-  finish node `'done` (idle completion) and (b) a pause `'pausep` (continuation
-  `'stop`) interposed on the pinned first case; a driver that resumes through
-  pauses and finishes every machine.
+  finish node `'done` (idle completion) and (b) a pause `'pausep` with
+  continuation `'start` reachable as an extra case-target draw; a driver that
+  resumes through pauses and finishes every machine.
 
 - [ ] **Step 1: Read first.** `machine-gen.sls` in full (81 lines) — the draw
   helpers, the two validity constraints (first case pinned `(stop . advance)`;
   target-`start` forces `advance`), and the header's constraint log; and the
-  driver program. New draws follow the file's existing PRNG-threading style.
-- [ ] **Step 2: Failing property.** Extend the driver first: after the
-  feed schedule, `parser-finish!` both sides and compare; whenever either side
-  reports `paused`, assert both do, `parser-resume!` both, compare acks, and
-  continue (feed pauses re-feed from `next`; finish pauses re-finish). Run the
-  property lane — still green (no generator changes yet), confirming the
-  driver extension is behavior-preserving on M1-shaped machines.
+  driver program (`property-differential-tests.sps` — note `rfields` builds a
+  FRESH parser per byte per side and feeds a single 1-byte slice; there is no
+  multi-feed schedule to hook into). New draws follow the file's existing
+  PRNG-threading style.
+- [ ] **Step 2: Behavior-preserving driver extension.** Restructure the driver
+  so both parsers stay live per byte: build the pair once per byte, feed the
+  slice, and whenever either side reports `paused`, assert both do,
+  `parser-resume!` both, compare acks, and re-feed from `next`; after the feed
+  concludes, `parser-finish!` both sides and compare (a finish `paused` →
+  resume both → finish again). Run the property lane — still green (no
+  generator changes yet), confirming the extension is behavior-preserving on
+  M1-shaped machines.
 - [ ] **Step 3: Generator draws.** Two independent draws per machine:
 
 ```scheme
     ;; Slice ③ draws: an idle-completion eof route and an explicit pause.
     ;; done (finish) joins the graph only when drawn as the entry eof-target,
-    ;; so it is never byte-reachable (§16.2:908 holds by construction);
-    ;; pausep's continuation is the stop terminal, so no zero-width cycle can
-    ;; form (§16.2 zero-progress holds by construction).
+    ;; so it is never byte-reachable (§16.2:908 holds by construction).
+    ;; pausep's continuation is 'start: the walk from a byte-reachable pause's
+    ;; continuation (D4(d)) lands on the entry dispatch, whose eof route is a
+    ;; finish, an error, or the machine default -- never a stop -- so §16.2:909
+    ;; holds by construction (a continuation of 'stop would be rejected).
+    ;; Every case targeting pausep is forced to advance (same rule as
+    ;; target-'start), so no zero-width cycle can form through it.
 ```
 
   (a) eof draw: `eof-target` = `'done` (adding `(make-finish-node 'done #f)`)
   in half the draws, else `#f` as today. (b) pause draw: in half the draws,
-  add `(make-pause-node 'pausep 'stop #f)` and re-pin the first case's edge to
-  `(make-edge 'pausep 'advance)` (the reachability pin still holds — pausep
-  continues into stop). Thread both through the existing PRNG state discipline;
-  update the header constraint log with the two new by-construction arguments.
+  add `(make-pause-node 'pausep 'start #f)` and extend the case-target
+  vocabulary with `'pausep` for the NON-pinned cases (the first-case
+  reachability pin `(stop . advance)` stays exactly as it is — re-pinning it
+  to pausep would strand the stop node and trip `unreachable-node`); any case
+  drawing target `'pausep` forces mode `advance`, extending the existing
+  target-`'start` rule. Thread both draws through the PRNG state discipline;
+  update the header constraint log with the by-construction arguments above.
   Every generated machine must still verify: the lane run IS the check (the
   driver refuses unverified machines already).
 - [ ] **Step 4: Green + Pass 39.** Property lanes green in both modes. Add one
@@ -1528,13 +1642,19 @@ git commit -m "test: property generator emits eof/finish/pause machines (M2 Slic
 
 - [ ] **Step 1: Fast-follow (b).** The v1-op mutation's
   `EXPECT_OUTPUT_MATCHES "status"` (:1992) — run that single mutation, read the
-  actual failure output, and pin the specific line (predicted: the v1 fixture
-  group's own check name). Record before/after in the ledger.
-- [ ] **Step 2: 0013 dated note.** Append (record style — annotate, never
-  reword):
-  `> **Slice ③ (2026-XX-XX):** the misuse family shipped as the single code`
-  `` `'lifecycle-violation` `` `(who = the refused operation, detail = (list <state> <op>)) — parent §9.4:438 names "lifecycle violation" as the code; the prohibited-cell inventory is §12.2's, enforced for the reachable rows (poisoned/busy ride to M5).`
-  (fill the real date).
+  actual failure output, and pin the specific line. Predicted shape: the
+  mutant makes the v1 group's cases RAISE (the suite's own comment :1987-1989
+  records the mechanism), so the harness prints
+  `FAIL <case-name>: case raised` — pin the case NAME + "case raised", not a
+  check name (no check runs). Record before/after in the ledger.
+- [ ] **Step 2: 0013 dated note.** Follow 0013's own amendment convention — a
+  dated second-level section (its ②a note is
+  `## 2026-08-28 (Slice ②a) — as-implemented manifest de-dup`), NOT a
+  blockquote: add `## <date> (Slice ③) — misuse codes as shipped` recording:
+  the family shipped as the single code `'lifecycle-violation` (who = the
+  refused operation, detail = `(list <state> <op>)`) — parent §9.4:438 names
+  "lifecycle violation" as the code; the prohibited-cell inventory is §12.2's,
+  enforced for the reachable rows (poisoned/busy ride to M5).
 - [ ] **Step 3: Design-doc amendments.** In `milestone-2-design.md`: a dated
   note at §5's sticky-cache paragraph recording D1 (short-circuit + stored
   error; driver: the ②b-2 default-EOF carry) and at §6 recording D6
@@ -1549,7 +1669,7 @@ git commit -m "test: property generator emits eof/finish/pause machines (M2 Slic
 - [ ] **Step 5: Exit criteria + clean re-measure.** `make clean && make build`;
   `make test-all` (release), pr preset, no-scheme preset, mutation lane, cmake
   mutation lane. Record all totals (predicted release 72, no-scheme 8, scheme
-  mutation 38 passes/~144, cmake 1/72 — **write only measured numbers**).
+  mutation 38 passes/~145-146, cmake 1/72 — **write only measured numbers**).
   Verify design §6's full-M2 exit list against the tree (each Slice ①/②
   criterion re-run via the existing lanes; Slice ③'s via the new ones) and
   §25's four criteria; confirm the two untouched goldens one last time.
