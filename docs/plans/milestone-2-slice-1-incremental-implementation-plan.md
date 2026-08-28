@@ -447,23 +447,33 @@ git commit -m "test: M2 slice 1 — nonzero-offset slices with exact next/consum
 
 - [ ] **Step 1: Add a nonzero-offset case to the example**
 
-In `test/common/example-one-byte-tests.sps`, inside the existing `harness-group` "construct, verify, compile, emit, import, run", add a second `harness-case` after the first one (§25 M2: "extend the Section 9.6 examples and their tests to feed a nonzero-offset slice"). The one-byte machine accepts byte `0`; place it at index 1 of a padded buffer and feed `[1,2)`:
+In `test/common/example-one-byte-tests.sps` (§25 M2: "extend the Section 9.6 examples and their tests to feed a nonzero-offset slice"), **replace the whole `harness-group` "construct, verify, compile, emit, import, run" block** with the two-case version below. The first case is unchanged; the second reuses the `(generated one-byte)` library the first already emitted and loaded (no re-emit / re-load) and feeds byte `0` at index 1 of a padded buffer over `[1,2)`. The full block is shown (not a splice) so the parenthesis nesting is exact:
 
 ```scheme
-    (harness-case "the emitted parser accepts the exact byte in a nonzero-offset slice"
+(harness-group "construct, verify, compile, emit, import, run"
+  (lambda ()
+    (harness-case "the emitted parser accepts the exact byte across the library boundary"
       (lambda ()
         (let ((comp (compile-machine one-byte '())))
+          (check "verified and compiled" (compilation-ok? comp))
           (call-with-port (open-file-output-port genfile (file-options no-fail))
             (lambda (p) (emit-machine comp 'one-byte-parser p)))
           (load genfile)
           (let* ((cm (eval 'one-byte-parser (environment '(generated one-byte))))
-                 (padded (let ((v (make-bytevector 3 9))) (bytevector-u8-set! v 1 0) v))
-                 (r (parser-feed! (make-parser cm '() #f) padded 1 2)))
+                 (input (make-bytevector 1 0))
+                 (r (parser-feed! (make-parser cm '() #f) input 0 1)))
             (check-equal "status" (parser-result-status r) 'stopped)
-            (check-equal "next is the absolute index past the consumed byte"
-                         (parser-result-next r) 2)
-            (check-equal "consumed one byte" (parser-result-consumed r) 1)
-            (check-equal "stream offset advanced by one" (parser-result-stream-offset r) 1)))))
+            (check-equal "consumed one byte" (parser-result-consumed r) 1)))))
+    (harness-case "the emitted parser accepts the exact byte in a nonzero-offset slice"
+      (lambda ()
+        (let* ((cm (eval 'one-byte-parser (environment '(generated one-byte))))
+               (padded (let ((v (make-bytevector 3 9))) (bytevector-u8-set! v 1 0) v))
+               (r (parser-feed! (make-parser cm '() #f) padded 1 2)))
+          (check-equal "status" (parser-result-status r) 'stopped)
+          (check-equal "next is the absolute index past the consumed byte"
+                       (parser-result-next r) 2)
+          (check-equal "consumed one byte" (parser-result-consumed r) 1)
+          (check-equal "stream offset advanced by one" (parser-result-stream-offset r) 1))))))
 ```
 
 (The existing example lanes rebuild and rerun this program; no CMake change is needed.)

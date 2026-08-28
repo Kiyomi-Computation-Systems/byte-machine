@@ -35,6 +35,16 @@
                  (input (make-bytevector 1 0))
                  (r (parser-feed! (make-parser cm '() #f) input 0 1)))
             (check-equal "status" (parser-result-status r) 'stopped)
-            (check-equal "consumed one byte" (parser-result-consumed r) 1)))))))
+            (check-equal "consumed one byte" (parser-result-consumed r) 1)))))
+    (harness-case "the emitted parser accepts the exact byte in a nonzero-offset slice"
+      (lambda ()
+        (let* ((cm (eval 'one-byte-parser (environment '(generated one-byte))))
+               (padded (let ((v (make-bytevector 3 9))) (bytevector-u8-set! v 1 0) v))
+               (r (parser-feed! (make-parser cm '() #f) padded 1 2)))
+          (check-equal "status" (parser-result-status r) 'stopped)
+          (check-equal "next is the absolute index past the consumed byte"
+                       (parser-result-next r) 2)
+          (check-equal "consumed one byte" (parser-result-consumed r) 1)
+          (check-equal "stream offset advanced by one" (parser-result-stream-offset r) 1))))))
 
 (harness-finish)
