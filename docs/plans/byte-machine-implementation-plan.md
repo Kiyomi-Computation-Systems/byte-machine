@@ -724,7 +724,7 @@ The machine entered a declared machine error or callback application error. The 
 
 Every input-dependent state uses either a state-specific EOF edge or the machine's explicitly declared default EOF error. A stream-idle entry state may route EOF to successful `finished`; a partially parsed request routes EOF to a truncation error.
 
-Lowered states inside a sequence inherit the source sequence state's EOF edge. EOF after a nonempty matched prefix therefore reports the source state's EOF policy at the current between-byte stream offset. EOF edges participate in a separate zero-progress-cycle check; EOF processing may not loop indefinitely.
+Lowered states inside a sequence inherit the source sequence state's EOF edge. EOF after a nonempty matched prefix therefore reports the source state's EOF policy at the current between-byte stream offset. EOF edges participate in a separate zero-progress-cycle check; EOF processing may not loop indefinitely. (The EOF traversal is the eof-target chain, terminating at finish/error/pause; execution model in decision 0011.)
 
 EOF processing may invoke callbacks and may pause. A pause during EOF produces `paused-finish`; after resume, a subsequent `parser-finish!` continues the saved EOF path. EOF processing never admits new bytes and must terminate in `finished` or `error` after a finite number of resumes.
 
@@ -904,9 +904,9 @@ The verifier rejects:
 - integer accumulation using an incompatible field or unsupported base;
 - malformed pause continuations;
 - terminal nodes with outgoing transitions;
-- invalid EOF targets or successful EOF with an active span;
+- invalid EOF targets or successful EOF with an active span (EOF *execution*, not just target resolution: decision 0011);
 - EOF-only zero-progress cycles and non-EOF control flow into a finish terminal;
-- EOF-reachable stop terminals: every EOF path must reach finish or error after finitely many explicit pauses;
+- EOF-reachable stop terminals: every EOF path must reach finish or error after finitely many explicit pauses (this and the preceding EOF-cycle / non-EOF-into-finish checks are decision 0011's, each with a diagnostic code);
 - generated identifier collisions;
 - backend limits that would make emission incorrect.
 
