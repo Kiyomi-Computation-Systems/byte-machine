@@ -9,7 +9,8 @@
 ;;; catch lowering defects (parent §18, §22.4).
 (library (byte-machine runtime)
   (export make-compiled-machine compiled-machine?
-          byte-machine-make-compiled-machine/v1 byte-machine-make-feed-outcome/v1
+          byte-machine-make-compiled-machine/v1 byte-machine-make-compiled-machine/v2
+          byte-machine-make-feed-outcome/v1
           make-parser parser?
           parser-feed! parser-finish! parser-lifecycle parser-reset!
           parser-result? parser-result-status parser-result-next
@@ -27,9 +28,13 @@
   (define callback-continue (vector 'byte-machine-callback-continue))
   (define callback-pause (vector 'byte-machine-callback-pause))
 
-  ;; --- compiled machine: two variants behind one type ---
-  ;; op:  (vector tag 'op op-closure)               -- the reference interpreter
-  ;; v1:  (vector tag 'v1 feed entry-state fingerprint) -- generated code
+  ;; --- compiled machine: three variants behind one type ---
+  ;; op:  (vector tag 'op op-closure)                    -- the reference interpreter
+  ;; v1:  (vector tag 'v1 feed entry-state fingerprint)  -- the pre-②b-2 feed-only
+  ;;      ABI, kept only so a stale v1 file (declaring abi 1) is refused cleanly.
+  ;; v2:  (vector tag 'v2 exec entry-state fingerprint)  -- generated code, one
+  ;;      unified `exec` closure carrying a finish? flag (Slice ②b-2). This is the
+  ;;      ABI the emitter now emits (Task 2 flipped generation).
   (define compiled-machine-tag (tag 'byte-machine-compiled-machine))
   (define (make-compiled-machine op)
     (unless (procedure? op)
@@ -38,7 +43,10 @@
   (define (compiled-machine? x) (tagged? compiled-machine-tag x))
   (define (compiled-machine-variant cm) (vector-ref cm 1))
 
-  (define current-abi-version 1)
+  ;; The ABI version the emitter currently emits. Bumped to 2 when generation
+  ;; flipped to the unified /v2 `exec` (Slice ②b-2); the /v1 constructor checks
+  ;; it, so a stale generated file (which declared abi 1) is now refused cleanly.
+  (define current-abi-version 2)
   (define (byte-machine-make-compiled-machine/v1 abi-version ir-fingerprint entry-state feed)
     (unless (and (integer? abi-version) (= abi-version current-abi-version))
       (assertion-violation 'byte-machine-make-compiled-machine/v1
@@ -48,6 +56,22 @@
     (vector compiled-machine-tag 'v1 feed entry-state ir-fingerprint))
   (define (compiled-machine-v1-feed cm) (vector-ref cm 2))
   (define (compiled-machine-v1-entry-state cm) (vector-ref cm 3))
+
+  ;; The /v2 constructor (Slice ②b-2). Same shape as /v1, but the executor is a
+  ;; finish?-aware `exec` -- (state offset bv start end finish?) -> feed-outcome --
+  ;; so one closure serves both parser-feed! (finish? #f) and parser-finish!
+  ;; (finish? #t). It checks the literal 2, matching what the emitter now emits;
+  ;; Task 2's current-abi-version bump made this the live generated ABI.
+  (define (byte-machine-make-compiled-machine/v2 abi-version ir-fingerprint entry-state exec)
+    (unless (and (integer? abi-version) (= abi-version 2))
+      (assertion-violation 'byte-machine-make-compiled-machine/v2
+                           "generated-runtime ABI mismatch" abi-version))
+    (unless (procedure? exec)
+      (assertion-violation 'byte-machine-make-compiled-machine/v2 "exec must be a procedure" exec))
+    (vector compiled-machine-tag 'v2 exec entry-state ir-fingerprint))
+  (define (compiled-machine-v2-exec cm) (vector-ref cm 2))
+  (define (compiled-machine-v2-entry-state cm) (vector-ref cm 3))
+  (define empty-bv (make-bytevector 0))
 
   ;; --- feed outcome (the runtime<-generated seam; accessors private) ---
   (define feed-outcome-tag (tag 'byte-machine-feed-outcome))
@@ -82,12 +106,18 @@
   (define (make-parser compiled-machine callback-bindings user-context)
     (unless (compiled-machine? compiled-machine)
       (assertion-violation 'make-parser "not a compiled machine" compiled-machine))
-    (if (eq? (compiled-machine-variant compiled-machine) 'op)
-        (let* ((op (vector-ref compiled-machine 2)) (entry (op 'entry)))
-          (vector parser-tag 'op op entry entry 0 'ready))
-        (let ((feed (compiled-machine-v1-feed compiled-machine))
-              (entry-state (compiled-machine-v1-entry-state compiled-machine)))
-          (vector parser-tag 'v1 feed entry-state entry-state 0 'ready))))
+    (cond
+      ((eq? (compiled-machine-variant compiled-machine) 'op)
+       (let* ((op (vector-ref compiled-machine 2)) (entry (op 'entry)))
+         (vector parser-tag 'op op entry entry 0 'ready)))
+      ((eq? (compiled-machine-variant compiled-machine) 'v2)
+       (let ((exec (compiled-machine-v2-exec compiled-machine))
+             (entry-state (compiled-machine-v2-entry-state compiled-machine)))
+         (vector parser-tag 'v2 exec entry-state entry-state 0 'ready)))
+      (else
+       (let ((feed (compiled-machine-v1-feed compiled-machine))
+             (entry-state (compiled-machine-v1-entry-state compiled-machine)))
+         (vector parser-tag 'v1 feed entry-state entry-state 0 'ready)))))
   (define (parser? x) (tagged? parser-tag x))
   (define (parser-variant p) (vector-ref p 1))
   (define (parser-executor p) (vector-ref p 2))
@@ -102,9 +132,10 @@
   (define (parser-feed! parser bv start end)
     (unless (and (bytevector? bv) (<= 0 start end (bytevector-length bv)))
       (byte-machine-contract-violation 'parser-feed! 'invalid-slice (list start end)))
-    (let ((r (if (eq? (parser-variant parser) 'op)
-                 (parser-feed-op! parser bv start end)
-                 (parser-feed-v1! parser bv start end))))
+    (let ((r (case (parser-variant parser)
+               ((op) (parser-feed-op! parser bv start end))
+               ((v2) (parser-feed-v2! parser bv start end))
+               (else (parser-feed-v1! parser bv start end)))))
       (case (parser-result-status r)
         ((stopped) (parser-set-lifecycle! parser 'stopped))
         ((error) (parser-set-lifecycle! parser 'error))
@@ -153,16 +184,45 @@
       (make-parser-result status next (- next start)
                           (feed-outcome-offset o) (feed-outcome-error o))))
 
+  ;; The generated /v2 path: exec owns the dispatch loop; finish? = #f for feed.
+  (define (parser-feed-v2! parser bv start end)
+    (let* ((exec (parser-executor parser))
+           (o (exec (parser-current parser) (parser-offset parser) bv start end #f)))
+      (parser-set-current! parser (feed-outcome-next-state o))
+      (parser-set-offset! parser (feed-outcome-offset o))
+      (make-parser-result (feed-outcome-status o) (feed-outcome-next o)
+                          (- (feed-outcome-next o) start)
+                          (feed-outcome-offset o) (feed-outcome-error o))))
+
   ;; parser-finish! (§12.4): run the executor with input exhausted. From the
   ;; current state, an exhausted dispatch takes its eof-target (a named node, else
   ;; the machine default-eof-error); execution continues to a finish node
   ;; (-> finished), an error node (-> error), or a stop node reached this way is
   ;; verifier-rejected so it never occurs. No slice, so next/consumed mirror the
-  ;; stream offset / 0. The generated (v1) finish path is Slice ②b-2.
+  ;; stream offset / 0. The generated /v2 finish path runs the same `exec` with
+  ;; finish? #t (Slice ②b-2); v1 never supported finish, so its else arm stays an
+  ;; assertion violation.
   (define (parser-finish! parser)
-    (if (eq? (parser-variant parser) 'op)
-        (parser-finish-op! parser)
-        (assertion-violation 'parser-finish! "generated finish path is Slice 2b-2" parser)))
+    (case (parser-variant parser)
+      ((op) (parser-finish-op! parser))
+      ((v2) (parser-finish-v2! parser))
+      (else (assertion-violation 'parser-finish! "v1 has no finish path" (parser-variant parser)))))
+
+  ;; The generated /v2 finish path: run exec over the empty slice with finish? #t.
+  ;; exec owns the eof-target chain internally (Task 2 lowers it); the runtime just
+  ;; commits resume state, records the terminal lifecycle, and snapshots the result
+  ;; (no slice, so next/consumed mirror the stream offset / 0).
+  (define (parser-finish-v2! parser)
+    (let* ((exec (parser-executor parser))
+           (o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t)))
+      (parser-set-current! parser (feed-outcome-next-state o))
+      (parser-set-offset! parser (feed-outcome-offset o))
+      (case (feed-outcome-status o)
+        ((finished) (parser-set-lifecycle! parser 'finished))
+        ((error) (parser-set-lifecycle! parser 'error))
+        ((stopped) (parser-set-lifecycle! parser 'stopped)))
+      (make-parser-result (feed-outcome-status o) (feed-outcome-offset o) 0
+                          (feed-outcome-offset o) (feed-outcome-error o))))
 
   (define (parser-finish-op! parser)
     ;; No local cycle guard: termination relies on the verifier's

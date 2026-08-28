@@ -69,7 +69,7 @@
 ;; reserved-member-3 -- so it belongs here, not in accepted.
 (define rejected-bindings
   (list (string->symbol "9a") (string->symbol "-a") 'Ab (string->symbol "a.b")
-        'define 'make-compiled-machine 'feed 'start
+        'define 'make-compiled-machine 'exec 'start
         (string->symbol "") (string->symbol "a\xe9;b")))
 
 (harness-group "machine names: the verify-site grammar"

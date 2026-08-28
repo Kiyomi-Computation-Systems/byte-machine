@@ -77,6 +77,14 @@
   mechanism — it is exactly what makes an exit-path constant witnessable,
   because the mutation stales its own manifest and drives the run down the
   failure path whose constant it changed (SchemeMutationSuite passes 30/31).
+* **A mutation's witnessing test lives in its own SPEC lane's program.**
+  A mutation is only witnessed by tests that run in the lane named by its
+  `SPEC`. The runtime's SPEC lane (`byte-machine.unit.runtime.chez.source`)
+  drives `runtime.sls` through hand-built op stubs, not the interpreter — so a
+  runtime mutation whose only witness lives in `interpret-tests.sps` (a
+  different lane) is uncaught. Slice ②b-1 shipped exactly this until an uncaught
+  mutation surfaced it. When you add a mutation, put its witness in that
+  mutation's SPEC-lane program.
 
 ### Documentation & record discipline
 

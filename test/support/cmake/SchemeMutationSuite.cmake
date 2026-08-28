@@ -290,8 +290,38 @@ cmake_minimum_required(VERSION 3.26)
 # already parked at a finish node re-fed returns finished, consuming zero) had
 # a functional test but no witnessing mutation. Passes stay at 37 and
 # 115 + 1 = 116 mutations.
+#
+# Milestone 2 Slice ②b-2's Task 1 (the dormant /v2 runtime machinery) adds two
+# more decisions to the same Pass 32, both witnessed by the new /v2 stub group
+# in runtime-tests.sps: parser-finish-v2! must drive `exec` with finish? #t
+# (not #f), and the /v2 constructor's ABI guard must refuse a version other than
+# the literal 2. The existing "a v1 machine is driven down the op path" mutation
+# is re-anchored in place (parser-feed!'s `if` became a three-way `case` when the
+# /v2 variant landed) -- same decision, same count, so it neither adds nor drops
+# a mutation. Passes stay at 37 and 116 + 2 = 118 mutations.
+#
+# Slice ②b-2's Task 2 (the generation flip) adds one mutation to Pass 35 (the
+# normalizer) and three to Pass 36 (the emitter). Pass 35 gains the dispatch
+# default-eof encoding: the resolved eof routing is now hashed, so dropping the
+# default-eof code from the canonical bytes moves the (re-baselined) one-byte
+# golden. Pass 36 gains the three new emitter decisions, each witnessed by a
+# finish-node fixture (eof-fin) added to compile-tests.sps: the finish terminal
+# arm (renders 'finished, not 'stopped), the exhausted-dispatch eof branch (emits
+# the resolved default-eof code), and the finish? guard (the exhausted dispatch
+# branches on finish?, not a constant). Passes stay at 37 and 118 + 1 + 3 = 122
+# mutations.
+#
+# Slice ②b-2's whole-branch review (item d) adds one more mutation to Pass 35
+# (the normalizer): Task 2's default-eof mutation above witnesses only the
+# DEFAULT eof-encode arm (tag 1 + code symbol), reached by the one-byte machine.
+# The NODE arm (tag 0 + u32be routed node id) had no golden and no mutation
+# because no machine in the SPEC lane routed eof to a named node. normal-ir-
+# tests.sps now pins a second golden over the shared eof-machine (s0/s1 both
+# route eof to named nodes), so dropping the routed node id from the encoding
+# moves that node-routing golden and its fingerprint case catches it. Passes
+# stay at 37 and 122 + 1 = 123 mutations.
 set(EXPECTED_PASSES 37)
-set(EXPECTED_MUTATIONS 116)
+set(EXPECTED_MUTATIONS 123)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -1948,13 +1978,17 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a v1 machine is driven down the op path"
-  # Widened from the bare `(if (eq? (parser-variant parser) 'op)` once Milestone
-  # 2 Slice ②b-1's Task 2 gave parser-finish! its own, textually distinct
-  # variant check -- the bare pattern now occurs twice in runtime.sls, so this
-  # anchors on parser-feed!'s own call site (the `let` that binds its result)
-  # to stay unique to the decision this mutation actually witnesses.
-  FIND [[(let ((r (if (eq? (parser-variant parser) 'op)]]
-  REPLACE [[(let ((r (if #t]]
+  # Re-anchored for Milestone 2 Slice ②b-2: parser-feed!'s binary `if` became a
+  # three-way `case` (op / v2 / else=v1) when the /v2 variant landed, so the old
+  # `(if #t ...)` anchor no longer exists. The same decision -- a v1 machine must
+  # NOT be driven through parser-feed-op! -- is now witnessed by redirecting the
+  # v1 (else) arm to the op driver; `parser-feed-v1!` occurs only here as a call
+  # (its definition reads `(define (parser-feed-v1! ...`), so this is unique. The
+  # effect on the suite is identical to the former mutation (v1 stubs raise an
+  # arity error inside parser-feed-op!'s `(op 'kind node)`, recorded as a "case
+  # raised" failure -> exit 1, summary `status=1`), so EXPECT is unchanged.
+  FIND [[(else (parser-feed-v1! parser bv start end))]]
+  REPLACE [[(else (parser-feed-op! parser bv start end))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "status")
 
 byte_machine_mutation(
@@ -1987,15 +2021,28 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: an accepting feed does not record the stopped lifecycle"
-  FIND [[((stopped) (parser-set-lifecycle! parser 'stopped))]]
-  REPLACE [[((stopped) (parser-set-lifecycle! parser 'ready))]]
+  # Re-anchored for Slice ②b-2: parser-finish-v2! commits its own terminal
+  # lifecycle with the same case-arm form, so the bare `((stopped) ...)` arm now
+  # occurs twice. The `(case (parser-result-status r)` discriminator is unique to
+  # parser-feed! (parser-finish-v2! keys on feed-outcome-status), so anchoring on
+  # it keeps this the feed decision it was.
+  FIND [[(case (parser-result-status r)
+        ((stopped) (parser-set-lifecycle! parser 'stopped))]]
+  REPLACE [[(case (parser-result-status r)
+        ((stopped) (parser-set-lifecycle! parser 'ready))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "stopped after accept")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a rejecting feed does not record the error lifecycle"
-  FIND [[((error) (parser-set-lifecycle! parser 'error))]]
-  REPLACE [[((error) (parser-set-lifecycle! parser 'ready))]]
+  # Re-anchored for Slice ②b-2, same reason as the stopped arm above. In
+  # parser-feed! the `((error) ...)` arm is followed by the `((finished) ...)`
+  # arm; parser-finish-v2! orders them differently (finished, then error, then
+  # stopped), so this two-arm sequence is unique to parser-feed!.
+  FIND [[((error) (parser-set-lifecycle! parser 'error))
+        ((finished) (parser-set-lifecycle! parser 'finished))]]
+  REPLACE [[((error) (parser-set-lifecycle! parser 'ready))
+        ((finished) (parser-set-lifecycle! parser 'finished))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "error after reject")
 
 byte_machine_mutation(
@@ -2048,6 +2095,31 @@ byte_machine_mutation(
   FIND [[(make-parser-result 'finished pos (- pos start) (parser-offset parser) #f)]]
   REPLACE [[(make-parser-result 'stopped pos (- pos start) (parser-offset parser) #f)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "status")
+
+# Milestone 2 Slice ②b-2's Task 1 (the dormant /v2 runtime machinery) adds two
+# more decisions to this pass, both proven by the /v2 stub group in
+# runtime-tests.sps. First: parser-finish-v2! must drive exec with finish? #t,
+# not #f -- with #f, the empty-slice dispatch returns need-input instead of the
+# default-eof error, so the finish case's `default-eof code` check reddens. The
+# FIND's `empty-bv 0 0 #t` is unique to the finish driver (parser-feed-v2! calls
+# exec with `bv start end #f`).
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a /v2 finish does not drive exec with finish? true"
+  FIND [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t)))]]
+  REPLACE [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #f)))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "default-eof code")
+
+# Second: the /v2 constructor's ABI-version guard. It checks the literal 2 (the
+# emitter still emits /v1, so current-abi-version stays 1), textually distinct
+# from the /v1 guard's `(= abi-version current-abi-version)` above. Accepting any
+# version lets the /v2 refusal test call it with abi 1 without raising.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a mismatched /v2 ABI version is accepted"
+  FIND [[(unless (and (integer? abi-version) (= abi-version 2))]]
+  REPLACE [[(unless #t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "refused")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -2248,21 +2320,21 @@ byte_machine_mutation(
   LABEL "normal-ir: the FNV offset basis is changed"
   FIND [[(define fnv-offset 14695981039346656037)]]
   REPLACE [[(define fnv-offset 14695981039346656038)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "11963406767470843108")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "4236938459847922092")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: the FNV prime is changed"
   FIND [[(define fnv-prime  1099511628211)]]
   REPLACE [[(define fnv-prime  1099511628212)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "11963406767470843108")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "4236938459847922092")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: the byte is never mixed into the hash"
   FIND [[(* (bitwise-xor h (bytevector-u8-ref bv i)) fnv-prime)]]
   REPLACE [[(* h fnv-prime)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "11963406767470843108")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "4236938459847922092")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
@@ -2284,6 +2356,36 @@ byte_machine_mutation(
   FIND [[(error-declaration-code (car es)) (loop (cdr es))]]
   REPLACE [[(error-declaration-name (car es)) (loop (cdr es))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "unexpected-byte")
+
+# Milestone 2 Slice ②b-2 (Task 2): the dispatch eof routing is now part of the
+# canonical encoding, so a dispatch state's resolved eof (the one-byte machine
+# routes to the default-eof error, code 'eof) is mixed into the fingerprint.
+# Dropping the default-eof code from the encoding moves the one-byte golden, so
+# normal-ir-tests.sps's fingerprint case reddens against the re-baselined value.
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a dispatch's default-eof routing is not encoded into the fingerprint"
+  FIND [[(begin (put-u8 p 1) (put-symbol p (cdr eof)))]]
+  REPLACE [[(begin (put-u8 p 1))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "4236938459847922092")
+
+# Milestone 2 whole-branch review (item d): the NODE-eof encode arm -- tag 0 +
+# u32be routed node id -- had no witnessing mutation and no golden, because no
+# machine in this SPEC lane routed eof to a named node. The mutation above only
+# witnesses the DEFAULT arm (tag 1 + code symbol), reached by the one-byte
+# machine, whose eof goes to the default-eof error. normal-ir-tests.sps now pins
+# a second golden over the shared eof-machine, whose s0/s1 BOTH route eof to
+# named nodes (finish 'done, error 'trunc), so dropping the routed node id from
+# the canonical encoding moves ONLY that node-routing golden (the one-byte golden
+# is untouched) and its fingerprint case is the sole witness. Distinct verbatim
+# FIND from the default arm above (the '(cdr eof)' payload differs by encoder),
+# so SITES stays 1.
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a dispatch's node-eof routing target is not encoded into the fingerprint"
+  FIND [[(begin (put-u8 p 0) (put-u32be p (cdr eof)))]]
+  REPLACE [[(begin (put-u8 p 0))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "9098559711816935340")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -2374,6 +2476,32 @@ byte_machine_mutation(
   REPLACE [["internal" ") " id " off))\n")]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "error arm")
 
+# Milestone 2 Slice ②b-2 (Task 2): the emitter renders the /v2 unified `exec`
+# with a finish? EOF branch and a distinct finish terminal arm. compile-tests.sps
+# gains a finish-node fixture (eof-fin) whose entry dispatch routes eof to a
+# finish node, so all three new emitter decisions have a witness in the compile
+# SPEC lane. Each FIND is a unique verbatim substring.
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: a finish node renders the stopped terminal instead of finished"
+  FIND [[(quote finished) pos #f " id " off))\n"]]
+  REPLACE [[(quote stopped) pos #f " id " off))\n"]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish arm")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: the exhausted-dispatch eof branch drops the resolved default-eof code"
+  FIND [[(symbol->string (cdr eof)) ") " id " off)")]]
+  REPLACE [["internal" ") " id " off)")]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "eof routes to the default-eof error")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: the exhausted dispatch does not branch on finish?"
+  FIND [[(if finish?\n"]]
+  REPLACE [[(if #f\n"]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish eof guard")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 37: D7 identifier repertoire + LF (Slice B) -------------------------
@@ -2417,8 +2545,8 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
   LABEL "compile: the final newline is emitted as CRLF"
-  FIND [[" feed)))\n"))))]]
-  REPLACE [[" feed)))\r\n"))))]]
+  FIND [[" exec)))\n"))))]]
+  REPLACE [[" exec)))\r\n"))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "carriage return")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")

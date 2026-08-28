@@ -40,6 +40,23 @@
 (define (text) (utf8->string (render-machine ok 'one-byte-parser)))
 (define (has? needle) (harness-string-contains? (text) needle))
 
+;; A second machine whose entry dispatch routes EOF to a finish node ('done),
+;; so the emitter renders the finish terminal arm -- absent from the one-byte
+;; machine, whose eof routes to the default error. Byte 1 -> stop; EOF at entry
+;; -> finish 'done -> finished. It verifies (finish is EOF-only, not byte-reached).
+(define eof-fin
+  (make-machine 'eofm 's0 '() '() '() (list eof-decl rej-decl)
+    (list (make-byte-dispatch-node 's0
+            (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'stop 'advance) #f))
+            (make-edge 'reject 'reexecute) 'done #f)
+          (make-stop-node 'stop #f)
+          (make-finish-node 'done #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+(define eof-ok (compile-machine eof-fin '()))
+(define (eof-text) (utf8->string (render-machine eof-ok 'eof-parser)))
+(define (eof-has? needle) (harness-string-contains? (eof-text) needle))
+
 (harness-group "compilation"
   (lambda ()
     (harness-case "a valid machine compiles ok"
@@ -72,16 +89,25 @@
         (check "library form" (has? "(library (generated one-byte)"))
         (check "export" (has? "(export one-byte-parser)"))
         (check "import" (has? "(import (rnrs) (byte-machine runtime))"))))
-    (harness-case "it constructs the compiled machine through the v1 ABI with the fingerprint"
+    (harness-case "it constructs the compiled machine through the v2 ABI with the fingerprint"
       (lambda ()
-        (check "v1 call" (has? "(byte-machine-make-compiled-machine/v1 1 11963406767470843108 0 feed)"))))
+        (check "v2 call" (has? "(byte-machine-make-compiled-machine/v2 2 4236938459847922092 0 exec)"))))
     (harness-case "the accepted byte advances and the fallback reexecutes"
       (lambda ()
         (check "advance arm" (has? "((0) (loop (+ pos 1) 1 (+ off 1)))"))
         (check "fallback"    (has? "(else (loop pos 2 off))"))))
     (harness-case "the error state emits the resolved code"
       (lambda ()
-        (check "error arm" (has? "(byte-machine-make-feed-outcome/v1 (quote error) pos (quote unexpected-byte) 2 off)"))))))
+        (check "error arm" (has? "(byte-machine-make-feed-outcome/v1 (quote error) pos (quote unexpected-byte) 2 off)"))))
+    (harness-case "an exhausted dispatch branches on finish? and routes eof to the default error"
+      (lambda ()
+        (check "finish eof guard" (has? "(if finish?"))
+        (check "eof routes to the default-eof error"
+               (has? "(byte-machine-make-feed-outcome/v1 (quote error) pos (quote eof) 0 off)"))))
+    (harness-case "a finish node renders the finished terminal arm"
+      (lambda ()
+        (check "finish machine compiles" (compilation-ok? eof-ok))
+        (check "finish arm" (eof-has? "(byte-machine-make-feed-outcome/v1 (quote finished) pos #f"))))))
 
 (harness-group "binding validation"
   (lambda ()
@@ -99,7 +125,7 @@
         (check-raises "member 2" (lambda (e) #t) (lambda () (render-machine ok 'make-compiled-machine)))))
     (harness-case "a template identifier binding is refused (reserved member 3)"
       (lambda ()
-        (check-raises "member 3" (lambda (e) #t) (lambda () (render-machine ok 'feed)))))))
+        (check-raises "member 3" (lambda (e) #t) (lambda () (render-machine ok 'exec)))))))
 
 (harness-group "emission"
   (lambda ()
@@ -107,7 +133,7 @@
       (lambda ()
         (let-values (((port get) (open-bytevector-output-port)))
           (let ((meta (emit-machine ok 'one-byte-parser port)))
-            (check-equal "fingerprint" (vector-ref meta 1) 11963406767470843108)
+            (check-equal "fingerprint" (vector-ref meta 1) 4236938459847922092)
             (check-equal "byte count matches render"
                          (vector-ref meta 2) (bytevector-length (render-machine ok 'one-byte-parser)))
             (check-equal "bytes written match render"

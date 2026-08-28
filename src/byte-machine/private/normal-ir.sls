@@ -10,13 +10,15 @@
           normal-machine-fingerprint
           normal-state-kind normal-state-id
           normal-dispatch-transitions normal-dispatch-fallback
-          normal-error-code)
+          normal-error-code normal-dispatch-eof)
   (import (rnrs)
           (only (byte-machine private ir)
-                machine-nodes machine-entry machine-errors
+                machine-nodes machine-entry machine-errors machine-default-eof-error
                 byte-dispatch-node? byte-dispatch-node-cases byte-dispatch-node-fallback
+                byte-dispatch-node-eof-target
                 byte-case-matcher byte-case-edge exact-byte-matcher-byte
                 edge-target edge-mode stop-node? error-node? error-node-error-name
+                finish-node?
                 error-declaration-name error-declaration-code node-name))
 
   (define nm-tag (vector 'byte-machine-normal-machine))
@@ -27,12 +29,17 @@
   (define (normal-machine-fingerprint m) (vector-ref m 3))
 
   (define ns-tag (vector 'byte-machine-normal-state))
-  ;; (vector ns-tag kind id transitions fallback code) ; unused slots #f
+  ;; (vector ns-tag kind id transitions fallback code eof) ; unused slots #f.
+  ;; eof (slot 6) is a dispatch state's resolved eof routing:
+  ;;   (node . <id>)             -- an exhausted dispatch continues to node <id>
+  ;;   (default . <code-symbol>) -- it routes to the machine default-eof error.
+  ;; Non-dispatch states carry #f there.
   (define (normal-state-kind s) (vector-ref s 1))
   (define (normal-state-id s) (vector-ref s 2))
   (define (normal-dispatch-transitions s) (vector-ref s 3))
   (define (normal-dispatch-fallback s) (vector-ref s 4))
   (define (normal-error-code s) (vector-ref s 5))
+  (define (normal-dispatch-eof s) (vector-ref s 6))
 
   ;; --- FNV-1a 64-bit over a canonical byte encoding (decision 0009) ---
   (define mask64 (- (expt 2 64) 1))
@@ -57,8 +64,8 @@
       (put-u16be p (bytevector-length b)) (put-bytevector p b)))
   (define (mode->byte m) (if (eq? m 'advance) 0 1))
 
-  ;; The `else` guards below are unreachable-today safety for a fourth node/state
-  ;; kind (EOF execution, Milestone 2); verified by inspection, not mutation.
+  ;; The `else` guards below are unreachable-today safety for a fifth node/state
+  ;; kind beyond dispatch/stop/error/finish; verified by inspection, not mutation.
 
   ;; Lowering: verified machine -> (values entry states-vector). No encoding.
   (define (lower-machine machine)
@@ -71,6 +78,14 @@
                       (let loop ((es (machine-errors machine)))
                         (if (eq? (error-declaration-name (car es)) nm)
                             (error-declaration-code (car es)) (loop (cdr es))))))
+           ;; A dispatch node's eof-target is a node NAME (resolved to its id) or
+           ;; #f (route to the machine default-eof error, resolved to its code).
+           (default-eof-code (errcode (machine-default-eof-error machine)))
+           (eof-of (lambda (n)
+                     (let ((t (byte-dispatch-node-eof-target n)))
+                       (if (symbol? t)
+                           (cons 'node (id-of t))
+                           (cons 'default default-eof-code)))))
            (entry (id-of (machine-entry machine)))
            (states (list->vector
                     (let loop ((ns nodes) (i 0) (acc '()))
@@ -88,12 +103,14 @@
                                                         (byte-dispatch-node-cases n))))
                                             (fb (byte-dispatch-node-fallback n)))
                                         (vector ns-tag 'dispatch i trs
-                                                (cons (id-of (edge-target fb)) (edge-mode fb)) #f)))
-                                     ((stop-node? n) (vector ns-tag 'stop i #f #f #f))
-                                     ((error-node? n) (vector ns-tag 'error i #f #f (errcode (error-node-error-name n))))
-                                     ;; The M1 repertoire is exactly these three node kinds; EOF
-                                     ;; execution (a fourth kind) is Milestone 2. A future kind
-                                     ;; reaching here must fail loudly, not lower to nothing.
+                                                (cons (id-of (edge-target fb)) (edge-mode fb)) #f
+                                                (eof-of n))))
+                                     ((stop-node? n) (vector ns-tag 'stop i #f #f #f #f))
+                                     ((error-node? n) (vector ns-tag 'error i #f #f (errcode (error-node-error-name n)) #f))
+                                     ((finish-node? n) (vector ns-tag 'finish i #f #f #f #f))
+                                     ;; The repertoire is exactly these four node kinds
+                                     ;; (dispatch/stop/error/finish). A future kind reaching
+                                     ;; here must fail loudly, not lower to nothing.
                                      (else (assertion-violation 'normalize-machine "unknown node kind" n)))
                                    acc))))))))
       (values entry states)))
@@ -117,9 +134,15 @@
                               (put-u8 p (car tr)) (put-u32be p (cadr tr))
                               (put-u8 p (mode->byte (caddr tr)))) trs))
                 (let ((fb (normal-dispatch-fallback s)))
-                  (put-u32be p (car fb)) (put-u8 p (mode->byte (cdr fb)))))
+                  (put-u32be p (car fb)) (put-u8 p (mode->byte (cdr fb))))
+                ;; eof routing: tag 0 + u32be node id, or tag 1 + default-eof code.
+                (let ((eof (normal-dispatch-eof s)))
+                  (if (eq? (car eof) 'node)
+                      (begin (put-u8 p 0) (put-u32be p (cdr eof)))
+                      (begin (put-u8 p 1) (put-symbol p (cdr eof))))))
                ((stop) (put-u8 p 1))
                ((error) (put-u8 p 2) (put-symbol p (normal-error-code s)))
+               ((finish) (put-u8 p 3))
                (else (assertion-violation 'normalize-machine "unknown state kind"
                                           (normal-state-kind s)))))
            (loop (+ i 1)))))))

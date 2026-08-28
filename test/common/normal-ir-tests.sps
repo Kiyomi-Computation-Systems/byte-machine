@@ -4,6 +4,7 @@
 ;;; assignment and transition sort, which one dispatch case cannot witness.
 (import (rnrs)
         (byte-machine test harness)
+        (byte-machine test eof-machine)
         (byte-machine graph)
         (byte-machine verify)
         (byte-machine private normal-ir))
@@ -54,13 +55,15 @@
     ;; Golden value: measured against this exact encoding (format tag 1; entry and
     ;; state-count as u32be; per dispatch state u16be transition count then each
     ;; (u8 byte, u32be target, u8 mode) ascending by byte, then u32be fallback
-    ;; target + u8 mode; stop = one tag byte; error = tag byte + u16be code-length
-    ;; + UTF-8 code bytes) run through FNV-1a. A change to any FNV constant, the
-    ;; XOR/multiply, or the field layout moves this number.
+    ;; target + u8 mode, then eof routing (tag 0 + u32be node id, or tag 1 +
+    ;; u16be code-length + UTF-8 default-eof code bytes); stop = one tag byte;
+    ;; error = tag byte + u16be code-length + UTF-8 code bytes; finish = one tag
+    ;; byte) run through FNV-1a. A change to any FNV constant, the XOR/multiply,
+    ;; or the field layout (eof routing included) moves this number.
     (harness-case "the IR fingerprint is the measured golden value"
       (lambda ()
         (check-equal "fingerprint" (normal-machine-fingerprint n1)
-                     11963406767470843108)))
+                     4236938459847922092)))
     (harness-case "normalization is deterministic"
       (lambda ()
         (check-equal "same fingerprint twice"
@@ -88,5 +91,27 @@
         (check-equal "bytes"
                      (map car (normal-dispatch-transitions (vector-ref (normal-machine-states n2) 1)))
                      '(2 5))))))
+
+;; The one-byte machine's eof routes to the machine default-eof error (encode
+;; tag 1 + code symbol), so its fingerprint cannot witness the NODE-eof arm
+;; (tag 0 + u32be node id). The shared eof-machine's two dispatch states BOTH
+;; route eof to named nodes -- s0 -> finish 'done, s1 -> error 'trunc -- so its
+;; fingerprint is the only golden that moves when the node-routing payload is
+;; dropped from the canonical encoding. Same measured-golden discipline as the
+;; one-byte case above; normalized identically through `normalize`.
+(define eofm (make-eof-machine))
+(define n-eof (normalize eofm))
+
+(harness-group "node-routing eof encoding"
+  (lambda ()
+    (harness-case "both dispatch states route eof to a node, not the default error"
+      (lambda ()
+        (let ((s (normal-machine-states n-eof)))
+          (check-equal "s0 eof" (car (normal-dispatch-eof (vector-ref s 0))) 'node)
+          (check-equal "s1 eof" (car (normal-dispatch-eof (vector-ref s 1))) 'node))))
+    (harness-case "the IR fingerprint of the node-routing machine is the measured golden value"
+      (lambda ()
+        (check-equal "fingerprint" (normal-machine-fingerprint n-eof)
+                     9098559711816935340)))))
 
 (harness-finish)

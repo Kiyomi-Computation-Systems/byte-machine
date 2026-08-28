@@ -5,8 +5,8 @@
 ;;; emit-machine writes those bytes to the supplied binary port only. The
 ;;; generated library imports only (rnrs) and (byte-machine runtime), owns the
 ;;; derived library name (generated <machine-name>), and defines the single
-;;; caller-named compiled-machine binding via the v1 ABI. Pure but for
-;;; emit-machine's port write.
+;;; caller-named compiled-machine binding via the v2 ABI (one unified `exec`
+;;; closure carrying a finish? EOF flag). Pure but for emit-machine's port write.
 (library (byte-machine compile)
   (export compile-machine compilation-ok? compilation-diagnostics
           render-machine emit-machine
@@ -43,12 +43,13 @@
   ;; accept a binding that collides with it (Slice B; Slice A design §6).
   (define reserved-member-2
     '(make-compiled-machine compiled-machine?
-      byte-machine-make-compiled-machine/v1 byte-machine-make-feed-outcome/v1
+      byte-machine-make-compiled-machine/v1 byte-machine-make-compiled-machine/v2
+      byte-machine-make-feed-outcome/v1
       make-parser parser? parser-feed! parser-finish! parser-lifecycle parser-reset!
       parser-result? parser-result-status parser-result-next
       parser-result-consumed parser-result-stream-offset parser-result-error
       callback-continue callback-pause))
-  (define reserved-member-3 '(feed loop pos st off b bv start end state offset))
+  (define reserved-member-3 '(exec loop pos st off b bv start end state offset finish?))
   (define (lower-alpha? c) (and (char>=? c #\a) (char<=? c #\z)))
   (define (name-char? c)
     (or (lower-alpha? c) (and (char>=? c #\0) (char<=? c #\9)) (char=? c #\-)))
@@ -80,6 +81,14 @@
     (string-append "               ((" (number->string (car tr)) ") "
                    (loop-tail (cadr tr) (caddr tr)) ")\n"))
 
+  ;; An exhausted dispatch (finish? #t) routes eof: to a named node's loop
+  ;; (continue the eof-target chain) or to the machine default-eof error.
+  (define (render-eof-branch eof id)
+    (if (eq? (car eof) 'node)
+        (string-append "(loop pos " (number->string (cdr eof)) " off)")
+        (string-append "(byte-machine-make-feed-outcome/v1 (quote error) pos (quote "
+                       (symbol->string (cdr eof)) ") " id " off)")))
+
   (define (render-state-arm s)
     (let ((id (number->string (normal-state-id s))))
       (case (normal-state-kind s)
@@ -88,12 +97,16 @@
         ((error)
          (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote error) pos (quote "
                         (symbol->string (normal-error-code s)) ") " id " off))\n"))
+        ((finish)
+         (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote finished) pos #f " id " off))\n"))
         ((dispatch)
          (let ((fb (normal-dispatch-fallback s)))
            (string-append
             "      ((" id ")\n"
             "       (if (>= pos end)\n"
-            "           (byte-machine-make-feed-outcome/v1 (quote need-input) pos #f " id " off)\n"
+            "           (if finish?\n"
+            "               " (render-eof-branch (normal-dispatch-eof s) id) "\n"
+            "               (byte-machine-make-feed-outcome/v1 (quote need-input) pos #f " id " off))\n"
             "           (let ((b (bytevector-u8-ref bv pos)))\n"
             "             (case b\n"
             (apply string-append (map render-transition-arm (normal-dispatch-transitions s)))
@@ -115,16 +128,16 @@
         "(library (generated " mname ")\n"
         "  (export " bstr ")\n"
         "  (import (rnrs) (byte-machine runtime))\n"
-        "  (define (feed state offset bv start end)\n"
+        "  (define (exec state offset bv start end finish?)\n"
         "    (let loop ((pos start) (st state) (off offset))\n"
         "      (case st\n"
         (let loop ((i 0) (acc ""))
           (if (>= i (vector-length states)) acc
               (loop (+ i 1) (string-append acc (render-state-arm (vector-ref states i))))))
-        "      (else (assertion-violation (quote feed) \"unknown state\" st)))))\n"
+        "      (else (assertion-violation (quote exec) \"unknown state\" st)))))\n"
         "  (define " bstr "\n"
-        "    (byte-machine-make-compiled-machine/v1 1 " (number->string fp) " "
-        (number->string entry) " feed)))\n"))))
+        "    (byte-machine-make-compiled-machine/v2 2 " (number->string fp) " "
+        (number->string entry) " exec)))\n"))))
 
   (define (emit-machine compilation binding port)
     (let ((bytes (render-machine compilation binding)))
