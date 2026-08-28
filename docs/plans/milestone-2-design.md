@@ -238,9 +238,11 @@ M2 depends on — plus the sticky-repeat feed fix M1 left broken.
 > eof-target execution, `finished`, idle-vs-truncation — no normalizer/emitter/
 > `/v2`/goldens) and **②b-2** (EOF *generation*: the normalizer finish/eof
 > encoding + the IR-fingerprint move & single golden re-baseline, the emitter
-> finish arm, `/v2`, `position-kind = eof`, and the interpreter≡generated
-> differential over EOF). Everything below is delivered across ②b-1 then ②b-2;
-> `position-kind = eof` lands in ②b-2 with the differential.
+> finish arm, `/v2`, and the interpreter≡generated differential over EOF).
+> Everything below is delivered across ②b-1 then ②b-2. `position-kind` is
+> **deferred out of M2** (2026-08-28 scope-check) — it belongs to the structured
+> `parser-error-*` family §7 defers to M4/M5; the eof *offset* is already carried
+> by `parser-result-stream-offset`.
 
 **Deliver.**
 
@@ -298,11 +300,15 @@ M2 depends on — plus the sticky-repeat feed fix M1 left broken.
 - **Coded misuse conditions** (§3.3): each prohibited operation-matrix cell, and
   the invalid-slice contract, raises `&byte-machine-contract` with an asserted
   `code`/`who`.
-- **Truncation error carries `position-kind = eof` + the absolute stream offset**
-  (§12.7:771: "Truncated input during `finish!` → `eof` at the final stream
-  offset"). The full structured `parser-error-*` family (§9.3) is deferred until
-  error richness is needed (M4+); M2 populates only the EOF position/offset that
-  distinguishes truncation.
+- **The truncation error carries the absolute stream offset** as its EOF position
+  (already exposed by `parser-result-stream-offset`). **`position-kind` is deferred
+  (2026-08-28, Slice ②b-2 scope-check):** its accessor `parser-error-position-kind`
+  is part of the structured `parser-error-*` family (§9.3) that §7 defers to M4/M5,
+  and M2's idle-vs-truncation is distinguished by *status* (`finished` vs `error`),
+  not by the categorical `'eof`/`'byte`/`'boundary` marker; the eof *offset* is
+  already carried. `position-kind` lands with that structured-error family, not in
+  M2 — this removes an inconsistent carve-out (populating one field of an otherwise-
+  deferred accessor family).
 - **`/v2` blast radius** (§3.2): rewrite the `/v1` runtime-tests behavioral group as
   `/v2` (the abi=1 case now fails the version check; the "mismatch refused" case now
   uses abi≠2) and re-baseline the two goldens with the moved fingerprint. Add the
@@ -317,7 +323,7 @@ M2 depends on — plus the sticky-repeat feed fix M1 left broken.
   covers a machine that actually exercises the eof encoding.
 
 **Exit.** EOF distinguishes idle completion (`finished`) from truncation (`error`
-with `position-kind = eof`); `finished` is sticky and sticky-repeat feeds report
+at the eof stream offset); `finished` is sticky and sticky-repeat feeds report
 `next = new start`, `consumed = 0`; reset returns to `ready` at entry with offset
 0; an eof-target cycle, a byte-reachable finish node, and an eof-reachable stop
 node each fail verification with the correct code; the reachable non-pause rows of
@@ -376,8 +382,9 @@ paused-feed/paused-finish/resume lifecycle can be exercised now.
   callback escape or synchronous re-entry to trigger, and callbacks are Milestone 5.
   §25's "lifecycle transition table is fully tested" is read, for M2, as **over the
   reachable rows only**; the exit criterion is annotated to say so.
-- **The full structured `parser-error-*` accessor family** (§9.3) — M2 populates
-  only the `eof` position-kind/offset that distinguishes truncation; richer error
+- **The full structured `parser-error-*` accessor family** (§9.3), including
+  `position-kind` — M2 carries only the eof *stream offset* that locates truncation
+  (via `parser-result-stream-offset`); the categorical `position-kind` marker and richer error
   structure arrives with the milestones that produce richer errors (M4+).
 - **Byte classes, sequences, fields, actions, branches, callbacks, spans, and
   counted consumption** remain Milestones 3–6; M2's "sequence" is a hand-wired
@@ -459,5 +466,5 @@ paused-feed/paused-finish/resume lifecycle can be exercised now.
 | `private normal-ir` | extend the **dispatch** arm to encode `eof-target` (new imports); replace the `else` guards with **finish** (Slice ②) and **pause** (Slice ③) arms + canonical tag bytes; the IR fingerprint **moves** (re-baseline the golden). |
 | `compile` (emitter) | unified `exec` with a `finish?` branch; distinct `finish` arm emitting `finished`; pause arm; `/v2` constructor call (emit `/v2`, keep `/v1` export); enumerated `reserved-member-2`/`-3` deltas. |
 | `interpret` | `op` gains eof-target/finish messages and `finish`/`pause` handling. |
-| `runtime` | explicit lifecycle-state field + `parser-lifecycle` accessor, **replacing the sticky cache** (removed — idempotent re-execution provides §12.2 sticky-repeat by construction; a stored-result short-circuit returns at M5 with callbacks); `parser-finish!`, `parser-resume!`, `parser-reset!`; `paused`/`finished` statuses; truncation `position-kind = eof` + offset; `/v2` constructor; import `conditions`; coded misuse + invalid-slice conditions; operation-matrix enforcement. |
+| `runtime` | explicit lifecycle-state field + `parser-lifecycle` accessor, **replacing the sticky cache** (removed — idempotent re-execution provides §12.2 sticky-repeat by construction; a stored-result short-circuit returns at M5 with callbacks); `parser-finish!`, `parser-resume!`, `parser-reset!`; `paused`/`finished` statuses; truncation carries the eof stream offset; `/v2` constructor; import `conditions`; coded misuse + invalid-slice conditions; operation-matrix enforcement. |
 | CMake `test/CMakeLists.txt` | shared conditions fragment; de-dup `CORE_ALL`; rewrite `/v1` runtime lane group as `/v2`; new determinism goldens. |
