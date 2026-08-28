@@ -228,8 +228,16 @@ cmake_minimum_required(VERSION 3.26)
 # matrix's own retirement above, the surviving passes keep their numbers
 # rather than closing the gap. So 40 - 3 = 37 passes and
 # 114 - (6 + 3 + 1) = 104 mutations.
+#
+# Milestone 2 Slice ②a's Task 1 (decision 0013) adds one more mutation to the
+# existing Pass 32 (the runtime) rather than opening a new pass: parser-feed!'s
+# invalid-slice guard now raises a coded &byte-machine-contract condition
+# instead of assertion-violation, so the guard's own predicate -- code
+# 'invalid-slice, who 'parser-feed! -- is a decision the accept/reject/
+# need-input cases above it do not exercise. Passes stay at 37 and
+# 104 + 1 = 105 mutations.
 set(EXPECTED_PASSES 37)
-set(EXPECTED_MUTATIONS 104)
+set(EXPECTED_MUTATIONS 105)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -1910,6 +1918,13 @@ byte_machine_mutation(
   FIND [[(if (or (eq? status 'stopped) (eq? status 'error)) (parser-set-sticky! parser r))]]
   REPLACE [[(if #f (parser-set-sticky! parser r))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "second")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: an invalid feed slice is accepted instead of raising"
+  FIND [[(unless (and (bytevector? bv) (<= 0 start end (bytevector-length bv)))]]
+  REPLACE [[(unless #t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid slice")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

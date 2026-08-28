@@ -15,7 +15,8 @@
           parser-result? parser-result-status parser-result-next
           parser-result-consumed parser-result-stream-offset parser-result-error
           callback-continue callback-pause)
-  (import (rnrs))
+  (import (rnrs)
+          (byte-machine private conditions))
 
   (define (tag sym) (vector sym))
   (define (tagged? t x) (and (vector? x) (> (vector-length x) 0) (eq? (vector-ref x 0) t)))
@@ -93,7 +94,7 @@
 
   (define (parser-feed! parser bv start end)
     (unless (and (bytevector? bv) (<= 0 start end (bytevector-length bv)))
-      (assertion-violation 'parser-feed! "invalid slice" (list start end)))
+      (byte-machine-contract-violation 'parser-feed! 'invalid-slice (list start end)))
     (or (parser-sticky parser)
         (if (eq? (parser-variant parser) 'op)
             (parser-feed-op! parser bv start end)

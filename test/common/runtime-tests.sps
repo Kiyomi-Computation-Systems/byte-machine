@@ -4,6 +4,7 @@
 ;;; other byte reexecutes into the error node.
 (import (rnrs)
         (byte-machine test harness)
+        (byte-machine private conditions)
         (byte-machine runtime))
 
 (harness-begin "unit.runtime")
@@ -105,5 +106,18 @@
         (check-raises "refused"
                       (lambda (e) #t)
                       (lambda () (byte-machine-make-compiled-machine/v1 2 42 0 stub-feed)))))))
+
+(harness-group "invalid feed slices"
+  (lambda ()
+    (harness-case "a slice past the bytevector end raises a coded contract condition"
+      (lambda ()
+        (check-raises "invalid slice"
+          (lambda (e)
+            (and (byte-machine-contract-condition? e)
+                 (eq? (byte-machine-contract-condition-code e) 'invalid-slice)
+                 (eq? (byte-machine-contract-condition-who e) 'parser-feed!)))
+          (lambda ()
+            (parser-feed! (make-parser (make-compiled-machine one-byte-op) '() #f)
+                          (make-bytevector 1 0) 0 5)))))))
 
 (harness-finish)
