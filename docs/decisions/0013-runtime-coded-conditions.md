@@ -47,3 +47,13 @@ deferral's blocker is removed here.
   de-dup); `no-scheme` stays at 8/8 (no new `cmake.direct` lane is registered).
 - Decision 0010 item 5's *manifest blocker* is discharged; item 5's ABI-mismatch
   condition itself remains deferred (only now unblocked).
+
+## 2026-08-28 (Slice ②a) — as-implemented manifest de-dup
+
+Item 2's "shared conditions manifest fragment" was realized without a separate
+named fragment: `conditions.sls` is prepended directly to
+`BYTE_MACHINE_CORE_RUNTIME` (before `runtime.sls`) and `BYTE_MACHINE_CORE_ALL`
+is de-duplicated with `list(REMOVE_DUPLICATES ...)`. The outcome is identical —
+`conditions.sls` reaches `CORE_ALL` once, load order stays conditions → ir →
+graph → verify → runtime → interpret, and the per-lane duplicate-basename guard
+stays green.

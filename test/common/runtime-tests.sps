@@ -54,7 +54,18 @@
         (let* ((p (make-parser (make-compiled-machine one-byte-op) '() #f))
                (returned 'not-yet-run))
           (set! returned (parser-result-status (parser-feed! p (make-bytevector 0) 0 0)))
-          (check-equal "status" returned 'need-input))))))
+          (check-equal "status" returned 'need-input))))
+    (harness-case "a repeat feed on a terminal parser reports a fresh empty result (§12.2)"
+      (lambda ()
+        (let* ((p (make-parser (make-compiled-machine one-byte-op) '() #f))
+               (r1 (parser-feed! p (make-bytevector 1 0) 0 1))
+               (r2 (parser-feed! p (make-bytevector 1 0) 0 1)))
+          (check-equal "first stopped" (parser-result-status r1) 'stopped)
+          (check-equal "second still stopped" (parser-result-status r2) 'stopped)
+          (check-equal "second next is the new slice start" (parser-result-next r2) 0)
+          (check-equal "second consumed is zero" (parser-result-consumed r2) 0)
+          (check-equal "second stream offset unchanged"
+                       (parser-result-stream-offset r2) (parser-result-stream-offset r1)))))))
 
 ;; The direct-executor ABI. A hand-built feed encodes the one-byte machine over
 ;; numeric states (0 dispatch, 1 stop, 2 error), so the v1 path is witnessed
