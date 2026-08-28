@@ -266,8 +266,17 @@ cmake_minimum_required(VERSION 3.26)
 # exclusive witness of offset-zeroing on this one-byte stub machine -- it
 # also (correctly) reacts to a broken entry-restore. The lifecycle check is
 # unaffected by the other two mutations, so only this one pair overlaps.
+#
+# Milestone 2 Slice ②b-1's Task 1 (decision 0011, the finish node + §16.2 EOF
+# verification) adds three more decisions to the same Pass 33 rather than
+# opening a new pass: non-eof-into-finish (a byte edge must not target a
+# finish terminal), eof-reachable-stop (an eof-target chain must not reach a
+# stop terminal), and eof-zero-progress-cycle (an eof-target chain must not
+# cycle). None of the existing Pass 33 mutations above reach pass-eof-
+# execution or eof-terminal, which did not exist before this task. Passes
+# stay at 37 and 109 + 3 = 112 mutations.
 set(EXPECTED_PASSES 37)
-set(EXPECTED_MUTATIONS 109)
+set(EXPECTED_MUTATIONS 112)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -2096,6 +2105,30 @@ byte_machine_mutation(
   LABEL "verify: the error-code grammar check is suppressed"
   FIND [[(valid-name? (error-declaration-code e))]]
   REPLACE [[#t]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid-name")
+
+# Milestone 2 Slice ②b-1's Task 1 (decision 0011) adds three more decisions to
+# this pass: the §16.2 EOF-execution checks. Each FIND is a verbatim, unique
+# substring of pass-eof-execution / eof-terminal in verify.sls.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a byte edge into a finish terminal is accepted"
+  FIND [[(if (and tn (finish-node? tn))]]
+  REPLACE [[(if (and tn #f)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "non-eof-into-finish")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an EOF-reachable stop terminal is accepted"
+  FIND [[((stop-node? n) 'eof-reachable-stop)]]
+  REPLACE [[((stop-node? n) 'finish)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "eof-reachable-stop")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an eof-target cycle is classified as a finish terminal"
+  FIND [[(if (memq name seen) 'cycle]]
+  REPLACE [[(if (memq name seen) 'finish]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "eof-zero-progress-cycle")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

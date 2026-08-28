@@ -49,6 +49,13 @@
                         (byte-dispatch-node-cases n))
                    (list (edge-target (byte-dispatch-node-fallback n)))))
           (else '())))
+  ;; byte out-targets PLUS a dispatch node's eof-target (for reachability only).
+  (define (all-out-targets n)
+    (append (node-out-targets n)
+            (if (byte-dispatch-node? n)
+                (let ((t (byte-dispatch-node-eof-target n)))
+                  (if (symbol? t) (list t) '()))
+                '())))
 
   ;; PASS 1: schema.
   (define (pass-schema m)
@@ -113,7 +120,7 @@
       (let visit ((name (machine-entry m)))
         (when (and (lookup nodes name) (not (memq name reached)))
           (set! reached (cons name reached))
-          (for-each visit (node-out-targets (lookup nodes name)))))
+          (for-each visit (all-out-targets (lookup nodes name)))))
       (filter values
               (map (lambda (n)
                      (if (memq (node-name n) reached) #f
@@ -165,6 +172,57 @@
                          '()))
                    nodes)))))
 
+  ;; Walk the eof-target chain from `start`, classifying its terminal.
+  (define (eof-terminal m start)
+    (let ((nodes (machine-nodes m)))
+      (let loop ((name start) (seen '()))
+        (if (memq name seen) 'cycle
+            (let ((n (lookup nodes name)))
+              (cond ((not n) 'unresolved)             ; pass-eof reports missing target
+                    ((finish-node? n) 'finish)
+                    ((error-node? n) 'error)
+                    ((stop-node? n) 'eof-reachable-stop)
+                    ((byte-dispatch-node? n)
+                     (let ((t (byte-dispatch-node-eof-target n)))
+                       (if (symbol? t) (loop t (cons name seen)) 'default-error)))
+                    (else 'unknown)))))))
+
+  ;; §16.2:908/:909 and the separate EOF zero-progress-cycle check.
+  (define (pass-eof-execution m)
+    (let ((nodes (machine-nodes m)))
+      (append
+       ;; :908 — a byte edge (case or fallback) into a finish terminal.
+       (apply append
+              (map (lambda (n)
+                     (if (byte-dispatch-node? n)
+                         (filter values
+                                 (map (lambda (t)
+                                        (let ((tn (lookup nodes t)))
+                                          (if (and tn (finish-node? tn))
+                                              (make-diagnostic 'non-eof-into-finish (node-name n)
+                                                               "a byte edge targets a finish terminal")
+                                              #f)))
+                                      (node-out-targets n)))
+                         '()))
+                   nodes))
+       ;; :909 + the EOF-cycle check — walk each dispatch node's eof-target chain.
+       (apply append
+              (map (lambda (n)
+                     (if (byte-dispatch-node? n)
+                         (let ((t (byte-dispatch-node-eof-target n)))
+                           (if (symbol? t)
+                               (case (eof-terminal m t)
+                                 ((eof-reachable-stop)
+                                  (list (make-diagnostic 'eof-reachable-stop (node-name n)
+                                                         "an EOF path reaches a stop terminal")))
+                                 ((cycle)
+                                  (list (make-diagnostic 'eof-zero-progress-cycle (node-name n)
+                                                         "an EOF path cycles without reaching a terminal")))
+                                 (else '()))
+                               '()))
+                         '()))
+                   nodes)))))
+
   ;; PASS 7: generated-name safety (member 1) — machine, node, error names/codes.
   (define (pass-names-valid m)
     (append
@@ -192,6 +250,7 @@
                                   (pass-reachability machine)
                                   (pass-zero-progress machine)
                                   (pass-eof machine)
+                                  (pass-eof-execution machine)
                                   (pass-names-valid machine))
                           '()))))
       (make-verification-result (null? ds) ds machine)))

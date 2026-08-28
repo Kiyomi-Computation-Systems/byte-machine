@@ -4,9 +4,9 @@
 ;;; verification is (byte-machine verify)'s job (parent §9.1).
 (library (byte-machine graph)
   (export make-machine make-byte-dispatch-node make-byte-case
-          make-exact-byte-matcher make-edge make-stop-node make-error-node
-          make-error-declaration)
+          make-exact-byte-matcher make-edge make-stop-node make-finish-node
+          make-error-node make-error-declaration)
   (import (only (byte-machine private ir)
                 make-machine make-byte-dispatch-node make-byte-case
-                make-exact-byte-matcher make-edge make-stop-node make-error-node
-                make-error-declaration)))
+                make-exact-byte-matcher make-edge make-stop-node make-finish-node
+                make-error-node make-error-declaration)))
