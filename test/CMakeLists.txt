@@ -739,9 +739,11 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/graph-tests.sps"
   TIMEOUT 120)
 
-# The runtime depends on nothing above it (parent §7.2), so its manifest is a
-# single library.
+# The runtime now depends on (byte-machine private conditions) for coded API
+# contract conditions (decision 0013); conditions.sls imports only (rnrs), so no
+# cycle. It is listed first so the AOT lane compiles it before runtime.sls.
 set(BYTE_MACHINE_CORE_RUNTIME
+    "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/private/conditions.sls"
     "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/runtime.sls")
 
 byte_machine_add_scheme_lane(
@@ -791,6 +793,12 @@ set(BYTE_MACHINE_CORE_ALL
     ${BYTE_MACHINE_CORE_VERIFY}
     ${BYTE_MACHINE_CORE_RUNTIME}
     "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/interpret.sls")
+
+# conditions.sls now reaches CORE_ALL twice — once via CORE_VERIFY's ir manifest,
+# once via CORE_RUNTIME (decision 0013). REMOVE_DUPLICATES keeps the first (early,
+# before ir.sls) occurrence, so load/compile order stays conditions -> ir -> ... ->
+# runtime -> interpret, and the per-lane duplicate-basename guard stays green.
+list(REMOVE_DUPLICATES BYTE_MACHINE_CORE_ALL)
 
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.interpret.chez.source

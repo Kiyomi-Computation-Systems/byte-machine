@@ -4,6 +4,7 @@
 ;;; other byte reexecutes into the error node.
 (import (rnrs)
         (byte-machine test harness)
+        (byte-machine private conditions)
         (byte-machine runtime))
 
 (harness-begin "unit.runtime")
@@ -53,7 +54,18 @@
         (let* ((p (make-parser (make-compiled-machine one-byte-op) '() #f))
                (returned 'not-yet-run))
           (set! returned (parser-result-status (parser-feed! p (make-bytevector 0) 0 0)))
-          (check-equal "status" returned 'need-input))))))
+          (check-equal "status" returned 'need-input))))
+    (harness-case "a repeat feed on a terminal parser reports a fresh empty result (§12.2)"
+      (lambda ()
+        (let* ((p (make-parser (make-compiled-machine one-byte-op) '() #f))
+               (r1 (parser-feed! p (make-bytevector 1 0) 0 1))
+               (r2 (parser-feed! p (make-bytevector 1 0) 0 1)))
+          (check-equal "first stopped" (parser-result-status r1) 'stopped)
+          (check-equal "second still stopped" (parser-result-status r2) 'stopped)
+          (check-equal "second next is the new slice start" (parser-result-next r2) 0)
+          (check-equal "second consumed is zero" (parser-result-consumed r2) 0)
+          (check-equal "second stream offset unchanged"
+                       (parser-result-stream-offset r2) (parser-result-stream-offset r1)))))))
 
 ;; The direct-executor ABI. A hand-built feed encodes the one-byte machine over
 ;; numeric states (0 dispatch, 1 stop, 2 error), so the v1 path is witnessed
@@ -92,18 +104,70 @@
                (got 'not-yet))
           (set! got (parser-result-status (parser-feed! p (make-bytevector 0) 0 0)))
           (check-equal "status" got 'need-input))))
-    (harness-case "a terminal result is sticky across a second feed"
+    (harness-case "a repeat feed on a terminal parser reports a fresh empty result (§12.2)"
       (lambda ()
         (let* ((p (make-parser (v1-machine) '() #f))
                (r1 (parser-feed! p (make-bytevector 1 0) 0 1))
                (r2 (parser-feed! p (make-bytevector 1 0) 0 1)))
-          (check-equal "second next equals first" (parser-result-next r2) (parser-result-next r1))
-          (check-equal "second consumed equals first"
-                       (parser-result-consumed r2) (parser-result-consumed r1)))))
+          (check-equal "first stopped" (parser-result-status r1) 'stopped)
+          (check-equal "second still stopped" (parser-result-status r2) 'stopped)
+          (check-equal "second next is the new slice start" (parser-result-next r2) 0)
+          (check-equal "second consumed is zero" (parser-result-consumed r2) 0)
+          (check-equal "second stream offset unchanged"
+                       (parser-result-stream-offset r2) (parser-result-stream-offset r1)))))
+    (harness-case "parser-lifecycle tracks ready -> terminal"
+      (lambda ()
+        (let ((p (make-parser (v1-machine) '() #f)))
+          (check-equal "starts ready" (parser-lifecycle p) 'ready)
+          (parser-feed! p (make-bytevector 1 0) 0 1)
+          (check-equal "stopped after accept" (parser-lifecycle p) 'stopped)
+          (let ((q (make-parser (v1-machine) '() #f)))
+            (parser-feed! q (make-bytevector 1 65) 0 1)
+            (check-equal "error after reject" (parser-lifecycle q) 'error)))))
     (harness-case "a mismatched ABI version is refused"
       (lambda ()
         (check-raises "refused"
                       (lambda (e) #t)
                       (lambda () (byte-machine-make-compiled-machine/v1 2 42 0 stub-feed)))))))
+
+(harness-group "invalid feed slices"
+  (lambda ()
+    (harness-case "a slice past the bytevector end raises a coded contract condition"
+      (lambda ()
+        (check-raises "invalid slice"
+          (lambda (e)
+            (and (byte-machine-contract-condition? e)
+                 (eq? (byte-machine-contract-condition-code e) 'invalid-slice)
+                 (eq? (byte-machine-contract-condition-who e) 'parser-feed!)))
+          (lambda ()
+            (parser-feed! (make-parser (make-compiled-machine one-byte-op) '() #f)
+                          (make-bytevector 1 0) 0 5)))))))
+
+(harness-group "parser-reset!"
+  (lambda ()
+    ;; Witness current-restoration via a status CHANGE: reach the error terminal,
+    ;; reset, then feed byte 0. From the entry state byte 0 is ACCEPTED (stopped);
+    ;; if reset failed to restore `current`, the parser would still be at the error
+    ;; node and the result would stay 'error. (For an accept-then-accept sequence,
+    ;; both entry and the stop terminal yield 'stopped, so only the offset would
+    ;; differ -- which would witness the wrong decision. Hence error-then-accept.)
+    (harness-case "reset returns to ready and re-parses from the entry state"
+      (lambda ()
+        (let ((p (make-parser (v1-machine) '() #f)))
+          (parser-feed! p (make-bytevector 1 65) 0 1)         ; -> error, parked at the error node
+          (check-equal "error before reset" (parser-lifecycle p) 'error)
+          (parser-reset! p)
+          (check-equal "ready after reset" (parser-lifecycle p) 'ready)
+          (check-equal "re-parses from entry"
+                       (parser-result-status (parser-feed! p (make-bytevector 1 0) 0 1))
+                       'stopped))))
+    (harness-case "reset zeroes the stream offset"
+      (lambda ()
+        (let ((p (make-parser (v1-machine) '() #f)))
+          (parser-feed! p (make-bytevector 1 0) 0 1)          ; advance -> offset 1, stopped
+          (parser-reset! p)
+          (check-equal "offset zeroed then advanced by one"
+                       (parser-result-stream-offset (parser-feed! p (make-bytevector 1 0) 0 1))
+                       1))))))
 
 (harness-finish)

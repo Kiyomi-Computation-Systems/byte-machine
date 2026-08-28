@@ -228,8 +228,46 @@ cmake_minimum_required(VERSION 3.26)
 # matrix's own retirement above, the surviving passes keep their numbers
 # rather than closing the gap. So 40 - 3 = 37 passes and
 # 114 - (6 + 3 + 1) = 104 mutations.
+#
+# Milestone 2 Slice ②a's Task 1 (decision 0013) adds one more mutation to the
+# existing Pass 32 (the runtime) rather than opening a new pass: parser-feed!'s
+# invalid-slice guard now raises a coded &byte-machine-contract condition
+# instead of assertion-violation, so the guard's own predicate -- code
+# 'invalid-slice, who 'parser-feed! -- is a decision the accept/reject/
+# need-input cases above it do not exercise. Passes stay at 37 and
+# 104 + 1 = 105 mutations.
+#
+# Slice ②a's Task 2 replaces the sticky result cache with an explicit lifecycle
+# field on the same Pass 32: -1 sticky, +2 lifecycle. The sticky mutation's FIND
+# anchor is gone (idempotent re-execution replaces the cache, so setting-vs-not-
+# setting it is unobservable); the stopped and error lifecycle arms are each a
+# distinct decision (recording the terminal state) that the accept/reject cases
+# above them do not otherwise exercise. Passes stay at 37 and
+# 105 - 1 + 2 = 106 mutations.
+#
+# Slice ②a's Task 3 adds parser-reset! to the same Pass 32: three more
+# decisions -- restoring the entry state, zeroing the stream offset, and
+# returning the lifecycle to ready -- none of which the feed-path mutations
+# above exercise (they run before any reset call exists). Passes stay at 37
+# and 106 + 3 = 109 mutations.
+#
+# Each of the three reset mutations below is individually caught by its own
+# named EXPECT_OUTPUT_MATCHES check for the right reason: does-not-restore-
+# entry by "re-parses from entry" (a status check), does-not-zero-offset by
+# "offset zeroed then advanced by one", and does-not-return-to-ready by
+# "ready after reset". That per-mutation correctness does NOT mean the three
+# checks are mutually isolated, though. Under does-not-restore-entry, the
+# offset check also fails: observing a zeroed offset requires re-parsing
+# from the entry state (the alternative -- reading the offset directly --
+# has no public parser-offset accessor), and that re-parse itself depends on
+# `current` having been restored; with `current` left at the stop terminal,
+# the re-feed hits it and returns without advancing, so the offset comes
+# back 0 instead of the expected 1. The offset check is therefore not an
+# exclusive witness of offset-zeroing on this one-byte stub machine -- it
+# also (correctly) reacts to a broken entry-restore. The lifecycle check is
+# unaffected by the other two mutations, so only this one pair overlaps.
 set(EXPECTED_PASSES 37)
-set(EXPECTED_MUTATIONS 104)
+set(EXPECTED_MUTATIONS 109)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -1904,12 +1942,53 @@ byte_machine_mutation(
   REPLACE [[(status 'stopped)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "status")
 
+# (removed 2026-08-28, Slice ②a) "a v1 terminal result is not made sticky": the
+# sticky cache was deleted; a repeat feed re-runs the executor, which is idempotent
+# for stop/error, so setting-vs-not-setting a cache is now unobservable in M2's
+# callback-free world. Its intent is re-witnessed by the reset mutations (Task 3),
+# which distinguish current/offset/lifecycle restoration. See design §5.
+
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
-  LABEL "runtime: a v1 terminal result is not made sticky"
-  FIND [[(if (or (eq? status 'stopped) (eq? status 'error)) (parser-set-sticky! parser r))]]
-  REPLACE [[(if #f (parser-set-sticky! parser r))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "second")
+  LABEL "runtime: an invalid feed slice is accepted instead of raising"
+  FIND [[(unless (and (bytevector? bv) (<= 0 start end (bytevector-length bv)))]]
+  REPLACE [[(unless #t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid slice")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: an accepting feed does not record the stopped lifecycle"
+  FIND [[((stopped) (parser-set-lifecycle! parser 'stopped))]]
+  REPLACE [[((stopped) (parser-set-lifecycle! parser 'ready))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "stopped after accept")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a rejecting feed does not record the error lifecycle"
+  FIND [[((error) (parser-set-lifecycle! parser 'error))]]
+  REPLACE [[((error) (parser-set-lifecycle! parser 'ready))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "error after reject")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: reset does not restore the entry state"
+  FIND [[(parser-set-current! parser (parser-entry parser))]]
+  REPLACE [[(parser-set-current! parser (parser-current parser))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "re-parses from entry")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: reset does not zero the stream offset"
+  FIND [[(parser-set-offset! parser 0)]]
+  REPLACE [[(parser-set-offset! parser (parser-offset parser))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "offset zeroed then advanced by one")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: reset does not return the lifecycle to ready"
+  FIND [[(parser-set-lifecycle! parser 'ready)]]
+  REPLACE [[(parser-set-lifecycle! parser 'stopped)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "ready after reset")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
