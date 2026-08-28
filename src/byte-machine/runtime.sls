@@ -165,6 +165,11 @@
         (assertion-violation 'parser-finish! "generated finish path is Slice 2b-2" parser)))
 
   (define (parser-finish-op! parser)
+    ;; No local cycle guard: termination relies on the verifier's
+    ;; eof-zero-progress-cycle/eof-reachable-stop checks having already rejected
+    ;; non-terminating and stop-terminating EOF chains, so this loop terminates
+    ;; only for verified machines -- relevant once Slice ②b-2's generated v1
+    ;; finish path arrives, since it does not re-verify at runtime.
     (let ((op (parser-executor parser))
           (off (parser-offset parser)))
       (let loop ((node (parser-current parser)))

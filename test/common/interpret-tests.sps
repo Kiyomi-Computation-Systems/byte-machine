@@ -2,6 +2,7 @@
 ;;; byte values through the runtime parser API.
 (import (rnrs)
         (byte-machine test harness)
+        (byte-machine test eof-machine)
         (byte-machine graph)
         (byte-machine verify)
         (byte-machine interpret)
@@ -40,23 +41,7 @@
 
 (harness-group "EOF execution through the interpreter"
   (lambda ()
-    (define (m)
-      (make-machine 'eofm 's0 '() '() '()
-        (list (make-error-declaration 'default-eof 'eof "eof" #f)
-              (make-error-declaration 'rejected 'unexpected-byte "bad" #f)
-              (make-error-declaration 'truncated 'truncated-input "trunc" #f))
-        (list (make-byte-dispatch-node 's0
-                (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 's1 'advance) #f))
-                (make-edge 'reject 'reexecute) 'done #f)          ; idle: eof -> finish
-              (make-byte-dispatch-node 's1
-                (list (make-byte-case (make-exact-byte-matcher 2) (make-edge 'stop 'advance) #f))
-                (make-edge 'reject 'reexecute) 'trunc #f)         ; truncation: eof -> error
-              (make-stop-node 'stop #f)
-              (make-finish-node 'done #f)
-              (make-error-node 'trunc 'truncated #f)
-              (make-error-node 'reject 'rejected #f))
-        'default-eof #f))
-    (define (fresh) (make-parser (make-interpreted-machine (verify-machine (m))) '() #f))
+    (define (fresh) (make-parser (make-interpreted-machine (verify-machine (make-eof-machine))) '() #f))
     (harness-case "finish with no input is idle completion -> finished"
       (lambda ()
         (let ((r (parser-finish! (fresh))))

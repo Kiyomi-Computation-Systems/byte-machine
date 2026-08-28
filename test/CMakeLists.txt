@@ -806,6 +806,7 @@ byte_machine_add_scheme_lane(
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/interpret-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/eof-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/interpret-tests.sps"
   TIMEOUT 120)
 
@@ -815,6 +816,7 @@ byte_machine_add_scheme_lane(
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/interpret-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/eof-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/interpret-tests.sps"
   TIMEOUT 120)
 
