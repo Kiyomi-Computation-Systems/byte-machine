@@ -902,6 +902,29 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/example-one-byte-tests.sps"
   TIMEOUT 120)
 
+# --- Milestone 2 Slice 1: incremental execution over a multi-byte sequence ----
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.sequence.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-sequence-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/sequence-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-sequence-tests.sps"
+  TIMEOUT 180)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.sequence.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-sequence-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/sequence-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-sequence-tests.sps"
+  TIMEOUT 180)
+
 # --- Milestone 1 Phase 3 Slice B: D7 identifier repertoire + binary LF -------
 byte_machine_add_scheme_lane(
   NAME byte-machine.verify.identifier-repertoire.chez.source
