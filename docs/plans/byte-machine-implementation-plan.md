@@ -744,7 +744,7 @@ HTTP-shaped message loops use explicit field actions to reset message-local valu
 
 ### 12.6 Misuse and poisoning
 
-Prohibited lifecycle operations and reentrant parser operations raise API-contract conditions before further mutation.
+Prohibited lifecycle operations and reentrant parser operations raise API-contract conditions before further mutation. (From Milestone 2 the runtime raises coded `&byte-machine-contract` conditions, the §11.1 invalid-slice contract included — [decision 0013](../decisions/0013-runtime-coded-conditions.md).)
 
 Expected callback failures must use callback result values. If a callback raises an unexpected condition or performs a nonlocal escape, the condition/escape propagates and `dynamic-wind` marks the parser poisoned. Only full reset may reuse it.
 
