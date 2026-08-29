@@ -239,7 +239,8 @@ destroys the property: factoring "the shared prefix walker" into a common librar
   and `parser-reset!` restores it from the entry slot, so a compound value flows
   through feed, `need-input`, finish and reset untouched. The `/v2` contract
   mentions no node kind; decision 0012 item 3 established that new behaviour rides
-  on new status symbols and new state ids, not a new record.
+  on new status symbols rather than a new `feed-outcome` record, and the executor
+  state the ABI carries is opaque, so new state ids need no ABI surface at all.
 - The interpreter's node lookup and node-kind dispatch must learn to destructure a
   compound `current`; today they match node names by identity and raise a contract
   violation on anything else. That is the whole of the interpreter change.

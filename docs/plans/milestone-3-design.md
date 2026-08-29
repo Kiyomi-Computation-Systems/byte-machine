@@ -460,8 +460,10 @@ zero-progress cycles fail verification).
 - **Cross-node prefix-state sharing** between distinct sequence nodes (§4.3).
 - **Any `runtime.sls` change for sequence support, and any `/v3` ABI.** The `/v2`
   contract is `(state offset bv start end finish?) → feed-outcome` with an opaque
-  state; no node kind appears in it. Decision 0010 item 4 / 0012 established that
-  new behaviour rides on new status symbols and new state ids, not a new record.
+  state; no node kind appears in it. Decision 0012 item 3 established that new
+  behaviour rides on new status symbols rather than a new `feed-outcome` record,
+  and the executor state the ABI carries is
+  opaque, so new state ids need no ABI surface at all.
 - **Any general lookahead or "try the sequence, restore on mismatch" mechanism** —
   §10.6:546 and §11.3:648 forbid it.
 - **Adding a `source-label` parameter to any matcher constructor "for
