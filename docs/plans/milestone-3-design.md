@@ -8,6 +8,21 @@ sized medium or larger was independently adversarially refuted before being
 admitted as work; the refutation pass removed roughly two thirds of the claimed
 scope, most of it as *already shipped by M1/M2* or as *another milestone's*.
 
+> **Amended 2026-08-29.** Three citation errors, found during Gate 0 execution
+> after this design was approved, are corrected in the body below rather than
+> left standing; this note is the record of the errors, not the correction. §8
+> (Explicitly out of Milestone 3) attributed a "new status symbols and new state
+> ids, not a new record" rule to "Decision 0010 item 4 / 0012" — 0012 item 3 says
+> only that `paused`/`finished` are new status *symbols*, not a new
+> `feed-outcome` record, and says nothing about state ids; 0010 item 4 is the
+> general extend-by-version seam, not this rule (fixed by `87e8520`). §10
+> (References)'s decision-0012 entry repeated the same mischaracterization,
+> crediting item 3 with "new statuses and state ids" (fixed by `9ffc193`). §4.4
+> (Degenerate matcher and sequence shapes are constructor contract violations)
+> claimed the parent plan "calls" §16.2's required-checks list "closed"; the plan
+> never says so — it calls only §10.6's node-kind set closed
+> (`byte-machine-implementation-plan.md:534`) (fixed by `3f8cd1b`).
+
 Governing plan: [byte-machine-implementation-plan.md](./byte-machine-implementation-plan.md)
 §25 ("Milestone 3: Byte classes and sequences"), scope §25:1527-1533, exit
 criteria §25:1537-1540. This document does not change M3's *scope*; it re-cuts M3
