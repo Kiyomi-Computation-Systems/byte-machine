@@ -427,8 +427,26 @@ cmake_minimum_required(VERSION 3.26)
 # built a pause-node?, and the pause-target message resolving to the pause
 # node's continuation rather than the pause node itself. Two mutations. So
 # 37 + 1 = 38 passes and 149 + 2 = 151 mutations.
+#
+# Slice ③'s Task 4 (the pause node in the normalizer + emitter) adds two more
+# mutations to the existing Pass 35 and two more to the existing Pass 36
+# rather than opening a new pass: the normalizer's lower arm (a pause's
+# resolved continuation id, not its own) and encode arm (tag 4 + u32be
+# continuation id hashed into the fingerprint), and the emitter's pause arm
+# (renders the `paused` outcome) and its next-state (the continuation target,
+# not the pause node's own id). Each is witnessed in its own SPEC lane's
+# program: normal-ir-tests.sps gains a "pause normalization" group (a
+# structural case plus a measured-then-pinned fingerprint golden); compile-
+# tests.sps gains a third inline fixture (the eof-fin precedent) asserting
+# both rendered pause arms by substring. The lower-arm mutation is pinned to
+# the structural "p1 target" check rather than the fingerprint it also
+# disturbs as a side effect, the more precise of its two witnesses; the
+# encode-arm mutation is pinned to the fingerprint golden's own label,
+# following -- deliberately, see that mutation's own comment -- the estab-
+# lished golden-family convention of pinning the check's text rather than its
+# numeral. Passes stay at 38 and 151 + 4 = 155 mutations.
 set(EXPECTED_PASSES 38)
-set(EXPECTED_MUTATIONS 151)
+set(EXPECTED_MUTATIONS 155)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -2918,6 +2936,51 @@ byte_machine_mutation(
   REPLACE [[(begin (put-u8 p 0))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "9098559711816935340")
 
+# Milestone 2 Slice ③'s Task 4 (the pause node in the normalizer) adds two
+# more mutations to this pass rather than opening a new one. normal-ir-
+# tests.sps gains a "pause normalization" group over the shared pause-machine
+# fixture (s0 p1 s1 pe stop done trunc reject -> ids 0-7): a structural case
+# (p1/pe's kind and resolved continuation target) and a fingerprint golden
+# case, measured (not guessed) through the shipped encode arm.
+#
+# The lower-arm mutation below stores a pause node's OWN id instead of its
+# resolved continuation id. Measured: it fails "p1 target" (expected 2, got 1)
+# and "pe target" (expected 5, got 3) -- the structural checks, which print
+# the actual wrong id -- AND, as a side effect, "pause fingerprint" (the wrong
+# id is also what gets hashed). EXPECT_OUTPUT_MATCHES pins the structural
+# check, the more precise of the two witnesses.
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a pause lowers its continuation id, not its own"
+  FIND [[(cons 'node (id-of (pause-node-continuation n)))]]
+  REPLACE [[(cons 'node i)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "p1 target")
+
+# The encode-arm mutation drops the continuation id from the pause tag's
+# encoded bytes (tag 4 alone, no u32be payload). Measured: it fails ONLY
+# "pause fingerprint" -- no other machine in this SPEC lane has a pause node,
+# so tag 4 is never encoded for the one-byte or node-routing goldens above,
+# and this mutation cannot disturb them.
+#
+# Golden-family decision (deliberate, not an oversight): a prior audit found
+# the FNV-offset/prime/mixing and default-eof/node-eof mutations above all
+# cross-match -- each can fail MORE THAN ONE fingerprint check in the same
+# run, and only the "got" value tells them apart -- and chose to pin just the
+# failing check's own text, never the "got" number, because embedding the
+# golden numeral would add one more constant to re-baseline on every future
+# IR-encoding move (see that audit's header note above Pass 35). This
+# mutation is narrower than those five -- it cannot cross-match the one-byte
+# or node-routing goldens, since neither fixture has a pause node -- but it is
+# still the same KIND of witness (a fingerprint check-equal), so it follows
+# the same convention for the same reason: pin the check's label ("pause
+# fingerprint"), not its numeral.
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the pause encode arm hashes tag and continuation"
+  FIND [[((pause) (put-u8 p 4) (put-u32be p (normal-pause-target s)))]]
+  REPLACE [[((pause) (put-u8 p 4))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "pause fingerprint")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 36: the emitter (Milestone 1 Phase 3 Slice A) ----------------------
@@ -3032,6 +3095,31 @@ byte_machine_mutation(
   FIND [[(if finish?\n"]]
   REPLACE [[(if #f\n"]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish eof guard")
+
+# Milestone 2 Slice ③'s Task 4 (the pause node in the emitter) adds two more
+# mutations to this pass. compile-tests.sps gains a third inline fixture (the
+# pause machine, following the eof-fin precedent above -- the compile lanes
+# carry no fixture libraries, and (byte-machine test pause-machine) is the
+# source of truth the fixture is kept in sync with by hand) whose rendered
+# text pins both pause arms by substring: p1's (continuation target 2) and
+# pe's (continuation target 5). Both mutations below break the SAME two
+# checks, "pause arm p1" and "pause arm pe" -- byte-identical rendered text no
+# other check in this file constructs -- so the shared "pause arm" pin cannot
+# match anything else in this lane's output. Measured: each fails both checks
+# with "expected a true value" (the file's `check`, not `check-equal`).
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: the pause arm emits paused"
+  FIND [[(quote paused) pos #f "]]
+  REPLACE [[(quote stopped) pos #f "]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "pause arm")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: the pause arm's next-state is the continuation"
+  FIND [[(number->string (normal-pause-target s)) " off))\n"))]]
+  REPLACE [[id " off))\n"))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "pause arm")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

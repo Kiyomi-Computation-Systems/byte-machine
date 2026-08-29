@@ -100,6 +100,9 @@
                         (symbol->string (normal-error-code s)) ") " id " off))\n"))
         ((finish)
          (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote finished) pos #f " id " off))\n"))
+        ((pause)
+         (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
+                        (number->string (normal-pause-target s)) " off))\n"))
         ((dispatch)
          (let ((fb (normal-dispatch-fallback s)))
            (string-append
@@ -111,7 +114,9 @@
             "           (let ((b (bytevector-u8-ref bv pos)))\n"
             "             (case b\n"
             (apply string-append (map render-transition-arm (normal-dispatch-transitions s)))
-            "               (else " (loop-tail (car fb) (cdr fb)) ")))))\n"))))))
+            "               (else " (loop-tail (car fb) (cdr fb)) ")))))\n")))
+        (else (assertion-violation 'render-machine "unknown state kind"
+                                   (normal-state-kind s))))))
 
   (define (render-machine compilation binding)
     (unless (compilation-ok? compilation)

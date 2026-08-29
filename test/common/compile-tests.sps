@@ -57,6 +57,37 @@
 (define (eof-text) (utf8->string (render-machine eof-ok 'eof-parser)))
 (define (eof-has? needle) (harness-string-contains? (eof-text) needle))
 
+;; A third machine exercising the pause kind (Slice 3): byte 1 -> pause p1
+;; (continuation s1); byte 2 at s1 -> stop. EOF at entry -> pause pe
+;; (continuation done, a finish node). Inlined rather than imported --
+;; (byte-machine test pause-machine) is the source of truth for this graph
+;; (kept in sync by hand); the compile lanes carry no fixture libraries today
+;; (the eof-fin precedent above), and this file's charter is the rendered
+;; TEXT (header :1-5), not execution -- the CORE_COMPILE manifest carries no
+;; runtime.sls, so a compile+eval case cannot even load the generated library
+;; here. The pause/resume execution walks are Task 5's, in the CORE_EMIT lanes.
+(define pausem
+  (make-machine 'pausem 's0 '() '() '()
+    (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
+          (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f)
+          (make-error-declaration 'truncated 'truncated-input "truncated input" #f))
+    (list (make-byte-dispatch-node 's0
+            (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'p1 'advance) #f))
+            (make-edge 'reject 'reexecute) 'pe #f)
+          (make-pause-node 'p1 's1 #f)
+          (make-byte-dispatch-node 's1
+            (list (make-byte-case (make-exact-byte-matcher 2) (make-edge 'stop 'advance) #f))
+            (make-edge 'reject 'reexecute) 'trunc #f)
+          (make-pause-node 'pe 'done #f)
+          (make-stop-node 'stop #f)
+          (make-finish-node 'done #f)
+          (make-error-node 'trunc 'truncated #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+(define pause-ok (compile-machine pausem '()))
+(define (pause-text) (utf8->string (render-machine pause-ok 'pause-parser)))
+(define (pause-has? needle) (harness-string-contains? (pause-text) needle))
+
 (harness-group "compilation"
   (lambda ()
     (harness-case "a valid machine compiles ok"
@@ -107,7 +138,14 @@
     (harness-case "a finish node renders the finished terminal arm"
       (lambda ()
         (check "finish machine compiles" (compilation-ok? eof-ok))
-        (check "finish arm" (eof-has? "(byte-machine-make-feed-outcome/v1 (quote finished) pos #f"))))))
+        (check "finish arm" (eof-has? "(byte-machine-make-feed-outcome/v1 (quote finished) pos #f"))))
+    (harness-case "a pause node renders the paused terminal arm with its continuation target"
+      (lambda ()
+        (check "pause machine compiles" (compilation-ok? pause-ok))
+        (check "pause arm p1"
+               (pause-has? "((1) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f 2 off))"))
+        (check "pause arm pe"
+               (pause-has? "((3) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f 5 off))"))))))
 
 (harness-group "binding validation"
   (lambda ()
