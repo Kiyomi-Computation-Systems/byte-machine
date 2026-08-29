@@ -142,8 +142,15 @@ following is an open design call.
 ## 4. Gate 0 — design-call resolutions
 
 Decision-only. No product code is written in Gate 0. writing-plans assigns the
-record numbers (next free in `docs/decisions/`, expected 0014–0017) and confirms
+record numbers (next free in `docs/decisions/`, assigned 0014–0017) and confirms
 whether any splits or merges of the four below are warranted.
+
+> **Gate 0 discharged 2026-08-29.** §4.1 → decision
+> [0014](../decisions/0014-byte-classes-expand-per-byte.md), §4.2 →
+> [0015](../decisions/0015-sequence-prefix-states.md), §4.3 →
+> [0016](../decisions/0016-normalized-state-id-allocation.md), §4.4 →
+> [0017](../decisions/0017-degenerate-shapes-are-contract-violations.md). §4.5's
+> two resolutions stayed in this document by design and have no record.
 
 ### 4.1 Byte classes expand to per-byte transitions
 
@@ -494,6 +501,9 @@ zero-progress cycles fail verification).
   whether §4.2 should split — it deliberately fuses the normalizer and interpreter
   calls because §18:970-972 makes them one decision, and splitting them invites
   the shared-walker mistake §3 warns about.
+  **Resolved:** §4.2 stayed one record (0015). Splitting it would separate the
+  normalized representation from the interpreter constraint that makes the
+  differential meaningful, which is the mistake §3 warns about.
 - **Exact proving machines.** §5–§7 specify the *properties*; writing-plans pins
   the concrete node wiring — the class/complement/ASCII fixtures and their 256-value
   loops; the single-alternative sequence that must reproduce `sequence-machine.sls`
