@@ -462,8 +462,8 @@ zero-progress cycles fail verification).
   contract is `(state offset bv start end finish?) → feed-outcome` with an opaque
   state; no node kind appears in it. Decision 0012 item 3 established that new
   behaviour rides on new status symbols rather than a new `feed-outcome` record,
-  and the executor state the ABI carries is
-  opaque, so new state ids need no ABI surface at all.
+  and the executor state the ABI carries is opaque, so new state ids need no ABI
+  surface at all.
 - **Any general lookahead or "try the sequence, restore on mismatch" mechanism** —
   §10.6:546 and §11.3:648 forbid it.
 - **Adding a `source-label` parameter to any matcher constructor "for
@@ -547,8 +547,8 @@ zero-progress cycles fail verification).
 - [decision 0011](../decisions/0011-eof-execution-model.md) — the EOF execution
   model whose chain §4.2's corollary discusses.
 - [decision 0012](../decisions/0012-generated-abi-v2-finish.md) — `/v2` (**item 3**:
-  new behaviour rides on new statuses and state ids; **item 4**: the
-  `reserved-member-3` obligation in §6).
+  new behaviour rides on new status symbols rather than a new `feed-outcome`
+  record; **item 4**: the `reserved-member-3` obligation in §6).
 
 ## Appendix — per-library change map
 
