@@ -554,8 +554,10 @@ cmake_minimum_required(VERSION 3.26)
 # Milestone 3 Slice ① Task 1 adds Pass 42 (matcher canonicalization and the
 # tag-guarded accessor) with two mutations, and re-anchors two existing pins
 # without adding either. Passes become 38 + 1 = 39; mutations 165 + 2 = 167.
+# Slice ① Task 2 adds five constructor and canonicalization mutations to
+# Pass 42. Passes stay at 39; mutations become 167 + 5 = 172.
 set(EXPECTED_PASSES 39)
-set(EXPECTED_MUTATIONS 167)
+set(EXPECTED_MUTATIONS 172)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3848,7 +3850,8 @@ byte_machine_mutation(
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 42: matcher canonicalization and the tag-guarded accessor (M3 Slice
-# ① Task 1) -----------------------------------------------------------------
+# ① Task 1), plus the class-matcher constructors and ascii-bytes (M3 Slice ①
+# Task 2) ---------------------------------------------------------------------
 #
 # ir-tests.sps is the first program to reach (byte-machine private ir)'s
 # canonicalization spine directly, and no pass has ever mutated ir.sls: every
@@ -3859,6 +3862,18 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # and returns instead of raising -- the exact defect design §5 says must not
 # be allowed to reach pass-overlap or list-sort. Verify command uses both
 # library roots, an empty object guard, the ir program.
+#
+# FIND is matched as a literal substring (MutationRunner.cmake), not a regex
+# and not whitespace-insensitive; it is written without leading whitespace,
+# which is what tolerates indentation drift in the matched line. SITES
+# defaults to 1 and is asserted exactly.
+#
+# Task 2 adds five mutations to this same pass rather than opening a new one,
+# since they exercise the same canonicalization spine the first two already
+# prove ir-tests.sps can reach: the byte-set and byte-range constructors'
+# degenerate-shape guards (decision 0017), ascii-bytes' non-ASCII guard, and
+# matcher-bytes' new byte-set-canonical and complement arms. Passes stay at
+# 39; mutations become 167 + 5 = 172.
 
 byte_machine_mutation_reset()
 
@@ -3886,14 +3901,56 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "one-element set: set -- expected \\(7\\), got \\(0\\)")
 
-# FIND text is matched as a whitespace-insensitive substring; SITES asserts
-# each is unique in its file.
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
   LABEL "ir: the exact-byte accessor reads slot 1 of any vector"
   FIND [[(byte-machine-contract-violation 'exact-byte-matcher-byte 'invalid-argument 'matcher)]]
   REPLACE [[#f]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "refuses a foreign vector: refused")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: an empty byte set is accepted"
+  FIND [[(unless (and (list? bytes) (pair? bytes)]]
+  REPLACE [[(unless (and (list? bytes)]]
+  # Comparison-caught via check-raises' own expected-vs-actual assertion, not
+  # an incidental raise: dropping (pair? bytes) lets '() satisfy the rest of
+  # the guard (for-all over '() is vacuously true), so construction succeeds
+  # and check-raises reports "expected a raise, but the thunk returned ...".
+  # Measured (not predicted): this mutant also fails the ascii-bytes empty-
+  # string case ("and cannot become a byte set"), since that check-raises
+  # reaches the same guard; the pin below is the first FAIL line only.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "an empty byte set is rejected: empty set")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: a reversed byte range is accepted"
+  FIND [[(unless (<= low high)]]
+  REPLACE [[(unless #t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "low greater than high is rejected: reversed")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: ascii-bytes admits a non-ASCII character"
+  FIND [[(unless (<= 0 c 127)]]
+  REPLACE [[(unless #t]]
+  # Measured (not predicted): the case name is lowercase ("a non-ASCII
+  # character is rejected"), not the plan's predicted "A non-ASCII...".
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "a non-ASCII character is rejected: non-ascii")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: a byte set is canonicalized without de-duplication"
+  FIND [[((and (pair? acc) (= (car s) (car acc))) (loop (cdr s) acc))]]
+  REPLACE [[((and (pair? acc) (< (car s) (car acc))) (loop (cdr s) acc))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "ascending and de-duplicated: set")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: a complement is not the universe minus the inner set"
+  FIND [[((memv b inner) (loop (- b 1) acc))]]
+  REPLACE [[((memv b inner) (loop (- b 1) (cons b acc)))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "minus the inner set: count")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
