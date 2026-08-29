@@ -6,9 +6,9 @@
 ;;; finished the same way (a finish pause resumes to finish-ready and
 ;;; finishes again), so a Slice 3 machine's pause/resume and idle-completion
 ;;; routes are walked to a real terminal, not just fed one byte and dropped.
-;;; The seed is fixed and printed; a disagreement tags which phase diverged
-;;; and prints the machine index so the case replays. Generated .sls are
-;;; test-time artifacts in the tmp root.
+;;; The seed is fixed and printed; a disagreement tags the byte and which
+;;; phase diverged, and prints the machine index, so the case replays.
+;;; Generated .sls are test-time artifacts in the tmp root.
 (import (rnrs) (rnrs eval)
         (only (chezscheme) load)
         (byte-machine test harness)
@@ -56,11 +56,14 @@
 ;; Feed bv[start,end) to both sides, honouring the pause protocol: whenever
 ;; BOTH sides report paused, resume both (§12.1 -- lifecycle only, no input
 ;; consumed) and re-feed the remainder from `next`. A side that paused alone
-;; is already a disagreement caught by the tuple compare below, and must not
-;; be driven through parser-resume!, which raises on anything but a
-;; paused-feed parser -- so resume is only ever reached once both sides
-;; agree. Returns (values bad paused?): bad is 'none or a tagged description
-;; of the first disagreement; paused? is #t iff a pause was observed.
+;; is already a disagreement the rfields compare in this function's own first
+;; cond clause has already caught, and must not be driven through
+;; parser-resume!, which raises on anything but a paused-feed parser -- so
+;; resume is only ever reached once both sides agree. Returns (values bad
+;; paused?): bad is 'none or a tagged description of the first disagreement
+;; (untagged with the byte number here -- byte-trial adds that, since this
+;; loop does not know which byte its caller is trying); paused? is #t iff a
+;; pause was observed.
 (define (feed-loop! pr pg bv start end)
   (let ((rr (parser-feed! pr bv start end)) (rg (parser-feed! pg bv start end)))
     (cond
@@ -78,19 +81,27 @@
 ;; feed-loop! -- a finish pause (D4(d)'s idle-completion route) resumes to
 ;; finish-ready and finishes again, which falls through to the real executor
 ;; rather than a sticky short-circuit: finish-ready is not one of
-;; parser-finish!'s sticky rows. Returns (values bad paused?), the same
-;; shape as feed-loop!.
+;; parser-finish!'s sticky rows. This branch is unexercised by THIS lane's
+;; own generated machines today: a byte-reachable pausep's continuation is
+;; always 'start (never a finish-only route), so parser-finish! can only ever
+;; resolve directly to finished/error for a property-generated machine, never
+;; through a pause of its own -- kept for parity with the general operation
+;; matrix and differential-pause-tests.sps's own finish-pause handling.
+;; Returns (values bad paused? finished?): bad/paused? as feed-loop!;
+;; finished? is #t iff both sides agreed on a 'finished status (the eof
+;; draw's idle-completion route -- see the finished-count anti-vacuity guard
+;; below).
 (define (finish-loop! pr pg)
   (let ((rr (parser-finish! pr)) (rg (parser-finish! pg)))
     (cond
-      ((not (equal? (rfields rr pr) (rfields rg pg))) (values (list 'finish) #f))
+      ((not (equal? (rfields rr pr) (rfields rg pg))) (values (list 'finish) #f #f))
       ((and (eq? (parser-result-status rr) 'paused) (eq? (parser-result-status rg) 'paused))
        (let ((acks (resume-pair! pr pg)))
          (if (not (equal? (car acks) (cadr acks)))
-             (values (list 'finish-ack) #t)
-             (let-values (((bad _paused?) (finish-loop! pr pg)))
-               (values bad #t)))))
-      (else (values 'none #f)))))
+             (values (list 'finish-ack) #t #f)
+             (let-values (((bad _paused? finished?) (finish-loop! pr pg)))
+               (values bad #t finished?)))))
+      (else (values 'none #f (eq? (parser-result-status rr) 'finished))))))
 
 ;; One byte's trial: a fresh parser pair, fed the single byte and driven
 ;; through feed-loop!'s pause protocol, then -- only when both sides are
@@ -99,16 +110,19 @@
 ;; finish! on a sticky lifecycle short-circuits inside the shared runtime.sls
 ;; wrapper before reaching either executor (D1), so that comparison would
 ;; only check the wrapper against itself and prove nothing about either
-;; side. Returns (values bad paused?), the same shape as feed-loop!.
+;; side. Returns (values bad paused? finished?): bad is 'none or (cons b
+;; <feed-loop!/finish-loop! tag>) -- the byte number wrapped around whatever
+;; phase tag the sub-loop reported, so a disagreement replays without also
+;; having to grep for which of the 256 bytes it was.
 (define (byte-trial cm-ref cm-gen b)
   (let ((pr (make-parser cm-ref '() #f)) (pg (make-parser cm-gen '() #f)))
     (let-values (((bad paused?) (feed-loop! pr pg (make-bytevector 1 b) 0 1)))
       (cond
-        ((not (eq? bad 'none)) (values bad paused?))
+        ((not (eq? bad 'none)) (values (cons b bad) paused? #f))
         ((and (eq? (parser-lifecycle pr) 'ready) (eq? (parser-lifecycle pg) 'ready))
-         (let-values (((fbad fpaused?) (finish-loop! pr pg)))
-           (values fbad (or paused? fpaused?))))
-        (else (values 'none paused?))))))
+         (let-values (((fbad fpaused? finished?) (finish-loop! pr pg)))
+           (values (if (eq? fbad 'none) fbad (cons b fbad)) (or paused? fpaused?) finished?)))
+        (else (values bad paused? #f))))))
 
 (harness-group "the PRNG is reproducible"
   (lambda ()
@@ -122,12 +136,14 @@
   (lambda ()
     (harness-case "all generated machines verify and agree on all 256 bytes"
       (lambda ()
-        ;; paused-count is the anti-vacuity guard for the Slice 3 pause draw
-        ;; (machine-gen.sls): a seed set where it never actually fires (or
-        ;; fires but no case ever lands on `pausep`) would make every pause
-        ;; check below vacuous, so this asserts the property lane actually
-        ;; drove at least one generated machine through a real pause.
-        (let loop ((i 0) (s (make-prng seed)) (paused-count 0))
+        ;; paused-count / finished-count are the anti-vacuity guards for the
+        ;; Slice 3 pause and eof draws (machine-gen.sls): a seed set where a
+        ;; draw never fires, or fires but is never actually observed by a
+        ;; real 256-byte trial, would make every pause/finish check below
+        ;; vacuous, so this asserts the property lane actually drove at
+        ;; least one generated machine through a real pause, and at least
+        ;; one through a real idle-completion finish.
+        (let loop ((i 0) (s (make-prng seed)) (paused-count 0) (finished-count 0))
           (if (< i machine-count)
               (let-values (((m s2) (gen-machine s)))
                 (let ((v (verify-machine m)))
@@ -136,19 +152,29 @@
                   (if (verification-ok? v)
                       (let ((cm-ref (make-interpreted-machine v))
                             (cm-gen (emit-and-load m i)))
-                        (let bl ((b 0) (bad 'none) (paused? #f))
+                        (let bl ((b 0) (bad 'none) (paused? #f) (finished? #f))
                           (if (< b 256)
-                              (let-values (((b-bad b-paused?) (byte-trial cm-ref cm-gen b)))
-                                (bl (+ b 1) (if (eq? bad 'none) b-bad bad) (or paused? b-paused?)))
+                              (let-values (((b-bad b-paused? b-finished?) (byte-trial cm-ref cm-gen b)))
+                                (bl (+ b 1)
+                                    (if (eq? bad 'none) b-bad bad)
+                                    (or paused? b-paused?)
+                                    (or finished? b-finished?)))
                               (begin
                                 (check-equal
                                  (string-append "machine " (number->string i)
                                                 " (seed " (number->string seed) ") byte agreement")
                                  bad 'none)
-                                (loop (+ i 1) s2 (if paused? (+ paused-count 1) paused-count))))))
-                      (loop (+ i 1) s2 paused-count))))
-              (check (string-append "at least one of the " (number->string machine-count)
-                                    " generated machines' 256-byte trial observes a pause")
-                     (>= paused-count 1))))))))
+                                (loop (+ i 1) s2
+                                      (if paused? (+ paused-count 1) paused-count)
+                                      (if finished? (+ finished-count 1) finished-count))))))
+                      (loop (+ i 1) s2 paused-count finished-count))))
+              (begin
+                (check (string-append "at least one of the " (number->string machine-count)
+                                      " generated machines' 256-byte trial observes a pause")
+                       (>= paused-count 1))
+                (check (string-append "at least one of the " (number->string machine-count)
+                                      " generated machines' 256-byte trial observes an"
+                                      " idle-completion finish")
+                       (>= finished-count 1)))))))))
 
 (harness-finish)
