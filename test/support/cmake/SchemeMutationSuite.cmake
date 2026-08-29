@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# THIRTY-NINE PASSES, BECAUSE THIRTY-NINE DIFFERENT WITNESSES ARE NEEDED
+# FORTY PASSES, BECAUSE FORTY DIFFERENT WITNESSES ARE NEEDED
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -145,7 +145,7 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "THIRTY-NINE PASSES..." above. Declared here, rather than only in
+# See "FORTY PASSES..." above. Declared here, rather than only in
 # prose, so the count enforced at the bottom of this file is the same text a
 # reader checks by eye at the top -- one number to keep in sync, not two
 # that can quietly disagree. 25 passes / 60 mutations before the aot task;
@@ -567,8 +567,10 @@ cmake_minimum_required(VERSION 3.26)
 # Passes stay at 39; mutations become 178 + 3 = 181.
 # Slice ① Task 4 adds two per-byte-expansion mutations to Pass 35.
 # Passes stay at 39; mutations become 181 + 2 = 183.
-set(EXPECTED_PASSES 39)
-set(EXPECTED_MUTATIONS 183)
+# Slice ① Task 5 adds Pass 43 (class membership and recursive canonicalization)
+# with two mutations. Passes become 39 + 1 = 40; mutations 183 + 2 = 185.
+set(EXPECTED_PASSES 40)
+set(EXPECTED_MUTATIONS 185)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -4144,9 +4146,71 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
+# --- Pass 43: class membership and recursive canonicalization (M3 Slice ①
+# Task 5) --------------------------------------------------------------------
+#
+# byte-class-interpret-tests.sps drives five class fixtures over all 256 bytes
+# with ABSOLUTE expected outcomes. Two decisions here are unreachable from every
+# earlier lane, because every earlier fixture's matcher is a one-element set:
+# `memv` over the whole canonical set (for a singleton, `memv` and `= (car ...)`
+# agree, so Pass 34's one-byte machine cannot separate them), and the recursion
+# through a nested complement. The first mutation matches only a class's lowest
+# byte; the second stops complement canonicalization recursing, so a
+# complement-of-a-complement is read as its own inner matcher. Verify command
+# uses both library roots, an empty object guard, the byte-class program.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/byte-class-interpret-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.byte-class.chez.source
+  LABEL "interpret: class membership matches only the class's lowest byte"
+  FIND [[((memv byte (matcher-bytes (byte-case-matcher (car cs))))]]
+  REPLACE [[((= byte (car (matcher-bytes (byte-case-matcher (car cs)))))]]
+  # The brief's own predicted pin, "accepted exactly the class size", is a bare
+  # check label the brief flagged as possibly colliding. Measured: it does not
+  # merely collide, it never fires at all -- `hits` counts membership in the
+  # test's own precomputed `accepted` list (memv b accepted), not whether the
+  # byte actually stopped, so that check passes unchanged under this mutant.
+  # What actually reddens is "no byte misbehaved": with only the class's
+  # lowest canonical byte still matching the dispatch case, every other
+  # accepted byte now falls through to the reject fallback. Measured FAIL
+  # line: "FAIL all 256 byte values, per class.byte-set accepts exactly its
+  # class: no byte misbehaved -- expected none, got 1". byte-complement's own
+  # FAIL line also ends "got 1" (its lowest canonical byte is 0, so its first
+  # misbehaving byte is also 1), so the bare detail alone would resolve to two
+  # cases; the case-name prefix "byte-set accepts exactly its class:" is what
+  # keeps this pin to the one (case, check) pair.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "byte-set accepts exactly its class: no byte misbehaved -- expected none, got 1")
+
+# The REPLACE below canonicalizes a complement's inner matcher normally UNLESS
+# that inner matcher is itself a complement, in which case it reads as the empty
+# set -- so a nested complement becomes the full universe while every
+# single-level complement is untouched. That isolates the recursion specifically,
+# and it is caught by a failed comparison rather than by a raise (AGENTS.md):
+# handing `memv` a vector instead of a list would crash somewhere incidental
+# rather than redden the assertion that names the decision.
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.byte-class.chez.source
+  LABEL "ir: complement canonicalization does not recurse"
+  FIND [[(let ((inner (matcher-bytes (byte-complement-matcher-matcher m))))]]
+  REPLACE [[(let ((inner (if (byte-complement-matcher? (byte-complement-matcher-matcher m)) (quote ()) (matcher-bytes (byte-complement-matcher-matcher m)))))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "nested-complement accepts exactly its class")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "THIRTY-NINE PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FORTY PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

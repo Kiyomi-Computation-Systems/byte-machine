@@ -1031,6 +1031,31 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-pause-tests.sps"
   TIMEOUT 120)
 
+# --- Milestone 3 Slice ①: all-byte class coverage through the interpreter ----
+# ABSOLUTE expected outcomes over all 256 bytes for a set, a range, a complement,
+# a nested complement and an ASCII set. Absolute rather than differential because
+# both executors canonicalize through the same matcher-bytes: a defect there is
+# invisible to a comparison and visible here.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.byte-class.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/byte-class-interpret-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/class-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/byte-class-interpret-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.byte-class.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/byte-class-interpret-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/class-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/byte-class-interpret-tests.sps"
+  TIMEOUT 120)
+
 # --- Milestone 1 Phase 3 Slice B: D7 identifier repertoire + binary LF -------
 byte_machine_add_scheme_lane(
   NAME byte-machine.verify.identifier-repertoire.chez.source
