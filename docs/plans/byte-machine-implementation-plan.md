@@ -1,6 +1,6 @@
 # Byte Machine Implementation Plan
 
-Status: milestone 0 in progress (see [milestone-0-portability-spike.md](./milestone-0-portability-spike.md)); decisions amended by 0005 (Chez-only) via [chez-only-simplification.md](./chez-only-simplification.md) §2, and by 0006 (inline libraries)
+Status: milestones 0, 1, and 2 are closed — 0 on 2026-08-22 ([the spike](./milestone-0-portability-spike.md), [the close-out](./milestone-0-close-out.md), [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md)), 1 on 2026-08-23 ([milestone-1-design.md](./milestone-1-design.md)), and 2 on 2026-08-29 ([milestone-2-design.md](./milestone-2-design.md)); each carries a dated close note under its own §25 subsection below, and each of those cites where its exit criteria are dispositioned. Milestone 3 (byte classes and sequences) has not started. Decisions amended by 0005 (Chez-only) via [chez-only-simplification.md](./chez-only-simplification.md) §2, and by 0006 (inline libraries)
 
 Date: 2026-08-15
 
@@ -1475,6 +1475,19 @@ Exit criteria:
 - interpreter/generated results match;
 - a graph descriptor can be constructed, verified, compiled, emitted, loaded, and run across the public library boundaries in both execution lanes;
 - invalid names, targets, overlap, fallback, and terminals are rejected.
+
+> **Closed 2026-08-23 by [milestone-1-design.md](./milestone-1-design.md)** —
+> Gate 0 (PR #12, `9ca009c`), Phase 1 CI (PR #13, `e0aa377`), Phase 2 semantic
+> core (PR #14, `59a6f85`), and Phase 3 Slice A (PR #16, `db3d3fd`) and Slice B
+> (PR #17, `4eb16a3`). All four criteria are met against the shipped tree; that
+> document's §6 dispositions each individually, below its own "Exit (full
+> Milestone 1)" list. See CHANGELOG.md's Milestone 1 entries for the
+> release-facing summary.
+>
+> **Annotated 2026-08-29**, six days after the close, not at it: Milestone 1
+> closed without a note here, and the Milestone 2 close-out found the gap. The
+> §6 disposition this note cites was written on the same later date and says so
+> itself, rather than being dated back to the close.
 
 ### Milestone 2: Incremental execution and lifecycle
 
