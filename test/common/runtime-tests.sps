@@ -105,19 +105,30 @@
 ;; fixture, none of which reaches an EOF pause after consuming any bytes
 ;; (pause-op's own s1 eof-target is the error node 'trunc, not a pause) -- so
 ;; `off` was always already 0 there and a hard-coded 0 was indistinguishable.
+;;
+;; Extended for the T8 re-review's Critical-1 residual: s1 ALSO advances on
+;; byte 2 to a second, byte-reachable pause p2 (continuation the stop node
+;; s2, not the fp/done finish pair above, so the two pause routes stay
+;; independent). This witnesses a decision the single-call nonzero-start case
+;; below cannot: on any ONE feed call from a fresh parser, consumed and
+;; stream-offset are equal by construction (offset starts at 0, so the
+;; cross-call total equals this call's own count) -- only a SECOND feed call
+;; separates them.
 (define (finish-pause-op msg . args)
   (case msg
     ((entry) 's0)
     ((kind) (case (car args)
-              ((s0 s1) 'dispatch) ((fp) 'pause) ((done) 'finish)
+              ((s0 s1) 'dispatch) ((fp p2) 'pause) ((done) 'finish) ((s2) 'stop)
               (else (assertion-violation 'finish-pause-op "bad node" (car args)))))
     ((dispatch)
-     (let ((node (car args)))
+     (let ((node (car args)) (byte (cadr args)))
        (case node
          ((s0) (cons 's1 'advance))
+         ((s1) (if (= byte 2) (cons 'p2 'advance)
+                   (assertion-violation 'finish-pause-op "unexpected byte at s1" byte)))
          (else (assertion-violation 'finish-pause-op "unexpected dispatch" args)))))
     ((eof-target) (case (car args) ((s1) 'fp) (else #f)))
-    ((pause-target) (case (car args) ((fp) 'done)))
+    ((pause-target) (case (car args) ((fp) 'done) ((p2) 's2)))
     ((default-eof-value) 'eof)
     (else (assertion-violation 'finish-pause-op "bad message" msg))))
 
@@ -405,16 +416,34 @@
         ;; correctly" from "all three hard-wired to next" -- the same trap
         ;; already closed for the sticky error arm's `next` field (see the
         ;; "error row's next mirrors the new call's start" mutation below).
-        ;; Feeding from a nonzero start breaks the coincidence: next is the
-        ;; absolute position (2), while consumed (this call's own byte, 1)
-        ;; and stream-offset (the persistent offset, 1) both diverge from it
-        ;; -- a divergence only a nonzero start can produce.
+        ;; Feeding from a nonzero start breaks the coincidence between next
+        ;; and the other two: next is the absolute position (2), while
+        ;; consumed and stream-offset both stay 1. It does NOT separate
+        ;; consumed from stream-offset -- on any single feed call from a
+        ;; fresh parser those two are equal by construction (the offset
+        ;; starts at 0, so the cross-call total equals this call's own
+        ;; count); see the next case for that.
         (let* ((p (pause-parser))
                (r (parser-feed! p (u8-list->bytevector (list 9 1 2)) 1 3)))
           (check-equal "status" (parser-result-status r) 'paused)
           (check-equal "next" (parser-result-next r) 2)
           (check-equal "consumed" (parser-result-consumed r) 1)
           (check-equal "stream offset" (parser-result-stream-offset r) 1))))
+    (harness-case "a second feed call separates consumed from stream offset"
+      (lambda ()
+        ;; T8 re-review residual: no start offset can separate consumed from
+        ;; stream-offset on a single call (see the previous case's comment).
+        ;; Only a second feed call can -- this one consumes a byte at s0
+        ;; first (offset 0->1), then a second call consumes another at s1
+        ;; before pausing (offset 1->2), so consumed (this call's own 1
+        ;; byte) and stream-offset (the persisted total, 2) diverge.
+        (let ((p (make-parser (make-compiled-machine finish-pause-op) '() #f)))
+          (parser-feed! p (make-bytevector 1 1) 0 1)
+          (let ((r (parser-feed! p (make-bytevector 1 2) 0 1)))
+            (check-equal "status" (parser-result-status r) 'paused)
+            (check-equal "next" (parser-result-next r) 1)
+            (check-equal "consumed" (parser-result-consumed r) 1)
+            (check-equal "stream offset" (parser-result-stream-offset r) 2)))))
     (harness-case "resume from a feed pause acks feed-ready and reopens feed"
       (lambda ()
         (let ((p (pause-parser)))

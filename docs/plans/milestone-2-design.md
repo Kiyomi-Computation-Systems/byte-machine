@@ -442,11 +442,12 @@ paused-feed/paused-finish/resume lifecycle can be exercised now.
 > (`parser-finish!`'s own sticky arm, distinct from the `resume!` cells
 > above) — closed the same way, with one more `runtime-tests.sps` check
 > (:126-137) and one more mutation (`SchemeMutationSuite.cmake`, "runtime: a
-> re-finish on a finished parser does not return finished"). `ready` × `reset!` has no case of
-> its own — a documented scope call, not a gap: reset on an already-`ready`
-> parser is idempotent by construction, and `stopped`/`error` × `reset!` are
-> covered by the pre-existing "parser-reset!" group. `poisoned`/`busy` stay
-> out of M2 per §7 and are excluded from the 28, not silently short. (5)
+> re-finish on a finished parser does not return finished"). `ready` ×
+> `reset!` has no case of its own — a documented scope call, not a gap: reset
+> on an already-`ready` parser is idempotent by construction, and
+> `stopped`/`error` × `reset!` are covered by the pre-existing
+> "parser-reset!" group. `poisoned`/`busy` stay out of M2 per §7 and are
+> excluded from the 28, not silently short. (5)
 > **met**: every file cited above is a `differential-*` program comparing the
 > interpreter and generated executors directly, and `differential-pause-
 > tests.sps` extends this to pause continuations.

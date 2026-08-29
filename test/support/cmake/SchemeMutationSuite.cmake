@@ -543,8 +543,16 @@ cmake_minimum_required(VERSION 3.26)
 # consuming bytes reports zero instead of the persisted offset", and
 # "runtime: feed admits finish-ready instead of refusing it"). Passes stay
 # at 38; mutations become 161 + 3 = 164.
+#
+# A T8 re-review of that fix found the nonzero-start case still insufficient:
+# it separates `next` from the other two fields, but not `consumed` from
+# `stream-offset` -- those two are equal by construction on any single feed
+# call from a fresh parser, so only a second feed call can separate them.
+# One more mutation joins this same pass (see "runtime: the feed pause arm
+# swaps consumed and stream offset"). Passes stay at 38; mutations become
+# 164 + 1 = 165.
 set(EXPECTED_PASSES 38)
-set(EXPECTED_MUTATIONS 164)
+set(EXPECTED_MUTATIONS 165)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -2795,12 +2803,32 @@ byte_machine_mutation(
   # start 0 with exactly one byte consumed, where all three evaluate to 1.
   # Closed by a new nonzero-start case in runtime-tests.sps ("a nonzero-start
   # feed pause separates next, consumed, and stream offset"), which feeds
-  # #vu8(9 1 2)[1,3) so next=2, consumed=1, stream-offset=1 are pairwise
-  # distinguishable.
+  # #vu8(9 1 2)[1,3) so next (2) separates from the other two (both still 1).
   FIND [[(make-parser-result 'paused pos (- pos start) (parser-offset parser) #f))]]
   REPLACE [[(make-parser-result 'paused pos pos pos #f))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "separates next, consumed, and stream offset: consumed -- expected 1, got 2")
+
+# T8 re-review residual: the nonzero-start case above separates `next` from
+# the pair, but NOT `consumed` from `stream-offset` -- on any single feed
+# call from a fresh parser those two are equal by construction (the offset
+# starts at 0, so the cross-call total equals this call's own count), so a
+# mutant that only SWAPS the two expressions (rather than collapsing all
+# three) is invisible to it. Measured on a copy of the tree before being
+# closed: the swap below, re-anchored on the SAME FIND the mutation above
+# uses, left the whole release preset green (72/72) with only the
+# nonzero-start case in place. Closed by a second feed call in
+# runtime-tests.sps ("a second feed call separates consumed from stream
+# offset"): finish-pause-op's s1 now also advances on byte 2 into a second,
+# byte-reachable pause, so the first call's advance (offset 0->1) makes the
+# second call's own consumed (1) and the persisted stream-offset (2) diverge.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the feed pause arm swaps consumed and stream offset"
+  FIND [[(make-parser-result 'paused pos (- pos start) (parser-offset parser) #f))]]
+  REPLACE [[(make-parser-result 'paused pos (parser-offset parser) (- pos start) #f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "separates consumed from stream offset: consumed -- expected 1, got 2")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
