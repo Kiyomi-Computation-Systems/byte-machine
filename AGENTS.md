@@ -137,6 +137,20 @@
   and reports a false *absent*; counting `EXPECT_STATUS` textually picks it up
   inside `#` comments and reports a false *declared*. Only a single
   left-to-right lexer skipping both is sound.
+* **A plan's verification step whose expected result is prose is not a check — state a literal, a count, or "no output".**
+  Milestone 3's Gate 0 plan wrote expectations of the form "the first prints the
+  record, the §19.2 clause, and the design's §4.2 references, all agreeing." Two
+  of those steps named the design document as a source of hits when that file
+  contained none — its placeholder `0014–0017` holds "0014" and "0017" as
+  substrings but not "0015"/"0016" — and both implementers reported the
+  expectation matched, because the command did print hits from the *other* paths
+  in the same invocation. The shipped content was right only because the
+  reviewers re-derived it independently. This is the mutation rule one level up:
+  a nonzero exit is not proof, and neither is output that merely resembles a
+  description. Give every mechanical step an expected result that can fail — an
+  exact literal, an exact count, or "no output / exit 1" — and when a step needs
+  judgement ("read the surrounding lines and confirm the record's claim"), say so
+  and separate it, so the mechanical half keeps a hard pass/fail.
 
 ### Documentation & record discipline
 
