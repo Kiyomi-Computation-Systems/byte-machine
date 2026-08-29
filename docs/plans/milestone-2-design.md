@@ -437,7 +437,12 @@ paused-feed/paused-finish/resume lifecycle can be exercised now.
 > while still refusing `ready`/`stopped`/`finish-ready` would have survived),
 > and they were closed in the same pass with two `check-raises` cases plus a
 > measured mutation (`SchemeMutationSuite.cmake`, "runtime: resume admits
-> error/finished instead of refusing them"). `ready` × `reset!` has no case of
+> error/finished instead of refusing them"). A self-review of the same
+> criterion then found one more untested cell, `finished` × `finish!`
+> (`parser-finish!`'s own sticky arm, distinct from the `resume!` cells
+> above) — closed the same way, with one more `runtime-tests.sps` check
+> (:126-137) and one more mutation (`SchemeMutationSuite.cmake`, "runtime: a
+> re-finish on a finished parser does not return finished"). `ready` × `reset!` has no case of
 > its own — a documented scope call, not a gap: reset on an already-`ready`
 > parser is idempotent by construction, and `stopped`/`error` × `reset!` are
 > covered by the pre-existing "parser-reset!" group. `poisoned`/`busy` stay

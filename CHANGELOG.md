@@ -429,13 +429,18 @@ delivered. No versioned release exists yet.
   Three new lane pairs (source + AOT): `byte-machine.unit.pause-interpret`,
   `byte-machine.differential.pause`, `byte-machine.determinism.pause`.
   Measured on the shipped tree: `release`/`pr` 72/72, `no-scheme` 8/8, the
-  Scheme mutation suite 38 passes/161 mutations (152 caught, 9 declared
+  Scheme mutation suite 38 passes/164 mutations (155 caught, 9 declared
   `EXPECT_SURVIVES`), the CMake mutation suite unchanged at 1 pass/72
   mutations. The two extra mutations past this slice's own close-out close a
   gap Task 7's review found in exit criterion 4: `error`/`finished` ×
   `resume!` and `finished` × `finish!` had no direct test (see
   [milestone-2-design.md](docs/plans/milestone-2-design.md) §6's dated
-  disposition).
+  disposition). Three further mutations past that close the final
+  whole-branch review's (pre-merge) own findings: two Critical gaps where the
+  feed-path and finish-path pause arms collapsed
+  `next`/`consumed`/`stream-offset` to indistinguishable values on every
+  zero-start fixture, and one Minor gap in `finish-ready`'s own membership in
+  `parser-feed!`'s prohibited lifecycle rows.
 
 ### Changed
 

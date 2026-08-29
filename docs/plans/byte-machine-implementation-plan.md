@@ -1501,10 +1501,11 @@ Exit criteria:
 > **Closed 2026-08-29 by [milestone-2-design.md](./milestone-2-design.md).**
 > All four criteria are met against the shipped tree; that document's §6
 > dispositions each individually (below its own, more detailed five-item Exit
-> list), including one review caught short at Task 7 close-out — the
-> lifecycle transition table's `error`/`finished` × `resume!` cells were
-> untested — and closed in the same pass, before this note was written. See
-> CHANGELOG.md's Milestone 2 entries for the release-facing summary.
+> list), including a review caught short at Task 7 close-out and a following
+> self-review — the lifecycle transition table's `error`/`finished` ×
+> `resume!` cells, and separately `finished` × `finish!`, were untested — and
+> closed in the same pass, before this note was written. See CHANGELOG.md's
+> Milestone 2 entries for the release-facing summary.
 
 ### Milestone 3: Byte classes and sequences
 

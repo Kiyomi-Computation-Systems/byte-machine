@@ -531,8 +531,20 @@ cmake_minimum_required(VERSION 3.26)
 # (runtime-tests.sps) and one more mutation joining this same lane (see
 # "runtime: a re-finish on a finished parser does not return finished").
 # Mutations become 160 + 1 = 161.
+#
+# The final whole-branch review (pre-merge) found two more Critical gaps in
+# this same pass -- the feed-path and finish-path pause arms each collapse
+# next/consumed/stream-offset to numerically-indistinguishable values on
+# every existing zero-start fixture, the identical defect class the sticky
+# error arm's `next` field closed above -- plus one Minor gap, finish-ready's
+# own membership in parser-feed!'s prohibited clause. Three mutations join
+# this same Pass 32 SPEC lane (see "runtime: the feed pause arm's consumed
+# and stream offset collapse to next", "runtime: an EOF pause after
+# consuming bytes reports zero instead of the persisted offset", and
+# "runtime: feed admits finish-ready instead of refusing it"). Passes stay
+# at 38; mutations become 161 + 3 = 164.
 set(EXPECTED_PASSES 38)
-set(EXPECTED_MUTATIONS 161)
+set(EXPECTED_MUTATIONS 164)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -2765,6 +2777,75 @@ byte_machine_mutation(
   REPLACE [[(parser-set-stored-error! parser (parser-stored-error parser))]]
   EXPECT_SURVIVES
     "parser-stored-error is unexported, so nothing outside this library can read the slot directly; its only two read sites (the error sticky arms in parser-feed! and parser-finish!) are both guarded by lifecycle = 'error, and parser-reset! unconditionally sets lifecycle to 'ready in this same call, so neither read site is reachable immediately after a reset. Reaching 'error again requires a fresh feed or finish that re-enters one of the four write sites, and every one of them stores its own value before or alongside its own lifecycle='error transition -- so a stale value left by a skipped clear is always overwritten before anything could observe it. Measured directly: this mutant passes the whole SPEC-lane suite unchanged")
+
+# Final whole-branch review of Slice ③ (pre-merge) found two Critical gaps in
+# this pass, both the same defect class the sticky error arm's `next` field
+# closed above: every existing pause fixture feeds from start 0 / a fresh
+# offset 0, so a field that should read a computed position is
+# indistinguishable from one that reads a coincidentally-equal constant.
+# Both were measured on a copy of the tree before being closed: the
+# unmodified suite stayed green (cases=35 failed-cases=0) with the mutant
+# REPLACE below already in place.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the feed pause arm's consumed and stream offset collapse to next"
+  # Critical 1. parser-feed-op!'s pause arm reads `pos` for next, `(- pos
+  # start)` for consumed, and `(parser-offset parser)` for stream-offset --
+  # three DIFFERENT expressions that every existing pause fixture feeds from
+  # start 0 with exactly one byte consumed, where all three evaluate to 1.
+  # Closed by a new nonzero-start case in runtime-tests.sps ("a nonzero-start
+  # feed pause separates next, consumed, and stream offset"), which feeds
+  # #vu8(9 1 2)[1,3) so next=2, consumed=1, stream-offset=1 are pairwise
+  # distinguishable.
+  FIND [[(make-parser-result 'paused pos (- pos start) (parser-offset parser) #f))]]
+  REPLACE [[(make-parser-result 'paused pos pos pos #f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "separates next, consumed, and stream offset: consumed -- expected 1, got 2")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: an EOF pause after consuming bytes reports zero instead of the persisted offset"
+  # Critical 2. parser-finish-op!'s pause arm reads `off` -- (parser-offset
+  # parser), snapshotted at the top of the call -- into both the next and
+  # stream-offset slots. No fixture before this task reached an EOF pause
+  # after consuming any bytes (pause-op's own s1 routes its eof-target to
+  # the error node 'trunc, not a pause), so `off` was always already 0 and a
+  # hard-coded 0 was indistinguishable. Closed by a fourth op stub in
+  # runtime-tests.sps, finish-pause-op (s0 --1/advance--> s1, s1's eof-target
+  # a pause continuing to a finish), and its own case.
+  #
+  # Measured collision: this mutation's failure set is a SUBSET of the
+  # pre-existing "runtime: advance does not increment the stream offset"
+  # mutation's, on the SAME two checks ("next", "stream offset" in the new
+  # case both read 0 instead of 1) -- that mutation breaks the one write
+  # site that would make `off` become 1 in the first place, this one
+  # discards a correctly-computed `off` at the read site, and this fixture
+  # cannot tell them apart because proving `off` is nonzero here has no
+  # route that avoids the shared increment statement (the 'op variant's
+  # only write site for parser-offset). No pin can separate them -- the
+  # SUBSUMED pattern this file's pin re-audit already documents for ten
+  # other pairs above.
+  FIND [[(make-parser-result 'paused off 0 off #f))]]
+  REPLACE [[(make-parser-result 'paused 0 0 0 #f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the persisted offset, not zero: next -- expected 1, got 0")
+
+# Minor finding, same review: finish-ready's own membership in parser-feed!'s
+# prohibited clause had a test (runtime-tests.sps's "feed on finish-ready"
+# case) but no mutation -- the pre-existing "runtime: feed refuses every
+# paused/finish-ready row" mutation above drops paused-feed instead, and is a
+# separate decision (measured: dropping finish-ready does not also un-refuse
+# paused-feed, and vice versa). finish-ready is the row that closes the
+# resume-then-feed-into-finish route, so it is its own decision.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: feed admits finish-ready instead of refusing it"
+  FIND [[((paused-feed paused-finish finish-ready)
+       (byte-machine-contract-violation 'parser-feed! 'lifecycle-violation]]
+  REPLACE [[((paused-feed paused-finish)
+       (byte-machine-contract-violation 'parser-feed! 'lifecycle-violation]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "feed on finish-ready -- expected a raise, but the thunk returned")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

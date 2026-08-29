@@ -201,7 +201,7 @@
             (else (assertion-violation 'parser-feed! "unknown node kind" (op 'kind node))))))))
 
   ;; The generated path: the feed owns the dispatch loop and returns one outcome;
-  ;; the runtime commits resume state and builds the result. No cache (see above).
+  ;; the runtime commits resume state and builds the result.
   (define (parser-feed-v1! parser bv start end)
     (let* ((feed (parser-executor parser))
            (o (feed (parser-current parser) (parser-offset parser) bv start end))
@@ -275,8 +275,9 @@
     ;; No local cycle guard: termination relies on the verifier's
     ;; eof-zero-progress-cycle/eof-reachable-stop checks having already rejected
     ;; non-terminating and stop-terminating EOF chains, so this loop terminates
-    ;; only for verified machines -- relevant once Slice ②b-2's generated v1
-    ;; finish path arrives, since it does not re-verify at runtime.
+    ;; only for verified machines -- the same reliance the generated /v2 finish
+    ;; path (parser-finish-v2!, Slice ②b-2) has, since it does not re-verify at
+    ;; runtime either.
     (let ((op (parser-executor parser))
           (off (parser-offset parser)))
       (let loop ((node (parser-current parser)))

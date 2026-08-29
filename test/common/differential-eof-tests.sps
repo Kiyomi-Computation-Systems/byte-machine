@@ -37,11 +37,19 @@
         (check-equal "trunc is error" (car (rfields cm-gen '(1))) 'error)))
     (harness-case "all 256 first bytes: op and gen agree on feed-then-finish"
       (lambda ()
-        (let ((bad 'none))
+        ;; Whole-branch review finding 4, back-ported from differential-pause-
+        ;; tests.sps's b1-final: `bad` alone proves no DISAGREEMENT was seen,
+        ;; not that the loop ran -- a loop that silently never executed would
+        ;; leave `bad` at its seeded 'none too. last-byte is set on every
+        ;; iteration regardless of outcome, so it reaches its final value 255
+        ;; only if all 256 iterations actually ran.
+        (let ((bad 'none) (last-byte 'unset))
           (let loop ((b 0))
             (when (< b 256)
               (unless (equal? (rfields cm-ref (list b)) (rfields cm-gen (list b)))
                 (when (eq? bad 'none) (set! bad b)))
+              (set! last-byte b)
               (loop (+ b 1))))
-          (check-equal "no byte disagreed" bad 'none))))))
+          (check-equal "no byte disagreed" bad 'none)
+          (check-equal "loop ran all 256 bytes" last-byte 255))))))
 (harness-finish)

@@ -69,6 +69,23 @@
           (check-equal "byte 1's post-resume continuation stops on byte 2"
                        b1-final 'stopped))))))
 
+(harness-group "nonzero-start feed pause"
+  (lambda ()
+    (harness-case "a pause fed from a nonzero start agrees on next, consumed, and stream offset"
+      (lambda ()
+        ;; Whole-branch review Critical 1: runtime-tests.sps's own nonzero-
+        ;; start case witnesses the interpreter's pause arm directly; this
+        ;; adds the same fixture here so a divergence would also show up as
+        ;; a ref/gen disagreement (the generated side is unmutated, so an
+        ;; interpreter-only regression separates the two here too).
+        (let* ((pr (fresh-ref)) (pg (fresh-gen))
+               (bv (u8-list->bytevector (list 9 1 2)))
+               (rr (parser-feed! pr bv 1 3)) (rg (parser-feed! pg bv 1 3)))
+          (check-equal "fields agree" (rfields rg pg) (rfields rr pr))
+          (check-equal "next" (parser-result-next rr) 2)
+          (check-equal "consumed" (parser-result-consumed rr) 1)
+          (check-equal "stream offset" (parser-result-stream-offset rr) 1))))))
+
 (harness-group "EOF pause/resume walk"
   (lambda ()
     (harness-case "finish pauses at entry, resumes to finish-ready, finish finishes"

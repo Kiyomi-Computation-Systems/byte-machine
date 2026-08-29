@@ -99,6 +99,28 @@
               (else (assertion-violation 'finish-feed-op "bad node" (car args)))))
     (else (assertion-violation 'finish-feed-op "bad message" msg))))
 
+;; Fourth op stub, whole-branch review Critical 2: s0 advances on byte 1 to
+;; s1; s1's eof-target is a pause (continuation a finish node). Isolates
+;; parser-finish-op!'s own pause arm (off/0/off) from every existing pause-op
+;; fixture, none of which reaches an EOF pause after consuming any bytes
+;; (pause-op's own s1 eof-target is the error node 'trunc, not a pause) -- so
+;; `off` was always already 0 there and a hard-coded 0 was indistinguishable.
+(define (finish-pause-op msg . args)
+  (case msg
+    ((entry) 's0)
+    ((kind) (case (car args)
+              ((s0 s1) 'dispatch) ((fp) 'pause) ((done) 'finish)
+              (else (assertion-violation 'finish-pause-op "bad node" (car args)))))
+    ((dispatch)
+     (let ((node (car args)))
+       (case node
+         ((s0) (cons 's1 'advance))
+         (else (assertion-violation 'finish-pause-op "unexpected dispatch" args)))))
+    ((eof-target) (case (car args) ((s1) 'fp) (else #f)))
+    ((pause-target) (case (car args) ((fp) 'done)))
+    ((default-eof-value) 'eof)
+    (else (assertion-violation 'finish-pause-op "bad message" msg))))
+
 (harness-group "parser-finish!"
   (lambda ()
     (harness-case "an exhausted dispatch with a truthy eof-target continues to it -> finished"
@@ -132,7 +154,16 @@
           (let ((r2 (parser-feed! p (make-bytevector 3 0) 2 3)))
             (check-equal "sticky status" (parser-result-status r2) 'finished)
             (check-equal "sticky next is the new start" (parser-result-next r2) 2)
-            (check-equal "sticky consumed zero" (parser-result-consumed r2) 0)))))))
+            (check-equal "sticky consumed zero" (parser-result-consumed r2) 0)))))
+    (harness-case "an EOF pause after consuming bytes reports the persisted offset, not zero"
+      (lambda ()
+        (let ((p (make-parser (make-compiled-machine finish-pause-op) '() #f)))
+          (parser-feed! p (make-bytevector 1 1) 0 1)
+          (let ((r (parser-finish! p)))
+            (check-equal "status" (parser-result-status r) 'paused)
+            (check-equal "next" (parser-result-next r) 1)
+            (check-equal "consumed" (parser-result-consumed r) 0)
+            (check-equal "stream offset" (parser-result-stream-offset r) 1)))))))
 
 ;; The direct-executor ABI. A hand-built feed encodes the one-byte machine over
 ;; numeric states (0 dispatch, 1 stop, 2 error), so the v1 (feed-only) path is
@@ -366,6 +397,24 @@
           (check-equal "next" (parser-result-next r) 1)
           (check-equal "consumed" (parser-result-consumed r) 1)
           (check-equal "lifecycle" (parser-lifecycle p) 'paused-feed))))
+    (harness-case "a nonzero-start feed pause separates next, consumed, and stream offset"
+      (lambda ()
+        ;; Whole-branch review Critical 1: every OTHER pause case in this file
+        ;; feeds from start 0, where next, consumed, and stream-offset are
+        ;; numerically identical (all 1) and cannot separate "computed
+        ;; correctly" from "all three hard-wired to next" -- the same trap
+        ;; already closed for the sticky error arm's `next` field (see the
+        ;; "error row's next mirrors the new call's start" mutation below).
+        ;; Feeding from a nonzero start breaks the coincidence: next is the
+        ;; absolute position (2), while consumed (this call's own byte, 1)
+        ;; and stream-offset (the persistent offset, 1) both diverge from it
+        ;; -- a divergence only a nonzero start can produce.
+        (let* ((p (pause-parser))
+               (r (parser-feed! p (u8-list->bytevector (list 9 1 2)) 1 3)))
+          (check-equal "status" (parser-result-status r) 'paused)
+          (check-equal "next" (parser-result-next r) 2)
+          (check-equal "consumed" (parser-result-consumed r) 1)
+          (check-equal "stream offset" (parser-result-stream-offset r) 1))))
     (harness-case "resume from a feed pause acks feed-ready and reopens feed"
       (lambda ()
         (let ((p (pause-parser)))
