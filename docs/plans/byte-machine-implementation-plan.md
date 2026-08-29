@@ -1007,7 +1007,7 @@ Parser state is kept in local variables while executing and committed to the par
 
 - Byte dispatch: portable `case`/conditional code over numeric bytes.
 - Byte sets: canonical membership code selected for simplicity, not speculative density optimization (Milestone 3 lowers them to one transition per byte, leaving the encoding and the IR fingerprint in place — decision 0014).
-- Sequences: explicit resumable prefix states.
+- Sequences: explicit resumable prefix states (ordinary dispatch states, with the interpreter's own prefix representation derived independently — decision 0015).
 - Field operations: generic exact arithmetic with declared-bound checks.
 - Callbacks: direct indexed vector lookup.
 - Counted consume: bulk cursor movement using available/count minimum.
