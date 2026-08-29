@@ -556,8 +556,15 @@ cmake_minimum_required(VERSION 3.26)
 # without adding either. Passes become 38 + 1 = 39; mutations 165 + 2 = 167.
 # Slice ① Task 2 adds five constructor and canonicalization mutations to
 # Pass 42. Passes stay at 39; mutations become 167 + 5 = 172.
+# Slice ① Task 2's review fix wave 1 adds six more to the same pass: one per
+# remaining tag-guarded class-matcher accessor (four -- byte-set-matcher-
+# bytes, byte-range-matcher-low, byte-range-matcher-high, byte-complement-
+# matcher-matcher), decision 0014's ordering half, and matcher-bytes' else
+# arm. The predicted-count cap that stopped Task 2 from closing these is
+# withdrawn; every count here is measured. Passes stay at 39; mutations
+# become 172 + 6 = 178.
 set(EXPECTED_PASSES 39)
-set(EXPECTED_MUTATIONS 172)
+set(EXPECTED_MUTATIONS 178)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3874,6 +3881,20 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # degenerate-shape guards (decision 0017), ascii-bytes' non-ASCII guard, and
 # matcher-bytes' new byte-set-canonical and complement arms. Passes stay at
 # 39; mutations become 167 + 5 = 172.
+#
+# Task 2's review fix wave 1 adds six more, still in this same pass, still
+# against ir-tests.sps: the tag guards on the three remaining class-matcher
+# accessors this task's own review found uncaught, decision 0014's ordering
+# half, and matcher-bytes' else arm (carried open from Task 1's own report).
+# See each mutation's own comment for what it measures. Two pre-existing pins
+# in this pass -- "the exact-byte accessor reads slot 1 of any vector" and "a
+# byte set is canonicalized without de-duplication" -- were re-anchored in the
+# same commit: adding mutations here widened both pins' collision sets (a
+# full Pass 42 pin sweep -- byte_machine_mutation_verdict, every pin against
+# every other mutant's captured output, 156 ordered pairs across all 13
+# mutations -- found exactly these two, both now carrying the case's full
+# name or its own measured "got" instead of the bare check label). No other
+# pair in the pass collides.
 
 byte_machine_mutation_reset()
 
@@ -3906,7 +3927,13 @@ byte_machine_mutation(
   LABEL "ir: the exact-byte accessor reads slot 1 of any vector"
   FIND [[(byte-machine-contract-violation 'exact-byte-matcher-byte 'invalid-argument 'matcher)]]
   REPLACE [[#f]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "refuses a foreign vector: refused")
+  # Re-anchored in Fix wave 1: bare "refuses a foreign vector: refused" cross-
+  # matched the four new tag-guard mutations below, since every accessor in
+  # that guard class shares the same check label and case-name tail. Re-
+  # measured (byte_machine_mutation_verdict against all 12 other Pass 42
+  # mutants' captured output): the full case name is unique in the pass.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the exact-byte accessor refuses a foreign vector: refused")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
@@ -3943,7 +3970,15 @@ byte_machine_mutation(
   LABEL "ir: a byte set is canonicalized without de-duplication"
   FIND [[((and (pair? acc) (= (car s) (car acc))) (loop (cdr s) acc))]]
   REPLACE [[((and (pair? acc) (< (car s) (car acc))) (loop (cdr s) acc))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "ascending and de-duplicated: set")
+  # Re-anchored in Fix wave 1: the bare case+check pin cross-matched the new
+  # ordering mutation below, which breaks the same check ("ascending and
+  # de-duplicated: set") with a different measured "got". Each of the two
+  # sibling mutations now carries its own measured "got" tuple, the same
+  # trade the pre-existing one-byte-fingerprint pins made (see the header
+  # note above EXPECTED_PASSES/EXPECTED_MUTATIONS).
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "ascending and de-duplicated: set -- expected \\(0 1 2 254 255\\), got \\(0 1 1 2 254 255\\)")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
@@ -3951,6 +3986,88 @@ byte_machine_mutation(
   FIND [[((memv b inner) (loop (- b 1) acc))]]
   REPLACE [[((memv b inner) (loop (- b 1) (cons b acc)))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "minus the inner set: count")
+
+# --- Fix wave 1 (Task 2 review): the four remaining tag-guarded class-matcher
+# accessors, decision 0014's ordering half, and matcher-bytes' else arm -----
+#
+# The mutation-count cap that stopped Task 2 from closing these is withdrawn
+# (see the Global Constraints note this fix wave was dispatched under); every
+# mutation below is measured, not predicted, against this file's own tree.
+#
+# The first four are one instance per class-matcher accessor of the same tag-
+# guard defect Pass 42's second mutation already proves for
+# exact-byte-matcher-byte: dropping the tag check lets the accessor read
+# whatever slot N of a foreign vector without raising. Four mutations, not
+# one, because each guard sits at its own source line -- deleting
+# byte-range-matcher-low's `unless` does not touch byte-range-matcher-high's,
+# so a single representative mutation would leave three of the four exactly
+# as unguarded as before this fix wave. Each is caught by check-raises' own
+# expected-vs-actual assertion (comparison-caught, not raise-based): the
+# guard's replacement is `#f`, not a raise, so execution falls through to the
+# bare vector-ref and the thunk returns instead of raising.
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: byte-set-matcher-bytes reads slot 1 of any vector"
+  FIND [[(byte-machine-contract-violation 'byte-set-matcher-bytes 'invalid-argument 'matcher)]]
+  REPLACE [[#f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "byte-set-matcher-bytes refuses a foreign vector: refused")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: byte-range-matcher-low reads slot 1 of any vector"
+  FIND [[(byte-machine-contract-violation 'byte-range-matcher-low 'invalid-argument 'matcher)]]
+  REPLACE [[#f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "byte-range-matcher-low refuses a foreign vector: refused")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: byte-range-matcher-high reads slot 2 of any vector"
+  FIND [[(byte-machine-contract-violation 'byte-range-matcher-high 'invalid-argument 'matcher)]]
+  REPLACE [[#f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "byte-range-matcher-high refuses a foreign vector: refused")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: byte-complement-matcher-matcher reads slot 1 of any vector"
+  FIND [[(byte-machine-contract-violation 'byte-complement-matcher-matcher
+                                       'invalid-argument 'matcher)]]
+  REPLACE [[#f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "byte-complement-matcher-matcher refuses a foreign vector: refused")
+
+# Decision 0014's ordering half (Minor 4): the existing de-duplication
+# mutation above proves the `=` comparison in byte-set-canonical's loop is
+# load-bearing, but nothing proved `list-sort` itself is. Dropping it leaves
+# input-order bytes with no adjacent duplicates untouched by the loop, so the
+# result comes back in the caller's order instead of ascending --
+# comparison-caught by the same check the de-duplication mutation uses,
+# distinguished from it by its own measured "got" (see that mutation's
+# re-anchored pin comment above).
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: a byte set canonicalizes without ascending order"
+  FIND [[(list-sort < bs)]]
+  REPLACE [[bs]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "ascending and de-duplicated: set -- expected \\(0 1 2 254 255\\), got \\(254 1 0 1 255 2\\)")
+
+# matcher-bytes' contract-violation else arm (Minor 5, carried from Task 1):
+# REPLACE returns the empty list instead of raising, witnessed by the
+# existing "canonicalizing a foreign vector is a contract violation" case.
+# Comparison-caught via check-raises' own expected-vs-actual assertion.
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: matcher-bytes canonicalizes a foreign vector instead of raising"
+  FIND [[(byte-machine-contract-violation 'matcher-bytes
+                                                 'invalid-argument 'matcher)]]
+  REPLACE [['()]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a contract violation: refused -- expected a raise, but the thunk returned \\(\\)")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

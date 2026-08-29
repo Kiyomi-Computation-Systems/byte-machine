@@ -41,12 +41,21 @@
     (unless (symbol? v)
       (byte-machine-contract-violation who 'invalid-argument what))
     v)
+  ;; A byte is an exact integer in 0..255; this shape is checked at four call
+  ;; sites (a lone byte, a byte inside a set, a range's low, a range's high),
+  ;; so it is a pure predicate (byte-value?, reused by the for-all below) plus
+  ;; a require-symbol sibling (require-byte) that threads who/what the same
+  ;; way.
+  (define (byte-value? x) (and (integer? x) (exact? x) (<= 0 x 255)))
+  (define (require-byte who what v)
+    (unless (byte-value? v)
+      (byte-machine-contract-violation who 'invalid-argument what))
+    v)
 
   ;; --- exact-byte matcher ---
   (define exact-byte-matcher-tag (tag 'byte-machine-exact-byte-matcher))
   (define (make-exact-byte-matcher byte)
-    (unless (and (integer? byte) (exact? byte) (<= 0 byte 255))
-      (byte-machine-contract-violation 'make-exact-byte-matcher 'invalid-argument 'byte))
+    (require-byte 'make-exact-byte-matcher 'byte byte)
     (vector exact-byte-matcher-tag byte))
   (define (exact-byte-matcher? x) (tagged? exact-byte-matcher-tag x))
   ;; Tag-guarded: an unguarded (vector-ref m 1) on a matcher of another kind
@@ -63,8 +72,7 @@
   ;; matcher-bytes does both, once, at canonicalization.
   (define byte-set-matcher-tag (tag 'byte-machine-byte-set-matcher))
   (define (make-byte-set-matcher bytes)
-    (unless (and (list? bytes) (pair? bytes)
-                 (for-all (lambda (b) (and (integer? b) (exact? b) (<= 0 b 255))) bytes))
+    (unless (and (list? bytes) (pair? bytes) (for-all byte-value? bytes))
       (byte-machine-contract-violation 'make-byte-set-matcher 'invalid-argument 'bytes))
     (vector byte-set-matcher-tag bytes))
   (define (byte-set-matcher? x) (tagged? byte-set-matcher-tag x))
@@ -77,10 +85,8 @@
   ;; low = high is legal: a redundant but well-formed exact byte.
   (define byte-range-matcher-tag (tag 'byte-machine-byte-range-matcher))
   (define (make-byte-range-matcher low high)
-    (unless (and (integer? low) (exact? low) (<= 0 low 255))
-      (byte-machine-contract-violation 'make-byte-range-matcher 'invalid-argument 'low))
-    (unless (and (integer? high) (exact? high) (<= 0 high 255))
-      (byte-machine-contract-violation 'make-byte-range-matcher 'invalid-argument 'high))
+    (require-byte 'make-byte-range-matcher 'low low)
+    (require-byte 'make-byte-range-matcher 'high high)
     (unless (<= low high)
       (byte-machine-contract-violation 'make-byte-range-matcher 'invalid-argument 'range))
     (vector byte-range-matcher-tag low high))

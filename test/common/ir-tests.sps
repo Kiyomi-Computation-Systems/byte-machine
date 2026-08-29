@@ -9,15 +9,20 @@
 (harness-begin "unit.ir")
 
 ;; house convention (conditions.sls header): tests compare the code and who,
-;; never rendered text. Both new matcher-contract sites raise code
-;; invalid-argument with detail 'matcher; who is the only discriminator, so
-;; all three are asserted here rather than the bare predicate alone.
-(define (matcher-contract-violation? who)
+;; never rendered text -- and, per Fix wave 1, the detail too: two distinct
+;; guards can share a who/code pair (or a code/detail pair) and only the third
+;; field tells them apart, so a check-raises that stops at
+;; byte-machine-contract-condition? alone would not notice a copy-pasted `who`
+;; or `detail`. contract-violation? asserts all three; matcher-contract-
+;; violation? is the detail='matcher case most call sites want, kept as a
+;; named alias rather than inlining 'matcher everywhere.
+(define (contract-violation? who detail)
   (lambda (e)
     (and (byte-machine-contract-condition? e)
          (eq? (byte-machine-contract-condition-code e) 'invalid-argument)
          (eq? (byte-machine-contract-condition-who e) who)
-         (eq? (byte-machine-contract-condition-detail e) 'matcher))))
+         (eq? (byte-machine-contract-condition-detail e) detail))))
+(define (matcher-contract-violation? who) (contract-violation? who 'matcher))
 
 (harness-group "matchers and edges"
   (lambda ()
@@ -93,6 +98,34 @@
                       (matcher-contract-violation? 'exact-byte-matcher-byte)
                       (lambda () (exact-byte-matcher-byte (make-edge 'stop 'advance))))))))
 
+;; Same guard class as above, one instance per class-matcher accessor
+;; (Important 1, Fix wave 1): an unguarded (vector-ref m N) on a matcher of
+;; another kind reads the wrong slot and fails far away -- inside arithmetic
+;; or a sort predicate -- rather than at the contract boundary. Each accessor
+;; gets its own case because each is its own guard at its own source site.
+(harness-group "the class-matcher accessors are tag-guarded"
+  (lambda ()
+    (harness-case "byte-set-matcher-bytes refuses a foreign vector"
+      (lambda ()
+        (check-raises "refused"
+                      (matcher-contract-violation? 'byte-set-matcher-bytes)
+                      (lambda () (byte-set-matcher-bytes (make-edge 'stop 'advance))))))
+    (harness-case "byte-range-matcher-low refuses a foreign vector"
+      (lambda ()
+        (check-raises "refused"
+                      (matcher-contract-violation? 'byte-range-matcher-low)
+                      (lambda () (byte-range-matcher-low (make-edge 'stop 'advance))))))
+    (harness-case "byte-range-matcher-high refuses a foreign vector"
+      (lambda ()
+        (check-raises "refused"
+                      (matcher-contract-violation? 'byte-range-matcher-high)
+                      (lambda () (byte-range-matcher-high (make-edge 'stop 'advance))))))
+    (harness-case "byte-complement-matcher-matcher refuses a foreign vector"
+      (lambda ()
+        (check-raises "refused"
+                      (matcher-contract-violation? 'byte-complement-matcher-matcher)
+                      (lambda () (byte-complement-matcher-matcher (make-edge 'stop 'advance))))))))
+
 (harness-group "the three class matchers canonicalize"
   (lambda ()
     (harness-case "a byte set canonicalizes ascending and de-duplicated"
@@ -138,23 +171,32 @@
     (harness-case "an empty byte set is rejected"
       (lambda ()
         (check-raises "empty set"
-                      byte-machine-contract-condition?
+                      (contract-violation? 'make-byte-set-matcher 'bytes)
                       (lambda () (make-byte-set-matcher '())))))
     (harness-case "a byte set holding a non-byte is rejected"
       (lambda ()
         (check-raises "out of range"
-                      byte-machine-contract-condition?
+                      (contract-violation? 'make-byte-set-matcher 'bytes)
                       (lambda () (make-byte-set-matcher '(0 256))))))
     (harness-case "a range with low greater than high is rejected"
       (lambda ()
         (check-raises "reversed"
-                      (lambda (e) (and (byte-machine-contract-condition? e)
-                                       (eq? (byte-machine-contract-condition-detail e) 'range)))
+                      (contract-violation? 'make-byte-range-matcher 'range)
                       (lambda () (make-byte-range-matcher 9 8)))))
+    (harness-case "a range rejects a non-byte low"
+      (lambda ()
+        (check-raises "low out of range"
+                      (contract-violation? 'make-byte-range-matcher 'low)
+                      (lambda () (make-byte-range-matcher 256 255)))))
+    (harness-case "a range rejects a non-byte high"
+      (lambda ()
+        (check-raises "high out of range"
+                      (contract-violation? 'make-byte-range-matcher 'high)
+                      (lambda () (make-byte-range-matcher 0 256)))))
     (harness-case "a complement of something that is not a matcher is rejected"
       (lambda ()
         (check-raises "not a matcher"
-                      byte-machine-contract-condition?
+                      (matcher-contract-violation? 'make-byte-complement-matcher)
                       (lambda () (make-byte-complement-matcher (make-edge 'stop 'advance))))))
     (harness-case "duplicate bytes inside one set are NOT a constructor error"
       (lambda ()
@@ -172,20 +214,24 @@
       (lambda ()
         (check-equal "empty" (ascii-bytes "") '())
         (check-raises "and cannot become a byte set"
-                      byte-machine-contract-condition?
+                      (contract-violation? 'make-byte-set-matcher 'bytes)
                       (lambda () (make-byte-set-matcher (ascii-bytes ""))))))
     (harness-case "a non-ASCII character is rejected"
       (lambda ()
         (check-raises "non-ascii"
-                      (lambda (e) (and (byte-machine-contract-condition? e)
-                                       (eq? (byte-machine-contract-condition-detail e) 'non-ascii)))
+                      (contract-violation? 'ascii-bytes 'non-ascii)
                       (lambda () (ascii-bytes "caf\xe9;")))))
     (harness-case "code point 127 is ASCII and 128 is not"
       (lambda ()
         (check-equal "delete" (ascii-bytes (string (integer->char 127))) '(127))
         (check-raises "128"
-                      byte-machine-contract-condition?
-                      (lambda () (ascii-bytes (string (integer->char 128)))))))))
+                      (contract-violation? 'ascii-bytes 'non-ascii)
+                      (lambda () (ascii-bytes (string (integer->char 128)))))))
+    (harness-case "a non-string is rejected"
+      (lambda ()
+        (check-raises "not a string"
+                      (contract-violation? 'ascii-bytes 'string)
+                      (lambda () (ascii-bytes 42)))))))
 
 (harness-group "make-byte-case accepts every matcher kind"
   (lambda ()
@@ -205,7 +251,7 @@
     (harness-case "an edge handed in as a matcher is still refused"
       (lambda ()
         (check-raises "not a matcher"
-                      byte-machine-contract-condition?
+                      (matcher-contract-violation? 'make-byte-case)
                       (lambda () (make-byte-case (make-edge 'stop 'advance)
                                                  (make-edge 'stop 'advance) #f)))))))
 
