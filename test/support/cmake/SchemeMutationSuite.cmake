@@ -320,8 +320,20 @@ cmake_minimum_required(VERSION 3.26)
 # route eof to named nodes), so dropping the routed node id from the encoding
 # moves that node-routing golden and its fingerprint case catches it. Passes
 # stay at 37 and 122 + 1 = 123 mutations.
+#
+# Milestone 2 Slice ③'s Task 1 (the pause node in the source IR + verifier)
+# adds five more decisions to the existing Pass 33 (the verifier) rather than
+# opening a new pass: a pause continuation is an out-target for both name
+# resolution and reachability (node-out-targets), eof-terminal walks a pause
+# continuation instead of stopping at it, a byte-reachable pause into a finish
+# node is rejected (§16.2:908), a pause continuation joins the reexecute
+# zero-progress walk (a pause consumes no input), and a byte-reachable pause's
+# continuation chain is itself checked as an EOF path (§16.2:909). The
+# existing zero-progress-detection mutation is re-anchored in place (its guard
+# widened to admit pause nodes), same decision and count, so it neither adds
+# nor drops a mutation. Passes stay at 37 and 123 + 5 = 128 mutations.
 set(EXPECTED_PASSES 37)
-set(EXPECTED_MUTATIONS 123)
+set(EXPECTED_MUTATIONS 128)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -2157,7 +2169,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: zero-progress detection never fires"
-  FIND [[(if (and (byte-dispatch-node? n) (reaches-self? (node-name n)))]]
+  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)) (reaches-self? (node-name n)))]]
   REPLACE [[(if #f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "zero-progress-cycle")
 
 byte_machine_mutation(
@@ -2251,6 +2263,59 @@ byte_machine_mutation(
   FIND [[(if (memq name seen) 'cycle]]
   REPLACE [[(if (memq name seen) 'finish]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "eof-zero-progress-cycle")
+
+# Milestone 2 Slice ③'s Task 1 (the pause node) adds five more decisions to
+# this pass: a pause continuation is an out-target for both name resolution
+# (§16.2:905's missing-target) and reachability (node-out-targets); eof-
+# terminal walks through a pause continuation instead of stopping at it;
+# a byte-reachable pause into a finish node is rejected (§16.2:908, D4(b));
+# a pause continuation joins the reexecute zero-progress walk (a pause
+# consumes no input, so a pause-only or mixed reexecute/pause cycle makes no
+# progress); and a byte-reachable pause's continuation chain is itself an EOF
+# path, checked the same way a dispatch node's eof-target chain already is
+# (§16.2:909, D4(d)). The zero-progress-detection mutation above is re-
+# anchored in place: pass-zero-progress's guard widened from
+# `(byte-dispatch-node? n)` to `(or (byte-dispatch-node? n) (pause-node? n))`
+# so a pause could join the walk, which moved the FIND text but not the
+# decision or the count. Passes stay at 37 and 123 + 5 = 128 mutations.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a pause continuation is an out-target (resolution + reachability)"
+  FIND [[((pause-node? n) (list (pause-node-continuation n)))
+          (else '())]]
+  REPLACE [[((pause-node? n) '())
+          (else '())]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "missing-target")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: eof-terminal chains through a pause continuation"
+  FIND [[((pause-node? n) (loop (pause-node-continuation n) (cons name seen)))]]
+  REPLACE [[((pause-node? n) 'finish)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "eof-zero-progress-cycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a byte-reachable pause into finish is rejected"
+  FIND [[(if (and cn (finish-node? cn))]]
+  REPLACE [[(if (and cn #f (finish-node? cn))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "non-eof-into-finish")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: pause continuations join the zero-progress walk"
+  FIND [[((pause-node? n) (list (pause-node-continuation n)))
+              (else '())]]
+  REPLACE [[((pause-node? n) '())
+              (else '())]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "zero-progress-cycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a byte-reachable pause's continuation chain is an EOF path"
+  FIND [[(case (eof-terminal m (pause-node-continuation n))]]
+  REPLACE [[(case 'finish]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "eof-reachable-stop")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

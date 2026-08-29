@@ -48,6 +48,11 @@
            (append (map (lambda (c) (edge-target (byte-case-edge c)))
                         (byte-dispatch-node-cases n))
                    (list (edge-target (byte-dispatch-node-fallback n)))))
+          ;; A pause's single zero-width out-edge (§10.6): resolution-checked by
+          ;; PASS 2 (a malformed continuation is 'missing-target, §16.2:905) and
+          ;; walked by reachability. The §16.2:908 dispatch check below filters
+          ;; on byte-dispatch-node?, so this arm does not feed it.
+          ((pause-node? n) (list (pause-node-continuation n)))
           (else '())))
   ;; byte out-targets PLUS a dispatch node's eof-target (for reachability only).
   (define (all-out-targets n)
@@ -131,13 +136,17 @@
   (define (pass-zero-progress m)
     (let ((nodes (machine-nodes m)))
       (define (reexec-targets n)
-        (if (byte-dispatch-node? n)
-            (append (map (lambda (c) (edge-target (byte-case-edge c)))
-                         (filter (lambda (c) (eq? (edge-mode (byte-case-edge c)) 'reexecute))
-                                 (byte-dispatch-node-cases n)))
-                    (if (eq? (edge-mode (byte-dispatch-node-fallback n)) 'reexecute)
-                        (list (edge-target (byte-dispatch-node-fallback n))) '()))
-            '()))
+        (cond ((byte-dispatch-node? n)
+               (append (map (lambda (c) (edge-target (byte-case-edge c)))
+                            (filter (lambda (c) (eq? (edge-mode (byte-case-edge c)) 'reexecute))
+                                    (byte-dispatch-node-cases n)))
+                       (if (eq? (edge-mode (byte-dispatch-node-fallback n)) 'reexecute)
+                           (list (edge-target (byte-dispatch-node-fallback n))) '())))
+              ;; A pause consumes no input (§12.4, design §6): its continuation
+              ;; is a zero-width edge, so a reexecute/pause-only cycle with no
+              ;; advance is a zero-progress cycle.
+              ((pause-node? n) (list (pause-node-continuation n)))
+              (else '())))
       (define (reaches-self? start)
         (let loop ((frontier (reexec-targets (lookup nodes start))) (seen '()))
           (cond ((null? frontier) #f)
@@ -148,9 +157,9 @@
                               (cons (car frontier) seen)))))))
       (filter values
               (map (lambda (n)
-                     (if (and (byte-dispatch-node? n) (reaches-self? (node-name n)))
+                     (if (and (or (byte-dispatch-node? n) (pause-node? n)) (reaches-self? (node-name n)))
                          (make-diagnostic 'zero-progress-cycle (node-name n)
-                                          "reexecute-only cycle makes no progress")
+                                          "a zero-width cycle (reexecute edges/pause continuations) makes no progress")
                          #f))
                    nodes))))
 
@@ -182,10 +191,24 @@
                     ((finish-node? n) 'finish)
                     ((error-node? n) 'error)
                     ((stop-node? n) 'eof-reachable-stop)
+                    ((pause-node? n) (loop (pause-node-continuation n) (cons name seen)))
                     ((byte-dispatch-node? n)
                      (let ((t (byte-dispatch-node-eof-target n)))
                        (if (symbol? t) (loop t (cons name seen)) 'default-error)))
                     (else 'unknown)))))))
+
+  ;; Byte-flow reachability (feed can arrive): entry DFS over node-out-targets
+  ;; -- dispatch case/fallback edges plus reached-pause continuations --
+  ;; excluding eof-targets. An eof-only-reachable pause legally continues into
+  ;; a finish node (decision 0011); a byte-reachable one must not (§16.2:908).
+  (define (byte-reached m)
+    (let ((nodes (machine-nodes m)) (reached '()))
+      (let visit ((name (machine-entry m)))
+        (let ((n (lookup nodes name)))
+          (when (and n (not (memq name reached)))
+            (set! reached (cons name reached))
+            (for-each visit (node-out-targets n)))))
+      reached))
 
   ;; §16.2:908/:909 and the separate EOF zero-progress-cycle check.
   (define (pass-eof-execution m)
@@ -221,7 +244,38 @@
                                  (else '()))
                                '()))
                          '()))
-                   nodes)))))
+                   nodes))
+       ;; D4(b)/(d): checks keyed on byte-reachability. A feed pause parks
+       ;; current on its continuation and resume returns the row to ready, so
+       ;; every byte-reachable pause's continuation is both a feed re-entry
+       ;; point (:908 -- it must not be a finish terminal) and a possible EOF-
+       ;; processing start (:909 -- its chain must reach finish or error,
+       ;; never a stop, never a cycle).
+       (let ((br (byte-reached m)))
+         (append
+          (apply append
+                 (map (lambda (n)
+                        (if (and (pause-node? n) (memq (node-name n) br))
+                            (let ((cn (lookup nodes (pause-node-continuation n))))
+                              (if (and cn (finish-node? cn))
+                                  (list (make-diagnostic 'non-eof-into-finish (node-name n)
+                                                         "a pause continuation byte-reaches a finish terminal"))
+                                  '()))
+                            '()))
+                      nodes))
+          (apply append
+                 (map (lambda (n)
+                        (if (and (pause-node? n) (memq (node-name n) br))
+                            (case (eof-terminal m (pause-node-continuation n))
+                              ((eof-reachable-stop)
+                               (list (make-diagnostic 'eof-reachable-stop (node-name n)
+                                                      "an EOF path reaches a stop terminal")))
+                              ((cycle)
+                               (list (make-diagnostic 'eof-zero-progress-cycle (node-name n)
+                                                      "an EOF path cycles without reaching a terminal")))
+                              (else '()))
+                            '()))
+                      nodes)))))))
 
   ;; PASS 7: generated-name safety (member 1) — machine, node, error names/codes.
   (define (pass-names-valid m)

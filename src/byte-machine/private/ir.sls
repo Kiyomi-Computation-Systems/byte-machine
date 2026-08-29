@@ -1,6 +1,6 @@
 ;;; Immutable source-IR descriptors (parent §9.1, §10), M1 subset: the machine,
-;;; byte-dispatch/stop/error nodes, exact-byte matcher, edge, error
-;;; declaration, and the verification-result value. Tagged vectors behind
+;;; byte-dispatch/stop/error/finish/pause nodes, exact-byte matcher, edge,
+;;; error declaration, and the verification-result value. Tagged vectors behind
 ;;; accessors; the tag is a freshly allocated vector so a second copy gets a
 ;;; second identity. Constructors validate only local shape; graph/cross-
 ;;; reference checks live in verify.
@@ -18,6 +18,7 @@
           make-edge edge? edge-target edge-mode
           make-stop-node stop-node? stop-node-name
           make-finish-node finish-node? finish-node-name
+          make-pause-node pause-node? pause-node-name pause-node-continuation
           make-error-node error-node? error-node-name error-node-error-name
           make-error-declaration error-declaration? error-declaration-name
           error-declaration-code error-declaration-reason
@@ -101,6 +102,18 @@
   (define (finish-node? x) (tagged? finish-node-tag x))
   (define (finish-node-name n) (vector-ref n 1))
 
+  ;; --- pause node (explicit continuation; returns paused -- parent §10.6) ---
+  ;; One zero-width out-edge to `continuation`: pause reads no byte, so it has
+  ;; no advance/reexecute mode (§11.2 defines modes only for byte reads).
+  (define pause-node-tag (tag 'byte-machine-pause-node))
+  (define (make-pause-node name continuation source-label)
+    (require-symbol 'make-pause-node 'name name)
+    (require-symbol 'make-pause-node 'continuation continuation)
+    (vector pause-node-tag name continuation source-label))
+  (define (pause-node? x) (tagged? pause-node-tag x))
+  (define (pause-node-name n) (vector-ref n 1))
+  (define (pause-node-continuation n) (vector-ref n 2))
+
   ;; --- error node (references a declaration by NAME) ---
   (define error-node-tag (tag 'byte-machine-error-node))
   (define (make-error-node name error-declaration source-label)
@@ -126,12 +139,13 @@
 
   ;; --- node dispatch ---
   (define (node? x)
-    (or (byte-dispatch-node? x) (stop-node? x) (error-node? x) (finish-node? x)))
+    (or (byte-dispatch-node? x) (stop-node? x) (error-node? x) (finish-node? x) (pause-node? x)))
   (define (node-name x)
     (cond ((byte-dispatch-node? x) (byte-dispatch-node-name x))
           ((stop-node? x) (stop-node-name x))
           ((error-node? x) (error-node-name x))
           ((finish-node? x) (finish-node-name x))
+          ((pause-node? x) (pause-node-name x))
           (else (byte-machine-contract-violation 'node-name 'invalid-argument 'node))))
 
   ;; --- machine (default-eof-error is a declared error NAME) ---
