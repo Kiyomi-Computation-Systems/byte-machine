@@ -143,6 +143,19 @@
         ;; vacuous, so this asserts the property lane actually drove at
         ;; least one generated machine through a real pause, and at least
         ;; one through a real idle-completion finish.
+        ;;
+        ;; finished-count is a CONJUNCTION its name does not show: byte-trial
+        ;; only finishes a pair still `ready` after its feed, so reaching
+        ;; 'finished needs the eof draw to have routed the entry's eof-target
+        ;; to `done` AND at least one of that machine's 256 bytes to leave
+        ;; both parsers ready -- a free byte case targeting `start` or
+        ;; `pausep` rather than a terminal. That makes the assertion stronger
+        ;; than it reads, not weaker, and the margin at this seed is
+        ;; comfortable (measured: 14 of the 40 machines finish, 7 pause). But
+        ;; a future seed or vocabulary change could zero the byte-case half of
+        ;; the conjunction while the eof draw still fires, and that would
+        ;; present as the eof draw's own mutation losing its witness -- for a
+        ;; reason nobody would find without this sentence.
         (let loop ((i 0) (s (make-prng seed)) (paused-count 0) (finished-count 0))
           (if (< i machine-count)
               (let-values (((m s2) (gen-machine s)))

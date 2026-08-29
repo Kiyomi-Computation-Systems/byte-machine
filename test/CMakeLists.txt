@@ -1010,7 +1010,7 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-eof-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 2 Slice ③: interpreter≡generated differential over pause/resume --
+# --- Milestone 2 Slice ③: interpreter≡generated pause/resume differential -----
 byte_machine_add_scheme_lane(
   NAME byte-machine.differential.pause.chez.source
   BACKEND chez
@@ -1071,7 +1071,7 @@ byte_machine_add_scheme_lane(
   TIMEOUT 120
   ENVIRONMENT "BYTE_MACHINE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-one-byte.golden.sls")
 
-# --- Milestone 2 Slice ③: determinism against a committed golden (pause) ----
+# --- Milestone 2 Slice ③: determinism against a committed golden (pause) ------
 # Unlike the one-byte neighbor above, this program imports (byte-machine test
 # pause-machine) rather than building its machine inline, so both lanes below
 # list pause-machine.sls in SOURCES -- exactly as the differential.pause block

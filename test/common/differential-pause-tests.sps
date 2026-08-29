@@ -11,7 +11,7 @@
 ;;; pause-target arm.
 (import (rnrs) (rnrs eval) (only (chezscheme) load)
         (byte-machine test harness) (byte-machine test pause-machine)
-        (byte-machine graph) (byte-machine verify) (byte-machine interpret)
+        (byte-machine verify) (byte-machine interpret)
         (byte-machine runtime) (byte-machine compile))
 (harness-begin "differential.pause")
 (define tmpdir (or (adapter-environment-variable "BYTE_MACHINE_TEST_TMPDIR")
@@ -37,7 +37,7 @@
 
 (harness-group "feed pause/resume walk over all 256 first bytes"
   (lambda ()
-    (harness-case "byte 1 pauses and its post-resume continuation agrees; every other byte's rejection agrees"
+    (harness-case "byte 1 pauses and its post-resume continuation agrees; other bytes reject alike"
       (lambda ()
         (let ((bad 'none) (b1-final 'unset))
           (let loop ((b 0))

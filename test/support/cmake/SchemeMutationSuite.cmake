@@ -439,16 +439,19 @@ cmake_minimum_required(VERSION 3.26)
 # own SPEC lane's program: normal-ir-tests.sps gains a "pause normalization"
 # group (a structural case plus a measured-then-pinned fingerprint golden);
 # compile-tests.sps gains a third inline fixture (the eof-fin precedent)
-# asserting both rendered pause arms by substring. The lower-arm mutation is
-# pinned to the structural "p1 target" check rather than the fingerprint it
-# also disturbs as a side effect, the more precise of its two witnesses; the
-# two encode-arm mutations are both pinned to the fingerprint golden's own
-# check label, "pause fingerprint" -- unique in that file, so unlike the five
-# pre-existing fingerprint-golden mutations above (which embed a golden
-# numeral because their own check label, bare "fingerprint", is shared by two
-# different goldens) this pin needs no numeral to be unambiguous; see that
-# mutation's own comment for the full reasoning. Passes stay at 38 and
-# 151 + 5 = 156 mutations.
+# asserting both rendered pause arms. The lower-arm mutation is pinned to the
+# structural "p1 target" check rather than the fingerprint it also disturbs as
+# a side effect, the more precise of its two witnesses. The two encode-arm
+# mutations were originally pinned to the fingerprint golden's own check
+# label, "pause fingerprint", on the argument that a label unique in the file
+# needs no numeral. The Slice ③ pin re-audit measured that label's FAIL line
+# in the output of seven OTHER mutants of the same pass -- every
+# fingerprint-affecting mutation in the lane moves the pause golden too -- so
+# each now carries its own measured "got" value, which is what actually
+# separates the siblings; the two emitter mutations were likewise re-pinned
+# to measured check-equal details after compile-tests.sps's content-blind
+# `check` probes were replaced. See each mutation's own comment. Passes stay
+# at 38 and 151 + 5 = 156 mutations.
 #
 # Slice ③'s Task 6 (the property generator learns eof/finish/pause: a
 # generated machine's entry can now route eof to a finish node `done`, and a
@@ -517,6 +520,57 @@ cmake_minimum_required(VERSION 3.26)
 # So passes stay at 38 and 156 + 3 = 159 mutations.
 set(EXPECTED_PASSES 38)
 set(EXPECTED_MUTATIONS 159)
+
+# --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
+#
+# EXPECT_OUTPUT_MATCHES is an UNANCHORED regex over the verify command's
+# stdout+stderr, so a pin matching text that every failing run prints is a
+# bare nonzero-exit catch wearing a disguise. Text that is unconditional in
+# a harness lane: the FAIL-CONTEXT line's `backend=`, `mode=`, `os=`,
+# `architecture=`, `machine-type=`, `artifacts=`, and the values of
+# BYTE_MACHINE_TEST_NAME / BYTE_MACHINE_TEST_TMPDIR that
+# byte_machine_add_test supplies (so `scheme`, `mutation`, `harness`, `cmake`
+# and `direct` are all unconditional here); and the summary line's `status=`,
+# `cases=`, `checks=`, `failures=`. The FAIL grammar is
+#   byte-machine-harness: FAIL <group>.<case>: <what> -- <detail>
+# so a sound pin resolves to exactly ONE (case, check) pair. MATCHES is a real
+# regex: `(` `)` `.` are metacharacters, so a case name carrying a
+# parenthesised section reference cannot be used as a tail unescaped.
+#
+# All 34 of this slice's pins were re-judged against the captured output of
+# every other mutation in their own lane -- 797 pair judgments through
+# byte_machine_mutation_verdict, part of a 2008-pair sweep over all 89 pinned
+# mutations in the six lanes this slice touched. Every pin whose match landed
+# on a DIFFERENT
+# (case, check) than its own -- five, all in Pass 33's pause group, each
+# pinned to a bare diagnostic CODE rather than to a check -- was re-anchored,
+# and four more that shared a check with a sibling were extended with the
+# measured detail that separates them (Pass 32's two paused-row refusals, Pass
+# 35's two pause-fingerprint mutations). Pass 36's two emitter mutations
+# needed the SPEC to change, not the pin: see that pass's own comment.
+#
+# Twelve pairs remain where one mutation's whole failure set is a SUBSET of a
+# broader sibling's, with byte-identical details -- a decision subsumed by a
+# kill-switch above it, not an under-anchored pin. No output text can separate
+# these, and each is still caught at the check that names its own decision:
+#   p32 resume-on-paused-feed  < feed-pause maps to paused-feed
+#   p32 resume-on-paused-finish < EOF pause parks paused-finish
+#   p32 /v2 finish error stored < /v2 finish drives exec with finish? true
+#   p33 pause continuation out-target      < missing-target never reported
+#   p33 eof-terminal chains through pause  < eof-target cycle is a finish
+#   p33 pause joins zero-progress walk     < zero-progress never fires
+#   p33 pause-only zero-progress cycle     < zero-progress never fires (also
+#                                            < pause joins the walk)
+#   p33 byte-reachable pause chain is EOF  < EOF-reachable stop accepted
+#   p33 byte-reachability gate (:908)      < pause continuation out-target
+#   p39 pause draw / eof draw              < inverted dispatch byte test
+# The last pair is the only one with a cheap remedy, and it was declined
+# deliberately: property-differential-tests.sps counts a pause only when BOTH
+# sides agree they paused, so a compile.sls divergence zeroes the same two
+# anti-vacuity counters the generator mutations zero. Counting the oracle's
+# own pause instead would separate them, but it would weaken what the guard
+# asserts (that the LANE drove a real agreeing pause) for a pin-specificity
+# gain, and both mutations are already caught at their own checks.
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -2403,7 +2457,13 @@ byte_machine_mutation(
        (byte-machine-contract-violation 'parser-feed! 'lifecycle-violation]]
   REPLACE [[((paused-finish finish-ready)
        (byte-machine-contract-violation 'parser-feed! 'lifecycle-violation]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "feed on paused-feed")
+  # Slice 3 pin re-audit: "feed on paused-feed" is the right check, but the
+  # sibling "a feed pause maps to paused-feed, not paused-finish" mutation
+  # breaks the SAME check -- measured. The details differ and separate them:
+  # this mutation makes the prohibited call return a tuple, that one leaves
+  # the refusal in place but raises with the wrong lifecycle in it.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "feed on paused-feed -- expected a raise, but the thunk returned")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -2412,7 +2472,11 @@ byte_machine_mutation(
        (byte-machine-contract-violation 'parser-finish! 'lifecycle-violation]]
   REPLACE [[((paused-finish)
        (byte-machine-contract-violation 'parser-finish! 'lifecycle-violation]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish on paused-feed")
+  # Slice 3 pin re-audit: same collision and same separation as the feed row
+  # above -- the paused-feed/paused-finish mapping mutation breaks this check
+  # too, but by raising with the wrong lifecycle rather than by returning.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "finish on paused-feed -- expected a raise, but the thunk returned")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -2556,9 +2620,17 @@ byte_machine_mutation(
 # past `start` (it fires before any byte is read), so it returns the
 # byte-identical tuple (status 'finished, next start, consumed 0, offset and
 # error untouched) the deleted sticky arm would have returned directly. The
-# claim is scoped to 'op: v1 can never finish (parser-finish!'s v1 else arm
-# always raises) and no /v2 fixture in this file re-feeds a parser parked at
-# a finished state, so neither variant's own path is exercised either way.
+# claim is scoped to 'op, for a reason that is EMPIRICAL, not structural.
+# parser-feed!'s inner case records lifecycle 'finished from ANY variant whose
+# executor returns status 'finished, so a v1 parser is not structurally barred
+# from the sticky finished row -- parser-finish!'s raising v1 else arm only
+# closes the finish! route, not the feed! one. What actually excludes it is
+# this SPEC lane's fixtures: runtime-tests.sps's only v1 executor, stub-feed,
+# has states 1 (stopped), 2 (error) and a dispatch else (need-input), and no
+# state returning 'finished, so no v1 fixture here ever parks a parser at
+# lifecycle 'finished. Likewise no /v2 fixture in this file re-feeds a parser
+# parked at a finished state (stub-exec never returns 'finished either), so
+# neither variant's own path is exercised either way.
 # Measured: the mutant below passes the whole SPEC-lane suite unchanged
 # (cases=35 failed-cases=0).
 byte_machine_mutation(
@@ -2573,7 +2645,7 @@ byte_machine_mutation(
   FIND [[((finished) (make-parser-result 'finished start 0 (parser-offset parser) #f))]]
   REPLACE [[ ]]
   EXPECT_SURVIVES
-    "whole-arm deletion (as opposed to the field-value mutation above, which IS caught) falls through to parser-feed!'s shared `else` branch; for the 'op variant, parser-feed-op! run fresh from a `current` still parked on the same finish node reaches that loop's own `(finish)` case before advancing `pos`, producing the byte-identical result tuple this arm short-circuits to. v1 can never reach 'finished (its else arm in parser-finish! always raises) and no /v2 fixture in this file re-feeds a parser parked at a finished state, so neither other variant witnesses it either. Measured directly: this mutant passes the whole SPEC-lane suite unchanged (cases=35 failed-cases=0)")
+    "whole-arm deletion (as opposed to the field-value mutation above, which IS caught) falls through to parser-feed!'s shared `else` branch; for the 'op variant, parser-feed-op! run fresh from a `current` still parked on the same finish node reaches that loop's own `(finish)` case before advancing `pos`, producing the byte-identical result tuple this arm short-circuits to. The other two variants do not witness it either, for an EMPIRICAL reason rather than a structural one: parser-feed!'s inner case records lifecycle 'finished from ANY variant whose executor returns 'finished, so v1 is not barred from the sticky finished row (parser-finish!'s raising v1 else arm closes only the finish! route) -- but this file's only v1 executor, stub-feed, has no state that returns 'finished, and its /v2 stub-exec has none either, so no v1 or /v2 fixture here ever parks a parser at lifecycle 'finished. Measured directly: this mutant passes the whole SPEC-lane suite unchanged (cases=35 failed-cases=0)")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -2749,25 +2821,46 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a pause continuation is an out-target (resolution + reachability)"
+  # Slice 3 pin re-audit: bare "missing-target" is this file's check label in
+  # TWO other cases as well (the fallback-target and the entry-target
+  # rejections), and the pair-wise matrix measured it matching both of their
+  # mutants' FAIL lines -- so it named a diagnostic code, not a decision.
+  # "missing-target diagnostic" is the pause case's own label and occurs
+  # exactly once in verify-tests.sps. The case name itself ends in
+  # "(§16.2:905)", whose parentheses are CMake regex metacharacters, so the
+  # unique check label is the anchor rather than a case-name tail.
   FIND [[((pause-node? n) (list (pause-node-continuation n)))
           (else '())]]
   REPLACE [[((pause-node? n) '())
           (else '())]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "missing-target")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "missing-target diagnostic")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: eof-terminal chains through a pause continuation"
+  # Slice 3 pin re-audit: bare "eof-zero-progress-cycle" is a diagnostic code,
+  # not a check -- measured matching the pre-Slice-3 eof-target-cycle case's
+  # own "has eof-zero-progress-cycle" check (a different decision) and this
+  # pass's later "no eof-zero-progress-cycle attributed to pa" check (a
+  # different check in the same case). Anchored to the case tail plus the one
+  # check label; the case name carries no parentheses, so the tail is safe.
   FIND [[((pause-node? n) (loop (pause-node-continuation n) (cons name seen)))]]
   REPLACE [[((pause-node? n) 'finish)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "eof-zero-progress-cycle")
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "zero-progress EOF cycle: eof-zero-progress-cycle diagnostic")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a byte-reachable pause into finish is rejected"
+  # Slice 3 pin re-audit: bare "non-eof-into-finish" is a diagnostic code and
+  # was measured matching the pre-Slice-3 byte-edge-into-finish case's own
+  # "has non-eof-into-finish" check -- a different decision. This case's own
+  # label is "non-eof-into-finish diagnostic", which occurs exactly once in
+  # verify-tests.sps; the case name ends in "(§16.2:908)", so parenthesis-free
+  # anchoring means the check label rather than a case-name tail.
   FIND [[(if (and cn (finish-node? cn))]]
   REPLACE [[(if (and cn #f (finish-node? cn))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "non-eof-into-finish")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "non-eof-into-finish diagnostic")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -2787,9 +2880,18 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a byte-reachable pause's continuation chain is an EOF path"
+  # Slice 3 pin re-audit: bare "eof-reachable-stop" is a diagnostic code, and
+  # "eof-reachable-stop diagnostic" is a check label THREE cases share, so
+  # neither anchors this decision -- both were measured matching the
+  # pre-Slice-3 eof-target-into-stop case and the EOF-chain-through-a-pause
+  # case, each a different decision. The entry-pause case is the one that
+  # witnesses BYTE-reachability specifically, its label "entry
+  # eof-reachable-stop diagnostic" occurs once, and its case name carries no
+  # parentheses, so the pin is that case's tail plus that label.
   FIND [[(case (eof-terminal m (pause-node-continuation n))]]
   REPLACE [[(case 'finish]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "eof-reachable-stop")
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "so its chain is walked too: entry eof-reachable-stop diagnostic")
 
 # Task 1's whole-branch review found two of the five decisions above were
 # unwitnessed, not just uncaught -- neither test nor mutation reached them --
@@ -2843,11 +2945,14 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a pause's byte-reachability gate is not checked (non-eof-into-finish)"
+  # Slice 3 pin re-audit: bare "accepted" is a check label, but nothing in it
+  # names the case, so any future case reusing the word would satisfy it.
+  # Anchored to the case tail as well; the case name carries no parentheses.
   FIND [[(if (and (pause-node? n) (memq (node-name n) br))
                             (let ((cn (lookup nodes (pause-node-continuation n))))]]
   REPLACE [[(if (pause-node? n)
                             (let ((cn (lookup nodes (pause-node-continuation n))))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "accepted")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "pause machine verifies: accepted")
 
 # Cleanup follow-up: the second site's gap above is closed here too -- not by
 # VERDICT (still genuinely impossible, per the measurement above) but by
@@ -3032,26 +3137,30 @@ byte_machine_mutation(
 # so tag 4 is never encoded for the one-byte or node-routing goldens above,
 # and this mutation cannot disturb them.
 #
-# Golden-family note (why this pin differs from the five above, not an
-# oversight): those five DO embed a golden numeral in their own pins (the
-# FNV-offset/prime/mixing and default-eof mutations above all pin
-# "4236938459847922092"; the node-eof mutation pins "9098559711816935340").
-# What they decline to pin is the mutant's produced ("got") value -- the one
-# thing that actually differs between siblings that share an "expected"
-# numeral -- because pinning it would add a new constant to re-baseline on
-# every future IR-encoding move. They need a numeral at all because the
-# one-byte and node-routing fingerprint checks in normal-ir-tests.sps share
-# the bare check label "fingerprint", which by itself does not say which of
-# the two failed; the numeral is what disambiguates them. This mutation's
-# check label, "pause fingerprint", is unique in that file, so it needs
-# neither a numeral nor the got value to be unambiguous -- a stronger
-# position than the five above, not the same convention applied once more.
+# Golden-family note, CORRECTED by the Slice ③ pin re-audit. The original
+# note argued that "pause fingerprint" needs neither a numeral nor a got
+# value because the check label is unique in normal-ir-tests.sps -- "a
+# stronger position than the five above". Uniqueness of the LABEL is not the
+# question the pin answers. The pair-wise matrix measured this label's FAIL
+# line in the output of SEVEN other mutants of this same pass: every
+# fingerprint-affecting mutation in the lane (FNV offset, FNV prime, byte
+# mixing and error-code resolution -- the four that pin "4236938459847922092"
+# -- node-eof routing, which pins "9098559711816935340", the pause lower arm,
+# and the tag-value mutation below) moves the pause golden too, because the
+# pause machine is hashed by the same algorithm. So the bare label said only
+# "some fingerprint moved". What separates the siblings is the got value, which is
+# distinct for each -- so both pause-encoding mutations below carry theirs.
+# That is the same convention as the five above, applied where it is now
+# measured to be necessary, and the re-baseline cost is real but bounded: a
+# future IR-encoding move already re-baselines the pause golden itself
+# (15725897457025557005, in normal-ir-tests.sps), and these two move with it.
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: the pause encode arm hashes tag and continuation"
   FIND [[((pause) (put-u8 p 4) (put-u32be p (normal-pause-target s)))]]
   REPLACE [[((pause) (put-u8 p 4))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "pause fingerprint")
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "pause fingerprint -- expected 15725897457025557005, got 6626362746927380524")
 
 # A third mutation targets the pause TAG VALUE alone (4 -> 3, colliding with
 # finish's own tag byte) rather than the whole payload mutation 2 above
@@ -3062,17 +3171,18 @@ byte_machine_mutation(
 # emits the 4 payload bytes a finish state does not.) Measured: it fails
 # ONLY "pause fingerprint" (1 of 23 checks) -- same reasoning as mutation 2
 # above: no other machine in this SPEC lane has a pause node, so this arm is
-# never reached encoding the one-byte or node-routing goldens. It shares
-# mutation 2's pin, "pause fingerprint" -- both are witnessed by that one
-# unique check label -- but each was independently measured to be genuinely
-# caught (nonzero exit, matching text) for its own FIND/REPLACE, so the
-# shared pin does not mask either one.
+# never reached encoding the one-byte or node-routing goldens. It is witnessed
+# by the same check as mutation 2 -- the Slice ③ pin re-audit's finding is
+# that a SHARED pin over that check therefore named neither decision (see the
+# corrected golden-family note above), so each carries its own measured got
+# value instead.
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: the pause tag collides with finish's tag"
   FIND [[(put-u8 p 4)]]
   REPLACE [[(put-u8 p 3)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "pause fingerprint")
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "pause fingerprint -- expected 15725897457025557005, got 5068390459764251309")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -3194,25 +3304,37 @@ byte_machine_mutation(
 # pause machine, following the eof-fin precedent above -- the compile lanes
 # carry no fixture libraries, and (byte-machine test pause-machine) is the
 # source of truth the fixture is kept in sync with by hand) whose rendered
-# text pins both pause arms by substring: p1's (continuation target 2) and
-# pe's (continuation target 5). Both mutations below break the SAME two
-# checks, "pause arm p1" and "pause arm pe" -- byte-identical rendered text no
-# other check in this file constructs -- so the shared "pause arm" pin cannot
-# match anything else in this lane's output. Measured: each fails both checks
-# with "expected a true value" (the file's `check`, not `check-equal`).
+# text pins both pause arms: p1's (continuation target 2) and pe's
+# (continuation target 5).
+#
+# Both mutations below break the SAME two checks, "pause arm p1" and "pause
+# arm pe". As shipped, those two were substring probes under `check`, whose
+# failure text is content-blind ("expected a true value"), so the shared
+# "pause arm" pin was measured matching BOTH mutants' FAIL lines: it proved a
+# pause arm was wrong, never which of the two emitter decisions was wrong.
+# The Slice ③ pin re-audit turned them into check-equal over the status token
+# and the next state read out of that one rendered arm line
+# (compile-tests.sps's `pause-arm`), so the detail now carries the mutant's
+# own answer and each mutation pins its own measured signature. Splitting the
+# substring probe in two -- the other remedy on the table -- does NOT work: a
+# pause continuation is a dispatch node whose own need-input arm parks on that
+# same state id, so " pos #f 2 off))" survives the next-state mutation
+# elsewhere in the rendered text and a target-only probe would be vacuous.
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: the pause arm emits paused"
   FIND [[(quote paused) pos #f "]]
   REPLACE [[(quote stopped) pos #f "]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "pause arm")
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "pause arm p1 -- expected \"paused 2\", got \"stopped 2\"")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: the pause arm's next-state is the continuation"
   FIND [[(number->string (normal-pause-target s)) " off))\n"))]]
   REPLACE [[id " off))\n"))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "pause arm")
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "pause arm p1 -- expected \"paused 2\", got \"paused 1\"")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

@@ -86,7 +86,47 @@
     'default-eof #f))
 (define pause-ok (compile-machine pausem '()))
 (define (pause-text) (utf8->string (render-machine pause-ok 'pause-parser)))
-(define (pause-has? needle) (harness-string-contains? (pause-text) needle))
+
+;; The status token and the next state a pause arm renders, as one short
+;; string -- "paused 2" for
+;;   ((1) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f 2 off))
+;;
+;; Both Slice 3 emitter decisions -- which status a pause arm emits, and which
+;; state it parks on -- live in that ONE line, and a `check` over a substring
+;; probe reports the same content-blind "expected a true value" for either, so
+;; the mutation suite could not tell the two mutations apart (Slice 3 pin
+;; audit). Splitting the probe in two does not separate them either: a pause
+;; continuation is a dispatch node whose own need-input arm parks on that same
+;; state id, so the " pos #f 2 off))" tail survives the next-state mutation
+;; elsewhere in the rendered text and a target-only probe would be vacuous.
+;; Comparing the two extracted fields with check-equal puts them in the
+;; failure detail instead, so each decision has its own signature. This is
+;; still search-only over the rendered text (header :1-5): two tokens read out
+;; of one known line, never a re-parse of the emitted library.
+(define (pause-arm-fields line)
+  (let loop ((fs (harness-split line #\space)) (acc '()))
+    (cond ((null? fs) (reverse acc))
+          ((string=? (car fs) "") (loop (cdr fs) acc))
+          (else (loop (cdr fs) (cons (car fs) acc))))))
+(define (pause-arm st)
+  (let ((head (string-append "((" (number->string st)
+                             ") (byte-machine-make-feed-outcome/v1 (quote ")))
+    (let loop ((lines (harness-split (pause-text) #\newline)))
+      (cond
+        ((null? lines) "no such arm")
+        ((harness-string-contains? (car lines) head)
+         ;; ("((1)" "(byte-machine-make-feed-outcome/v1" "(quote" "paused)"
+         ;;  "pos" "#f" "2" "off))") -- the status loses its closing paren, and
+         ;; the next state is the field before "off))". Any other shape is
+         ;; reported whole rather than indexed into, so a mutation that
+         ;; changes the arm's arity fails the comparison instead of raising.
+         (let ((fields (pause-arm-fields (car lines))))
+           (if (= (length fields) 8)
+               (string-append (substring (list-ref fields 3) 0
+                                         (- (string-length (list-ref fields 3)) 1))
+                              " " (list-ref fields 6))
+               (harness-join fields " "))))
+        (else (loop (cdr lines)))))))
 
 (harness-group "compilation"
   (lambda ()
@@ -142,10 +182,8 @@
     (harness-case "a pause node renders the paused terminal arm with its continuation target"
       (lambda ()
         (check "pause machine compiles" (compilation-ok? pause-ok))
-        (check "pause arm p1"
-               (pause-has? "((1) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f 2 off))"))
-        (check "pause arm pe"
-               (pause-has? "((3) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f 5 off))"))))))
+        (check-equal "pause arm p1" (pause-arm 1) "paused 2")
+        (check-equal "pause arm pe" (pause-arm 3) "paused 5")))))
 
 (harness-group "binding validation"
   (lambda ()
