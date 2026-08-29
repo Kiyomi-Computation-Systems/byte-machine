@@ -122,18 +122,22 @@
   ;; any byte; an exact-byte matcher is the one-element case of the same rule.
   (define (byte-sets-overlap? a b)
     (and (pair? a) (or (and (memv (car a) b) #t) (byte-sets-overlap? (cdr a) b))))
-  ;; One diagnostic per COLLIDING PAIR of cases, in caller order -- not one per
-  ;; shared byte. A complement and a set can share 200 bytes, and a naive
-  ;; per-byte expansion would turn one decision into 200 identical diagnostics
-  ;; against §16.4:937-943. Pairs are enumerated i < j so a pair is reported
-  ;; once, and the pass never inspects the lowered graph: canonical byte sets
-  ;; are a source-level property (§17:951 verify-before-normalize).
+  ;; One diagnostic per COLLIDING PAIR of cases, not one per shared byte. A
+  ;; complement and a set can share 200 bytes, and a naive per-byte expansion
+  ;; would turn one decision into 200 identical diagnostics against
+  ;; §16.4:937-943. Pairs are enumerated i < j so a pair is reported once, and
+  ;; the pass never inspects the lowered graph: canonical byte sets are a
+  ;; source-level property (§17:951 verify-before-normalize). Every diagnostic
+  ;; a node contributes shares that node's (code, node, message) triple, so no
+  ;; pair carries an identity of its own: the relative order between two
+  ;; diagnostics from the same node is not observable (by anything short of
+  ;; object identity) and is not promised.
   (define (node-overlaps n)
     (let ((sets (map (lambda (c) (matcher-bytes (byte-case-matcher c)))
                      (byte-dispatch-node-cases n))))
       (let outer ((ss sets) (out '()))
         (if (null? ss)
-            (reverse out)
+            out
             (outer (cdr ss)
                    (let inner ((rest (cdr ss)) (out out))
                      (if (null? rest)

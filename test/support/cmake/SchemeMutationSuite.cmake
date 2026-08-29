@@ -2995,14 +2995,29 @@ byte_machine_mutation(
   LABEL "verify: only the first case is compared against the others"
   FIND [[(outer (cdr ss)]]
   REPLACE [[(outer '()]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "second and third cases is found: one pair")
+  # Fix wave 1: the bare case tail collided with two other Pass 33 mutants'
+  # captured output (the pre-existing "two cases sharing a byte are never
+  # found to overlap" helper mutant, which also drives this case's count to
+  # 0, and this mutation's own sibling "a case is compared against itself",
+  # which fails the same case with a different got). Appending this
+  # mutation's own measured "got" tail excludes the sibling (its got is 4,
+  # not 0) and cuts the collision set from two to one; the helper mutant
+  # still collides because it genuinely produces the identical got 0 for
+  # this case -- disabling byte-sets-overlap? entirely is indistinguishable
+  # from dropping every case but the first, on this one fixture.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "second and third cases is found: one pair -- expected 1, got 0")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a case's collisions after the first are dropped"
   FIND [[(inner (cdr rest)]]
   REPLACE [[(inner '()]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "first and third cases is found: one pair")
+  # Fix wave 1: same trade as the mutation above, on the mirror fixture --
+  # appending this mutation's own measured "got" tail excludes the sibling
+  # self-comparison mutant (got 4 there, got 0 here) and cuts the collision
+  # set from two to one; the pre-existing helper mutant still collides for
+  # the same reason.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "first and third cases is found: one pair -- expected 1, got 0")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
