@@ -12,7 +12,7 @@
 
 - Decision records follow the repo format: `# NNNN: <title>` / `Date: YYYY-MM-DD` / `Status: accepted` / `Milestone: 3, Gate 0 (milestone-3-design.md §N)` / `## Context` / `## Decision` (numbered) / `## Consequences`. See `docs/decisions/0011-eof-execution-model.md` and `docs/decisions/0012-generated-abi-v2-finish.md` for the house style.
 - The next free decision number is **0014** (last is `docs/decisions/0013-runtime-coded-conditions.md`). Confirm with `ls docs/decisions/` before writing; if a higher number exists, use the next free numbers in order and renumber the cross-references between these four records to match.
-- **Record vs instruction discipline (AGENTS.md:166-186).** A *record* (a measurement, a finding, a decision's Context, a prior decision record) gets a dated amendment note appended, never a rewrite. An *instruction* (a work-order, an exit criterion, a Deliver/Scope entry, a normative spec sentence, or a live comment saying what code is for) is corrected in place. The parent plan's §9.1/§17/§19.2 sentences touched here are **normative-spec instructions** → add minimal in-place citation clauses only where a reader would otherwise re-derive, never rewrite the surrounding prose.
+- **Record vs instruction discipline (AGENTS.md:157-165).** A *record* (a measurement, a finding, a decision's Context, a prior decision record) gets a dated amendment note appended, never a rewrite. An *instruction* (a work-order, an exit criterion, a Deliver/Scope entry, a normative spec sentence, or a live comment saying what code is for) is corrected in place. The parent plan's §9.1/§17/§19.2 sentences touched here are **normative-spec instructions** → add minimal in-place citation clauses only where a reader would otherwise re-derive, never rewrite the surrounding prose.
 - **Do NOT amend decision 0009.** Records 0014 and 0016 are both designed so the IR fingerprint and the normalized encoding do **not** move. 0009 is neither falsified nor extended by them, so it takes no dated amendment; each record states the no-move guarantee in its own Consequences instead. Adding an amendment to 0009 that says "nothing changed" is noise, and it would make a future reader hunt for a change that does not exist.
 - **Citation staleness (AGENTS.md, project memory).** Before editing any parent-plan sentence, `rg` for it and read the surrounding lines to confirm the *current* wording at HEAD. Do not trust the quoted "current text" in this plan as exact — line numbers and phrasing drift, and this plan's own line numbers were measured at `7955a4d`.
 - **No code, no counts.** Gate 0 changes no `.sls`, no CMake, no test. It quotes and moves **no measured totals**: `EXPECTED_PASSES`/`EXPECTED_MUTATIONS` (38/165 today) are not touched, quoted as predictions, or forecast. The matcher constructors, the sequence node kind, the verifier arms, the lowering and the id allocation are described as *obligations handed to the slices*, not performed here.
@@ -252,7 +252,11 @@ destroys the property: factoring "the shared prefix walker" into a common librar
   state the ABI carries is opaque, so new state ids need no ABI surface at all.
 - The interpreter's node lookup and node-kind dispatch must learn to destructure a
   compound `current`; today they match node names by identity and raise a contract
-  violation on anything else. That is the whole of the interpreter change.
+  violation on anything else. That is the whole of the interpreter change *this
+  representation choice* forces — not the whole of Milestone 3's interpreter work:
+  Slice ② must also add sequence byte matching, prefix advance and mismatch
+  routing to `interpret.sls`, and Slice ① separately rewrites its matcher dispatch
+  onto the canonical byte set of decision 0014.
 - **EOF discards prefix position, and that is correct.** §12.4:727 makes every
   lowered prefix state inherit the source sequence state's EOF edge, and decision
   0011 lets that chain terminate at a pause. At that point `current` parks on the
@@ -534,7 +538,7 @@ the only way lowered prefix states themselves can enter a zero-progress cycle.
 At §9.1's constructor-validation sentence — currently beginning `Constructors validate only local shape and return immutable-by-API descriptors.` — append a single clause to that first sentence so it reads:
 
 ```
-Constructors validate only local shape and return immutable-by-API descriptors (from Milestone 3 that includes rejecting an empty byte set, a range with `low > high`, and an empty sequence — decision 0017).
+Constructors validate only local shape and return immutable-by-API descriptors (from Milestone 3 that validation includes rejecting an empty byte set, a range with `low > high`, and an empty sequence — decision 0017).
 ```
 
 Single clause; do not rewrite the rest of the paragraph, and do **not** add anything to §16.2 — the record's fourth decision point is precisely that §16.2 stays as it is.

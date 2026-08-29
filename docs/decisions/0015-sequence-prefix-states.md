@@ -63,7 +63,11 @@ destroys the property: factoring "the shared prefix walker" into a common librar
   state the ABI carries is opaque, so new state ids need no ABI surface at all.
 - The interpreter's node lookup and node-kind dispatch must learn to destructure a
   compound `current`; today they match node names by identity and raise a contract
-  violation on anything else. That is the whole of the interpreter change.
+  violation on anything else. That is the whole of the interpreter change *this
+  representation choice* forces — not the whole of Milestone 3's interpreter work:
+  Slice ② must also add sequence byte matching, prefix advance and mismatch
+  routing to `interpret.sls`, and Slice ① separately rewrites its matcher dispatch
+  onto the canonical byte set of decision 0014.
 - **EOF discards prefix position, and that is correct.** §12.4:727 makes every
   lowered prefix state inherit the source sequence state's EOF edge, and decision
   0011 lets that chain terminate at a pause. At that point `current` parks on the
