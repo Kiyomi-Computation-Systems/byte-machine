@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FORTY PASSES, BECAUSE FORTY DIFFERENT WITNESSES ARE NEEDED
+# FORTY-ONE PASSES, BECAUSE FORTY-ONE DIFFERENT WITNESSES ARE NEEDED
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -145,7 +145,7 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "FORTY PASSES..." above. Declared here, rather than only in prose, so the
+# See "FORTY-ONE PASSES..." above. Declared here, rather than only in prose, so the
 # count enforced at the bottom of this file is the same text a reader checks by
 # eye at the top -- one number to keep in sync, not two that can quietly
 # disagree. 25 passes / 60 mutations before the aot task; pass 26 adds two (C3,
@@ -569,8 +569,10 @@ cmake_minimum_required(VERSION 3.26)
 # Passes stay at 39; mutations become 181 + 2 = 183.
 # Slice ① Task 5 adds Pass 43 (class membership and recursive canonicalization)
 # with two mutations. Passes become 39 + 1 = 40; mutations 183 + 2 = 185.
-set(EXPECTED_PASSES 40)
-set(EXPECTED_MUTATIONS 185)
+# Slice ① Task 6 adds Pass 44 (byte-class differential non-vacuity) with one
+# mutation. Passes become 40 + 1 = 41; mutations 185 + 1 = 186.
+set(EXPECTED_PASSES 41)
+set(EXPECTED_MUTATIONS 186)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -4231,9 +4233,49 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
+# --- Pass 44: the byte-class differential is non-vacuous (M3 Slice ① Task 6) --
+#
+# differential-byte-class-tests.sps compares the interpreter against the emitted
+# library over all 256 bytes for five class fixtures. Shifting every rendered
+# transition byte by one makes the generated executor accept a class shifted one
+# byte up, so the comparison diverges at the class's first byte. Verify command
+# uses both library roots, an empty object guard, the differential program.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/differential-byte-class-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.byte-class.chez.source
+  LABEL "compile: every rendered transition byte is shifted by one"
+  FIND [[(string-append "               ((" (number->string (car tr)) ") "]]
+  REPLACE [[(string-append "               ((" (number->string (+ 1 (car tr))) ") "]]
+  # Measured against a scratch tree: byte-set is the first fixture in
+  # class-machines, so it is the first case in "interpreter and generated agree
+  # on every byte, for every class" to run, and its lowest class byte (0) is the
+  # one whose rendered arm is shifted away from key 0 to key 1 -- so the
+  # generated side stops matching it and falls through to the dispatch node's
+  # own reject/reexecute default, diverging from the (unmutated) interpreter at
+  # byte 0. Measured FAIL line: "byte-machine-harness: FAIL interpreter and
+  # generated agree on every byte, for every class.byte-set agrees on all 256
+  # bytes: no byte disagreed -- expected none, got 0". Pinned to byte-set's own
+  # case name plus the check label so the pin resolves to one (case, check)
+  # pair, not the five fixtures' shared case-name tail ("agrees on all 256
+  # bytes: no byte disagreed") the brief flagged as needing narrowing.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "byte-set agrees on all 256 bytes: no byte disagreed -- expected none, got 0")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FORTY PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FORTY-ONE PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

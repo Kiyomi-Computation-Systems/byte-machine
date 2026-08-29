@@ -1056,6 +1056,30 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/byte-class-interpret-tests.sps"
   TIMEOUT 120)
 
+# --- Milestone 3 Slice ①: interpreter≡generated over every class matcher -----
+# The complement fixture renders 254 sibling arms inside the single `(case b ...)`
+# -- the concrete proof that decision 0014's per-byte lowering needed no emitter
+# change.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.byte-class.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-byte-class-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/class-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-byte-class-tests.sps"
+  TIMEOUT 180)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.byte-class.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-byte-class-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/class-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-byte-class-tests.sps"
+  TIMEOUT 180)
+
 # --- Milestone 1 Phase 3 Slice B: D7 identifier repertoire + binary LF -------
 byte_machine_add_scheme_lane(
   NAME byte-machine.verify.identifier-repertoire.chez.source
