@@ -7,7 +7,10 @@ All notable changes to byte-machine are recorded here. The format follows
 ## [Unreleased]
 
 Milestones 0 through 2 (portability spike, minimal executable machine,
-incremental execution and lifecycle) have closed. See
+incremental execution and lifecycle) have closed. Milestone 3 (byte classes
+and sequences) is **in progress**: Slice ① (byte classes) has closed; Slices
+② (sequence dispatch and prefix lowering) and ③ (multiple alternatives,
+ambiguity, and cycle analysis) are open. See
 [the implementation plan](docs/plans/byte-machine-implementation-plan.md) §25
 for overall scope; the entries below record what each milestone actually
 delivered. No versioned release exists yet.
@@ -555,6 +558,23 @@ delivered. No versioned release exists yet.
   `next`/`consumed`/`stream-offset` to indistinguishable values on every
   zero-start fixture, and one Minor gap in `finish-ready`'s own membership in
   `parser-feed!`'s prohibited lifecycle rows.
+
+- Byte classes (Milestone 3 Slice ①): `make-byte-set-matcher`,
+  `make-byte-range-matcher`, `make-byte-complement-matcher` and `ascii-bytes` on
+  the public construction façade, canonicalized to subsets of `0..255` by one
+  shared spine and lowered to one normalized transition per byte
+  ([decision 0014](docs/decisions/0014-byte-classes-expand-per-byte.md)).
+  Degenerate shapes — an empty byte set, a range with `low > high` — are
+  constructor contract violations
+  ([decision 0017](docs/decisions/0017-degenerate-shapes-are-contract-violations.md));
+  duplicate bytes and a vacuous complement are not. `pass-overlap` now reports
+  one diagnostic per colliding pair of cases across mixed matcher kinds. The
+  normalized encoding, its format version byte, the emitter and the runtime are
+  unchanged: all three pinned IR fingerprints and both committed goldens are
+  byte-identical. Measured on the shipped tree: `release`/`pr` 76/76,
+  `no-scheme` 8/8, the Scheme mutation suite 41 passes/186 mutations (177
+  caught, 9 declared `EXPECT_SURVIVES`, all pre-existing and none from this
+  slice), the CMake mutation suite unchanged at 1 pass/72 mutations.
 
 ### Changed
 

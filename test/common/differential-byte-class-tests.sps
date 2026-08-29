@@ -24,9 +24,16 @@
     (if (and d (not (string=? d ""))) d
         (assertion-violation 'differential "BYTE_MACHINE_TEST_TMPDIR is unset" d))))
 
-;; Emit, load and eval one fixture's generated library. The library name is
-;; (generated <machine-name>) and the binding is <machine-name>-parser, both
-;; derived from the fixture's own name, so the five never collide.
+;; Emit, load and eval one fixture's generated library. The binding,
+;; <machine-name>-parser, is derived from this function's own `name` argument.
+;; The library name, (generated <machine-name>), is NOT: emit-machine draws it
+;; from the compiled machine's own `machine-name` field, set inside
+;; class-machine.sls at construction time. The two agree today only because
+;; every class-machines entry reuses the identical symbol for both its list
+;; label and the name passed to class-machine -- an invariant held by
+;; convention, asserted nowhere, and enforced only by `load` failing loudly
+;; with a library-not-found error if a future fixture's label and
+;; machine-name ever diverge.
 (define (generated-machine name machine)
   (let ((genfile (string-append tmpdir "/generated-" (symbol->string name) ".sls"))
         (binding (string->symbol (string-append (symbol->string name) "-parser"))))
@@ -73,8 +80,12 @@
                (check-equal "no byte disagreed" bad 'none)
                (check-equal "loop ran all 256 bytes" last-byte 255))))
          ;; Agreement alone cannot see a defect both executors share, so the
-         ;; generated side is also checked against the class ABSOLUTELY -- at
-         ;; the class's own lowest byte and at a byte just outside it.
+         ;; generated side is also checked against the class ABSOLUTELY, here
+         ;; at the class's own lowest byte, for all five fixtures. A byte just
+         ;; outside the class is checked absolutely too, but only for two of
+         ;; the five (ascii-set and byte-complement) -- see the next
+         ;; harness-group, "a byte outside the class errors in both, at
+         ;; offset 0".
          (harness-case (string-append (symbol->string name) " generated stops on a class byte")
            (lambda ()
              (check-equal "stopped" (car (rfields cm-gen (car accepted))) 'stopped)

@@ -455,6 +455,21 @@ Expected: `100% tests passed, 0 tests failed out of 2` — the three pinned
 fingerprints (`4236938459847922092`, `9098559711816935340`,
 `15725897457025557005`) still hold.
 
+> **Disposition, 2026-08-29 (Task 7 close-out).** This step's own instruction
+> — run the whole mutation suite here, as part of Step 8 — has closed and is
+> dispositioned rather than reworded. Run in this step's literal position,
+> *before* Steps 9-10 re-anchor the two dying pins and add Pass 42, `make
+> test-all` fails on the mutation lane: Steps 3, 5-7 already deleted `(if
+> (memv b seen)` and the exact-byte `=` comparison those two pins' `FIND`
+> text names, so `SITES` resolves to 0 instead of the asserted 1 and the
+> suite raises a stale-`FIND` configure error — exactly what this task's own
+> introduction predicts for an un-reanchored pin. The implementer completed
+> Steps 9-10 before running Step 8's `make test-all`, which is what shipped
+> (commits `3ea0c98`..`dd50a16`; task-1-report.md). The plan's own step
+> order was not corrected, because Step 8's instruction has already been
+> discharged by the branch that noticed the ordering problem; a future
+> re-use of this plan should read Steps 9-10 before Step 8's suite run.
+
 - [ ] **Step 9: Re-anchor the two dying mutation pins**
 
 In `test/support/cmake/SchemeMutationSuite.cmake`, replace the whole Pass 33
@@ -551,6 +566,25 @@ set(EXPECTED_PASSES 39)
 set(EXPECTED_MUTATIONS 167)
 ```
 
+> **Disposition, 2026-08-29 (Task 7 close-out).** This step's own worked
+> example — the first mutation's `REPLACE`, `(cond ((and #f
+> (exact-byte-matcher? m)) ...))` — is dispositioned rather than corrected,
+> because its work (proving Pass 42's first decision) has closed under a
+> stronger mutation than the one shown here. `(and #f ...)` routes every
+> input through the same `else` arm regardless of matcher kind, so it is
+> caught by a **raise**, not by the comparison this file's own Global
+> Constraints and AGENTS.md's "prefer a mutation caught by a failed
+> comparison over one caught by a raise" rule ask for — and review found it
+> proved only "`matcher-bytes` returned something," not this mutation's own
+> `LABEL`, "does not canonicalize to its own byte": a mutant that returned
+> the *wrong* byte would have survived it. It also made the sibling
+> "canonicalizing a foreign vector is a contract violation" case pass for
+> the wrong reason, since that case expects exactly the `else` arm this
+> mutant forces unconditionally. Shipped instead (commit `dd50a16`,
+> `SchemeMutationSuite.cmake`'s Pass 42 first mutation): `REPLACE (list
+> (exact-byte-matcher-byte m)) (list 0)`, comparison-caught, pinned to the
+> measured `"one-element set: set -- expected \(7\), got \(0\)"`.
+
 - [ ] **Step 11: Run the whole mutation suite**
 
 ```bash
@@ -572,6 +606,22 @@ grep -c 'exact-byte-matcher-byte' test/support/cmake/SchemeMutationSuite.cmake
 
 Expected: `1` — the Pass 42 accessor mutation's `FIND`. (Pass 34's old
 occurrence is gone; Pass 42's new one is the only remaining reference.)
+
+> **Disposition, 2026-08-29 (Task 7 close-out).** This step's expected count
+> has closed against a measurement of `3`, not `1`, and is dispositioned
+> rather than reworded to `3`. The mutation this step itself adds in Step 10
+> is `LABEL "ir: the exact-byte accessor reads slot 1 of any vector"` with
+> `FIND [[(byte-machine-contract-violation 'exact-byte-matcher-byte
+> 'invalid-argument 'matcher)]]` — that `FIND` string and its sibling
+> `REPLACE` line both contain the literal identifier `exact-byte-matcher-byte`
+> a second and third time, so `grep -c` over the whole file counts 3 the
+> moment this step's own Step 10 edit lands, independent of Pass 34's old
+> occurrence going away. This step's check *intent* — no other pin still
+> references code this task deleted — is still discharged: this file's
+> `SITES` argument is asserted exactly per mutation, so a pin left pointing
+> at deleted text is a hard configure-time failure regardless of what a
+> whole-file `grep -c` reports. The implementer measured `3`, reported it,
+> and did not force the count to `1`.
 
 - [ ] **Step 13: Commit**
 
@@ -1113,6 +1163,25 @@ construction surface and lists none."
   (i before j, i ascending then j ascending). Diagnostic node is the dispatch
   node's name. No new diagnostic code.
 
+> **Disposition, 2026-08-29 (Task 7 close-out).** The "in caller order (i
+> before j, i ascending then j ascending)" clause above promised something
+> nothing in the shipped code or tests can observe, and is dispositioned
+> rather than reworded to drop it silently. `make-diagnostic` takes exactly
+> `(code node message)` — no ordering field — so every `'overlapping-cases`
+> diagnostic one dispatch node produces is `equal?` to every other, and a
+> reader comparing the list has no way to recover which pair produced which
+> element. The implementation initially carried a `(reverse out)` to try to
+> deliver the claim; review found it unobservable (`equal?` collapses the
+> distinction the reverse exists to preserve) and additionally found it made
+> a sibling test case vacuous. Both `(reverse out)` and the ordering promise
+> above were removed together in the fix wave (commit `b835bfe`), verified
+> by a control: reintroducing `(reverse out)` left all 72 tests green,
+> confirming nothing was testing it. Diagnostic order was never re-promised
+> at a weaker grain (e.g. "diagnostics for a fixed node appear in some
+> stable but unspecified order") because §16.4 and `verify.sls`'s own header
+> forbid comparing diagnostics by rendered text, which is the only way an
+> order claim could be tested without an ordering field.
+
 - [ ] **Step 1: Write the failing tests**
 
 Append to `test/common/verify-tests.sps`, before `(harness-finish)`:
@@ -1417,6 +1486,32 @@ Append to `test/common/normal-ir-tests.sps`, before `(harness-finish)`:
           (check-equal "first" (car bs) 0)
           (check-equal "last" (list-ref bs 255) 255))))))
 ```
+
+> **Disposition, 2026-08-29 (Task 7 close-out).** The "full complement" case
+> above is dispositioned rather than silently reflowed, because a reader who
+> pastes it verbatim reproduces a real defect. Independently re-counted
+> (paren depth per line, string contents excluded): the `let`'s binding list
+> `((bs (map car (transitions-of ...)))` closes the `bs` pair and every form
+> nested inside it, but never closes the **outer** bindings-list paren before
+> the three `check-equal` body forms begin — the block is one `)` short at
+> that point, running at depth 4 (harness-case, lambda, let, and the still-open
+> bindings-list) where the body expects depth 3. Chez's reader does not error
+> there: it keeps consuming the three `check-equal` forms as further bindings
+> inside the still-open list, and the block's own trailing run of six `)` on
+> its last line closes one paren too many for a self-contained form (final
+> depth −1), which silently closes one paren belonging to whatever follows in
+> the file instead — swallowing the rest of the file's forms by exactly one
+> level from that point on, with no read error at any point. This block was
+> read-checked as Scheme text at plan-authoring time in the four **library**
+> edits this plan specifies (§0's "Verified at plan-authoring time" note), but
+> not in the **test** code blocks, which carry the same syntactic risk and got
+> none of the check. The implementer found this from Chez's own behavior
+> (the appended tests silently vanished) rather than from a read error,
+> diagnosed the missing paren, and shipped the corrected block with one
+> additional `)` closing the bindings list before the three `check-equal`
+> body forms (commit `387f528`, `normal-ir-tests.sps:196-205`;
+> task-4-report.md's "Plan defect found and fixed: unbalanced parens in the
+> brief's Step 1 code").
 
 - [ ] **Step 2: Run the tests and confirm they pass**
 
@@ -1736,6 +1831,35 @@ Create `test/common/byte-class-interpret-tests.sps`:
 
 (harness-finish)
 ```
+
+> **Disposition, 2026-08-29 (Task 7 close-out).** Step 2's `hits` sentinel
+> above, and its comment's claim that "`hits` counts acceptances so a matcher
+> that accepts nothing at all cannot pass," are dispositioned rather than
+> corrected in place, because the work that comment describes has closed
+> under a rewritten sentinel — the comment described what the plan intended
+> `hits` to do, not what the code above it does. `(set! hits (+ hits 1))`
+> sits inside the `(if (memv b accepted) ...)` branch, i.e. it increments
+> from the test's own **expected** `accepted` list, never from the observed
+> `parser-result-status`/`-consumed` fields the surrounding `unless` checks.
+> `hits` is therefore identically `(length accepted)` for **every** possible
+> matcher behaviour — it can only differ from the class size if a fixture's
+> own `accepted` list held a duplicate, which none does — so "accepted
+> exactly the class size" passed whether the matcher was right or wrong,
+> exactly the defect this file's own Global Constraints exist to prevent
+> ("a test that passes whether the code is right or wrong is worse than no
+> test"). Found by the mutation this same plan's Pass 43 adds against
+> `interpret.sls`'s class-membership dispatch: the pin predicted by this
+> step's own brief text ("accepted exactly the class size") never fired
+> against the vacuous sentinel. The implementer diagnosed the vacuity from
+> the pin's silence, not from inspection, and shipped a rewritten `hits`
+> that increments from the observed result
+> (`(and (eq? (parser-result-status r) 'stopped) (= (parser-result-consumed
+> r) 1))`) instead of list membership (commit `e581ac4`); re-measured, the
+> originally predicted pin now fires as this step's brief said it would.
+> Task 6 separately found and closed a second vacuity one level up — the
+> `for-each` over `(class-machines)` in this group and its sibling had no
+> sentinel on the fixture count itself, so a dropped fixture would shrink
+> both groups silently.
 
 - [ ] **Step 3: Register the two lanes**
 
