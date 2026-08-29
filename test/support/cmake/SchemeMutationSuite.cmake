@@ -419,8 +419,16 @@ cmake_minimum_required(VERSION 3.26)
 # the same exactness the case-prefix gives its siblings. No FIND/REPLACE
 # changed in any of the three, so none of this moves the count. Passes stay
 # at 37 and 147 + 1 + 1 = 149 mutations.
-set(EXPECTED_PASSES 37)
-set(EXPECTED_MUTATIONS 149)
+#
+# Milestone 2 Slice ③'s Task 3 (the interpreter pause kind + shared pause-
+# machine fixture + pause-interpret lane) adds the last pass, Pass 41 (the
+# interpreter's two pause decisions): a pause node's own kind, unreachable by
+# any earlier SPEC lane because no fixture before this task's pause-machine
+# built a pause-node?, and the pause-target message resolving to the pause
+# node's continuation rather than the pause node itself. Two mutations. So
+# 37 + 1 = 38 passes and 149 + 2 = 151 mutations.
+set(EXPECTED_PASSES 38)
+set(EXPECTED_MUTATIONS 151)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -3151,6 +3159,52 @@ byte_machine_mutation(
   FIND [[make-parser parser? parser-feed!]]
   REPLACE [[make-parser parser?]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "no drift between reserved-member-2")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 41: the interpreter's pause kind and pause-target message (Slice ③,
+# Task 3) -------------------------------------------------------------------
+#
+# pause-interpret-tests.sps drives the shared pause-machine (byte-machine test
+# pause-machine) end-to-end through the interpreter's pause arms and the
+# runtime's paused-feed/paused-finish/finish-ready lifecycle. This pass proves
+# that coverage is not vacuous. The first mutation makes a pause node report
+# kind 'stop instead of 'pause -- no node in any earlier SPEC lane's fixture
+# was ever a pause-node?, so this decision was unreachable before this task's
+# fixture existed -- and the feed-pause case's own "paused" check (byte 1
+# pausing) fails first. The second mutation makes pause-target resolve to the
+# pause node's own name instead of its continuation, so `current` never
+# advances past the pause (D3) and the resumed feed re-enters the same pause
+# node instead of consuming byte 2; the same case's "stopped" check (byte 2
+# stopping after resume) fails. Both signatures are the exact case-name tail
+# ("byte 2 stops") plus the one check label each mutation breaks first, unique
+# in this program's own check vocabulary -- neither collides with the other
+# mutation's own pin, a group name, or a `-- <detail>` tail. Verify command
+# uses both library roots, an empty object guard, the pause-interpret program.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/pause-interpret-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.pause-interpret.chez.source
+  LABEL "interpret: a pause node has its own kind"
+  FIND [[((pause-node? n) 'pause)]]
+  REPLACE [[((pause-node? n) 'stop)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "byte 2 stops: paused")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.pause-interpret.chez.source
+  LABEL "interpret: pause-target resolves the continuation, not the pause itself"
+  FIND [[((pause-target) (pause-node-continuation (lookup nodes (car args))))]]
+  REPLACE [[((pause-target) (car args))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "byte 2 stops: stopped")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

@@ -844,6 +844,29 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/eof-interpret-tests.sps"
   TIMEOUT 120)
 
+# Milestone 2 Slice ③: the shared pause/resume proving machine driven through
+# the interpreter's pause arms and the runtime's paused-feed/paused-finish/
+# finish-ready lifecycle.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.pause-interpret.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/pause-interpret-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/pause-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/pause-interpret-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.pause-interpret.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/pause-interpret-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/pause-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/pause-interpret-tests.sps"
+  TIMEOUT 120)
+
 # --- Milestone 1 Phase 3 Slice A: normalizer ------------------------------
 set(BYTE_MACHINE_CORE_NORMAL_IR
     ${BYTE_MACHINE_CORE_VERIFY}
