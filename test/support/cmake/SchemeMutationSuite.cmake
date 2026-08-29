@@ -623,9 +623,27 @@ set(EXPECTED_MUTATIONS 165)
 # under-anchored pin with a strictly better anchor going unused. The one
 # genuinely separable family this slice owns -- Pass 35's two pause-fingerprint
 # mutations -- WAS separated, by putting each mutant's distinct "got" digest in
-# its pin: the same trade the four pre-existing one-byte-fingerprint pins in
-# that pass decline, and the reason that family cross-matches without being
-# subsumed.
+# its pin.
+#
+# That paragraph originally continued "the same trade the four pre-existing
+# one-byte-fingerprint pins in that pass decline". They no longer decline it:
+# the five pre-existing fingerprint pins in this pass now carry their own
+# measured "got" digest too, for the reason this slice found first. The whole
+# family was category 3 -- separable, because each mutant hashes to a distinct
+# digest, but pinned on the shared EXPECTED golden, which every
+# fingerprint-affecting mutation in the lane prints. Closing them takes the
+# lane's residual cross-matches to zero.
+#
+# THE COST, STATED SO IT IS NOT REDISCOVERED. An IR-encoding change moves the
+# expected goldens; there are now ~15 sites carrying one, not ten. The five
+# "got" digests are different in kind from the rest: an expected golden is
+# RECOMPUTED by re-running the lane, but a "got" digest can only be
+# RE-MEASURED, by applying that one mutation to a staged copy and reading what
+# it printed. That is mechanical -- it is what this pass's own audit did -- but
+# it is a step the ordinary re-baseline flow does not perform, so a re-baseline
+# that only recomputes the expected values will leave five pins pointing at
+# digests no mutant produces any more, and the suite will say so as
+# wrong-reason rather than silently.
 #
 # On a different axis, and still declined: the p39 pair has a SPEC-level
 # remedy. property-differential-tests.sps counts a pause only when BOTH sides
@@ -3284,21 +3302,21 @@ byte_machine_mutation(
   LABEL "normal-ir: the FNV offset basis is changed"
   FIND [[(define fnv-offset 14695981039346656037)]]
   REPLACE [[(define fnv-offset 14695981039346656038)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "4236938459847922092")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 4236938459847922092, got 12950784969855027655")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: the FNV prime is changed"
   FIND [[(define fnv-prime  1099511628211)]]
   REPLACE [[(define fnv-prime  1099511628212)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "4236938459847922092")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 4236938459847922092, got 4383449027582801924")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: the byte is never mixed into the hash"
   FIND [[(* (bitwise-xor h (bytevector-u8-ref bv i)) fnv-prime)]]
   REPLACE [[(* h fnv-prime)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "4236938459847922092")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 4236938459847922092, got 11573569732163983077")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
@@ -3331,7 +3349,7 @@ byte_machine_mutation(
   LABEL "normal-ir: a dispatch's default-eof routing is not encoded into the fingerprint"
   FIND [[(begin (put-u8 p 1) (put-symbol p (cdr eof)))]]
   REPLACE [[(begin (put-u8 p 1))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "4236938459847922092")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 4236938459847922092, got 11399399754445376357")
 
 # Milestone 2 whole-branch review (item d): the NODE-eof encode arm -- tag 0 +
 # u32be routed node id -- had no witnessing mutation and no golden, because no
@@ -3349,7 +3367,7 @@ byte_machine_mutation(
   LABEL "normal-ir: a dispatch's node-eof routing target is not encoded into the fingerprint"
   FIND [[(begin (put-u8 p 0) (put-u32be p (cdr eof)))]]
   REPLACE [[(begin (put-u8 p 0))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "9098559711816935340")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 9098559711816935340, got 5670164119345830887")
 
 # Milestone 2 Slice ③'s Task 4 (the pause node in the normalizer) adds three
 # more mutations to this pass rather than opening a new one. normal-ir-
