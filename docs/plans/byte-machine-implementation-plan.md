@@ -1006,7 +1006,7 @@ Parser state is kept in local variables while executing and committed to the par
 ### 19.2 Initial lowering choices
 
 - Byte dispatch: portable `case`/conditional code over numeric bytes.
-- Byte sets: canonical membership code selected for simplicity, not speculative density optimization.
+- Byte sets: canonical membership code selected for simplicity, not speculative density optimization (Milestone 3 lowers them to one transition per byte, leaving the encoding and the IR fingerprint in place — decision 0014).
 - Sequences: explicit resumable prefix states.
 - Field operations: generic exact arithmetic with declared-bound checks.
 - Callbacks: direct indexed vector lookup.
