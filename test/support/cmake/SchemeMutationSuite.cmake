@@ -2068,7 +2068,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: an accepting feed does not record the stopped lifecycle"
-  # Re-anchored for Slice 3 Task 2: Step 3(c) re-nests parser-feed!'s own
+  # Re-anchored for Slice ③ Task 2: Step 3(c) re-nests parser-feed!'s own
   # case-dispatch under a new `else` arm behind the lifecycle guard, so the
   # old FIND at the previous indentation no longer occurs. Same decision, same
   # reason -- only the surrounding indentation moved.
@@ -2081,7 +2081,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a rejecting feed does not record the error lifecycle"
-  # Re-anchored for Slice 3 Task 2: the error arm now also stores the parser-
+  # Re-anchored for Slice ③ Task 2: the error arm now also stores the parser-
   # result's error value (D1), so the old bare `((error) (parser-set-lifecycle!
   # parser 'error))` two-line pairing with the finished arm no longer occurs.
   # Still anchored on the same error-arm-then-finished-arm adjacency that makes
@@ -2111,7 +2111,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: reset does not return the lifecycle to ready"
-  # Re-anchored for Slice 3 Task 2: parser-resume!'s new paused-feed arm adds a
+  # Re-anchored for Slice ③ Task 2: parser-resume!'s new paused-feed arm adds a
   # second bare `(parser-set-lifecycle! parser 'ready)` occurrence, so the old
   # single-line FIND no longer disambiguates. Widened with the preceding
   # `(parser-set-offset! parser 0)` line, which occurs only in parser-reset!.
@@ -2135,7 +2135,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a dispatch with no eof-target does not route to the default error"
-  # Re-anchored for Slice 3 Task 2: Step 3(g)'s let-bound rewrite (D1's stored-
+  # Re-anchored for Slice ③ Task 2: Step 3(g)'s let-bound rewrite (D1's stored-
   # error site) deletes the old single-expression
   # `(make-parser-result 'error off 0 off (op 'default-eof-value))` this FIND
   # anchored. Same routing decision, same reason; the store itself is a
@@ -2198,7 +2198,7 @@ byte_machine_mutation(
   REPLACE [[(unless #t]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "refused")
 
-# Milestone 2 Slice 3's Task 2 (pause/resume + the full §12.2 operation
+# Milestone 2 Slice ③'s Task 2 (pause/resume + the full §12.2 operation
 # matrix, D1-D3) adds the rest of this pass: parser-resume! (its two acks and
 # its own prohibited-cell else arm), the newly-prohibited feed/finish rows,
 # the feed-side stored-error read, both pause arms in parser-feed-op!, the
