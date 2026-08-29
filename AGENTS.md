@@ -85,6 +85,58 @@
   different lane) is uncaught. Slice ②b-1 shipped exactly this until an uncaught
   mutation surfaced it. When you add a mutation, put its witness in that
   mutation's SPEC-lane program.
+* **A pin that matches text printed on every failing run asserts nothing.**
+  `EXPECT_OUTPUT_MATCHES` is an *unanchored* regex over the spec command's
+  stdout+stderr (`MutationRunner.cmake`), and two lines print on essentially
+  every failing run: the FAIL-CONTEXT line (`backend=`, `mode=`, `os=`,
+  `architecture=`, `machine-type=`, `artifacts=`, plus the
+  `BYTE_MACHINE_TEST_NAME`/`BYTE_MACHINE_TEST_TMPDIR` values, which make
+  `scheme`, `mutation`, `harness`, `cmake`, `direct` unconditional) and the
+  summary line (`status=`, `cases=`, `checks=`, `failures=`). A pin that is a
+  substring of either is the bare nonzero-exit catch this file forbids, wearing
+  a signature. Slice ③ shipped `"ack"`, which hid inside `backend=`; a suite-wide
+  audit then found four more. Pin a case-name tail plus the check label, so the
+  pin resolves to one `(case, check)` pair — the FAIL grammar is
+  `FAIL <group>.<case>: <what> -- <detail>`. A pin can also match another
+  mutant's `-- <detail>` tail or a *group* name, so uniqueness among check
+  labels is not sufficient; CMake `MATCHES` is not literal, so no metacharacters
+  (`\\.` for a dot). The discriminator is the *pair*
+  (`EXPECT_STATUS`, `EXPECT_OUTPUT_MATCHES`): mutations sharing a pin but
+  declaring different statuses are still separated.
+* **Judge a pin against the other mutants in its lane, not by reading it.**
+  Static inspection cannot see a collision; re-judging each pin through
+  `byte_machine_mutation_verdict` against every *other* mutation's captured
+  output can. That pass is also what sorts the residue, which has three kinds
+  and not two: **under-anchored** (the broad mutant emits a line the narrow one
+  does not — a tighter pin exists), **subsumed** (the narrow mutant's whole
+  failure set is a subset — no pin can separate them), and **separable but
+  deliberately declined** (the sets differ, so a pin *could* discriminate, but
+  only by embedding a value with a maintenance cost). A subset test reports the
+  third as clean, so classifying by it alone records a deliberate trade as "no
+  issue" — or worse, as "unfixable". Compare whole FAIL **records**, not lines:
+  runtime details are multi-line condition dumps, and a line-level comparison
+  manufactures false separability. Rule out under-anchoring by exhaustion
+  ("no record it emits is unique to it"), not by inspection — only the former is
+  checkable. Run the subset test *before* the fix pass, or you spend the cycle
+  first and learn it was unfixable second.
+* **A pin is only ever verified against the mutants that existed when it was measured.**
+  This is the same shape as the exit-path rule above: adding mutations to a lane
+  can widen an existing pin's collision set, silently. When a branch adds
+  mutations to lanes another branch has audited, that branch must re-measure
+  after the merge — and the obligation belongs in the tree, named by mutation
+  LABEL rather than line number, not in a session transcript.
+* **A measurement that cannot fail visibly needs a control, not a re-read.**
+  Slice ③'s close-out produced two plausible-and-wrong counts from two different
+  methods, each returning a number that gave no reason to distrust it. Reading
+  the output again would not have caught either; a deliberate control did — run
+  the measurement a second way and compare, or construct the case the number
+  claims is impossible. Two traps this repo's own mutation suite sets, both from
+  one root cause (its comments contain CMake syntax and its bracket arguments
+  contain unbalanced parens, so neither construct is recognisable without lexing
+  the other): balancing parens from `byte_machine_mutation(` truncates the body
+  and reports a false *absent*; counting `EXPECT_STATUS` textually picks it up
+  inside `#` comments and reports a false *declared*. Only a single
+  left-to-right lexer skipping both is sound.
 
 ### Documentation & record discipline
 
