@@ -607,21 +607,42 @@ grep -c 'exact-byte-matcher-byte' test/support/cmake/SchemeMutationSuite.cmake
 Expected: `1` — the Pass 42 accessor mutation's `FIND`. (Pass 34's old
 occurrence is gone; Pass 42's new one is the only remaining reference.)
 
-> **Disposition, 2026-08-29 (Task 7 close-out).** This step's expected count
-> has closed against a measurement of `3`, not `1`, and is dispositioned
-> rather than reworded to `3`. The mutation this step itself adds in Step 10
-> is `LABEL "ir: the exact-byte accessor reads slot 1 of any vector"` with
-> `FIND [[(byte-machine-contract-violation 'exact-byte-matcher-byte
-> 'invalid-argument 'matcher)]]` — that `FIND` string and its sibling
-> `REPLACE` line both contain the literal identifier `exact-byte-matcher-byte`
-> a second and third time, so `grep -c` over the whole file counts 3 the
-> moment this step's own Step 10 edit lands, independent of Pass 34's old
-> occurrence going away. This step's check *intent* — no other pin still
-> references code this task deleted — is still discharged: this file's
-> `SITES` argument is asserted exactly per mutation, so a pin left pointing
-> at deleted text is a hard configure-time failure regardless of what a
-> whole-file `grep -c` reports. The implementer measured `3`, reported it,
-> and did not force the count to `1`.
+> **Disposition, 2026-08-29 (Task 7 close-out); corrected in Fix wave 1,
+> 2026-08-29.** This step's expected count has closed against a measurement
+> of `3`, not `1`, and is dispositioned rather than reworded to `3`. The
+> original text here derived the `3` from what the plan says Step 10 adds,
+> rather than from the file — corrected below by reading the file itself.
+>
+> `grep -n 'exact-byte-matcher-byte' test/support/cmake/SchemeMutationSuite.cmake`
+> on the shipped tree returns three hits, none of them a `FIND`/`REPLACE`
+> pair on the same mutation:
+>
+> 1. `:3989` — `FIND [[(list (exact-byte-matcher-byte m))]]`, the *other*
+>    Pass 42 mutation this same Step 10 block adds (`LABEL "ir: an exact-byte
+>    matcher does not canonicalize to its own byte"`), re-anchored to its
+>    comparison-caught form by commit `dd50a16` (Task 1's own fix wave —
+>    see the Step 10 disposition immediately above).
+> 2. `:4005` — `FIND [[(byte-machine-contract-violation
+>    'exact-byte-matcher-byte 'invalid-argument 'matcher)]]`, this step's own
+>    accessor mutation (`LABEL "ir: the exact-byte accessor reads slot 1 of
+>    any vector"`), unchanged since it landed in `3ea0c98`. Its `REPLACE` is
+>    `[[#f]]` and contains no such identifier.
+> 3. `:4076` — a **prose comment**, `# exact-byte-matcher-byte: dropping the
+>    tag check lets the accessor read ...`, introducing the four-mutation
+>    tag-guard fix wave for the other class-matcher accessors. `git blame`
+>    dates this line to commit `c426b5d` (2026-08-29 16:15:50) — Task 2's
+>    own fix wave, not Step 10.
+>
+> So at Step 10/12's landing (`3ea0c98`, then `dd50a16` — both within Task 1)
+> the count was **2**: one `FIND` per Pass 42 mutation, each containing the
+> identifier once. It became **3** only when Task 2's fix wave added the
+> comment at `:4076`, a task later. The `3` recorded above is correct as a
+> present-day measurement; what was wrong was reasoning it from the plan's
+> own Step 10 text instead of reading the tree. This step's check *intent* —
+> no other pin still references code this task deleted — is still
+> discharged: this file's `SITES` argument is asserted exactly per mutation,
+> so a pin left pointing at deleted text is a hard configure-time failure
+> regardless of what a whole-file `grep -c` reports.
 
 - [ ] **Step 13: Commit**
 
@@ -1175,8 +1196,12 @@ construction surface and lists none."
 > distinction the reverse exists to preserve) and additionally found it made
 > a sibling test case vacuous. Both `(reverse out)` and the ordering promise
 > above were removed together in the fix wave (commit `b835bfe`), verified
-> by a control: reintroducing `(reverse out)` left all 72 tests green,
-> confirming nothing was testing it. Diagnostic order was never re-promised
+> by a control: reintroducing `(reverse out)` left the release lane
+> (`ctest --preset release`, i.e. `make test-all`) green at 72/72 — that
+> lane's size at Task 3, before Tasks 5-6 added the four byte-class lanes
+> that bring the shipped tree's release lane to 76/76 (re-measured on
+> `b835bfe` directly for Fix wave 1: 72/72, matching `task-3-report.md`'s own
+> figure). Diagnostic order was never re-promised
 > at a weaker grain (e.g. "diagnostics for a fixed node appear in some
 > stable but unspecified order") because §16.4 and `verify.sls`'s own header
 > forbid comparing diagnostics by rendered text, which is the only way an

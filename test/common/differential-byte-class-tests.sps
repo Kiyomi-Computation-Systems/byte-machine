@@ -31,9 +31,12 @@
 ;; class-machine.sls at construction time. The two agree today only because
 ;; every class-machines entry reuses the identical symbol for both its list
 ;; label and the name passed to class-machine -- an invariant held by
-;; convention, asserted nowhere, and enforced only by `load` failing loudly
-;; with a library-not-found error if a future fixture's label and
-;; machine-name ever diverge.
+;; convention, asserted nowhere, and enforced only by `environment` (below)
+;; failing loudly with a library-not-found error if a future fixture's label
+;; and machine-name ever diverge: `load` installs whatever library name the
+;; generated file declares and succeeds regardless; it is `(environment
+;; (list 'generated name))`, the only form that consumes this function's own
+;; `name` argument, that raises when the two disagree.
 (define (generated-machine name machine)
   (let ((genfile (string-append tmpdir "/generated-" (symbol->string name) ".sls"))
         (binding (string->symbol (string-append (symbol->string name) "-parser"))))

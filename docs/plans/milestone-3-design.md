@@ -1,8 +1,9 @@
 # Milestone 3 Design — Byte Classes and Sequences
 
 Status: design — approved shape, **Gate 0 discharged; Slice ① (byte classes)
-closed 2026-08-29** (commits `3ea0c98`..`3bbd1d8` on branch
-`feat/milestone-3-slice-1`; PR not yet opened as of this note). **Slices ② and
+closed 2026-08-29** (commits `3ea0c98` through `3bbd1d8`, plus this note's own
+commit, on branch `feat/milestone-3-slice-1`; PR not yet opened as of this
+note). **Slices ② and
 ③ not started.** Milestone 3 as a whole remains open — this slice discharges
 §5's scope, not the milestone's (see the dated §5 disposition below). Authored
 2026-08-29, the day Milestone 2 closed
@@ -403,8 +404,14 @@ recorded by mutation LABEL, not line number.
 >    membership test all call it. **Gate met**: `4236938459847922092`,
 >    `9098559711816935340`, `15725897457025557005` and both committed goldens
 >    (`generated-one-byte.golden.sls`, `generated-pause.golden.sls`) are
->    byte-identical on the shipped tree (`git status --porcelain --
->    test/fixtures/` empty). Task 1.
+>    byte-identical on the shipped tree — shown by the cross-commit diff
+>    against the branch's merge base, `git diff --stat
+>    $(git merge-base main HEAD)..HEAD -- test/fixtures/` (`a9de657..f7d6234`
+>    at close-out), empty. (A plain `git status --porcelain` only shows the
+>    working tree matches HEAD; it is blind to a golden re-baselined inside a
+>    branch commit, which is exactly what this gate exists to catch — the
+>    per-task uses of `git status` elsewhere in this plan are fine, since
+>    there the surrounding commit is untouched.) Task 1.
 > 2. **The constructors.** `make-byte-set-matcher`, `make-byte-range-matcher`,
 >    `make-byte-complement-matcher`, `ascii-bytes`, the widened
 >    `make-byte-case` guard, and decision 0017's degenerate-shape rejections
