@@ -549,28 +549,58 @@ set(EXPECTED_MUTATIONS 159)
 # 35's two pause-fingerprint mutations). Pass 36's two emitter mutations
 # needed the SPEC to change, not the pin: see that pass's own comment.
 #
-# Twelve pairs remain where one mutation's whole failure set is a SUBSET of a
-# broader sibling's, with byte-identical details -- a decision subsumed by a
-# kill-switch above it, not an under-anchored pin. No output text can separate
-# these, and each is still caught at the check that names its own decision:
-#   p32 resume-on-paused-feed  < feed-pause maps to paused-feed
+# Twelve pairs of mutations in these lanes still cross-match, and they are NOT
+# all the same thing. Classified by the only test that separates them -- do the
+# two mutants' FAIL-record sets actually DIFFER? -- they fall in two groups.
+#
+# (a) SUBSUMED -- ten pairs. The narrow mutation's ENTIRE failure set is a
+# subset of the broader one's, with byte-identical details: a decision killed
+# again by a switch above it. No pin can separate these, and that sentence is
+# the complete record -- there is no text in the narrow mutant's output that is
+# not also in the broad one's.
+#   p32 resume-on-paused-feed   < feed-pause maps to paused-feed
 #   p32 resume-on-paused-finish < EOF pause parks paused-finish
 #   p32 /v2 finish error stored < /v2 finish drives exec with finish? true
-#   p33 pause continuation out-target      < missing-target never reported
-#   p33 eof-terminal chains through pause  < eof-target cycle is a finish
-#   p33 pause joins zero-progress walk     < zero-progress never fires
-#   p33 pause-only zero-progress cycle     < zero-progress never fires (also
-#                                            < pause joins the walk)
-#   p33 byte-reachable pause chain is EOF  < EOF-reachable stop accepted
-#   p33 byte-reachability gate (:908)      < pause continuation out-target
-#   p39 pause draw / eof draw              < inverted dispatch byte test
-# The last pair is the only one with a cheap remedy, and it was declined
-# deliberately: property-differential-tests.sps counts a pause only when BOTH
-# sides agree they paused, so a compile.sls divergence zeroes the same two
-# anti-vacuity counters the generator mutations zero. Counting the oracle's
-# own pause instead would separate them, but it would weaken what the guard
-# asserts (that the LANE drove a real agreeing pause) for a pin-specificity
-# gain, and both mutations are already caught at their own checks.
+#   p33 pause joins zero-progress walk    < zero-progress never fires
+#   p33 pause-only zero-progress cycle    < zero-progress never fires, AND
+#                                         < pause joins the walk (two pairs)
+#   p33 byte-reachable pause chain is EOF < EOF-reachable stop accepted
+#   p33 byte-reachability gate (:908)     < pause continuation out-target
+#   p39 pause draw, eof draw              < inverted dispatch byte test (two)
+#
+# (b) SEPARABLE, DECLINED -- two pairs. The sets DIFFER, so a pin separating
+# that pair does exist. Measured against the whole lane, each one only moves
+# the collision to a different sibling, and moves the pin off the check that
+# states the decision. Calling these "unfixable" would be false:
+#   p33 pause continuation out-target  vs  missing-target never reported.
+#     They differ: the narrow mutant also fails "a well-formed pause machine
+#     verifies: accepted". Pinning that excludes the broad mutant -- and
+#     matches the byte-reachability-gate mutation instead, whose sole witness
+#     that check is -- while moving this pin off "missing-target diagnostic",
+#     the check that states this decision. One collision traded for another.
+#   p33 eof-terminal chains through pause  vs  eof-target cycle is a finish.
+#     They differ: the narrow mutant also fails the ":909 EOF chain through a
+#     pause into a stop" case. Pinning that (parentheses escaped) excludes the
+#     broad mutant and matches "EOF-reachable stop accepted" instead, while
+#     moving the pin off the eof-cycle case that states this decision.
+#
+# Proved by exhaustion rather than argued: for every one of the eleven narrow
+# mutations, EVERY FAIL record it emits is also emitted by some sibling in its
+# own lane, so no collision-free pin exists for any of them. None is an
+# under-anchored pin with a strictly better anchor going unused. The one
+# genuinely separable family this slice owns -- Pass 35's two pause-fingerprint
+# mutations -- WAS separated, by putting each mutant's distinct "got" digest in
+# its pin: the same trade the four pre-existing one-byte-fingerprint pins in
+# that pass decline, and the reason that family cross-matches without being
+# subsumed.
+#
+# On a different axis, and still declined: the p39 pair has a SPEC-level
+# remedy. property-differential-tests.sps counts a pause only when BOTH sides
+# agree they paused, so a compile.sls divergence zeroes the same two
+# anti-vacuity counters the generator mutations zero. Counting the oracle's own
+# pause instead would separate them, but it would weaken what the guard asserts
+# (that the LANE drove a real agreeing pause) for a pin-specificity gain, and
+# both mutations are already caught at their own checks.
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
