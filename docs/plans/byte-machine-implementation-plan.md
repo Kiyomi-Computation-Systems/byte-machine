@@ -319,7 +319,7 @@ No umbrella library is required for v0.1. Avoid forcing runtime consumers to loa
 
 `make-machine` stamps the current public source-IR format version; v0.1 callers do not supply or override that version. A future deserializer may expose explicit version handling, but ordinary construction cannot manufacture an unsupported-version descriptor through the public API.
 
-Constructors validate only local shape and return immutable-by-API descriptors. Cross-reference, graph, and semantic checks belong to `verify-machine` so callers can accumulate structured diagnostics.
+Constructors validate only local shape and return immutable-by-API descriptors (from Milestone 3 that includes rejecting an empty byte set, a range with `low > high`, and an empty sequence — decision 0017). Cross-reference, graph, and semantic checks belong to `verify-machine` so callers can accumulate structured diagnostics.
 
 Field-action operations and their exact `arguments` schemas are:
 
