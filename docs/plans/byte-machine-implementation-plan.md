@@ -319,7 +319,7 @@ No umbrella library is required for v0.1. Avoid forcing runtime consumers to loa
 
 `make-machine` stamps the current public source-IR format version; v0.1 callers do not supply or override that version. A future deserializer may expose explicit version handling, but ordinary construction cannot manufacture an unsupported-version descriptor through the public API.
 
-Constructors validate only local shape and return immutable-by-API descriptors. Cross-reference, graph, and semantic checks belong to `verify-machine` so callers can accumulate structured diagnostics.
+Constructors validate only local shape and return immutable-by-API descriptors (from Milestone 3 that validation includes rejecting an empty byte set, a range with `low > high`, and an empty sequence — decision 0017). Cross-reference, graph, and semantic checks belong to `verify-machine` so callers can accumulate structured diagnostics.
 
 Field-action operations and their exact `arguments` schemas are:
 
@@ -952,7 +952,7 @@ Normalization runs only after source verification and is deterministic.
 
 Responsibilities:
 
-- resolve symbolic names to stable numeric IDs;
+- resolve symbolic names to stable numeric IDs (declared nodes keep their declaration index; internal states append after them — decision 0016);
 - lower byte ranges and classes to canonical byte sets;
 - lower sequence alternatives into resumable prefix states;
 - make cursor advancement explicit on every input edge;
@@ -1006,8 +1006,8 @@ Parser state is kept in local variables while executing and committed to the par
 ### 19.2 Initial lowering choices
 
 - Byte dispatch: portable `case`/conditional code over numeric bytes.
-- Byte sets: canonical membership code selected for simplicity, not speculative density optimization.
-- Sequences: explicit resumable prefix states.
+- Byte sets: canonical membership code selected for simplicity, not speculative density optimization (Milestone 3 lowers them to one transition per byte, leaving the encoding and the IR fingerprint in place — decision 0014).
+- Sequences: explicit resumable prefix states (ordinary dispatch states, with the interpreter's own prefix representation derived independently — decision 0015).
 - Field operations: generic exact arithmetic with declared-bound checks.
 - Callbacks: direct indexed vector lookup.
 - Counted consume: bulk cursor movement using available/count minimum.
