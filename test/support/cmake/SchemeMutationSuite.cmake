@@ -344,8 +344,31 @@ cmake_minimum_required(VERSION 3.26)
 # dropping the gate there is not caught at all; see the two mutations' own
 # comments for the measurement). Passes stay at 37 and 128 + 2 = 130
 # mutations.
+#
+# Slice ③'s Task 2 (runtime lifecycle: the full §12.2 operation matrix,
+# parser-resume!, the D1 sticky short-circuit) adds ten decisions to the
+# existing Pass 32 (the runtime) rather than opening a new pass: parser-
+# resume!'s two acks and its own prohibited-cell else arm (three), the newly-
+# prohibited feed and finish rows (two), the feed-side stored-error read
+# (one), the feed and EOF pause arms' lifecycle mapping and current-parking
+# (three), and the sticky-stopped row's consumed field (one). Four pre-
+# existing mutations are textually broken by Step 3's refactor and re-
+# anchored in place, same decision and count each, so they neither add nor
+# drop a mutation -- see each one's own comment for what moved and why.
+# AGENTS.md's exit-path rule (three new raise sites, plus a short-circuit that
+# bypasses executor arms four mutations above relied on reaching) requires a
+# whole-pass review, not just confirming the four re-anchors still discrim-
+# inate: it found three more decisions this task's own new code introduced
+# with no witness at all -- parser-finish-op!'s plain error arm (unreachable
+# by any fixture before the pause-op stub's s1 -> 'trunc), and the /v2 finish
+# path's own error-store and pause arms (no /v2 fixture re-read a stored
+# value or reached a pause state) -- each closed with one more mutation. A
+# fourth near-miss, the default-eof arm's OWN store (as opposed to its
+# routing, re-anchored above), turned out already witnessed by the plan's own
+# ②b-2-carry case, so it is one dedicated mutation, not a gap needing a new
+# fixture. Passes stay at 37 and 130 + 10 + 4 = 144 mutations.
 set(EXPECTED_PASSES 37)
-set(EXPECTED_MUTATIONS 130)
+set(EXPECTED_MUTATIONS 144)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -2045,28 +2068,30 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: an accepting feed does not record the stopped lifecycle"
-  # Re-anchored for Slice ②b-2: parser-finish-v2! commits its own terminal
-  # lifecycle with the same case-arm form, so the bare `((stopped) ...)` arm now
-  # occurs twice. The `(case (parser-result-status r)` discriminator is unique to
-  # parser-feed! (parser-finish-v2! keys on feed-outcome-status), so anchoring on
-  # it keeps this the feed decision it was.
+  # Re-anchored for Slice 3 Task 2: Step 3(c) re-nests parser-feed!'s own
+  # case-dispatch under a new `else` arm behind the lifecycle guard, so the
+  # old FIND at the previous indentation no longer occurs. Same decision, same
+  # reason -- only the surrounding indentation moved.
   FIND [[(case (parser-result-status r)
-        ((stopped) (parser-set-lifecycle! parser 'stopped))]]
+           ((stopped) (parser-set-lifecycle! parser 'stopped))]]
   REPLACE [[(case (parser-result-status r)
-        ((stopped) (parser-set-lifecycle! parser 'ready))]]
+           ((stopped) (parser-set-lifecycle! parser 'ready))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "stopped after accept")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a rejecting feed does not record the error lifecycle"
-  # Re-anchored for Slice ②b-2, same reason as the stopped arm above. In
-  # parser-feed! the `((error) ...)` arm is followed by the `((finished) ...)`
-  # arm; parser-finish-v2! orders them differently (finished, then error, then
-  # stopped), so this two-arm sequence is unique to parser-feed!.
-  FIND [[((error) (parser-set-lifecycle! parser 'error))
-        ((finished) (parser-set-lifecycle! parser 'finished))]]
-  REPLACE [[((error) (parser-set-lifecycle! parser 'ready))
-        ((finished) (parser-set-lifecycle! parser 'finished))]]
+  # Re-anchored for Slice 3 Task 2: the error arm now also stores the parser-
+  # result's error value (D1), so the old bare `((error) (parser-set-lifecycle!
+  # parser 'error))` two-line pairing with the finished arm no longer occurs.
+  # Still anchored on the same error-arm-then-finished-arm adjacency that makes
+  # it unique to parser-feed! (parser-finish-v2! orders its arms differently).
+  FIND [[((error) (parser-set-lifecycle! parser 'error)
+                    (parser-set-stored-error! parser (parser-result-error r)))
+           ((finished) (parser-set-lifecycle! parser 'finished))]]
+  REPLACE [[((error) (parser-set-lifecycle! parser 'ready)
+                    (parser-set-stored-error! parser (parser-result-error r)))
+           ((finished) (parser-set-lifecycle! parser 'finished))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "error after reject")
 
 byte_machine_mutation(
@@ -2086,8 +2111,14 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: reset does not return the lifecycle to ready"
-  FIND [[(parser-set-lifecycle! parser 'ready)]]
-  REPLACE [[(parser-set-lifecycle! parser 'stopped)]]
+  # Re-anchored for Slice 3 Task 2: parser-resume!'s new paused-feed arm adds a
+  # second bare `(parser-set-lifecycle! parser 'ready)` occurrence, so the old
+  # single-line FIND no longer disambiguates. Widened with the preceding
+  # `(parser-set-offset! parser 0)` line, which occurs only in parser-reset!.
+  FIND [[(parser-set-offset! parser 0)
+    (parser-set-lifecycle! parser 'ready)]]
+  REPLACE [[(parser-set-offset! parser 0)
+    (parser-set-lifecycle! parser 'stopped)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "ready after reset")
 
 # Milestone 2 Slice ②b-1's Task 2 (EOF execution) adds two more decisions to
@@ -2104,9 +2135,31 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a dispatch with no eof-target does not route to the default error"
-  FIND [[(make-parser-result 'error off 0 off (op 'default-eof-value))]]
-  REPLACE [[(make-parser-result 'stopped off 0 off (op 'default-eof-value))]]
+  # Re-anchored for Slice 3 Task 2: Step 3(g)'s let-bound rewrite (D1's stored-
+  # error site) deletes the old single-expression
+  # `(make-parser-result 'error off 0 off (op 'default-eof-value))` this FIND
+  # anchored. Same routing decision, same reason; the store itself is a
+  # separate decision, tested below.
+  FIND [[(let ((e (op 'default-eof-value)))
+                          (parser-set-stored-error! parser e)
+                          (make-parser-result 'error off 0 off e))))))]]
+  REPLACE [[(let ((e (op 'default-eof-value)))
+                          (parser-set-stored-error! parser e)
+                          (make-parser-result 'stopped off 0 off e))))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "default-eof")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the default-eof arm does not store its value"
+  # Same FIND anchor as the routing re-anchor above, a distinct decision:
+  # dropping only the store (not the status) is witnessed by the brief's own
+  # ②b-2-carry case, which reads the value back through a later feed.
+  FIND [[(let ((e (op 'default-eof-value)))
+                          (parser-set-stored-error! parser e)
+                          (make-parser-result 'error off 0 off e))))))]]
+  REPLACE [[(let ((e (op 'default-eof-value)))
+                          (make-parser-result 'error off 0 off e))))))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "stored error value")
 
 # Code-review fix for Task 2 (§12.2 finished x feed!): parser-feed-op!'s own
 # `finish` arm -- a parser parked at a finish node re-fed returns finished,
@@ -2144,6 +2197,140 @@ byte_machine_mutation(
   FIND [[(unless (and (integer? abi-version) (= abi-version 2))]]
   REPLACE [[(unless #t]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "refused")
+
+# Milestone 2 Slice 3's Task 2 (pause/resume + the full §12.2 operation
+# matrix, D1-D3) adds the rest of this pass: parser-resume! (its two acks and
+# its own prohibited-cell else arm), the newly-prohibited feed/finish rows,
+# the feed-side stored-error read, both pause arms in parser-feed-op!, the
+# EOF-pause arm in parser-finish-op!, and the sticky short-circuit's consumed
+# field. See the header narrative amendment beside EXPECTED_MUTATIONS for the
+# accounting; several EXPECT_OUTPUT_MATCHES values below are measured, not the
+# plan's prediction -- each says so where it differs.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: resume on paused-feed reopens feed, not finish"
+  # Measured, not the plan's predicted "continues past the pause": the
+  # lifecycle corruption itself fails the case's own "lifecycle" check before
+  # the next parser-feed! call is even reached; that call then raises (the
+  # corrupted state is now a prohibited feed row), recorded as a second,
+  # cascading "case raised" failure. Both are real; "lifecycle" is the one
+  # that names this decision.
+  FIND [[((paused-feed) (parser-set-lifecycle! parser 'ready) 'feed-ready)]]
+  REPLACE [[((paused-feed) (parser-set-lifecycle! parser 'finish-ready) 'feed-ready)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "lifecycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: resume on paused-finish acks finish-ready"
+  FIND [[((paused-finish) (parser-set-lifecycle! parser 'finish-ready) 'finish-ready)]]
+  REPLACE [[((paused-finish) (parser-set-lifecycle! parser 'finish-ready) 'feed-ready)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "ack")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: resume outside the paused rows is a prohibited cell"
+  FIND [[(else (byte-machine-contract-violation 'parser-resume! 'lifecycle-violation
+                                             (list (parser-lifecycle parser) 'resume)))]]
+  REPLACE [[(else 'feed-ready)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "resume on ready")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: feed refuses every paused/finish-ready row"
+  FIND [[((paused-feed paused-finish finish-ready)
+       (byte-machine-contract-violation 'parser-feed! 'lifecycle-violation]]
+  REPLACE [[((paused-finish finish-ready)
+       (byte-machine-contract-violation 'parser-feed! 'lifecycle-violation]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "feed on paused-feed")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: finish refuses the paused rows"
+  FIND [[((paused-feed paused-finish)
+       (byte-machine-contract-violation 'parser-finish! 'lifecycle-violation]]
+  REPLACE [[((paused-finish)
+       (byte-machine-contract-violation 'parser-finish! 'lifecycle-violation]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish on paused-feed")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the error row returns the STORED error"
+  FIND [[((error) (parser-set-lifecycle! parser 'error)
+                    (parser-set-stored-error! parser (parser-result-error r)))]]
+  REPLACE [[((error) (parser-set-lifecycle! parser 'error))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "feed-stored error value")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a feed pause maps to paused-feed, not paused-finish"
+  FIND [[((paused) (parser-set-lifecycle! parser 'paused-feed))]]
+  REPLACE [[((paused) (parser-set-lifecycle! parser 'paused-finish))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "ack")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the feed pause arm parks current on the continuation"
+  FIND [[(parser-set-current! parser (op 'pause-target node))
+             (make-parser-result 'paused pos (- pos start) (parser-offset parser) #f))]]
+  REPLACE [[(make-parser-result 'paused pos (- pos start) (parser-offset parser) #f))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "continues past the pause")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: an EOF pause parks paused-finish, not paused-feed"
+  FIND [[(parser-set-lifecycle! parser 'paused-finish)
+           (make-parser-result 'paused off 0 off #f))]]
+  REPLACE [[(parser-set-lifecycle! parser 'paused-feed)
+           (make-parser-result 'paused off 0 off #f))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "lifecycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the stopped row short-circuits with consumed zero"
+  FIND [[((stopped) (make-parser-result 'stopped start 0 (parser-offset parser) #f))]]
+  REPLACE [[((stopped) (make-parser-result 'stopped start 1 (parser-offset parser) #f))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "consumed")
+
+# The plan's Task 2 predicted ten mutations for this pass; the whole-pass
+# review it also mandated (AGENTS.md's exit-path rule) found three more
+# decisions with no witness at all -- not just narrower than intended, catches
+# nothing if broken:
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a finish reaching a named error node does not store its value"
+  # parser-finish-op!'s own plain error arm was unreachable by any fixture
+  # before this task (nothing drove an eof-target chain into a NAMED error
+  # node); the new pause-op stub's s1 -> 'trunc closes that gap and witnesses
+  # both this store and the arm's routing together.
+  FIND [[(let ((e (op 'error-value node)))
+             (parser-set-stored-error! parser e)
+             (make-parser-result 'error off 0 off e)))]]
+  REPLACE [[(let ((e (op 'error-value node)))
+             (make-parser-result 'error off 0 off e)))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish repeats the finish-stored error")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a /v2 finish error does not store its value"
+  # parser-finish-v2!'s own error arm is a separate call site from every op-
+  # path store above: no existing /v2 fixture re-read the stored value, so a
+  # dropped store here was invisible until this new case chains a second
+  # finish! through the sticky read.
+  FIND [[((error) (parser-set-lifecycle! parser 'error)
+                 (parser-set-stored-error! parser (feed-outcome-error o)))]]
+  REPLACE [[((error) (parser-set-lifecycle! parser 'error))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish repeats the stored /v2 error")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a /v2 finish reaching a pause state does not record paused-finish"
+  # parser-finish-v2!'s own paused arm -- distinct code from both the shared
+  # parser-feed! wrapper's paused arm and parser-finish-op!'s pause arm, both
+  # witnessed only through the op-path stub. No /v2 fixture reached a pause
+  # state before stub-exec's new state 3.
+  FIND [[((paused) (parser-set-lifecycle! parser 'paused-finish)))]]
+  REPLACE [[((paused) (parser-set-lifecycle! parser 'paused-feed)))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "lifecycle")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

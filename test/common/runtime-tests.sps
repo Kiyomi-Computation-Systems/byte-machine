@@ -192,12 +192,17 @@
 ;; slice, parser-finish! with #t over the empty slice. This stub encodes the
 ;; one-byte machine over numeric states (0 dispatch, 1 stop, 2 error); state 0's
 ;; exhausted-with-finish? path routes to the machine's default-eof error 'eof,
-;; witnessing the /v2 finish arm independently of the emitter.
+;; witnessing the /v2 finish arm independently of the emitter. State 3 is a
+;; pause (Slice 3): unconditional, regardless of finish?, continuation state 1
+;; (stop) -- mirroring D5's unconditional generated pause arm and letting
+;; v2-pause-machine below witness parser-finish-v2!'s own paused arm, which no
+;; other /v2 fixture reaches.
 (define (stub-exec state offset bv start end finish?)
   (let loop ((pos start) (st state) (off offset))
     (case st
       ((1) (byte-machine-make-feed-outcome/v1 'stopped pos #f 1 off))
       ((2) (byte-machine-make-feed-outcome/v1 'error pos 'unexpected-byte 2 off))
+      ((3) (byte-machine-make-feed-outcome/v1 'paused pos #f 1 off))
       (else
        (if (>= pos end)
            (if finish?
@@ -206,6 +211,7 @@
            (let ((b (bytevector-u8-ref bv pos)))
              (if (= b 0) (loop (+ pos 1) 1 (+ off 1)) (loop pos 2 off))))))))
 (define (v2-machine) (byte-machine-make-compiled-machine/v2 2 99 0 stub-exec))
+(define (v2-pause-machine) (byte-machine-make-compiled-machine/v2 2 99 3 stub-exec))
 
 (harness-group "generated-code ABI (/v2): feed and finish"
   (lambda ()
@@ -221,7 +227,26 @@
     (harness-case "a mismatched /v2 ABI version is refused"
       (lambda ()
         (check-raises "refused" (lambda (e) #t)
-                      (lambda () (byte-machine-make-compiled-machine/v2 1 99 0 stub-exec)))))))
+                      (lambda () (byte-machine-make-compiled-machine/v2 1 99 0 stub-exec)))))
+    (harness-case "a /v2 finish error is stored and repeated on the next call"
+      (lambda ()
+        ;; Witnesses parser-finish-v2!'s own store -- a separate site from the
+        ;; op-path stores above and below, distinct code with no other witness.
+        (let ((p (make-parser (v2-machine) '() #f)))
+          (parser-finish! p)                                    ; -> error, stores 'eof
+          (check-equal "lifecycle" (parser-lifecycle p) 'error)
+          (check-equal "finish repeats the stored /v2 error"
+                       (parser-result-error (parser-finish! p)) 'eof))))
+    (harness-case "a /v2 finish reaching a pause state sets paused-finish"
+      (lambda ()
+        ;; Witnesses parser-finish-v2!'s own paused arm -- distinct code from
+        ;; the shared parser-feed! wrapper's paused arm (op-witnessed above)
+        ;; and from parser-finish-op!'s pause arm (also op-witnessed): no other
+        ;; /v2 fixture reaches a pause state.
+        (let* ((p (make-parser (v2-pause-machine) '() #f))
+               (r (parser-finish! p)))
+          (check-equal "status" (parser-result-status r) 'paused)
+          (check-equal "lifecycle" (parser-lifecycle p) 'paused-finish))))))
 
 (harness-group "invalid feed slices"
   (lambda ()
@@ -262,5 +287,170 @@
           (check-equal "offset zeroed then advanced by one"
                        (parser-result-stream-offset (parser-feed! p (make-bytevector 1 0) 0 1))
                        1))))))
+
+;; Slice 3: pause/resume + the full §12.2 operation matrix. This stub encodes a
+;; two-pause machine: entry s0 dispatches byte 1 to a pause (continuation s1,
+;; the post-pause dispatch state), s1 dispatches byte 2 to stop, and s0's own
+;; eof-target is a second pause (pe, continuation done -- a finish node) so
+;; parser-finish! also exercises the pause arm. Any other byte at either
+;; dispatch state reexecutes into the error node (trunc when reached via s1's
+;; eof-target, reject otherwise).
+(define (pause-op msg . args)
+  (case msg
+    ((entry) 's0)
+    ((kind) (case (car args)
+              ((s0 s1) 'dispatch) ((p pe) 'pause) ((stop) 'stop)
+              ((done) 'finish) ((trunc reject) 'error)))
+    ((dispatch)
+     (let ((node (car args)) (byte (cadr args)))
+       (case node
+         ((s0) (if (= byte 1) (cons 'p 'advance) (cons 'reject 'reexecute)))
+         ((s1) (if (= byte 2) (cons 'stop 'advance) (cons 'reject 'reexecute))))))
+    ((pause-target) (case (car args) ((p) 's1) ((pe) 'done)))
+    ((eof-target) (case (car args) ((s0) 'pe) ((s1) 'trunc)))
+    ((error-value) (case (car args) ((trunc) 'truncated-input) (else 'unexpected-byte)))
+    (else (assertion-violation 'pause-op "bad message" msg))))
+
+(define (pause-parser) (make-parser (make-compiled-machine pause-op) '() #f))
+(define (lifecycle-violation? who op)
+  ;; D2: detail is (list <state> <op>) -- the state varies by call site, the
+  ;; refused operation must match.
+  (lambda (e)
+    (and (byte-machine-contract-condition? e)
+         (eq? (byte-machine-contract-condition-code e) 'lifecycle-violation)
+         (eq? (byte-machine-contract-condition-who e) who)
+         (eq? (cadr (byte-machine-contract-condition-detail e)) op))))
+
+(harness-group "pause + resume (§12.1)"
+  (lambda ()
+    (harness-case "feed pauses at the pause node with the first unconsumed index"
+      (lambda ()
+        (let* ((p (pause-parser))
+               (r (parser-feed! p (make-bytevector 2 1) 0 2)))   ; bytes 1 1
+          (check-equal "status" (parser-result-status r) 'paused)
+          (check-equal "next" (parser-result-next r) 1)
+          (check-equal "consumed" (parser-result-consumed r) 1)
+          (check-equal "lifecycle" (parser-lifecycle p) 'paused-feed))))
+    (harness-case "resume from a feed pause acks feed-ready and reopens feed"
+      (lambda ()
+        (let ((p (pause-parser)))
+          (parser-feed! p (make-bytevector 1 1) 0 1)
+          (check-equal "ack" (parser-resume! p) 'feed-ready)
+          (check-equal "lifecycle" (parser-lifecycle p) 'ready)
+          (let ((r (parser-feed! p (make-bytevector 1 2) 0 1)))
+            (check-equal "continues past the pause" (parser-result-status r) 'stopped)))))
+    (harness-case "finish! pauses on the EOF path and resumes to finish-ready"
+      (lambda ()
+        (let* ((p (pause-parser))
+               (r (parser-finish! p)))
+          (check-equal "status" (parser-result-status r) 'paused)
+          (check-equal "lifecycle" (parser-lifecycle p) 'paused-finish)
+          (check-equal "ack" (parser-resume! p) 'finish-ready)
+          (check-equal "lifecycle now" (parser-lifecycle p) 'finish-ready)
+          (let ((r2 (parser-finish! p)))
+            (check-equal "continues to finished" (parser-result-status r2) 'finished)
+            (check-equal "lifecycle final" (parser-lifecycle p) 'finished)))))))
+
+(harness-group "operation matrix (§12.2)"
+  (lambda ()
+    (harness-case "feed is prohibited in paused-feed, paused-finish, and finish-ready"
+      (lambda ()
+        (let ((p (pause-parser)))
+          (parser-feed! p (make-bytevector 1 1) 0 1)             ; -> paused-feed
+          (check-raises "feed on paused-feed" (lifecycle-violation? 'parser-feed! 'feed)
+            (lambda () (parser-feed! p (make-bytevector 1 2) 0 1))))
+        (let ((p (pause-parser)))
+          (parser-finish! p)                                     ; -> paused-finish
+          (check-raises "feed on paused-finish" (lifecycle-violation? 'parser-feed! 'feed)
+            (lambda () (parser-feed! p (make-bytevector 1 2) 0 1)))
+          (parser-resume! p)                                     ; -> finish-ready
+          (check-raises "feed on finish-ready" (lifecycle-violation? 'parser-feed! 'feed)
+            (lambda () (parser-feed! p (make-bytevector 1 2) 0 1))))))
+    (harness-case "finish is prohibited while paused"
+      (lambda ()
+        (let ((p (pause-parser)))
+          (parser-feed! p (make-bytevector 1 1) 0 1)
+          (check-raises "finish on paused-feed" (lifecycle-violation? 'parser-finish! 'finish)
+            (lambda () (parser-finish! p))))
+        (let ((p (pause-parser)))
+          (parser-finish! p)
+          (check-raises "finish on paused-finish" (lifecycle-violation? 'parser-finish! 'finish)
+            (lambda () (parser-finish! p))))))
+    (harness-case "resume is prohibited outside the paused rows"
+      (lambda ()
+        (check-raises "resume on ready" (lifecycle-violation? 'parser-resume! 'resume)
+          (lambda () (parser-resume! (pause-parser))))
+        (let ((p (pause-parser)))
+          (parser-finish! p) (parser-resume! p)                  ; -> finish-ready
+          (check-raises "resume on finish-ready" (lifecycle-violation? 'parser-resume! 'resume)
+            (lambda () (parser-resume! p))))
+        (let ((p (make-parser (make-compiled-machine one-byte-op) '() #f)))
+          (parser-feed! p (make-bytevector 1 0) 0 1)             ; -> stopped
+          (check-raises "resume on stopped" (lifecycle-violation? 'parser-resume! 'resume)
+            (lambda () (parser-resume! p))))))
+    (harness-case "sticky rows short-circuit: stopped feed/finish return the tuple"
+      (lambda ()
+        (let ((p (make-parser (make-compiled-machine one-byte-op) '() #f)))
+          (parser-feed! p (make-bytevector 1 0) 0 1)
+          (let ((r (parser-feed! p (make-bytevector 3 0) 1 3)))
+            (check-equal "status" (parser-result-status r) 'stopped)
+            (check-equal "next is the new start" (parser-result-next r) 1)
+            (check-equal "consumed zero" (parser-result-consumed r) 0))
+          (check-equal "finish on stopped returns stopped"
+                       (parser-result-status (parser-finish! p)) 'stopped))))
+    (harness-case "the error row returns the stored error after a feed error"
+      (lambda ()
+        ;; Witnesses parser-feed!'s own store (the finish-path store below is a
+        ;; separate site with its own mutation).
+        (let ((p (make-parser (make-compiled-machine one-byte-op) '() #f)))
+          (parser-feed! p (make-bytevector 1 65) 0 1)            ; -> error
+          (let ((r (parser-feed! p (make-bytevector 1 0) 0 1)))
+            (check-equal "sticky status" (parser-result-status r) 'error)
+            (check-equal "feed-stored error value" (parser-result-error r) 'unexpected-byte))
+          (check-equal "finish repeats the feed-stored error"
+                       (parser-result-error (parser-finish! p)) 'unexpected-byte))))
+    (harness-case "the error row returns the stored error after a default-EOF truncation"
+      (lambda ()
+        ;; Closes the ②b-2 carry: with default-eof-op (eof-target #f), finish!
+        ;; errors via the machine default while current stays on the dispatch node;
+        ;; the old re-execution mechanism would re-run dispatch and consume bytes.
+        (let ((p (make-parser (make-compiled-machine default-eof-op) '() #f)))
+          (parser-finish! p)
+          (let ((r (parser-feed! p (make-bytevector 1 0) 0 1)))
+            (check-equal "status stays error" (parser-result-status r) 'error)
+            (check-equal "consumed zero" (parser-result-consumed r) 0)
+            (check-equal "stored error value" (parser-result-error r) 'eof))
+          (check-equal "finish repeats the stored error"
+                       (parser-result-error (parser-finish! p)) 'eof))))
+    (harness-case "finish reaches a named error node via the eof-target chain and stores it"
+      (lambda ()
+        ;; Witnesses parser-finish-op!'s own plain error arm -- distinct from
+        ;; both the feed-side store above and the default-eof arm above: s1's
+        ;; eof-target is a NAMED error node ('trunc), reached only after a
+        ;; pause+resume moves current past s0's own pause. No other case in
+        ;; this file drives an eof-target chain into a named (non-default)
+        ;; error node.
+        (let ((p (pause-parser)))
+          (parser-feed! p (make-bytevector 1 1) 0 1)             ; -> paused-feed at p
+          (parser-resume! p)                                     ; -> ready, current = s1
+          (let ((r (parser-finish! p)))
+            (check-equal "status" (parser-result-status r) 'error)
+            (check-equal "error value" (parser-result-error r) 'truncated-input)
+            (check-equal "lifecycle" (parser-lifecycle p) 'error))
+          (check-equal "finish repeats the finish-stored error"
+                       (parser-result-error (parser-finish! p)) 'truncated-input))))
+    (harness-case "reset recovers every reachable row to ready"
+      (lambda ()
+        (let ((p (pause-parser)))
+          (parser-feed! p (make-bytevector 1 1) 0 1)             ; paused-feed
+          (parser-reset! p)
+          (check-equal "from paused-feed" (parser-lifecycle p) 'ready))
+        (let ((p (pause-parser)))
+          (parser-finish! p) (parser-resume! p)                  ; finish-ready
+          (parser-reset! p)
+          (check-equal "from finish-ready" (parser-lifecycle p) 'ready)
+          (check-equal "re-feeds from entry"
+                       (parser-result-status (parser-feed! p (make-bytevector 1 1) 0 1))
+                       'paused))))))
 
 (harness-finish)
