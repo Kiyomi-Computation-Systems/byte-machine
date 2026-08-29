@@ -9,6 +9,14 @@ corrected an EOF-terminal modeling error (a distinct **finish** node, not a
 the proving surface and ABI/test obligations. The three-slice architecture is
 unchanged.
 
+**Milestone 2 complete as of 2026-08-29.** Gate 0 (decisions 0011-0013),
+Slice ① (incremental execution), Slice ②a/②b-1/②b-2 (lifecycle spine, EOF
+semantic core, EOF generation), and Slice ③ (pause/resume, §6) are all
+delivered and reviewed; §4-§6's exit criteria and the parent plan's §25 four
+criteria are met against the shipped tree — see CHANGELOG.md's Milestone 2
+entries for the release-facing summary. Merge to `main` is the pending
+closing ritual as of this note.
+
 Governing plan: [byte-machine-implementation-plan.md](./byte-machine-implementation-plan.md)
 §25 ("Milestone 2: Incremental execution and lifecycle"). This document does not
 change M2's *scope*; it re-cuts M2 *internally* into an ordered Gate 0 plus three
@@ -267,6 +275,28 @@ M2 depends on — plus the sticky-repeat feed fix M1 left broken.
   deferred to M5; the lifecycle field is observational until then. This deletes the
   now-unwitnessable `SchemeMutationSuite` "v1 terminal not made sticky" mutation,
   whose effect idempotent re-execution now provides.
+
+  **Superseded (2026-08-29, Slice ③ — D1):** the deferral above did not survive
+  contact with the ②b-2 default-EOF carry. `parser-finish-op!`'s default arm
+  parks `current` on the dispatch node it just exhausted, not past it, so a
+  feed after a default-EOF truncation re-ran **dispatch** and consumed bytes
+  in both lanes — the idempotent re-execution this paragraph relied on was
+  demonstrated broken, not merely superseded early. Slice ③ pulls the
+  short-circuit forward: `stopped`/`error`/`finished` now return the §12.2
+  sticky tuple **at the operation entry**, without re-running the executor
+  (`runtime.sls:145-152` for `parser-feed!`, `:239-248` for
+  `parser-finish!`), and the parser gains a stored-error slot (slot 7,
+  `parser-stored-error`/`parser-set-stored-error!`) so the error row has a
+  value to return without re-executing anything. "The lifecycle field is
+  observational until then" no longer describes the shipped tree — M5's
+  remaining open item is narrower than this paragraph states: only the
+  *result* short-circuit callbacks will need (arbitrary stored results, not
+  only the error value), not the entry-gating short-circuit itself, which
+  Slice ③ already ships. Regression coverage: `runtime-tests.sps`'s "the
+  error row returns the stored error after a default-EOF truncation" case.
+  See the Slice ③ plan §0 D1
+  (`docs/plans/milestone-2-slice-3-pause-resume-implementation-plan.md`) for
+  the full rationale.
 - **The `finish` node — a new node kind** (`make-finish-node` in graph/ir; a
   normalizer arm with its own canonical tag byte; a `finish` render arm in the
   emitter emitting `finished`; a `finish` kind in the interpreter `op` and the
@@ -352,6 +382,19 @@ paused-feed/paused-finish/resume lifecycle can be exercised now.
   `exec` at `target`, past the pause. No continuation object — it rides the same
   numeric-state resume the executor already uses. (The audit confirmed this shape
   against §10.6/§12.1/§12.3.)
+
+  **As shipped (2026-08-29, Slice ③ — D6):** the paused result's `next`/
+  `consumed` fields follow the shape the operation demanded, not one shared
+  convention. A feed-path pause returns `next` = the first unconsumed index
+  and `consumed = next − start` (§10.6:608, §12.3:711) — ordinary mid-slice
+  progress reporting, unaffected by pausing (`runtime.sls:183-187`). A
+  finish-path pause has no slice to report against, so it mirrors the
+  `finished` convention ②b already shipped: `next` = the stream offset,
+  `consumed = 0` (`runtime.sls:288-291`, matching `:284-287`'s `finished`
+  arm exactly). Accessor-applicability enforcement (§9.3:425) — refusing
+  `parser-result-next`/`-consumed` where they are not meaningful for a given
+  status — stays deferred with the structured `parser-error-*` family (§7;
+  M4/M5), the same scope call ②b made for `finished` results.
 - **Cycle analysis treats pause as non-progress** (it consumes no input). Feed's
   zero-progress check rejects a reexecute/pause-only cycle with no advance; the EOF
   check from Slice ② already forbids a pause-loop on the EOF path.

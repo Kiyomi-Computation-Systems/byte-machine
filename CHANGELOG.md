@@ -378,6 +378,61 @@ what this milestone delivers.
   (`finished`) from truncation (`error`).
   [Decision 0010](docs/decisions/0010-direct-executor-abi.md) item 4 governs the
   `/v2`-constructor-over-arity-break seam.
+- Milestone 2 Slice ③: the explicit pause node, `parser-resume!`, and the
+  full reachable operation matrix, closing Milestone 2. A new source-IR node
+  kind, `make-pause-node` — the fifth normalized state kind after
+  dispatch/stop/error/finish — carries a name and one zero-width
+  continuation edge, with no advance/reexecute mode (pause reads no byte).
+  `parser-resume!` changes only lifecycle and consumes no input:
+  `paused-feed` acks to `ready` (`'feed-ready`), `paused-finish` acks to
+  `finish-ready` (`'finish-ready`); the next feed/finish re-enters the saved
+  continuation directly, with no separate continuation object — both
+  executors park `current` on the continuation before returning `paused`
+  (interpreter: `parser-set-current!` to `(op 'pause-target node)`;
+  generated: `next-state` = the continuation's state id). A feed-path pause
+  returns `next` = the first unconsumed index and `consumed = next - start`;
+  a finish-path pause has no slice, so it mirrors the `finished` convention
+  (`next` = the stream offset, `consumed = 0`).
+
+  The runtime now gates every operation on lifecycle at entry and enforces
+  the full **reachable** §12.2 matrix — `ready` / `paused-feed` /
+  `paused-finish` / `finish-ready` / `stopped` / `error` / `finished` ×
+  `feed!` / `finish!` / `resume!` / `reset!` (`poisoned`/`busy` are
+  unreachable without callbacks and ride to Milestone 5). Every prohibited
+  cell raises `&byte-machine-contract` with the single code
+  `'lifecycle-violation`: `who` is the refused operation (`parser-feed!` /
+  `parser-finish!` / `parser-resume!`), `detail` is `(list <state> <op>)`.
+  See [decision 0013](docs/decisions/0013-runtime-coded-conditions.md)'s
+  2026-08-29 note.
+
+  The verifier's reachability and zero-progress passes learn a pause arm: a
+  malformed or missing continuation is `missing-target` (§16.2:905); a
+  byte-reachable pause into a `finish` node is `non-eof-into-finish`
+  (§16.2:908); an EOF chain — through pauses, including from a
+  byte-reachable pause's continuation — into a `stop` node is
+  `eof-reachable-stop` (§16.2:909); an EOF chain of pauses that never
+  reaches a terminal is `eof-zero-progress-cycle`; a pause folded into a
+  reexecute-only cycle makes no progress and is `zero-progress-cycle`. No
+  new diagnostic codes were needed.
+
+  The normalizer lowers `pause` to canonical encode tag byte 4, with the
+  continuation riding the routing slot as `(node . <id>)`; the emitter's
+  pause arm emits `(byte-machine-make-feed-outcome/v1 'paused pos #f
+  <continuation-id> off)`. Pause is purely additive to the encoding — the
+  one-byte and node-routing goldens (`4236938459847922092`,
+  `9098559711816935340`) are unmoved — and a machine containing a pause
+  node gets its own golden, measured at `15725897457025557005`
+  (`test/fixtures/generated-pause.golden.sls`, `normal-ir-tests.sps`). The
+  §22.6 property generator now draws `pausep` and an eof target for a
+  subset of generated machines, and the differential driver resumes both
+  parsers through a feed-pause/finish-pause schedule.
+
+  Three new lane pairs (source + AOT): `byte-machine.unit.pause-interpret`,
+  `byte-machine.differential.pause`, `byte-machine.determinism.pause`.
+  Measured on the shipped tree: `release`/`pr` 72/72, `no-scheme` 8/8, the
+  Scheme mutation suite 38 passes/159 mutations (150 caught, 9 declared
+  `EXPECT_SURVIVES`), the CMake mutation suite unchanged at 1 pass/72
+  mutations.
 
 ### Changed
 
@@ -501,6 +556,23 @@ what this milestone delivers.
   benchmark showing material improvement, and Slice B builds no benchmark
   harness) and named accessors for `emission-metadata` (no consumer exists
   yet beyond the tests that construct it).
+- Sticky lifecycle rows (`stopped`/`error`/`finished`) now short-circuit at
+  the operation entry and synthesize the §12.2 result tuple directly,
+  instead of re-executing the interpreter/generated loop from a parked
+  terminal `current` and relying on that re-execution being idempotent (the
+  mechanism Slice ②a shipped). The parser gains a stored-error slot
+  (`runtime.sls` slot 7, `parser-stored-error`) so the error row has a value
+  to return without re-running anything. This changes no asserted result
+  tuple for the cases Slice ②a's mechanism already got right — but it fixes
+  one Slice ②a left broken and unwitnessed: a repeat feed after a
+  **default-EOF truncation** left `current` parked on the exhausted dispatch
+  node rather than past it, so `parser-finish-op!`'s default arm made the
+  next feed re-run dispatch and **consume bytes** instead of returning the
+  sticky error tuple. That is an observable behavior change, now covered by
+  `runtime-tests.sps`'s "the error row returns the stored error after a
+  default-EOF truncation" case. See
+  [milestone-2-design.md](docs/plans/milestone-2-design.md) §5's 2026-08-29
+  note (D1).
 
 ### Removed
 

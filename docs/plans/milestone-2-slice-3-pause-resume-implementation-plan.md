@@ -1647,6 +1647,37 @@ git commit -m "test: property generator emits eof/finish/pause machines (M2 Slic
   records the mechanism), so the harness prints
   `FAIL <case-name>: case raised` — pin the case NAME + "case raised", not a
   check name (no check runs). Record before/after in the ledger.
+
+> **Dispositioned 2026-08-29 (Task 7).** Not executed here. The work landed
+> first on `fix/mutation-signature-vacuity-audit` (branched off `main` at
+> `98d4a01`, single commit `67f59e7`), whose own broader pin-vacuity sweep
+> reached this exact mutation before Task 7 did. The predicted shape above
+> was confirmed correct — the mutant makes every `/v1` case RAISE inside
+> `parser-feed-op!`'s `(op 'kind node)`, so the harness's own "case raised"
+> failure is what the bare `"status"` pin was really catching (via the
+> summary line's unconditional `status=1`, not any FAIL line) — and that
+> branch's measured replacement is
+> `"an empty slice needs input: case raised"`: the case name of the raising
+> `/v1` fixture, with the colon disambiguating it from the one-byte group's
+> differently-worded case ("an empty slice needs input **and reports no
+> result yet**"), which would otherwise also match. That branch is not
+> merged into this one, so this tree still carries the original bare
+> `"status"` pin — at `SchemeMutationSuite.cmake:2241` after Slice ③'s
+> insertions shifted it from `main`'s `:1992` — plus two siblings the same
+> audit also fixed: `:2255` ("runtime: the v1 result status is hard-wired to
+> stopped", `main`'s `:2006`) and `:2379` ("runtime: a feed on a finished
+> parser does not return finished", `main`'s `:2097`). All three are that
+> branch's scope, not this slice's; editing them here would conflict with
+> work already done there.
+>
+> Coordination note for that branch, left by this slice's own pin re-audit
+> (`.superpowers/sdd/pin-audit-report.md` §6, not committed): Slice ③'s new
+> mutants **widened** some of the same six lanes' pre-existing collision
+> sets it left untouched (e.g. Pass 32's bare `"finished"` pin now also
+> matches the EOF-pause mutant's failure text) — `fix/mutation-signature-
+> vacuity-audit` should re-measure its own pins after this slice merges,
+> not assume they are still sound against the merged tree.
+
 - [ ] **Step 2: 0013 dated note.** Follow 0013's own amendment convention — a
   dated second-level section (its ②a note is
   `## 2026-08-28 (Slice ②a) — as-implemented manifest de-dup`), NOT a
