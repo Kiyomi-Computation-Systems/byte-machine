@@ -320,8 +320,320 @@ cmake_minimum_required(VERSION 3.26)
 # route eof to named nodes), so dropping the routed node id from the encoding
 # moves that node-routing golden and its fingerprint case catches it. Passes
 # stay at 37 and 122 + 1 = 123 mutations.
-set(EXPECTED_PASSES 37)
-set(EXPECTED_MUTATIONS 123)
+#
+# Milestone 2 Slice ③'s Task 1 (the pause node in the source IR + verifier)
+# adds five more decisions to the existing Pass 33 (the verifier) rather than
+# opening a new pass: a pause continuation is an out-target for both name
+# resolution and reachability (node-out-targets), eof-terminal walks a pause
+# continuation instead of stopping at it, a byte-reachable pause into a finish
+# node is rejected (§16.2:908), a pause continuation joins the reexecute
+# zero-progress walk (a pause consumes no input), and a byte-reachable pause's
+# continuation chain is itself checked as an EOF path (§16.2:909). The
+# existing zero-progress-detection mutation is re-anchored in place (its guard
+# widened to admit pause nodes), same decision and count, so it neither adds
+# nor drops a mutation. Passes stay at 37 and 123 + 5 = 128 mutations.
+#
+# Task 1's whole-branch review found two of those five decisions unwitnessed
+# and adds one mutation each, still on Pass 33: the PASS 5 filter guard's
+# `(pause-node? n)` disjunct (no fixture exercised a zero-width cycle with no
+# byte-dispatch node in it until a second check was added to the existing
+# pa->pb->pa EOF-pause-cycle fixture), and the D4(b)/(d) byte-reachability
+# gate shared by both new pass-eof-execution checks (witnessed at only one
+# of its two call sites -- the other's effect is masked by a pre-existing,
+# ungated check that already emits the identical diagnostic code, so
+# dropping the gate there is not caught at all; see the two mutations' own
+# comments for the measurement). Passes stay at 37 and 128 + 2 = 130
+# mutations.
+#
+# Slice ③'s Task 2 (runtime lifecycle: the full §12.2 operation matrix,
+# parser-resume!, the D1 sticky short-circuit) adds ten decisions to the
+# existing Pass 32 (the runtime) rather than opening a new pass: parser-
+# resume!'s two acks and its own prohibited-cell else arm (three), the newly-
+# prohibited feed and finish rows (two), the feed-side stored-error read
+# (one), the feed and EOF pause arms' lifecycle mapping and current-parking
+# (three), and the sticky-stopped row's consumed field (one). Four pre-
+# existing mutations are textually broken by Step 3's refactor and re-
+# anchored in place, same decision and count each, so they neither add nor
+# drop a mutation -- see each one's own comment for what moved and why.
+# AGENTS.md's exit-path rule (three new raise sites, plus a short-circuit that
+# bypasses executor arms four mutations above relied on reaching) requires a
+# whole-pass review, not just confirming the four re-anchors still discrim-
+# inate: it found three more decisions this task's own new code introduced
+# with no witness at all -- parser-finish-op!'s plain error arm (unreachable
+# by any fixture before the pause-op stub's s1 -> 'trunc), and the /v2 finish
+# path's own error-store and pause arms (no /v2 fixture re-read a stored
+# value or reached a pause state) -- each closed with one more mutation. A
+# fourth near-miss, the default-eof arm's OWN store (as opposed to its
+# routing, re-anchored above), turned out already witnessed by the plan's own
+# ②b-2-carry case, so it is one dedicated mutation, not a gap needing a new
+# fixture. Passes stay at 37 and 130 + 10 + 4 = 144 mutations.
+#
+# A subsequent review of Task 2's 14 additions found the implementation
+# itself correct but seven of their EXPECT_OUTPUT_MATCHES signatures
+# substring-vacuous: harness.sls's FAIL-CONTEXT line prints unconditionally
+# on every recorded failure and contains " backend=chez", so bare "ack" (a
+# substring of "backend") was satisfied by any failure at all, not the one it
+# named -- the two resume-ack mutations and the feed-pause mutation used it.
+# Bare "lifecycle" and "consumed" are not vacuous under that same mechanism,
+# but both collide with unrelated group/case names elsewhere in this file
+# ("one-byte parser lifecycle", "parser-lifecycle tracks ready -> terminal")
+# or with several other check labels ("consumed" alone names eight), so
+# neither pins the decision it claims to. All seven (and the default-eof
+# store mutation's "stored error value", a substring of the feed-side store
+# mutation's own "feed-stored error value") are re-pinned in place to their
+# owning case's own words; no FIND/REPLACE changed, so this does not move the
+# count. The same review found two more decisions this task's own code left
+# with no witness: parser-feed!'s finished sticky arm (no fixture repeated a
+# feed once lifecycle was already 'finished) and the error sticky arm's
+# `next` field (both existing witnesses fed from a zero start, so `start`,
+# the literal 0, and (parser-offset parser) were indistinguishable) -- each
+# closed with a new runtime-tests.sps case and its own mutation. A third
+# finding, parser-reset!'s stored-error clear, is genuinely unobservable
+# through the public API (parser-stored-error is unexported and both its
+# read sites require lifecycle = 'error, which reset overwrites to 'ready in
+# the same call) and is declared EXPECT_SURVIVES rather than left
+# undeclared. Passes stay at 37 and 144 + 3 = 147 mutations.
+#
+# A whole-branch cleanup pass over Slice 3 closes two more gaps and re-pins
+# three signatures that were already catching their mutant for the right
+# reason but not provably a UNIQUE one. Pass 33 gains one mutation: the
+# D4(d) byte-reachability gate's second call site (the eof-terminal-chain
+# check), left uncaught by verdict above, is now witnessed by ATTRIBUTION --
+# two new checks in the pa->pb->pa fixture assert the eof-zero-progress-cycle
+# diagnostic's NODE, not just its code, and ungating this site puts a
+# redundant copy on pa that only those checks see. Pass 32 gains one
+# mutation: parser-feed!'s finished sticky arm, witnessed above for its
+# field values, gets a second mutation for its own existence (whole-clause
+# deletion), declared EXPECT_SURVIVES and measured directly -- the 'op
+# executor reaches the identical result tuple from `current` regardless, and
+# neither other variant exercises the path. Neither addition opens a new
+# pass. The same review re-pinned three EXPECT_OUTPUT_MATCHES values: the
+# resume-ack mutation's "acks feed-ready and reopens feed: ack" named a
+# downstream consequence rather than the decision itself, re-pinned to the
+# case that states the decision directly; the EOF-pause mutation's "resumes
+# to finish-ready: lifecycle" was a prefix of two sibling checks in its own
+# case, extended into the measured detail to become exact; and "sticky
+# consumed zero" -- the one recent pin with no case prefix, because its
+# case's own name ends in a parenthesised section number a regex cannot
+# match literally -- is extended into its own measured detail instead, for
+# the same exactness the case-prefix gives its siblings. No FIND/REPLACE
+# changed in any of the three, so none of this moves the count. Passes stay
+# at 37 and 147 + 1 + 1 = 149 mutations.
+#
+# Milestone 2 Slice ③'s Task 3 (the interpreter pause kind + shared pause-
+# machine fixture + pause-interpret lane) adds the last pass, Pass 41 (the
+# interpreter's two pause decisions): a pause node's own kind, unreachable by
+# any earlier SPEC lane because no fixture before this task's pause-machine
+# built a pause-node?, and the pause-target message resolving to the pause
+# node's continuation rather than the pause node itself. Two mutations. So
+# 37 + 1 = 38 passes and 149 + 2 = 151 mutations.
+#
+# Slice ③'s Task 4 (the pause node in the normalizer + emitter) adds three
+# more mutations to the existing Pass 35 and two more to the existing Pass 36
+# rather than opening a new pass: the normalizer's lower arm (a pause's
+# resolved continuation id, not its own), its encode arm (tag 4 + u32be
+# continuation id hashed into the fingerprint), and the encode arm's tag
+# value alone (4 -> 3, colliding with finish's own tag byte), and the
+# emitter's pause arm (renders the `paused` outcome) and its next-state (the
+# continuation target, not the pause node's own id). Each is witnessed in its
+# own SPEC lane's program: normal-ir-tests.sps gains a "pause normalization"
+# group (a structural case plus a measured-then-pinned fingerprint golden);
+# compile-tests.sps gains a third inline fixture (the eof-fin precedent)
+# asserting both rendered pause arms. The lower-arm mutation is pinned to the
+# structural "p1 target" check rather than the fingerprint it also disturbs as
+# a side effect, the more precise of its two witnesses. The two encode-arm
+# mutations were originally pinned to the fingerprint golden's own check
+# label, "pause fingerprint", on the argument that a label unique in the file
+# needs no numeral. The Slice ③ pin re-audit measured that label's FAIL line
+# in the output of seven OTHER mutants of the same pass -- every
+# fingerprint-affecting mutation in the lane moves the pause golden too -- so
+# each now carries its own measured "got" value, which is what actually
+# separates the siblings; the two emitter mutations were likewise re-pinned
+# to measured check-equal details after compile-tests.sps's content-blind
+# `check` probes were replaced. See each mutation's own comment. Passes stay
+# at 38 and 151 + 5 = 156 mutations.
+#
+# Slice ③'s Task 6 (the property generator learns eof/finish/pause: a
+# generated machine's entry can now route eof to a finish node `done`, and a
+# byte case can now target an explicit pause `pausep`; the differential
+# driver -- property-differential-tests.sps -- now stays live across a
+# pause/resume/finish schedule instead of feeding one byte to a throwaway
+# parser) joins the existing Pass 39 (Slice B) with three mutations, rather
+# than opening a new pass: Pass 39 already runs this same program under this
+# same verify command (it re-anchors Slice A's advance-arm-lowering mutation
+# against the property lane), so a second reset/baseline/re-stage for the
+# identical spec would only pay the suite's most expensive lane's cost twice
+# for no new discrimination -- the pattern this slice's Tasks 1, 2 and 4
+# already established, each joining an existing pass rather than opening one.
+# (Review caught an earlier draft of this that opened "Pass 42" instead,
+# reasoning from the plan's own "Pass 39" citation and the unrelated fact
+# that Pass 41 above is this slice's one genuinely new pass; passes 39 and
+# 40 are M1 Slice B's, never claimed by this slice's earlier tasks, so
+# joining 39 was available and is what this task's mutations do now.)
+#
+# The generator's third (reachability) constraint -- gen-machine adds
+# `pausep` only when gen-cases reports some case actually drew it -- gets no
+# dedicated mutation, consistent with machine-gen.sls carrying none for its
+# two pre-Slice-③ constraints either (the target-`start`-forces-`advance`
+# rule, the first-case `stop` pin): breaking that gate manufactures an
+# unreachable node, which the property lane's own "machine N verifies"
+# checks already fail on every build, so a dedicated mutation would be
+# redundant with a check the lane already runs. The eof and pause draws
+# THEMSELVES are a different matter -- hard-wiring either one's coin to a
+# constant reproduces a machine shape `verify-machine` still accepts (the
+# pre-Task-6 generator ran green under this same lane, 81 checks / 0
+# failures, before either draw existed), so no existing check fails and both
+# draws needed their own new anti-vacuity assertions before they could be
+# witnessed at all. property-differential-tests.sps now carries both:
+# paused-count (added with the pause draw) and finished-count (added by this
+# fix, mirroring it), each asserted >= 1 across the seed's 40 machines.
+#
+# The first new mutation breaks resume-pair! (property-differential-
+# tests.sps), the one place either side's parser-resume! is called, shared
+# by the feed-pause and finish-pause loops: REPLACE swaps the two real calls
+# for a pair of hardcoded acks, so neither parser's lifecycle actually
+# leaves paused-feed. The very next operation the driver runs on them --
+# feed-loop!'s post-resume re-feed of the slice's remainder -- lands on
+# runtime.sls's own lifecycle-violation guard, which the driver does not
+# catch; harness-case's own guard catches it instead and records it as
+# "case raised". Measured: `code: lifecycle-violation who*: parser-feed!
+# detail: (paused-feed feed)`. Pinned to "paused-feed feed" -- the measured
+# detail tuple, metacharacter-free and specific to this exact lifecycle/op
+# pair, printed by nothing else in this program's output (a bare
+# "lifecycle-violation" would also match a violation raised for a different
+# reason, so the detail is the more precise of the two).
+#
+# The second new mutation targets the pause draw's own probability line in
+# machine-gen.sls: pause-drawn? is hard-wired to #f, so no case is ever
+# offered `pausep` as a target and no generated machine ever includes one.
+# paused-count's own assertion fails, at 0, exactly when this line is
+# mutated. Pinned to "observes a pause", the assertion's own words and
+# otherwise unused in this program.
+#
+# The third new mutation targets the eof draw's own probability line, the
+# same way: eof? is hard-wired to #f, so no dispatch node's eof-target is
+# ever `done` and no generated machine ever reaches `finished`.
+# finished-count's own assertion fails, at 0, exactly when this line is
+# mutated. Pinned to "idle-completion finish", the assertion's own words and
+# otherwise unused in this program.
+#
+# So passes stay at 38 and 156 + 3 = 159 mutations.
+#
+# Task 7 close-out review found the operation-matrix group's error/finished x
+# resume! cells (§12.2:696-697) untested -- closed by two check-raises cases
+# (runtime-tests.sps) and one mutation joining this same Pass 32 SPEC lane
+# (see its own comment, just above "runtime: resume admits error/finished
+# instead of refusing them"). Passes stay at 38 (an existing lane, not a new
+# one); mutations become 159 + 1 = 160.
+#
+# Self-review of the same criterion then found finished x finish! (parser-
+# finish!'s own sticky arm) also untested -- closed by one more check
+# (runtime-tests.sps) and one more mutation joining this same lane (see
+# "runtime: a re-finish on a finished parser does not return finished").
+# Mutations become 160 + 1 = 161.
+#
+# The final whole-branch review (pre-merge) found two more Critical gaps in
+# this same pass -- the feed-path and finish-path pause arms each collapse
+# next/consumed/stream-offset to numerically-indistinguishable values on
+# every existing zero-start fixture, the identical defect class the sticky
+# error arm's `next` field closed above -- plus one Minor gap, finish-ready's
+# own membership in parser-feed!'s prohibited clause. Three mutations join
+# this same Pass 32 SPEC lane (see "runtime: the feed pause arm's consumed
+# and stream offset collapse to next", "runtime: an EOF pause after
+# consuming bytes reports zero instead of the persisted offset", and
+# "runtime: feed admits finish-ready instead of refusing it"). Passes stay
+# at 38; mutations become 161 + 3 = 164.
+#
+# A T8 re-review of that fix found the nonzero-start case still insufficient:
+# it separates `next` from the other two fields, but not `consumed` from
+# `stream-offset` -- those two are equal by construction on any single feed
+# call from a fresh parser, so only a second feed call can separate them.
+# One more mutation joins this same pass (see "runtime: the feed pause arm
+# swaps consumed and stream offset"). Passes stay at 38; mutations become
+# 164 + 1 = 165.
+set(EXPECTED_PASSES 38)
+set(EXPECTED_MUTATIONS 165)
+
+# --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
+#
+# EXPECT_OUTPUT_MATCHES is an UNANCHORED regex over the verify command's
+# stdout+stderr, so a pin matching text that every failing run prints is a
+# bare nonzero-exit catch wearing a disguise. Text that is unconditional in
+# a harness lane: the FAIL-CONTEXT line's `backend=`, `mode=`, `os=`,
+# `architecture=`, `machine-type=`, `artifacts=`, and the values of
+# BYTE_MACHINE_TEST_NAME / BYTE_MACHINE_TEST_TMPDIR that
+# byte_machine_add_test supplies (so `scheme`, `mutation`, `harness`, `cmake`
+# and `direct` are all unconditional here); and the summary line's `status=`,
+# `cases=`, `checks=`, `failures=`. The FAIL grammar is
+#   byte-machine-harness: FAIL <group>.<case>: <what> -- <detail>
+# so a sound pin resolves to exactly ONE (case, check) pair. MATCHES is a real
+# regex: `(` `)` `.` are metacharacters, so a case name carrying a
+# parenthesised section reference cannot be used as a tail unescaped.
+#
+# All 34 of this slice's pins were re-judged against the captured output of
+# every other mutation in their own lane -- 797 pair judgments through
+# byte_machine_mutation_verdict, part of a 2008-pair sweep over all 89 pinned
+# mutations in the six lanes this slice touched. Every pin whose match landed
+# on a DIFFERENT
+# (case, check) than its own -- five, all in Pass 33's pause group, each
+# pinned to a bare diagnostic CODE rather than to a check -- was re-anchored,
+# and four more that shared a check with a sibling were extended with the
+# measured detail that separates them (Pass 32's two paused-row refusals, Pass
+# 35's two pause-fingerprint mutations). Pass 36's two emitter mutations
+# needed the SPEC to change, not the pin: see that pass's own comment.
+#
+# Twelve pairs of mutations in these lanes still cross-match, and they are NOT
+# all the same thing. Classified by the only test that separates them -- do the
+# two mutants' FAIL-record sets actually DIFFER? -- they fall in two groups.
+#
+# (a) SUBSUMED -- ten pairs. The narrow mutation's ENTIRE failure set is a
+# subset of the broader one's, with byte-identical details: a decision killed
+# again by a switch above it. No pin can separate these, and that sentence is
+# the complete record -- there is no text in the narrow mutant's output that is
+# not also in the broad one's.
+#   p32 resume-on-paused-feed   < feed-pause maps to paused-feed
+#   p32 resume-on-paused-finish < EOF pause parks paused-finish
+#   p32 /v2 finish error stored < /v2 finish drives exec with finish? true
+#   p33 pause joins zero-progress walk    < zero-progress never fires
+#   p33 pause-only zero-progress cycle    < zero-progress never fires, AND
+#                                         < pause joins the walk (two pairs)
+#   p33 byte-reachable pause chain is EOF < EOF-reachable stop accepted
+#   p33 byte-reachability gate (:908)     < pause continuation out-target
+#   p39 pause draw, eof draw              < inverted dispatch byte test (two)
+#
+# (b) SEPARABLE, DECLINED -- two pairs. The sets DIFFER, so a pin separating
+# that pair does exist. Measured against the whole lane, each one only moves
+# the collision to a different sibling, and moves the pin off the check that
+# states the decision. Calling these "unfixable" would be false:
+#   p33 pause continuation out-target  vs  missing-target never reported.
+#     They differ: the narrow mutant also fails "a well-formed pause machine
+#     verifies: accepted". Pinning that excludes the broad mutant -- and
+#     matches the byte-reachability-gate mutation instead, whose sole witness
+#     that check is -- while moving this pin off "missing-target diagnostic",
+#     the check that states this decision. One collision traded for another.
+#   p33 eof-terminal chains through pause  vs  eof-target cycle is a finish.
+#     They differ: the narrow mutant also fails the ":909 EOF chain through a
+#     pause into a stop" case. Pinning that (parentheses escaped) excludes the
+#     broad mutant and matches "EOF-reachable stop accepted" instead, while
+#     moving the pin off the eof-cycle case that states this decision.
+#
+# Proved by exhaustion rather than argued: for every one of the eleven narrow
+# mutations, EVERY FAIL record it emits is also emitted by some sibling in its
+# own lane, so no collision-free pin exists for any of them. None is an
+# under-anchored pin with a strictly better anchor going unused. The one
+# genuinely separable family this slice owns -- Pass 35's two pause-fingerprint
+# mutations -- WAS separated, by putting each mutant's distinct "got" digest in
+# its pin: the same trade the four pre-existing one-byte-fingerprint pins in
+# that pass decline, and the reason that family cross-matches without being
+# subsumed.
+#
+# On a different axis, and still declined: the p39 pair has a SPEC-level
+# remedy. property-differential-tests.sps counts a pause only when BOTH sides
+# agree they paused, so a compile.sls divergence zeroes the same two
+# anti-vacuity counters the generator mutations zero. Counting the oracle's own
+# pause instead would separate them, but it would weaken what the guard asserts
+# (that the LANE drove a real agreeing pause) for a pin-specificity gain, and
+# both mutations are already caught at their own checks.
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -2021,28 +2333,30 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: an accepting feed does not record the stopped lifecycle"
-  # Re-anchored for Slice ②b-2: parser-finish-v2! commits its own terminal
-  # lifecycle with the same case-arm form, so the bare `((stopped) ...)` arm now
-  # occurs twice. The `(case (parser-result-status r)` discriminator is unique to
-  # parser-feed! (parser-finish-v2! keys on feed-outcome-status), so anchoring on
-  # it keeps this the feed decision it was.
+  # Re-anchored for Slice ③ Task 2: Step 3(c) re-nests parser-feed!'s own
+  # case-dispatch under a new `else` arm behind the lifecycle guard, so the
+  # old FIND at the previous indentation no longer occurs. Same decision, same
+  # reason -- only the surrounding indentation moved.
   FIND [[(case (parser-result-status r)
-        ((stopped) (parser-set-lifecycle! parser 'stopped))]]
+           ((stopped) (parser-set-lifecycle! parser 'stopped))]]
   REPLACE [[(case (parser-result-status r)
-        ((stopped) (parser-set-lifecycle! parser 'ready))]]
+           ((stopped) (parser-set-lifecycle! parser 'ready))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "stopped after accept")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a rejecting feed does not record the error lifecycle"
-  # Re-anchored for Slice ②b-2, same reason as the stopped arm above. In
-  # parser-feed! the `((error) ...)` arm is followed by the `((finished) ...)`
-  # arm; parser-finish-v2! orders them differently (finished, then error, then
-  # stopped), so this two-arm sequence is unique to parser-feed!.
-  FIND [[((error) (parser-set-lifecycle! parser 'error))
-        ((finished) (parser-set-lifecycle! parser 'finished))]]
-  REPLACE [[((error) (parser-set-lifecycle! parser 'ready))
-        ((finished) (parser-set-lifecycle! parser 'finished))]]
+  # Re-anchored for Slice ③ Task 2: the error arm now also stores the parser-
+  # result's error value (D1), so the old bare `((error) (parser-set-lifecycle!
+  # parser 'error))` two-line pairing with the finished arm no longer occurs.
+  # Still anchored on the same error-arm-then-finished-arm adjacency that makes
+  # it unique to parser-feed! (parser-finish-v2! orders its arms differently).
+  FIND [[((error) (parser-set-lifecycle! parser 'error)
+                    (parser-set-stored-error! parser (parser-result-error r)))
+           ((finished) (parser-set-lifecycle! parser 'finished))]]
+  REPLACE [[((error) (parser-set-lifecycle! parser 'ready)
+                    (parser-set-stored-error! parser (parser-result-error r)))
+           ((finished) (parser-set-lifecycle! parser 'finished))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "error after reject")
 
 byte_machine_mutation(
@@ -2062,8 +2376,14 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: reset does not return the lifecycle to ready"
-  FIND [[(parser-set-lifecycle! parser 'ready)]]
-  REPLACE [[(parser-set-lifecycle! parser 'stopped)]]
+  # Re-anchored for Slice ③ Task 2: parser-resume!'s new paused-feed arm adds a
+  # second bare `(parser-set-lifecycle! parser 'ready)` occurrence, so the old
+  # single-line FIND no longer disambiguates. Widened with the preceding
+  # `(parser-set-offset! parser 0)` line, which occurs only in parser-reset!.
+  FIND [[(parser-set-offset! parser 0)
+    (parser-set-lifecycle! parser 'ready)]]
+  REPLACE [[(parser-set-offset! parser 0)
+    (parser-set-lifecycle! parser 'stopped)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "ready after reset")
 
 # Milestone 2 Slice ②b-1's Task 2 (EOF execution) adds two more decisions to
@@ -2080,9 +2400,34 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a dispatch with no eof-target does not route to the default error"
-  FIND [[(make-parser-result 'error off 0 off (op 'default-eof-value))]]
-  REPLACE [[(make-parser-result 'stopped off 0 off (op 'default-eof-value))]]
+  # Re-anchored for Slice ③ Task 2: Step 3(g)'s let-bound rewrite (D1's stored-
+  # error site) deletes the old single-expression
+  # `(make-parser-result 'error off 0 off (op 'default-eof-value))` this FIND
+  # anchored. Same routing decision, same reason; the store itself is a
+  # separate decision, tested below.
+  FIND [[(let ((e (op 'default-eof-value)))
+                          (parser-set-stored-error! parser e)
+                          (make-parser-result 'error off 0 off e))))))]]
+  REPLACE [[(let ((e (op 'default-eof-value)))
+                          (parser-set-stored-error! parser e)
+                          (make-parser-result 'stopped off 0 off e))))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "default-eof")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the default-eof arm does not store its value"
+  # Same FIND anchor as the routing re-anchor above, a distinct decision:
+  # dropping only the store (not the status) is witnessed by the brief's own
+  # ②b-2-carry case, which reads the value back through a later feed.
+  # Signature review: bare "stored error value" is a substring of a DIFFERENT
+  # check's own label, "feed-stored error value" (the feed-side store's
+  # witness below) -- pinned to this case's own name instead.
+  FIND [[(let ((e (op 'default-eof-value)))
+                          (parser-set-stored-error! parser e)
+                          (make-parser-result 'error off 0 off e))))))]]
+  REPLACE [[(let ((e (op 'default-eof-value)))
+                          (make-parser-result 'error off 0 off e))))))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "default-EOF truncation: stored error value")
 
 # Code-review fix for Task 2 (§12.2 finished x feed!): parser-feed-op!'s own
 # `finish` arm -- a parser parked at a finish node re-fed returns finished,
@@ -2121,6 +2466,415 @@ byte_machine_mutation(
   REPLACE [[(unless #t]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "refused")
 
+# Milestone 2 Slice ③'s Task 2 (pause/resume + the full §12.2 operation
+# matrix, D1-D3) adds the rest of this pass: parser-resume! (its two acks and
+# its own prohibited-cell else arm), the newly-prohibited feed/finish rows,
+# the feed-side stored-error read, both pause arms in parser-feed-op!, the
+# EOF-pause arm in parser-finish-op!, and the sticky short-circuit's consumed
+# field. See the header narrative amendment beside EXPECTED_MUTATIONS for the
+# accounting; several EXPECT_OUTPUT_MATCHES values below are measured, not the
+# plan's prediction -- each says so where it differs.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: resume on paused-feed reopens feed, not finish"
+  # Measured, not the plan's predicted "continues past the pause": the
+  # lifecycle corruption itself fails the case's own "lifecycle" check before
+  # the next parser-feed! call is even reached; that call then raises (the
+  # corrupted state is now a prohibited feed row), recorded as a second,
+  # cascading "case raised" failure. Both are real. Review found bare
+  # "lifecycle" itself substring-vacuous under a DIFFERENT mechanism than the
+  # plan's prediction being wrong: harness.sls's FAIL-CONTEXT line prints
+  # unconditionally on every failure and is not the risk here, but the
+  # group name "one-byte parser lifecycle" and the case name "parser-
+  # lifecycle tracks ready -> terminal" elsewhere in this file both also
+  # contain "lifecycle", so a bare match does not by itself prove this is
+  # the check that failed -- pinned to the owning case's own words instead.
+  FIND [[((paused-feed) (parser-set-lifecycle! parser 'ready) 'feed-ready)]]
+  REPLACE [[((paused-feed) (parser-set-lifecycle! parser 'finish-ready) 'feed-ready)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "acks feed-ready and reopens feed: lifecycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: resume on paused-finish acks finish-ready"
+  # Review found bare "ack" substring-vacuous: harness.sls's FAIL-CONTEXT line
+  # (printed on every recorded failure, harness.sls ~:394-402) contains
+  # " backend=chez", and "ack" is a substring of "backend" -- so this
+  # signature was satisfied by ANY failure, not this one. Pinned to the
+  # owning case's own words instead.
+  FIND [[((paused-finish) (parser-set-lifecycle! parser 'finish-ready) 'finish-ready)]]
+  REPLACE [[((paused-finish) (parser-set-lifecycle! parser 'finish-ready) 'feed-ready)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "EOF path and resumes to finish-ready: ack")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: resume outside the paused rows is a prohibited cell"
+  FIND [[(else (byte-machine-contract-violation 'parser-resume! 'lifecycle-violation
+                                             (list (parser-lifecycle parser) 'resume)))]]
+  REPLACE [[(else 'feed-ready)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "resume on ready")
+
+# Task 7 close-out review: the whole-arm mutation above is caught by "resume
+# on ready", but a narrower mutant admitting ONLY error/finished (leaving
+# ready/stopped/finish-ready correctly refused) would have survived -- those
+# two cells (§12.2:696-697) had no direct witness. Closed by adding two
+# check-raises cases (runtime-tests.sps, "resume is prohibited outside the
+# paused rows") plus this mutation. Measured: the thunk returns the mutant's
+# own 'ok literal instead of raising, on both new checks; pinned to the
+# first ("resume on error"), a label unique in this file, with the literal
+# returned value making the pin specific to this exact mutant.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: resume admits error/finished instead of refusing them"
+  FIND [[(else (byte-machine-contract-violation 'parser-resume! 'lifecycle-violation
+                                             (list (parser-lifecycle parser) 'resume)))]]
+  REPLACE [[((error finished) 'ok)
+      (else (byte-machine-contract-violation 'parser-resume! 'lifecycle-violation
+                                             (list (parser-lifecycle parser) 'resume)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "resume on error -- expected a raise, but the thunk returned ok")
+
+# Self-review, same close-out pass: auditing criterion 4's "every reachable
+# cell" claim by hand (the same check the review above applied to resume!)
+# found a second unwitnessed cell -- finished x finish!, parser-finish!'s OWN
+# sticky arm (distinct from parser-feed!'s sticky-finished arm, LABEL
+# "runtime: a feed on a finished parser does not return finished" above,
+# which this file's Slice ③ pin re-audit already found pins bare "status").
+# Closed the same way: one more check in the existing "eof-target continues
+# to it -> finished" case (runtime-tests.sps) plus this mutation.
+#
+# Measured: a single FAIL, on the new check only (the first finish! call, via
+# the executor's own finish arm, is untouched by this REPLACE and still
+# passes). The naive pin "sticky status -- expected finished, got stopped"
+# does NOT discriminate -- hand-measured against that sibling mutation
+# above: it ALSO fails a check named "sticky status" with the SAME "expected
+# finished, got stopped" text, as a cascading effect (its mutant corrupts
+# lifecycle to 'stopped after the FIRST feed, so the second feed's own
+# sticky-status check reports the identical wrong value). The case-name tail
+# is what separates them -- "continues to it -> finished" occurs only in
+# this mutation's own case.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a re-finish on a finished parser does not return finished"
+  FIND [[((finished) (make-parser-result 'finished (parser-offset parser) 0
+                                      (parser-offset parser) #f))]]
+  REPLACE [[((finished) (make-parser-result 'stopped (parser-offset parser) 0
+                                      (parser-offset parser) #f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "continues to it -> finished: sticky status -- expected finished, got stopped")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: feed refuses every paused/finish-ready row"
+  FIND [[((paused-feed paused-finish finish-ready)
+       (byte-machine-contract-violation 'parser-feed! 'lifecycle-violation]]
+  REPLACE [[((paused-finish finish-ready)
+       (byte-machine-contract-violation 'parser-feed! 'lifecycle-violation]]
+  # Slice 3 pin re-audit: "feed on paused-feed" is the right check, but the
+  # sibling "a feed pause maps to paused-feed, not paused-finish" mutation
+  # breaks the SAME check -- measured. The details differ and separate them:
+  # this mutation makes the prohibited call return a tuple, that one leaves
+  # the refusal in place but raises with the wrong lifecycle in it.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "feed on paused-feed -- expected a raise, but the thunk returned")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: finish refuses the paused rows"
+  FIND [[((paused-feed paused-finish)
+       (byte-machine-contract-violation 'parser-finish! 'lifecycle-violation]]
+  REPLACE [[((paused-finish)
+       (byte-machine-contract-violation 'parser-finish! 'lifecycle-violation]]
+  # Slice 3 pin re-audit: same collision and same separation as the feed row
+  # above -- the paused-feed/paused-finish mapping mutation breaks this check
+  # too, but by raising with the wrong lifecycle rather than by returning.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "finish on paused-feed -- expected a raise, but the thunk returned")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the error row returns the STORED error"
+  FIND [[((error) (parser-set-lifecycle! parser 'error)
+                    (parser-set-stored-error! parser (parser-result-error r)))]]
+  REPLACE [[((error) (parser-set-lifecycle! parser 'error))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "feed-stored error value")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a feed pause maps to paused-feed, not paused-finish"
+  # Review found bare "ack" substring-vacuous (see the resume-on-paused-
+  # finish mutation above for the mechanism); pinned to the owning case. A
+  # later re-review found that fix itself sound but pointed at a downstream
+  # consequence ("resume from a feed pause acks feed-ready...") rather than
+  # the decision this mutation actually breaks -- the earlier case "feed
+  # pauses at the pause node with the first unconsumed index" has its own
+  # "lifecycle" check reading `current`'s lifecycle right after THIS arm
+  # runs, which fails first and more directly. Re-pinned to that, measured.
+  FIND [[((paused) (parser-set-lifecycle! parser 'paused-feed))]]
+  REPLACE [[((paused) (parser-set-lifecycle! parser 'paused-finish))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "unconsumed index: lifecycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the feed pause arm parks current on the continuation"
+  FIND [[(parser-set-current! parser (op 'pause-target node))
+             (make-parser-result 'paused pos (- pos start) (parser-offset parser) #f))]]
+  REPLACE [[(make-parser-result 'paused pos (- pos start) (parser-offset parser) #f))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "continues past the pause")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: an EOF pause parks paused-finish, not paused-feed"
+  # Review found bare "lifecycle" substring-vacuous by group/case-name
+  # collision (see the resume-on-paused-feed mutation above); pinned to the
+  # owning case. A later re-review found that fix still loose: the owning
+  # case has two SIBLING checks whose own labels ("lifecycle now", "lifecycle
+  # final") both start with the same word, so "...finish-ready: lifecycle" is
+  # a prefix of all three FAIL lines and does not by itself say which one
+  # failed (the intended one does fail here, cascading into "lifecycle now"
+  # as a second, real failure -- both are caught, but the pin must name only
+  # its own). The detail is on the same FAIL line, so extending into it (the
+  # measured expected/actual pair, unique to this one check) makes the match
+  # exact instead of a prefix.
+  FIND [[(parser-set-lifecycle! parser 'paused-finish)
+           (make-parser-result 'paused off 0 off #f))]]
+  REPLACE [[(parser-set-lifecycle! parser 'paused-feed)
+           (make-parser-result 'paused off 0 off #f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "resumes to finish-ready: lifecycle -- expected paused-finish, got paused-feed")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the stopped row short-circuits with consumed zero"
+  # Review found bare "consumed" matches eight other check labels file-wide
+  # (measured: this exact mutation also legitimately reddens two PRE-existing
+  # tests that now exercise the same sticky short-circuit -- real, not
+  # coincidental, but still not a signature that names only this decision).
+  # Pinned to the owning case's own words.
+  FIND [[((stopped) (make-parser-result 'stopped start 0 (parser-offset parser) #f))]]
+  REPLACE [[((stopped) (make-parser-result 'stopped start 1 (parser-offset parser) #f))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "tuple: consumed zero")
+
+# The plan's Task 2 predicted ten mutations for this pass; the whole-pass
+# review it also mandated (AGENTS.md's exit-path rule) found three more
+# decisions with no witness at all -- not just narrower than intended, catches
+# nothing if broken:
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a finish reaching a named error node does not store its value"
+  # parser-finish-op!'s own plain error arm was unreachable by any fixture
+  # before this task (nothing drove an eof-target chain into a NAMED error
+  # node); the new pause-op stub's s1 -> 'trunc closes that gap and witnesses
+  # both this store and the arm's routing together.
+  FIND [[(let ((e (op 'error-value node)))
+             (parser-set-stored-error! parser e)
+             (make-parser-result 'error off 0 off e)))]]
+  REPLACE [[(let ((e (op 'error-value node)))
+             (make-parser-result 'error off 0 off e)))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish repeats the finish-stored error")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a /v2 finish error does not store its value"
+  # parser-finish-v2!'s own error arm is a separate call site from every op-
+  # path store above: no existing /v2 fixture re-read the stored value, so a
+  # dropped store here was invisible until this new case chains a second
+  # finish! through the sticky read.
+  FIND [[((error) (parser-set-lifecycle! parser 'error)
+                 (parser-set-stored-error! parser (feed-outcome-error o)))]]
+  REPLACE [[((error) (parser-set-lifecycle! parser 'error))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish repeats the stored /v2 error")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a /v2 finish reaching a pause state does not record paused-finish"
+  # parser-finish-v2!'s own paused arm -- distinct code from both the shared
+  # parser-feed! wrapper's paused arm and parser-finish-op!'s pause arm, both
+  # witnessed only through the op-path stub. No /v2 fixture reached a pause
+  # state before stub-exec's new state 3.
+  # Review found bare "lifecycle" substring-vacuous by group/case-name
+  # collision (see the resume-on-paused-feed mutation above); pinned to the
+  # owning case.
+  FIND [[((paused) (parser-set-lifecycle! parser 'paused-finish)))]]
+  REPLACE [[((paused) (parser-set-lifecycle! parser 'paused-feed)))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "sets paused-finish: lifecycle")
+
+# Review also found two decisions this task's own new code left with no
+# witness at all (distinct from the seven signature fixes above, which all
+# WERE caught, just not provably for their own reason): parser-feed!'s
+# finished sticky arm (no fixture repeated a feed after lifecycle was already
+# 'finished) and the error sticky arm's `next` field (both existing witnesses
+# used a zero start, making `start`, the literal 0, and (parser-offset
+# parser) indistinguishable). Both are closed above in runtime-tests.sps and
+# witnessed here.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the finished row short-circuits with consumed zero"
+  # Review: the only one of this pass's recently-pinned signatures not
+  # case-prefixed -- unlike its siblings above, this case's own name ends in
+  # the parenthesised section reference "(section 12.2)", and CMake's MATCHES
+  # is a real regex: unescaped "(" ")" would open a capture group instead of
+  # matching literal parentheses, and "." inside the section number would
+  # match any character, so a case-name tail is not a safe anchor here.
+  # Extending into the detail instead (the measured expected/actual pair)
+  # reaches the same exactness the case-tail gives the other eight, without
+  # putting a metacharacter in the pattern.
+  FIND [[((finished) (make-parser-result 'finished start 0 (parser-offset parser) #f))]]
+  REPLACE [[((finished) (make-parser-result 'finished start 1 (parser-offset parser) #f))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "sticky consumed zero -- expected 0, got 1")
+
+# Cleanup review (Task 2 follow-up): the mutation above witnesses the finished
+# arm's FIELD VALUES, but not the arm's own existence -- deleting the whole
+# `((finished) ...)` clause is a different mutant, declared and measured
+# separately. parser-feed!'s outer case falls through to the shared `else`
+# branch on a deleted clause, which for the 'op variant runs parser-feed-op!
+# fresh from `current` -- still parked on the SAME finish node a prior finish!
+# or feed! left it at. That loop's own `(finish)` case never advances `pos`
+# past `start` (it fires before any byte is read), so it returns the
+# byte-identical tuple (status 'finished, next start, consumed 0, offset and
+# error untouched) the deleted sticky arm would have returned directly. The
+# claim is scoped to 'op, for a reason that is EMPIRICAL, not structural.
+# parser-feed!'s inner case records lifecycle 'finished from ANY variant whose
+# executor returns status 'finished, so a v1 parser is not structurally barred
+# from the sticky finished row -- parser-finish!'s raising v1 else arm only
+# closes the finish! route, not the feed! one. What actually excludes it is
+# this SPEC lane's fixtures: runtime-tests.sps's only v1 executor, stub-feed,
+# has states 1 (stopped), 2 (error) and a dispatch else (need-input), and no
+# state returning 'finished, so no v1 fixture here ever parks a parser at
+# lifecycle 'finished. Likewise no /v2 fixture in this file re-feeds a parser
+# parked at a finished state (stub-exec never returns 'finished either), so
+# neither variant's own path is exercised either way.
+# Measured: the mutant below passes the whole SPEC-lane suite unchanged
+# (cases=35 failed-cases=0).
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: parser-feed!'s finished sticky arm is deleted outright"
+  # REPLACE is a single space, not empty: CMake's cmake_parse_arguments (under
+  # this file's own cmake_minimum_required, policy CMP0174 OLD) treats an
+  # empty bracket argument as "not passed" and unsets arg_REPLACE, which would
+  # trip byte_machine_mutation's own required-argument check. A lone space
+  # deletes the clause just as effectively -- Scheme does not care about the
+  # blank line it leaves between the preceding clause and `(else`.
+  FIND [[((finished) (make-parser-result 'finished start 0 (parser-offset parser) #f))]]
+  REPLACE [[ ]]
+  EXPECT_SURVIVES
+    "whole-arm deletion (as opposed to the field-value mutation above, which IS caught) falls through to parser-feed!'s shared `else` branch; for the 'op variant, parser-feed-op! run fresh from a `current` still parked on the same finish node reaches that loop's own `(finish)` case before advancing `pos`, producing the byte-identical result tuple this arm short-circuits to. The other two variants do not witness it either, for an EMPIRICAL reason rather than a structural one: parser-feed!'s inner case records lifecycle 'finished from ANY variant whose executor returns 'finished, so v1 is not barred from the sticky finished row (parser-finish!'s raising v1 else arm closes only the finish! route) -- but this file's only v1 executor, stub-feed, has no state that returns 'finished, and its /v2 stub-exec has none either, so no v1 or /v2 fixture here ever parks a parser at lifecycle 'finished. Measured directly: this mutant passes the whole SPEC-lane suite unchanged (cases=35 failed-cases=0)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the error row's next mirrors the new call's start, not the offset"
+  FIND [[(make-parser-result 'error start 0 (parser-offset parser)]]
+  REPLACE [[(make-parser-result 'error (parser-offset parser) 0 (parser-offset parser)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "after a feed error: next is the new start")
+
+# parser-reset!'s stored-error clear (§12.5): declared, not silently
+# unmutated. parser-stored-error is unexported, and its only two read sites
+# both require lifecycle = 'error -- which parser-reset! unconditionally
+# overwrites to 'ready in the very same call, before any read could observe
+# what this line left behind. The only way lifecycle can become 'error again
+# is through one of this file's four write sites (the feed wrapper, both
+# finish variants, and the default-eof arm), every one of which stores a
+# fresh value before or as part of its own transition into 'error -- so
+# whatever this clear left behind is always overwritten first. Measured: the
+# mutant below passes the whole suite unchanged (cases=35 failed-cases=0);
+# EXPECT_SURVIVES is the honest declaration of that, not silence.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: reset's stored-error clear is skipped"
+  FIND [[(parser-set-stored-error! parser #f)]]
+  REPLACE [[(parser-set-stored-error! parser (parser-stored-error parser))]]
+  EXPECT_SURVIVES
+    "parser-stored-error is unexported, so nothing outside this library can read the slot directly; its only two read sites (the error sticky arms in parser-feed! and parser-finish!) are both guarded by lifecycle = 'error, and parser-reset! unconditionally sets lifecycle to 'ready in this same call, so neither read site is reachable immediately after a reset. Reaching 'error again requires a fresh feed or finish that re-enters one of the four write sites, and every one of them stores its own value before or alongside its own lifecycle='error transition -- so a stale value left by a skipped clear is always overwritten before anything could observe it. Measured directly: this mutant passes the whole SPEC-lane suite unchanged")
+
+# Final whole-branch review of Slice ③ (pre-merge) found two Critical gaps in
+# this pass, both the same defect class the sticky error arm's `next` field
+# closed above: every existing pause fixture feeds from start 0 / a fresh
+# offset 0, so a field that should read a computed position is
+# indistinguishable from one that reads a coincidentally-equal constant.
+# Both were measured on a copy of the tree before being closed: the
+# unmodified suite stayed green (cases=35 failed-cases=0) with the mutant
+# REPLACE below already in place.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the feed pause arm's consumed and stream offset collapse to next"
+  # Critical 1. parser-feed-op!'s pause arm reads `pos` for next, `(- pos
+  # start)` for consumed, and `(parser-offset parser)` for stream-offset --
+  # three DIFFERENT expressions that every existing pause fixture feeds from
+  # start 0 with exactly one byte consumed, where all three evaluate to 1.
+  # Closed by a new nonzero-start case in runtime-tests.sps ("a nonzero-start
+  # feed pause separates next, consumed, and stream offset"), which feeds
+  # #vu8(9 1 2)[1,3) so next (2) separates from the other two (both still 1).
+  FIND [[(make-parser-result 'paused pos (- pos start) (parser-offset parser) #f))]]
+  REPLACE [[(make-parser-result 'paused pos pos pos #f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "separates next, consumed, and stream offset: consumed -- expected 1, got 2")
+
+# T8 re-review residual: the nonzero-start case above separates `next` from
+# the pair, but NOT `consumed` from `stream-offset` -- on any single feed
+# call from a fresh parser those two are equal by construction (the offset
+# starts at 0, so the cross-call total equals this call's own count), so a
+# mutant that only SWAPS the two expressions (rather than collapsing all
+# three) is invisible to it. Measured on a copy of the tree before being
+# closed: the swap below, re-anchored on the SAME FIND the mutation above
+# uses, left the whole release preset green (72/72) with only the
+# nonzero-start case in place. Closed by a second feed call in
+# runtime-tests.sps ("a second feed call separates consumed from stream
+# offset"): finish-pause-op's s1 now also advances on byte 2 into a second,
+# byte-reachable pause, so the first call's advance (offset 0->1) makes the
+# second call's own consumed (1) and the persisted stream-offset (2) diverge.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the feed pause arm swaps consumed and stream offset"
+  FIND [[(make-parser-result 'paused pos (- pos start) (parser-offset parser) #f))]]
+  REPLACE [[(make-parser-result 'paused pos (parser-offset parser) (- pos start) #f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "separates consumed from stream offset: consumed -- expected 1, got 2")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: an EOF pause after consuming bytes reports zero instead of the persisted offset"
+  # Critical 2. parser-finish-op!'s pause arm reads `off` -- (parser-offset
+  # parser), snapshotted at the top of the call -- into both the next and
+  # stream-offset slots. No fixture before this task reached an EOF pause
+  # after consuming any bytes (pause-op's own s1 routes its eof-target to
+  # the error node 'trunc, not a pause), so `off` was always already 0 and a
+  # hard-coded 0 was indistinguishable. Closed by a fourth op stub in
+  # runtime-tests.sps, finish-pause-op (s0 --1/advance--> s1, s1's eof-target
+  # a pause continuing to a finish), and its own case.
+  #
+  # Measured collision: this mutation's failure set is a SUBSET of the
+  # pre-existing "runtime: advance does not increment the stream offset"
+  # mutation's, on the SAME two checks ("next", "stream offset" in the new
+  # case both read 0 instead of 1) -- that mutation breaks the one write
+  # site that would make `off` become 1 in the first place, this one
+  # discards a correctly-computed `off` at the read site, and this fixture
+  # cannot tell them apart because proving `off` is nonzero here has no
+  # route that avoids the shared increment statement (the 'op variant's
+  # only write site for parser-offset). No pin can separate them -- the
+  # SUBSUMED pattern this file's pin re-audit already documents for ten
+  # other pairs above.
+  FIND [[(make-parser-result 'paused off 0 off #f))]]
+  REPLACE [[(make-parser-result 'paused 0 0 0 #f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the persisted offset, not zero: next -- expected 1, got 0")
+
+# Minor finding, same review: finish-ready's own membership in parser-feed!'s
+# prohibited clause had a test (runtime-tests.sps's "feed on finish-ready"
+# case) but no mutation -- the pre-existing "runtime: feed refuses every
+# paused/finish-ready row" mutation above drops paused-feed instead, and is a
+# separate decision (measured: dropping finish-ready does not also un-refuse
+# paused-feed, and vice versa). finish-ready is the row that closes the
+# resume-then-feed-into-finish route, so it is its own decision.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: feed admits finish-ready instead of refusing it"
+  FIND [[((paused-feed paused-finish finish-ready)
+       (byte-machine-contract-violation 'parser-feed! 'lifecycle-violation]]
+  REPLACE [[((paused-feed paused-finish)
+       (byte-machine-contract-violation 'parser-feed! 'lifecycle-violation]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "feed on finish-ready -- expected a raise, but the thunk returned")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 33: the verifier's decisions (Milestone 1 Phase 2) -----------------
@@ -2157,7 +2911,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: zero-progress detection never fires"
-  FIND [[(if (and (byte-dispatch-node? n) (reaches-self? (node-name n)))]]
+  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)) (reaches-self? (node-name n)))]]
   REPLACE [[(if #f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "zero-progress-cycle")
 
 byte_machine_mutation(
@@ -2251,6 +3005,178 @@ byte_machine_mutation(
   FIND [[(if (memq name seen) 'cycle]]
   REPLACE [[(if (memq name seen) 'finish]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "eof-zero-progress-cycle")
+
+# Milestone 2 Slice ③'s Task 1 (the pause node) adds five more decisions to
+# this pass: a pause continuation is an out-target for both name resolution
+# (§16.2:905's missing-target) and reachability (node-out-targets); eof-
+# terminal walks through a pause continuation instead of stopping at it;
+# a byte-reachable pause into a finish node is rejected (§16.2:908, D4(b));
+# a pause continuation joins the reexecute zero-progress walk (a pause
+# consumes no input, so a pause-only or mixed reexecute/pause cycle makes no
+# progress); and a byte-reachable pause's continuation chain is itself an EOF
+# path, checked the same way a dispatch node's eof-target chain already is
+# (§16.2:909, D4(d)). The zero-progress-detection mutation above is re-
+# anchored in place: pass-zero-progress's guard widened from
+# `(byte-dispatch-node? n)` to `(or (byte-dispatch-node? n) (pause-node? n))`
+# so a pause could join the walk, which moved the FIND text but not the
+# decision or the count. Passes stay at 37 and 123 + 5 = 128 mutations.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a pause continuation is an out-target (resolution + reachability)"
+  # Slice 3 pin re-audit: bare "missing-target" is this file's check label in
+  # TWO other cases as well (the fallback-target and the entry-target
+  # rejections), and the pair-wise matrix measured it matching both of their
+  # mutants' FAIL lines -- so it named a diagnostic code, not a decision.
+  # "missing-target diagnostic" is the pause case's own label and occurs
+  # exactly once in verify-tests.sps. The case name itself ends in
+  # "(§16.2:905)", whose parentheses are CMake regex metacharacters, so the
+  # unique check label is the anchor rather than a case-name tail.
+  FIND [[((pause-node? n) (list (pause-node-continuation n)))
+          (else '())]]
+  REPLACE [[((pause-node? n) '())
+          (else '())]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "missing-target diagnostic")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: eof-terminal chains through a pause continuation"
+  # Slice 3 pin re-audit: bare "eof-zero-progress-cycle" is a diagnostic code,
+  # not a check -- measured matching the pre-Slice-3 eof-target-cycle case's
+  # own "has eof-zero-progress-cycle" check (a different decision) and this
+  # pass's later "no eof-zero-progress-cycle attributed to pa" check (a
+  # different check in the same case). Anchored to the case tail plus the one
+  # check label; the case name carries no parentheses, so the tail is safe.
+  FIND [[((pause-node? n) (loop (pause-node-continuation n) (cons name seen)))]]
+  REPLACE [[((pause-node? n) 'finish)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "zero-progress EOF cycle: eof-zero-progress-cycle diagnostic")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a byte-reachable pause into finish is rejected"
+  # Slice 3 pin re-audit: bare "non-eof-into-finish" is a diagnostic code and
+  # was measured matching the pre-Slice-3 byte-edge-into-finish case's own
+  # "has non-eof-into-finish" check -- a different decision. This case's own
+  # label is "non-eof-into-finish diagnostic", which occurs exactly once in
+  # verify-tests.sps; the case name ends in "(§16.2:908)", so parenthesis-free
+  # anchoring means the check label rather than a case-name tail.
+  FIND [[(if (and cn (finish-node? cn))]]
+  REPLACE [[(if (and cn #f (finish-node? cn))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "non-eof-into-finish diagnostic")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: pause continuations join the zero-progress walk"
+  # Later review: bare "zero-progress-cycle" is a substring of three other
+  # check labels in this file (the pre-Slice-3 mutation above reuses it, and
+  # "eof-zero-progress-cycle diagnostic"/"zero-progress-cycle diagnostic" are
+  # each a distinct decision), so it does not by itself prove which one
+  # failed. Measured: this mutation's own primary witness is the reexecute/
+  # pause-only cycle case; pinned to it.
+  FIND [[((pause-node? n) (list (pause-node-continuation n)))
+              (else '())]]
+  REPLACE [[((pause-node? n) '())
+              (else '())]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "cycle with no advance makes no progress: zero-progress-cycle diagnostic")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a byte-reachable pause's continuation chain is an EOF path"
+  # Slice 3 pin re-audit: bare "eof-reachable-stop" is a diagnostic code, and
+  # "eof-reachable-stop diagnostic" is a check label THREE cases share, so
+  # neither anchors this decision -- both were measured matching the
+  # pre-Slice-3 eof-target-into-stop case and the EOF-chain-through-a-pause
+  # case, each a different decision. The entry-pause case is the one that
+  # witnesses BYTE-reachability specifically, its label "entry
+  # eof-reachable-stop diagnostic" occurs once, and its case name carries no
+  # parentheses, so the pin is that case's tail plus that label.
+  FIND [[(case (eof-terminal m (pause-node-continuation n))]]
+  REPLACE [[(case 'finish]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "so its chain is walked too: entry eof-reachable-stop diagnostic")
+
+# Task 1's whole-branch review found two of the five decisions above were
+# unwitnessed, not just uncaught -- neither test nor mutation reached them --
+# and added a mutation for each rather than leaving a gap. First: the PASS 5
+# filter guard's `(pause-node? n)` disjunct (line ~160) had no witness at
+# all. The only existing pause-in-a-cycle fixture (the reexecute/pause-only
+# cycle above) has the byte-dispatch node `e0` itself in the cycle, so
+# narrowing the guard back to byte-dispatch-only still flags `e0` and the
+# fixture's diagnostic-code check passes either way -- a guard shown not to
+# guard. The witness was already sitting in the pa->pb->pa EOF-pause-cycle
+# fixture used by the eof-zero-progress-cycle mutation above: pa/pb form a
+# zero-width cycle with NO byte-dispatch node in it, so PASS 5 (a completely
+# separate check from the eof-target-chain walk that fixture was built for)
+# flags them only when the disjunct admits pause nodes. A second check --
+# "zero-progress-cycle diagnostic" -- was added to that case in
+# verify-tests.sps, confirmed by hand to fail when the guard is narrowed
+# back (and only that one case fails: e0's own PASS-5 flag in the
+# reexecute/pause-only fixture, and every other case, is unaffected).
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a pause-only zero-progress cycle is not flagged"
+  # Later review: bare "zero-progress-cycle" is shared with three other check
+  # labels in this file (see the mutation above); pinned to the specific
+  # fixture the case-header comment above already names as this decision's
+  # own witness (the pa->pb->pa EOF-pause cycle).
+  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)) (reaches-self? (node-name n)))]]
+  REPLACE [[(if (and (byte-dispatch-node? n) (reaches-self? (node-name n)))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "chain of pauses that cycles is a zero-progress EOF cycle: zero-progress-cycle diagnostic")
+
+# Second: the `(memq (node-name n) br)` byte-reachability gate shared by both
+# D4(b)/(d) checks above -- the entire reason `byte-reached` exists -- had a
+# test witness (dropping it makes the well-formed fixture's `pe -> done`
+# illegal) but no mutation. The guard text is identical at both call sites,
+# so a bare FIND double-matches (confirmed: 2 occurrences) and widening to a
+# two-line FIND including each site's next line (`(let ((cn ...` vs.
+# `(case (eof-terminal ...`) makes each unique without restructuring the
+# shared shape. Measured both candidates directly rather than assuming
+# either witnessed the decision: dropping the gate at the second site (the
+# eof-terminal-chain check) is NOT CAUGHT by this suite at all (exit 0) --
+# every EOF-only-reachable pause fixture's continuation either resolves to
+# `'finish` (no diagnostic either way) or to a stop/cycle the dispatch node's
+# own, ungated :909 walk above already flags with the identical code, so the
+# gate's removal there produces only a redundant duplicate diagnostic no
+# check distinguishes (the whole-branch review's Minor item on duplicate
+# same-code diagnostics is the same underlying gap). Dropping it at the
+# first site (the non-eof-into-finish check) is cleanly caught: the
+# well-formed fixture's `pe` (eof-only-reachable, continuation a finish
+# node) newly and wrongly reports non-eof-into-finish, so that fixture's
+# sole "accepted" check -- the only case in this file using that label --
+# fails. That site is used below.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a pause's byte-reachability gate is not checked (non-eof-into-finish)"
+  # Slice 3 pin re-audit: bare "accepted" is a check label, but nothing in it
+  # names the case, so any future case reusing the word would satisfy it.
+  # Anchored to the case tail as well; the case name carries no parentheses.
+  FIND [[(if (and (pause-node? n) (memq (node-name n) br))
+                            (let ((cn (lookup nodes (pause-node-continuation n))))]]
+  REPLACE [[(if (pause-node? n)
+                            (let ((cn (lookup nodes (pause-node-continuation n))))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "pause machine verifies: accepted")
+
+# Cleanup follow-up: the second site's gap above is closed here too -- not by
+# VERDICT (still genuinely impossible, per the measurement above) but by
+# ATTRIBUTION. diagnostic-node was already exported but unused by any test.
+# Under correct code, the pa->pb->pa fixture's sole eof-zero-progress-cycle
+# diagnostic is attributed to the entry dispatch node e0 (the pre-existing,
+# ungated :909 walk), never to pa or pb -- neither is byte-reached, so this
+# site's gate never lets them contribute one. Two new checks in that fixture
+# assert this by NODE, not just by CODE: confirmed by hand that ungating this
+# site (below) makes "no eof-zero-progress-cycle attributed to pa" fail --
+# pa now gets its own copy of the diagnostic, redundant by code (matching the
+# measurement above) but distinct by attribution, which is what the new check
+# was written to see.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a pause's byte-reachability gate is not checked (eof-terminal chain)"
+  FIND [[(if (and (pause-node? n) (memq (node-name n) br))
+                            (case (eof-terminal m (pause-node-continuation n))]]
+  REPLACE [[(if (pause-node? n)
+                            (case (eof-terminal m (pause-node-continuation n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "chain of pauses that cycles is a zero-progress EOF cycle: no eof-zero-progress-cycle attributed to pa")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -2387,6 +3313,79 @@ byte_machine_mutation(
   REPLACE [[(begin (put-u8 p 0))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "9098559711816935340")
 
+# Milestone 2 Slice ③'s Task 4 (the pause node in the normalizer) adds three
+# more mutations to this pass rather than opening a new one. normal-ir-
+# tests.sps gains a "pause normalization" group over the shared pause-machine
+# fixture (s0 p1 s1 pe stop done trunc reject -> ids 0-7): a structural case
+# (p1/pe's kind and resolved continuation target) and a fingerprint golden
+# case, measured (not guessed) through the shipped encode arm.
+#
+# The lower-arm mutation below stores a pause node's OWN id instead of its
+# resolved continuation id. Measured: it fails "p1 target" (expected 2, got 1)
+# and "pe target" (expected 5, got 3) -- the structural checks, which print
+# the actual wrong id -- AND, as a side effect, "pause fingerprint" (the wrong
+# id is also what gets hashed). EXPECT_OUTPUT_MATCHES pins the structural
+# check, the more precise of the two witnesses.
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a pause lowers its continuation id, not its own"
+  FIND [[(cons 'node (id-of (pause-node-continuation n)))]]
+  REPLACE [[(cons 'node i)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "p1 target")
+
+# The encode-arm mutation drops the continuation id from the pause tag's
+# encoded bytes (tag 4 alone, no u32be payload). Measured: it fails ONLY
+# "pause fingerprint" -- no other machine in this SPEC lane has a pause node,
+# so tag 4 is never encoded for the one-byte or node-routing goldens above,
+# and this mutation cannot disturb them.
+#
+# Golden-family note, CORRECTED by the Slice ③ pin re-audit. The original
+# note argued that "pause fingerprint" needs neither a numeral nor a got
+# value because the check label is unique in normal-ir-tests.sps -- "a
+# stronger position than the five above". Uniqueness of the LABEL is not the
+# question the pin answers. The pair-wise matrix measured this label's FAIL
+# line in the output of SEVEN other mutants of this same pass: every
+# fingerprint-affecting mutation in the lane (FNV offset, FNV prime, byte
+# mixing and error-code resolution -- the four that pin "4236938459847922092"
+# -- node-eof routing, which pins "9098559711816935340", the pause lower arm,
+# and the tag-value mutation below) moves the pause golden too, because the
+# pause machine is hashed by the same algorithm. So the bare label said only
+# "some fingerprint moved". What separates the siblings is the got value, which is
+# distinct for each -- so both pause-encoding mutations below carry theirs.
+# That is the same convention as the five above, applied where it is now
+# measured to be necessary, and the re-baseline cost is real but bounded: a
+# future IR-encoding move already re-baselines the pause golden itself
+# (15725897457025557005, in normal-ir-tests.sps), and these two move with it.
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the pause encode arm hashes tag and continuation"
+  FIND [[((pause) (put-u8 p 4) (put-u32be p (normal-pause-target s)))]]
+  REPLACE [[((pause) (put-u8 p 4))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "pause fingerprint -- expected 15725897457025557005, got 6626362746927380524")
+
+# A third mutation targets the pause TAG VALUE alone (4 -> 3, colliding with
+# finish's own tag byte) rather than the whole payload mutation 2 above
+# already covers -- proving the tag byte itself, not just the u32be
+# continuation id after it, is mixed into the fingerprint. Left unwitnessed,
+# nothing would notice the two kinds' tag bytes becoming equal. (Their
+# encodings as a whole stay distinguishable even then: a pause state still
+# emits the 4 payload bytes a finish state does not.) Measured: it fails
+# ONLY "pause fingerprint" (1 of 23 checks) -- same reasoning as mutation 2
+# above: no other machine in this SPEC lane has a pause node, so this arm is
+# never reached encoding the one-byte or node-routing goldens. It is witnessed
+# by the same check as mutation 2 -- the Slice ③ pin re-audit's finding is
+# that a SHARED pin over that check therefore named neither decision (see the
+# corrected golden-family note above), so each carries its own measured got
+# value instead.
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the pause tag collides with finish's tag"
+  FIND [[(put-u8 p 4)]]
+  REPLACE [[(put-u8 p 3)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "pause fingerprint -- expected 15725897457025557005, got 5068390459764251309")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 36: the emitter (Milestone 1 Phase 3 Slice A) ----------------------
@@ -2502,6 +3501,43 @@ byte_machine_mutation(
   REPLACE [[(if #f\n"]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish eof guard")
 
+# Milestone 2 Slice ③'s Task 4 (the pause node in the emitter) adds two more
+# mutations to this pass. compile-tests.sps gains a third inline fixture (the
+# pause machine, following the eof-fin precedent above -- the compile lanes
+# carry no fixture libraries, and (byte-machine test pause-machine) is the
+# source of truth the fixture is kept in sync with by hand) whose rendered
+# text pins both pause arms: p1's (continuation target 2) and pe's
+# (continuation target 5).
+#
+# Both mutations below break the SAME two checks, "pause arm p1" and "pause
+# arm pe". As shipped, those two were substring probes under `check`, whose
+# failure text is content-blind ("expected a true value"), so the shared
+# "pause arm" pin was measured matching BOTH mutants' FAIL lines: it proved a
+# pause arm was wrong, never which of the two emitter decisions was wrong.
+# The Slice ③ pin re-audit turned them into check-equal over the status token
+# and the next state read out of that one rendered arm line
+# (compile-tests.sps's `pause-arm`), so the detail now carries the mutant's
+# own answer and each mutation pins its own measured signature. Splitting the
+# substring probe in two -- the other remedy on the table -- does NOT work: a
+# pause continuation is a dispatch node whose own need-input arm parks on that
+# same state id, so " pos #f 2 off))" survives the next-state mutation
+# elsewhere in the rendered text and a target-only probe would be vacuous.
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: the pause arm emits paused"
+  FIND [[(quote paused) pos #f "]]
+  REPLACE [[(quote stopped) pos #f "]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "pause arm p1 -- expected \"paused 2\", got \"stopped 2\"")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: the pause arm's next-state is the continuation"
+  FIND [[(number->string (normal-pause-target s)) " off))\n"))]]
+  REPLACE [[id " off))\n"))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "pause arm p1 -- expected \"paused 2\", got \"paused 1\"")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 37: D7 identifier repertoire + LF (Slice B) -------------------------
@@ -2576,13 +3612,23 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Pass 39: property differential is non-vacuous (Slice B) ------------------
+# --- Pass 39: property differential is non-vacuous (Slice B; Slice ③ Task 6
+# joined three more mutations here rather than opening a new pass -- see the
+# EXPECTED_PASSES/EXPECTED_MUTATIONS header above) ---------------------------
 #
 # Slice A's Pass 36 already witnesses the advance-arm lowering against one
 # fixed machine; this re-anchors the same lowering mutation against the
 # *property* lane, so the generated-machine differential is proven to notice
 # divergence too, not just the fixed one-byte example. Verify command modelled
 # on the differential/determinism passes above.
+#
+# Slice ③ Task 6 adds three more mutations under the same verify command,
+# since all three run this same property-differential-tests.sps program: the
+# driver's own resume handling (property-differential-tests.sps), and the
+# eof and pause draws' probability lines (machine-gen.sls) -- see the header
+# comment above EXPECTED_PASSES/EXPECTED_MUTATIONS for why each is
+# witnessable only via a new anti-vacuity assertion, not the lane's
+# pre-existing checks.
 byte_machine_mutation_reset()
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
@@ -2609,6 +3655,50 @@ byte_machine_mutation(
   REPLACE [[(number->string (mod (+ 1 (car tr)) 256)) ") "]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "byte agreement")
 
+byte_machine_mutation(
+  FILE test/common/property-differential-tests.sps
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "property-differential: resume-pair! stops calling parser-resume!"
+  FIND [[(list (parser-resume! pr) (parser-resume! pg))]]
+  REPLACE [[(list 'feed-ready 'feed-ready)]]
+  # Measured: skipping the real resume leaves both parsers at paused-feed;
+  # the driver's own next feed call (feed-loop!'s post-resume re-feed) then
+  # trips runtime.sls's own lifecycle-violation guard, which the driver does
+  # not catch, so harness-case's guard records it as "case raised" with the
+  # condition's own description:
+  #   code: lifecycle-violation who*: parser-feed! detail: (paused-feed feed)
+  # Pinned to the measured detail tuple, not the bare code: "paused-feed
+  # feed" is metacharacter-free (a literal substring under CMake MATCHES)
+  # and specific to this one lifecycle/op pair, whereas the code alone would
+  # also match a lifecycle-violation raised for any other reason. Printed by
+  # nothing else in this program's output.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "paused-feed feed")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-gen.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "machine-gen: the pause draw's coin is hard-wired to false"
+  FIND [[(pause-drawn? (= pausei 0))]]
+  REPLACE [[(pause-drawn? #f)]]
+  # No case ever offers pausep as a target, so no generated machine ever
+  # includes one; property-differential-tests.sps's paused-count assertion
+  # (added alongside the pause/resume/finish schedule, Task 6) fails at 0.
+  # Pinned to the assertion's own words, unique to this one check.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "observes a pause")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-gen.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "machine-gen: the eof draw's coin is hard-wired to false"
+  FIND [[(eof? (= eofi 0))]]
+  REPLACE [[(eof? #f)]]
+  # No dispatch node's eof-target is ever `done`, so no generated machine
+  # ever reaches `finished`; property-differential-tests.sps's
+  # finished-count assertion (added by Task 6's review-fix round, mirroring
+  # paused-count) fails at 0. Pinned to the assertion's own words, unique to
+  # this one check.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "idle-completion finish")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 40: member-2 drift guard (Slice B) ---------------------------------
@@ -2628,6 +3718,52 @@ byte_machine_mutation(
   FIND [[make-parser parser? parser-feed!]]
   REPLACE [[make-parser parser?]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "no drift between reserved-member-2")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 41: the interpreter's pause kind and pause-target message (Slice ③,
+# Task 3) -------------------------------------------------------------------
+#
+# pause-interpret-tests.sps drives the shared pause-machine (byte-machine test
+# pause-machine) end-to-end through the interpreter's pause arms and the
+# runtime's paused-feed/paused-finish/finish-ready lifecycle. This pass proves
+# that coverage is not vacuous. The first mutation makes a pause node report
+# kind 'stop instead of 'pause -- no node in any earlier SPEC lane's fixture
+# was ever a pause-node?, so this decision was unreachable before this task's
+# fixture existed -- and the feed-pause case's own "paused" check (byte 1
+# pausing) fails first. The second mutation makes pause-target resolve to the
+# pause node's own name instead of its continuation, so `current` never
+# advances past the pause (D3) and the resumed feed re-enters the same pause
+# node instead of consuming byte 2; the same case's "stopped" check (byte 2
+# stopping after resume) fails. Both signatures are the exact case-name tail
+# ("byte 2 stops") plus the one check label each mutation breaks first, unique
+# in this program's own check vocabulary -- neither collides with the other
+# mutation's own pin, a group name, or a `-- <detail>` tail. Verify command
+# uses both library roots, an empty object guard, the pause-interpret program.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/pause-interpret-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.pause-interpret.chez.source
+  LABEL "interpret: a pause node has its own kind"
+  FIND [[((pause-node? n) 'pause)]]
+  REPLACE [[((pause-node? n) 'stop)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "byte 2 stops: paused")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.pause-interpret.chez.source
+  LABEL "interpret: pause-target resolves the continuation, not the pause itself"
+  FIND [[((pause-target) (pause-node-continuation (lookup nodes (car args))))]]
+  REPLACE [[((pause-target) (car args))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "byte 2 stops: stopped")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

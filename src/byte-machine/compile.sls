@@ -45,7 +45,8 @@
     '(make-compiled-machine compiled-machine?
       byte-machine-make-compiled-machine/v1 byte-machine-make-compiled-machine/v2
       byte-machine-make-feed-outcome/v1
-      make-parser parser? parser-feed! parser-finish! parser-lifecycle parser-reset!
+      make-parser parser? parser-feed! parser-finish! parser-resume!
+      parser-lifecycle parser-reset!
       parser-result? parser-result-status parser-result-next
       parser-result-consumed parser-result-stream-offset parser-result-error
       callback-continue callback-pause))
@@ -99,6 +100,9 @@
                         (symbol->string (normal-error-code s)) ") " id " off))\n"))
         ((finish)
          (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote finished) pos #f " id " off))\n"))
+        ((pause)
+         (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
+                        (number->string (normal-pause-target s)) " off))\n"))
         ((dispatch)
          (let ((fb (normal-dispatch-fallback s)))
            (string-append
@@ -110,7 +114,13 @@
             "           (let ((b (bytevector-u8-ref bv pos)))\n"
             "             (case b\n"
             (apply string-append (map render-transition-arm (normal-dispatch-transitions s)))
-            "               (else " (loop-tail (car fb) (cdr fb)) ")))))\n"))))))
+            "               (else " (loop-tail (car fb) (cdr fb)) ")))))\n")))
+        ;; Unreachable today -- this case already covers every kind
+        ;; normal-state-kind can produce (dispatch/stop/error/finish/pause);
+        ;; verified by inspection, not mutation (same convention as
+        ;; normal-ir.sls's own else guards).
+        (else (assertion-violation 'render-machine "unknown state kind"
+                                   (normal-state-kind s))))))
 
   (define (render-machine compilation binding)
     (unless (compilation-ok? compilation)

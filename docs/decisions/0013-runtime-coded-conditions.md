@@ -57,3 +57,27 @@ is de-duplicated with `list(REMOVE_DUPLICATES ...)`. The outcome is identical �
 `conditions.sls` reaches `CORE_ALL` once, load order stays conditions → ir →
 graph → verify → runtime → interpret, and the per-lane duplicate-basename guard
 stays green.
+
+## 2026-08-29 (Slice ③) — misuse codes as shipped
+
+Item 1's lifecycle-misuse family shipped as a **single** code,
+`'lifecycle-violation`, covering every §12.2 operation-matrix cell Milestone 2
+makes reachable — `parser-feed!` refused from `paused-feed`/`paused-finish`/
+`finish-ready`; `parser-finish!` refused from `paused-feed`/`paused-finish`;
+`parser-resume!` refused from every non-paused row (`ready`, `stopped`,
+`error`, `finished` — including a v1 parser, which can never reach a
+*paused* row at all, so its `resume!` is always refused, from whichever of
+those non-paused rows it is actually in). `who` is the refused operation
+(`parser-feed!` / `parser-finish!` / `parser-resume!`); `detail` is
+`(list <state> <op>)` — the offending lifecycle row and a short op tag
+(`'feed` / `'finish` / `'resume`) — with both elements asserted directly by
+the tests (`runtime-tests.sps`'s `lifecycle-violation?` helper checks code,
+who, and both detail elements; `runtime.sls:137-333`). Parent §9.4:438
+already named "lifecycle violation" in its code taxonomy; this is that
+code's one concrete symbol. The prohibited-cell inventory is §12.2's; the
+`poisoned`/`busy` rows are unreachable in Milestone 2 without callbacks
+(design §7) and ride to Milestone 5, whose plan inherits those exact rows.
+This is distinct
+from item 1's other half, the §11.1 invalid-slice contract
+(`runtime.sls:139`), which shipped in Slice ② as its own code,
+`'invalid-slice` — a malformed call, not a lifecycle refusal.

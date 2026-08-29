@@ -844,6 +844,29 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/eof-interpret-tests.sps"
   TIMEOUT 120)
 
+# Milestone 2 Slice ③: the shared pause/resume proving machine driven through
+# the interpreter's pause arms and the runtime's paused-feed/paused-finish/
+# finish-ready lifecycle.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.pause-interpret.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/pause-interpret-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/pause-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/pause-interpret-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.pause-interpret.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/pause-interpret-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/pause-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/pause-interpret-tests.sps"
+  TIMEOUT 120)
+
 # --- Milestone 1 Phase 3 Slice A: normalizer ------------------------------
 set(BYTE_MACHINE_CORE_NORMAL_IR
     ${BYTE_MACHINE_CORE_VERIFY}
@@ -856,6 +879,7 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_NORMAL_IR}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/eof-machine.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/pause-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/normal-ir-tests.sps"
   TIMEOUT 120)
 
@@ -866,6 +890,7 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_NORMAL_IR}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/eof-machine.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/pause-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/normal-ir-tests.sps"
   TIMEOUT 120)
 
@@ -985,6 +1010,27 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-eof-tests.sps"
   TIMEOUT 120)
 
+# --- Milestone 2 Slice ③: interpreter≡generated pause/resume differential -----
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.pause.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-pause-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/pause-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-pause-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.pause.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-pause-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/pause-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-pause-tests.sps"
+  TIMEOUT 120)
+
 # --- Milestone 1 Phase 3 Slice B: D7 identifier repertoire + binary LF -------
 byte_machine_add_scheme_lane(
   NAME byte-machine.verify.identifier-repertoire.chez.source
@@ -1024,6 +1070,34 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/determinism-one-byte-tests.sps"
   TIMEOUT 120
   ENVIRONMENT "BYTE_MACHINE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-one-byte.golden.sls")
+
+# --- Milestone 2 Slice ③: determinism against a committed golden (pause) ------
+# Unlike the one-byte neighbor above, this program imports (byte-machine test
+# pause-machine) rather than building its machine inline, so both lanes below
+# list pause-machine.sls in SOURCES -- exactly as the differential.pause block
+# above does -- because the aot lane resolves libraries only through objects
+# compiled from its own SOURCES (the source-guard blocks fallback).
+byte_machine_add_scheme_lane(
+  NAME byte-machine.determinism.pause.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/determinism-pause-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/pause-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/determinism-pause-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_PAUSE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-pause.golden.sls")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.determinism.pause.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/determinism-pause-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/pause-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/determinism-pause-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_PAUSE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-pause.golden.sls")
 
 # --- Milestone 1 Phase 3 Slice B: property generator + differential ----------
 byte_machine_add_scheme_lane(

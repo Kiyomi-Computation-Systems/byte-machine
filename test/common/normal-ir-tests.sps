@@ -5,6 +5,7 @@
 (import (rnrs)
         (byte-machine test harness)
         (byte-machine test eof-machine)
+        (byte-machine test pause-machine)
         (byte-machine graph)
         (byte-machine verify)
         (byte-machine private normal-ir))
@@ -113,5 +114,30 @@
       (lambda ()
         (check-equal "fingerprint" (normal-machine-fingerprint n-eof)
                      9098559711816935340)))))
+
+;; The pause tag (4) plus its u32be continuation id (D5) is not exercised by
+;; the one-byte or node-routing goldens above -- neither fixture has a pause
+;; node -- so this is the only golden that moves when the pause encode arm's
+;; bytes change. Same measured-golden discipline as those two cases; node
+;; order s0 p1 s1 pe stop done trunc reject -> ids 0..7, normalized
+;; identically through `normalize`.
+(define pausem (make-pause-machine))
+(define n-pause (normalize pausem))
+
+(harness-group "pause normalization (Slice 3)"
+  (lambda ()
+    (harness-case "pause states lower to kind pause with the continuation id"
+      (lambda ()
+        (let* ((states (normal-machine-states n-pause))
+               (p1 (vector-ref states 1))
+               (pe (vector-ref states 3)))
+          (check-equal "p1 kind" (normal-state-kind p1) 'pause)
+          (check-equal "p1 target" (normal-pause-target p1) 2)
+          (check-equal "pe kind" (normal-state-kind pe) 'pause)
+          (check-equal "pe target" (normal-pause-target pe) 5))))
+    (harness-case "the pause encoding is pinned by a fingerprint golden"
+      (lambda ()
+        (check-equal "pause fingerprint" (normal-machine-fingerprint n-pause)
+                     15725897457025557005)))))
 
 (harness-finish)

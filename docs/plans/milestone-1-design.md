@@ -1,7 +1,27 @@
 # Milestone 1 Design — Minimal Executable Machine
 
-Status: design — approved shape, pending implementation plan. Authored 2026-08-22,
+Status: design — approved shape, **delivered** (Milestone 1 complete as of
+2026-08-23; see the dated note below). Authored 2026-08-22,
 the day Milestone 0 closed (PR #11, [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md)).
+
+**Milestone 1 complete as of 2026-08-23**, and merged to `main`. Gate 0
+(decisions [0008](../decisions/0008-emitter-emits-importable-library.md) and
+[0009](../decisions/0009-content-and-ir-fingerprints.md), PR #12, `9ca009c`),
+Phase 1 CI (PR #13, `e0aa377`), Phase 2 semantic core (PR #14, `59a6f85`), and
+Phase 3 Slice A (PR #16, `db3d3fd`) and Slice B (PR #17, `4eb16a3`) are all
+delivered and reviewed; §6's dated disposition (below its Exit list) states each
+of the four full-M1 exit criteria's individual state against the shipped tree —
+parent §25's are the same four criteria (its item 2 says
+"interpreter/generated" where §6 says "interpreter and generated"), so that
+disposition covers both. See CHANGELOG.md's Milestone 1 entries for the
+release-facing summary.
+
+**This paragraph and the §6 disposition were written 2026-08-29**, six days
+after the close, not at it. Milestone 1 shipped without either: its Phase 3
+Slice B plan sent the exit-criteria confirmation to a task report rather than to
+a committed document, so nothing in the tree said the milestone had closed. The
+Milestone 2 close-out found the gap and it is repaired here rather than dated
+back — the tree these notes were checked against is stated in each.
 
 Governing plan: [byte-machine-implementation-plan.md](./byte-machine-implementation-plan.md) §25
 ("Milestone 1: Minimal executable machine"). This document does not change M1's
@@ -220,6 +240,50 @@ sub-split at writing-plans time (see §8).
 - a graph descriptor can be constructed, verified, compiled, emitted, loaded, and
   run across the public library boundaries in **both** execution lanes;
 - invalid names, targets, overlap, fallback, and terminals are rejected.
+
+> **Dispositioned 2026-08-29, recording the close of 2026-08-23.** These four,
+> and parent §25's same four, checked individually. Written six days after the
+> close because none was written at it (see the header note), so each row
+> below was read against two trees: `4eb16a3`, the tree Milestone 1 closed on,
+> and HEAD, which now carries Milestone 2. Every case name cited is present
+> unchanged in both, and the ten lanes named below are registered in both (60
+> lanes then, 72 now). The suite was *run* at HEAD only — 72/72, no failures, on
+> the pull-request selection (`make test`, 2026-08-29, Milestone 2 Slice ③ tip);
+> `4eb16a3` was read, not re-run, and this disposition claims nothing more about
+> it than the text it contains.
+>
+> (1) **met**: `interpret-tests.sps`'s "all 256 byte values" group, and
+> `differential-one-byte-tests.sps`'s "all 256 byte values match" case — the
+> byte range is walked, not sampled.
+> (2) **met**: `differential-one-byte-tests.sps`'s "interpreter and generated
+> agree on every byte" group, which emits the generated library at run time,
+> loads it, and compares `parser-result` fields from both executors through the
+> one shared `make-parser`/`parser-feed!` API.
+> (3) **met**: `example-one-byte-tests.sps`'s "construct, verify, compile, emit,
+> import, run" group — parent §9.6's example — specifically its case "the
+> emitted parser accepts the exact byte across the library boundary", which
+> compiles, emits to a binary file port, loads the emitted file, and reaches the
+> compiled machine only through `(environment '(generated one-byte))`. That case
+> is the Milestone 1 evidence and is the group's only case at `4eb16a3`; the
+> second case beside it at HEAD, the nonzero-offset slice, is Milestone 2's and
+> is not claimed here. "Both execution lanes" is the registered pair
+> `byte-machine.example.one-byte.{chez.source,chez.aot}`, two lanes over one
+> program, not one lane run twice.
+> (4) **met**: `verify-tests.sps`'s "rejections, one per decision" group covers
+> each named class — names (three `invalid-name` cases: machine, node, and
+> error code), targets (`missing-target`, on the entry and on a fallback edge),
+> overlap (`overlapping-cases`), fallback (the same fallback-edge case; an
+> *absent* fallback has no rejection case because it cannot be built —
+> `make-byte-dispatch-node` takes the fallback positionally and raises
+> `invalid-argument` for anything that is not an `edge?`, identically at
+> `4eb16a3` and HEAD), and terminals (`missing-error-declaration` and
+> `invalid-eof-target`, the EOF declaration M1 verifies without executing).
+> `identifier-repertoire-tests.sps` adds D7's exhaustive `[a-z][a-z0-9-]*`
+> accept/reject proof at both grammar sites.
+>
+> Not claimed here: the mutation suite, which is not in the pull-request
+> selection re-run above. Its Milestone 1 state is the one CHANGELOG.md's
+> Milestone 1 Phase 3 Slice B entry records.
 
 ## 7. Explicitly out of Milestone 1
 

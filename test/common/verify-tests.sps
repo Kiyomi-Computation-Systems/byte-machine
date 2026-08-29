@@ -201,4 +201,159 @@
                  (memq 'eof-zero-progress-cycle
                        (map diagnostic-code (verification-diagnostics (verify-machine m))))))))))
 
+;; Shared helper for this group: a machine over nodes with entry 'e0 and the
+;; standard three error declarations, matching the group's other fixtures.
+(define (pause-fixture nodes)
+  (make-machine 'pm 'e0 '() '() '()
+    (list (make-error-declaration 'default-eof 'eof "eof" #f)
+          (make-error-declaration 'rejected 'unexpected-byte "bad byte" #f)
+          (make-error-declaration 'truncated 'truncated-input "truncated" #f))
+    nodes 'default-eof #f))
+
+(harness-group "pause nodes (Slice 3)"
+  (lambda ()
+    (harness-case "a well-formed pause machine verifies"
+      (lambda ()
+        ;; e0 --byte 1/advance--> p (pause) --> s1 --byte 2/advance--> stop;
+        ;; e0's eof-target pauses (pe) into a finish node.
+        (let ((v (verify-machine
+                  (pause-fixture
+                   (list (make-byte-dispatch-node 'e0
+                           (list (make-byte-case (make-exact-byte-matcher 1)
+                                                 (make-edge 'p 'advance) #f))
+                           (make-edge 'reject 'reexecute) 'pe #f)
+                         (make-pause-node 'p 's1 #f)
+                         (make-byte-dispatch-node 's1
+                           (list (make-byte-case (make-exact-byte-matcher 2)
+                                                 (make-edge 'stop 'advance) #f))
+                           (make-edge 'reject 'reexecute) 'trunc #f)
+                         (make-pause-node 'pe 'done #f)
+                         (make-stop-node 'stop #f)
+                         (make-finish-node 'done #f)
+                         (make-error-node 'trunc 'truncated #f)
+                         (make-error-node 'reject 'rejected #f))))))
+          (check "accepted" (verification-ok? v)))))
+    (harness-case "a pause continuation naming no node is malformed (§16.2:905)"
+      (lambda ()
+        (let ((v (verify-machine
+                  (pause-fixture
+                   (list (make-byte-dispatch-node 'e0
+                           (list (make-byte-case (make-exact-byte-matcher 1)
+                                                 (make-edge 'p 'advance) #f))
+                           (make-edge 'reject 'reexecute) #f #f)
+                         (make-pause-node 'p 'nowhere #f)
+                         (make-error-node 'reject 'rejected #f))))))
+          (check "rejected" (not (verification-ok? v)))
+          (check "missing-target diagnostic"
+                 (exists (lambda (d) (eq? (diagnostic-code d) 'missing-target))
+                         (verification-diagnostics v))))))
+    (harness-case "a byte-reachable pause into a finish node is non-EOF flow (§16.2:908)"
+      (lambda ()
+        (let ((v (verify-machine
+                  (pause-fixture
+                   (list (make-byte-dispatch-node 'e0
+                           (list (make-byte-case (make-exact-byte-matcher 1)
+                                                 (make-edge 'p 'advance) #f))
+                           (make-edge 'reject 'reexecute) #f #f)
+                         (make-pause-node 'p 'done #f)
+                         (make-finish-node 'done #f)
+                         (make-error-node 'reject 'rejected #f))))))
+          (check "rejected" (not (verification-ok? v)))
+          (check "non-eof-into-finish diagnostic"
+                 (exists (lambda (d) (eq? (diagnostic-code d) 'non-eof-into-finish))
+                         (verification-diagnostics v))))))
+    (harness-case "an EOF chain of pauses that cycles is a zero-progress EOF cycle"
+      (lambda ()
+        ;; e0's eof-target enters pa; pa -> pb -> pa never reaches a terminal.
+        (let ((v (verify-machine
+                  (pause-fixture
+                   (list (make-byte-dispatch-node 'e0
+                           (list (make-byte-case (make-exact-byte-matcher 1)
+                                                 (make-edge 'stop 'advance) #f))
+                           (make-edge 'reject 'reexecute) 'pa #f)
+                         (make-pause-node 'pa 'pb #f)
+                         (make-pause-node 'pb 'pa #f)
+                         (make-stop-node 'stop #f)
+                         (make-error-node 'reject 'rejected #f))))))
+          (check "rejected" (not (verification-ok? v)))
+          (check "eof-zero-progress-cycle diagnostic"
+                 (exists (lambda (d) (eq? (diagnostic-code d) 'eof-zero-progress-cycle))
+                         (verification-diagnostics v)))
+          (check "zero-progress-cycle diagnostic"
+                 (exists (lambda (d) (eq? (diagnostic-code d) 'zero-progress-cycle))
+                         (verification-diagnostics v)))
+          ;; Attribution, not just verdict: the eof-zero-progress-cycle above is
+          ;; the entry dispatch node e0's own :909 eof-target-chain walk (its
+          ;; target is 'pa, which cycles). It must NOT also be raised on 'pa
+          ;; itself -- that would only happen if the D4(d) byte-reachability
+          ;; gate at the eof-terminal-chain call site stopped filtering pa/pb
+          ;; out (neither is byte-reached; both are eof-only-reachable), which
+          ;; produces a redundant same-code diagnostic no verdict-based check
+          ;; can see (whole-branch review; see the mutation's own comment).
+          (check "eof-zero-progress-cycle attributed to e0"
+                 (exists (lambda (d) (and (eq? (diagnostic-code d) 'eof-zero-progress-cycle)
+                                           (eq? (diagnostic-node d) 'e0)))
+                         (verification-diagnostics v)))
+          (check "no eof-zero-progress-cycle attributed to pa"
+                 (not (exists (lambda (d) (and (eq? (diagnostic-code d) 'eof-zero-progress-cycle)
+                                                (eq? (diagnostic-node d) 'pa)))
+                              (verification-diagnostics v)))))))
+    (harness-case "an EOF chain through a pause into a stop is rejected (§16.2:909)"
+      (lambda ()
+        (let ((v (verify-machine
+                  (pause-fixture
+                   (list (make-byte-dispatch-node 'e0
+                           (list (make-byte-case (make-exact-byte-matcher 1)
+                                                 (make-edge 'stop 'advance) #f))
+                           (make-edge 'reject 'reexecute) 'pa #f)
+                         (make-pause-node 'pa 'stop #f)
+                         (make-stop-node 'stop #f)
+                         (make-error-node 'reject 'rejected #f))))))
+          (check "rejected" (not (verification-ok? v)))
+          (check "eof-reachable-stop diagnostic"
+                 (exists (lambda (d) (eq? (diagnostic-code d) 'eof-reachable-stop))
+                         (verification-diagnostics v))))))
+    (harness-case "a byte-reachable pause into a stop would leak stopped through EOF (§16.2:909)"
+      (lambda ()
+        ;; D4(d): after feed pauses at p, current = stop and resume returns to
+        ;; ready, where finish! would begin EOF processing AT the stop.
+        (let ((v (verify-machine
+                  (pause-fixture
+                   (list (make-byte-dispatch-node 'e0
+                           (list (make-byte-case (make-exact-byte-matcher 1)
+                                                 (make-edge 'p 'advance) #f))
+                           (make-edge 'reject 'reexecute) #f #f)
+                         (make-pause-node 'p 'stop #f)
+                         (make-stop-node 'stop #f)
+                         (make-error-node 'reject 'rejected #f))))))
+          (check "rejected" (not (verification-ok? v)))
+          (check "eof-reachable-stop diagnostic"
+                 (exists (lambda (d) (eq? (diagnostic-code d) 'eof-reachable-stop))
+                         (verification-diagnostics v))))))
+    (harness-case "an entry pause is byte-reachable, so its chain is walked too"
+      (lambda ()
+        (let ((v (verify-machine
+                  (pause-fixture
+                   (list (make-pause-node 'e0 'stop #f)
+                         (make-stop-node 'stop #f))))))
+          (check "rejected" (not (verification-ok? v)))
+          (check "entry eof-reachable-stop diagnostic"
+                 (exists (lambda (d) (eq? (diagnostic-code d) 'eof-reachable-stop))
+                         (verification-diagnostics v))))))
+    (harness-case "a reexecute/pause-only cycle with no advance makes no progress"
+      (lambda ()
+        ;; e0 --byte 1/reexecute--> p (pause) --> e0: no byte is ever consumed.
+        (let ((v (verify-machine
+                  (pause-fixture
+                   (list (make-byte-dispatch-node 'e0
+                           (list (make-byte-case (make-exact-byte-matcher 1)
+                                                 (make-edge 'p 'reexecute) #f))
+                           (make-edge 'reject 'reexecute) #f #f)
+                         (make-pause-node 'p 'e0 #f)
+                         (make-error-node 'reject 'rejected #f))))))
+          (check "rejected" (not (verification-ok? v)))
+          (check "zero-progress-cycle diagnostic"
+                 (exists (lambda (d) (eq? (diagnostic-code d) 'zero-progress-cycle))
+                         (verification-diagnostics v))))))))
+
 (harness-finish)

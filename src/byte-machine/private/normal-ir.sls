@@ -10,7 +10,7 @@
           normal-machine-fingerprint
           normal-state-kind normal-state-id
           normal-dispatch-transitions normal-dispatch-fallback
-          normal-error-code normal-dispatch-eof)
+          normal-error-code normal-dispatch-eof normal-pause-target)
   (import (rnrs)
           (only (byte-machine private ir)
                 machine-nodes machine-entry machine-errors machine-default-eof-error
@@ -18,7 +18,7 @@
                 byte-dispatch-node-eof-target
                 byte-case-matcher byte-case-edge exact-byte-matcher-byte
                 edge-target edge-mode stop-node? error-node? error-node-error-name
-                finish-node?
+                finish-node? pause-node? pause-node-continuation
                 error-declaration-name error-declaration-code node-name))
 
   (define nm-tag (vector 'byte-machine-normal-machine))
@@ -33,13 +33,15 @@
   ;; eof (slot 6) is a dispatch state's resolved eof routing:
   ;;   (node . <id>)             -- an exhausted dispatch continues to node <id>
   ;;   (default . <code-symbol>) -- it routes to the machine default-eof error.
-  ;; Non-dispatch states carry #f there.
+  ;;   pause states carry (node . <continuation-id>) there (Slice ③).
+  ;; Other non-dispatch states carry #f there.
   (define (normal-state-kind s) (vector-ref s 1))
   (define (normal-state-id s) (vector-ref s 2))
   (define (normal-dispatch-transitions s) (vector-ref s 3))
   (define (normal-dispatch-fallback s) (vector-ref s 4))
   (define (normal-error-code s) (vector-ref s 5))
   (define (normal-dispatch-eof s) (vector-ref s 6))
+  (define (normal-pause-target s) (cdr (vector-ref s 6)))
 
   ;; --- FNV-1a 64-bit over a canonical byte encoding (decision 0009) ---
   (define mask64 (- (expt 2 64) 1))
@@ -64,8 +66,9 @@
       (put-u16be p (bytevector-length b)) (put-bytevector p b)))
   (define (mode->byte m) (if (eq? m 'advance) 0 1))
 
-  ;; The `else` guards below are unreachable-today safety for a fifth node/state
-  ;; kind beyond dispatch/stop/error/finish; verified by inspection, not mutation.
+  ;; The `else` guards below are unreachable-today safety for a sixth node/state
+  ;; kind beyond dispatch/stop/error/finish/pause; verified by inspection, not
+  ;; mutation.
 
   ;; Lowering: verified machine -> (values entry states-vector). No encoding.
   (define (lower-machine machine)
@@ -108,9 +111,13 @@
                                      ((stop-node? n) (vector ns-tag 'stop i #f #f #f #f))
                                      ((error-node? n) (vector ns-tag 'error i #f #f (errcode (error-node-error-name n)) #f))
                                      ((finish-node? n) (vector ns-tag 'finish i #f #f #f #f))
-                                     ;; The repertoire is exactly these four node kinds
-                                     ;; (dispatch/stop/error/finish). A future kind reaching
-                                     ;; here must fail loudly, not lower to nothing.
+                                     ((pause-node? n)
+                                      (vector ns-tag 'pause i #f #f #f
+                                              (cons 'node (id-of (pause-node-continuation n)))))
+                                     ;; The repertoire is exactly these five
+                                     ;; node kinds (dispatch/stop/error/finish/pause).
+                                     ;; A future kind reaching here must fail loudly, not
+                                     ;; lower to nothing.
                                      (else (assertion-violation 'normalize-machine "unknown node kind" n)))
                                    acc))))))))
       (values entry states)))
@@ -143,6 +150,8 @@
                ((stop) (put-u8 p 1))
                ((error) (put-u8 p 2) (put-symbol p (normal-error-code s)))
                ((finish) (put-u8 p 3))
+               ;; pause: tag 4 + u32be continuation state id (D5).
+               ((pause) (put-u8 p 4) (put-u32be p (normal-pause-target s)))
                (else (assertion-violation 'normalize-machine "unknown state kind"
                                           (normal-state-kind s)))))
            (loop (+ i 1)))))))
