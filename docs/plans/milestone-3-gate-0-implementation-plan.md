@@ -404,7 +404,7 @@ git commit -m "docs: decision 0016 — normalized state ids, declared nodes keep
 
 **Interfaces:**
 - Consumes: decision 0014 (canonicalization is where duplicate bytes go).
-- Produces: the settled contract "an empty byte set, a range with `low > high`, and an empty sequence are constructor contract violations; `low = high` and length-1 sequences are legal; duplicate bytes within one set are resolved by canonicalization, not rejected; §16.2's closed check list gains no invalid-matcher bullet." Slice ①'s constructor task and Slice ③'s cycle-analysis task consume this — the latter is *shrunk* by it.
+- Produces: the settled contract "an empty byte set, a range with `low > high`, and an empty sequence are constructor contract violations; `low = high` and length-1 sequences are legal; duplicate bytes within one set are resolved by canonicalization, not rejected; §16.2's check list gains no invalid-matcher bullet." Slice ①'s constructor task and Slice ③'s cycle-analysis task consume this — the latter is *shrunk* by it.
 
 - [ ] **Step 1: Read the targets**
 
@@ -437,12 +437,12 @@ matcher; an empty sequence; a length-1 sequence; duplicate alternatives in one
 sequence node.
 
 The plan gives no domain constraints beyond "complement within `0..255`"
-(§9.1:294). §16.2's list of required checks — which the plan calls closed — has
-**no** invalid-matcher entry at all; its only matcher bullet is overlap (§16.2:893)
-and its only sequence bullet is ambiguity (§16.2:894). So a matcher-validity
-*diagnostic* would be an addition to a closed list, while §9.1:322 says
-constructors validate only local shape and that cross-reference and semantic
-checks belong to verification.
+(§9.1:294). §16.2's list of required checks — an itemized enumeration with no
+open-ended qualifier — has **no** invalid-matcher entry at all; its only matcher
+bullet is overlap (§16.2:893) and its only sequence bullet is ambiguity
+(§16.2:894). So a matcher-validity *diagnostic* would be an addition to that
+list, while §9.1:322 says constructors validate only local shape and that
+cross-reference and semantic checks belong to verification.
 
 One of these shapes is load-bearing rather than merely untidy. An empty sequence
 is the only shape that makes a sequence node zero-width, which contradicts
@@ -463,7 +463,7 @@ the only way lowered prefix states themselves can enter a zero-progress cycle.
    They are resolved by canonicalization. Sorting or de-duplicating at construction
    would be a construction-time semantic transform, which §9.1:322 forbids and
    §9.1:318's "deterministic caller order" assumes away.
-4. **§16.2's closed check list gains no invalid-matcher bullet.** Overlap
+4. **§16.2's check list gains no invalid-matcher bullet.** Overlap
    (§16.2:893) and sequence ambiguity (§16.2:894) remain its only entries in this
    area, and both stay verifier work.
 

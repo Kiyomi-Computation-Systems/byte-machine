@@ -248,13 +248,12 @@ are resolved by canonicalization.
 
 **Why.** §9.1:322 says constructors validate only local shape, and these three
 shapes *are* local shape — the precedent is `make-exact-byte-matcher`'s own range
-check at `ir.sls:41-44`. §16.2's check list, which the plan calls closed, contains
-no "invalid matcher" bullet at all; its only matcher entry is :893 overlap. So a
-matcher-validity *diagnostic* would be an addition to a closed list, while a
-constructor check is the shipped convention. Duplicate bytes are excluded from the
-constructor because sorting or de-duplicating at construction would be a
-construction-time semantic transform, which §9.1:322 forbids and §9.1:318's
-"deterministic caller order" assumes away.
+check at `ir.sls:41-44`. §16.2's check list has no "invalid matcher" bullet at
+all; its only matcher entry is :893 overlap. So a matcher-validity *diagnostic*
+would be an addition to that list, while a constructor check is the shipped
+convention. Duplicate bytes are excluded from the constructor because sorting or
+de-duplicating at construction would be a construction-time semantic transform,
+which §9.1:322 forbids and §9.1:318's "deterministic caller order" assumes away.
 
 **Consequences.** The empty sequence is the load-bearing case: it is the only
 shape that makes a sequence node zero-width — contradicting §11.4:652, which
