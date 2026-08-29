@@ -49,7 +49,12 @@ the only way lowered prefix states themselves can enter a zero-progress cycle.
    rather than constructor work (§9.1:322) — and two identical alternatives
    are only the maximal instance of the ambiguity §16.2:894 already requires
    the verifier to reject, so the check that catches them is Slice ③'s
-   existing work, not a new rule.
+   existing work, not a new rule. Alternatives that merely *share* bytes
+   without either being a terminal prefix of the other — `AB` and `AC` — are
+   not ambiguous, and they are left to no check at all: the trie-shaped
+   lowering merges their shared prefix into one state, which is why that
+   lowering is not deferrable past the slice that adds the node kind
+   (decision 0016 point 3, milestone-3-design.md §6).
 
 ## Consequences
 

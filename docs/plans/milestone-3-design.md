@@ -1,7 +1,8 @@
 # Milestone 3 Design — Byte Classes and Sequences
 
-Status: design — approved shape, **not started**. Authored 2026-08-29, the day
-Milestone 2 closed (PR [#23](https://github.com/Kiyomi-Computation-Systems/byte-machine/pull/23),
+Status: design — approved shape, **Gate 0 discharged; Slices ①–③ not started**
+(see the dated notes below). Authored 2026-08-29, the day Milestone 2 closed
+(PR [#23](https://github.com/Kiyomi-Computation-Systems/byte-machine/pull/23),
 commit `5906ade`; status sweep PRs #24–#27). Written after a 92-agent audit of
 this milestone's requirements against the shipped tree, in which every gap claim
 sized medium or larger was independently adversarially refuted before being
@@ -22,6 +23,29 @@ scope, most of it as *already shipped by M1/M2* or as *another milestone's*.
 > claimed the parent plan "calls" §16.2's required-checks list "closed"; the plan
 > never says so — it calls only §10.6's node-kind set closed
 > (`byte-machine-implementation-plan.md:534`) (fixed by `3f8cd1b`).
+
+> **Amended 2026-08-29 (second amendment).** The Slice ②/③ boundary moved, after
+> a whole-branch review found that Slice ② as originally scoped would accept and
+> silently miscompile a multi-alternative sequence node. §6 scoped the lowering as
+> "linear prefix lowering (no sharing yet)" while `make-sequence-dispatch-node`
+> takes a plural `cases` list (§9.1:297) with local-shape validation only, and
+> decision 0017 point 4 leaves colliding alternatives to the verifier. Two
+> alternatives sharing a first byte — `AB` and `AC` — would therefore construct,
+> verify clean, and lower to two transitions on that byte out of one state; the
+> normalizer's ascending-by-byte sort key ties there, `list-sort` stability
+> silently picks a winner, and the losing alternative goes dead with nothing
+> failing. `AB` and `AC` are not *ambiguous* — ambiguity is one alternative being
+> a terminal prefix of another — so Slice ③'s ambiguous-terminal-prefix check
+> would not have caught it either; shared-prefix (trie) lowering is what does. The
+> owner approved moving trie-shaped lowering into Slice ②, where a one-alternative
+> trie *is* a linear chain, so the slice grows by a tree construction rather than
+> by a new concept and keeps the same `sequence-machine.sls` oracle; Slice ③ keeps
+> the multi-alternative fixtures, ambiguity rejection, the cycle extension, the
+> determinism pins and the `HTTP/1.0`⁄`HTTP/1.1` fixture. §1's phase table and
+> dependency paragraph, §6, §7 and the appendix are corrected in the body below;
+> this note is the record of what moved and why, not the correction. The status
+> line above was corrected in the same pass — it read "**not started**" while §4's
+> blockquote recorded Gate 0 discharged.
 
 Governing plan: [byte-machine-implementation-plan.md](./byte-machine-implementation-plan.md)
 §25 ("Milestone 3: Byte classes and sequences"), scope §25:1527-1533, exit
@@ -57,14 +81,16 @@ M3 is one milestone delivered as an ordered Gate 0 plus three slices:
 | --- | --- | --- | --- |
 | **Gate 0** | decisions only | 4 records | the calls §25, §10.6 and §16.2 leave open |
 | **Slice ① — Byte classes** | product | canonicalization spine; `make-byte-set-matcher` / `make-byte-range-matcher` / `make-byte-complement-matcher` / `ascii-bytes`; rewritten overlap pass; per-byte lowering; all-256 class lanes | §25:1527-1528, exit :1537 |
-| **Slice ② — Single-alternative sequences** | product | the sixth node kind and every verifier arm; linear prefix lowering; state-id allocation; independent interpreter tracking; both mismatch modes | §25:1530-1531 and the single-alternative half of :1529, exit :1538 |
-| **Slice ③ — Shared prefixes and ambiguity** | product | branching prefix structure; ambiguous-terminal-prefix rejection; the zero-progress/EOF-cycle extension; determinism pins; the `HTTP/1.0`⁄`HTTP/1.1` fixture | the multi-alternative half of §25:1529, plus :1532-1533, exits :1539-:1540 |
+| **Slice ② — Sequence dispatch and prefix lowering** | product | the sixth node kind and every verifier arm; trie-shaped prefix lowering; state-id allocation; independent interpreter tracking; both mismatch modes | §25:1530-1531 and the single-alternative half of :1529, exit :1538 |
+| **Slice ③ — Multiple alternatives and ambiguity** | product | multi-alternative fixtures over Slice ②'s trie; ambiguous-terminal-prefix rejection; the zero-progress/EOF-cycle extension; determinism pins; the `HTTP/1.0`⁄`HTTP/1.1` fixture | the multi-alternative half of §25:1529, plus :1532-1533, exits :1539-:1540 |
 
 Dependency order is strict. Gate 0 unblocks everything. Slice ① is purely
 additive to the normalized encoding, so it can assert *no fingerprint moved* as
-its own oracle. Slice ② lands the node kind, and is validated against a machine
-already on `main`. Slice ③ is the only slice that invents new analysis. Every
-slice runs in **both execution lanes** and is checked by the
+its own oracle. Slice ② lands the node kind and the trie-shaped lowering, and is
+validated against a machine already on `main`. Slice ③ adds the milestone's
+remaining new analysis — ambiguous-terminal-prefix rejection and the cycle
+extension — together with the fixtures that exercise more than one alternative.
+Every slice runs in **both execution lanes** and is checked by the
 **interpreter≡generated differential** (parent §18, §22.4).
 
 ## 2. Why this shape
@@ -358,11 +384,13 @@ count is a hard failure. Re-anchoring is a re-**measurement** of each pin's
 failure signature, not a text edit; per AGENTS.md:122-127 the obligation is
 recorded by mutation LABEL, not line number.
 
-## 6. Slice ② — Single-alternative sequence dispatch
+## 6. Slice ② — Sequence dispatch and prefix lowering
 
 Discharges §25:1530 (prefix normalization and resumable internal states),
 §25:1531 (mismatch positioning), and the single-alternative half of §25:1529;
 exit criterion §25:1538 (every sequence split and mismatch position passes).
+What stays single-alternative is the *fixture*, not the lowering: the M2 oracle
+this slice must reproduce is a single-alternative machine.
 
 **The node kind and every verifier arm land in one commit.** This is the
 milestone's second structural hazard: `normal-ir.sls:121` and `compile.sls:122`
@@ -379,6 +407,27 @@ one exception is reachability: an unextended `all-out-targets` produces a *loud
 but false* `'unreachable-node` on every successor only a sequence reaches, which
 reads as a user grammar error rather than a verifier gap.
 
+**The lowering is trie-shaped from the start, and that is a correctness
+requirement rather than an early optimization.** `make-sequence-dispatch-node`
+takes a plural `cases` list (§9.1:297) and validates local shape only, and
+decision 0017 point 4 leaves colliding alternatives to the verifier. So nothing
+stops a two-alternative node from being constructed and verified clean the day
+this slice merges. Lowered per-alternative as separate linear chains, two
+alternatives sharing a first byte — `AB` and `AC` — put two transitions on that
+byte out of one state; the ascending-by-byte sort key of §4.1's caveat ties
+there, `list-sort` stability picks a winner, and the other alternative goes dead
+with nothing failing. They are not *ambiguous* — neither is a terminal prefix of
+the other — so §7's ambiguous-terminal-prefix check would not catch it either.
+Merging the shared byte into one state is what removes the tie, so it lands with
+the node kind. For a single alternative a trie *is* a linear chain, so this is a
+tree construction rather than a new concept and the oracle below is unchanged.
+Genuinely ambiguous alternatives are a different failure and stay with Slice ③:
+the trie has no "accept here" slot to offer them (§4.2), so this slice's fixtures
+keep every alternative distinguishable and Slice ③ is what turns that convention
+into a checked property. That does put the rejection rule and the lowering it
+constrains in different pull requests, which §2 warns is how one drifts from the
+other; §4.2 is the shared resolution that has to be re-read in both.
+
 Contents:
 
 - **Source IR.** `make-sequence-dispatch-node` and `make-sequence-case` with
@@ -388,8 +437,12 @@ Contents:
 - **All six verifier arms above**, plus the `node-out-targets` arm that also
   repairs `pass-names`' missing-target resolution (`:101-107`) and `byte-reached`
   (`:213`) for free.
-- **Linear prefix lowering** (no sharing yet) and §4.3 id allocation, with
-  `normal-ir-tests.sps:41-46` amended to the recorded rule.
+- **Trie-shaped prefix lowering.** The alternatives of one node descend into
+  shared states wherever they agree, per §10.6:544 and §4.3's within-node sharing;
+  a one-alternative trie is a linear chain. With the §4.3 id allocation, whose
+  pre-order takes each state's children in ascending byte order so the traversal
+  is a total order (decision 0016 point 1), and with `normal-ir-tests.sps:41-46`
+  amended to the recorded rule.
 - **Interpreter prefix tracking** per §4.2, with `lookup` and `kind` destructuring.
 - **Emitter: confirm zero change and record it.** Any new emitted local must be
   added to `reserved-member-3` (`compile.sls:53`) in the **same commit** (decision
@@ -398,7 +451,9 @@ Contents:
   `sequence-machine.sls` exactly: all eight cut-sets, the seeded 32-schedule
   multi-split with its genuine-multi-split sentinel, nonzero-offset and empty
   slices, and every mismatch position, against tuples already pinned at
-  `differential-sequence-tests.sps:118-201`.
+  `differential-sequence-tests.sps:118-201`. That the oracle machine has one
+  alternative is a property of this fixture — `sequence-machine.sls` is what M2
+  shipped — not a limit on the lowering under test.
 - **Both mismatch modes.** Every shipped fixture uses `reexecute` fallbacks
   (`sequence-machine.sls:19,22,25,28`; `pause-machine.sls:17,21`), so the
   **advance-mismatch path has zero coverage anywhere in the tree** while §11.5:664
@@ -412,16 +467,22 @@ and duplicate CTest names are a configure-time `FATAL_ERROR`. New lanes need
 distinct five-segment names. More generally: anyone grepping `sequence` in this
 tree will conclude half of M3 already ships.
 
-## 7. Slice ③ — Shared prefixes, ambiguity, and cycle analysis
+## 7. Slice ③ — Multiple alternatives, ambiguity, and cycle analysis
 
-Discharges the multi-alternative half of §25:1529 (exact sequence alternatives),
-§25:1532 (ambiguous-prefix rejection) and §25:1533 (extension of zero-progress and
-EOF-cycle analysis to lowered sequence-prefix states); exit criteria §25:1539
-(normalized output is deterministic) and §25:1540 (consuming cycles pass and
-zero-progress cycles fail verification).
+Discharges the multi-alternative half of §25:1529 (exact sequence alternatives —
+Slice ② built the lowering that admits them; this slice is where more than one is
+constructed, executed and checked), §25:1532 (ambiguous-prefix rejection) and
+§25:1533 (extension of zero-progress and EOF-cycle analysis to lowered
+sequence-prefix states); exit criteria §25:1539 (normalized output is
+deterministic) and §25:1540 (consuming cycles pass and zero-progress cycles fail
+verification).
 
-- **Branching prefix structure.** Shared *nonterminal* prefixes in the lowering,
-  per §10.6:544. See §8's mirror trap before reading §29:1744 as a prohibition.
+- **Multi-alternative fixtures over Slice ②'s trie.** The branching prefix
+  structure itself — shared *nonterminal* prefixes in the lowering, per §10.6:544
+  — lands in Slice ② (§6), because without it two alternatives sharing a byte
+  miscompile silently. This slice is where more than one alternative is first
+  constructed, lowered and executed end to end. See §8's mirror trap before
+  reading §29:1744 as a prohibition.
 - **Ambiguous-terminal-prefix rejection**, one new diagnostic code (§4.5).
 - **The cycle extension**, which §25:1533 makes sound larger than it is *given
   Gate 0 record 4.4*: with empty sequences rejected at construction every sequence
@@ -580,7 +641,7 @@ zero-progress cycles fail verification).
 | --- | --- |
 | `graph`/`private ir` | Slice ①: `make-byte-set-matcher`, `make-byte-range-matcher`, `make-byte-complement-matcher`, `ascii-bytes`; a tag check on `exact-byte-matcher-byte`; `make-byte-case`'s guard widened to a `matcher?` disjunction; matcher predicates/accessors exported (closing `graph-tests.sps:5`'s reach into `private ir`). Slice ②: `make-sequence-dispatch-node`, `make-sequence-case`, and both added to `node?`/`node-name`. Both slices edit `graph.sls`'s export list **and** its `only` import list. |
 | `verify` | Slice ①: `pass-overlap` rewritten as canonical-set pairwise disjointness, one diagnostic per colliding pair. Slice ②: all six permissive fall-throughs taught the sequence node (`:56`, `:58-63`, `:158`, `:185`, `:207`, `:222`, `:236`) — in the same commit as the node kind. Slice ③: ambiguous-terminal-prefix pass with one new code, and the zero-progress extension for a self-targeting mismatch edge. `pass-reachability` and `reaches-self?` are **unchanged** (§5). |
-| `private normal-ir` | Slice ①: matcher canonicalization at the lowering site (`:103`); byte sets expand to per-byte transitions; encoding, tag bytes and format version byte **unchanged**, fingerprints **must not move**. Slice ②: sequence arm replacing part of the `else` guard at `:121`; linear prefix lowering; two-phase-append id allocation, with `normal-ir-tests.sps:41-46` amended to the recorded rule. Slice ③: branching prefix structure. |
+| `private normal-ir` | Slice ①: matcher canonicalization at the lowering site (`:103`); byte sets expand to per-byte transitions; encoding, tag bytes and format version byte **unchanged**, fingerprints **must not move**. Slice ②: sequence arm replacing part of the `else` guard at `:121`; trie-shaped prefix lowering, alternatives of one node sharing states wherever they agree; two-phase-append id allocation with the ascending-byte child rule, and `normal-ir-tests.sps:41-46` amended to the recorded rule. Slice ③ adds no further normalizer change — the branching structure its fixtures exercise is already here. |
 | `compile` (emitter) | Slices ① and ②: **confirm zero change and record it** — `render-transition-arm` (`:80-83`) and the `(case b ...)` at `:114-117` already render per-byte arms, and a prefix state is an ordinary dispatch state. Any new emitted local goes into `reserved-member-3` (`:53`) in the same commit. No `/v3`. |
 | `interpret` | Slice ①: matcher dispatch through the canonical form, replacing `(= byte (exact-byte-matcher-byte ...))` at `:46`. Slice ②: compound `current` for prefix position, with `lookup` (`:15-18`) and `kind` (`:32-39`) destructuring; derived **independently** of `normal-ir` (§18:970-972), and holding no mutable state across parsers. |
 | `runtime` | **No change.** `current` is opaque (no `symbol?` test anywhere), `parser-reset!` clears it at `:331`, and the `/v2` contract mentions no node kind. |

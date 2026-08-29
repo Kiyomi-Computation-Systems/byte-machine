@@ -24,7 +24,12 @@ feed the IR fingerprint of decision 0009 and the order of the emitted `case` arm
 
 1. **Two-phase append.** Every declared source node keeps its declaration index as
    its id. Internal prefix states are assigned ids after the entire declared block,
-   ordered by (declaring-node order, then prefix-structure pre-order).
+   ordered by (declaring-node order, then prefix-structure pre-order, taking each
+   prefix state's children in ascending byte order). The child rule is what makes
+   the pre-order total: without it a prefix state with two or more children admits
+   several pre-orders, and as the Context says the choice is externally observable
+   through the IR fingerprint and the order of the emitted `case` arms, so it is
+   pinned here rather than left to whatever order the lowering happens to build.
 2. **Sequence-free machines are unaffected, byte for byte.** Name resolution
    resolves names, and the encoder walks the states vector positionally without
    ever writing a state's own id, so a machine with no sequence node normalizes and
@@ -42,6 +47,22 @@ feed the IR fingerprint of decision 0009 and the order of the emitted `case` arm
 - Interleaving — giving each sequence node's prefix states ids immediately after
   it — was rejected. It renumbers every later node and moves the fingerprint of
   every machine containing a sequence, for no benefit.
+- **Lowered prefix states must likewise carry at most one transition per byte, and
+  decision point 3 is what establishes it.** Decision 0014's Consequences rest the
+  normalizer's ascending-by-byte sort on that property, and warrant it with the
+  overlap check — which is filtered on byte-dispatch nodes and walks *source*
+  byte-cases, so it never sees a lowered prefix state and cannot be the warrant
+  here. Within-node prefix sharing supplies one: alternatives that agree on a byte
+  descend into a single shared child rather than into two sibling states, so no
+  prefix state can offer the same byte twice and the sort key cannot tie there
+  either. Lowering each alternative as its own chain would break it — two
+  alternatives differing only after a common first byte would put two transitions
+  on that byte out of one state, and `list-sort` stability would silently pick a
+  winner, which is §25:1539's determinism criterion lost to an implementation
+  detail. This is why decision point 3's sharing is not a size optimization that
+  could be deferred: it is load-bearing for determinism, and the milestone's
+  slicing lands it with the sequence node kind for that reason
+  (milestone-3-design.md §6).
 - **The test that asserts the old contract is amended by this decision, not by a
   routine test update.** Milestone 3 Slice ② rewrites
   `normal-ir-tests.sps`'s "state ids are the declaration indices" case to state the

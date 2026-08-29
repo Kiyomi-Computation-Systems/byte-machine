@@ -168,7 +168,7 @@ git commit -m "docs: decision 0014 — byte classes expand to per-byte normalize
 
 **Interfaces:**
 - Consumes: decision 0014's canonicalization vocabulary (a prefix state's single-byte test is the one-element canonical set).
-- Produces: the settled contract "a lowered prefix state is an ordinary normalized `dispatch` state — no new tag, no emitter arm, no ABI change; the reference interpreter represents prefix position as a compound `current` derived independently of the normalizer; a mid-sequence boundary is `need-input`, never `paused`; a mid-sequence pause cannot arise." Slice ②'s lowering, interpreter and emitter-confirm tasks and Slice ③'s branching-structure task consume this.
+- Produces: the settled contract "a lowered prefix state is an ordinary normalized `dispatch` state — no new tag, no emitter arm, no ABI change; the reference interpreter represents prefix position as a compound `current` derived independently of the normalizer; a mid-sequence boundary is `need-input`, never `paused`; a mid-sequence pause cannot arise." Slice ②'s lowering, interpreter and emitter-confirm tasks and Slice ③'s ambiguity-rejection task consume this.
 
 - [ ] **Step 1: Read the targets**
 
@@ -301,7 +301,7 @@ git commit -m "docs: decision 0015 — sequence prefix states are ordinary dispa
 
 **Interfaces:**
 - Consumes: decision 0015 (prefix states exist and are dispatch states, so they need ids).
-- Produces: the settled contract "source nodes keep their declaration index; internal prefix states are appended after the declared block, ordered by declaring-node order then prefix-structure pre-order; within-node prefix sharing is in scope, cross-node sharing is not." Slice ②'s id-allocation task consumes this, and the test amendment it forces is named here so it is not mistaken for a routine test edit.
+- Produces: the settled contract "source nodes keep their declaration index; internal prefix states are appended after the declared block, ordered by declaring-node order then prefix-structure pre-order with each state's children taken in ascending byte order; within-node prefix sharing is in scope, cross-node sharing is not." Slice ②'s id-allocation task consumes this, and the test amendment it forces is named here so it is not mistaken for a routine test edit.
 
 - [ ] **Step 1: Read the targets**
 
@@ -345,7 +345,12 @@ feed the IR fingerprint of decision 0009 and the order of the emitted `case` arm
 
 1. **Two-phase append.** Every declared source node keeps its declaration index as
    its id. Internal prefix states are assigned ids after the entire declared block,
-   ordered by (declaring-node order, then prefix-structure pre-order).
+   ordered by (declaring-node order, then prefix-structure pre-order, taking each
+   prefix state's children in ascending byte order). The child rule is what makes
+   the pre-order total: without it a prefix state with two or more children admits
+   several pre-orders, and as the Context says the choice is externally observable
+   through the IR fingerprint and the order of the emitted `case` arms, so it is
+   pinned here rather than left to whatever order the lowering happens to build.
 2. **Sequence-free machines are unaffected, byte for byte.** Name resolution
    resolves names, and the encoder walks the states vector positionally without
    ever writing a state's own id, so a machine with no sequence node normalizes and
@@ -363,6 +368,22 @@ feed the IR fingerprint of decision 0009 and the order of the emitted `case` arm
 - Interleaving — giving each sequence node's prefix states ids immediately after
   it — was rejected. It renumbers every later node and moves the fingerprint of
   every machine containing a sequence, for no benefit.
+- **Lowered prefix states must likewise carry at most one transition per byte, and
+  decision point 3 is what establishes it.** Decision 0014's Consequences rest the
+  normalizer's ascending-by-byte sort on that property, and warrant it with the
+  overlap check — which is filtered on byte-dispatch nodes and walks *source*
+  byte-cases, so it never sees a lowered prefix state and cannot be the warrant
+  here. Within-node prefix sharing supplies one: alternatives that agree on a byte
+  descend into a single shared child rather than into two sibling states, so no
+  prefix state can offer the same byte twice and the sort key cannot tie there
+  either. Lowering each alternative as its own chain would break it — two
+  alternatives differing only after a common first byte would put two transitions
+  on that byte out of one state, and `list-sort` stability would silently pick a
+  winner, which is §25:1539's determinism criterion lost to an implementation
+  detail. This is why decision point 3's sharing is not a size optimization that
+  could be deferred: it is load-bearing for determinism, and the milestone's
+  slicing lands it with the sequence node kind for that reason
+  (milestone-3-design.md §6).
 - **The test that asserts the old contract is amended by this decision, not by a
   routine test update.** Milestone 3 Slice ② rewrites
   `normal-ir-tests.sps`'s "state ids are the declaration indices" case to state the
@@ -482,7 +503,12 @@ the only way lowered prefix states themselves can enter a zero-progress cycle.
    rather than constructor work (§9.1:322) — and two identical alternatives
    are only the maximal instance of the ambiguity §16.2:894 already requires
    the verifier to reject, so the check that catches them is Slice ③'s
-   existing work, not a new rule.
+   existing work, not a new rule. Alternatives that merely *share* bytes
+   without either being a terminal prefix of the other — `AB` and `AC` — are
+   not ambiguous, and they are left to no check at all: the trie-shaped
+   lowering merges their shared prefix into one state, which is why that
+   lowering is not deferrable past the slice that adds the node kind
+   (decision 0016 point 3, milestone-3-design.md §6).
 
 ## Consequences
 
