@@ -3463,7 +3463,11 @@ byte_machine_mutation(
   # both directions: this pin does not occur anywhere in the sibling's
   # output, and the sibling's own pin ("transitions are sorted ascending by
   # byte: bytes -- expected (2 5), got (5 2)", on the "entry and transition
-  # order" group that this mutant never reaches) does not occur in this one's.
+  # order" group) does not occur in this one's output either -- not because
+  # this mutant skips that group (it runs there too, same as everywhere
+  # else), but because that group's fixture ("two") uses only exact-byte
+  # matchers, whose matcher-bytes is already a one-element list, so taking
+  # the car of it is a no-op and the check still passes.
   FIND [[(bs (matcher-bytes (byte-case-matcher c)))]]
   REPLACE [[(bs (list (car (matcher-bytes (byte-case-matcher c)))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES

@@ -234,6 +234,14 @@ places.
 | `test/support/cmake/SchemeMutationSuite.cmake` (modify) | two re-anchors; new Pass 42 (ir) and Pass 43 (byte-class); Pass 33/35 additions; totals | 1-6 |
 | `CHANGELOG.md`, `docs/plans/milestone-3-design.md` (modify) | measured close-out | 7 |
 
+> **Disposition, 2026-08-29 (re-review fix wave).** The `test/common/graph-
+> tests.sps` row's description, "the façade builds a class machine with no
+> private import", is stale in the same way as Task 2 Step 9's listing below
+> (see that step's disposition): the shipped file permanently imports three
+> machine accessors from `(byte-machine private ir)`, and the whole-branch
+> review fix wave (`b6c987c`) reworded the file's own top-of-file comment and
+> `harness-case` name to say so. Table row left as originally written.
+
 ---
 
 ## Task 1: The canonicalization spine, behaviour-preserving
@@ -1066,6 +1074,19 @@ and append this group before `(harness-finish)`:
                 (byte-complement-matcher-matcher
                  (make-byte-complement-matcher (make-exact-byte-matcher 3)))))))))
 ```
+
+> **Disposition, 2026-08-29 (re-review fix wave).** This step's code listing
+> names its first `harness-case` `"a set, range, complement and ASCII
+> machine build with no private import"`. That name is stale: the
+> whole-branch review fix wave (commit `b6c987c`) renamed it in the shipped
+> `test/common/graph-tests.sps` to `"a set, range, complement and ASCII
+> machine build through the façade's constructors (machine accessors still
+> private)"`, because the file permanently imports three machine accessors
+> (`machine?`, `machine-entry`, `machine-default-eof-error`) from
+> `(byte-machine private ir)` -- "no private import" was never literally
+> true of the whole file, only of the construction calls this case exercises.
+> Re-executing this step verbatim would write the retired name back. Listing
+> left as originally written; the shipped case name is the one above.
 
 - [ ] **Step 10: Run the whole suite**
 

@@ -70,14 +70,30 @@
   ;; The caller's element order and duplicates are stored verbatim -- sorting
   ;; or de-duplicating here would be a construction-time semantic transform,
   ;; which §9.1:322 forbids; matcher-bytes does both, once, at
-  ;; canonicalization. The list itself IS copied at construction, with
-  ;; `(append bytes '())` rather than `list-copy` (unbound under a bare
-  ;; `(rnrs)` import) -- so §9.1's "immutable-by-API descriptor" holds: a
-  ;; caller who later mutates the list they passed in (set-car!, etc.) cannot
-  ;; reach back into an already-built matcher. Copying is not the transform
+  ;; canonicalization. The list is copied on BOTH sides of the descriptor,
+  ;; with `(append bytes '())` rather than `list-copy` (unbound under a bare
+  ;; `(rnrs)` import): once at construction, and again below in
+  ;; byte-set-matcher-bytes -- so §9.1's "immutable-by-API descriptor" holds
+  ;; in both directions. A caller who mutates the list they passed in
+  ;; (set-car!, etc.) cannot reach back into an already-built matcher, and a
+  ;; caller who mutates the list this accessor just handed them cannot reach
+  ;; the matcher's own storage either -- both routes go through `(rnrs
+  ;; mutable-pairs)` and this closes both. Copying is not the transform
   ;; decision 0017 point 3 forbids -- it changes the list's identity, not its
-  ;; order or membership, and byte-set-matcher-bytes below still returns
-  ;; exactly that copy, unsorted and undeduplicated.
+  ;; order or membership; the copy byte-set-matcher-bytes returns is unsorted
+  ;; and undeduplicated, same as the stored list. The degenerate `(append '()
+  ;; z)` case (which would return `z` itself, aliasing it) cannot occur on
+  ;; either side: `make-byte-set-matcher` requires `(pair? bytes)`, so the
+  ;; stored list -- and therefore the accessor's `(vector-ref m 1)` -- is
+  ;; always a non-empty proper list.
+  ;;
+  ;; byte-complement-matcher-matcher below does NOT get the same treatment --
+  ;; it hands back the nested matcher object itself (a tagged vector), not a
+  ;; copy. That is a real, separate exposure (`vector-set!` can overwrite a
+  ;; nested matcher's own slots in place), but it is a different route
+  ;; through a different mutable primitive than the one this fix closes, and
+  ;; closing it would mean deep-copying an arbitrarily nested matcher tree on
+  ;; every read -- out of scope here.
   (define byte-set-matcher-tag (tag 'byte-machine-byte-set-matcher))
   (define (make-byte-set-matcher bytes)
     (unless (and (list? bytes) (pair? bytes) (for-all byte-value? bytes))
@@ -87,7 +103,7 @@
   (define (byte-set-matcher-bytes m)
     (unless (byte-set-matcher? m)
       (byte-machine-contract-violation 'byte-set-matcher-bytes 'invalid-argument 'matcher))
-    (vector-ref m 1))
+    (append (vector-ref m 1) '()))
 
   ;; --- byte-range matcher (§9.1:293; decision 0017 points 1 and 2) ---
   ;; low = high is legal: a redundant but well-formed exact byte.
