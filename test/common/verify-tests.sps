@@ -278,6 +278,9 @@
           (check "rejected" (not (verification-ok? v)))
           (check "eof-zero-progress-cycle diagnostic"
                  (exists (lambda (d) (eq? (diagnostic-code d) 'eof-zero-progress-cycle))
+                         (verification-diagnostics v)))
+          (check "zero-progress-cycle diagnostic"
+                 (exists (lambda (d) (eq? (diagnostic-code d) 'zero-progress-cycle))
                          (verification-diagnostics v))))))
     (harness-case "an EOF chain through a pause into a stop is rejected (§16.2:909)"
       (lambda ()

@@ -332,8 +332,20 @@ cmake_minimum_required(VERSION 3.26)
 # existing zero-progress-detection mutation is re-anchored in place (its guard
 # widened to admit pause nodes), same decision and count, so it neither adds
 # nor drops a mutation. Passes stay at 37 and 123 + 5 = 128 mutations.
+#
+# Task 1's whole-branch review found two of those five decisions unwitnessed
+# and adds one mutation each, still on Pass 33: the PASS 5 filter guard's
+# `(pause-node? n)` disjunct (no fixture exercised a zero-width cycle with no
+# byte-dispatch node in it until a second check was added to the existing
+# pa->pb->pa EOF-pause-cycle fixture), and the D4(b)/(d) byte-reachability
+# gate shared by both new pass-eof-execution checks (witnessed at only one
+# of its two call sites -- the other's effect is masked by a pre-existing,
+# ungated check that already emits the identical diagnostic code, so
+# dropping the gate there is not caught at all; see the two mutations' own
+# comments for the measurement). Passes stay at 37 and 128 + 2 = 130
+# mutations.
 set(EXPECTED_PASSES 37)
-set(EXPECTED_MUTATIONS 128)
+set(EXPECTED_MUTATIONS 130)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -2316,6 +2328,60 @@ byte_machine_mutation(
   FIND [[(case (eof-terminal m (pause-node-continuation n))]]
   REPLACE [[(case 'finish]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "eof-reachable-stop")
+
+# Task 1's whole-branch review found two of the five decisions above were
+# unwitnessed, not just uncaught -- neither test nor mutation reached them --
+# and added a mutation for each rather than leaving a gap. First: the PASS 5
+# filter guard's `(pause-node? n)` disjunct (line ~160) had no witness at
+# all. The only existing pause-in-a-cycle fixture (the reexecute/pause-only
+# cycle above) has the byte-dispatch node `e0` itself in the cycle, so
+# narrowing the guard back to byte-dispatch-only still flags `e0` and the
+# fixture's diagnostic-code check passes either way -- a guard shown not to
+# guard. The witness was already sitting in the pa->pb->pa EOF-pause-cycle
+# fixture used by the eof-zero-progress-cycle mutation above: pa/pb form a
+# zero-width cycle with NO byte-dispatch node in it, so PASS 5 (a completely
+# separate check from the eof-target-chain walk that fixture was built for)
+# flags them only when the disjunct admits pause nodes. A second check --
+# "zero-progress-cycle diagnostic" -- was added to that case in
+# verify-tests.sps, confirmed by hand to fail when the guard is narrowed
+# back (and only that one case fails: e0's own PASS-5 flag in the
+# reexecute/pause-only fixture, and every other case, is unaffected).
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a pause-only zero-progress cycle is not flagged"
+  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)) (reaches-self? (node-name n)))]]
+  REPLACE [[(if (and (byte-dispatch-node? n) (reaches-self? (node-name n)))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "zero-progress-cycle")
+
+# Second: the `(memq (node-name n) br)` byte-reachability gate shared by both
+# D4(b)/(d) checks above -- the entire reason `byte-reached` exists -- had a
+# test witness (dropping it makes the well-formed fixture's `pe -> done`
+# illegal) but no mutation. The guard text is identical at both call sites,
+# so a bare FIND double-matches (confirmed: 2 occurrences) and widening to a
+# two-line FIND including each site's next line (`(let ((cn ...` vs.
+# `(case (eof-terminal ...`) makes each unique without restructuring the
+# shared shape. Measured both candidates directly rather than assuming
+# either witnessed the decision: dropping the gate at the second site (the
+# eof-terminal-chain check) is NOT CAUGHT by this suite at all (exit 0) --
+# every EOF-only-reachable pause fixture's continuation either resolves to
+# `'finish` (no diagnostic either way) or to a stop/cycle the dispatch node's
+# own, ungated :909 walk above already flags with the identical code, so the
+# gate's removal there produces only a redundant duplicate diagnostic no
+# check distinguishes (the whole-branch review's Minor item on duplicate
+# same-code diagnostics is the same underlying gap). Dropping it at the
+# first site (the non-eof-into-finish check) is cleanly caught: the
+# well-formed fixture's `pe` (eof-only-reachable, continuation a finish
+# node) newly and wrongly reports non-eof-into-finish, so that fixture's
+# sole "accepted" check -- the only case in this file using that label --
+# fails. That site is used below.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a pause's byte-reachability gate is not checked (non-eof-into-finish)"
+  FIND [[(if (and (pause-node? n) (memq (node-name n) br))
+                            (let ((cn (lookup nodes (pause-node-continuation n))))]]
+  REPLACE [[(if (pause-node? n)
+                            (let ((cn (lookup nodes (pause-node-continuation n))))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "accepted")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
