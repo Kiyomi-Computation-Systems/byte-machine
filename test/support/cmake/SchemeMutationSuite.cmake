@@ -626,13 +626,18 @@ set(EXPECTED_MUTATIONS 165)
 # its pin.
 #
 # That paragraph originally continued "the same trade the four pre-existing
-# one-byte-fingerprint pins in that pass decline". They no longer decline it:
-# the five pre-existing fingerprint pins in this pass now carry their own
-# measured "got" digest too, for the reason this slice found first. The whole
-# family was category 3 -- separable, because each mutant hashes to a distinct
-# digest, but pinned on the shared EXPECTED golden, which every
-# fingerprint-affecting mutation in the lane prints. Closing them takes the
-# lane's residual cross-matches to zero.
+# one-byte-fingerprint pins in that pass decline". The count and its qualifier
+# were both right -- exactly four pins carried the one-byte golden -- and only
+# the tense has gone stale: they TAKE that trade now, each carrying its own
+# measured "got" digest, for the reason this slice found first.
+#
+# The cross-matching family is five, which is a different number from a
+# different question: the four one-byte-fingerprint pins, plus the node-eof pin
+# on the node-routing golden, which the same FNV change moves. All five were
+# category 3 -- separable, because each mutant hashes to a distinct digest, but
+# pinned on a shared EXPECTED golden that every fingerprint-affecting mutation
+# in the lane prints. Closing all five takes this lane's residual cross-matches
+# to zero.
 #
 # THE COST, STATED SO IT IS NOT REDISCOVERED. An IR-encoding change moves the
 # expected goldens; there are now ~15 sites carrying one, not ten. The five
