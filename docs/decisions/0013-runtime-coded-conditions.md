@@ -65,8 +65,9 @@ Item 1's lifecycle-misuse family shipped as a **single** code,
 makes reachable — `parser-feed!` refused from `paused-feed`/`paused-finish`/
 `finish-ready`; `parser-finish!` refused from `paused-feed`/`paused-finish`;
 `parser-resume!` refused from every non-paused row (`ready`, `stopped`,
-`error`, `finished` — including a v1 parser, which can only ever be in
-`ready`, since it can never pause). `who` is the refused operation
+`error`, `finished` — including a v1 parser, which can never reach a
+*paused* row at all, so its `resume!` is always refused, from whichever of
+those non-paused rows it is actually in). `who` is the refused operation
 (`parser-feed!` / `parser-finish!` / `parser-resume!`); `detail` is
 `(list <state> <op>)` — the offending lifecycle row and a short op tag
 (`'feed` / `'finish` / `'resume`) — with both elements asserted directly by

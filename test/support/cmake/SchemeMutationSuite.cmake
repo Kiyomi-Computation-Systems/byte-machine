@@ -518,8 +518,21 @@ cmake_minimum_required(VERSION 3.26)
 # otherwise unused in this program.
 #
 # So passes stay at 38 and 156 + 3 = 159 mutations.
+#
+# Task 7 close-out review found the operation-matrix group's error/finished x
+# resume! cells (§12.2:696-697) untested -- closed by two check-raises cases
+# (runtime-tests.sps) and one mutation joining this same Pass 32 SPEC lane
+# (see its own comment, just above "runtime: resume admits error/finished
+# instead of refusing them"). Passes stay at 38 (an existing lane, not a new
+# one); mutations become 159 + 1 = 160.
+#
+# Self-review of the same criterion then found finished x finish! (parser-
+# finish!'s own sticky arm) also untested -- closed by one more check
+# (runtime-tests.sps) and one more mutation joining this same lane (see
+# "runtime: a re-finish on a finished parser does not return finished").
+# Mutations become 160 + 1 = 161.
 set(EXPECTED_PASSES 38)
-set(EXPECTED_MUTATIONS 159)
+set(EXPECTED_MUTATIONS 161)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -2479,6 +2492,56 @@ byte_machine_mutation(
                                              (list (parser-lifecycle parser) 'resume)))]]
   REPLACE [[(else 'feed-ready)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "resume on ready")
+
+# Task 7 close-out review: the whole-arm mutation above is caught by "resume
+# on ready", but a narrower mutant admitting ONLY error/finished (leaving
+# ready/stopped/finish-ready correctly refused) would have survived -- those
+# two cells (§12.2:696-697) had no direct witness. Closed by adding two
+# check-raises cases (runtime-tests.sps, "resume is prohibited outside the
+# paused rows") plus this mutation. Measured: the thunk returns the mutant's
+# own 'ok literal instead of raising, on both new checks; pinned to the
+# first ("resume on error"), a label unique in this file, with the literal
+# returned value making the pin specific to this exact mutant.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: resume admits error/finished instead of refusing them"
+  FIND [[(else (byte-machine-contract-violation 'parser-resume! 'lifecycle-violation
+                                             (list (parser-lifecycle parser) 'resume)))]]
+  REPLACE [[((error finished) 'ok)
+      (else (byte-machine-contract-violation 'parser-resume! 'lifecycle-violation
+                                             (list (parser-lifecycle parser) 'resume)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "resume on error -- expected a raise, but the thunk returned ok")
+
+# Self-review, same close-out pass: auditing criterion 4's "every reachable
+# cell" claim by hand (the same check the review above applied to resume!)
+# found a second unwitnessed cell -- finished x finish!, parser-finish!'s OWN
+# sticky arm (distinct from parser-feed!'s sticky-finished arm, LABEL
+# "runtime: a feed on a finished parser does not return finished" above,
+# which this file's Slice ③ pin re-audit already found pins bare "status").
+# Closed the same way: one more check in the existing "eof-target continues
+# to it -> finished" case (runtime-tests.sps) plus this mutation.
+#
+# Measured: a single FAIL, on the new check only (the first finish! call, via
+# the executor's own finish arm, is untouched by this REPLACE and still
+# passes). The naive pin "sticky status -- expected finished, got stopped"
+# does NOT discriminate -- hand-measured against that sibling mutation
+# above: it ALSO fails a check named "sticky status" with the SAME "expected
+# finished, got stopped" text, as a cascading effect (its mutant corrupts
+# lifecycle to 'stopped after the FIRST feed, so the second feed's own
+# sticky-status check reports the identical wrong value). The case-name tail
+# is what separates them -- "continues to it -> finished" occurs only in
+# this mutation's own case.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a re-finish on a finished parser does not return finished"
+  FIND [[((finished) (make-parser-result 'finished (parser-offset parser) 0
+                                      (parser-offset parser) #f))]]
+  REPLACE [[((finished) (make-parser-result 'stopped (parser-offset parser) 0
+                                      (parser-offset parser) #f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "continues to it -> finished: sticky status -- expected finished, got stopped")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source

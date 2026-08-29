@@ -6,12 +6,11 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ## [Unreleased]
 
-Milestone 0 (portability and harness spike) closed on 2026-08-22; see
-[the close-out](docs/plans/milestone-0-close-out.md). No public API
-exists yet; see
-[the implementation plan](docs/plans/byte-machine-implementation-plan.md) for
-scope and [the milestone plan](docs/plans/milestone-0-portability-spike.md) for
-what this milestone delivers.
+Milestones 0 through 2 (portability spike, minimal executable machine,
+incremental execution and lifecycle) have closed. See
+[the implementation plan](docs/plans/byte-machine-implementation-plan.md) §25
+for overall scope; the entries below record what each milestone actually
+delivered. No versioned release exists yet.
 
 ### Added
 
@@ -430,9 +429,13 @@ what this milestone delivers.
   Three new lane pairs (source + AOT): `byte-machine.unit.pause-interpret`,
   `byte-machine.differential.pause`, `byte-machine.determinism.pause`.
   Measured on the shipped tree: `release`/`pr` 72/72, `no-scheme` 8/8, the
-  Scheme mutation suite 38 passes/159 mutations (150 caught, 9 declared
+  Scheme mutation suite 38 passes/161 mutations (152 caught, 9 declared
   `EXPECT_SURVIVES`), the CMake mutation suite unchanged at 1 pass/72
-  mutations.
+  mutations. The two extra mutations past this slice's own close-out close a
+  gap Task 7's review found in exit criterion 4: `error`/`finished` ×
+  `resume!` and `finished` × `finish!` had no direct test (see
+  [milestone-2-design.md](docs/plans/milestone-2-design.md) §6's dated
+  disposition).
 
 ### Changed
 

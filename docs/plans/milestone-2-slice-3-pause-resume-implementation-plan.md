@@ -50,6 +50,13 @@ Design authority: [milestone-2-design.md](./milestone-2-design.md) §6 (Slice �
   the CHANGELOG, or a record. Expected totals after Slice ③ ≈ release 72,
   passes 38, mutations ~145-146 (the per-task chain 123 +5 +10 +2 +4 reaches
   144 at Task 4; Task 6 adds 1-2 Pass 39 mutations) — measure.
+  **Measured at close (2026-08-29):** release/pr 72/72 and passes 38 landed
+  on prediction; mutations landed at **161**, not ~145-146 — six review
+  rounds, a pair-wise pin re-audit, and Task 7's own close-out review (which
+  found exit criterion 4 short two cells and closed them, +2) added
+  witnesses this arithmetic did not foresee. This prediction is left as
+  written, per AGENTS.md; see CHANGELOG.md's Slice ③ entry for the measured
+  total in force.
 - **No new dependencies.** Only `(rnrs)` + in-repo libraries.
 - **Conditions are asserted by code and who, never rendered text**
   (`conditions.sls` header; decision 0013).
@@ -1662,11 +1669,12 @@ git commit -m "test: property generator emits eof/finish/pause machines (M2 Slic
 > differently-worded case ("an empty slice needs input **and reports no
 > result yet**"), which would otherwise also match. That branch is not
 > merged into this one, so this tree still carries the original bare
-> `"status"` pin — at `SchemeMutationSuite.cmake:2241` after Slice ③'s
-> insertions shifted it from `main`'s `:1992` — plus two siblings the same
-> audit also fixed: `:2255` ("runtime: the v1 result status is hard-wired to
-> stopped", `main`'s `:2006`) and `:2379` ("runtime: a feed on a finished
-> parser does not return finished", `main`'s `:2097`). All three are that
+> `"status"` pin, on the mutation LABELed "runtime: a v1 machine is driven
+> down the op path" (`main`'s `:1992`; line numbers in this tree shift as
+> Slice ③ grows the file, so cite by LABEL, not line) — plus two siblings the
+> same audit also fixed: LABEL "runtime: the v1 result status is hard-wired
+> to stopped" (`main`'s `:2006`) and LABEL "runtime: a feed on a finished
+> parser does not return finished" (`main`'s `:2097`). All three are that
 > branch's scope, not this slice's; editing them here would conflict with
 > work already done there.
 >

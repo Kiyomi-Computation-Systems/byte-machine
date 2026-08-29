@@ -1,6 +1,7 @@
 # Milestone 2 Design — Incremental Execution and Lifecycle
 
-Status: design — approved shape, pending implementation plan. Authored 2026-08-28,
+Status: design — approved shape, **delivered** (Milestone 2 complete as of
+2026-08-29; see the dated note below). Authored 2026-08-28,
 after Milestone 1 closed (PR #17, commit `4eb16a3`). Revised 2026-08-28 after a
 systematic audit of this design against the parent plan's normative sections and
 the Milestone 1 source (`.superpowers/sdd/m2-design-audit-report.md`): the audit
@@ -12,8 +13,10 @@ unchanged.
 **Milestone 2 complete as of 2026-08-29.** Gate 0 (decisions 0011-0013),
 Slice ① (incremental execution), Slice ②a/②b-1/②b-2 (lifecycle spine, EOF
 semantic core, EOF generation), and Slice ③ (pause/resume, §6) are all
-delivered and reviewed; §4-§6's exit criteria and the parent plan's §25 four
-criteria are met against the shipped tree — see CHANGELOG.md's Milestone 2
+delivered and reviewed; §6's dated disposition (below its Exit list) states
+each of the five full-M2 exit criteria's individual state against the shipped
+tree — parent §25's four criteria are the same four in shorter form (§6's own
+framing), so that disposition covers both. See CHANGELOG.md's Milestone 2
 entries for the release-facing summary. Merge to `main` is the pending
 closing ritual as of this note.
 
@@ -418,6 +421,30 @@ paused-feed/paused-finish/resume lifecycle can be exercised now.
   × `feed!`/`finish!`/`resume!`/`reset!` — with `poisoned`/`busy` explicitly
   carried to M5 (the M5 plan inherits those exact rows);
 - interpreter and generated results match across all of the above.
+
+> **Dispositioned 2026-08-29 at close.** These five, and parent §25's same
+> four in shorter form, checked individually against the shipped tree. (1)
+> **met**: `differential-sequence-tests.sps`'s "every fragmentation of 1 2 3 4
+> reaches stopped in both lanes" group covers every split, split-point pairs,
+> and a deterministic multi-split schedule. (2) **met**: the same file's
+> leading/intermediate/trailing-empty-feed case and its "nonzero-offset
+> slices" group. (3) **met**: `differential-eof-tests.sps`'s "idle, one-byte
+> truncation, and full sequence agree" case. (4) **met** for the 28 reachable
+> `(state, operation)` cells — `runtime-tests.sps`'s "pause + resume" and
+> "operation matrix" groups witness every prohibited and sticky cell directly,
+> including `error`/`finished` × `resume!`: **Task 7 close-out review found
+> these two cells untested** (a mutation admitting exactly those two rows
+> while still refusing `ready`/`stopped`/`finish-ready` would have survived),
+> and they were closed in the same pass with two `check-raises` cases plus a
+> measured mutation (`SchemeMutationSuite.cmake`, "runtime: resume admits
+> error/finished instead of refusing them"). `ready` × `reset!` has no case of
+> its own — a documented scope call, not a gap: reset on an already-`ready`
+> parser is idempotent by construction, and `stopped`/`error` × `reset!` are
+> covered by the pre-existing "parser-reset!" group. `poisoned`/`busy` stay
+> out of M2 per §7 and are excluded from the 28, not silently short. (5)
+> **met**: every file cited above is a `differential-*` program comparing the
+> interpreter and generated executors directly, and `differential-pause-
+> tests.sps` extends this to pause continuations.
 
 ## 7. Explicitly out of Milestone 2
 

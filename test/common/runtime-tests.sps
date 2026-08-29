@@ -103,10 +103,16 @@
   (lambda ()
     (harness-case "an exhausted dispatch with a truthy eof-target continues to it -> finished"
       (lambda ()
-        (check-equal "finished"
-                     (parser-result-status
-                      (parser-finish! (make-parser (make-compiled-machine eof-target-op) '() #f)))
-                     'finished)))
+        (let ((p (make-parser (make-compiled-machine eof-target-op) '() #f)))
+          (check-equal "finished" (parser-result-status (parser-finish! p)) 'finished)
+          ;; Self-review, Task 7 close-out: a second finish! call here is D1's
+          ;; sticky arm (parser-finish!'s own ((finished) ...) case clause)
+          ;; rather than the executor's finish arm the first call exercised --
+          ;; no test had reached it before (finished x feed! was covered
+          ;; below; finished x finish! was not).
+          (let ((r2 (parser-finish! p)))
+            (check-equal "sticky status" (parser-result-status r2) 'finished)
+            (check-equal "sticky consumed zero" (parser-result-consumed r2) 0)))))
     (harness-case "an exhausted dispatch with no eof-target routes to the default-eof error"
       (lambda ()
         (let ((r (parser-finish! (make-parser (make-compiled-machine default-eof-op) '() #f))))
@@ -417,13 +423,27 @@
           (parser-feed! p (make-bytevector 1 0) 0 1)             ; -> stopped
           (check-raises "resume on stopped" (lifecycle-violation? 'parser-resume! 'stopped 'resume)
             (lambda () (parser-resume! p))))
-        ;; D7: v1 can never pause, so resume on a v1 parser is always this
-        ;; same prohibited cell -- the guard is variant-agnostic (it reads
-        ;; only lifecycle), witnessed here through the one variant that can
-        ;; never reach a *paused* row at all (v1 can still reach 'stopped and
-        ;; 'error, as the "generated-code ABI (/v1)" cases above show; it
-        ;; just never pauses, so 'ready is the only lifecycle a v1 parser's
-        ;; resume call can ever be refused from).
+        ;; Review (Task 7 close-out): the two rows above and the v1 case below
+        ;; left error/finished x resume! -- both prohibited (§12.2:696-697)
+        ;; -- with no direct witness. A mutation admitting only error/finished
+        ;; (leaving ready/stopped/finish-ready correctly refused) would have
+        ;; survived undetected.
+        (let ((p (make-parser (make-compiled-machine one-byte-op) '() #f)))
+          (parser-feed! p (make-bytevector 1 65) 0 1)            ; -> error
+          (check-raises "resume on error" (lifecycle-violation? 'parser-resume! 'error 'resume)
+            (lambda () (parser-resume! p))))
+        (let ((p (pause-parser)))
+          (parser-finish! p) (parser-resume! p) (parser-finish! p) ; -> finished
+          (check-raises "resume on finished" (lifecycle-violation? 'parser-resume! 'finished 'resume)
+            (lambda () (parser-resume! p))))
+        ;; D7: v1 can never reach a *paused* row (the v1 ABI predates
+        ;; `paused`), so resume! on a v1 parser is always refused -- the
+        ;; guard is variant-agnostic (it reads only lifecycle). This witnesses
+        ;; it through 'ready, the state right after construction; v1 can also
+        ;; reach 'stopped and 'error (the "generated-code ABI (/v1)" cases
+        ;; above show both), and resume! is refused from those too, by the
+        ;; same variant-agnostic guard the error/finished cases just above
+        ;; already exercise -- v1 adds no row the guard treats differently.
         (check-raises "resume on a v1 parser" (lifecycle-violation? 'parser-resume! 'ready 'resume)
           (lambda () (parser-resume! (make-parser (v1-machine) '() #f))))))
     (harness-case "sticky rows short-circuit: stopped feed/finish return the tuple"
