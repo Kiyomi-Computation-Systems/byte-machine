@@ -116,16 +116,20 @@
                          '()))
                    nodes)))))
 
-  ;; PASS 3: exact-byte overlap within a dispatch node.
+  ;; PASS 3: overlap within a dispatch node, over canonical matcher byte sets
+  ;; (§16.2:893, §16.3:921). Two cases overlap when their canonical sets share
+  ;; any byte; an exact-byte matcher is the one-element case of the same rule.
+  (define (byte-sets-overlap? a b)
+    (and (pair? a) (or (and (memv (car a) b) #t) (byte-sets-overlap? (cdr a) b))))
   (define (pass-overlap m)
     (apply append
            (map (lambda (n)
                   (if (byte-dispatch-node? n)
                       (let loop ((cs (byte-dispatch-node-cases n)) (seen '()) (out '()))
                         (if (null? cs) out
-                            (let ((b (exact-byte-matcher-byte (byte-case-matcher (car cs)))))
-                              (loop (cdr cs) (cons b seen)
-                                    (if (memv b seen)
+                            (let ((bs (matcher-bytes (byte-case-matcher (car cs)))))
+                              (loop (cdr cs) (append bs seen)
+                                    (if (byte-sets-overlap? bs seen)
                                         (cons (make-diagnostic 'overlapping-cases (node-name n)
                                                                "two cases match the same byte") out)
                                         out)))))

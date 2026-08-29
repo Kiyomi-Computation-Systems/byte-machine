@@ -59,4 +59,27 @@
           (check-equal "start fallback target"
                        (edge-target (byte-dispatch-node-fallback start)) 'reject))))))
 
+(harness-group "matcher canonicalization"
+  (lambda ()
+    (harness-case "an exact-byte matcher canonicalizes to its one-element set"
+      (lambda ()
+        (check-equal "set" (matcher-bytes (make-exact-byte-matcher 7)) '(7))))
+    (harness-case "the low and high ends of the byte universe canonicalize"
+      (lambda ()
+        (check-equal "zero" (matcher-bytes (make-exact-byte-matcher 0)) '(0))
+        (check-equal "255" (matcher-bytes (make-exact-byte-matcher 255)) '(255))))
+    (harness-case "canonicalizing a foreign vector is a contract violation"
+      (lambda ()
+        (check-raises "refused"
+                      byte-machine-contract-condition?
+                      (lambda () (matcher-bytes (make-edge 'stop 'advance))))))))
+
+(harness-group "the exact-byte accessor is tag-guarded"
+  (lambda ()
+    (harness-case "the exact-byte accessor refuses a foreign vector"
+      (lambda ()
+        (check-raises "refused"
+                      byte-machine-contract-condition?
+                      (lambda () (exact-byte-matcher-byte (make-edge 'stop 'advance))))))))
+
 (harness-finish)

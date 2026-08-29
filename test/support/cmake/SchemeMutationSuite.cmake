@@ -551,8 +551,11 @@ cmake_minimum_required(VERSION 3.26)
 # One more mutation joins this same pass (see "runtime: the feed pause arm
 # swaps consumed and stream offset"). Passes stay at 38; mutations become
 # 164 + 1 = 165.
-set(EXPECTED_PASSES 38)
-set(EXPECTED_MUTATIONS 165)
+# Milestone 3 Slice ① Task 1 adds Pass 42 (matcher canonicalization and the
+# tag-guarded accessor) with two mutations, and re-anchors two existing pins
+# without adding either. Passes become 38 + 1 = 39; mutations 165 + 2 = 167.
+set(EXPECTED_PASSES 39)
+set(EXPECTED_MUTATIONS 167)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -2961,11 +2964,17 @@ byte_machine_mutation(
   FIND [[(make-diagnostic 'unreachable-node (node-name n) "node is unreachable")]]
   REPLACE [[#f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "unreachable-node")
 
+# Re-anchored in Milestone 3 Slice ① Task 1: pass-overlap now compares canonical
+# matcher BYTE SETS, so the old `(if (memv b seen)` line no longer exists. The
+# decision is unchanged -- two cases matching the same byte must be reported --
+# and it is pinned on the helper's body rather than on the loop, so Slice ①
+# Task 3's per-colliding-pair rewrite of the loop leaves this pin standing.
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: overlap check treats every byte as distinct"
-  FIND [[(if (memv b seen)]]
-  REPLACE [[(if #f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "overlapping-cases")
+  LABEL "verify: two cases sharing a byte are never found to overlap"
+  FIND [[(and (pair? a) (or (and (memv (car a) b) #t) (byte-sets-overlap? (cdr a) b)))]]
+  REPLACE [[#f]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "same byte overlap: overlapping-cases")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -3261,10 +3270,13 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/common/interpret-tests.sps")
 
+# Re-anchored in Milestone 3 Slice ① Task 1: the interpreter's membership test is
+# now `memv` over the canonical byte set, not `=` against a single exact byte.
+# Same decision, same witness, same signature -- re-measured, not merely retyped.
 byte_machine_mutation(
   FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
   LABEL "interpret: dispatch matches every byte to the first case"
-  FIND [[((= byte (exact-byte-matcher-byte (byte-case-matcher (car cs))))]]
+  FIND [[((memv byte (matcher-bytes (byte-case-matcher (car cs))))]]
   REPLACE [[(#t]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "no byte in 1..255 misbehaved")
 
 byte_machine_mutation(
@@ -3832,6 +3844,54 @@ byte_machine_mutation(
   FIND [[((pause-target) (pause-node-continuation (lookup nodes (car args))))]]
   REPLACE [[((pause-target) (car args))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "byte 2 stops: stopped")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 42: matcher canonicalization and the tag-guarded accessor (M3 Slice
+# ① Task 1) -----------------------------------------------------------------
+#
+# ir-tests.sps is the first program to reach (byte-machine private ir)'s
+# canonicalization spine directly, and no pass has ever mutated ir.sls: every
+# earlier pass reaches it only through a consumer. The first mutation drops the
+# exact-byte arm of matcher-bytes, so an exact matcher canonicalizes to the
+# contract violation instead of its one-element set; the second removes the
+# accessor's tag guard, so a foreign vector reads slot 1 and returns instead of
+# raising -- the exact defect design §5 says must not be allowed to reach
+# pass-overlap or list-sort. Verify command uses both library roots, an empty
+# object guard, the ir program.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/ir-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: an exact-byte matcher does not canonicalize to its own byte"
+  FIND [[(cond ((exact-byte-matcher? m) (list (exact-byte-matcher-byte m)))]]
+  REPLACE [[(cond ((and #f (exact-byte-matcher? m)) (list (exact-byte-matcher-byte m)))]]
+  # Measured, not predicted: disabling the exact-byte arm sends every call to
+  # matcher-bytes' own contract-violation else clause, so the case body RAISES
+  # before check-equal's "set" label is ever reached -- the harness reports
+  # "case raised", not a failed comparison. Pinned on the case-name tail plus
+  # that check label.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "one-element set: case raised")
+
+# Every FIND in this plan is written WITHOUT leading whitespace and matched as a
+# substring, so an indentation that drifts from the plan's code block cannot turn
+# the pin into a "found 0, expected 1" configure failure. Each is unique in its
+# file; confirm with `grep -c` before adding the mutation.
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: the exact-byte accessor reads slot 1 of any vector"
+  FIND [[(byte-machine-contract-violation 'exact-byte-matcher-byte 'invalid-argument 'matcher)]]
+  REPLACE [[#f]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "refuses a foreign vector: refused")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

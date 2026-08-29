@@ -15,6 +15,7 @@
           byte-dispatch-node-eof-target
           make-byte-case byte-case? byte-case-matcher byte-case-edge
           make-exact-byte-matcher exact-byte-matcher? exact-byte-matcher-byte
+          matcher-bytes
           make-edge edge? edge-target edge-mode
           make-stop-node stop-node? stop-node-name
           make-finish-node finish-node? finish-node-name
@@ -43,7 +44,26 @@
       (byte-machine-contract-violation 'make-exact-byte-matcher 'invalid-argument 'byte))
     (vector exact-byte-matcher-tag byte))
   (define (exact-byte-matcher? x) (tagged? exact-byte-matcher-tag x))
-  (define (exact-byte-matcher-byte m) (vector-ref m 1))
+  ;; Tag-guarded: an unguarded (vector-ref m 1) on a matcher of another kind
+  ;; pulls a byte LIST out of the wrong slot and fails far away, inside
+  ;; arithmetic or a sort predicate, rather than at the contract boundary.
+  (define (exact-byte-matcher-byte m)
+    (unless (exact-byte-matcher? m)
+      (byte-machine-contract-violation 'exact-byte-matcher-byte 'invalid-argument 'matcher))
+    (vector-ref m 1))
+
+  ;; --- matcher canonicalization (parent §10.6:538, §16.3:921; decision 0014) ---
+  ;; Every matcher denotes a subset of the closed byte universe 0..255. This is
+  ;; the one place that subset is computed: the verifier's overlap analysis, the
+  ;; normalizer's per-byte lowering and the interpreter's membership test all
+  ;; call it, so a matcher kind taught here is understood by all three at once.
+  ;; The result is a proper list of exact integers, ascending and duplicate-free
+  ;; -- ordering and de-duplication are what keep the normalizer's
+  ;; ascending-by-byte transition sort a TOTAL order (decision 0014).
+  (define (matcher-bytes m)
+    (cond ((exact-byte-matcher? m) (list (exact-byte-matcher-byte m)))
+          (else (byte-machine-contract-violation 'matcher-bytes
+                                                 'invalid-argument 'matcher))))
 
   ;; --- edge ---
   (define edge-tag (tag 'byte-machine-edge))

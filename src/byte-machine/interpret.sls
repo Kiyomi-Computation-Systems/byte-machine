@@ -43,7 +43,7 @@
             (cond ((null? cs)
                    (let ((e (byte-dispatch-node-fallback n)))
                      (cons (edge-target e) (edge-mode e))))
-                  ((= byte (exact-byte-matcher-byte (byte-case-matcher (car cs))))
+                  ((memv byte (matcher-bytes (byte-case-matcher (car cs))))
                    (let ((e (byte-case-edge (car cs))))
                      (cons (edge-target e) (edge-mode e))))
                   (else (loop (cdr cs)))))))

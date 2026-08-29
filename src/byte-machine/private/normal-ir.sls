@@ -16,7 +16,7 @@
                 machine-nodes machine-entry machine-errors machine-default-eof-error
                 byte-dispatch-node? byte-dispatch-node-cases byte-dispatch-node-fallback
                 byte-dispatch-node-eof-target
-                byte-case-matcher byte-case-edge exact-byte-matcher-byte
+                byte-case-matcher byte-case-edge matcher-bytes
                 edge-target edge-mode stop-node? error-node? error-node-error-name
                 finish-node? pause-node? pause-node-continuation
                 error-declaration-name error-declaration-code node-name))
@@ -99,11 +99,20 @@
                                    (cond
                                      ((byte-dispatch-node? n)
                                       (let ((trs (list-sort (lambda (a b) (< (car a) (car b)))
-                                                   (map (lambda (c)
-                                                          (let ((b (exact-byte-matcher-byte (byte-case-matcher c)))
-                                                                (e (byte-case-edge c)))
-                                                            (list b (id-of (edge-target e)) (edge-mode e))))
-                                                        (byte-dispatch-node-cases n))))
+                                                   ;; One transition per byte of each case's
+                                                   ;; canonical set (decision 0014): the encoding,
+                                                   ;; its tag bytes and its format version byte are
+                                                   ;; unchanged, and every machine expressible
+                                                   ;; before Milestone 3 encodes identically.
+                                                   (apply append
+                                                     (map (lambda (c)
+                                                            (let ((e (byte-case-edge c))
+                                                                  (bs (matcher-bytes (byte-case-matcher c))))
+                                                              (map (lambda (b)
+                                                                     (list b (id-of (edge-target e))
+                                                                           (edge-mode e)))
+                                                                   bs)))
+                                                          (byte-dispatch-node-cases n)))))
                                             (fb (byte-dispatch-node-fallback n)))
                                         (vector ns-tag 'dispatch i trs
                                                 (cons (id-of (edge-target fb)) (edge-mode fb)) #f
