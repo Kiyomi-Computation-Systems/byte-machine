@@ -39,9 +39,17 @@ the only way lowered prefix states themselves can enter a zero-progress cycle.
    They are resolved by canonicalization. Sorting or de-duplicating at construction
    would be a construction-time semantic transform, which §9.1:322 forbids and
    §9.1:318's "deterministic caller order" assumes away.
-4. **§16.2's check list gains no invalid-matcher bullet.** Overlap
-   (§16.2:893) and sequence ambiguity (§16.2:894) remain its only entries in this
-   area, and both stay verifier work.
+4. **Duplicate alternatives, or any alternatives that are otherwise
+   mutually-ambiguous, within one sequence node are not a constructor error
+   either, and §16.2's check list gains no invalid-matcher bullet.** Overlap
+   (§16.2:893) and sequence ambiguity (§16.2:894) remain its only entries in
+   this area, and both stay verifier work. Whether two alternatives collide is
+   a cross-case property, not the local shape of either one — exactly parallel
+   to how overlap between two byte-cases of one dispatch node is verifier work
+   rather than constructor work (§9.1:322) — and two identical alternatives
+   are only the maximal instance of the ambiguity §16.2:894 already requires
+   the verifier to reject, so the check that catches them is Slice ③'s
+   existing work, not a new rule.
 
 ## Consequences
 
