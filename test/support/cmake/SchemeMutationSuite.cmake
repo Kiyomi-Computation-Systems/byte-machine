@@ -2991,15 +2991,16 @@ byte_machine_mutation(
 # finish's own tag byte) rather than the whole payload mutation 2 above
 # already covers -- proving the tag byte itself, not just the u32be
 # continuation id after it, is mixed into the fingerprint. Left unwitnessed,
-# this is the one failure mode in this encoding that silently equates two
-# semantically different node kinds. Measured: it fails ONLY "pause
-# fingerprint" (1 of 23 checks) -- same reasoning as mutation 2 above: no
-# other machine in this SPEC lane has a pause node, so this arm is never
-# reached encoding the one-byte or node-routing goldens. It shares mutation
-# 2's pin, "pause fingerprint" -- both are witnessed by that one unique check
-# label -- but each was independently measured to be genuinely caught
-# (nonzero exit, matching text) for its own FIND/REPLACE, so the shared pin
-# does not mask either one.
+# nothing would notice the two kinds' tag bytes becoming equal. (Their
+# encodings as a whole stay distinguishable even then: a pause state still
+# emits the 4 payload bytes a finish state does not.) Measured: it fails
+# ONLY "pause fingerprint" (1 of 23 checks) -- same reasoning as mutation 2
+# above: no other machine in this SPEC lane has a pause node, so this arm is
+# never reached encoding the one-byte or node-routing goldens. It shares
+# mutation 2's pin, "pause fingerprint" -- both are witnessed by that one
+# unique check label -- but each was independently measured to be genuinely
+# caught (nonzero exit, matching text) for its own FIND/REPLACE, so the
+# shared pin does not mask either one.
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: the pause tag collides with finish's tag"
