@@ -343,8 +343,11 @@ feed the IR fingerprint of decision 0009 and the order of the emitted `case` arm
    encodes exactly as it did before Milestone 3.
 3. **Within-node prefix sharing is in scope; cross-node sharing is not.** Two
    alternatives of the *same* sequence node share their common nonterminal prefix
-   states, as §10.6:544 requires. Two *different* sequence nodes never share prefix
-   states, even for identical byte runs.
+   states: §10.6:544 permits sequences to share nonterminal prefixes, and
+   §11.3:648's prohibition on rewind or backtracking leaves no way to honor that
+   permission except by merging the shared bytes into common states. Two
+   *different* sequence nodes never share prefix states, even for identical byte
+   runs.
 
 ## Consequences
 
