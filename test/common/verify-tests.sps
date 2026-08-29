@@ -281,7 +281,23 @@
                          (verification-diagnostics v)))
           (check "zero-progress-cycle diagnostic"
                  (exists (lambda (d) (eq? (diagnostic-code d) 'zero-progress-cycle))
-                         (verification-diagnostics v))))))
+                         (verification-diagnostics v)))
+          ;; Attribution, not just verdict: the eof-zero-progress-cycle above is
+          ;; the entry dispatch node e0's own :909 eof-target-chain walk (its
+          ;; target is 'pa, which cycles). It must NOT also be raised on 'pa
+          ;; itself -- that would only happen if the D4(d) byte-reachability
+          ;; gate at the eof-terminal-chain call site stopped filtering pa/pb
+          ;; out (neither is byte-reached; both are eof-only-reachable), which
+          ;; produces a redundant same-code diagnostic no verdict-based check
+          ;; can see (whole-branch review; see the mutation's own comment).
+          (check "eof-zero-progress-cycle attributed to e0"
+                 (exists (lambda (d) (and (eq? (diagnostic-code d) 'eof-zero-progress-cycle)
+                                           (eq? (diagnostic-node d) 'e0)))
+                         (verification-diagnostics v)))
+          (check "no eof-zero-progress-cycle attributed to pa"
+                 (not (exists (lambda (d) (and (eq? (diagnostic-code d) 'eof-zero-progress-cycle)
+                                                (eq? (diagnostic-node d) 'pa)))
+                              (verification-diagnostics v)))))))
     (harness-case "an EOF chain through a pause into a stop is rejected (§16.2:909)"
       (lambda ()
         (let ((v (verify-machine

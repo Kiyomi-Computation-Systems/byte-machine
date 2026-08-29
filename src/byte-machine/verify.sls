@@ -62,6 +62,19 @@
                   (if (symbol? t) (list t) '()))
                 '())))
 
+  ;; Visited-set DFS from the machine's entry, following whatever edge
+  ;; function `targets` selects (node-out-targets, all-out-targets, ...).
+  ;; Returns the reached node names. Shared by pass-reachability and
+  ;; byte-reached, which differ only in which edge function they walk.
+  (define (reach-from m targets)
+    (let ((nodes (machine-nodes m)) (reached '()))
+      (let visit ((name (machine-entry m)))
+        (let ((n (lookup nodes name)))
+          (when (and n (not (memq name reached)))
+            (set! reached (cons name reached))
+            (for-each visit (targets n)))))
+      reached))
+
   ;; PASS 1: schema.
   (define (pass-schema m)
     (if (machine? m) '() (list (make-diagnostic 'invalid-shape #f "not a machine"))))
@@ -121,11 +134,7 @@
 
   ;; PASS 4: reachability from entry.
   (define (pass-reachability m)
-    (let ((nodes (machine-nodes m)) (reached '()))
-      (let visit ((name (machine-entry m)))
-        (when (and (lookup nodes name) (not (memq name reached)))
-          (set! reached (cons name reached))
-          (for-each visit (all-out-targets (lookup nodes name)))))
+    (let ((nodes (machine-nodes m)) (reached (reach-from m all-out-targets)))
       (filter values
               (map (lambda (n)
                      (if (memq (node-name n) reached) #f
@@ -201,14 +210,7 @@
   ;; -- dispatch case/fallback edges plus reached-pause continuations --
   ;; excluding eof-targets. An eof-only-reachable pause legally continues into
   ;; a finish node (decision 0011); a byte-reachable one must not (§16.2:908).
-  (define (byte-reached m)
-    (let ((nodes (machine-nodes m)) (reached '()))
-      (let visit ((name (machine-entry m)))
-        (let ((n (lookup nodes name)))
-          (when (and n (not (memq name reached)))
-            (set! reached (cons name reached))
-            (for-each visit (node-out-targets n)))))
-      reached))
+  (define (byte-reached m) (reach-from m node-out-targets))
 
   ;; §16.2:908/:909 and the separate EOF zero-progress-cycle check.
   (define (pass-eof-execution m)

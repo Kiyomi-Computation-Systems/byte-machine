@@ -197,11 +197,13 @@
                       (lambda () (byte-machine-make-compiled-machine/v1 1 42 0 stub-feed)))))
     ;; D7: v1 can never pause, so parser-finish!'s v1 else arm (runtime.sls,
     ;; "v1 has no finish path") is reachable only from a still-`ready` v1
-    ;; parser -- one that was never fed at all.
+    ;; parser -- a fresh one, or one fed only empty/need-input slices (the
+    ;; "an empty slice needs input" case above is exactly that: it returns
+    ;; 'need-input and lifecycle stays 'ready).
     (harness-case "finish on a still-ready v1 parser raises: v1 has no finish path"
       (lambda ()
         (check-raises "v1 has no finish path"
-                      (lambda (e) #t)
+                      assertion-violation?
                       (lambda () (parser-finish! (make-parser (v1-machine) '() #f))))))
     ;; Once fed to a terminal row, D1's sticky short-circuit checks lifecycle
     ;; before variant -- parser-finish! never reaches the v1 else arm above,
@@ -418,7 +420,10 @@
         ;; D7: v1 can never pause, so resume on a v1 parser is always this
         ;; same prohibited cell -- the guard is variant-agnostic (it reads
         ;; only lifecycle), witnessed here through the one variant that can
-        ;; never reach any row but 'ready.
+        ;; never reach a *paused* row at all (v1 can still reach 'stopped and
+        ;; 'error, as the "generated-code ABI (/v1)" cases above show; it
+        ;; just never pauses, so 'ready is the only lifecycle a v1 parser's
+        ;; resume call can ever be refused from).
         (check-raises "resume on a v1 parser" (lifecycle-violation? 'parser-resume! 'ready 'resume)
           (lambda () (parser-resume! (make-parser (v1-machine) '() #f))))))
     (harness-case "sticky rows short-circuit: stopped feed/finish return the tuple"

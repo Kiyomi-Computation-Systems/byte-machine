@@ -393,8 +393,34 @@ cmake_minimum_required(VERSION 3.26)
 # read sites require lifecycle = 'error, which reset overwrites to 'ready in
 # the same call) and is declared EXPECT_SURVIVES rather than left
 # undeclared. Passes stay at 37 and 144 + 3 = 147 mutations.
+#
+# A whole-branch cleanup pass over Slice 3 closes two more gaps and re-pins
+# three signatures that were already catching their mutant for the right
+# reason but not provably a UNIQUE one. Pass 33 gains one mutation: the
+# D4(d) byte-reachability gate's second call site (the eof-terminal-chain
+# check), left uncaught by verdict above, is now witnessed by ATTRIBUTION --
+# two new checks in the pa->pb->pa fixture assert the eof-zero-progress-cycle
+# diagnostic's NODE, not just its code, and ungating this site puts a
+# redundant copy on pa that only those checks see. Pass 32 gains one
+# mutation: parser-feed!'s finished sticky arm, witnessed above for its
+# field values, gets a second mutation for its own existence (whole-clause
+# deletion), declared EXPECT_SURVIVES and measured directly -- the 'op
+# executor reaches the identical result tuple from `current` regardless, and
+# neither other variant exercises the path. Neither addition opens a new
+# pass. The same review re-pinned three EXPECT_OUTPUT_MATCHES values: the
+# resume-ack mutation's "acks feed-ready and reopens feed: ack" named a
+# downstream consequence rather than the decision itself, re-pinned to the
+# case that states the decision directly; the EOF-pause mutation's "resumes
+# to finish-ready: lifecycle" was a prefix of two sibling checks in its own
+# case, extended into the measured detail to become exact; and "sticky
+# consumed zero" -- the one recent pin with no case prefix, because its
+# case's own name ends in a parenthesised section number a regex cannot
+# match literally -- is extended into its own measured detail instead, for
+# the same exactness the case-prefix gives its siblings. No FIND/REPLACE
+# changed in any of the three, so none of this moves the count. Passes stay
+# at 37 and 147 + 1 + 1 = 149 mutations.
 set(EXPECTED_PASSES 37)
-set(EXPECTED_MUTATIONS 147)
+set(EXPECTED_MUTATIONS 149)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -2304,10 +2330,16 @@ byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a feed pause maps to paused-feed, not paused-finish"
   # Review found bare "ack" substring-vacuous (see the resume-on-paused-
-  # finish mutation above for the mechanism); pinned to the owning case.
+  # finish mutation above for the mechanism); pinned to the owning case. A
+  # later re-review found that fix itself sound but pointed at a downstream
+  # consequence ("resume from a feed pause acks feed-ready...") rather than
+  # the decision this mutation actually breaks -- the earlier case "feed
+  # pauses at the pause node with the first unconsumed index" has its own
+  # "lifecycle" check reading `current`'s lifecycle right after THIS arm
+  # runs, which fails first and more directly. Re-pinned to that, measured.
   FIND [[((paused) (parser-set-lifecycle! parser 'paused-feed))]]
   REPLACE [[((paused) (parser-set-lifecycle! parser 'paused-finish))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "acks feed-ready and reopens feed: ack")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "unconsumed index: lifecycle")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -2322,12 +2354,21 @@ byte_machine_mutation(
   LABEL "runtime: an EOF pause parks paused-finish, not paused-feed"
   # Review found bare "lifecycle" substring-vacuous by group/case-name
   # collision (see the resume-on-paused-feed mutation above); pinned to the
-  # owning case.
+  # owning case. A later re-review found that fix still loose: the owning
+  # case has two SIBLING checks whose own labels ("lifecycle now", "lifecycle
+  # final") both start with the same word, so "...finish-ready: lifecycle" is
+  # a prefix of all three FAIL lines and does not by itself say which one
+  # failed (the intended one does fail here, cascading into "lifecycle now"
+  # as a second, real failure -- both are caught, but the pin must name only
+  # its own). The detail is on the same FAIL line, so extending into it (the
+  # measured expected/actual pair, unique to this one check) makes the match
+  # exact instead of a prefix.
   FIND [[(parser-set-lifecycle! parser 'paused-finish)
            (make-parser-result 'paused off 0 off #f))]]
   REPLACE [[(parser-set-lifecycle! parser 'paused-feed)
            (make-parser-result 'paused off 0 off #f))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "resumes to finish-ready: lifecycle")
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "resumes to finish-ready: lifecycle -- expected paused-finish, got paused-feed")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -2396,9 +2437,47 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: the finished row short-circuits with consumed zero"
+  # Review: the only one of this pass's recently-pinned signatures not
+  # case-prefixed -- unlike its siblings above, this case's own name ends in
+  # the parenthesised section reference "(section 12.2)", and CMake's MATCHES
+  # is a real regex: unescaped "(" ")" would open a capture group instead of
+  # matching literal parentheses, and "." inside the section number would
+  # match any character, so a case-name tail is not a safe anchor here.
+  # Extending into the detail instead (the measured expected/actual pair)
+  # reaches the same exactness the case-tail gives the other eight, without
+  # putting a metacharacter in the pattern.
   FIND [[((finished) (make-parser-result 'finished start 0 (parser-offset parser) #f))]]
   REPLACE [[((finished) (make-parser-result 'finished start 1 (parser-offset parser) #f))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "sticky consumed zero")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "sticky consumed zero -- expected 0, got 1")
+
+# Cleanup review (Task 2 follow-up): the mutation above witnesses the finished
+# arm's FIELD VALUES, but not the arm's own existence -- deleting the whole
+# `((finished) ...)` clause is a different mutant, declared and measured
+# separately. parser-feed!'s outer case falls through to the shared `else`
+# branch on a deleted clause, which for the 'op variant runs parser-feed-op!
+# fresh from `current` -- still parked on the SAME finish node a prior finish!
+# or feed! left it at. That loop's own `(finish)` case never advances `pos`
+# past `start` (it fires before any byte is read), so it returns the
+# byte-identical tuple (status 'finished, next start, consumed 0, offset and
+# error untouched) the deleted sticky arm would have returned directly. The
+# claim is scoped to 'op: v1 can never finish (parser-finish!'s v1 else arm
+# always raises) and no /v2 fixture in this file re-feeds a parser parked at
+# a finished state, so neither variant's own path is exercised either way.
+# Measured: the mutant below passes the whole SPEC-lane suite unchanged
+# (cases=35 failed-cases=0).
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: parser-feed!'s finished sticky arm is deleted outright"
+  # REPLACE is a single space, not empty: CMake's cmake_parse_arguments (under
+  # this file's own cmake_minimum_required, policy CMP0174 OLD) treats an
+  # empty bracket argument as "not passed" and unsets arg_REPLACE, which would
+  # trip byte_machine_mutation's own required-argument check. A lone space
+  # deletes the clause just as effectively -- Scheme does not care about the
+  # blank line it leaves between the preceding clause and `(else`.
+  FIND [[((finished) (make-parser-result 'finished start 0 (parser-offset parser) #f))]]
+  REPLACE [[ ]]
+  EXPECT_SURVIVES
+    "whole-arm deletion (as opposed to the field-value mutation above, which IS caught) falls through to parser-feed!'s shared `else` branch; for the 'op variant, parser-feed-op! run fresh from a `current` still parked on the same finish node reaches that loop's own `(finish)` case before advancing `pos`, producing the byte-identical result tuple this arm short-circuits to. v1 can never reach 'finished (its else arm in parser-finish! always raises) and no /v2 fixture in this file re-feeds a parser parked at a finished state, so neither other variant witnesses it either. Measured directly: this mutant passes the whole SPEC-lane suite unchanged (cases=35 failed-cases=0)")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -2673,6 +2752,28 @@ byte_machine_mutation(
   REPLACE [[(if (pause-node? n)
                             (let ((cn (lookup nodes (pause-node-continuation n))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "accepted")
+
+# Cleanup follow-up: the second site's gap above is closed here too -- not by
+# VERDICT (still genuinely impossible, per the measurement above) but by
+# ATTRIBUTION. diagnostic-node was already exported but unused by any test.
+# Under correct code, the pa->pb->pa fixture's sole eof-zero-progress-cycle
+# diagnostic is attributed to the entry dispatch node e0 (the pre-existing,
+# ungated :909 walk), never to pa or pb -- neither is byte-reached, so this
+# site's gate never lets them contribute one. Two new checks in that fixture
+# assert this by NODE, not just by CODE: confirmed by hand that ungating this
+# site (below) makes "no eof-zero-progress-cycle attributed to pa" fail --
+# pa now gets its own copy of the diagnostic, redundant by code (matching the
+# measurement above) but distinct by attribution, which is what the new check
+# was written to see.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a pause's byte-reachability gate is not checked (eof-terminal chain)"
+  FIND [[(if (and (pause-node? n) (memq (node-name n) br))
+                            (case (eof-terminal m (pause-node-continuation n))]]
+  REPLACE [[(if (pause-node? n)
+                            (case (eof-terminal m (pause-node-continuation n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "chain of pauses that cycles is a zero-progress EOF cycle: no eof-zero-progress-cycle attributed to pa")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
