@@ -952,7 +952,7 @@ Normalization runs only after source verification and is deterministic.
 
 Responsibilities:
 
-- resolve symbolic names to stable numeric IDs;
+- resolve symbolic names to stable numeric IDs (declared nodes keep their declaration index; internal states append after them — decision 0016);
 - lower byte ranges and classes to canonical byte sets;
 - lower sequence alternatives into resumable prefix states;
 - make cursor advancement explicit on every input edge;
