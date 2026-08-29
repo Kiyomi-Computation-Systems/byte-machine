@@ -20,6 +20,15 @@
 - Conventional Commits. One decision (plus the citation clauses it forces) per commit.
 - `.superpowers/sdd/` is git-ignored; nothing there is committed. All artifacts here live under `docs/`.
 
+> **Amended 2026-08-29.** Five verification steps below (Tasks 1–4's final
+> "Verify and self-review" step, and Task 5's Step 4) asserted that
+> `milestone-3-design.md`'s §10 References section would name the newly
+> written decision records (0014–0017); that was never true. §10 catalogues
+> the design's antecedent decisions (0009–0012) and Gate 0 never touches it —
+> the record numbers land in §4 instead, via the mapping blockquote Task 5's
+> Step 2 adds. The five steps are corrected in place below; this note is the
+> record of the error, not the correction.
+
 ---
 
 ## Task 1: Decision 0014 — byte classes expand to per-byte transitions
@@ -140,7 +149,7 @@ Run:
 rg -n "0014" docs/decisions/ docs/plans/byte-machine-implementation-plan.md docs/plans/milestone-3-design.md
 rg -n "EXPECTED_PASSES|EXPECTED_MUTATIONS|38/165|165 mutations" docs/decisions/0014-byte-classes-expand-per-byte.md
 ```
-Expected: the first prints the new record, the §19.2 clause, and the design's §4.1/§10 references, all agreeing. The second prints **nothing** — Gate 0 quotes no measured totals. Confirm the record cites §19.2:1009, §29:1743, §23.3:1369 and §23.3:1380 as a *joint* warrant rather than resting on one; confirm decision 0009 was **not** amended. Fix inline.
+Expected: the first prints the new record and the §19.2 clause; its only hit inside the design document is §4's pre-existing "expected 0014–0017" placeholder — an incidental number match, not a citation, since neither §4.1 nor §10 names the record yet (§4's mapping arrives only in Task 5, and §10 never gains one at all — it continues to catalogue only the design's antecedent decisions 0009–0012). The second prints **nothing** — Gate 0 quotes no measured totals. Confirm the record cites §19.2:1009, §29:1743, §23.3:1369 and §23.3:1380 as a *joint* warrant rather than resting on one; confirm decision 0009 was **not** amended. Fix inline.
 
 - [ ] **Step 6: Commit**
 
@@ -273,7 +282,7 @@ Run:
 rg -n "0015" docs/decisions/ docs/plans/byte-machine-implementation-plan.md docs/plans/milestone-3-design.md
 rg -n "v3|/v3" docs/decisions/0015-sequence-prefix-states.md
 ```
-Expected: the first prints the record, the §19.2 clause and the design's §4.2/§10 references, agreeing. The second prints only the sentence ruling `/v3` out — confirm the record does not accidentally *propose* one. Confirm the record states decision points 3 and 4 as constraints on the interpreter (not merely a description), since those are what preserve the differential's power. Fix inline.
+Expected: the first prints the record and the §19.2 clause; it finds nothing in the design document — unlike 0014's coincidental placeholder match, "0015" is not even a substring of §4's "expected 0014–0017" placeholder, so neither §4.2 nor §10 shows a hit, and §10 never gains one at all, continuing to catalogue only the design's antecedent decisions 0009–0012. The second prints only the sentence ruling `/v3` out — confirm the record does not accidentally *propose* one. Confirm the record states decision points 3 and 4 as constraints on the interpreter (not merely a description), since those are what preserve the differential's power. Fix inline.
 
 - [ ] **Step 5: Commit**
 
@@ -385,7 +394,7 @@ Run:
 rg -n "0016" docs/decisions/ docs/plans/byte-machine-implementation-plan.md docs/plans/milestone-3-design.md
 rg -n "declaration indices" test/common/normal-ir-tests.sps
 ```
-Expected: the first prints the record, the §17 clause and the design's §4.3/§10 references. The second still prints the **unmodified** test — Gate 0 changes no test; the record only *names* the amendment Slice ② will make. If the test has changed, Gate 0 has overstepped; revert the test and keep the record. Fix inline.
+Expected: the first prints the record and the §17 clause; it finds nothing in the design document — "0016" is not a substring of §4's "expected 0014–0017" placeholder either, so neither §4.3 nor §10 shows a hit, and §10 never gains one at all, continuing to catalogue only the design's antecedent decisions 0009–0012. The second still prints the **unmodified** test — Gate 0 changes no test; the record only *names* the amendment Slice ② will make. If the test has changed, Gate 0 has overstepped; revert the test and keep the record. Fix inline.
 
 - [ ] **Step 5: Commit**
 
@@ -511,7 +520,7 @@ Run:
 rg -n "0017" docs/decisions/ docs/plans/byte-machine-implementation-plan.md docs/plans/milestone-3-design.md
 git diff HEAD~1 -- docs/plans/byte-machine-implementation-plan.md
 ```
-Expected: the first prints the record, the §9.1 clause and the design's §4.4/§10 references. The second must show a change to §9.1 **only** — if §16.2 was touched, the edit contradicts decision point 4; revert it. Confirm the record states the empty-sequence consequence explicitly, since that is what Slice ③'s scope now rests on. Fix inline.
+Expected: the first prints the record and the §9.1 clause; its only hit inside the design document is §4's pre-existing "expected 0014–0017" placeholder — an incidental number match, not a citation, since neither §4.4 nor §10 names the record yet (§4's mapping arrives only in Task 5, and §10 never gains one at all — it continues to catalogue only the design's antecedent decisions 0009–0012). The second must show a change to §9.1 **only** — if §16.2 was touched, the edit contradicts decision point 4; revert it. Confirm the record states the empty-sequence consequence explicitly, since that is what Slice ③'s scope now rests on. Fix inline.
 
 - [ ] **Step 5: Commit**
 
@@ -569,7 +578,7 @@ Run:
 rg -n "0014|0015|0016|0017" docs/plans/milestone-3-design.md
 rg -n "expected 0014" docs/plans/milestone-3-design.md
 ```
-Expected: the first shows §4's mapping, §9's resolution and §10's references all naming the same four numbers. The second prints **nothing** — the placeholder is gone. Fix inline.
+Expected: the first shows §4's mapping naming all four numbers and §9's resolution naming 0015; §10 contributes no hits at all — Gate 0 never touches it, and it continues to catalogue only the design's antecedent decisions 0009–0012, not the new records. The second prints **nothing** — the placeholder is gone. Fix inline.
 
 - [ ] **Step 5: Commit**
 
