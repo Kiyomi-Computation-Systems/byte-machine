@@ -114,10 +114,19 @@
           (check-equal "default-eof code" (parser-result-error r) 'eof))))
     (harness-case "a parser parked at a finish node re-feeds to finished, consuming zero (§12.2)"
       (lambda ()
-        (let ((r (parser-feed! (make-parser (make-compiled-machine finish-feed-op) '() #f)
-                                (make-bytevector 1 0) 0 1)))
+        (let* ((p (make-parser (make-compiled-machine finish-feed-op) '() #f))
+               (r (parser-feed! p (make-bytevector 1 0) 0 1)))
           (check-equal "status" (parser-result-status r) 'finished)
-          (check-equal "consumed" (parser-result-consumed r) 0))))))
+          (check-equal "consumed" (parser-result-consumed r) 0)
+          ;; Second feed: lifecycle is already 'finished, so this one is
+          ;; sticky (parser-feed!'s own finished arm) rather than the
+          ;; executor's finish arm the first feed above exercised -- no test
+          ;; reached that sticky arm before. Nonzero start so `next` cannot be
+          ;; confused with a stale/hardcoded 0.
+          (let ((r2 (parser-feed! p (make-bytevector 3 0) 2 3)))
+            (check-equal "sticky status" (parser-result-status r2) 'finished)
+            (check-equal "sticky next is the new start" (parser-result-next r2) 2)
+            (check-equal "sticky consumed zero" (parser-result-consumed r2) 0)))))))
 
 ;; The direct-executor ABI. A hand-built feed encodes the one-byte machine over
 ;; numeric states (0 dispatch, 1 stop, 2 error), so the v1 (feed-only) path is
@@ -185,7 +194,24 @@
       (lambda ()
         (check-raises "refused"
                       (lambda (e) #t)
-                      (lambda () (byte-machine-make-compiled-machine/v1 1 42 0 stub-feed)))))))
+                      (lambda () (byte-machine-make-compiled-machine/v1 1 42 0 stub-feed)))))
+    ;; D7: v1 can never pause, so parser-finish!'s v1 else arm (runtime.sls,
+    ;; "v1 has no finish path") is reachable only from a still-`ready` v1
+    ;; parser -- one that was never fed at all.
+    (harness-case "finish on a still-ready v1 parser raises: v1 has no finish path"
+      (lambda ()
+        (check-raises "v1 has no finish path"
+                      (lambda (e) #t)
+                      (lambda () (parser-finish! (make-parser (v1-machine) '() #f))))))
+    ;; Once fed to a terminal row, D1's sticky short-circuit checks lifecycle
+    ;; before variant -- parser-finish! never reaches the v1 else arm above,
+    ;; so a v1 parser already stopped/errored returns the ordinary sticky
+    ;; tuple instead of raising, unlike before this task.
+    (harness-case "finish on a terminal v1 parser returns the sticky tuple instead"
+      (lambda ()
+        (let ((p (make-parser (v1-machine) '() #f)))
+          (parser-feed! p (make-bytevector 1 0) 0 1)             ; -> stopped
+          (check-equal "sticky status" (parser-result-status (parser-finish! p)) 'stopped))))))
 
 ;; The unified-executor ABI (/v2, Slice ②b-2). One `exec` closure carries the
 ;; whole dispatch loop and a `finish?` flag: feed calls it with #f over the real
@@ -312,13 +338,14 @@
     (else (assertion-violation 'pause-op "bad message" msg))))
 
 (define (pause-parser) (make-parser (make-compiled-machine pause-op) '() #f))
-(define (lifecycle-violation? who op)
-  ;; D2: detail is (list <state> <op>) -- the state varies by call site, the
-  ;; refused operation must match.
+(define (lifecycle-violation? who state op)
+  ;; D2: detail is (list <state> <op>) -- both are asserted, so a condition
+  ;; reporting the right op but the wrong offending row does not pass.
   (lambda (e)
     (and (byte-machine-contract-condition? e)
          (eq? (byte-machine-contract-condition-code e) 'lifecycle-violation)
          (eq? (byte-machine-contract-condition-who e) who)
+         (eq? (car (byte-machine-contract-condition-detail e)) state)
          (eq? (cadr (byte-machine-contract-condition-detail e)) op))))
 
 (harness-group "pause + resume (§12.1)"
@@ -357,37 +384,43 @@
       (lambda ()
         (let ((p (pause-parser)))
           (parser-feed! p (make-bytevector 1 1) 0 1)             ; -> paused-feed
-          (check-raises "feed on paused-feed" (lifecycle-violation? 'parser-feed! 'feed)
+          (check-raises "feed on paused-feed" (lifecycle-violation? 'parser-feed! 'paused-feed 'feed)
             (lambda () (parser-feed! p (make-bytevector 1 2) 0 1))))
         (let ((p (pause-parser)))
           (parser-finish! p)                                     ; -> paused-finish
-          (check-raises "feed on paused-finish" (lifecycle-violation? 'parser-feed! 'feed)
+          (check-raises "feed on paused-finish" (lifecycle-violation? 'parser-feed! 'paused-finish 'feed)
             (lambda () (parser-feed! p (make-bytevector 1 2) 0 1)))
           (parser-resume! p)                                     ; -> finish-ready
-          (check-raises "feed on finish-ready" (lifecycle-violation? 'parser-feed! 'feed)
+          (check-raises "feed on finish-ready" (lifecycle-violation? 'parser-feed! 'finish-ready 'feed)
             (lambda () (parser-feed! p (make-bytevector 1 2) 0 1))))))
     (harness-case "finish is prohibited while paused"
       (lambda ()
         (let ((p (pause-parser)))
           (parser-feed! p (make-bytevector 1 1) 0 1)
-          (check-raises "finish on paused-feed" (lifecycle-violation? 'parser-finish! 'finish)
+          (check-raises "finish on paused-feed" (lifecycle-violation? 'parser-finish! 'paused-feed 'finish)
             (lambda () (parser-finish! p))))
         (let ((p (pause-parser)))
           (parser-finish! p)
-          (check-raises "finish on paused-finish" (lifecycle-violation? 'parser-finish! 'finish)
+          (check-raises "finish on paused-finish" (lifecycle-violation? 'parser-finish! 'paused-finish 'finish)
             (lambda () (parser-finish! p))))))
     (harness-case "resume is prohibited outside the paused rows"
       (lambda ()
-        (check-raises "resume on ready" (lifecycle-violation? 'parser-resume! 'resume)
+        (check-raises "resume on ready" (lifecycle-violation? 'parser-resume! 'ready 'resume)
           (lambda () (parser-resume! (pause-parser))))
         (let ((p (pause-parser)))
           (parser-finish! p) (parser-resume! p)                  ; -> finish-ready
-          (check-raises "resume on finish-ready" (lifecycle-violation? 'parser-resume! 'resume)
+          (check-raises "resume on finish-ready" (lifecycle-violation? 'parser-resume! 'finish-ready 'resume)
             (lambda () (parser-resume! p))))
         (let ((p (make-parser (make-compiled-machine one-byte-op) '() #f)))
           (parser-feed! p (make-bytevector 1 0) 0 1)             ; -> stopped
-          (check-raises "resume on stopped" (lifecycle-violation? 'parser-resume! 'resume)
-            (lambda () (parser-resume! p))))))
+          (check-raises "resume on stopped" (lifecycle-violation? 'parser-resume! 'stopped 'resume)
+            (lambda () (parser-resume! p))))
+        ;; D7: v1 can never pause, so resume on a v1 parser is always this
+        ;; same prohibited cell -- the guard is variant-agnostic (it reads
+        ;; only lifecycle), witnessed here through the one variant that can
+        ;; never reach any row but 'ready.
+        (check-raises "resume on a v1 parser" (lifecycle-violation? 'parser-resume! 'ready 'resume)
+          (lambda () (parser-resume! (make-parser (v1-machine) '() #f))))))
     (harness-case "sticky rows short-circuit: stopped feed/finish return the tuple"
       (lambda ()
         (let ((p (make-parser (make-compiled-machine one-byte-op) '() #f)))
@@ -404,8 +437,12 @@
         ;; separate site with its own mutation).
         (let ((p (make-parser (make-compiled-machine one-byte-op) '() #f)))
           (parser-feed! p (make-bytevector 1 65) 0 1)            ; -> error
-          (let ((r (parser-feed! p (make-bytevector 1 0) 0 1)))
+          ;; Nonzero start: with the prior zero-start read-back, `start`,
+          ;; the literal 0, and (parser-offset parser) (also 0 here) were
+          ;; indistinguishable, so a next-field regression had no witness.
+          (let ((r (parser-feed! p (make-bytevector 3 0) 1 3)))
             (check-equal "sticky status" (parser-result-status r) 'error)
+            (check-equal "next is the new start" (parser-result-next r) 1)
             (check-equal "feed-stored error value" (parser-result-error r) 'unexpected-byte))
           (check-equal "finish repeats the feed-stored error"
                        (parser-result-error (parser-finish! p)) 'unexpected-byte))))
@@ -439,6 +476,9 @@
             (check-equal "lifecycle" (parser-lifecycle p) 'error))
           (check-equal "finish repeats the finish-stored error"
                        (parser-result-error (parser-finish! p)) 'truncated-input))))
+    ;; stopped and error are already covered by the pre-existing
+    ;; "parser-reset!" group above; ready is trivial (reset is idempotent on
+    ;; it). The four rows below are the ones this task's own lifecycle adds.
     (harness-case "reset recovers every reachable row to ready"
       (lambda ()
         (let ((p (pause-parser)))
@@ -446,11 +486,19 @@
           (parser-reset! p)
           (check-equal "from paused-feed" (parser-lifecycle p) 'ready))
         (let ((p (pause-parser)))
+          (parser-finish! p)                                     ; paused-finish
+          (parser-reset! p)
+          (check-equal "from paused-finish" (parser-lifecycle p) 'ready))
+        (let ((p (pause-parser)))
           (parser-finish! p) (parser-resume! p)                  ; finish-ready
           (parser-reset! p)
           (check-equal "from finish-ready" (parser-lifecycle p) 'ready)
           (check-equal "re-feeds from entry"
                        (parser-result-status (parser-feed! p (make-bytevector 1 1) 0 1))
-                       'paused))))))
+                       'paused))
+        (let ((p (pause-parser)))
+          (parser-finish! p) (parser-resume! p) (parser-finish! p) ; finished
+          (parser-reset! p)
+          (check-equal "from finished" (parser-lifecycle p) 'ready))))))
 
 (harness-finish)

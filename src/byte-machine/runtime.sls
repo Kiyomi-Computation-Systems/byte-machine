@@ -99,9 +99,10 @@
   ;; lifecycle: ready | paused-feed | paused-finish | finish-ready | stopped |
   ;; error | finished (§12.1; poisoned/busy are M5 rows). Sticky rows
   ;; short-circuit at the operation entry and synthesize the §12.2 tuple
-  ;; (next = the new call's start, consumed = 0, stored offset/error) without
-  ;; re-running the executor: ②a's idempotent re-execution broke on default-EOF
-  ;; truncation, which parks `current` on a dispatch node (②b-2 final review).
+  ;; (next = the new call's start for feed, the stream offset for finish;
+  ;; consumed = 0; stored offset/error) without re-running the executor: ②a's
+  ;; idempotent re-execution broke on default-EOF truncation, which parks
+  ;; `current` on a dispatch node (②b-2 final review).
   ;; stored-error (slot 7) is the error value the error row returns; #f
   ;; otherwise. M5's full stored-result short-circuit (callbacks) stays deferred.
   (define parser-tag (tag 'byte-machine-parser))
@@ -136,6 +137,11 @@
   (define (parser-feed! parser bv start end)
     (unless (and (bytevector? bv) (<= 0 start end (bytevector-length bv)))
       (byte-machine-contract-violation 'parser-feed! 'invalid-slice (list start end)))
+    ;; The three sticky arms below, and parser-finish!'s below, are
+    ;; deliberately not factored into a shared helper even though each pair
+    ;; is near-identical: Pass 32 anchors a mutation on each arm's own text,
+    ;; and a shared helper would collapse several distinct decisions onto one
+    ;; FIND site, silently dropping their independent witnesses.
     (case (parser-lifecycle parser)
       ((paused-feed paused-finish finish-ready)
        (byte-machine-contract-violation 'parser-feed! 'lifecycle-violation
@@ -228,6 +234,8 @@
   ;; runs the same `exec` with finish? #t (Slice ②b-2); v1 never supported
   ;; finish, so its else arm stays an assertion violation.
   (define (parser-finish! parser)
+    ;; Sticky arms deliberately not shared with parser-feed!'s -- see the
+    ;; comment there.
     (case (parser-lifecycle parser)
       ((paused-feed paused-finish)
        (byte-machine-contract-violation 'parser-finish! 'lifecycle-violation

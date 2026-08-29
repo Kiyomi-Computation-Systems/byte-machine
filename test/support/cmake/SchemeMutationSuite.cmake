@@ -367,8 +367,34 @@ cmake_minimum_required(VERSION 3.26)
 # routing, re-anchored above), turned out already witnessed by the plan's own
 # ②b-2-carry case, so it is one dedicated mutation, not a gap needing a new
 # fixture. Passes stay at 37 and 130 + 10 + 4 = 144 mutations.
+#
+# A subsequent review of Task 2's 14 additions found the implementation
+# itself correct but seven of their EXPECT_OUTPUT_MATCHES signatures
+# substring-vacuous: harness.sls's FAIL-CONTEXT line prints unconditionally
+# on every recorded failure and contains " backend=chez", so bare "ack" (a
+# substring of "backend") was satisfied by any failure at all, not the one it
+# named -- the two resume-ack mutations and the feed-pause mutation used it.
+# Bare "lifecycle" and "consumed" are not vacuous under that same mechanism,
+# but both collide with unrelated group/case names elsewhere in this file
+# ("one-byte parser lifecycle", "parser-lifecycle tracks ready -> terminal")
+# or with several other check labels ("consumed" alone names eight), so
+# neither pins the decision it claims to. All seven (and the default-eof
+# store mutation's "stored error value", a substring of the feed-side store
+# mutation's own "feed-stored error value") are re-pinned in place to their
+# owning case's own words; no FIND/REPLACE changed, so this does not move the
+# count. The same review found two more decisions this task's own code left
+# with no witness: parser-feed!'s finished sticky arm (no fixture repeated a
+# feed once lifecycle was already 'finished) and the error sticky arm's
+# `next` field (both existing witnesses fed from a zero start, so `start`,
+# the literal 0, and (parser-offset parser) were indistinguishable) -- each
+# closed with a new runtime-tests.sps case and its own mutation. A third
+# finding, parser-reset!'s stored-error clear, is genuinely unobservable
+# through the public API (parser-stored-error is unexported and both its
+# read sites require lifecycle = 'error, which reset overwrites to 'ready in
+# the same call) and is declared EXPECT_SURVIVES rather than left
+# undeclared. Passes stay at 37 and 144 + 3 = 147 mutations.
 set(EXPECTED_PASSES 37)
-set(EXPECTED_MUTATIONS 144)
+set(EXPECTED_MUTATIONS 147)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -2154,12 +2180,15 @@ byte_machine_mutation(
   # Same FIND anchor as the routing re-anchor above, a distinct decision:
   # dropping only the store (not the status) is witnessed by the brief's own
   # ②b-2-carry case, which reads the value back through a later feed.
+  # Signature review: bare "stored error value" is a substring of a DIFFERENT
+  # check's own label, "feed-stored error value" (the feed-side store's
+  # witness below) -- pinned to this case's own name instead.
   FIND [[(let ((e (op 'default-eof-value)))
                           (parser-set-stored-error! parser e)
                           (make-parser-result 'error off 0 off e))))))]]
   REPLACE [[(let ((e (op 'default-eof-value)))
                           (make-parser-result 'error off 0 off e))))))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "stored error value")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "default-EOF truncation: stored error value")
 
 # Code-review fix for Task 2 (§12.2 finished x feed!): parser-feed-op!'s own
 # `finish` arm -- a parser parked at a finish node re-fed returns finished,
@@ -2213,18 +2242,29 @@ byte_machine_mutation(
   # lifecycle corruption itself fails the case's own "lifecycle" check before
   # the next parser-feed! call is even reached; that call then raises (the
   # corrupted state is now a prohibited feed row), recorded as a second,
-  # cascading "case raised" failure. Both are real; "lifecycle" is the one
-  # that names this decision.
+  # cascading "case raised" failure. Both are real. Review found bare
+  # "lifecycle" itself substring-vacuous under a DIFFERENT mechanism than the
+  # plan's prediction being wrong: harness.sls's FAIL-CONTEXT line prints
+  # unconditionally on every failure and is not the risk here, but the
+  # group name "one-byte parser lifecycle" and the case name "parser-
+  # lifecycle tracks ready -> terminal" elsewhere in this file both also
+  # contain "lifecycle", so a bare match does not by itself prove this is
+  # the check that failed -- pinned to the owning case's own words instead.
   FIND [[((paused-feed) (parser-set-lifecycle! parser 'ready) 'feed-ready)]]
   REPLACE [[((paused-feed) (parser-set-lifecycle! parser 'finish-ready) 'feed-ready)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "lifecycle")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "acks feed-ready and reopens feed: lifecycle")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: resume on paused-finish acks finish-ready"
+  # Review found bare "ack" substring-vacuous: harness.sls's FAIL-CONTEXT line
+  # (printed on every recorded failure, harness.sls ~:394-402) contains
+  # " backend=chez", and "ack" is a substring of "backend" -- so this
+  # signature was satisfied by ANY failure, not this one. Pinned to the
+  # owning case's own words instead.
   FIND [[((paused-finish) (parser-set-lifecycle! parser 'finish-ready) 'finish-ready)]]
   REPLACE [[((paused-finish) (parser-set-lifecycle! parser 'finish-ready) 'feed-ready)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "ack")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "EOF path and resumes to finish-ready: ack")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -2263,9 +2303,11 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a feed pause maps to paused-feed, not paused-finish"
+  # Review found bare "ack" substring-vacuous (see the resume-on-paused-
+  # finish mutation above for the mechanism); pinned to the owning case.
   FIND [[((paused) (parser-set-lifecycle! parser 'paused-feed))]]
   REPLACE [[((paused) (parser-set-lifecycle! parser 'paused-finish))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "ack")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "acks feed-ready and reopens feed: ack")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -2278,18 +2320,26 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: an EOF pause parks paused-finish, not paused-feed"
+  # Review found bare "lifecycle" substring-vacuous by group/case-name
+  # collision (see the resume-on-paused-feed mutation above); pinned to the
+  # owning case.
   FIND [[(parser-set-lifecycle! parser 'paused-finish)
            (make-parser-result 'paused off 0 off #f))]]
   REPLACE [[(parser-set-lifecycle! parser 'paused-feed)
            (make-parser-result 'paused off 0 off #f))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "lifecycle")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "resumes to finish-ready: lifecycle")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: the stopped row short-circuits with consumed zero"
+  # Review found bare "consumed" matches eight other check labels file-wide
+  # (measured: this exact mutation also legitimately reddens two PRE-existing
+  # tests that now exercise the same sticky short-circuit -- real, not
+  # coincidental, but still not a signature that names only this decision).
+  # Pinned to the owning case's own words.
   FIND [[((stopped) (make-parser-result 'stopped start 0 (parser-offset parser) #f))]]
   REPLACE [[((stopped) (make-parser-result 'stopped start 1 (parser-offset parser) #f))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "consumed")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "tuple: consumed zero")
 
 # The plan's Task 2 predicted ten mutations for this pass; the whole-pass
 # review it also mandated (AGENTS.md's exit-path rule) found three more
@@ -2328,9 +2378,53 @@ byte_machine_mutation(
   # parser-feed! wrapper's paused arm and parser-finish-op!'s pause arm, both
   # witnessed only through the op-path stub. No /v2 fixture reached a pause
   # state before stub-exec's new state 3.
+  # Review found bare "lifecycle" substring-vacuous by group/case-name
+  # collision (see the resume-on-paused-feed mutation above); pinned to the
+  # owning case.
   FIND [[((paused) (parser-set-lifecycle! parser 'paused-finish)))]]
   REPLACE [[((paused) (parser-set-lifecycle! parser 'paused-feed)))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "lifecycle")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "sets paused-finish: lifecycle")
+
+# Review also found two decisions this task's own new code left with no
+# witness at all (distinct from the seven signature fixes above, which all
+# WERE caught, just not provably for their own reason): parser-feed!'s
+# finished sticky arm (no fixture repeated a feed after lifecycle was already
+# 'finished) and the error sticky arm's `next` field (both existing witnesses
+# used a zero start, making `start`, the literal 0, and (parser-offset
+# parser) indistinguishable). Both are closed above in runtime-tests.sps and
+# witnessed here.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the finished row short-circuits with consumed zero"
+  FIND [[((finished) (make-parser-result 'finished start 0 (parser-offset parser) #f))]]
+  REPLACE [[((finished) (make-parser-result 'finished start 1 (parser-offset parser) #f))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "sticky consumed zero")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the error row's next mirrors the new call's start, not the offset"
+  FIND [[(make-parser-result 'error start 0 (parser-offset parser)]]
+  REPLACE [[(make-parser-result 'error (parser-offset parser) 0 (parser-offset parser)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "after a feed error: next is the new start")
+
+# parser-reset!'s stored-error clear (§12.5): declared, not silently
+# unmutated. parser-stored-error is unexported, and its only two read sites
+# both require lifecycle = 'error -- which parser-reset! unconditionally
+# overwrites to 'ready in the very same call, before any read could observe
+# what this line left behind. The only way lifecycle can become 'error again
+# is through one of this file's four write sites (the feed wrapper, both
+# finish variants, and the default-eof arm), every one of which stores a
+# fresh value before or as part of its own transition into 'error -- so
+# whatever this clear left behind is always overwritten first. Measured: the
+# mutant below passes the whole suite unchanged (cases=35 failed-cases=0);
+# EXPECT_SURVIVES is the honest declaration of that, not silence.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: reset's stored-error clear is skipped"
+  FIND [[(parser-set-stored-error! parser #f)]]
+  REPLACE [[(parser-set-stored-error! parser (parser-stored-error parser))]]
+  EXPECT_SURVIVES
+    "parser-stored-error is unexported, so nothing outside this library can read the slot directly; its only two read sites (the error sticky arms in parser-feed! and parser-finish!) are both guarded by lifecycle = 'error, and parser-reset! unconditionally sets lifecycle to 'ready in this same call, so neither read site is reachable immediately after a reset. Reaching 'error again requires a fresh feed or finish that re-enters one of the four write sites, and every one of them stores its own value before or alongside its own lifecycle='error transition -- so a stale value left by a skipped clear is always overwritten before anything could observe it. Measured directly: this mutant passes the whole SPEC-lane suite unchanged")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -2503,11 +2597,17 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: pause continuations join the zero-progress walk"
+  # Later review: bare "zero-progress-cycle" is a substring of three other
+  # check labels in this file (the pre-Slice-3 mutation above reuses it, and
+  # "eof-zero-progress-cycle diagnostic"/"zero-progress-cycle diagnostic" are
+  # each a distinct decision), so it does not by itself prove which one
+  # failed. Measured: this mutation's own primary witness is the reexecute/
+  # pause-only cycle case; pinned to it.
   FIND [[((pause-node? n) (list (pause-node-continuation n)))
               (else '())]]
   REPLACE [[((pause-node? n) '())
               (else '())]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "zero-progress-cycle")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "cycle with no advance makes no progress: zero-progress-cycle diagnostic")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -2536,9 +2636,13 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a pause-only zero-progress cycle is not flagged"
+  # Later review: bare "zero-progress-cycle" is shared with three other check
+  # labels in this file (see the mutation above); pinned to the specific
+  # fixture the case-header comment above already names as this decision's
+  # own witness (the pa->pb->pa EOF-pause cycle).
   FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)) (reaches-self? (node-name n)))]]
   REPLACE [[(if (and (byte-dispatch-node? n) (reaches-self? (node-name n)))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "zero-progress-cycle")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "chain of pauses that cycles is a zero-progress EOF cycle: zero-progress-cycle diagnostic")
 
 # Second: the `(memq (node-name n) br)` byte-reachability gate shared by both
 # D4(b)/(d) checks above -- the entire reason `byte-reached` exists -- had a
