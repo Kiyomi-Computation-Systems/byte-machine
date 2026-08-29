@@ -12,14 +12,19 @@ reference interpreter.
 It is a library and source generator, not itself an HTTP parser. A separate
 project will use it to define and generate one.
 
-*Status: pre-release.* No public API exists yet. The repository currently holds
-the project plans and the build and discovery layer that the implementation will
-be developed against. See [[file:docs/plans/byte-machine-implementation-plan.md][the implementation plan]] for scope,
-architecture, and milestones.
+*Status: pre-release.* No versioned release exists yet — the target is =0.1.0=,
+and the API is not yet stable. Milestones 0 (portability and harness spike), 1
+(minimal executable machine), and 2 (incremental execution and lifecycle) have
+closed; Milestone 3 (byte classes and sequences) has not started.
+=src/byte-machine/= holds the construction API, the verifier, the normalizer and
+emitter, the reference interpreter, and the runtime, each exercised in both the
+source and ahead-of-time execution lanes. See
+[[file:docs/plans/byte-machine-implementation-plan.md][the implementation plan]] for scope, architecture, and milestones.
 
 ** Requirements
 
-- CMake 3.26 or newer (only 4.3.3 has been exercised so far)
+- CMake 3.26 or newer (local work uses 4.3.3; CI runs on whatever version its
+  runners ship, which the workflow does not pin)
 - Chez Scheme 10.4.1 or newer, full system rather than Petite
 
 The Chez pin is a floor recording what has actually been verified, not a guess
@@ -67,6 +72,8 @@ cmake --preset no-scheme && ctest --preset no-scheme
 
 - [[file:docs/plans/byte-machine-implementation-plan.md][Implementation plan]] — authoritative scope, IR semantics, milestones, and release criteria
 - [[file:docs/plans/milestone-0-portability-spike.md][Milestone 0 plan]] — the portability and harness spike
+- [[file:docs/plans/milestone-1-design.md][Milestone 1 design]] — the minimal executable machine
+- [[file:docs/plans/milestone-2-design.md][Milestone 2 design]] — incremental execution and lifecycle
 - [[file:docs/decisions/][Architecture decisions]]
 - [[file:CHANGELOG.md][Changelog]]
 

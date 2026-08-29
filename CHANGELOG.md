@@ -347,6 +347,115 @@ delivered. No versioned release exists yet.
   shipping. Measured on the shipped tree: `release` 60/60, `no-scheme` 8/8,
   the Scheme mutation suite 37 passes/104 mutations, the CMake mutation
   suite 1 pass/72 mutations.
+- Milestone 2 Gate 0: three decision records answering the EOF, ABI, and
+  condition questions Milestone 1 handed forward, with no code change.
+  [Decision 0011](docs/decisions/0011-eof-execution-model.md) fixes the EOF
+  execution model. `parser-finish!` runs the same executor loop as feed with input
+  permanently exhausted, and the only branch that differs is a dispatch node with
+  no byte available: feed returns `need-input`, finish instead takes that node's
+  `eof-target` — the named node when set, else the machine `default-eof-error`.
+  EOF success is its own `finish` node kind rather than a `stop` re-read on the
+  finish path, because that "polysemous stop" model describes a machine parent
+  §16.2 requires the verifier to *reject*; and eof-targets chain, terminating at
+  `finish`, `error`, or (Slice ③) `pause`, never at `stop`.
+  [Decision 0012](docs/decisions/0012-generated-abi-v2-finish.md) takes the
+  `/v2`-constructor-over-arity-break seam
+  [decision 0010](docs/decisions/0010-direct-executor-abi.md) item 4 had already
+  fixed for exactly this kind of change: `byte-machine-make-compiled-machine/v2`,
+  `current-abi-version` 2, one unified `exec` closure carrying a `finish?` flag
+  rather than two closures, terminal arms one per kind, and the `feed-outcome`
+  record shape reused — `finished` and `paused` are new status *symbols*, not a new
+  record. [Decision 0013](docs/decisions/0013-runtime-coded-conditions.md) lets
+  `runtime.sls` import `(byte-machine private conditions)`, so lifecycle misuse and
+  the §11.1 invalid-slice contract raise `&byte-machine-contract` with a stable
+  `code`/`who` the tests assert directly rather than `assertion-violation` text.
+  That was decision 0010 item 5's deferral, whose blocker was the `CORE_ALL` lane
+  manifest; 0013 removes it by de-duplicating the manifest.
+
+  The design this gate serves was revised the same day after a systematic audit
+  against the parent plan's normative sections and the Milestone 1 source. The
+  audit is what corrected the EOF-terminal modeling error above, and it surfaced a
+  latent Milestone 1 sticky-feed bug that Slice ②a then fixed. Docs only: the lane
+  count stays 60 and both mutation suites are untouched.
+- Milestone 2 Slice ①: incremental execution, proven over the first machine with
+  more than one dispatch node. A four-byte accept-sequence fixture
+  (`(byte-machine test sequence-machine)` — `s0` through `s3` each read one byte of
+  `1 2 3 4` into a `stop`, every fallback reexecuting into the reject error so a
+  wrong byte's `next` points *at* the offending byte, parent §11.5) gives three
+  interior split points, which is what makes parent §22.5's split-point pairs and
+  multi-split schedules satisfiable at all. Its interpreter≡generated differential
+  covers whole-input accept and per-position reject; all 256 bytes at each of the
+  four positions; every fragmentation of the input, including leading, intermediate
+  and trailing empty feeds and a deterministic multi-split schedule; and
+  nonzero-offset slices asserting exact `next`/`consumed`/`stream-offset`. The §9.6
+  end-to-end example gains a nonzero-offset case — byte 0 at index 1 of a padded
+  buffer, fed as `[1,2)` — reusing the library the first case emitted and loaded,
+  so the example stays one narrative rather than two.
+
+  No `src/` change, and that is the point: Milestone 1's feed engine already
+  accepted an arbitrary `(bv start end)` and already reported `need-input` and
+  exact offsets, so this slice is the evidence that it does, over a machine whose
+  multiple dispatch nodes can actually distinguish a correct implementation from a
+  lucky one. It never re-feeds a terminal parser: the §12.2 sticky-repeat path was
+  still broken at this commit, and fixing it is Slice ②a's job. Two lanes under a
+  new `differential.sequence` name, source and AOT, take the lane count 60 → 62;
+  both mutation suites unchanged.
+- Milestone 2 Slice ②a: the lifecycle spine. The parser gains an explicit lifecycle
+  field (`ready` | `stopped` | `error`) and exports `parser-lifecycle`. It replaces
+  the ad hoc result cache Milestone 1 used to make terminal results sticky, and
+  removing that cache *is* the fix for the bug the Milestone 2 design audit found: a
+  repeat `parser-feed!` on a terminal parser now re-runs the executor — idempotent
+  for `stop` and `error` in this callback-free milestone — and returns the §12.2
+  sticky-repeat tuple (`next` = `start`, `consumed` 0, the stored offset) by
+  construction, instead of by a cached value that could disagree with the parser's
+  actual state. A stored-result short-circuit returns at Milestone 5, when callbacks
+  make re-execution non-idempotent. `parser-reset!` ships the Milestone 2 subset of
+  parent §12.5: the parser vector grows an `entry` slot, and reset restores `current`
+  to the entry state, zeroes the stream offset, and returns lifecycle to `ready`.
+
+  Per [decision 0013](docs/decisions/0013-runtime-coded-conditions.md),
+  `runtime.sls` now imports `(byte-machine private conditions)`, and
+  `parser-feed!`'s invalid-slice guard raises `&byte-machine-contract` (code
+  `invalid-slice`, who `parser-feed!`) instead of `assertion-violation`. Because
+  that import puts `conditions.sls` into `CORE_ALL` by two paths at once — the
+  runtime manifest and, via graph/ir, the verify manifest — the stored `CORE_ALL`
+  value is de-duplicated before it is reused, keeping the per-lane
+  duplicate-basename guard green. `compile.sls`'s `reserved-member-2`, the
+  hand-maintained mirror of the runtime's exports, gains `parser-lifecycle` and
+  `parser-reset!` so the member-2 drift guard stays accurate. The Scheme mutation
+  suite drops the now-unwitnessable "v1 terminal result is not made sticky"
+  mutation — its anchor left with the cache — and gains the coded-condition
+  mutation, two lifecycle-arm mutations, and three `parser-reset!` mutations, one
+  per decision the procedure makes: 104 → 109 mutations, 37 passes unchanged. Lane
+  count unchanged at 62.
+- Milestone 2 Slice ②b-1: the EOF semantic core, through the reference interpreter
+  only. `finish` joins `byte-dispatch`, `stop` and `error` as a source-IR node kind
+  — `make-finish-node`, exported from `(byte-machine graph)` — giving EOF success
+  the distinct terminal
+  [decision 0011](docs/decisions/0011-eof-execution-model.md) called for. The
+  verifier grows the parent §16.2 checks that only become load-bearing once EOF is
+  executed rather than merely declared: a byte edge into a finish terminal is
+  `non-eof-into-finish` (§16.2:908), an eof-target chain that reaches a `stop` is
+  `eof-reachable-stop` (§16.2:909), and a chain that cycles without reaching a
+  terminal is `eof-zero-progress-cycle`. Reachability now walks eof-targets as well
+  as byte edges, so a node reachable only by EOF is no longer reported unreachable.
+
+  `parser-finish!` runs the executor with input exhausted: from the current state an
+  exhausted dispatch takes its eof-target — a named node, else the machine
+  `default-eof-error` — and execution continues through zero-width nodes to
+  `finished` or `error`, with `next` and `consumed` mirroring the stream offset and
+  0, since a finish has no slice. That loop carries no cycle guard of its own, and
+  deliberately so: termination is exactly what the two new verifier checks buy,
+  which is what makes them worth having once Slice ②b-2's generated path stops
+  re-verifying at run time. `finished` joins the lifecycle field. A shared
+  idle-vs-truncation fixture (`(byte-machine test eof-machine)`, which accepts `1 2`
+  and routes EOF at entry to a finish node but EOF after one byte to a truncation
+  error) proves the distinction the whole slice exists for; it is written once here
+  and reused by Slice ②b-2's differential. The generated finish path is still
+  absent — `parser-finish!` on a `v1` parser raises rather than guessing at an ABI
+  Slice ②b-2 had not yet defined. Two new lanes, `unit.eof-interpret` in source and
+  AOT, take the count 62 → 64; the Scheme mutation suite goes 109 → 116 with 37
+  passes.
 - Milestone 2 Slice ②b-2: EOF generation. The emitter now emits the `/v2`
   generated-runtime ABI, `byte-machine-make-compiled-machine/v2`, and
   `current-abi-version` bumps to `2`. The generated machine exposes one unified
@@ -429,10 +538,15 @@ delivered. No versioned release exists yet.
   Three new lane pairs (source + AOT): `byte-machine.unit.pause-interpret`,
   `byte-machine.differential.pause`, `byte-machine.determinism.pause`.
   Measured on the shipped tree: `release`/`pr` 72/72, `no-scheme` 8/8, the
-  Scheme mutation suite 38 passes/164 mutations (155 caught, 9 declared
+  Scheme mutation suite 38 passes/165 mutations (156 caught, 9 declared
   `EXPECT_SURVIVES`), the CMake mutation suite unchanged at 1 pass/72
-  mutations. The two extra mutations past this slice's own close-out close a
-  gap Task 7's review found in exit criterion 4: `error`/`finished` ×
+  mutations. (Corrected 2026-08-29: this line first read 164 mutations and 155
+  caught, which never matched the merged tree — `SchemeMutationSuite.cmake`
+  declares `EXPECTED_MUTATIONS 165`. Re-run against the merged tree, the suite
+  reports "38 passes, 165 mutations" with 9 `SURVIVES (expected)` lines; the
+  other four figures were re-run and confirmed unchanged.) The two extra
+  mutations past this slice's own close-out close a gap Task 7's review found
+  in exit criterion 4: `error`/`finished` ×
   `resume!` and `finished` × `finish!` had no direct test (see
   [milestone-2-design.md](docs/plans/milestone-2-design.md) §6's dated
   disposition). Three further mutations past that close the final
