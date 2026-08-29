@@ -449,8 +449,54 @@ cmake_minimum_required(VERSION 3.26)
 # different goldens) this pin needs no numeral to be unambiguous; see that
 # mutation's own comment for the full reasoning. Passes stay at 38 and
 # 151 + 5 = 156 mutations.
-set(EXPECTED_PASSES 38)
-set(EXPECTED_MUTATIONS 156)
+#
+# Slice ③'s Task 6 (the property generator learns eof/finish/pause: a
+# generated machine's entry can now route eof to a finish node `done`, and a
+# byte case can now target an explicit pause `pausep`; the differential
+# driver -- property-differential-tests.sps -- now stays live across a
+# pause/resume/finish schedule instead of feeding one byte to a throwaway
+# parser) opens the last pass, Pass 42, with two mutations. (The plan drafted
+# this as "Pass 39"; Tasks 1-5 had already claimed 39-41 for their own
+# decisions by the time this task ran, so 42 is the actual next free
+# number.) Neither of Slice ③'s two new generator draws gets a dedicated
+# mutation of its own, consistent with machine-gen.sls carrying none for its
+# two pre-Slice-③ constraints either (the target-`start`-forces-`advance`
+# rule, the first-case `stop` pin): the property lane's own "machine N
+# verifies" checks are what a broken draw or a broken reachability guard
+# actually fails, so the lane run is already the witness (as Step 3 of the
+# task brief itself puts it) and a second, redundant mutation would prove
+# nothing a lane failure had not already proved. What Pass 42 witnesses
+# instead is the two decisions in the DRIVER and its anti-vacuity guard that
+# no fixture before this task exercised, because no earlier generator ever
+# produced a pause to drive through: the driver's own resume handling, and
+# the count assertion that catches a pause draw which stopped drawing.
+#
+# The first mutation breaks resume-pair! (property-differential-tests.sps),
+# the one place either side's parser-resume! is called, shared by the
+# feed-pause and finish-pause loops: REPLACE swaps the two real calls for a
+# pair of hardcoded acks, so neither parser's lifecycle actually leaves
+# paused-feed. The very next operation the driver runs on them -- feed-
+# loop!'s post-resume re-feed of the slice's remainder -- lands on
+# runtime.sls's own lifecycle-violation guard, which the driver does not
+# catch; harness-case's own guard catches it instead and records it as
+# "case raised". Pinned to "lifecycle-violation" -- the condition's own code
+# field, rendered verbatim by Chez's display-condition, printed by nothing
+# else in this program's output.
+#
+# The second mutation targets the pause draw's own probability line in
+# machine-gen.sls: pause-drawn? is hard-wired to #f, so no case is ever
+# offered `pausep` as a target and no generated machine ever includes one.
+# This is exactly the vacuity the task brief asked the driver to guard
+# against, and measurement showed it witnessable -- unlike the brief's own
+# hedge, which allowed for it not to be: property-differential-tests.sps
+# gains a count assertion for this task (paused-count across the seed's 40
+# machines), and it fails, at 0, exactly when this line is mutated. Pinned
+# to "observes a pause", the assertion's own words and otherwise unused
+# in this program.
+#
+# So 38 + 1 = 39 passes and 156 + 2 = 158 mutations.
+set(EXPECTED_PASSES 39)
+set(EXPECTED_MUTATIONS 158)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -3320,6 +3366,44 @@ byte_machine_mutation(
   FIND [[((pause-target) (pause-node-continuation (lookup nodes (car args))))]]
   REPLACE [[((pause-target) (car args))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "byte 2 stops: stopped")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 42: the property generator learns eof/finish/pause, and the
+# differential driver's pause/resume/finish schedule (Slice ③, Task 6) -------
+#
+# See the header comment above EXPECTED_PASSES/EXPECTED_MUTATIONS for why
+# this is Pass 42 (not the plan's "Pass 39") and why the generator's own two
+# new draws get no mutation here. Both mutations below run the same program
+# as Pass 39 above -- property-differential-tests.sps -- so they share its
+# verify command; one edits that program directly, the other edits the
+# generator it drives.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/property-differential-tests.sps")
+
+byte_machine_mutation(
+  FILE test/common/property-differential-tests.sps
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "property-differential: resume-pair! stops calling parser-resume!"
+  FIND [[(list (parser-resume! pr) (parser-resume! pg))]]
+  REPLACE [[(list 'feed-ready 'feed-ready)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "lifecycle-violation")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-gen.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "machine-gen: the pause draw's coin is hard-wired to false"
+  FIND [[(pause-drawn? (= pausei 0))]]
+  REPLACE [[(pause-drawn? #f)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "observes a pause")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
