@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# THIRTY-ONE PASSES, BECAUSE THIRTY-ONE DIFFERENT WITNESSES ARE NEEDED
+# THIRTY-NINE PASSES, BECAUSE THIRTY-NINE DIFFERENT WITNESSES ARE NEEDED
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -145,7 +145,7 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "THIRTY-ONE PASSES..." above. Declared here, rather than only in
+# See "THIRTY-NINE PASSES..." above. Declared here, rather than only in
 # prose, so the count enforced at the bottom of this file is the same text a
 # reader checks by eye at the top -- one number to keep in sync, not two
 # that can quietly disagree. 25 passes / 60 mutations before the aot task;
@@ -3852,13 +3852,13 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 #
 # ir-tests.sps is the first program to reach (byte-machine private ir)'s
 # canonicalization spine directly, and no pass has ever mutated ir.sls: every
-# earlier pass reaches it only through a consumer. The first mutation drops the
-# exact-byte arm of matcher-bytes, so an exact matcher canonicalizes to the
-# contract violation instead of its one-element set; the second removes the
-# accessor's tag guard, so a foreign vector reads slot 1 and returns instead of
-# raising -- the exact defect design §5 says must not be allowed to reach
-# pass-overlap or list-sort. Verify command uses both library roots, an empty
-# object guard, the ir program.
+# earlier pass reaches it only through a consumer. The first mutation swaps
+# the exact-byte arm's returned byte for a constant 0, so an exact matcher
+# canonicalizes to the wrong one-element set instead of its own byte; the
+# second removes the accessor's tag guard, so a foreign vector reads slot 1
+# and returns instead of raising -- the exact defect design §5 says must not
+# be allowed to reach pass-overlap or list-sort. Verify command uses both
+# library roots, an empty object guard, the ir program.
 
 byte_machine_mutation_reset()
 
@@ -3873,19 +3873,21 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
   LABEL "ir: an exact-byte matcher does not canonicalize to its own byte"
-  FIND [[(cond ((exact-byte-matcher? m) (list (exact-byte-matcher-byte m)))]]
-  REPLACE [[(cond ((and #f (exact-byte-matcher? m)) (list (exact-byte-matcher-byte m)))]]
-  # Measured, not predicted: disabling the exact-byte arm sends every call to
-  # matcher-bytes' own contract-violation else clause, so the case body RAISES
-  # before check-equal's "set" label is ever reached -- the harness reports
-  # "case raised", not a failed comparison. Pinned on the case-name tail plus
-  # that check label.
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "one-element set: case raised")
+  FIND [[(list (exact-byte-matcher-byte m))]]
+  REPLACE [[(list 0)]]
+  # Comparison-caught, not raise-based: the exact-byte arm still runs, so
+  # matcher-bytes returns a set instead of raising, and check-equal's "set"
+  # comparison is what catches the wrong byte. Measured (not predicted):
+  # this also leaves "canonicalizing a foreign vector is a contract
+  # violation" passing under the mutant, since that case's else branch is
+  # untouched -- unlike the prior raise-based mutation, which routed every
+  # case through the same else and made that third case pass for the wrong
+  # reason.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "one-element set: set -- expected \\(7\\), got \\(0\\)")
 
-# Every FIND in this plan is written WITHOUT leading whitespace and matched as a
-# substring, so an indentation that drifts from the plan's code block cannot turn
-# the pin into a "found 0, expected 1" configure failure. Each is unique in its
-# file; confirm with `grep -c` before adding the mutation.
+# FIND text is matched as a whitespace-insensitive substring; SITES asserts
+# each is unique in its file.
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
   LABEL "ir: the exact-byte accessor reads slot 1 of any vector"
@@ -3897,7 +3899,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "THIRTY-ONE PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "THIRTY-NINE PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

@@ -1,9 +1,10 @@
 ;;; (byte-machine verify): structural verification of a source machine into a
 ;;; verification-result carrying diagnostics and the machine (parent §16). M1
 ;;; subset of §16.2/§16.3: schema, name resolution (nodes + error references),
-;;; exact-byte overlap, reachability, zero-progress cycles, terminal/EOF shape,
-;;; and generated-name safety (reserved-set member 1 — Gate 0 §3.3). Error
-;;; references are symbolic names resolved against the error declarations.
+;;; overlap over canonical matcher byte sets, reachability, zero-progress
+;;; cycles, terminal/EOF shape, and generated-name safety (reserved-set
+;;; member 1 — Gate 0 §3.3). Error references are symbolic names resolved
+;;; against the error declarations.
 ;;; Diagnostics are compared by code, never by text.
 (library (byte-machine verify)
   (export verify-machine verification-ok? verification-diagnostics

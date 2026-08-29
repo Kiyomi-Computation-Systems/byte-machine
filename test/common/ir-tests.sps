@@ -8,6 +8,17 @@
 
 (harness-begin "unit.ir")
 
+;; house convention (conditions.sls header): tests compare the code and who,
+;; never rendered text. Both new matcher-contract sites raise code
+;; invalid-argument with detail 'matcher; who is the only discriminator, so
+;; all three are asserted here rather than the bare predicate alone.
+(define (matcher-contract-violation? who)
+  (lambda (e)
+    (and (byte-machine-contract-condition? e)
+         (eq? (byte-machine-contract-condition-code e) 'invalid-argument)
+         (eq? (byte-machine-contract-condition-who e) who)
+         (eq? (byte-machine-contract-condition-detail e) 'matcher))))
+
 (harness-group "matchers and edges"
   (lambda ()
     (harness-case "an exact-byte matcher carries its byte"
@@ -71,7 +82,7 @@
     (harness-case "canonicalizing a foreign vector is a contract violation"
       (lambda ()
         (check-raises "refused"
-                      byte-machine-contract-condition?
+                      (matcher-contract-violation? 'matcher-bytes)
                       (lambda () (matcher-bytes (make-edge 'stop 'advance))))))))
 
 (harness-group "the exact-byte accessor is tag-guarded"
@@ -79,7 +90,7 @@
     (harness-case "the exact-byte accessor refuses a foreign vector"
       (lambda ()
         (check-raises "refused"
-                      byte-machine-contract-condition?
+                      (matcher-contract-violation? 'exact-byte-matcher-byte)
                       (lambda () (exact-byte-matcher-byte (make-edge 'stop 'advance))))))))
 
 (harness-finish)
