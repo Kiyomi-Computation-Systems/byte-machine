@@ -209,6 +209,20 @@
   disclose in a dated note what the change it authorised has since altered. And
   re-read every early artifact against HEAD *before* the final review rather than
   discovering it there.
+* **Keep a count next to the qualifier that makes it true.**
+  A number in a record is scoped by the words around it, and the scope is what
+  gets dropped when the number is repeated somewhere else — at which point a
+  true claim reads as a false one, or as a correction to a claim that was never
+  wrong. Slice ③'s close-out hit this three times in one exchange: "no pin can
+  separate them" restated without "no pin *worth its maintenance cost*"; a
+  subsumption result restated without "over the reproducible lanes I actually
+  swept"; and "the four pre-existing *one-byte-fingerprint* pins" answered with
+  "five", which is the size of the cross-matching family — a different number
+  from a different question, and the qualifier is the only thing that
+  distinguishes them. Each was caught by someone checking the tree rather than
+  the sentence. When two numbers answer different questions about the same
+  thing, state both with their questions attached; when you restate someone
+  else's number, carry its scope with it or do not carry the number.
 
 ## Closing ritual
 
