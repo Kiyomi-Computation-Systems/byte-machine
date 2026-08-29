@@ -469,13 +469,13 @@ the only way lowered prefix states themselves can enter a zero-progress cycle.
 
 ## Consequences
 
-- **Prefix-level zero-progress analysis is removed from Milestone 3 entirely.**
-  With empty sequences unconstructable, every admissible sequence advances, so the
-  §25:1533 cycle extension reduces to the source-level case of a mismatch edge
-  reexecuting into its own node. The verifier never needs the lowered graph for
-  this: the mismatch edge is a source-level field and every prefix state inherits
-  the source node's single EOF edge (§12.4:727), so §17:951's
-  verify-before-normalize ordering is never approached.
+- **Prefix-level zero-progress analysis is removed from Milestone 3's Slice ③
+  entirely.** With empty sequences unconstructable, every admissible sequence
+  advances, so the §25:1533 cycle extension reduces to the source-level case of a
+  mismatch edge reexecuting into its own node. The verifier never needs the
+  lowered graph for this: the mismatch edge is a source-level field and every
+  prefix state inherits the source node's single EOF edge (§12.4:727), so
+  §17:951's verify-before-normalize ordering is never approached.
 - Callers lose the ability to accumulate a diagnostic for these three shapes
   alongside other diagnostics; they get a raised condition at the offending
   constructor instead. That is the existing trade for every local-shape error in
