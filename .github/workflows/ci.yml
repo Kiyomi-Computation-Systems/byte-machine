@@ -1,9 +1,39 @@
 name: CI
 
+# Docs-only changes are skipped on both triggers. `paths-ignore` fires only when
+# EVERY changed file matches, so a commit touching one source file and ten
+# markdown files still runs -- the failure mode is a needless run, never a
+# skipped one. Kept as an ignore-list rather than a `paths:` allow-list for that
+# reason: a new top-level source directory would silently lose CI under an
+# allow-list, and gain it here.
+#
+# Nothing under these paths is a build or test input. Every reference to them in
+# CMake, the harness, or the mutation suite is a prose citation in a comment
+# (verified 2026-08-29). If that ever stops being true -- a doc that is parsed,
+# a fixture moved under docs/ -- remove it from this list.
+#
+# Safe today because `main` carries no branch protection: a skipped workflow
+# reports no check at all, which would leave a PR permanently pending if these
+# jobs were ever made REQUIRED status checks. If you add branch protection,
+# either drop this block or add a docs-only job that reports the same check
+# names.
+# The two lists below are deliberately duplicated rather than shared via a YAML
+# anchor: anchors are not a documented part of GitHub's workflow schema, and the
+# failure mode of a parser that ignores one would be CI silently not running.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.org'
+      - 'docs/**'
+      - 'LICENSE'
   pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.org'
+      - 'docs/**'
+      - 'LICENSE'
 
 jobs:
   macos-arm64:
