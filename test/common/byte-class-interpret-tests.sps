@@ -9,7 +9,6 @@
 (import (rnrs)
         (byte-machine test harness)
         (byte-machine test class-machine)
-        (byte-machine graph)
         (byte-machine verify)
         (byte-machine interpret)
         (byte-machine runtime))
@@ -18,6 +17,18 @@
 
 (define (feed cm b)
   (parser-feed! (make-parser cm '() #f) (make-bytevector 1 b) 0 1))
+
+;; Both behavioural groups below iterate (class-machines) with for-each and
+;; assert nothing about how many entries it yielded, so a future edit that
+;; dropped a fixture (e.g. byte-range or byte-complement) from the list would
+;; silently shrink both groups and leave this lane green. Pin the count once,
+;; up front, the same way last-byte=255 pins each per-fixture loop reaching
+;; byte 255.
+(harness-group "the shared class fixture list is complete"
+  (lambda ()
+    (harness-case "class-machines yields all five fixtures"
+      (lambda ()
+        (check-equal "fixture count" (length (class-machines)) 5)))))
 
 ;; Every machine must VERIFY clean first: a fixture that fails verification would
 ;; make every behavioural case below meaningless, and §22.6 forbids using an
@@ -45,18 +56,21 @@
              ;; `bad` alone proves no byte MISBEHAVED, not that the loop ran: a
              ;; loop that never executed leaves it at its seeded 'none. last-byte
              ;; is set every iteration, so it reaches 255 only if all 256 ran, and
-             ;; `hits` counts acceptances so a matcher that accepts nothing at all
-             ;; cannot pass by having no counterexample.
+             ;; `hits` counts the machine's OWN observed acceptances (stopped
+             ;; with consumed = 1) -- not membership in the fixture's `accepted`
+             ;; list -- so a matcher that accepts nothing, or accepts the wrong
+             ;; bytes, cannot pass by coincidentally matching accepted's length.
              (let ((bad 'none) (last-byte 'unset) (hits 0))
                (let loop ((b 0))
                  (when (< b 256)
                    (let ((r (feed cm b)))
+                     (when (and (eq? (parser-result-status r) 'stopped)
+                                (= (parser-result-consumed r) 1))
+                       (set! hits (+ hits 1)))
                      (if (memv b accepted)
-                         (begin
-                           (set! hits (+ hits 1))
-                           (unless (and (eq? (parser-result-status r) 'stopped)
-                                        (= (parser-result-consumed r) 1))
-                             (when (eq? bad 'none) (set! bad b))))
+                         (unless (and (eq? (parser-result-status r) 'stopped)
+                                      (= (parser-result-consumed r) 1))
+                           (when (eq? bad 'none) (set! bad b)))
                          (unless (and (eq? (parser-result-status r) 'error)
                                       (eq? (parser-result-error r) 'unexpected-byte)
                                       (= (parser-result-stream-offset r) 0))
@@ -82,7 +96,8 @@
               (let ((r (feed cm b)))
                 (set! checked (+ checked 1))
                 (unless (and (eq? (parser-result-status r) 'error)
-                             (eq? (parser-result-error r) 'unexpected-byte))
+                             (eq? (parser-result-error r) 'unexpected-byte)
+                             (= (parser-result-stream-offset r) 0))
                   (when (eq? bad 'none) (set! bad b))))
               (set! last-byte b)
               (loop (+ b 1))))

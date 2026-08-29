@@ -145,20 +145,20 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "FORTY PASSES..." above. Declared here, rather than only in
-# prose, so the count enforced at the bottom of this file is the same text a
-# reader checks by eye at the top -- one number to keep in sync, not two
-# that can quietly disagree. 25 passes / 60 mutations before the aot task;
-# pass 26 adds two (C3, C3b) and passes 27 to 29 add one each, so 25 + 4 =
-# 29 passes and 60 + 2 + 1 + 1 + 1 = 65 mutations before this task; W9 adds
-# three mutations across two passes, not one -- pass 30 (the split
-# character, the combining order) and pass 31 (the exit constant, which
-# turned out witnessable after all once its manifest was allowed to be
-# self-referential on purpose, superseding the declared survivor the plan
-# first carried for it) -- so 29 + 2 = 31 passes and 65 + 3 = 68 mutations.
-# Milestone 1 Phase 1's adapter os-table mapping mutation joins the existing
-# self-test batch (pass 31, already declared) rather than opening a new pass,
-# so passes stay at 31 and 68 + 1 = 69 mutations.
+# See "FORTY PASSES..." above. Declared here, rather than only in prose, so the
+# count enforced at the bottom of this file is the same text a reader checks by
+# eye at the top -- one number to keep in sync, not two that can quietly
+# disagree. 25 passes / 60 mutations before the aot task; pass 26 adds two (C3,
+# C3b) and passes 27 to 29 add one each, so 25 + 4 = 29 passes and 60 + 2 + 1 +
+# 1 + 1 = 65 mutations before this task; W9 adds three mutations across two
+# passes, not one -- pass 30 (the split character, the combining order) and
+# pass 31 (the exit constant, which turned out witnessable after all once its
+# manifest was allowed to be self-referential on purpose, superseding the
+# declared survivor the plan first carried for it) -- so 29 + 2 = 31 passes and
+# 65 + 3 = 68 mutations. Milestone 1 Phase 1's adapter os-table mapping
+# mutation joins the existing self-test batch (pass 31, already declared)
+# rather than opening a new pass, so passes stay at 31 and 68 + 1 = 69
+# mutations.
 #
 # Milestone 1 Phase 2 (semantic core) opens one new pass per executor module,
 # each appended after pass 31 below, for three new passes: 31 + 3 = 34.
@@ -4174,23 +4174,30 @@ byte_machine_mutation(
   LABEL "interpret: class membership matches only the class's lowest byte"
   FIND [[((memv byte (matcher-bytes (byte-case-matcher (car cs))))]]
   REPLACE [[((= byte (car (matcher-bytes (byte-case-matcher (car cs)))))]]
-  # The brief's own predicted pin, "accepted exactly the class size", is a bare
-  # check label the brief flagged as possibly colliding. Measured: it does not
-  # merely collide, it never fires at all -- `hits` counts membership in the
-  # test's own precomputed `accepted` list (memv b accepted), not whether the
-  # byte actually stopped, so that check passes unchanged under this mutant.
-  # What actually reddens is "no byte misbehaved": with only the class's
-  # lowest canonical byte still matching the dispatch case, every other
-  # accepted byte now falls through to the reject fallback. Measured FAIL
-  # line: "FAIL all 256 byte values, per class.byte-set accepts exactly its
-  # class: no byte misbehaved -- expected none, got 1". byte-complement's own
-  # FAIL line also ends "got 1" (its lowest canonical byte is 0, so its first
-  # misbehaving byte is also 1), so the bare detail alone would resolve to two
-  # cases; the case-name prefix "byte-set accepts exactly its class:" is what
-  # keeps this pin to the one (case, check) pair.
+  # The brief's own predicted pin, "accepted exactly the class size", was a
+  # bare check label the brief flagged as possibly colliding. At the time
+  # this pass was first written, it did not merely collide, it never fired at
+  # all: `hits` counted membership in the test's own precomputed `accepted`
+  # list (memv b accepted), not whether the byte actually stopped, so that
+  # check passed unchanged under this mutant regardless of matcher behaviour.
+  # A whole-branch review fix wave made `hits` a genuine behavioural count
+  # (observed stopped/consumed = 1, not list membership), and re-measuring
+  # this mutation against the fixed test shows "accepted exactly the class
+  # size" now reddens as originally predicted: with only the class's lowest
+  # canonical byte still matching the dispatch case, exactly one byte ever
+  # stops, so `hits` collapses to 1 for every fixture while the class size it
+  # is compared against (5, 26, 254, 10, 3) differs per fixture. Pinned to
+  # this check, not "no byte misbehaved" (which also still reddens here), so
+  # this pass demonstrates the fixed sentinel is the one doing the catching.
+  # Measured FAIL line: "FAIL all 256 byte values, per class.byte-set accepts
+  # exactly its class: accepted exactly the class size -- expected 5, got 1".
+  # Each fixture's "expected N" is unique across the whole run, so the bare
+  # detail alone would already resolve to one (case, check) pair, but the
+  # case-name prefix is kept for robustness against a future fixture whose
+  # class size happens to coincide.
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "byte-set accepts exactly its class: no byte misbehaved -- expected none, got 1")
+    "byte-set accepts exactly its class: accepted exactly the class size -- expected 5, got 1")
 
 # The REPLACE below canonicalizes a complement's inner matcher normally UNLESS
 # that inner matcher is itself a complement, in which case it reads as the empty
@@ -4204,7 +4211,23 @@ byte_machine_mutation(
   LABEL "ir: complement canonicalization does not recurse"
   FIND [[(let ((inner (matcher-bytes (byte-complement-matcher-matcher m))))]]
   REPLACE [[(let ((inner (if (byte-complement-matcher? (byte-complement-matcher-matcher m)) (quote ()) (matcher-bytes (byte-complement-matcher-matcher m)))))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "nested-complement accepts exactly its class")
+  # The prior pin, "nested-complement accepts exactly its class", matched only
+  # the case-name segment. That case carries three checks, so the pin was
+  # case-scoped, not signature-scoped -- any of the three failing would have
+  # satisfied it, not just the one this mutation is meant to demonstrate.
+  # Extended to the full measured line so the pin names exactly one
+  # (case, check) pair. Re-measured after the `hits` fix wave: the
+  # mis-canonicalized nested complement now reads as accepting the whole
+  # universe, so both "no byte misbehaved" (byte 0 is the first byte that
+  # wrongly stops) and "accepted exactly the class size" (hits climbs to 256)
+  # redden on this same case; pinned to "no byte misbehaved" because it fires
+  # first in check order and is the more direct statement of the defect --
+  # the matcher accepting bytes it must reject -- while "accepted exactly the
+  # class size" is downstream arithmetic on the same wrong behaviour. No
+  # CMake-regex metacharacters in the pin, so no escaping is needed.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "nested-complement accepts exactly its class: no byte misbehaved -- expected none, got 0")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
