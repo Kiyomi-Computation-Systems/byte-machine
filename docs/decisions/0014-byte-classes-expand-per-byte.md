@@ -56,10 +56,12 @@ change all three.
 - A dispatch node carrying a complement can reach 256 transitions. That is
   accepted output size, not a defect to optimize around; §17:966 asks for "the
   simplest correct execution graph".
-- The normalizer's ascending-by-byte sort remains a **total** order, because the
-  overlap check still guarantees no two cases of one node share a byte. This is
-  load-bearing: a grouped sort key that could tie would make emission depend on
-  `list-sort` stability, and emission determinism is a Milestone 3 exit criterion
-  (§25:1539).
+- The normalizer's ascending-by-byte sort remains a **total** order, because
+  the overlap check still guarantees no two cases of one node share a byte.
+  This is load-bearing: a grouped sort key that could tie would make emission
+  depend on `list-sort` stability, and emission determinism is a Milestone 3
+  exit criterion (§25:1539). Lowered prefix states fall outside this warrant —
+  the overlap check never sees them — so decision 0016's decision point 3
+  establishes the same one-transition-per-byte property for them instead.
 - Density optimization is not forbidden forever — it is deferred behind §23.3.
   Whoever revisits it must first supply the §23.3:1380 baseline-variance record.

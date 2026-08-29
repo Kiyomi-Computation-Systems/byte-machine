@@ -29,6 +29,22 @@
 > Step 2 adds. The five steps are corrected in place below; this note is the
 > record of the error, not the correction.
 
+> **Disposition 2026-08-29.** This is a different case from the note above:
+> not a step that was never true, but two that were true when written and were
+> later overtaken. Task 2 Step 4 and Task 3 Step 4's "Verify and self-review"
+> steps each expect their `rg -n "0015"` / `rg -n "0016"` against
+> `milestone-3-design.md` to find nothing there. That held at the time — the
+> only design-side text was §4's unassigned "expected 0014–0017" placeholder,
+> which does not contain "0015" or "0016" as a substring. It no longer holds:
+> this plan's own Task 5 replaced that placeholder with a per-subsection
+> mapping citing all four numbers by name, and a later design amendment
+> (5a949ed, "move trie-shaped sequence lowering into Milestone 3 Slice ②")
+> added "decision 0016 point 1" and "decision 0017 point 4" citations to §6.
+> Both steps are left as written below — they record what was asked when Task
+> 2 and Task 3 ran, not a standing description of the design document's text —
+> so a reader re-running either `rg` today should expect hits in §4 (and, for
+> "0016", in §6 too) rather than treating them as a failure.
+
 ---
 
 ## Task 1: Decision 0014 — byte classes expand to per-byte transitions
@@ -123,11 +139,13 @@ change all three.
 - A dispatch node carrying a complement can reach 256 transitions. That is
   accepted output size, not a defect to optimize around; §17:966 asks for "the
   simplest correct execution graph".
-- The normalizer's ascending-by-byte sort remains a **total** order, because the
-  overlap check still guarantees no two cases of one node share a byte. This is
-  load-bearing: a grouped sort key that could tie would make emission depend on
-  `list-sort` stability, and emission determinism is a Milestone 3 exit criterion
-  (§25:1539).
+- The normalizer's ascending-by-byte sort remains a **total** order, because
+  the overlap check still guarantees no two cases of one node share a byte.
+  This is load-bearing: a grouped sort key that could tie would make emission
+  depend on `list-sort` stability, and emission determinism is a Milestone 3
+  exit criterion (§25:1539). Lowered prefix states fall outside this warrant —
+  the overlap check never sees them — so decision 0016's decision point 3
+  establishes the same one-transition-per-byte property for them instead.
 - Density optimization is not forbidden forever — it is deferred behind §23.3.
   Whoever revisits it must first supply the §23.3:1380 baseline-variance record.
 ```
