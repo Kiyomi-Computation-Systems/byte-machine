@@ -140,4 +140,68 @@
         (check-equal "pause fingerprint" (normal-machine-fingerprint n-pause)
                      15725897457025557005)))))
 
+;; Milestone 3 Slice ① Task 4 (decision 0014): a byte set, range or complement
+;; lowers to ONE normalized transition per byte. Normalized IR gains no grouped
+;; or set-valued transition and its encoding gains no new arm -- so these cases
+;; check the transition LIST, and the three fingerprint goldens above (which no
+;; class machine touches) are what proves the encoding did not move.
+(define (class-machine name cases)
+  (make-machine name 'start '() '() '() (list eof-decl rej-decl)
+    (list (make-byte-dispatch-node 'start cases (make-edge 'reject 'reexecute) #f #f)
+          (make-stop-node 'stop #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+(define (accepts matcher) (make-byte-case matcher (make-edge 'stop 'advance) #f))
+(define (transitions-of m)
+  (normal-dispatch-transitions (vector-ref (normal-machine-states (normalize m)) 0)))
+
+(harness-group "byte classes lower to one transition per byte (decision 0014)"
+  (lambda ()
+    (harness-case "a range lowers to one transition per byte, ascending"
+      (lambda ()
+        (let ((trs (transitions-of (class-machine 'ranged (list (accepts (make-byte-range-matcher 48 51)))))))
+          (check-equal "transitions" trs '((48 1 advance) (49 1 advance)
+                                           (50 1 advance) (51 1 advance))))))
+    (harness-case "an unsorted, duplicated byte set lowers ascending and de-duplicated"
+      (lambda ()
+        (check-equal "bytes"
+                     (map car (transitions-of
+                               (class-machine 'setm (list (accepts (make-byte-set-matcher '(5 2 5 9)))))))
+                     '(2 5 9))))
+    (harness-case "a complement lowers to 254 transitions covering the universe minus two"
+      (lambda ()
+        (let ((bs (map car (transitions-of
+                            (class-machine 'compl
+                              (list (accepts (make-byte-complement-matcher
+                                              (make-byte-set-matcher '(10 13))))))))))
+          (check-equal "count" (length bs) 254)
+          (check-equal "first" (car bs) 0)
+          (check "10 absent" (not (memv 10 bs)))
+          (check "13 absent" (not (memv 13 bs))))))
+    (harness-case "two disjoint classes on one node interleave into one ascending list"
+      (lambda ()
+        (check-equal "bytes"
+                     (map car (transitions-of
+                               (class-machine 'two
+                                 (list (accepts (make-byte-set-matcher '(9 1)))
+                                       (accepts (make-byte-range-matcher 4 5))))))
+                     '(1 4 5 9))))
+    (harness-case "a vacuous complement lowers to zero transitions (decision 0017 point 2)"
+      (lambda ()
+        (check-equal "none"
+                     (transitions-of (class-machine 'vacuous
+                                       (list (accepts (make-byte-complement-matcher
+                                                       (make-byte-range-matcher 0 255))))))
+                     '())))
+    (harness-case "a full complement lowers to all 256 transitions"
+      (lambda ()
+        (let ((bs (map car (transitions-of
+                            (class-machine 'full
+                              (list (accepts (make-byte-complement-matcher
+                                              (make-byte-complement-matcher
+                                               (make-byte-range-matcher 0 255))))))))))
+          (check-equal "count" (length bs) 256)
+          (check-equal "first" (car bs) 0)
+          (check-equal "last" (list-ref bs 255) 255))))))
+
 (harness-finish)

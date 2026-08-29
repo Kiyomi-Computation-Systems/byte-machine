@@ -565,8 +565,10 @@ cmake_minimum_required(VERSION 3.26)
 # become 172 + 6 = 178.
 # Slice ① Task 3 adds three pair-enumeration mutations to Pass 33.
 # Passes stay at 39; mutations become 178 + 3 = 181.
+# Slice ① Task 4 adds two per-byte-expansion mutations to Pass 35.
+# Passes stay at 39; mutations become 181 + 2 = 183.
 set(EXPECTED_PASSES 39)
-set(EXPECTED_MUTATIONS 181)
+set(EXPECTED_MUTATIONS 183)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3395,9 +3397,39 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: dispatch cases are not sorted ascending by byte"
+  # Re-anchored by Task 4's Pass 35 collision sweep: the bare "bytes" pin was
+  # sound when written (one dispatch case, one FAIL line), but Task 4's
+  # per-byte expansion runs through this SAME list-sort call, so reversing it
+  # now also breaks two of the new byte-class checks ("bytes" is their check
+  # name too) -- measured 3 FAIL lines in this mutant's own output where the
+  # rule (AGENTS.md; "a sound pin resolves to exactly one (case, check) pair")
+  # allows 1. Pinned to the full FAIL line of the ORIGINAL witness instead.
   FIND [[(list-sort (lambda (a b) (< (car a) (car b)))]]
   REPLACE [[(list-sort (lambda (a b) (> (car a) (car b)))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "bytes")
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "transitions are sorted ascending by byte: bytes -- expected \\(2 5\\), got \\(5 2\\)")
+
+# Slice ① Task 4 (decision 0014): the per-byte expansion itself. The first
+# keeps only each class's lowest byte, so a range of four bytes lowers to one
+# transition instead of four. The second makes a vacuous class -- a
+# complement whose canonical set is empty, e.g. the complement of the full
+# range -- still emit one transition (on byte 0), which the vacuous-
+# complement case (decision 0017 point 2) catches; matcher-bytes's own
+# de-duplication (ir.sls, out of scope for this task) is untouched by either.
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a byte class lowers to only its lowest byte"
+  FIND [[(bs (matcher-bytes (byte-case-matcher c)))]]
+  REPLACE [[(bs (list (car (matcher-bytes (byte-case-matcher c)))))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "one transition per byte, ascending: transitions")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a class matching no bytes still contributes a transition"
+  FIND [[                                                                   bs)))]]
+  REPLACE [[                                                                   (if (null? bs) (list 0) bs))))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "zero transitions \\(decision 0017 point 2\\): none")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
