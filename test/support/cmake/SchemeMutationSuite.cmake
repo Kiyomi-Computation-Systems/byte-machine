@@ -2464,9 +2464,18 @@ byte_machine_mutation(
   # mutation and states the decision directly -- a feed on a parser parked at a
   # finish node reports finished, not stopped. The bare "status" it replaces was
   # a substring of the summary line's own `status=`.
+  #
+  # The leading ": " is load-bearing, and Slice 3 is why. That slice's re-finish
+  # mutation emits the same detail on the same case's OTHER check -- "sticky
+  # status -- expected finished, got stopped" -- so without the colon this pin
+  # matched that mutation too. The colon binds the pin to a check named exactly
+  # "status": in the sibling's line the two characters before "status" are
+  # "y ", not ": ". Measured against both mutants post-merge, and a worked
+  # example of the rule that a pin is only verified against the mutants that
+  # existed when it was measured.
   FIND [[(make-parser-result 'finished pos (- pos start) (parser-offset parser) #f)]]
   REPLACE [[(make-parser-result 'stopped pos (- pos start) (parser-offset parser) #f)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "status -- expected finished, got stopped")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES ": status -- expected finished, got stopped")
 
 # Milestone 2 Slice ②b-2's Task 1 (the dormant /v2 runtime machinery) adds two
 # more decisions to this pass, both proven by the /v2 stub group in
