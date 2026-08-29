@@ -180,9 +180,25 @@
   implementations" — that decision 0005 had made impossible, and it survived
   two further slices — the include collapse (PR #8) and the 5b remainder
   (PR #10), each with its own plan, review, and merge — before anyone read it
-  against the tree. Status lines are instructions too: a slice that closes a milestone is
-  not done until the milestone plan, the parent plan, and CHANGELOG.md all say
-  it closed.
+  against the tree. Status lines are instructions too, and this project states
+  its status in more places than any one step remembers: a slice that closes a
+  milestone is not done until the milestone plan, the parent plan,
+  `CHANGELOG.md`'s `[Unreleased]` preamble, that milestone's own design
+  document, **and `README.org`'s status paragraph** all say it closed. The
+  README is the one no step names, so its drift is unbounded rather than one
+  slice deep. It still read "No public API exists yet. The repository currently
+  holds the project plans and the build and discovery layer that the
+  implementation will be developed against" — accurate at Milestone 0 — after
+  Milestones 0, 1 and 2 had all closed, while the other four surfaces were
+  current, each brought up to date by the slice that closed the work. A document
+  no step names is a document nobody updates. Corrected in PR #24, whose sweep
+  found two more stale claims sitting beside it: a CMake-version parenthetical
+  written before CI existed, and a documentation list pointing only at the
+  Milestone 0 plan. When a status line is the subject of the work, read all five
+  before mirroring any one of them — that sweep found the parent plan's Status
+  line stale on every ref (`git for-each-ref`) and the CHANGELOG preamble
+  current only on an unmerged branch, both contrary to how they had been
+  described.
 * **Before writing "met" or "moot", find the thing in the tree.**
   A disposition is a claim, and "met" is the one easiest to get wrong. The rule
   above stops you editing a bar down to fit the result; its mirror is asserting
