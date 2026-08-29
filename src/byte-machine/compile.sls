@@ -115,6 +115,10 @@
             "             (case b\n"
             (apply string-append (map render-transition-arm (normal-dispatch-transitions s)))
             "               (else " (loop-tail (car fb) (cdr fb)) ")))))\n")))
+        ;; Unreachable today -- this case already covers every kind
+        ;; normal-state-kind can produce (dispatch/stop/error/finish/pause);
+        ;; verified by inspection, not mutation (same convention as
+        ;; normal-ir.sls's own else guards).
         (else (assertion-violation 'render-machine "unknown state kind"
                                    (normal-state-kind s))))))
 

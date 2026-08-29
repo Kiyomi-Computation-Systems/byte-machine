@@ -34,7 +34,7 @@
   ;;   (node . <id>)             -- an exhausted dispatch continues to node <id>
   ;;   (default . <code-symbol>) -- it routes to the machine default-eof error.
   ;;   pause states carry (node . <continuation-id>) there (Slice ③).
-  ;; Non-dispatch states carry #f there.
+  ;; Other non-dispatch states carry #f there.
   (define (normal-state-kind s) (vector-ref s 1))
   (define (normal-state-id s) (vector-ref s 2))
   (define (normal-dispatch-transitions s) (vector-ref s 3))

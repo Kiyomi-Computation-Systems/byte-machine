@@ -428,25 +428,29 @@ cmake_minimum_required(VERSION 3.26)
 # node's continuation rather than the pause node itself. Two mutations. So
 # 37 + 1 = 38 passes and 149 + 2 = 151 mutations.
 #
-# Slice ③'s Task 4 (the pause node in the normalizer + emitter) adds two more
-# mutations to the existing Pass 35 and two more to the existing Pass 36
+# Slice ③'s Task 4 (the pause node in the normalizer + emitter) adds three
+# more mutations to the existing Pass 35 and two more to the existing Pass 36
 # rather than opening a new pass: the normalizer's lower arm (a pause's
-# resolved continuation id, not its own) and encode arm (tag 4 + u32be
-# continuation id hashed into the fingerprint), and the emitter's pause arm
-# (renders the `paused` outcome) and its next-state (the continuation target,
-# not the pause node's own id). Each is witnessed in its own SPEC lane's
-# program: normal-ir-tests.sps gains a "pause normalization" group (a
-# structural case plus a measured-then-pinned fingerprint golden); compile-
-# tests.sps gains a third inline fixture (the eof-fin precedent) asserting
-# both rendered pause arms by substring. The lower-arm mutation is pinned to
-# the structural "p1 target" check rather than the fingerprint it also
-# disturbs as a side effect, the more precise of its two witnesses; the
-# encode-arm mutation is pinned to the fingerprint golden's own label,
-# following -- deliberately, see that mutation's own comment -- the estab-
-# lished golden-family convention of pinning the check's text rather than its
-# numeral. Passes stay at 38 and 151 + 4 = 155 mutations.
+# resolved continuation id, not its own), its encode arm (tag 4 + u32be
+# continuation id hashed into the fingerprint), and the encode arm's tag
+# value alone (4 -> 3, colliding with finish's own tag byte), and the
+# emitter's pause arm (renders the `paused` outcome) and its next-state (the
+# continuation target, not the pause node's own id). Each is witnessed in its
+# own SPEC lane's program: normal-ir-tests.sps gains a "pause normalization"
+# group (a structural case plus a measured-then-pinned fingerprint golden);
+# compile-tests.sps gains a third inline fixture (the eof-fin precedent)
+# asserting both rendered pause arms by substring. The lower-arm mutation is
+# pinned to the structural "p1 target" check rather than the fingerprint it
+# also disturbs as a side effect, the more precise of its two witnesses; the
+# two encode-arm mutations are both pinned to the fingerprint golden's own
+# check label, "pause fingerprint" -- unique in that file, so unlike the five
+# pre-existing fingerprint-golden mutations above (which embed a golden
+# numeral because their own check label, bare "fingerprint", is shared by two
+# different goldens) this pin needs no numeral to be unambiguous; see that
+# mutation's own comment for the full reasoning. Passes stay at 38 and
+# 151 + 5 = 156 mutations.
 set(EXPECTED_PASSES 38)
-set(EXPECTED_MUTATIONS 155)
+set(EXPECTED_MUTATIONS 156)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -2936,7 +2940,7 @@ byte_machine_mutation(
   REPLACE [[(begin (put-u8 p 0))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "9098559711816935340")
 
-# Milestone 2 Slice ③'s Task 4 (the pause node in the normalizer) adds two
+# Milestone 2 Slice ③'s Task 4 (the pause node in the normalizer) adds three
 # more mutations to this pass rather than opening a new one. normal-ir-
 # tests.sps gains a "pause normalization" group over the shared pause-machine
 # fixture (s0 p1 s1 pe stop done trunc reject -> ids 0-7): a structural case
@@ -2962,23 +2966,45 @@ byte_machine_mutation(
 # so tag 4 is never encoded for the one-byte or node-routing goldens above,
 # and this mutation cannot disturb them.
 #
-# Golden-family decision (deliberate, not an oversight): a prior audit found
-# the FNV-offset/prime/mixing and default-eof/node-eof mutations above all
-# cross-match -- each can fail MORE THAN ONE fingerprint check in the same
-# run, and only the "got" value tells them apart -- and chose to pin just the
-# failing check's own text, never the "got" number, because embedding the
-# golden numeral would add one more constant to re-baseline on every future
-# IR-encoding move (see that audit's header note above Pass 35). This
-# mutation is narrower than those five -- it cannot cross-match the one-byte
-# or node-routing goldens, since neither fixture has a pause node -- but it is
-# still the same KIND of witness (a fingerprint check-equal), so it follows
-# the same convention for the same reason: pin the check's label ("pause
-# fingerprint"), not its numeral.
+# Golden-family note (why this pin differs from the five above, not an
+# oversight): those five DO embed a golden numeral in their own pins (the
+# FNV-offset/prime/mixing and default-eof mutations above all pin
+# "4236938459847922092"; the node-eof mutation pins "9098559711816935340").
+# What they decline to pin is the mutant's produced ("got") value -- the one
+# thing that actually differs between siblings that share an "expected"
+# numeral -- because pinning it would add a new constant to re-baseline on
+# every future IR-encoding move. They need a numeral at all because the
+# one-byte and node-routing fingerprint checks in normal-ir-tests.sps share
+# the bare check label "fingerprint", which by itself does not say which of
+# the two failed; the numeral is what disambiguates them. This mutation's
+# check label, "pause fingerprint", is unique in that file, so it needs
+# neither a numeral nor the got value to be unambiguous -- a stronger
+# position than the five above, not the same convention applied once more.
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: the pause encode arm hashes tag and continuation"
   FIND [[((pause) (put-u8 p 4) (put-u32be p (normal-pause-target s)))]]
   REPLACE [[((pause) (put-u8 p 4))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "pause fingerprint")
+
+# A third mutation targets the pause TAG VALUE alone (4 -> 3, colliding with
+# finish's own tag byte) rather than the whole payload mutation 2 above
+# already covers -- proving the tag byte itself, not just the u32be
+# continuation id after it, is mixed into the fingerprint. Left unwitnessed,
+# this is the one failure mode in this encoding that silently equates two
+# semantically different node kinds. Measured: it fails ONLY "pause
+# fingerprint" (1 of 23 checks) -- same reasoning as mutation 2 above: no
+# other machine in this SPEC lane has a pause node, so this arm is never
+# reached encoding the one-byte or node-routing goldens. It shares mutation
+# 2's pin, "pause fingerprint" -- both are witnessed by that one unique check
+# label -- but each was independently measured to be genuinely caught
+# (nonzero exit, matching text) for its own FIND/REPLACE, so the shared pin
+# does not mask either one.
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the pause tag collides with finish's tag"
+  FIND [[(put-u8 p 4)]]
+  REPLACE [[(put-u8 p 3)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "pause fingerprint")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
