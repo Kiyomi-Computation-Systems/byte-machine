@@ -11,7 +11,6 @@
         (only (chezscheme) load)
         (byte-machine test harness)
         (byte-machine test class-machine)
-        (byte-machine graph)
         (byte-machine verify)
         (byte-machine interpret)
         (byte-machine runtime)

@@ -67,14 +67,22 @@
     (vector-ref m 1))
 
   ;; --- byte-set matcher (§9.1:292; decision 0017 points 1 and 3) ---
-  ;; The caller's list is stored verbatim. Sorting or de-duplicating here would
-  ;; be a construction-time semantic transform, which §9.1:322 forbids;
-  ;; matcher-bytes does both, once, at canonicalization.
+  ;; The caller's element order and duplicates are stored verbatim -- sorting
+  ;; or de-duplicating here would be a construction-time semantic transform,
+  ;; which §9.1:322 forbids; matcher-bytes does both, once, at
+  ;; canonicalization. The list itself IS copied at construction, with
+  ;; `(append bytes '())` rather than `list-copy` (unbound under a bare
+  ;; `(rnrs)` import) -- so §9.1's "immutable-by-API descriptor" holds: a
+  ;; caller who later mutates the list they passed in (set-car!, etc.) cannot
+  ;; reach back into an already-built matcher. Copying is not the transform
+  ;; decision 0017 point 3 forbids -- it changes the list's identity, not its
+  ;; order or membership, and byte-set-matcher-bytes below still returns
+  ;; exactly that copy, unsorted and undeduplicated.
   (define byte-set-matcher-tag (tag 'byte-machine-byte-set-matcher))
   (define (make-byte-set-matcher bytes)
     (unless (and (list? bytes) (pair? bytes) (for-all byte-value? bytes))
       (byte-machine-contract-violation 'make-byte-set-matcher 'invalid-argument 'bytes))
-    (vector byte-set-matcher-tag bytes))
+    (vector byte-set-matcher-tag (append bytes '())))
   (define (byte-set-matcher? x) (tagged? byte-set-matcher-tag x))
   (define (byte-set-matcher-bytes m)
     (unless (byte-set-matcher? m)

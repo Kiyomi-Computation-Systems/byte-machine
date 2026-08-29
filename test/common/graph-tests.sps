@@ -1,4 +1,7 @@
-;;; The public graph façade builds the one-byte machine with no private import.
+;;; The public graph façade supplies every constructor these machines need;
+;;; the three machine accessors (machine?, machine-entry,
+;;; machine-default-eof-error) are deliberately still private -- see the
+;;; import comment below.
 (import (rnrs)
         (byte-machine test harness)
         (byte-machine graph)
@@ -35,7 +38,7 @@
 
 (harness-group "the façade builds class matchers"
   (lambda ()
-    (harness-case "a set, range, complement and ASCII machine build with no private import"
+    (harness-case "a set, range, complement and ASCII machine build through the façade's constructors (machine accessors still private)"
       (lambda ()
         (let* ((eof-decl (make-error-declaration 'default-eof 'eof "unexpected end of input" #f))
                (rej-decl (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))

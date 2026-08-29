@@ -3282,6 +3282,27 @@ byte_machine_mutation(
                             (let ((cn (lookup nodes (pause-node-continuation n))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "pause machine verifies: accepted")
 
+# Whole-branch review (a9de657..c302cdd): Task 3's new "verify: a case is
+# compared against itself" mutation (this pass, above) is now a SECOND
+# sibling colliding with this pin, alongside the pre-existing "a pause
+# continuation is an out-target (resolution + reachability)" mutation
+# (below). Task 3's self-comparison mutant makes every dispatch case overlap
+# itself, which reddens the well-formed pause fixture's "accepted" check for
+# a reason this mutation names nothing about.
+#
+# Measured on this SPEC lane (verify-tests.sps): the gate mutation above
+# emits exactly one FAIL record --
+#   "FAIL pause nodes (Slice 3).a well-formed pause machine verifies:
+#    accepted -- expected a true value"
+# -- and the self-comparison mutant emits ten, one of which is that same
+# record, byte-for-byte identical (no "got" value on a boolean `check`, so
+# there is no varying detail to key on). Every FAIL line the gate mutation
+# can produce is thus a subset of the self-comparison mutant's output, so no
+# EXPECT_OUTPUT_MATCHES string can separate the two -- this is the subsumed
+# case AGENTS.md distinguishes from under-anchored: not a tighter pin to
+# find, a genuine overlap of what the two mutants break. Left declared and
+# collided, matching the pre-existing sibling's disposition.
+
 # Cleanup follow-up: the second site's gap above is closed here too -- not by
 # VERDICT (still genuinely impossible, per the measurement above) but by
 # ATTRIBUTION. diagnostic-node was already exported but unused by any test.
@@ -3424,9 +3445,29 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: a byte class lowers to only its lowest byte"
+  # Re-anchored by the whole-branch review (a9de657..c302cdd): the prior pin
+  # "one transition per byte, ascending: transitions" was under-anchored --
+  # the sibling mutation above ("dispatch cases are not sorted ascending by
+  # byte") fails the SAME (case, check) pair, because Task 4's sweep
+  # re-anchored that sibling's pin without checking it against the pin being
+  # added here. Both mutants touch the transition list this pass's fixtures
+  # build, so both redden the "a range lowers to one transition per byte,
+  # ascending" case's "transitions" check.
+  #
+  # Re-measured both mutants' whole output on this SPEC lane and picked a
+  # record that only THIS mutant produces: this mutant keeps one byte per
+  # class, so the "a complement lowers to 254 transitions covering the
+  # universe minus two" case's "count" check goes 254 -> 1; the sibling only
+  # reverses order, so that case's length is unchanged (254 -> 254, "count"
+  # passes) and it instead fails at check "first" (0 -> 255). Separable in
+  # both directions: this pin does not occur anywhere in the sibling's
+  # output, and the sibling's own pin ("transitions are sorted ascending by
+  # byte: bytes -- expected (2 5), got (5 2)", on the "entry and transition
+  # order" group that this mutant never reaches) does not occur in this one's.
   FIND [[(bs (matcher-bytes (byte-case-matcher c)))]]
   REPLACE [[(bs (list (car (matcher-bytes (byte-case-matcher c)))))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "one transition per byte, ascending: transitions")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "a complement lowers to 254 transitions covering the universe minus two: count -- expected 254, got 1")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source

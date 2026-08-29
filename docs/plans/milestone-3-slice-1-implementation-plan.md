@@ -2329,6 +2329,29 @@ be one this slice deliberately declared with a written reason; there should be
 **two** (both pre-existing runtime survivors from Milestone 2 Slice ③). A third
 is a finding: strengthen the test, never loosen the mutation.
 
+> **Disposition, 2026-08-29 (whole-branch review fix wave).** This step's
+> "there should be **two**" is dispositioned rather than reworded: followed
+> literally against the shipped tree, it reports seven false findings.
+>
+> `ctest --preset release -R 'scheme-mutation' -V 2>&1 | grep -c SURVIVES` on
+> the shipped tree measures **9**, not 2. Of those nine, **2** are the
+> pre-existing `runtime.sls` survivors from Milestone 2 Slice ③ this step
+> means (`"runtime: parser-feed!'s finished sticky arm is deleted outright"`,
+> `"runtime: reset's stored-error clear is skipped"`); the other **7** are
+> older harness/adapter/launcher survivors this step does not mention
+> (`runner: probe output suppression is removed`; `runner: the value read
+> for BYTE_MACHINE_TEST_VERBOSE is discarded`; `runner: a passing case is
+> never announced under verbose`; `chez adapter: an export used only inside
+> the runner section is dropped`; `launcher: source-directories is left at
+> Chez's default instead of emptied`; `launcher: a source lane is allowed to
+> compile what it imports`; `chez-aot launcher: source-directories is not
+> emptied`). Confirmed against `a9de657` (this slice's merge base): all nine
+> `EXPECT_SURVIVES` declarations, under these same labels, already existed
+> there — this slice added none, changed none, and the harness/launcher
+> seven predate Milestone 2 entirely. "there should be two" undercounted the
+> step's own qualifier ("both pre-existing runtime survivors from Milestone 2
+> Slice ③") by omitting every survivor this slice was never scoped to touch.
+
 - [ ] **Step 2: Reconcile the declared totals with the measurement**
 
 If the reported totals differ from `EXPECTED_PASSES`/`EXPECTED_MUTATIONS`, the

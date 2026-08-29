@@ -1,9 +1,9 @@
 # Milestone 3 Design — Byte Classes and Sequences
 
 Status: design — approved shape, **Gate 0 discharged; Slice ① (byte classes)
-closed 2026-08-29** (commits `3ea0c98` through `3bbd1d8`, plus this note's own
-commit, on branch `feat/milestone-3-slice-1`; PR not yet opened as of this
-note). **Slices ② and
+closed 2026-08-29** (every commit on branch `feat/milestone-3-slice-1` since it
+diverged from `main` at merge base `a9de657`, including this note's own
+commit; PR not yet opened as of this note). **Slices ② and
 ③ not started.** Milestone 3 as a whole remains open — this slice discharges
 §5's scope, not the milestone's (see the dated §5 disposition below). Authored
 2026-08-29, the day Milestone 2 closed
