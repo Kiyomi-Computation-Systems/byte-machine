@@ -563,8 +563,10 @@ cmake_minimum_required(VERSION 3.26)
 # arm. The predicted-count cap that stopped Task 2 from closing these is
 # withdrawn; every count here is measured. Passes stay at 39; mutations
 # become 172 + 6 = 178.
+# Slice ① Task 3 adds three pair-enumeration mutations to Pass 33.
+# Passes stay at 39; mutations become 178 + 3 = 181.
 set(EXPECTED_PASSES 39)
-set(EXPECTED_MUTATIONS 178)
+set(EXPECTED_MUTATIONS 181)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -2985,6 +2987,30 @@ byte_machine_mutation(
   REPLACE [[#f]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "same byte overlap: overlapping-cases")
 
+# Slice ① Task 3: the pair enumeration itself. The helper pin above proves the
+# disjointness TEST fires; these three prove the pass reaches every pair, reports
+# each once, and does not stop at the first collision it finds.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: only the first case is compared against the others"
+  FIND [[(outer (cdr ss)]]
+  REPLACE [[(outer '()]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "second and third cases is found: one pair")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a case's collisions after the first are dropped"
+  FIND [[(inner (cdr rest)]]
+  REPLACE [[(inner '()]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "first and third cases is found: one pair")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a case is compared against itself"
+  FIND [[(let inner ((rest (cdr ss)) (out out))]]
+  REPLACE [[(let inner ((rest ss) (out out))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "do not overlap: none")
+
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: zero-progress detection never fires"
@@ -3883,7 +3909,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # 39; mutations become 167 + 5 = 172.
 #
 # Task 2's review fix wave 1 adds six more, still in this same pass, still
-# against ir-tests.sps: the tag guards on the three remaining class-matcher
+# against ir-tests.sps: the tag guards on the four remaining class-matcher
 # accessors this task's own review found uncaught, decision 0014's ordering
 # half, and matcher-bytes' else arm (carried open from Task 1's own report).
 # See each mutation's own comment for what it measures. Two pre-existing pins

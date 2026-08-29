@@ -122,19 +122,31 @@
   ;; any byte; an exact-byte matcher is the one-element case of the same rule.
   (define (byte-sets-overlap? a b)
     (and (pair? a) (or (and (memv (car a) b) #t) (byte-sets-overlap? (cdr a) b))))
+  ;; One diagnostic per COLLIDING PAIR of cases, in caller order -- not one per
+  ;; shared byte. A complement and a set can share 200 bytes, and a naive
+  ;; per-byte expansion would turn one decision into 200 identical diagnostics
+  ;; against §16.4:937-943. Pairs are enumerated i < j so a pair is reported
+  ;; once, and the pass never inspects the lowered graph: canonical byte sets
+  ;; are a source-level property (§17:951 verify-before-normalize).
+  (define (node-overlaps n)
+    (let ((sets (map (lambda (c) (matcher-bytes (byte-case-matcher c)))
+                     (byte-dispatch-node-cases n))))
+      (let outer ((ss sets) (out '()))
+        (if (null? ss)
+            (reverse out)
+            (outer (cdr ss)
+                   (let inner ((rest (cdr ss)) (out out))
+                     (if (null? rest)
+                         out
+                         (inner (cdr rest)
+                                (if (byte-sets-overlap? (car ss) (car rest))
+                                    (cons (make-diagnostic 'overlapping-cases (node-name n)
+                                                           "two cases match the same byte or bytes")
+                                          out)
+                                    out)))))))))
   (define (pass-overlap m)
     (apply append
-           (map (lambda (n)
-                  (if (byte-dispatch-node? n)
-                      (let loop ((cs (byte-dispatch-node-cases n)) (seen '()) (out '()))
-                        (if (null? cs) out
-                            (let ((bs (matcher-bytes (byte-case-matcher (car cs)))))
-                              (loop (cdr cs) (append bs seen)
-                                    (if (byte-sets-overlap? bs seen)
-                                        (cons (make-diagnostic 'overlapping-cases (node-name n)
-                                                               "two cases match the same byte") out)
-                                        out)))))
-                      '()))
+           (map (lambda (n) (if (byte-dispatch-node? n) (node-overlaps n) '()))
                 (machine-nodes m))))
 
   ;; PASS 4: reachability from entry.
