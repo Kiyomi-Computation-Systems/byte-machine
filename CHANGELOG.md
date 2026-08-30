@@ -578,11 +578,19 @@ delivered. No versioned release exists yet.
 
 - Sequence dispatch (Milestone 3 Slice ②): `make-sequence-dispatch-node` and
   `make-sequence-case` on the public construction façade — the sixth node
-  kind in the parent plan's closed repertoire (§10.6) — threaded through
-  every verifier pass that resolves targets, walks reachability, detects
-  zero-progress cycles and classifies the EOF chain (eight sites in
-  `verify.sls`, not six as design §6 originally counted; see the dated
-  disposition there). A sequence node lowers to ordinary normalized
+  kind in the parent plan's closed repertoire (§10.6) — threaded through six
+  of `verify.sls`'s eight node-kind-dispatching sites: target resolution,
+  reachability, the zero-progress cycle WALK, and both EOF-chain checks (the
+  true site count, and the six/eight split, is design §6's own dated
+  disposition, corrected there after two earlier miscounts). The other two
+  sites are deliberately deferred to Slice ③: `pass-overlap`'s
+  cross-alternative collision check, and the zero-progress cycle REPORT,
+  which still filters on `byte-dispatch-node?`/`pause-node?` alone — so the
+  walk sees a self-targeting sequence-node mismatch edge but nothing reports
+  it. Measured consequence: such a machine verifies with zero diagnostics
+  today, and feeding it one byte that does not match its alternative does not
+  return, in either executor (dated comment at `verify.sls`'s zero-progress
+  pass). A sequence node lowers to ordinary normalized
   `dispatch` states through a trie that merges alternatives sharing a byte
   prefix, so two alternatives sharing a first byte (`AB`/`AC`) no longer
   silently collide on the ascending-byte sort key; internal prefix states get
@@ -590,10 +598,11 @@ delivered. No versioned release exists yet.
   child byte ([decision 0016](docs/decisions/0016-normalized-state-id-allocation.md)).
   The reference interpreter tracks prefix progress independently, as a
   compound `current` carrying the consumed byte path rather than a bare
-  position index — measured necessary: a position index accepts byte
-  sequences never on the input when two alternatives diverge and later
-  re-converge on a shared suffix byte (see the dated amendment at design
-  §4.2) ([decision 0015](docs/decisions/0015-sequence-prefix-states.md)). The
+  position index — measured necessary: a position index cannot distinguish
+  which alternatives are still live from how far along it is, so it accepts
+  byte sequences never on the input when two alternatives diverge at position
+  0 (`AB`/`XY`; see the dated amendment at design §4.2)
+  ([decision 0015](docs/decisions/0015-sequence-prefix-states.md)). The
   emitter and `runtime.sls` are unchanged, confirmed and recorded at the
   change site (`compile.sls`'s `render-state-arm`). Both mismatch modes
   (`reexecute` and `advance`) are covered; the interpreter≡generated

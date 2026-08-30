@@ -184,6 +184,26 @@ at `main` = `2468881` (line numbers current, not the design's pre-Slice-① ones
 Site 1 also repairs `pass-names`' missing-target resolution (`:101-107` region)
 and `byte-reached` (`:234`) for free, since both walk `node-out-targets`.
 
+> **Disposition, 2026-08-30 (whole-branch review fix wave; Slice ② closed).**
+> D2's own "SEVEN, not six" count above is itself superseded, not the final
+> word: Task 1's own review found an **eighth** permissive fall-through,
+> `pass-overlap` (§16.2:893 canonical byte-set overlap), which stayed
+> filtering on `byte-dispatch-node?` alone when the other seven landed —
+> correct, since §16.2:894 cross-alternative sequence collision is Slice ③'s
+> per decision 0017 point 4 and design §7, but undocumented at the time this
+> D2 was written. The binding correction lives at design §6's own dated
+> disposition ("Disposition, 2026-08-30 (Task 6 close-out; Slice ② closed)"),
+> which names this D2 by section as one of the two counts its "eight"
+> supersedes and re-derives the total directly from the shipped `verify.sls`
+> rather than from either prior count: **six** sites extended to the sixth
+> kind (`node-out-targets`; `node-eof-target`, into which three of the seven
+> above collapsed; `reexec-targets`; `eof-terminal`; and both
+> `pass-eof-execution` filters) plus **two** deliberately left unextended
+> (`pass-overlap`, and D3's own report guard, immediately below). D2's table
+> above is left as written — this plan is not the artifact design §6's
+> disposition edited — but a reader who stops at D2 alone would still
+> undercount `verify.sls`'s permissive fall-throughs by one.
+
 **D3 — `pass-zero-progress`'s report guard at `:190` is deliberately NOT
 extended here.** It reads
 `(or (byte-dispatch-node? n) (pause-node? n))`, and adding sequence nodes to the
@@ -1059,8 +1079,18 @@ Append to `test/common/normal-ir-tests.sps` before `(harness-finish)`:
 >    state by its *position* in `normal-machine-states`, never by
 >    `normal-state-id`, so `seq-state`'s `id` argument could be wrong (e.g.
 >    hard-coded to `0`) and nothing would notice, even though the field is
->    load-bearing at `compile.sls:102` (it derives each emitted state
->    procedure's name). Task 2's own review found this surviving mutation and
+>    load-bearing at `compile.sls:109` — `render-state-arm`'s
+>    `(normal-state-id s)` call (re-derived against the shipped tree, not
+>    trusted at the line number this disposition was first written with:
+>    `:102` was accurate on `main`, but this branch's own commit `c4a2039`
+>    inserted a seven-line comment above `render-state-arm`, moving the line
+>    to `:109`). And the field does not derive "each emitted state
+>    procedure's name" — the emitter renders no per-state procedures at all,
+>    one shared `exec` closure with a single `(case st ...)`
+>    (`test/fixtures/generated-one-byte.golden.sls:4-18`) — it derives the
+>    `case` datum key each state's arm matches on and the `next-state` field
+>    its outcome carries forward. Task 2's own review found this surviving
+>    mutation and
 >    closed it with two new cases asserting `normal-state-id` directly on the
 >    four-byte and depth-first fixtures, plus a matching mutation, both
 >    measured caught.

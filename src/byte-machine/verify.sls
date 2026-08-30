@@ -211,6 +211,19 @@
               ;; see through a sequence node. Adding sequence nodes to the
               ;; REPORTED set is §25:1533's cycle extension, which is Slice ③ --
               ;; a self-targeting sequence node going unflagged here is correct.
+              ;; Fix wave 2 (Important 1), measured 2026-08-30: a sequence node
+              ;; whose mismatch edge reexecutes into itself -- one alternative,
+              ;; no other nodes -- verifies with ok #t and zero diagnostics
+              ;; today, where the byte-identical shape built from a
+              ;; byte-dispatch node reports zero-progress-cycle. Feeding it one
+              ;; byte that does not match the alternative's first byte does not
+              ;; return: reproduced under a timeout in both the interpreted
+              ;; lane (parser-feed-op!'s `(loop pos)`, runtime.sls:200) and the
+              ;; generated lane (compile.sls's emitted `(loop pos <target>
+              ;; off)` fallback), since neither has a local cycle guard and
+              ;; both rely on this REPORT set, which does not yet see the
+              ;; sequence node. Deferred consequence, not a new defect --
+              ;; closed when Slice ③ extends the REPORT set above.
               ((sequence-dispatch-node? n)
                (if (eq? (edge-mode (sequence-dispatch-node-mismatch n)) 'reexecute)
                    (list (edge-target (sequence-dispatch-node-mismatch n))) '()))

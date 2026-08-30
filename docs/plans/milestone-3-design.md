@@ -242,12 +242,17 @@ depend on `list-sort` stability. Per-byte expansion preserves the guarantee.
 > exact bytes read so far (`interpret.sls`'s `seq-step`, the sole producer of
 > the compound form — Task 3, commit `c4a2039`). Measured directly:
 > `interpret-tests.sps`'s "A then Y mismatches rather than following the XY
-> alternative" case feeds `AB`/`XY` the bytes `A` then `Y` and asserts
-> `(error 0 0 1 unexpected-byte)`, not an accept — the exact failure this
-> amendment's counterexample predicts if `path` were replaced by a bare
-> position. Decision 0015 needs no matching amendment: point 3 says only "a
-> compound `current` value" and never names `(s . k)` or any other concrete
-> shape, so it was never wrong — this design section's illustration was.
+> alternative" case feeds `AB`/`XY` the bytes `A` then `Y` and checks two
+> things — the result's status is `'error` (`car`, not an accept) and its
+> offset is `1` (`cadddr`) — not the full five-field tuple
+> `(error 0 0 1 unexpected-byte)` as an earlier version of this amendment
+> described; the case never compares one. Both checks still discriminate the
+> exact failure this amendment's counterexample predicts if `path` were
+> replaced by a bare position, so the conclusion stands on the two checks the
+> case actually makes. Decision 0015 needs no matching amendment: point 3
+> says only "a compound `current` value" and never names `(s . k)` or any
+> other concrete shape, so it was never wrong — this design section's
+> illustration was.
 
 **Why (lowering).** §10.6:546, §17:957 and §19.2:1010 all say "resumable prefix
 states", and a resumable byte-reading state *is* the shipped dispatch state. The
@@ -539,7 +544,7 @@ reads as a user grammar error rather than a verifier gap.
 > cannot see a `cond` that dispatches through *other* kind predicates and so
 > cannot itself find an omission — confirms **eight** is the true count: six
 > sites extended to the sixth kind (`node-out-targets`; `node-eof-target`,
-> which Task 1's fix wave collapsed four near-duplicate accessor sites into;
+> which Task 1's fix wave collapsed three near-duplicate accessor sites into;
 > `reexec-targets`; `eof-terminal`; and both `pass-eof-execution` filters,
 > §16.2:908/:909) plus two sites deliberately left unextended and each
 > documented in place: `pass-overlap` above, and `pass-zero-progress`'s report

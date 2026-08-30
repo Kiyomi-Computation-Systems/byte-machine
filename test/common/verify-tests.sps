@@ -438,11 +438,17 @@
                                            (to-stop (make-byte-range-matcher 8 20)))))
                      3)))))
 
-;; Milestone 3 Slice ② Task 1: the sixth node kind, at all seven of verify.sls's
-;; permissive fall-throughs. A sequence node added to ir.sls but NOT to verify.sls
-;; VERIFIES CLEAN -- targets never resolution-checked, cycles never detected, EOF
-;; chain never walked -- and only crashes later in the normalizer. That is why
-;; these land in the same commit as the node kind.
+;; Milestone 3 Slice ② Task 1: the sixth node kind, at the six verify.sls sites
+;; it is actually extended to (design §6's dated disposition). Arms 2 and 4
+;; below both exercise node-eof-target -- the site Task 1's own fix wave
+;; collapsed three near-duplicate accessors into -- through its two different
+;; callers, all-out-targets and pass-eof, respectively. pass-overlap and
+;; pass-zero-progress's report guard are the two sites deliberately left
+;; unextended until Slice ③, and are not covered by an arm here. A sequence
+;; node added to ir.sls but NOT to verify.sls VERIFIES CLEAN -- targets never
+;; resolution-checked, cycles never detected, EOF chain never walked -- and
+;; only crashes later in the normalizer. That is why the six live sites land
+;; in the same commit as the node kind.
 (define (seq-node cases mismatch eof-target)
   (make-sequence-dispatch-node 'seq cases mismatch eof-target #f))
 (define (one-alt bytes target) (list (make-sequence-case bytes target #f)))
