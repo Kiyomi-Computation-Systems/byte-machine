@@ -119,6 +119,31 @@
   ("no record it emits is unique to it"), not by inspection — only the former is
   checkable. Run the subset test *before* the fix pass, or you spend the cycle
   first and learn it was unfixable second.
+* **"Subsumed" is a claim about the SPEC, not about the decision — and the relation is whole-set, not per-record.**
+  The taxonomy above sorts residue into three buckets, and the sorting itself has
+  two failure modes this repository has now hit both of. First, checking the
+  wrong relation: "is each of my records shared with *someone*?" is not "is my
+  whole record set inside *one* sibling's?" Milestone 3 Slice ②'s `:909`
+  sequence-arm mutation was documented as genuinely subsumed when its two records
+  were each shared with a *different* mutant and the intersection of the
+  containing sets was empty — a pin requiring **both records together**
+  separated it. Second, running the subset test and stopping: a subset test
+  reports the third bucket as though it were the second, so four residues were
+  filed "genuinely subsumed" without anyone attempting a fix, and three closed
+  the moment someone did.
+  A mutant with **zero unique FAIL records across the lane** is a signal that the
+  specification is under-specified, not that its pin is unfixable. Two remedies
+  are shipped here and both close this shape: an **attribution check** — assert
+  the diagnostic that must be *absent* on a well-formed fixture, instead of one
+  "accepted" boolean — and **count-don't-witness** — one fixture carrying both
+  things a walk can reach, asserting the count, so each way of breaking the
+  enumeration reports a different number. Only what survives an actual attempt
+  may be called subsumed, and it must be recorded with the measurement.
+  Re-sweep the whole pass after **each** fix, not once at the end: adding a
+  *check* widens pins just as adding a mutation does (a new `no unreachable-node`
+  check contained a bare pin as a substring and broke a pin sixteen mutations
+  above it), and a first attempt can collide with a third mutant — one fix here
+  had to be redesigned after its initial shape tied with a sibling.
 * **A pin is only ever verified against the mutants that existed when it was measured.**
   This is the same shape as the exit-path rule above: adding mutations to a lane
   can widen an existing pin's collision set, silently. When a branch adds
