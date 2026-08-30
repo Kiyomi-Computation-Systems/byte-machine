@@ -788,4 +788,84 @@
                                         'default-eof #f))))
                      2)))))
 
+;; Milestone 3 Slice ③ Task 1: §16.2:894 sequence ambiguity. One alternative
+;; being a terminal prefix of another is UNREPRESENTABLE (decision 0015 point
+;; 2: a prefix state has no "accept here" slot), so it is rejected here rather
+;; than left to the normalizer's internal guard. Duplicate alternatives are the
+;; maximal case of the same relation -- `AB` is a terminal prefix of `AB` -- so
+;; both shapes carry the one code design §4.5 allows. Reported once per
+;; colliding PAIR, like pass-overlap (§16.4:937-943).
+(define (amb-machine name alts extra-nodes)
+  (make-machine name 'seq '() '() '() errs
+    (append (list (make-sequence-dispatch-node 'seq
+                    (map (lambda (a) (make-sequence-case (car a) (cdr a) #f)) alts)
+                    (make-edge 'reject 'reexecute) #f #f)
+                  (make-stop-node 'stop #f)
+                  (make-error-node 'reject 'rejected #f))
+            extra-nodes)
+    'default-eof #f))
+(define two-more (list (make-stop-node 'halt #f) (make-stop-node 'done #f)))
+(define three-more (append two-more (list (make-stop-node 'more #f))))
+;; Counters read the OBSERVED diagnostic list, never the fixture's own shape.
+(define (ambiguity-count m)
+  (length (filter (lambda (c) (eq? c 'ambiguous-sequence-prefix)) (codes m))))
+(define nested-short-first
+  (amb-machine 'nest '(((65) . stop) ((65 66) . halt) ((65 66 67) . done)) two-more))
+(define nested-long-first
+  (amb-machine 'nest-rev '(((65 66 67) . done) ((65 66) . halt) ((65) . stop)) two-more))
+
+(harness-group "sequence ambiguity (§16.2:894)"
+  (lambda ()
+    (harness-case "an alternative that is a terminal prefix of another is rejected"
+      (lambda ()
+        (let ((m (amb-machine 'amb '(((65 66) . stop) ((65 66 67) . halt))
+                              (list (make-stop-node 'halt #f)))))
+          (check "rejected" (not (verification-ok? (verify-machine m))))
+          (check "ambiguous-sequence-prefix" (has-code? m 'ambiguous-sequence-prefix)))))
+    (harness-case "two identical alternatives are the maximal case of the same relation"
+      (lambda ()
+        (let ((m (amb-machine 'dup '(((65 66) . stop) ((65 66) . halt))
+                              (list (make-stop-node 'halt #f)))))
+          (check "rejected" (not (verification-ok? (verify-machine m))))
+          (check "ambiguous-sequence-prefix" (has-code? m 'ambiguous-sequence-prefix)))))
+    ;; The count fixtures. SUMMED over both declaration orders, deliberately:
+    ;; a short-first list is caught by a one-directional test as well as by a
+    ;; correct one, so a per-ordering check leaves the one-directional
+    ;; mutation's whole failure set inside the never-run mutation's -- the
+    ;; subsumed shape AGENTS.md names. The sum separates them (6 / 3 / 0).
+    (harness-case "the prefix test asks both directions, counted over both declaration orders"
+      (lambda ()
+        (check-equal "ambiguity count over both orderings"
+                     (+ (ambiguity-count nested-short-first)
+                        (ambiguity-count nested-long-first))
+                     6)))
+    ;; The over-rejection direction, which nothing else in this file tests: a
+    ;; SHARED first byte is not ambiguity (§10.6:544 permits shared nonterminal
+    ;; prefixes; the trie merges them), and a check that cannot tell the two
+    ;; apart would reject every branching machine this slice ships.
+    (harness-case "alternatives that merely share a prefix are not ambiguous"
+      (lambda ()
+        (check-equal "ambiguity count"
+                     (ambiguity-count
+                      (amb-machine 'ok '(((65 66) . stop) ((65 67) . halt) ((88 89) . done))
+                                   two-more))
+                     0)))
+    ;; The pair ENUMERATION, mirroring pass-overlap's own three enumeration
+    ;; mutations. A nested family of three (3 pairs) plus a disjoint pair
+    ;; (1 pair) = 4; the three ways to break the walk give 2, 3 and 9, all
+    ;; distinct and all distinct from the two mutations above.
+    (harness-case "every pair is enumerated once, across a nested family and a disjoint one"
+      (lambda ()
+        (check-equal "ambiguity count"
+                     (ambiguity-count
+                      (amb-machine 'fam '(((65) . stop) ((65 66) . halt) ((65 66 67) . done)
+                                          ((88) . more) ((88 89) . stop))
+                                   three-more))
+                     4)))
+    (harness-case "a byte-dispatch machine contributes no sequence ambiguity"
+      (lambda ()
+        (check-equal "ambiguity count"
+                     (ambiguity-count (machine (one-byte-nodes (make-edge 'reject 'reexecute))))
+                     0)))))
+
 (harness-finish)

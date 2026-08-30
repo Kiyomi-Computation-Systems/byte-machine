@@ -63,7 +63,10 @@
                 ;; The same two internal invariants the normalizer's trie asserts,
                 ;; for the same reason (decision 0015 point 2): a prefix position
                 ;; that both accepts and continues has no representation here
-                ;; either. Slice ③ rejects it as a diagnostic before this point.
+                ;; either. Slice ③'s §16.2:894 pass rejects both shapes before
+                ;; this point, and make-interpreted-machine refuses an unverified
+                ;; machine -- so these are unreachable through the public path and
+                ;; kept as defense-in-depth, exactly as normal-ir.sls's are.
                 ((and (pair? ends) (pair? conts))
                  (assertion-violation 'interpret "ambiguous terminal prefix"
                                       (sequence-dispatch-node-name n)))

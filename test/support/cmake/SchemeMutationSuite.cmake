@@ -663,8 +663,19 @@ cmake_minimum_required(VERSION 3.26)
 # sibling mutation swapping `start` for `(parser-offset parser)` on the same
 # arm was NOT added: it was already caught incidentally by two pre-existing
 # fixtures. Passes stay at 43; mutations become 222 + 1 = 223.
+# Milestone 3 Slice ③ Task 1 (§16.2:894, the sequence-ambiguity verifier pass)
+# adds six mutations to the existing Pass 33 (the verifier): the pass never
+# being wired into verify-machine (1), the terminal-prefix test asking only one
+# direction (1), the prefix relation collapsing to a first-byte test -- the
+# OVER-rejection direction, which nothing else here reaches (1), and the three
+# ways a pairwise walk can visit the wrong pairs (3), the sequence twins of
+# pass-overlap's own three enumeration mutations. All six are
+# comparison-caught, each pinned to a count no sibling produces. Pass 33 was
+# re-swept whole in both directions at 40 mutations, and Pass 34 -- whose
+# SPEC-lane program this task also edits -- at 12; see Pass 33's own audit
+# block for the result. Passes stay at 43; mutations become 223 + 6 = 229.
 set(EXPECTED_PASSES 43)
-set(EXPECTED_MUTATIONS 223)
+set(EXPECTED_MUTATIONS 229)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3141,6 +3152,33 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # duplicate-error-declaration. They are not oversights: each was judged against
 # all 26 siblings and matched none, because each names a decision only one
 # mutation here can break. Left as measured, not as read.
+#
+# WHOLE-PASS PIN AUDIT, Milestone 3 Slice ③ Task 1 (§16.2:894). Six mutations
+# joined this pass and six CASES joined verify-tests.sps -- and adding a check
+# widens every existing pin exactly as adding a mutation does -- so the whole
+# pass was re-measured by the method above, in BOTH directions: every pin
+# re-judged through byte_machine_mutation_verdict against every OTHER mutant's
+# captured output, plus a self-check that each pin still catches its own.
+# 40 mutations, 1560 ordered pairs. The same sweep was run on the merge base
+# (49c8cc4, 34 mutations) as a control, so an introduced collision could be
+# told from inherited debt; before the re-anchoring described below, both
+# sides reported the identical eight ordered pairs, so this task introduced
+# none of them.
+#
+# None of the six new §16.2:894 pins collided in either direction. What the
+# sweep did find was inherited: the "residual cross-matches ... and nothing
+# else" sentence above was measured at 27 mutations, and Slice ② has since
+# added both a mutation and a CASE that outrun it.
+#   * "verify: a byte-reachable pause into finish is rejected" was matched by
+#     three siblings, because Slice ② added a case whose NAME contains that
+#     pin as a substring. UNDER-ANCHORED -- the mutant owns a record none of
+#     the three emits -- and fixed here by re-anchoring alone; the
+#     measurement is at that mutation's own pin.
+#   * "verify: a sequence case's byte edge into a finish terminal is not
+#     flagged (arm 6, :908)" is matched by arm 1, which Slice ② measured and
+#     recorded as genuinely subsumed at arm 6's own pin.
+# Residual cross-matches at 40 mutations, re-measured after that fix: the four
+# subsumed pairs listed above, plus arm 6 < arm 1. Nothing else.
 
 byte_machine_mutation_reset()
 
@@ -3457,9 +3495,29 @@ byte_machine_mutation(
   # label is "non-eof-into-finish diagnostic", which occurs exactly once in
   # verify-tests.sps; the case name ends in "(§16.2:908)", so parenthesis-free
   # anchoring means the check label rather than a case-name tail.
+  #
+  # Milestone 3 Slice ③ Task 1's whole-pass sweep: that anchor stopped being
+  # unique when Slice ② added verify-tests.sps's "a byte case and a sequence
+  # case both into a finish terminal are two non-eof-into-finish diagnosticS"
+  # case. The pin is an unanchored regex and the check label above is a
+  # substring of that case's NAME, so every mutant that reddens that case
+  # matched this pin -- measured at 40 mutations, three of them did: "verify:
+  # a byte edge into a finish terminal is accepted", "verify: a sequence
+  # node's case and mismatch targets are not out-targets (arm 1,
+  # node-out-targets)", and "verify: a sequence case's byte edge into a finish
+  # terminal is not flagged (arm 6, :908)". UNDER-ANCHORED, not subsumed:
+  # this mutant owns "non-eof-into-finish diagnostic -- expected a true
+  # value", the check's own failure form, which none of the three emits (all
+  # three fail the count check instead, "-- expected 2, got N"). Requiring the
+  # " -- expected" delimiter immediately after the label forces the next
+  # character to be the delimiter rather than the "s" of "diagnostics" -- the
+  # same idiom the "AB|AB" pin in Pass 34 uses against "AB|ABC". Re-judged
+  # through byte_machine_mutation_verdict against all 39 other captured
+  # outputs: the pin below matches this mutant and no other.
   FIND [[(if (and cn (finish-node? cn))]]
   REPLACE [[(if (and cn #f (finish-node? cn))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "non-eof-into-finish diagnostic")
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "non-eof-into-finish diagnostic -- expected a true value")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -4054,6 +4112,80 @@ byte_machine_mutation(
   EXPECT_OUTPUT_MATCHES
     "an eof chain that cycles through a sequence node is an EOF cycle: eof-zero-progress-cycle.*a sequence eof path reaching a stop terminal is eof-reachable-stop: eof-reachable-stop")
 
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the §16.2:894 sequence-ambiguity pass is never run"
+  FIND [[                                  (pass-sequence-ambiguity machine)]]
+  REPLACE [[                                  '()]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "both directions, counted over both declaration orders: ambiguity count over both orderings -- expected 6, got 0")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the terminal-prefix test is one-directional (§16.2:894)"
+  # Comparison-caught. The pair test must ask BOTH directions: a caller may
+  # declare the longer alternative first, and normal-ir-tests.sps's own
+  # "reverse order" case exists because the trie has two distinct guard sites
+  # for exactly this. Measured: the summed check goes 6 -> 3, a value no other
+  # mutant in this pass produces on it. A per-ordering check would NOT separate
+  # this mutation from "never run" -- its records would be a strict subset.
+  FIND [[                                 (if (or (byte-prefix? (car as) (car others))
+                                         (byte-prefix? (car others) (car as)))]]
+  REPLACE [[                                 (if (byte-prefix? (car as) (car others))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "both directions, counted over both declaration orders: ambiguity count over both orderings -- expected 6, got 3")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the prefix relation degenerates to a first-byte test (§16.2:894)"
+  # The OVER-rejection direction, which no other mutation in this pass reaches:
+  # with the recursion collapsed, any two alternatives sharing a first byte are
+  # called ambiguous, and every branching machine this milestone ships would be
+  # refused. Measured: the well-formed AB/AC/XY fixture goes 0 -> 1.
+  FIND [[((= (car a) (car b)) (byte-prefix? (cdr a) (cdr b)))]]
+  REPLACE [[((= (car a) (car b)) #t)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "alternatives that merely share a prefix are not ambiguous: ambiguity count -- expected 0, got 1")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: only the first sequence alternative is compared against the others"
+  # The sequence twin of pass-overlap's ":3187" enumeration mutation. Measured
+  # on the nested-family fixture: 4 -> 2.
+  FIND [[(scan (cdr as)]]
+  REPLACE [[(scan '()]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "every pair is enumerated once, across a nested family and a disjoint one: ambiguity count -- expected 4, got 2")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a sequence alternative's collisions after the first are dropped"
+  # The twin of pass-overlap's ":3212". Measured: 4 -> 3. Note this and the
+  # mutation above are indistinguishable on the summed check (both 4) and on
+  # either per-ordering count (both 2); only the nested-family fixture, which
+  # makes the two walks visit different pair sets, separates them.
+  FIND [[(against (cdr others)]]
+  REPLACE [[(against '()]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "every pair is enumerated once, across a nested family and a disjoint one: ambiguity count -- expected 4, got 3")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a sequence alternative is compared against itself"
+  # The twin of pass-overlap's ":3225". Every alternative is a terminal prefix
+  # of itself, so self-comparison adds exactly one spurious diagnostic per
+  # alternative. Measured: 4 -> 9 on a five-alternative fixture.
+  FIND [[(let against ((others (cdr as)) (found found))]]
+  REPLACE [[(let against ((others as) (found found))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "every pair is enumerated once, across a nested family and a disjoint one: ambiguity count -- expected 4, got 9")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 34: the reference interpreter (Milestone 1 Phase 2) ----------------
@@ -4065,6 +4197,17 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # fails; the second disarms the unverified-machine refusal, so the refuse case's
 # check-raises sees a normal return. Verify command uses both library roots,
 # an empty object guard, the interpret program.
+#
+# WHOLE-PASS PIN AUDIT, Milestone 3 Slice ③ Task 1. This pass declares no new
+# mutation, but the task edits its SPEC-lane PROGRAM -- interpret-tests.sps
+# gains three §16.2:894 diagnostic cases and its guard group is rewritten
+# around a forged verification -- and a changed check set widens pins exactly
+# as a changed mutation set does. Re-swept whole, in both directions:
+# 12 mutations, 132 ordered pairs, every pin re-judged through
+# byte_machine_mutation_verdict against every other mutant's captured output,
+# plus a self-check that each pin still catches its own. No collisions, at
+# HEAD or on the merge-base control (49c8cc4). The two guard pins below were
+# the ones closest to being orphaned; see their own comment.
 
 byte_machine_mutation_reset()
 
@@ -4215,6 +4358,19 @@ byte_machine_mutation(
 # swapping which message either guard raises would also be caught; no such
 # mutation is declared here because the two messages are literal string
 # constants no earlier pass in this file already exercises swapping.
+#
+# Milestone 3 Slice ③ Task 1 correction: both witnesses now reach seq-step
+# through a FORGED verification, and this paragraph used to describe them as
+# built the ordinary way. §16.2:894's pass-sequence-ambiguity rejects both of
+# these shapes at verify-machine and make-interpreted-machine refuses an
+# unverified machine, so interpret-tests.sps's plain `interp` helper can no
+# longer carry either machine this far. The two cases below build theirs with
+# that program's `interp-unverified`, which wraps make-verification-result
+# (from (byte-machine private ir)) around an ok? #t result the verifier would
+# never produce -- exactly the caller-who-skips-verification these guards
+# exist for, which is why they are defense-in-depth rather than dead. Measured
+# after that rewrite: both mutants still fail with byte-identical details, so
+# both FIND/REPLACE pairs and both pins below are unchanged.
 byte_machine_mutation(
   FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
   LABEL "interpret: the ambiguous-terminal-prefix guard is dropped"

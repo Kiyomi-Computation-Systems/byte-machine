@@ -5,15 +5,15 @@
 ;;; cycles, terminal/EOF shape, and generated-name safety (reserved-set
 ;;; member 1 — Gate 0 §3.3). Error references are symbolic names resolved
 ;;; against the error declarations.
-;;; Milestone 3 Slice ② adds the sixth node kind, sequence-dispatch (§9.1:297,
+;;; Milestone 3 Slice ② added the sixth node kind, sequence-dispatch (§9.1:297,
 ;;; §10.6:542-546), to every one of these passes EXCEPT overlap: its case
 ;;; targets and mismatch edge are out-targets and eof-targets for name
 ;;; resolution and reachability, its mismatch edge's reexecute mode joins the
 ;;; zero-progress walk, and its eof-target joins the EOF-shape and :908/:909
-;;; terminal checks. Cross-alternative sequence collision (§16.2:894) stays
-;;; out of pass-overlap -- decision 0017 point 4 assigns it to the verifier,
-;;; and design §7 assigns it to Slice ③ -- see pass-overlap's own filter,
-;;; below.
+;;; terminal checks. Milestone 3 Slice ③ added pass-sequence-ambiguity
+;;; (§16.2:894) and taught pass-zero-progress's REPORT set the sixth kind
+;;; (§25:1533). Cross-alternative sequence collision stays out of pass-overlap
+;;; permanently -- it is :894's, not :893's; see pass-overlap's own filter.
 ;;; Diagnostics are compared by code, never by text.
 (library (byte-machine verify)
   (export verify-machine verification-ok? verification-diagnostics
@@ -173,14 +173,70 @@
                                                            "two cases match the same byte or bytes")
                                           out)
                                     out)))))))))
-  ;; Deliberately NOT extended to sequence-dispatch-node? (Milestone 3 Slice
-  ;; ②): whether two sequence alternatives collide is §16.2:894 sequence
-  ;; ambiguity, which decision 0017 point 4 assigns to the verifier and
-  ;; design §7 assigns to Slice ③. A sequence node is invisible to this pass
-  ;; between ② and ③.
+  ;; NOT extended to sequence-dispatch-node?, and not deferred either: whether
+  ;; two sequence ALTERNATIVES collide is §16.2:894 ambiguity, which
+  ;; pass-sequence-ambiguity below owns. Decision 0017 point 4 keeps :893 and
+  ;; :894 as two entries with two checks and two codes, and the predicates
+  ;; genuinely differ -- this pass compares canonical matcher byte SETS within
+  ;; one byte-dispatch node; that one compares the prefix relation between byte
+  ;; STRINGS. A sequence node is invisible to this pass permanently.
   (define (pass-overlap m)
     (apply append
            (map (lambda (n) (if (byte-dispatch-node? n) (node-overlaps n) '()))
+                (machine-nodes m))))
+
+  ;; Sequence ambiguity (§16.2:894), an unnumbered pass beside PASS 3 because
+  ;; §16.2 lists :893 and :894 adjacently and because renumbering PASS 4-7 would
+  ;; stale thirteen comment references for nothing. pass-eof-execution below is
+  ;; the shipped precedent for an unnumbered pass.
+  ;;
+  ;; "After prefix analysis" is what the pairwise test below IS: one alternative
+  ;; being a terminal prefix of another is decidable from the source byte lists
+  ;; alone, so this pass never inspects the lowered graph and §17:951's
+  ;; verify-before-normalize ordering is preserved. Measured equivalent to the
+  ;; normalizer's three trie guards (normal-ir.sls:102-116) over all 469
+  ;; nonempty alternative-sets of size <= 3 drawn from the 14 binary strings of
+  ;; length 1..3: zero disagreements.
+  ;;
+  ;; Duplicate alternatives are the MAXIMAL case of the same relation (`AB` is a
+  ;; terminal prefix of `AB`), so both shapes carry the one new code design §4.5
+  ;; allows. Alternatives that merely SHARE a nonterminal prefix -- `AB` and
+  ;; `AC` -- are explicitly legal (§10.6:544); the trie merges them, and a check
+  ;; that could not tell the two apart would reject every branching machine.
+  (define (byte-prefix? a b)
+    (cond ((null? a) #t)
+          ((null? b) #f)
+          ((= (car a) (car b)) (byte-prefix? (cdr a) (cdr b)))
+          (else #f)))
+  ;; One diagnostic per COLLIDING PAIR, enumerated i < j so a pair is reported
+  ;; once -- pass-overlap's convention above, and §16.4:937-943's one finding
+  ;; per decision. Every diagnostic a node contributes shares that node's
+  ;; (code, node, message) triple, so no pair carries an identity of its own and
+  ;; the relative order of two diagnostics from one node is not promised.
+  ;;
+  ;; The bindings are deliberately NOT node-overlaps' (`ss`/`outer`/`rest`/
+  ;; `inner`/`out`): three shipped mutations pin single lines of that skeleton,
+  ;; and a structural clone takes each from one occurrence to two, failing the
+  ;; suite with "pattern occurs 2 times ... expected 1" (§0 D8b).
+  (define (node-ambiguities n)
+    (let ((alts (map sequence-case-bytes (sequence-dispatch-node-cases n))))
+      (let scan ((as alts) (found '()))
+        (if (null? as)
+            found
+            (scan (cdr as)
+                  (let against ((others (cdr as)) (found found))
+                    (if (null? others)
+                        found
+                        (against (cdr others)
+                                 (if (or (byte-prefix? (car as) (car others))
+                                         (byte-prefix? (car others) (car as)))
+                                     (cons (make-diagnostic 'ambiguous-sequence-prefix (node-name n)
+                                                            "one alternative is a terminal prefix of another")
+                                           found)
+                                     found)))))))))
+  (define (pass-sequence-ambiguity m)
+    (apply append
+           (map (lambda (n) (if (sequence-dispatch-node? n) (node-ambiguities n) '()))
                 (machine-nodes m))))
 
   ;; PASS 4: reachability from entry.
@@ -388,6 +444,7 @@
                       (if (machine? machine)
                           (append (pass-names machine)
                                   (pass-overlap machine)
+                                  (pass-sequence-ambiguity machine)
                                   (pass-reachability machine)
                                   (pass-zero-progress machine)
                                   (pass-eof machine)
