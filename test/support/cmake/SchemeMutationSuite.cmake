@@ -645,6 +645,27 @@ set(EXPECTED_MUTATIONS 186)
 # mutations -- WAS separated, by putting each mutant's distinct "got" digest in
 # its pin.
 #
+# AMENDED by Milestone 3 Slice ① Task 3's whole-pass audit of Pass 33. Four of
+# the six p33 entries above no longer hold, and the reason is worth keeping:
+# "no collision-free pin exists" was measured correctly and read too widely.
+# It is a statement about the pins available against the SPEC AS IT STOOD, not
+# about the decisions -- and the two that were filed under (b) as separable
+# but declined were, on re-measurement, not merely declined but closable, by
+# adding the assertion whose absence made them look unfixable. Now closed, by
+# three new cases/checks in verify-tests.sps (see Pass 33's own header):
+#   p33 byte-reachability gate (:908)     -- was subsumed; the "accepted"
+#     verdict it shared with two siblings is now backed by per-code
+#     attribution checks, and each of the three fails its own.
+#   p33 pause continuation out-target     -- was (b); pinned on its
+#     reachability half, which no sibling touches, instead of its resolution
+#     half, which "missing-target never reported" shares entirely.
+#   p33 eof-terminal chains through pause -- was (b); a fixture carrying BOTH
+#     EOF terminal kinds gives it a count no sibling produces.
+# Still subsumed, and re-measured as such: p33 pause joins the zero-progress
+# walk, p33 pause-only zero-progress cycle (two pairs), p33 byte-reachable
+# pause chain is EOF. Nothing here re-measures the p32/p39 lanes, whose
+# entries above stand as written.
+#
 # That paragraph originally continued "the same trade the four pre-existing
 # one-byte-fingerprint pins in that pass decline". The count and its qualifier
 # were both right -- exactly four pins carried the one-byte golden -- and only
@@ -2964,6 +2985,70 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # emits each code and requiring the owning case to notice. Verify command
 # uses both library roots, an empty object guard, and the verify program.
 # Each FIND is a verbatim, unique substring of verify.sls.
+#
+# WHOLE-PASS PIN AUDIT (Milestone 3 Slice ① Task 3 review). Task 3 added three
+# mutations to this pass, and AGENTS.md's rule is that adding a mutation to a
+# lane widens every existing pin's collision set silently -- so the whole pass
+# was re-measured, not just the new arrivals. Method, the same one Pass 42's
+# audit used: apply each mutation to a staged copy, capture the SPEC lane's
+# full stdout+stderr, then re-judge every pin through
+# byte_machine_mutation_verdict against every OTHER mutant's captured output.
+# 27 mutations, 702 ordered pairs. Fifteen collided.
+#
+# Sorted by the test AGENTS.md names -- do the two mutants' FAIL RECORD sets
+# actually differ, and does the narrow one own a record no sibling emits? --
+# they were three kinds, and only the third is unfixable:
+#
+# (1) UNDER-ANCHORED, five pairs, fixed by re-anchoring alone. The three
+# pre-pause EOF mutations were pinned on a bare diagnostic CODE
+# ("non-eof-into-finish", "eof-reachable-stop", "eof-zero-progress-cycle"),
+# which the Slice ③ audit had already found and fixed for this pass's PAUSE
+# group while leaving the group above it bare. Each owns a "has <code>" check
+# no sibling fails; each pin now names that case and that check.
+#
+# (2) SEPARABLE, and NOT declined -- six pairs, fixed by giving the SPEC a
+# check the collision could not survive. Five mutations here had no record of
+# their own at all: everything they broke, some sibling also broke, so no pin
+# existed to be found and the fix had to be a new assertion. Three additions,
+# all in verify-tests.sps, all measured rather than predicted:
+#   * two ATTRIBUTION checks on "a well-formed pause machine verifies", whose
+#     single "accepted" boolean three different mutants reddened. Naming the
+#     diagnostic that must be ABSENT ("no unreachable-node", "no
+#     non-eof-into-finish") splits them. This is the shape the eof-terminal-
+#     chain gate below already uses: attribution, not verdict.
+#   * "an EOF walk crosses a pause for both terminal kinds (§16.2:909)", which
+#     counts BOTH terminal kinds an EOF walk can reach through a pause in one
+#     machine. Stopping AT the pause (0), losing stop classification (1) and
+#     losing cycle classification (1) had been indistinguishable case by case.
+#   * "an asymmetric collision graph counts every pair, once", whose collision
+#     graph is not symmetric under the two ways the pair enumeration can be
+#     truncated -- the mutually-colliding triple made both truncations report 2.
+#
+# (3) SUBSUMED, four pairs, genuinely unfixable by any pin. Recorded at each
+# pin below, named by the LABEL of the mutation that subsumes it, because
+# AGENTS.md requires the residue to live in the tree beside the pin. All four
+# are a decision killed again by a switch above it, so the narrow mutant's
+# whole FAIL-record set is a subset of the broad one's:
+#   "pause continuations join the zero-progress walk" < "zero-progress
+#   detection never fires"; "a pause-only zero-progress cycle is not flagged" <
+#   both of those; "a byte-reachable pause's continuation chain is an EOF path"
+#   < "an EOF-reachable stop terminal is accepted".
+# Proved by exhaustion, not by argument: no FAIL record any of the three emits
+# is absent from the subsuming mutant's output.
+#
+# Residual cross-matches in this pass after the fixes: those four pairs, and
+# nothing else. Re-measured after every edit above, since a new check changes
+# every mutant's record set, not only the ones it was written for -- and that
+# re-measurement earned its keep: the "no unreachable-node" attribution check
+# added for (2) contains the whole of "verify: reachability never reports an
+# unreachable node"'s bare-code pin as a substring, so a fix in the pause group
+# broke a pin sixteen mutations above it. That pin is re-anchored too; see it.
+#
+# Five bare-code pins remain in this pass -- duplicate-name,
+# missing-error-declaration, invalid-eof-target, invalid-shape,
+# duplicate-error-declaration. They are not oversights: each was judged against
+# all 26 siblings and matched none, because each names a decision only one
+# mutation here can break. Left as measured, not as read.
 
 byte_machine_mutation_reset()
 
@@ -2979,7 +3064,18 @@ byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: reachability never reports an unreachable node"
   FIND [[(make-diagnostic 'unreachable-node (node-name n) "node is unreachable")]]
-  REPLACE [[#f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "unreachable-node")
+  # Re-anchored by Task 3's whole-pass audit, and it was the audit's own fix
+  # that made this necessary -- the two-directional rule in the flesh. Bare
+  # "unreachable-node" was collision-free when measured against the 26 other
+  # mutants, and stopped being so the moment "a well-formed pause machine
+  # verifies" gained a "no unreachable-node" attribution check: the pin is an
+  # unanchored regex, and the new check's LABEL contains the old pin as a
+  # substring, so this pin began matching "a pause continuation is an
+  # out-target (resolution + reachability)". Anchored to its own case and
+  # check, which no sibling reddens.
+  REPLACE [[#f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "an unreachable node is rejected: unreachable-node")
 
 # Re-anchored in Milestone 3 Slice ① Task 1: pass-overlap now compares canonical
 # matcher BYTE SETS, so the old `(if (memv b seen)` line no longer exists. The
@@ -3001,29 +3097,38 @@ byte_machine_mutation(
   LABEL "verify: only the first case is compared against the others"
   FIND [[(outer (cdr ss)]]
   REPLACE [[(outer '()]]
-  # Fix wave 1: the bare case tail collided with two other Pass 33 mutants'
-  # captured output (the pre-existing "two cases sharing a byte are never
-  # found to overlap" helper mutant, which also drives this case's count to
-  # 0, and this mutation's own sibling "a case is compared against itself",
-  # which fails the same case with a different got). Appending this
-  # mutation's own measured "got" tail excludes the sibling (its got is 4,
-  # not 0) and cuts the collision set from two to one; the helper mutant
-  # still collides because it genuinely produces the identical got 0 for
-  # this case -- disabling byte-sets-overlap? entirely is indistinguishable
-  # from dropping every case but the first, on this one fixture.
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "second and third cases is found: one pair -- expected 1, got 0")
+  # Fix wave 1 pinned this on the second-and-third fixture's own measured
+  # "got 0", which cut the collision set from two to one but not to zero:
+  # "two cases sharing a byte are never found to overlap" disables
+  # byte-sets-overlap? outright and produces the identical got 0 on that
+  # fixture, so the two were indistinguishable there.
+  #
+  # Task 3 review, re-anchored on a measurement: every fixture this pass had
+  # was SYMMETRIC under the two ways the enumeration can be truncated -- on a
+  # mutually colliding triple, "only the first case is compared" and "each
+  # case is compared only against its successor" both report 2 -- so the pin
+  # had no unshared detail to reach for. "an asymmetric collision graph
+  # counts every pair, once" (verify-tests.sps) breaks that symmetry by
+  # construction: its colliding pairs are (1,2), (2,3), (2,4), on which the
+  # four ways of breaking the enumeration report four DIFFERENT counts
+  # (1 here, 2 for the sibling below, 0 for the helper mutant, 7 for the
+  # self-comparison mutant) against the correct 3. Measured against all 26
+  # other mutants' captured output: this pin matches no other.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "an asymmetric collision graph counts every pair, once: three pairs -- expected 3, got 1")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a case's collisions after the first are dropped"
   FIND [[(inner (cdr rest)]]
   REPLACE [[(inner '()]]
-  # Fix wave 1: same trade as the mutation above, on the mirror fixture --
-  # appending this mutation's own measured "got" tail excludes the sibling
-  # self-comparison mutant (got 4 there, got 0 here) and cuts the collision
-  # set from two to one; the pre-existing helper mutant still collides for
-  # the same reason.
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "first and third cases is found: one pair -- expected 1, got 0")
+  # Task 3 review: same fix as the mutation above, same measured fixture. On
+  # the asymmetric collision graph this edit reports 2 where the sibling
+  # above reports 1, the helper mutant 0, and the self-comparison mutant 7;
+  # the mirror fixture it used to be pinned on could not separate it from the
+  # helper mutant, which produced the identical got 0 there.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "an asymmetric collision graph counts every pair, once: three pairs -- expected 3, got 2")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -3116,21 +3221,44 @@ byte_machine_mutation(
   LABEL "verify: a byte edge into a finish terminal is accepted"
   FIND [[(if (and tn (finish-node? tn))]]
   REPLACE [[(if (and tn #f)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "non-eof-into-finish")
+  # Task 3 whole-pass audit: bare "non-eof-into-finish" is a diagnostic CODE,
+  # and the Slice ③ audit fixed exactly this shape for the pause group below
+  # while leaving this group bare -- measured matching "a byte-reachable pause
+  # into finish is rejected", whose case name and check label both carry the
+  # same code. This case's "has non-eof-into-finish" check is the only place
+  # the phrase occurs; the case-name tail is kept as well, its parentheses
+  # escaped because MATCHES is a real regex.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a byte case targeting a finish node is rejected \\(non-eof-into-finish\\): has non-eof-into-finish")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: an EOF-reachable stop terminal is accepted"
   FIND [[((stop-node? n) 'eof-reachable-stop)]]
   REPLACE [[((stop-node? n) 'finish)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "eof-reachable-stop")
+  # Task 3 whole-pass audit: bare "eof-reachable-stop" is a diagnostic CODE and
+  # was measured matching TWO other mutants -- "eof-terminal chains through a
+  # pause continuation" and "a byte-reachable pause's continuation chain is an
+  # EOF path", both of which redden pause cases whose labels carry the same
+  # code. This mutation breaks the classification for EVERY stop terminal, so
+  # it is the only mutant to fail the pre-pause eof-target case's own "has
+  # eof-reachable-stop" check; anchored there, parentheses escaped.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "an eof-target reaching a stop terminal is rejected \\(eof-reachable-stop\\): has eof-reachable-stop")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: an eof-target cycle is classified as a finish terminal"
   FIND [[(if (memq name seen) 'cycle]]
   REPLACE [[(if (memq name seen) 'finish]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "eof-zero-progress-cycle")
+  # Task 3 whole-pass audit: bare "eof-zero-progress-cycle" is a diagnostic
+  # CODE and was measured matching "eof-terminal chains through a pause
+  # continuation" and "a pause's byte-reachability gate is not checked
+  # (eof-terminal chain)", each of which reddens a pause case labelled with
+  # the same code. Anchored to the pre-pause eof-cycle case's own "has
+  # eof-zero-progress-cycle" check, parentheses escaped.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "an eof-target cycle is rejected \\(eof-zero-progress-cycle\\): has eof-zero-progress-cycle")
 
 # Milestone 2 Slice ③'s Task 1 (the pause node) adds five more decisions to
 # this pass: a pause continuation is an out-target for both name resolution
@@ -3149,33 +3277,53 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a pause continuation is an out-target (resolution + reachability)"
-  # Slice 3 pin re-audit: bare "missing-target" is this file's check label in
-  # TWO other cases as well (the fallback-target and the entry-target
-  # rejections), and the pair-wise matrix measured it matching both of their
-  # mutants' FAIL lines -- so it named a diagnostic code, not a decision.
-  # "missing-target diagnostic" is the pause case's own label and occurs
-  # exactly once in verify-tests.sps. The case name itself ends in
-  # "(§16.2:905)", whose parentheses are CMake regex metacharacters, so the
-  # unique check label is the anchor rather than a case-name tail.
+  # Slice ③ moved this off the bare "missing-target" code onto the pause
+  # case's own "missing-target diagnostic" label. Task 3's whole-pass audit
+  # measured that label still colliding, with "a missing transition target is
+  # not reported": suppressing the missing-target DIAGNOSTIC and dropping the
+  # pause continuation from the list of things checked for resolution redden
+  # the same case with the same two records, byte for byte. Nothing on this
+  # mutation's resolution half could separate them -- both halves of that case
+  # were shared.
+  #
+  # Fixed on the mutation's OTHER half instead. The label names two decisions
+  # ("resolution + reachability") and only the resolution one was pinned; the
+  # reachability one is this mutation's alone, because node-out-targets' pause
+  # arm is what keeps a pause's continuation on the reachability walk.
+  # "a well-formed pause machine verifies" now asserts that fixture emits no
+  # 'unreachable-node (attribution, not the "accepted" verdict three mutants
+  # shared), and this mutant is the only one of the 27 that fails it.
   FIND [[((pause-node? n) (list (pause-node-continuation n)))
           (else '())]]
   REPLACE [[((pause-node? n) '())
           (else '())]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "missing-target diagnostic")
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a well-formed pause machine verifies: no unreachable-node")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: eof-terminal chains through a pause continuation"
-  # Slice 3 pin re-audit: bare "eof-zero-progress-cycle" is a diagnostic code,
-  # not a check -- measured matching the pre-Slice-3 eof-target-cycle case's
-  # own "has eof-zero-progress-cycle" check (a different decision) and this
-  # pass's later "no eof-zero-progress-cycle attributed to pa" check (a
-  # different check in the same case). Anchored to the case tail plus the one
-  # check label; the case name carries no parentheses, so the tail is safe.
+  # Slice ③ anchored this on the pa->pb->pa case; Task 3's whole-pass audit
+  # measured that anchor still matching "an eof-target cycle is classified as
+  # a finish terminal", and found the reason is structural, not a bad choice
+  # of anchor. eof-terminal's pause arm returning 'finish suppresses a
+  # diagnostic only where the walk PAST the pause would have found a stop
+  # ('eof-reachable-stop) or a cycle ('cycle) -- and every fixture in this
+  # file reaches exactly one of those, so each one is also broken by the
+  # mutation that kills that one classification. Not a subset either way, but
+  # no single record was this mutant's own: category (2), separable, and here
+  # NOT declined.
+  #
+  # Closed by putting both terminal kinds in ONE machine and counting them:
+  # "an EOF walk crosses a pause for both terminal kinds (§16.2:909)" expects
+  # 2, and the three edits report three different numbers -- 0 here (the walk
+  # stops at the pause, so neither is found), 1 for losing stop
+  # classification, 1 for losing cycle classification. Measured: "got 0" on
+  # that check is this mutation's alone among the 27.
   FIND [[((pause-node? n) (loop (pause-node-continuation n) (cons name seen)))]]
   REPLACE [[((pause-node? n) 'finish)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "zero-progress EOF cycle: eof-zero-progress-cycle diagnostic")
+  EXPECT_OUTPUT_MATCHES "both EOF terminals reported -- expected 2, got 0")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -3199,6 +3347,15 @@ byte_machine_mutation(
   # each a distinct decision), so it does not by itself prove which one
   # failed. Measured: this mutation's own primary witness is the reexecute/
   # pause-only cycle case; pinned to it.
+  #
+  # SUBSUMED RESIDUE, and no pin can close it: every FAIL record this mutant
+  # emits is also emitted by "verify: zero-progress detection never fires".
+  # Dropping the pause arm from PASS 5's reexec-targets can only REMOVE
+  # zero-progress-cycle diagnostics, and that mutation removes all of them, so
+  # this mutant's failure set is a strict subset (3 records of that one's 4;
+  # the record it lacks is the pure byte-dispatch self-loop, which needs no
+  # pause arm to be found). Measured by exhaustion over the whole pass, not
+  # argued. Left pinned to the check that states this decision.
   FIND [[((pause-node? n) (list (pause-node-continuation n)))
               (else '())]]
   REPLACE [[((pause-node? n) '())
@@ -3216,6 +3373,17 @@ byte_machine_mutation(
   # witnesses BYTE-reachability specifically, its label "entry
   # eof-reachable-stop diagnostic" occurs once, and its case name carries no
   # parentheses, so the pin is that case's tail plus that label.
+  #
+  # SUBSUMED RESIDUE, and no pin can close it: every FAIL record this mutant
+  # emits is also emitted by "verify: an EOF-reachable stop terminal is
+  # accepted". Not walking a byte-reachable pause's continuation chain removes
+  # eof-reachable-stop diagnostics that arise THROUGH a pause; classifying a
+  # stop node as a finish removes every eof-reachable-stop diagnostic there
+  # is, pause-borne ones included. Strict subset (4 records of that one's 8),
+  # measured by exhaustion over the whole pass. That mutation is now anchored
+  # on the pre-pause eof-target case, which is one of the four records this
+  # one does NOT emit, so the collision is one-directional: this pin does not
+  # match that mutant.
   FIND [[(case (eof-terminal m (pause-node-continuation n))]]
   REPLACE [[(case 'finish]]
   EXPECT_STATUS 1
@@ -3245,6 +3413,16 @@ byte_machine_mutation(
   # labels in this file (see the mutation above); pinned to the specific
   # fixture the case-header comment above already names as this decision's
   # own witness (the pa->pb->pa EOF-pause cycle).
+  #
+  # SUBSUMED RESIDUE, twice over, and no pin can close either: this mutant's
+  # single FAIL record is also emitted by "verify: zero-progress detection
+  # never fires" and by "verify: pause continuations join the zero-progress
+  # walk". The three edits are nested by construction -- narrowing PASS 5's
+  # FILTER back to byte-dispatch nodes stops pause nodes being flagged;
+  # narrowing its WALK (the mutation above) stops pause nodes AND the dispatch
+  # nodes whose cycle runs through one; disabling the check stops everything.
+  # Each removes a superset of the last, so there is no record the narrowest
+  # of them owns. Measured by exhaustion over the whole pass.
   FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)) (reaches-self? (node-name n)))]]
   REPLACE [[(if (and (byte-dispatch-node? n) (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "chain of pauses that cycles is a zero-progress EOF cycle: zero-progress-cycle diagnostic")
@@ -3273,35 +3451,33 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a pause's byte-reachability gate is not checked (non-eof-into-finish)"
-  # Slice 3 pin re-audit: bare "accepted" is a check label, but nothing in it
-  # names the case, so any future case reusing the word would satisfy it.
-  # Anchored to the case tail as well; the case name carries no parentheses.
+  # Slice ③ anchored this on the well-formed pause fixture's "accepted"
+  # check. The whole-branch review (a9de657..c302cdd) then measured Task 3's
+  # new "verify: a case is compared against itself" mutant reddening that same
+  # check, joining the pre-existing "a pause continuation is an out-target
+  # (resolution + reachability)" mutant -- three mutations, one boolean, one
+  # FAIL record between them, byte for byte identical (a boolean `check`
+  # prints no "got", so there is no varying detail to key on). That review
+  # recorded it as subsumed and left it collided.
+  #
+  # Task 3's whole-pass audit closes it, and the subsumption was real: the fix
+  # is not a tighter pin but a check that did not exist. "accepted" is a
+  # VERDICT -- any diagnostic at all reddens it, so it cannot say which
+  # decision broke. The eof-terminal-chain gate below already had this
+  # problem and solved it by ATTRIBUTION; the same move works here.
+  # "a well-formed pause machine verifies" now also asserts that fixture emits
+  # no 'non-eof-into-finish, which is exactly what ungating the :908 site
+  # makes it emit (pe is EOF-only-reachable and legally continues into a
+  # finish node, decision 0011). The self-comparison mutant emits
+  # 'overlapping-cases there and the out-target mutant 'unreachable-node, so
+  # each of the three now fails a check that names its own decision.
+  # Measured: this pin matches no other mutant's output in the pass.
   FIND [[(if (and (pause-node? n) (memq (node-name n) br))
                             (let ((cn (lookup nodes (pause-node-continuation n))))]]
   REPLACE [[(if (pause-node? n)
                             (let ((cn (lookup nodes (pause-node-continuation n))))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "pause machine verifies: accepted")
-
-# Whole-branch review (a9de657..c302cdd): Task 3's new "verify: a case is
-# compared against itself" mutation (this pass, above) is now a SECOND
-# sibling colliding with this pin, alongside the pre-existing "a pause
-# continuation is an out-target (resolution + reachability)" mutation
-# (below). Task 3's self-comparison mutant makes every dispatch case overlap
-# itself, which reddens the well-formed pause fixture's "accepted" check for
-# a reason this mutation names nothing about.
-#
-# Measured on this SPEC lane (verify-tests.sps): the gate mutation above
-# emits exactly one FAIL record --
-#   "FAIL pause nodes (Slice 3).a well-formed pause machine verifies:
-#    accepted -- expected a true value"
-# -- and the self-comparison mutant emits ten, one of which is that same
-# record, byte-for-byte identical (no "got" value on a boolean `check`, so
-# there is no varying detail to key on). Every FAIL line the gate mutation
-# can produce is thus a subset of the self-comparison mutant's output, so no
-# EXPECT_OUTPUT_MATCHES string can separate the two -- this is the subsumed
-# case AGENTS.md distinguishes from under-anchored: not a tighter pin to
-# find, a genuine overlap of what the two mutants break. Left declared and
-# collided, matching the pre-existing sibling's disposition.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a well-formed pause machine verifies: no non-eof-into-finish")
 
 # Cleanup follow-up: the second site's gap above is closed here too -- not by
 # VERDICT (still genuinely impossible, per the measurement above) but by
