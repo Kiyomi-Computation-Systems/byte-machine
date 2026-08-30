@@ -232,7 +232,23 @@
                          (make-finish-node 'done #f)
                          (make-error-node 'trunc 'truncated #f)
                          (make-error-node 'reject 'rejected #f))))))
-          (check "accepted" (verification-ok? v)))))
+          (check "accepted" (verification-ok? v))
+          ;; ATTRIBUTION, not verdict. "accepted" is one boolean that ANY
+          ;; diagnostic reddens, so every mutation that wrongly rejects this
+          ;; fixture fails the same check and no pin can say which one did it
+          ;; (the pin sweep measured exactly that: three mutants shared this
+          ;; record). These two name the diagnostic that must be ABSENT, so
+          ;; each of those mutants fails a different check:
+          ;;   'unreachable-node -- node-out-targets' pause arm is what keeps
+          ;;     p's continuation s1 (and pe's continuation done) on the
+          ;;     reachability walk; dropping it strands them.
+          ;;   'non-eof-into-finish -- pe is EOF-only-reachable and continues
+          ;;     into a finish node, which is legal (decision 0011); only the
+          ;;     :908 site's byte-reachability gate keeps it legal.
+          (let ((cs (map diagnostic-code (verification-diagnostics v))))
+            (check "no unreachable-node" (not (memq 'unreachable-node cs)))
+            (check "no non-eof-into-finish"
+                   (not (memq 'non-eof-into-finish cs)))))))
     (harness-case "a pause continuation naming no node is malformed (§16.2:905)"
       (lambda ()
         (let ((v (verify-machine
@@ -313,6 +329,43 @@
           (check "eof-reachable-stop diagnostic"
                  (exists (lambda (d) (eq? (diagnostic-code d) 'eof-reachable-stop))
                          (verification-diagnostics v))))))
+    ;; Both terminal kinds an EOF walk can reach THROUGH a pause, in one
+    ;; machine, counted rather than merely witnessed. Every case above reaches
+    ;; exactly one of them, so each is satisfied by a walk that stops AT the
+    ;; pause for the other kind's reason; counting both at once is what
+    ;; separates "the pause arm walks on" from "stop is classified" and "a
+    ;; cycle is classified": against the correct 2, the pause-arm edit reports
+    ;; 0 and the other two report 1 each, so the 0 belongs to the pause arm
+    ;; alone -- which no single-terminal fixture can say.
+    ;;   e0 --eof--> pa (pause) --> stop        : eof-reachable-stop on e0
+    ;;   e1 --eof--> pb (pause) --> e1 --eof--> : eof-zero-progress-cycle on e1
+    ;; Neither pause is byte-reachable (each is only an eof-target), so the
+    ;; D4(b)/(d) pause checks are out of the picture and the count belongs to
+    ;; the dispatch-node walk alone.
+    (harness-case "an EOF walk crosses a pause for both terminal kinds (§16.2:909)"
+      (lambda ()
+        (let* ((v (verify-machine
+                   (pause-fixture
+                    (list (make-byte-dispatch-node 'e0
+                            (list (make-byte-case (make-exact-byte-matcher 1)
+                                                  (make-edge 'e1 'advance) #f))
+                            (make-edge 'reject 'reexecute) 'pa #f)
+                          (make-pause-node 'pa 'stop #f)
+                          (make-byte-dispatch-node 'e1
+                            (list (make-byte-case (make-exact-byte-matcher 2)
+                                                  (make-edge 'stop 'advance) #f))
+                            (make-edge 'reject 'reexecute) 'pb #f)
+                          (make-pause-node 'pb 'e1 #f)
+                          (make-stop-node 'stop #f)
+                          (make-error-node 'reject 'rejected #f)))))
+               (cs (map diagnostic-code (verification-diagnostics v))))
+          (check "rejected" (not (verification-ok? v)))
+          (check-equal "both EOF terminals reported"
+                       (length (filter (lambda (c)
+                                         (or (eq? c 'eof-reachable-stop)
+                                             (eq? c 'eof-zero-progress-cycle)))
+                                       cs))
+                       2))))
     (harness-case "a byte-reachable pause into a stop would leak stopped through EOF (§16.2:909)"
       (lambda ()
         ;; D4(d): after feed pauses at p, current = stop and resume returns to
@@ -436,6 +489,30 @@
                                      (list (to-stop (make-byte-range-matcher 0 10))
                                            (to-stop (make-byte-range-matcher 5 15))
                                            (to-stop (make-byte-range-matcher 8 20)))))
+                     3)))
+    ;; A collision graph deliberately NOT symmetric under the two ways the
+    ;; enumeration can be truncated. The three fixtures above cannot separate
+    ;; those two edits from the one that disables the disjointness test
+    ;; outright: on the mutually colliding triple both truncations report 2,
+    ;; and on each isolating pair the one truncation that misses it reports 0
+    ;; -- the same 0 the disabled test reports. Here the colliding pairs are
+    ;; (1,2), (2,3), (2,4):
+    ;;   c1 0-10, c2 5-105, c3 100-110, c4 exactly 50.
+    ;;   correct (every i<j)              -> 3
+    ;;   first case only, vs the rest     -> 1   ((1,2))
+    ;;   each case vs its successor only  -> 2   ((1,2), (2,3))
+    ;;   the disjointness test always #f  -> 0
+    ;;   each case also compared to ITSELF-> 7   (3 + four self-pairs)
+    ;; Four distinct wrong counts, so each way of breaking the enumeration
+    ;; carries its own detail.
+    (harness-case "an asymmetric collision graph counts every pair, once"
+      (lambda ()
+        (check-equal "three pairs"
+                     (overlap-count (dispatch-node-machine
+                                     (list (to-stop (make-byte-range-matcher 0 10))
+                                           (to-stop (make-byte-range-matcher 5 105))
+                                           (to-stop (make-byte-range-matcher 100 110))
+                                           (to-stop (make-exact-byte-matcher 50)))))
                      3)))))
 
 (harness-finish)
