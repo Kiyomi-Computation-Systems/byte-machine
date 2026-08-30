@@ -446,9 +446,10 @@
 (define (seq-node cases mismatch eof-target)
   (make-sequence-dispatch-node 'seq cases mismatch eof-target #f))
 (define (one-alt bytes target) (list (make-sequence-case bytes target #f)))
-(define (seq-machine* name nodes eof-name)
-  (make-machine name 'seq '() '() '() errs nodes eof-name #f))
-(define (seq-machine nodes) (seq-machine* 'seqnode nodes 'default-eof))
+;; Fix wave 1 (Minor 3): seq-machine* took a name/eof-name pair no caller ever
+;; varied -- one caller (seq-machine), always 'seqnode/'default-eof. Inlined.
+(define (seq-machine nodes)
+  (make-machine 'seqnode 'seq '() '() '() errs nodes 'default-eof #f))
 (define (well-formed-seq-nodes)
   (list (seq-node (one-alt '(1 2) 'stop) (make-edge 'reject 'reexecute) #f)
         (make-stop-node 'stop #f)

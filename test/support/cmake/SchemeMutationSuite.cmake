@@ -577,8 +577,16 @@ cmake_minimum_required(VERSION 3.26)
 # verifier arm; Pass 42 gains four (node?, node-name, the empty-sequence
 # guard, and the bytes-accessor copy). Passes stay at 41; mutations become
 # 186 + 7 + 4 = 197.
+# Slice ② Task 1's review fix wave 1 adds three more to Pass 42:
+# make-sequence-dispatch-node's remaining three constructor guards (empty
+# cases, non-edge? mismatch, malformed eof-target), previously proven only by
+# a green check-raises with no mutation behind it. No pin count changes in
+# Pass 33 -- four pins were re-anchored in place (arm 1, re-classified from
+# subsumed to under-anchored and fixed; arms 2, 4 and 7, whose FIND text
+# moved onto the new node-eof-target helper), not added or removed. Passes
+# stay at 41; mutations become 197 + 3 = 200.
 set(EXPECTED_PASSES 41)
-set(EXPECTED_MUTATIONS 197)
+set(EXPECTED_MUTATIONS 200)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3429,39 +3437,54 @@ byte_machine_mutation(
   # never fires and the case's own `check` reports "expected a true value".
   # Measured: this mutant also breaks four OTHER cases (the well-formed
   # control, the mismatch-target sibling, arm 2's reachability case, and arm
-  # 6's non-eof-into-finish case), since node-out-targets feeds all of them --
-  # this is the FIRST FAIL line CMake's MATCHES search reaches, and it is
-  # unique to this one case.
+  # 6's non-eof-into-finish case), since node-out-targets feeds all of them.
   #
-  # Pin sweep (Step 12): this pin's own FAIL record is also produced,
-  # byte-identical, by the pre-existing "verify: a missing transition target
-  # is not reported" mutation (which deletes pass-names' missing-target
-  # diagnostic construction entirely -- a strictly broader decision covering
-  # every node kind's out-targets, old and new). Genuinely subsumed, not
-  # under-anchored: that mutation's own failure set is a strict superset of
-  # this one's, so no pin wording on either side separates them. Left
-  # declared and collided, matching this pass's pre-existing "a case is
-  # compared against itself" residue above.
+  # Fix wave 1 (Important 1): the bare-missing-target pin above was declared
+  # "genuinely subsumed" by the pre-existing "verify: a missing transition
+  # target is not reported" mutation, but that mutation's own measured output
+  # (fallback missing-target, both pause-malformed checks, plus this mutant's
+  # OWN case-target and mismatch-target FAIL lines) is not a superset of this
+  # mutant's five-case failure set: it lacks the well-formed control, arm 2's
+  # reachability case, and arm 6's non-eof-into-finish case, none of which
+  # deleting pass-names' missing-target diagnostic construction can produce (a
+  # clean control has no missing target to report; arm 2/6 are different
+  # passes). The two failure sets only partially overlap -- neither is a
+  # subset of the other -- so this was under-anchored, not subsumed: a pin
+  # unique to this mutant existed and was measured. Re-anchored to the
+  # well-formed control's own diagnostic-count line, which this mutant is the
+  # only one in this pass to produce (checked against every other declared
+  # pin's captured output, both directions, including the "missing transition
+  # target" mutation above): under this mutant, `'stop` and `'reject` (the
+  # sequence case's and mismatch edge's targets) go unreachable, so
+  # pass-reachability adds two `unreachable-node` diagnostics where the
+  # well-formed fixture expects none.
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "a case target that names no node is missing-target: missing-target")
+  EXPECT_OUTPUT_MATCHES
+    "a well-formed sequence machine verifies with no diagnostics: diagnostic count -- expected 0, got 2")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a sequence node's eof-target does not feed reachability (arm 2, all-out-targets)"
-  FIND [[    (append (node-out-targets n)
-            (let ((t (cond ((byte-dispatch-node? n) (byte-dispatch-node-eof-target n))
-                           ((sequence-dispatch-node? n) (sequence-dispatch-node-eof-target n))
-                           (else #f))))
+  # Re-anchored in Fix wave 1 (Important 3): all-out-targets' own inline cond
+  # was extracted into the shared node-eof-target helper (also used by arm 4
+  # and arm 7 below), so the FIND text this mutation targets moved from the
+  # inline cond to the call site. REPLACE reproduces the old byte-dispatch-
+  # only behaviour by gating the call, not by inlining the old cond again.
+  FIND [[  (define (all-out-targets n)
+    (append (node-out-targets n)
+            (let ((t (node-eof-target n)))
               (if (symbol? t) (list t) '()))))]]
-  REPLACE [[    (append (node-out-targets n)
+  REPLACE [[  (define (all-out-targets n)
+    (append (node-out-targets n)
             (if (byte-dispatch-node? n)
-                (let ((t (byte-dispatch-node-eof-target n)))
+                (let ((t (node-eof-target n)))
                   (if (symbol? t) (list t) '()))
                 '())))]]
   # Comparison-caught: the finish node reached only via the sequence node's
   # eof-target goes unreached, so pass-reachability's own unreachable-node
   # diagnostic fires where the test expects none -- a clean, single-case
-  # witness (measured: no other case in this file is affected).
+  # witness. Re-measured against the refactored source: byte-identical output
+  # to the pre-refactor mutation (no other case in this file is affected).
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "a node reached only through the sequence eof-target is reachable: no unreachable-node -- expected 0, got 1")
@@ -3497,17 +3520,18 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a sequence node's eof-target is not resolution-checked (arm 4, pass-eof)"
+  # Re-anchored in Fix wave 1 (Important 3): pass-eof's own inline cond was
+  # extracted into the shared node-eof-target helper (see arm 2 above); the
+  # REPLACE reproduces byte-dispatch-only behaviour by gating the call.
   FIND [[              (map (lambda (n)
-                     (let ((t (cond ((byte-dispatch-node? n) (byte-dispatch-node-eof-target n))
-                                    ((sequence-dispatch-node? n) (sequence-dispatch-node-eof-target n))
-                                    (else #f))))
+                     (let ((t (node-eof-target n)))
                        (if (or (eq? t #f) (lookup nodes t)) '()
                            (list (make-diagnostic 'invalid-eof-target (node-name n)
                                                   "eof-target names no node")))))
                    nodes)))))]]
   REPLACE [[              (map (lambda (n)
                      (if (byte-dispatch-node? n)
-                         (let ((t (byte-dispatch-node-eof-target n)))
+                         (let ((t (node-eof-target n)))
                            (if (or (eq? t #f) (lookup nodes t)) '()
                                (list (make-diagnostic 'invalid-eof-target (node-name n)
                                                       "eof-target names no node"))))
@@ -3515,8 +3539,9 @@ byte_machine_mutation(
                    nodes)))))]]
   # Comparison-caught: with the arm reverted to byte-dispatch-only, a
   # sequence node's dangling eof-target is never checked against the node
-  # table, so invalid-eof-target never fires. Measured: a clean, single-case
-  # witness.
+  # table, so invalid-eof-target never fires. Re-measured against the
+  # refactored source: byte-identical output to the pre-refactor mutation, a
+  # clean, single-case witness.
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "a sequence eof-target that names no node is invalid-eof-target: invalid-eof-target")
@@ -3588,18 +3613,24 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a sequence node's own eof-target chain is not walked (arm 7, :909)"
+  # Re-anchored in Fix wave 1 (Important 3): the outer filter's node kind
+  # check is unchanged, but the inner accessor-selecting `if` now reads
+  # node-eof-target (see arm 2 above) instead of re-checking
+  # byte-dispatch-node? a second time.
   FIND [[       ;; :909 + the EOF-cycle check — walk each dispatch node's eof-target chain.
        (apply append
               (map (lambda (n)
                      (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n))
-                         (let ((t (if (byte-dispatch-node? n)
-                                      (byte-dispatch-node-eof-target n)
-                                      (sequence-dispatch-node-eof-target n))))]]
+                         (let ((t (node-eof-target n)))
+                           (if (symbol? t)
+                               (case (eof-terminal m t)]]
   REPLACE [[       ;; :909 + the EOF-cycle check — walk each dispatch node's eof-target chain.
        (apply append
               (map (lambda (n)
                      (if (byte-dispatch-node? n)
-                         (let ((t (byte-dispatch-node-eof-target n)))]]
+                         (let ((t (node-eof-target n)))
+                           (if (symbol? t)
+                               (case (eof-terminal m t)]]
   # Comparison-caught: with the filter narrowed back to byte-dispatch-only, a
   # sequence node's own eof-target chain is never walked from this site, so
   # neither eof-reachable-stop nor eof-zero-progress-cycle ever fires FOR
@@ -3608,17 +3639,28 @@ byte_machine_mutation(
   # the cycle case is byte-identical to arm 5's mutant's (see the header
   # note), but this fixture's sole diagnostic source is this site's own
   # per-node iteration over the sequence node, which arm 5's mutation never
-  # touches -- so only arm 7's removal breaks it.
+  # touches -- so only arm 7's removal breaks it. Re-measured against the
+  # refactored source: byte-identical output to the pre-refactor mutation.
   #
-  # Pin sweep (Step 12): this pin's own FAIL record is ALSO produced,
-  # byte-identical, by the pre-existing "verify: an EOF-reachable stop
-  # terminal is accepted" mutation (eof-terminal's stop-classification line
-  # is shared by every walker -- byte-dispatch, sequence, and pause -- that
-  # mutation's measured output contains SEVEN cases including this one).
-  # Genuinely subsumed, not under-anchored: that mutation's own pin is
-  # anchored to its own distinct originating case and does not appear in
-  # THIS mutant's single-line output, so the collision is one-directional and
-  # unfixable by re-wording either pin.
+  # Minor fix wave 1: the paragraph below previously claimed this mutant's
+  # OWN captured output was "single-line". Measured: it is not -- THIS
+  # mutant's own run reports failed-cases=2, failures=2 (the self-loop cycle
+  # case above plus this fixture's own case), matching the header note at
+  # :3403-3411 exactly. The pin below still separates arm 7 from arm 5,
+  # because the collision the next paragraph documents is with a DIFFERENT
+  # mutation's output, not with arm 5's.
+  #
+  # Pin sweep (Step 12): this pin's own FAIL record is ALSO produced by the
+  # pre-existing "verify: an EOF-reachable stop terminal is accepted"
+  # mutation (eof-terminal's stop-classification line is shared by every
+  # walker -- byte-dispatch, sequence, and pause). Re-measured: that
+  # mutation's own captured output reports failed-cases=5, failures=8 (its
+  # own originating case, three pause cases at two checks each, and this
+  # arm's own case) -- not the "seven cases" this comment previously
+  # claimed. Genuinely subsumed, not under-anchored: that mutation's own pin
+  # is anchored to its own distinct originating case and does not appear in
+  # THIS mutant's (arm 7's) two-case output, so the collision is
+  # one-directional and unfixable by re-wording either pin.
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "a sequence eof path reaching a stop terminal is eof-reachable-stop: eof-reachable-stop")
@@ -4505,6 +4547,16 @@ byte_machine_mutation(
 # measured against this file's own tree, not predicted. Passes stay at 41;
 # mutations become 193 + 4 = 197 (with the seven verify.sls arm mutations
 # above, this pass's own share rose from 13 to 17).
+#
+# Fix wave 1 (Minor finding 2) adds three more, still in this same pass:
+# make-sequence-dispatch-node's three guards -- empty cases, a non-edge?
+# mismatch, a bad eof-target -- had harness cases (the eof-target guard's own
+# rejection case did not even exist yet; added below, beside its existing
+# "an eof-target of #f is legal" sibling) but no mutation proving those
+# check-raises were non-vacuous. All three measured against this file's own
+# tree; all three comparison-caught via check-raises' own expected-vs-actual
+# assertion, none raise-based. Passes stay at 41; mutations become 197 + 3 =
+# 200.
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
   LABEL "ir: node? does not admit a sequence node"
@@ -4558,6 +4610,53 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the bytes accessor returns a copy, not the stored chain: not eq")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: make-sequence-dispatch-node accepts an empty case list"
+  FIND [[(unless (and (list? cases) (pair? cases) (for-all sequence-case? cases))]]
+  REPLACE [[(unless (and (list? cases) (for-all sequence-case? cases))]]
+  # Comparison-caught via check-raises' own expected-vs-actual assertion:
+  # dropping (pair? cases) lets '() satisfy the rest of the guard (for-all
+  # over '() is vacuously true), so construction succeeds and check-raises
+  # reports the thunk returned instead of raising. FIND is unique on its own:
+  # byte-dispatch-node's own cases guard has no (pair? cases) conjunct at all
+  # (an empty case list is legal there -- the fallback alone can dispatch).
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "an empty case list is rejected: no cases")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: make-sequence-dispatch-node accepts a non-edge mismatch"
+  FIND [[(unless (edge? mismatch)]]
+  REPLACE [[(unless #t]]
+  # Comparison-caught: the guard's test is forced true, so a bare target
+  # handed in as the mismatch edge is accepted and stored verbatim; the
+  # thunk returns instead of raising.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a bare target handed in as the mismatch edge is rejected: not an edge")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: make-sequence-dispatch-node accepts a malformed eof-target"
+  # The bare guard condition `(unless (or (symbol? eof-target) (eq? eof-target
+  # #f))` is byte-identical to byte-dispatch-node's own eof-target guard
+  # (:230); FIND includes the following contract-violation line, which names
+  # make-sequence-dispatch-node and is not shared, to stay unique (SITES=1,
+  # asserted exactly).
+  FIND [[    (unless (or (symbol? eof-target) (eq? eof-target #f))
+      (byte-machine-contract-violation 'make-sequence-dispatch-node 'invalid-argument 'eof-target))]]
+  REPLACE [[    (unless #t
+      (byte-machine-contract-violation 'make-sequence-dispatch-node 'invalid-argument 'eof-target))]]
+  # Comparison-caught: the guard's test is forced true, so a non-symbol,
+  # non-#f eof-target is accepted and stored verbatim; the thunk returns
+  # instead of raising. This harness case did not exist before this fix wave
+  # (added above, beside the pre-existing "an eof-target of #f is legal"
+  # case) -- until now nothing proved the eof-target guard rejects anything.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a non-symbol, non-#f eof-target is rejected: bad eof-target")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

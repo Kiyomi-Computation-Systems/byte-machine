@@ -305,6 +305,14 @@
                        'seq (list (make-sequence-case '(1) 'stop #f))
                        (make-edge 'reject 'reexecute) #f #f))
                      #f)))
+    ;; Fix wave 1 (Minor 2): the eof-target guard had a "legal #f" case above
+    ;; but no case proving it actually REJECTS a bad shape.
+    (harness-case "a non-symbol, non-#f eof-target is rejected"
+      (lambda ()
+        (check-raises "bad eof-target" (contract-violation? 'make-sequence-dispatch-node 'eof-target)
+                      (lambda () (make-sequence-dispatch-node
+                                  'seq (list (make-sequence-case '(1) 'stop #f))
+                                  (make-edge 'reject 'reexecute) 42 #f)))))
     (harness-case "an empty case list is rejected"
       (lambda ()
         (check-raises "no cases" (contract-violation? 'make-sequence-dispatch-node 'cases)
