@@ -19,7 +19,10 @@
                 byte-case-matcher byte-case-edge matcher-bytes
                 edge-target edge-mode stop-node? error-node? error-node-error-name
                 finish-node? pause-node? pause-node-continuation
-                error-declaration-name error-declaration-code node-name))
+                error-declaration-name error-declaration-code node-name
+                sequence-dispatch-node? sequence-dispatch-node-cases
+                sequence-dispatch-node-mismatch sequence-dispatch-node-eof-target
+                sequence-case-bytes sequence-case-target))
 
   (define nm-tag (vector 'byte-machine-normal-machine))
   (define (make-normal-machine entry states fp) (vector nm-tag entry states fp))
@@ -66,9 +69,69 @@
       (put-u16be p (bytevector-length b)) (put-bytevector p b)))
   (define (mode->byte m) (if (eq? m 'advance) 0 1))
 
-  ;; The `else` guards below are unreachable-today safety for a sixth node/state
-  ;; kind beyond dispatch/stop/error/finish/pause; verified by inspection, not
-  ;; mutation.
+  ;; The `else` guards below are unreachable-today safety for a SEVENTH
+  ;; node/state kind beyond the six now handled -- dispatch/stop/error/finish/
+  ;; pause/sequence (sequence lowers to ordinary dispatch states, decision
+  ;; 0015 point 1, so it adds no new case of its own); verified by inspection,
+  ;; not mutation.
+
+  ;; --- sequence prefix trie (decisions 0015, 0016) ---
+  ;; A trie node is (children . terminal); children is an alist (byte . node)
+  ;; kept ASCENDING by byte, which is what makes decision 0016 point 1's
+  ;; pre-order total. Alternatives that agree on a byte descend into ONE shared
+  ;; child, so no prefix state can offer the same byte twice -- the property
+  ;; decision 0014 rests the ascending sort on, and which pass-overlap cannot
+  ;; supply here because it walks source byte-cases and never sees these states.
+  (define (empty-trie) (cons '() #f))
+  (define (trie-children t) (car t))
+  (define (trie-terminal t) (cdr t))
+  (define (trie-interior? t) (pair? (trie-children t)))
+  (define (trie-put cs b child)
+    (cond ((null? cs) (list (cons b child)))
+          ((= b (caar cs)) (cons (cons b child) (cdr cs)))
+          ((< b (caar cs)) (cons (cons b child) cs))
+          (else (cons (car cs) (trie-put (cdr cs) b child)))))
+  ;; The two guards below are internal invariants, not user diagnostics. Decision
+  ;; 0015 point 2: a prefix state has no "accept here" slot, so a trie node that
+  ;; is both terminal and interior is UNREPRESENTABLE rather than merely
+  ;; unwanted. §16.2:894's ambiguity check rejects it as a diagnostic -- and that
+  ;; check is Slice ③, so between ② and ③ such a node is constructible and
+  ;; verifies clean. These fail loudly instead of silently dropping an
+  ;; alternative. (byte-machine interpret) will carry the same two guards once
+  ;; Task 3 lands them (decision 0015 point 2).
+  (define (trie-insert t bs target)
+    (if (null? bs)
+        (begin
+          (when (trie-terminal t)
+            (assertion-violation 'normalize-machine "duplicate sequence alternative" target))
+          (when (trie-interior? t)
+            (assertion-violation 'normalize-machine "ambiguous terminal prefix" target))
+          (cons (trie-children t) target))
+        (begin
+          (when (trie-terminal t)
+            (assertion-violation 'normalize-machine "ambiguous terminal prefix" target))
+          (let* ((b (car bs))
+                 (hit (assv b (trie-children t)))
+                 (child (trie-insert (if hit (cdr hit) (empty-trie)) (cdr bs) target)))
+            (cons (trie-put (trie-children t) b child) (trie-terminal t))))))
+  (define (build-trie cases)
+    (let loop ((cs cases) (t (empty-trie)))
+      (if (null? cs) t
+          (loop (cdr cs) (trie-insert t (sequence-case-bytes (car cs))
+                                      (sequence-case-target (car cs)))))))
+  ;; Ids for every INTERIOR non-root node, depth-first pre-order with children
+  ;; ascending by byte (decision 0016 point 1). The root is the declared node's
+  ;; own state, and a TERMINAL child consumes no id -- its byte routes straight
+  ;; to that alternative's declared target. Returns (alist next-id), keyed by
+  ;; trie-node identity.
+  (define (allocate-prefix-ids t next)
+    (let walk ((cs (trie-children t)) (acc '()) (next next))
+      (if (null? cs) (values (reverse acc) next)
+          (let ((child (cdar cs)))
+            (if (trie-interior? child)
+                (let-values (((sub next2) (allocate-prefix-ids child (+ next 1))))
+                  (walk (cdr cs) (append (reverse sub) (cons (cons child next) acc)) next2))
+                (walk (cdr cs) acc next))))))
 
   ;; Lowering: verified machine -> (values entry states-vector). No encoding.
   (define (lower-machine machine)
@@ -90,45 +153,97 @@
                            (cons 'node (id-of t))
                            (cons 'default default-eof-code)))))
            (entry (id-of (machine-entry machine)))
-           (states (list->vector
-                    (let loop ((ns nodes) (i 0) (acc '()))
-                      (if (null? ns) (reverse acc)
-                          (let ((n (car ns)))
-                            (loop (cdr ns) (+ i 1)
-                                  (cons
-                                   (cond
-                                     ((byte-dispatch-node? n)
-                                      (let ((trs (list-sort (lambda (a b) (< (car a) (car b)))
-                                                   ;; One transition per byte of each case's
-                                                   ;; canonical set (decision 0014): the encoding,
-                                                   ;; its tag bytes and its format version byte are
-                                                   ;; unchanged, and every machine expressible
-                                                   ;; before Milestone 3 encodes identically.
-                                                   (apply append
-                                                     (map (lambda (c)
-                                                            (let ((e (byte-case-edge c))
-                                                                  (bs (matcher-bytes (byte-case-matcher c))))
-                                                              (map (lambda (b)
-                                                                     (list b (id-of (edge-target e))
-                                                                           (edge-mode e)))
-                                                                   bs)))
-                                                          (byte-dispatch-node-cases n)))))
-                                            (fb (byte-dispatch-node-fallback n)))
-                                        (vector ns-tag 'dispatch i trs
-                                                (cons (id-of (edge-target fb)) (edge-mode fb)) #f
-                                                (eof-of n))))
-                                     ((stop-node? n) (vector ns-tag 'stop i #f #f #f #f))
-                                     ((error-node? n) (vector ns-tag 'error i #f #f (errcode (error-node-error-name n)) #f))
-                                     ((finish-node? n) (vector ns-tag 'finish i #f #f #f #f))
-                                     ((pause-node? n)
-                                      (vector ns-tag 'pause i #f #f #f
-                                              (cons 'node (id-of (pause-node-continuation n)))))
-                                     ;; The repertoire is exactly these five
-                                     ;; node kinds (dispatch/stop/error/finish/pause).
-                                     ;; A future kind reaching here must fail loudly, not
-                                     ;; lower to nothing.
-                                     (else (assertion-violation 'normalize-machine "unknown node kind" n)))
-                                   acc))))))))
+           (declared-count (length nodes))
+           ;; Decision 0016: declared nodes keep their declaration index; every
+           ;; internal prefix state appends after the whole declared block, in
+           ;; declaring-node order. Interleaving would renumber every later node
+           ;; and move the fingerprint of every machine containing a sequence.
+           (seq-eof-of (lambda (n)
+                         (let ((t (sequence-dispatch-node-eof-target n)))
+                           (if (symbol? t) (cons 'node (id-of t))
+                               (cons 'default default-eof-code)))))
+           (prefix-blocks
+            (let loop ((ns nodes) (next declared-count) (acc '()))
+              (if (null? ns) (reverse acc)
+                  (let ((n (car ns)))
+                    (if (sequence-dispatch-node? n)
+                        (let ((t (build-trie (sequence-dispatch-node-cases n))))
+                          (let-values (((ids next2) (allocate-prefix-ids t next)))
+                            (loop (cdr ns) next2 (cons (list n t ids) acc))))
+                        (loop (cdr ns) next acc))))))
+           (block-of (lambda (n)
+                       (let loop ((bs prefix-blocks))
+                         (cond ((null? bs)
+                                (assertion-violation 'normalize-machine
+                                  "sequence node has no prefix block" n))
+                               ((eq? (car (car bs)) n) (car bs))
+                               (else (loop (cdr bs)))))))
+           (trie-transitions
+            (lambda (t ids)
+              (map (lambda (kv)
+                     (let ((b (car kv)) (child (cdr kv)))
+                       (list b
+                             (if (trie-interior? child)
+                                 (cdr (assq child ids))
+                                 (id-of (trie-terminal child)))
+                             'advance)))
+                   (trie-children t))))
+           ;; Every prefix state carries the source node's mismatch edge as its
+           ;; fallback and inherits its EOF edge (§12.4:727).
+           (seq-state
+            (lambda (n t ids id)
+              (let ((mm (sequence-dispatch-node-mismatch n)))
+                (vector ns-tag 'dispatch id (trie-transitions t ids)
+                        (cons (id-of (edge-target mm)) (edge-mode mm)) #f
+                        (seq-eof-of n)))))
+           (declared
+            (let loop ((ns nodes) (i 0) (acc '()))
+              (if (null? ns) (reverse acc)
+                  (let ((n (car ns)))
+                    (loop (cdr ns) (+ i 1)
+                          (cons
+                           (cond
+                             ((byte-dispatch-node? n)
+                              (let ((trs (list-sort (lambda (a b) (< (car a) (car b)))
+                                           ;; One transition per byte of each case's
+                                           ;; canonical set (decision 0014): the encoding,
+                                           ;; its tag bytes and its format version byte are
+                                           ;; unchanged, and every machine expressible
+                                           ;; before Milestone 3 encodes identically.
+                                           (apply append
+                                             (map (lambda (c)
+                                                    (let ((e (byte-case-edge c))
+                                                          (bs (matcher-bytes (byte-case-matcher c))))
+                                                      (map (lambda (b)
+                                                             (list b (id-of (edge-target e))
+                                                                   (edge-mode e)))
+                                                           bs)))
+                                                  (byte-dispatch-node-cases n)))))
+                                    (fb (byte-dispatch-node-fallback n)))
+                                (vector ns-tag 'dispatch i trs
+                                        (cons (id-of (edge-target fb)) (edge-mode fb)) #f
+                                        (eof-of n))))
+                             ((sequence-dispatch-node? n)
+                              (let ((blk (block-of n)))
+                                (seq-state n (cadr blk) (caddr blk) i)))
+                             ((stop-node? n) (vector ns-tag 'stop i #f #f #f #f))
+                             ((error-node? n) (vector ns-tag 'error i #f #f (errcode (error-node-error-name n)) #f))
+                             ((finish-node? n) (vector ns-tag 'finish i #f #f #f #f))
+                             ((pause-node? n)
+                              (vector ns-tag 'pause i #f #f #f
+                                      (cons 'node (id-of (pause-node-continuation n)))))
+                             ;; The repertoire is now these six kinds. A future
+                             ;; kind reaching here must fail loudly, not lower to
+                             ;; nothing.
+                             (else (assertion-violation 'normalize-machine "unknown node kind" n)))
+                           acc))))))
+           (internal
+            (apply append
+                   (map (lambda (blk)
+                          (let ((n (car blk)) (ids (caddr blk)))
+                            (map (lambda (kv) (seq-state n (car kv) ids (cdr kv))) ids)))
+                        prefix-blocks)))
+           (states (list->vector (append declared internal))))
       (values entry states)))
 
   ;; Encoding: (entry, states) -> canonical bytes (decision 0009 layout).

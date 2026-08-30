@@ -38,12 +38,18 @@
           (check-equal "state 0 kind" (normal-state-kind (vector-ref s 0)) 'dispatch)
           (check-equal "state 1 kind" (normal-state-kind (vector-ref s 1)) 'stop)
           (check-equal "state 2 kind" (normal-state-kind (vector-ref s 2)) 'error))))
-    (harness-case "state ids are the declaration indices"
+    ;; Decision 0016 point 1: a DECLARED node keeps its declaration index; only
+    ;; internal prefix states break the old coincidence, and they append after
+    ;; the entire declared block. The one-byte machine has no sequence node, so
+    ;; its ids are unchanged -- which is decision 0016 point 2 in one assertion.
+    (harness-case "declared nodes keep their declaration indices (decision 0016)"
       (lambda ()
         (let ((s (normal-machine-states n1)))
           (check-equal "id 0" (normal-state-id (vector-ref s 0)) 0)
           (check-equal "id 1" (normal-state-id (vector-ref s 1)) 1)
-          (check-equal "id 2" (normal-state-id (vector-ref s 2)) 2))))
+          (check-equal "id 2" (normal-state-id (vector-ref s 2)) 2)
+          (check-equal "no internal states in a sequence-free machine"
+                       (vector-length s) 3))))
     (harness-case "the dispatch state lowers its case and fallback to ids"
       (lambda ()
         (let ((d (vector-ref (normal-machine-states n1) 0)))
@@ -203,5 +209,185 @@
           (check-equal "count" (length bs) 256)
           (check-equal "first" (car bs) 0)
           (check-equal "last" (list-ref bs 255) 255))))))
+
+;; Milestone 3 Slice ② Task 2 (decisions 0015 and 0016). A sequence node lowers
+;; to ORDINARY dispatch states -- no new state kind, no new encoding arm -- with
+;; alternatives merged into a trie so no prefix state can offer the same byte
+;; twice, which is what keeps the ascending-by-byte sort a total order.
+(define (seq-alt bytes target) (make-sequence-case bytes target #f))
+(define (seq-machine name alts extra-nodes)
+  (make-machine name 'seq '() '() '() (list eof-decl rej-decl)
+    (append (list (make-sequence-dispatch-node
+                   'seq (map (lambda (a) (seq-alt (car a) (cdr a))) alts)
+                   (make-edge 'reject 'reexecute) #f #f)
+                  (make-stop-node 'stop #f)
+                  (make-error-node 'reject 'rejected #f))
+            extra-nodes)
+    'default-eof #f))
+(define (state-of m i) (vector-ref (normal-machine-states (normalize m)) i))
+(define (state-count m) (vector-length (normal-machine-states (normalize m))))
+(define (kinds-of m)
+  (let ((s (normal-machine-states (normalize m))))
+    (let loop ((i 0) (a '()))
+      (if (= i (vector-length s)) (reverse a)
+          (loop (+ i 1) (cons (normal-state-kind (vector-ref s i)) a))))))
+(define (trs-of m i) (normal-dispatch-transitions (state-of m i)))
+
+(define four-byte (seq-machine 'seqnode '(((1 2 3 4) . stop)) '()))
+
+(harness-group "a single-alternative sequence lowers to a chain of dispatch states"
+  (lambda ()
+    (harness-case "three declared nodes plus three internal prefix states"
+      (lambda () (check-equal "count" (state-count four-byte) 6)))
+    (harness-case "every lowered prefix state is an ordinary dispatch state"
+      (lambda ()
+        (check-equal "kinds" (kinds-of four-byte)
+                     '(dispatch stop error dispatch dispatch dispatch))))
+    (harness-case "the declared node keeps its declaration index and the prefix states append"
+      (lambda ()
+        (check-equal "root" (trs-of four-byte 0) '((1 3 advance)))
+        (check-equal "prefix 1" (trs-of four-byte 3) '((2 4 advance)))
+        (check-equal "prefix 2" (trs-of four-byte 4) '((3 5 advance)))
+        (check-equal "prefix 3 targets the alternative's declared target"
+                     (trs-of four-byte 5) '((4 1 advance)))))
+    ;; Every other check here reaches a prefix state through its VECTOR
+    ;; POSITION (state-of); none reads the state's own `id` field, so a lowered
+    ;; state carrying the wrong id passes every check above unnoticed. This is
+    ;; the one place that field is asserted for an internal (non-declared)
+    ;; state at all.
+    (harness-case "internal prefix states carry their own id, not a placeholder"
+      (lambda ()
+        (check-equal "id 3" (normal-state-id (state-of four-byte 3)) 3)
+        (check-equal "id 4" (normal-state-id (state-of four-byte 4)) 4)
+        (check-equal "id 5" (normal-state-id (state-of four-byte 5)) 5)))
+    (harness-case "every prefix state inherits the mismatch edge as its fallback"
+      (lambda ()
+        (for-each (lambda (i)
+                    (check-equal (string-append "fallback " (number->string i))
+                                 (normal-dispatch-fallback (state-of four-byte i))
+                                 '(2 . reexecute)))
+                  '(0 3 4 5))))
+    (harness-case "every prefix state inherits the source node's EOF edge (§12.4:727)"
+      (lambda ()
+        (for-each (lambda (i)
+                    (check-equal (string-append "eof " (number->string i))
+                                 (normal-dispatch-eof (state-of four-byte i))
+                                 '(default . eof)))
+                  '(0 3 4 5))))))
+
+(harness-group "alternatives share prefix states wherever they agree"
+  (lambda ()
+    (define shared (seq-machine 'shared '(((65 66) . stop) ((65 67) . halt))
+                                (list (make-stop-node 'halt #f))))
+    (harness-case "a shared first byte becomes ONE transition into ONE state"
+      (lambda ()
+        (check-equal "root has a single transition" (trs-of shared 0) '((65 4 advance)))))
+    (harness-case "the shared state branches to both alternatives' targets"
+      (lambda ()
+        (check-equal "branch" (trs-of shared 4) '((66 1 advance) (67 3 advance)))))
+    (harness-case "caller order does not change the canonical result"
+      (lambda ()
+        (check-equal "same fingerprint"
+                     (normal-machine-fingerprint
+                      (normalize (seq-machine 'shared '(((65 66) . stop) ((65 67) . halt))
+                                              (list (make-stop-node 'halt #f)))))
+                     (normal-machine-fingerprint
+                      (normalize (seq-machine 'shared '(((65 67) . halt) ((65 66) . stop))
+                                              (list (make-stop-node 'halt #f))))))))
+    (harness-case "alternatives that diverge at position 0 get separate states"
+      (lambda ()
+        (let ((d (seq-machine 'disjoint '(((65 66) . stop) ((88 89) . halt))
+                              (list (make-stop-node 'halt #f)))))
+          (check-equal "root" (trs-of d 0) '((65 4 advance) (88 5 advance)))
+          (check-equal "A branch" (trs-of d 4) '((66 1 advance)))
+          (check-equal "X branch" (trs-of d 5) '((89 3 advance))))))))
+
+(harness-group "internal ids are depth-first pre-order, children ascending (decision 0016)"
+  (lambda ()
+    ;; A -> {B terminal, C -> D}, X -> Y. Depth-first gives 5,6,7; breadth-first
+    ;; would give 5,7,6 -- so this fixture is what pins the traversal.
+    (define ordered
+      (make-machine 'order 'seq '() '() '() (list eof-decl rej-decl)
+        (list (make-sequence-dispatch-node 'seq
+                (list (seq-alt '(65 66) 'stop) (seq-alt '(65 67 68) 'halt)
+                      (seq-alt '(88 89) 'done))
+                (make-edge 'reject 'reexecute) #f #f)
+              (make-stop-node 'stop #f) (make-error-node 'reject 'rejected #f)
+              (make-stop-node 'halt #f) (make-stop-node 'done #f))
+        'default-eof #f))
+    (harness-case "depth-first pre-order, not breadth-first"
+      (lambda ()
+        (check-equal "root" (trs-of ordered 0) '((65 5 advance) (88 7 advance)))
+        (check-equal "A's child is 5" (trs-of ordered 5) '((66 1 advance) (67 6 advance)))
+        (check-equal "C's child is 6, nested under 5" (trs-of ordered 6) '((68 3 advance)))
+        (check-equal "X's child is 7, after the whole A subtree" (trs-of ordered 7)
+                     '((89 4 advance)))))
+    ;; Same gap as the four-byte fixture above: this is the ordering-sensitive
+    ;; fixture, so it is also the strongest witness that each internal state's
+    ;; own `id` field -- not just its position in the states vector -- matches
+    ;; the depth-first allocation order.
+    (harness-case "internal prefix states' own ids match the depth-first allocation"
+      (lambda ()
+        (check-equal "A's id" (normal-state-id (state-of ordered 5)) 5)
+        (check-equal "C's id" (normal-state-id (state-of ordered 6)) 6)
+        (check-equal "X's id" (normal-state-id (state-of ordered 7)) 7)))))
+
+(harness-group "two sequence nodes never share prefix states (decision 0016 point 3)"
+  (lambda ()
+    (define two
+      (make-machine 'two 'sa '() '() '() (list eof-decl rej-decl)
+        (list (make-sequence-dispatch-node 'sa (list (seq-alt '(1 2 3) 'sb))
+                (make-edge 'reject 'reexecute) #f #f)
+              (make-sequence-dispatch-node 'sb (list (seq-alt '(1 2 3) 'stop))
+                (make-edge 'reject 'reexecute) #f #f)
+              (make-stop-node 'stop #f) (make-error-node 'reject 'rejected #f))
+        'default-eof #f))
+    (harness-case "identical byte runs in two nodes get disjoint states, in declaring order"
+      (lambda ()
+        (check-equal "sa root" (trs-of two 0) '((1 4 advance)))
+        (check-equal "sb root" (trs-of two 1) '((1 6 advance)))
+        (check-equal "sa prefix states are 4,5" (trs-of two 4) '((2 5 advance)))
+        (check-equal "sb prefix states are 6,7" (trs-of two 6) '((2 7 advance)))
+        (check-equal "state count" (state-count two) 8)))))
+
+;; house convention (conditions.sls header, and ir-tests.sps's own
+;; contract-violation? helper): tests compare the condition's structured
+;; fields, never rendered text. These two guards raise a plain R6RS assertion
+;; violation (not the byte-machine contract condition), so the predicate
+;; asserts assertion-violation?, that `who` is normalize-machine's own name,
+;; and which of the two messages it carries -- (lambda (e) #t) would pass on
+;; ANY raise, including one from the two messages swapped between the guards,
+;; or from an unrelated later pass rejecting the same fixture outright.
+(define (raises-normalize-assertion? message)
+  (lambda (e)
+    (and (assertion-violation? e)
+         (eq? (condition-who e) 'normalize-machine)
+         (equal? (condition-message e) message))))
+
+(harness-group "the two unrepresentable trie shapes fail loudly (decision 0015 point 2)"
+  (lambda ()
+    (harness-case "an ambiguous terminal prefix is an assertion violation"
+      (lambda ()
+        (check-raises "AB|ABC" (raises-normalize-assertion? "ambiguous terminal prefix")
+                      (lambda () (normalize (seq-machine 'amb '(((65 66) . stop)
+                                                                ((65 66 67) . halt))
+                                                         (list (make-stop-node 'halt #f))))))))
+    (harness-case "two identical alternatives are an assertion violation"
+      (lambda ()
+        (check-raises "AB|AB" (raises-normalize-assertion? "duplicate sequence alternative")
+                      (lambda () (normalize (seq-machine 'dup '(((65 66) . stop)
+                                                                ((65 66) . halt))
+                                                         (list (make-stop-node 'halt #f))))))))
+    ;; Minor 3 (Fix wave 1): trie-insert's bs-NULL branch carries a THIRD guard
+    ;; -- (when (trie-interior? t) ...) -- distinct from the bs-non-null-branch
+    ;; guard the "AB|ABC" case above witnesses. It fires only when a LONGER
+    ;; alternative is inserted BEFORE its own prefix (every fixture above
+    ;; inserts short-first). Reversing the order is what reaches it.
+    (harness-case "an ambiguous terminal prefix inserted in reverse order is also caught"
+      (lambda ()
+        (check-raises "ABC|AB" (raises-normalize-assertion? "ambiguous terminal prefix")
+                      (lambda () (normalize (seq-machine 'amb-rev '(((65 66 67) . halt)
+                                                                    ((65 66) . stop))
+                                                         (list (make-stop-node 'halt #f))))))))))
 
 (harness-finish)
