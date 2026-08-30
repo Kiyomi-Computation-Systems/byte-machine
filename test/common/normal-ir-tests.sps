@@ -350,6 +350,48 @@
         (check-equal "sb prefix states are 6,7" (trs-of two 6) '((2 7 advance)))
         (check-equal "state count" (state-count two) 8)))))
 
+;; Milestone 3 Slice ③ Task 3: the §21.2:1065 `version` production lowered.
+;; Two alternatives sharing the seven-byte prefix `HTTP/1.` descend into ONE
+;; chain and part at ONE state -- §10.6:544's shared nonterminal prefixes, and
+;; the property that makes decision 0014's ascending-by-byte sort a total order
+;; (no prefix state can offer the same byte twice). This is where "each
+;; alternative reaches its OWN declared node" is observable at all: both
+;; targets are stop nodes, so the two accepts are behaviourally identical.
+(harness-group "two alternatives over a shared prefix lower to one trie"
+  (lambda ()
+    (define httpver
+      (seq-machine 'httpver
+                   (list (cons '(72 84 84 80 47 49 46 48) 'stop)    ; HTTP/1.0
+                         (cons '(72 84 84 80 47 49 46 49) 'halt))   ; HTTP/1.1
+                   (list (make-stop-node 'halt #f))))
+    (harness-case "the shared prefix is not duplicated"
+      (lambda ()
+        ;; Two eight-byte alternatives lowered as separate chains would need
+        ;; fourteen internal states; merged, they need seven.
+        (check-equal "state count" (state-count httpver) 11)))
+    (harness-case "the chain is linear until the distinguishing byte"
+      (lambda ()
+        (check-equal "root"     (trs-of httpver 0)  '((72 4 advance)))
+        (check-equal "state 4"  (trs-of httpver 4)  '((84 5 advance)))
+        (check-equal "state 5"  (trs-of httpver 5)  '((84 6 advance)))
+        (check-equal "state 6"  (trs-of httpver 6)  '((80 7 advance)))
+        (check-equal "state 7"  (trs-of httpver 7)  '((47 8 advance)))
+        (check-equal "state 8"  (trs-of httpver 8)  '((49 9 advance)))
+        (check-equal "state 9"  (trs-of httpver 9)  '((46 10 advance)))))
+    (harness-case "the branch state routes each alternative to its OWN declared node"
+      (lambda ()
+        ;; 48 -> state 1 ('stop), 49 -> state 3 ('halt): ascending by byte, two
+        ;; transitions, two different declared targets. A lowering that dropped
+        ;; an alternative would show one transition here -- and this file is
+        ;; where that has to be caught, because http-version-interpret-tests.sps
+        ;; drives the same two alternatives through the reference interpreter,
+        ;; which never touches the normalizer (interpret.sls's header, §18) and
+        ;; so cannot see a lowering defect at all. The AB/AC group above makes
+        ;; the same claim over a one-byte prefix; this one carries the seven-byte
+        ;; chain with it.
+        (check-equal "branch transitions" (trs-of httpver 10)
+                     '((48 1 advance) (49 3 advance)))))))
+
 ;; house convention (conditions.sls header, and ir-tests.sps's own
 ;; contract-violation? helper): tests compare the condition's structured
 ;; fields, never rendered text. These two guards raise a plain R6RS assertion

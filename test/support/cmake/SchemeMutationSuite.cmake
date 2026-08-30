@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FORTY-THREE PASSES, BECAUSE FORTY-THREE DIFFERENT WITNESSES ARE NEEDED
+# FORTY-FOUR PASSES, BECAUSE FORTY-FOUR DIFFERENT WITNESSES ARE NEEDED
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -145,7 +145,7 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "FORTY-THREE PASSES..." above. Declared here, rather than only in prose, so the
+# See "FORTY-FOUR PASSES..." above. Declared here, rather than only in prose, so the
 # count enforced at the bottom of this file is the same text a reader checks by
 # eye at the top -- one number to keep in sync, not two that can quietly
 # disagree. 25 passes / 60 mutations before the aot task; pass 26 adds two (C3,
@@ -683,8 +683,17 @@ cmake_minimum_required(VERSION 3.26)
 # count-not-witness case whose correct value moved 2 -> 3. Pass 33 was re-swept
 # whole in both directions at 41 mutations; see Pass 33's own audit block.
 # Passes stay at 43; mutations become 229 + 1 = 230.
-set(EXPECTED_PASSES 43)
-set(EXPECTED_MUTATIONS 230)
+# Milestone 3 Slice ③ Task 3 (the multi-alternative fixture and its absolute
+# interpreter lane) opens Pass 47 with two mutations -- seq-step's
+# live-alternative filter truncated to the first declared alternative and to
+# the last -- because the lane it proves non-vacuous is the only one that
+# drives a branching trie end to end, and both mutants pass the
+# single-alternative lane unchanged. The same task adds a group to
+# normal-ir-tests.sps, so Pass 35 (whose SPEC lane runs that program) was
+# re-swept whole in both directions at 22 mutations; see Pass 35's own audit
+# block. Passes become 43 + 1 = 44; mutations become 230 + 2 = 232.
+set(EXPECTED_PASSES 44)
+set(EXPECTED_MUTATIONS 232)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -4530,6 +4539,31 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # value) and the structural decisions (entry id, transition sort, error-code
 # resolution). This pass proves those checks are not vacuous. Verify command
 # uses both library roots, an empty object guard, the normal-ir program.
+#
+# WHOLE-PASS PIN AUDIT, Milestone 3 Slice ③ Task 3 (the multi-alternative
+# fixture). No mutation joined this pass. Three CASES and nine checks joined
+# normal-ir-tests.sps -- the "two alternatives over a shared prefix lower to one
+# trie" group, which lowers the §21.2 `version` production -- and adding a check
+# widens every existing pin exactly as adding a mutation does (AGENTS.md), so
+# the whole pass was re-measured in BOTH directions by the method Pass 33's
+# audit blocks describe: apply each mutation to a staged copy, capture the SPEC
+# lane's full stdout+stderr, then re-judge every pin through
+# byte_machine_mutation_verdict against every OTHER mutant's captured output,
+# plus a self-check that each pin still catches its own. 22 mutations, 484
+# ordered pairs, ZERO collisions, and all 22 pins still catch their own mutant.
+# Control, because a colliding pass has to be told apart from an inherited one:
+# the identical sweep run against the pre-change normal-ir-tests.sps
+# (`git show HEAD:test/common/normal-ir-tests.sps`) is also 484 pairs and also
+# zero. Nothing inherited, nothing introduced.
+#
+# The new group is not inert under this pass's own mutants -- four of the 22
+# redden it, measured on the same captures: "normal-ir: the trie does not merge
+# alternatives sharing a byte" (state count 39 rather than 11, which is the two
+# alternatives lowered as SEPARATE chains), "normal-ir: trie children are not
+# kept ascending by byte", "normal-ir: internal prefix states do not append
+# after the declared block", and "normal-ir: a terminal trie child consumes an
+# id it should not" (state count 13). Named by LABEL, not by line number: this
+# branch has already caught three stale line citations into this file.
 
 byte_machine_mutation_reset()
 
@@ -6000,9 +6034,106 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
+# --- Pass 47: the multi-alternative absolute lane is non-vacuous (M3 Slice ③ --
+# Task 3) ----------------------------------------------------------------------
+#
+# http-version-interpret-tests.sps drives TWO alternatives over a shared prefix
+# end to end, with absolute tuples: the §21.2 `version` production, whose seven
+# shared bytes put the branch far enough in that the chain is fully walked
+# before either alternative can be distinguished. Both mutations below truncate
+# seq-step's live-alternative filter to a single case, so the interpreter
+# answers as though the node had declared one alternative rather than two, and
+# between them they witness the loss of either one.
+#
+# Why the decision needs a lane of its own rather than the single-alternative
+# one Pass 45 covers: both mutants were run against sequence-interpret-tests.sps
+# (Pass 45's SPEC-lane program) on a scratch stage and BOTH pass it unchanged --
+# status=0, cases=10 failed-cases=0 checks=25 failures=0, no FAIL lines --
+# because with one declared alternative the truncated list and the whole list
+# are the same list (AGENTS.md: a mutation's witnessing test lives in its own
+# SPEC lane's program).
+#
+# Stated rather than implied, because "the first lane to drive a branching
+# sequence node" would be false: interpret-tests.sps, under the DIFFERENT SPEC
+# byte-machine.unit.interpret.chez.source, has driven AB/AC and AB/XY
+# alternatives through the interpreter since Slice ②, and it catches both
+# mutations below (measured: cases=21 checks=40, failed-cases=4 for the FIRST
+# mutation, 5 for the LAST). What is new here is the shape rather than the node
+# kind -- a seven-byte shared prefix instead of a one-byte one, asserted as
+# absolute tuples rather than as bare statuses -- and the reason these are
+# declared here as well is the SPEC-lane rule, which is the same relationship
+# Pass 45's completed-alternative mutation documents against Pass 34. Verify
+# command uses both library roots, an empty object guard, the new absolute
+# program.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/http-version-interpret-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.http-version.chez.source
+  LABEL "interpret: a branching prefix keeps only the FIRST declared alternative live"
+  # seq-step filters the node's WHOLE case list for the alternatives still
+  # matching the accumulated path. Truncating that list to its head leaves
+  # `HTTP/1.0` -- the first declared alternative -- accepting, and `HTTP/1.1`
+  # mismatching on its own last byte, at the branch state the shared prefix
+  # ends in. FIND measured unique in the file (one occurrence).
+  #
+  # Measured against a scratch stage, not the committed tree: baseline cases=12
+  # failed-cases=0 checks=19 failures=0 status=0; mutant cases=12
+  # failed-cases=2 checks=19 failures=2 status=1, both failures on HTTP/1.1's
+  # own accept checks and nothing else. Comparison-caught (check-equal
+  # failures, no raise).
+  #
+  # Pin sweep, both directions, against every other mutation under this pass's
+  # verify command -- which is the sibling below and nothing else: 2 mutations,
+  # 4 ordered pairs, every pin re-judged through byte_machine_mutation_verdict
+  # against both captures. Zero collisions, and each pin still catches its own
+  # mutant. The two failure sets are mirror images -- this mutant reports only
+  # the HTTP/1.1 cases, the sibling only the HTTP/1.0 ones -- so neither pin
+  # can match the other's output.
+  # Control: this lane and both mutations are new on this branch, so there is
+  # no prior baseline to re-measure; the meaningful control is the
+  # sequence-interpret-tests.sps run recorded in this pass's header, which
+  # shows the mutants surviving the sibling lane they are NOT declared under.
+  FIND [[                            (sequence-dispatch-node-cases n)))]]
+  REPLACE [[                            (list (car (sequence-dispatch-node-cases n)))))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "HTTP/1\\.1 stops at the one target: one byte at a time -- expected \\(stopped 1 1 8 #f\\), got \\(error 0 0 7 unexpected-byte\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.http-version.chez.source
+  LABEL "interpret: a branching prefix keeps only the LAST declared alternative live"
+  # The opposite truncation, and the reason both are here: keeping only the
+  # head leaves the FIRST alternative coincidentally correct, so on its own it
+  # cannot show that `HTTP/1.0` is reached by being matched rather than by
+  # being the one alternative the interpreter ever looks at. Keeping only the
+  # tail is the mirror -- `HTTP/1.1` accepts, `HTTP/1.0` mismatches -- and the
+  # pair is what pins "each alternative reaches its OWN target" to both
+  # alternatives. Same FIND as the mutation above (each byte_machine_mutation()
+  # call reads a pristine copy of interpret.sls and restores it afterward, so
+  # sharing a FIND is a different edit, not a repeated one).
+  #
+  # Measured against a scratch stage: mutant cases=12 failed-cases=2 checks=19
+  # failures=2 status=1, both failures on HTTP/1.0's own accept checks.
+  # Comparison-caught. Pin sweep: see the sibling above -- the same two-way
+  # re-judgement covers this pin.
+  FIND [[                            (sequence-dispatch-node-cases n)))]]
+  REPLACE [[                            (list (car (reverse (sequence-dispatch-node-cases n))))))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "HTTP/1\\.0 stops at the zero target: one byte at a time -- expected \\(stopped 1 1 8 #f\\), got \\(error 0 0 7 unexpected-byte\\)")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FORTY-THREE PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FORTY-FOUR PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

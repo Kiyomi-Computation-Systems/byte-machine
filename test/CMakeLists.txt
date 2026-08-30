@@ -1132,6 +1132,30 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-sequence-node-tests.sps"
   TIMEOUT 180)
 
+# --- Milestone 3 Slice ③: multiple alternatives over a shared prefix ---------
+# The §21.2 `version = "HTTP/1.0" / "HTTP/1.1"` production. Both lanes list the
+# fixture .sls in SOURCES because the aot lane resolves libraries only through
+# objects compiled from its own SOURCES (the source-guard blocks fallback).
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.http-version.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/http-version-interpret-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-version-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/http-version-interpret-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.http-version.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/http-version-interpret-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-version-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/http-version-interpret-tests.sps"
+  TIMEOUT 120)
+
 # --- Milestone 1 Phase 3 Slice B: D7 identifier repertoire + binary LF -------
 byte_machine_add_scheme_lane(
   NAME byte-machine.verify.identifier-repertoire.chez.source
