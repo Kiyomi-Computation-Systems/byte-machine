@@ -4153,8 +4153,10 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: only the first sequence alternative is compared against the others"
-  # The sequence twin of pass-overlap's ":3187" enumeration mutation. Measured
-  # on the nested-family fixture: 4 -> 2.
+  # The sequence twin of pass-overlap's own "verify: only the first case is
+  # compared against the others" -- cited by LABEL, not by line, because this
+  # task's own edits to this file moved every one of the three (AGENTS.md: name
+  # the mutation, not the line). Measured on the nested-family fixture: 4 -> 2.
   FIND [[(scan (cdr as)]]
   REPLACE [[(scan '()]]
   EXPECT_STATUS 1
@@ -4164,10 +4166,11 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a sequence alternative's collisions after the first are dropped"
-  # The twin of pass-overlap's ":3212". Measured: 4 -> 3. Note this and the
-  # mutation above are indistinguishable on the summed check (both 4) and on
-  # either per-ordering count (both 2); only the nested-family fixture, which
-  # makes the two walks visit different pair sets, separates them.
+  # The twin of pass-overlap's "verify: a case's collisions after the first are
+  # dropped". Measured: 4 -> 3. Note this and the mutation above are
+  # indistinguishable on the summed check (both 4) and on either per-ordering
+  # count (both 2); only the nested-family fixture, which makes the two walks
+  # visit different pair sets, separates them.
   FIND [[(against (cdr others)]]
   REPLACE [[(against '()]]
   EXPECT_STATUS 1
@@ -4177,9 +4180,10 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a sequence alternative is compared against itself"
-  # The twin of pass-overlap's ":3225". Every alternative is a terminal prefix
-  # of itself, so self-comparison adds exactly one spurious diagnostic per
-  # alternative. Measured: 4 -> 9 on a five-alternative fixture.
+  # The twin of pass-overlap's "verify: a case is compared against itself".
+  # Every alternative is a terminal prefix of itself, so self-comparison adds
+  # exactly one spurious diagnostic per alternative. Measured: 4 -> 9 on a
+  # five-alternative fixture.
   FIND [[(let against ((others (cdr as)) (found found))]]
   REPLACE [[(let against ((others as) (found found))]]
   EXPECT_STATUS 1

@@ -11,8 +11,7 @@
 ;;; resolution and reachability, its mismatch edge's reexecute mode joins the
 ;;; zero-progress walk, and its eof-target joins the EOF-shape and :908/:909
 ;;; terminal checks. Milestone 3 Slice ③ added pass-sequence-ambiguity
-;;; (§16.2:894) and taught pass-zero-progress's REPORT set the sixth kind
-;;; (§25:1533). Cross-alternative sequence collision stays out of pass-overlap
+;;; (§16.2:894). Cross-alternative sequence collision stays out of pass-overlap
 ;;; permanently -- it is :894's, not :893's; see pass-overlap's own filter.
 ;;; Diagnostics are compared by code, never by text.
 (library (byte-machine verify)
@@ -194,7 +193,7 @@
   ;; being a terminal prefix of another is decidable from the source byte lists
   ;; alone, so this pass never inspects the lowered graph and §17:951's
   ;; verify-before-normalize ordering is preserved. Measured equivalent to the
-  ;; normalizer's three trie guards (normal-ir.sls:102-116) over all 469
+  ;; normalizer's three trie guards (normal-ir.sls:103-117) over all 469
   ;; nonempty alternative-sets of size <= 3 drawn from the 14 binary strings of
   ;; length 1..3: zero disagreements.
   ;;
