@@ -145,17 +145,17 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "FORTY-FIVE PASSES..." above. Declared here, rather than only in prose, so the
-# count enforced at the bottom of this file is the same text a reader checks by
-# eye at the top -- one number to keep in sync, not two that can quietly
-# disagree. 25 passes / 60 mutations before the aot task; pass 26 adds two (C3,
-# C3b) and passes 27 to 29 add one each, so 25 + 4 = 29 passes and 60 + 2 + 1 +
-# 1 + 1 = 65 mutations before this task; W9 adds three mutations across two
-# passes, not one -- pass 30 (the split character, the combining order) and
-# pass 31 (the exit constant, which turned out witnessable after all once its
-# manifest was allowed to be self-referential on purpose, superseding the
-# declared survivor the plan first carried for it) -- so 29 + 2 = 31 passes and
-# 65 + 3 = 68 mutations. Milestone 1 Phase 1's adapter os-table mapping
+# See "FORTY-FIVE PASSES..." above. Declared here, rather than only in prose,
+# so the count enforced at the bottom of this file is the same text a reader
+# checks by eye at the top -- one number to keep in sync, not two that can
+# quietly disagree. 25 passes / 60 mutations before the aot task; pass 26 adds
+# two (C3, C3b) and passes 27 to 29 add one each, so 25 + 4 = 29 passes and
+# 60 + 2 + 1 + 1 + 1 = 65 mutations before this task; W9 adds three mutations
+# across two passes, not one -- pass 30 (the split character, the combining
+# order) and pass 31 (the exit constant, which turned out witnessable after all
+# once its manifest was allowed to be self-referential on purpose, superseding
+# the declared survivor the plan first carried for it) -- so 29 + 2 = 31 passes
+# and 65 + 3 = 68 mutations. Milestone 1 Phase 1's adapter os-table mapping
 # mutation joins the existing self-test batch (pass 31, already declared)
 # rather than opening a new pass, so passes stay at 31 and 68 + 1 = 69
 # mutations.
@@ -6195,13 +6195,21 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 #   never emits.
 #
 # Stated rather than implied, because "no other lane catches this" would be
-# false: re-measured on the same stage, differential-byte-class-tests.sps
-# reddens for both (cases=13 checks=26; failed-cases=5 failures=5 for FIRST,
-# failed-cases=10 failures=15 for LAST) and property-differential-tests.sps
-# reddens for both (cases=2 failed-cases=1 checks=83 failures=30). Those
-# fixtures reach MANY-ARM dispatch states by a different route -- a byte class
-# lowers to one transition per byte (decision 0014) -- and they run under
-# different SPECs, so neither can witness this pass's mutations. What is
+# false: re-measured on the same stage, two lanes under DIFFERENT SPECs redden
+# for both mutants, and they get their many-arm dispatch states by two
+# different routes, neither of which is this lane's.
+#   differential-byte-class-tests.sps (cases=13 checks=26; failed-cases=5
+#   failures=5 for FIRST, failed-cases=10 failures=15 for LAST): a byte class
+#   lowers to one transition per byte (decision 0014), so one declared class
+#   renders up to 256 sibling arms.
+#   property-differential-tests.sps (cases=2 failed-cases=1 checks=83
+#   failures=30, both mutants): NOT byte classes -- machine-gen.sls builds no
+#   class at all (`rg byte-class` over that file returns nothing). Its nodes
+#   are make-byte-dispatch-node over 1 to 4 randomly drawn make-byte-case /
+#   make-exact-byte-matcher pairs (machine-gen.sls:83, :96, :120-131), so a
+#   many-arm state is whatever that draw happened to produce.
+# Both routes reach a many-arm state without a shared PREFIX, and both run
+# under their own SPEC, so neither can witness this pass's mutations. What is
 # specific to this lane is the arm count arising from a BRANCHING PREFIX, which
 # is exactly what the single-alternative differential above cannot produce.
 #
@@ -6228,8 +6236,8 @@ byte_machine_mutation(
   # copy); SITES therefore stays at its default of 1.
   #
   # Measured against a scratch stage, not the committed tree: baseline cases=8
-  # failed-cases=0 checks=20 failures=0 status=0; mutant cases=8
-  # failed-cases=4 checks=20 failures=6 status=1. Comparison-caught throughout
+  # failed-cases=0 checks=19 failures=0 status=0; mutant cases=8
+  # failed-cases=4 checks=19 failures=6 status=1. Comparison-caught throughout
   # (check-equal failures, no raise) -- every dispatch state in this fixture
   # has at least one transition, so `car` never sees an empty list.
   #
@@ -6257,7 +6265,7 @@ byte_machine_mutation(
   # different edit, not a repeated one).
   #
   # Measured against the same scratch stage: mutant cases=8 failed-cases=6
-  # checks=20 failures=9 status=1 -- two failed cases and three failures more
+  # checks=19 failures=9 status=1 -- two failed cases and three failures more
   # than the sibling, and the two extra cases are exactly the "nonzero-offset
   # and empty slices agree" pair, which feeds `HTTP/1.0` and so is untouched by
   # the sibling's truncation. Comparison-caught.

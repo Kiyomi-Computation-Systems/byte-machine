@@ -97,8 +97,14 @@
 
 (harness-group "both alternatives agree at every single-cut split"
   (lambda ()
-    (harness-case "nine cut positions x two alternatives x two modes all agree and accept"
+    (harness-case "seven interior cuts plus the uncut sequence at both ends all agree and accept"
       (lambda ()
+        ;; The loop runs k = 0..8, but k=0 and k=8 both take the `'()` branch
+        ;; and build the identical single whole-sequence slice, so the nine
+        ;; iterations cover EIGHT distinct schedules: seven interior cuts
+        ;; (k = 1..7) plus the uncut sequence, driven twice. The counter below
+        ;; stays 36 because it counts iterations, not schedules.
+        ;;
         ;; SENTINELS: `compared` counts runs the LOOP performed, `accepts`
         ;; counts what the executors RETURNED. A loop that never ran, or an
         ;; executor that stopped accepting, is caught by a different one.
@@ -124,7 +130,7 @@
               (list (cons cm-ref cm-gen) (cons ad-ref ad-gen))))
            (list zero-bytes one-bytes))
           (check-equal "nothing disagreed or failed to accept" bad 'none)
-          (check-equal "the loop ran 2 alternatives x 2 modes x 9 cuts" compared 36)
+          (check-equal "the loop ran 2 alternatives x 2 modes x 9 iterations" compared 36)
           (check-equal "every run accepted, observed from the executors" accepts 36))))
     (harness-case "the cut at the branch boundary is one of them, and is asserted by name"
       (lambda ()
@@ -190,10 +196,17 @@
   (lambda ()
     (harness-case "256 x 8 positions match, in both mismatch modes"
       (lambda ()
-        (let ((bad 'none) (last-byte 'unset) (positions 0))
+        ;; SENTINEL: ONE counter over both loops, not one per loop. A byte
+        ;; counter and a position counter share a single mutable slot across
+        ;; the eight positions, so (last-byte 255, positions 8) is equally
+        ;; true of "256 bytes at all eight positions" and of "256 bytes at one
+        ;; position and none at the other seven" -- it catches a loop that
+        ;; never ran and not a partial inner skip. Counting (position byte)
+        ;; drives closes that: 8 x 256 = 2048 is exactly what the group name
+        ;; claims, and no partial run reaches it.
+        (let ((bad 'none) (drives 0))
           (let pos ((k 0))
             (when (< k 8)
-              (set! positions (+ positions 1))
               (let ((prefix (head-n zero-bytes k)))
                 (let loop ((b 0))
                   (when (< b 256)
@@ -201,12 +214,11 @@
                       (when (eq? bad 'none) (set! bad (list 'reexecute k b))))
                     (unless (equal? (drive ad-ref prefix b) (drive ad-gen prefix b))
                       (when (eq? bad 'none) (set! bad (list 'advance k b))))
-                    (set! last-byte b)
+                    (set! drives (+ drives 1))
                     (loop (+ b 1)))))
               (pos (+ k 1))))
           (check-equal "no (mode position byte) disagreed" bad 'none)
-          (check-equal "the byte loop ran all 256 values" last-byte 255)
-          (check-equal "the position loop ran all eight" positions 8))))))
+          (check-equal "the loops ran all 8 x 256 (position byte) drives" drives 2048))))))
 
 ;; §11.5:664, asserted ABSOLUTELY on the generated side rather than as agreement:
 ;; the branch byte is where the two modes visibly differ on a multi-alternative

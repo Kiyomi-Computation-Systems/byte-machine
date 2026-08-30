@@ -11,10 +11,12 @@
 ;;; the normalizer lowers the two alternatives to a trie before compile.sls sees
 ;;; them, so the BRANCHING prefix state renders as an ordinary multi-arm
 ;;; `(case b ((48) ...) ((49) ...) (else ...))` -- indistinguishable in form from
-;;; a one-alternative state's single arm. Measured on the reexecute machine:
-;;; `git diff --stat 6535682 -- src/byte-machine/compile.sls` is empty and the
-;;; emitted library is 3849 bytes, which is the evidence it rendered at all
-;;; rather than merely failing to change the emitter.
+;;; a one-alternative state's single arm. No line of compile.sls changed for
+;;; this fixture, and the durable record of why is compile.sls's own
+;;; render-state-arm comment (decision 0015 point 1), not a commit hash here --
+;;; this branch squash-merges, so a hash naming it would stop resolving in a
+;;; clone of main. The evidence it RENDERED at all, rather than merely failing
+;;; to change the emitter: the reexecute machine emits a 3849-byte library.
 ;;;
 ;;; Why this fixture and not an invented one: it exercises a shared NONTERMINAL
 ;;; prefix with a distinguishing terminal byte (§10.6:544), it comes from the
