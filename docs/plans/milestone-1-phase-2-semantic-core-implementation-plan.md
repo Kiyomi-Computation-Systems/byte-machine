@@ -424,6 +424,23 @@ Create `test/common/graph-tests.sps`. Because references are symbolic, the machi
 (harness-finish)
 ```
 
+> **Disposition, 2026-08-29 (Milestone 3 Slice ① re-review fix wave).** This
+> listing is an accurate record of what Milestone 1 Task 2 wrote and shipped
+> -- Milestone 1 closed long before this note, and this step is not being
+> re-executed. It is no longer an accurate description of the CURRENT
+> `test/common/graph-tests.sps`: Milestone 3 Slice ①'s whole-branch review
+> fix wave (commit `b6c987c`, on branch `feat/milestone-3-slice-1`) reworded
+> the file's top-of-file comment (this listing's line 1, `"The public graph
+> façade builds the one-byte machine with no private import."`) because the
+> file's `only` import of three machine accessors from `(byte-machine
+> private ir)` -- present since this very listing, unchanged since -- makes
+> "no private import" untrue of the file as a whole, not just of the one
+> case this step added. Treated as a record, not an instruction: the
+> constraint that plan prose is never reworded in place applies here the
+> same as it does to the still-open Milestone 3 plans, so this is a dated
+> amendment beside the untouched original, not an in-place correction.
+> Listing left as originally written.
+
 - [ ] **Step 2: Run and confirm failure**
 
 Run: `cmake --build --preset dev && ctest --preset release -R "unit.graph" --output-on-failure`

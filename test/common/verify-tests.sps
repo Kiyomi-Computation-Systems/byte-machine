@@ -356,4 +356,86 @@
                  (exists (lambda (d) (eq? (diagnostic-code d) 'zero-progress-cycle))
                          (verification-diagnostics v))))))))
 
+;; Milestone 3 Slice ① Task 3: overlap is a property of canonical byte SETS, so
+;; it must be found across mixed matcher kinds, and reported once per colliding
+;; PAIR of cases -- not once per shared byte. A set and a complement can share
+;; 200 bytes, and §16.4:937-943 wants one finding per decision.
+(define (dispatch-node-machine cases)
+  (machine (list (dispatch cases (make-edge 'reject 'reexecute))
+                 (make-stop-node 'stop #f)
+                 (make-error-node 'reject 'rejected #f))))
+(define (overlap-count m)
+  (length (filter (lambda (c) (eq? c 'overlapping-cases)) (codes m))))
+(define (to-stop matcher) (make-byte-case matcher (make-edge 'stop 'advance) #f))
+
+(harness-group "byte-class overlap (§16.2:893)"
+  (lambda ()
+    (harness-case "a range and an exact byte inside it overlap"
+      (lambda ()
+        (check "overlapping-cases"
+               (has-code? (dispatch-node-machine
+                           (list (to-stop (make-byte-range-matcher 48 57))
+                                 (to-stop (make-exact-byte-matcher 50))))
+                          'overlapping-cases))))
+    (harness-case "a set and a complement that share a byte overlap"
+      (lambda ()
+        (check "overlapping-cases"
+               (has-code? (dispatch-node-machine
+                           (list (to-stop (make-byte-set-matcher '(200 201)))
+                                 (to-stop (make-byte-complement-matcher
+                                           (make-byte-range-matcher 0 199)))))
+                          'overlapping-cases))))
+    (harness-case "disjoint classes do not overlap"
+      (lambda ()
+        (check-equal "none"
+                     (overlap-count (dispatch-node-machine
+                                     (list (to-stop (make-byte-range-matcher 48 57))
+                                           (to-stop (make-byte-range-matcher 65 90))
+                                           (to-stop (make-byte-set-matcher '(10 13))))))
+                     0)))
+    (harness-case "a vacuous complement collides with nothing"
+      (lambda ()
+        (check-equal "none"
+                     (overlap-count (dispatch-node-machine
+                                     (list (to-stop (make-byte-complement-matcher
+                                                     (make-byte-range-matcher 0 255)))
+                                           (to-stop (make-byte-range-matcher 48 57)))))
+                     0)))
+    (harness-case "two classes sharing 200 bytes are one diagnostic, not 200"
+      (lambda ()
+        (check-equal "exactly one"
+                     (overlap-count (dispatch-node-machine
+                                     (list (to-stop (make-byte-range-matcher 0 199))
+                                           (to-stop (make-byte-range-matcher 0 255)))))
+                     1)))
+    ;; These three fixtures are ordered deliberately. Each isolates one half of
+    ;; the pair enumeration, so the three Task 3 mutations below have distinct
+    ;; first failures and distinct failure SETS -- without the first-and-third
+    ;; fixture, "collisions after the first are dropped" is subsumed by "only the
+    ;; first case is compared" and no pin can separate them.
+    (harness-case "a collision between the first and third cases is found"
+      (lambda ()
+        (check-equal "one pair"
+                     (overlap-count (dispatch-node-machine
+                                     (list (to-stop (make-byte-range-matcher 0 10))
+                                           (to-stop (make-byte-range-matcher 100 110))
+                                           (to-stop (make-byte-range-matcher 5 8)))))
+                     1)))
+    (harness-case "a collision between the second and third cases is found"
+      (lambda ()
+        (check-equal "one pair"
+                     (overlap-count (dispatch-node-machine
+                                     (list (to-stop (make-byte-set-matcher '(1)))
+                                           (to-stop (make-byte-range-matcher 100 110))
+                                           (to-stop (make-byte-set-matcher '(105))))))
+                     1)))
+    (harness-case "three mutually colliding cases are three diagnostics, one per pair"
+      (lambda ()
+        (check-equal "three pairs"
+                     (overlap-count (dispatch-node-machine
+                                     (list (to-stop (make-byte-range-matcher 0 10))
+                                           (to-stop (make-byte-range-matcher 5 15))
+                                           (to-stop (make-byte-range-matcher 8 20)))))
+                     3)))))
+
 (harness-finish)

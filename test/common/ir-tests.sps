@@ -8,6 +8,22 @@
 
 (harness-begin "unit.ir")
 
+;; house convention (conditions.sls header): tests compare the code and who,
+;; never rendered text -- and, per Fix wave 1, the detail too: two distinct
+;; guards can share a who/code pair (or a code/detail pair) and only the third
+;; field tells them apart, so a check-raises that stops at
+;; byte-machine-contract-condition? alone would not notice a copy-pasted `who`
+;; or `detail`. contract-violation? asserts all three; matcher-contract-
+;; violation? is the detail='matcher case most call sites want, kept as a
+;; named alias rather than inlining 'matcher everywhere.
+(define (contract-violation? who detail)
+  (lambda (e)
+    (and (byte-machine-contract-condition? e)
+         (eq? (byte-machine-contract-condition-code e) 'invalid-argument)
+         (eq? (byte-machine-contract-condition-who e) who)
+         (eq? (byte-machine-contract-condition-detail e) detail))))
+(define (matcher-contract-violation? who) (contract-violation? who 'matcher))
+
 (harness-group "matchers and edges"
   (lambda ()
     (harness-case "an exact-byte matcher carries its byte"
@@ -58,5 +74,185 @@
                        (error-node-error-name reject) 'rejected)
           (check-equal "start fallback target"
                        (edge-target (byte-dispatch-node-fallback start)) 'reject))))))
+
+(harness-group "matcher canonicalization"
+  (lambda ()
+    (harness-case "an exact-byte matcher canonicalizes to its one-element set"
+      (lambda ()
+        (check-equal "set" (matcher-bytes (make-exact-byte-matcher 7)) '(7))))
+    (harness-case "the low and high ends of the byte universe canonicalize"
+      (lambda ()
+        (check-equal "zero" (matcher-bytes (make-exact-byte-matcher 0)) '(0))
+        (check-equal "255" (matcher-bytes (make-exact-byte-matcher 255)) '(255))))
+    (harness-case "canonicalizing a foreign vector is a contract violation"
+      (lambda ()
+        (check-raises "refused"
+                      (matcher-contract-violation? 'matcher-bytes)
+                      (lambda () (matcher-bytes (make-edge 'stop 'advance))))))))
+
+(harness-group "the exact-byte accessor is tag-guarded"
+  (lambda ()
+    (harness-case "the exact-byte accessor refuses a foreign vector"
+      (lambda ()
+        (check-raises "refused"
+                      (matcher-contract-violation? 'exact-byte-matcher-byte)
+                      (lambda () (exact-byte-matcher-byte (make-edge 'stop 'advance))))))))
+
+;; Same guard class as above, one instance per class-matcher accessor
+;; (Important 1, Fix wave 1): an unguarded (vector-ref m N) on a matcher of
+;; another kind reads the wrong slot and fails far away -- inside arithmetic
+;; or a sort predicate -- rather than at the contract boundary. Each accessor
+;; gets its own case because each is its own guard at its own source site.
+(harness-group "the class-matcher accessors are tag-guarded"
+  (lambda ()
+    (harness-case "byte-set-matcher-bytes refuses a foreign vector"
+      (lambda ()
+        (check-raises "refused"
+                      (matcher-contract-violation? 'byte-set-matcher-bytes)
+                      (lambda () (byte-set-matcher-bytes (make-edge 'stop 'advance))))))
+    (harness-case "byte-range-matcher-low refuses a foreign vector"
+      (lambda ()
+        (check-raises "refused"
+                      (matcher-contract-violation? 'byte-range-matcher-low)
+                      (lambda () (byte-range-matcher-low (make-edge 'stop 'advance))))))
+    (harness-case "byte-range-matcher-high refuses a foreign vector"
+      (lambda ()
+        (check-raises "refused"
+                      (matcher-contract-violation? 'byte-range-matcher-high)
+                      (lambda () (byte-range-matcher-high (make-edge 'stop 'advance))))))
+    (harness-case "byte-complement-matcher-matcher refuses a foreign vector"
+      (lambda ()
+        (check-raises "refused"
+                      (matcher-contract-violation? 'byte-complement-matcher-matcher)
+                      (lambda () (byte-complement-matcher-matcher (make-edge 'stop 'advance))))))))
+
+(harness-group "the three class matchers canonicalize"
+  (lambda ()
+    (harness-case "a byte set canonicalizes ascending and de-duplicated"
+      (lambda ()
+        (check-equal "set" (matcher-bytes (make-byte-set-matcher '(254 1 0 1 255 2)))
+                     '(0 1 2 254 255))))
+    (harness-case "a byte set keeps the caller's order in its own accessor"
+      (lambda ()
+        (check-equal "as given" (byte-set-matcher-bytes (make-byte-set-matcher '(254 1 0)))
+                     '(254 1 0))))
+    (harness-case "a range canonicalizes to every byte from low to high inclusive"
+      (lambda ()
+        (check-equal "digits" (matcher-bytes (make-byte-range-matcher 48 57))
+                     '(48 49 50 51 52 53 54 55 56 57))
+        (check-equal "count" (length (matcher-bytes (make-byte-range-matcher 0 255))) 256)))
+    (harness-case "a range with low = high is a legal one-element set"
+      (lambda ()
+        (check-equal "single" (matcher-bytes (make-byte-range-matcher 9 9)) '(9))))
+    (harness-case "a complement is the universe minus the inner set"
+      (lambda ()
+        (let ((c (matcher-bytes (make-byte-complement-matcher (make-byte-set-matcher '(10 13))))))
+          (check-equal "count" (length c) 254)
+          (check-equal "first" (car c) 0)
+          (check "10 excluded" (not (memv 10 c)))
+          (check "13 excluded" (not (memv 13 c)))
+          (check "255 present" (and (memv 255 c) #t)))))
+    (harness-case "complements nest: complementing twice returns the inner set"
+      (lambda ()
+        (check-equal "digits again"
+                     (matcher-bytes
+                      (make-byte-complement-matcher
+                       (make-byte-complement-matcher (make-byte-range-matcher 48 57))))
+                     '(48 49 50 51 52 53 54 55 56 57))))
+    (harness-case "the complement of the full universe is the empty set"
+      (lambda ()
+        (check-equal "vacuous"
+                     (matcher-bytes
+                      (make-byte-complement-matcher (make-byte-range-matcher 0 255)))
+                     '())))))
+
+(harness-group "degenerate shapes are constructor contract violations (decision 0017)"
+  (lambda ()
+    (harness-case "an empty byte set is rejected"
+      (lambda ()
+        (check-raises "empty set"
+                      (contract-violation? 'make-byte-set-matcher 'bytes)
+                      (lambda () (make-byte-set-matcher '())))))
+    (harness-case "a byte set holding a non-byte is rejected"
+      (lambda ()
+        (check-raises "out of range"
+                      (contract-violation? 'make-byte-set-matcher 'bytes)
+                      (lambda () (make-byte-set-matcher '(0 256))))))
+    (harness-case "a range with low greater than high is rejected"
+      (lambda ()
+        (check-raises "reversed"
+                      (contract-violation? 'make-byte-range-matcher 'range)
+                      (lambda () (make-byte-range-matcher 9 8)))))
+    (harness-case "a range rejects a non-byte low"
+      (lambda ()
+        (check-raises "low out of range"
+                      (contract-violation? 'make-byte-range-matcher 'low)
+                      (lambda () (make-byte-range-matcher 256 255)))))
+    (harness-case "a range rejects a non-byte high"
+      (lambda ()
+        (check-raises "high out of range"
+                      (contract-violation? 'make-byte-range-matcher 'high)
+                      (lambda () (make-byte-range-matcher 0 256)))))
+    (harness-case "a complement of something that is not a matcher is rejected"
+      (lambda ()
+        (check-raises "not a matcher"
+                      (matcher-contract-violation? 'make-byte-complement-matcher)
+                      (lambda () (make-byte-complement-matcher (make-edge 'stop 'advance))))))
+    (harness-case "duplicate bytes inside one set are NOT a constructor error"
+      (lambda ()
+        (check "constructs" (byte-set-matcher? (make-byte-set-matcher '(3 3 3))))))))
+
+(harness-group "ascii-bytes (parent §9.1:299)"
+  (lambda ()
+    (harness-case "a string becomes its code points in string order"
+      (lambda ()
+        (check-equal "GET" (ascii-bytes "GET") '(71 69 84))))
+    (harness-case "repeated characters are kept, not de-duplicated"
+      (lambda ()
+        (check-equal "aa" (ascii-bytes "aa") '(97 97))))
+    (harness-case "the empty string yields the empty list, which is not a matcher"
+      (lambda ()
+        (check-equal "empty" (ascii-bytes "") '())
+        (check-raises "and cannot become a byte set"
+                      (contract-violation? 'make-byte-set-matcher 'bytes)
+                      (lambda () (make-byte-set-matcher (ascii-bytes ""))))))
+    (harness-case "a non-ASCII character is rejected"
+      (lambda ()
+        (check-raises "non-ascii"
+                      (contract-violation? 'ascii-bytes 'non-ascii)
+                      (lambda () (ascii-bytes "caf\xe9;")))))
+    (harness-case "code point 127 is ASCII and 128 is not"
+      (lambda ()
+        (check-equal "delete" (ascii-bytes (string (integer->char 127))) '(127))
+        (check-raises "128"
+                      (contract-violation? 'ascii-bytes 'non-ascii)
+                      (lambda () (ascii-bytes (string (integer->char 128)))))))
+    (harness-case "a non-string is rejected"
+      (lambda ()
+        (check-raises "not a string"
+                      (contract-violation? 'ascii-bytes 'string)
+                      (lambda () (ascii-bytes 42)))))))
+
+(harness-group "make-byte-case accepts every matcher kind"
+  (lambda ()
+    (harness-case "a byte-set case constructs and reads back its matcher"
+      (lambda ()
+        (let* ((m (make-byte-set-matcher '(1 2)))
+               (c (make-byte-case m (make-edge 'stop 'advance) #f)))
+          (check "byte-set matcher" (byte-set-matcher? (byte-case-matcher c))))))
+    (harness-case "a range case and a complement case construct"
+      (lambda ()
+        (check "range" (byte-case? (make-byte-case (make-byte-range-matcher 1 2)
+                                                   (make-edge 'stop 'advance) #f)))
+        (check "complement"
+               (byte-case? (make-byte-case
+                            (make-byte-complement-matcher (make-exact-byte-matcher 0))
+                            (make-edge 'stop 'advance) #f)))))
+    (harness-case "an edge handed in as a matcher is still refused"
+      (lambda ()
+        (check-raises "not a matcher"
+                      (matcher-contract-violation? 'make-byte-case)
+                      (lambda () (make-byte-case (make-edge 'stop 'advance)
+                                                 (make-edge 'stop 'advance) #f)))))))
 
 (harness-finish)

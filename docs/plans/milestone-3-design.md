@@ -1,7 +1,12 @@
 # Milestone 3 Design — Byte Classes and Sequences
 
-Status: design — approved shape, **Gate 0 discharged; Slices ①–③ not started**
-(see the dated notes below). Authored 2026-08-29, the day Milestone 2 closed
+Status: design — approved shape, **Gate 0 discharged; Slice ① (byte classes)
+closed 2026-08-29** (every commit on branch `feat/milestone-3-slice-1` since it
+diverged from `main` at merge base `a9de657`, including this note's own
+commit; PR not yet opened as of this note). **Slices ② and
+③ not started.** Milestone 3 as a whole remains open — this slice discharges
+§5's scope, not the milestone's (see the dated §5 disposition below). Authored
+2026-08-29, the day Milestone 2 closed
 (PR [#23](https://github.com/Kiyomi-Computation-Systems/byte-machine/pull/23),
 commit `5906ade`; status sweep PRs #24–#27). Written after a 92-agent audit of
 this milestone's requirements against the shipped tree, in which every gap claim
@@ -383,6 +388,89 @@ FIND** (`:2973` and `:3183`), and `SITES` is asserted exactly, so a change in si
 count is a hard failure. Re-anchoring is a re-**measurement** of each pin's
 failure signature, not a text edit; per AGENTS.md:122-127 the obligation is
 recorded by mutation LABEL, not line number.
+
+> **Disposition, 2026-08-29 (Task 7 close-out; Slice ① closed).** §5's own
+> work has closed, so per AGENTS.md's "an instruction changes category when
+> its work closes" rule, its six numbered items and its two departures below
+> are dispositioned here rather than reworded to match what shipped. Each was
+> re-checked against the tree, not asserted from memory.
+>
+> **The six items, each found in the tree:**
+>
+> 1. **Canonicalization spine.** `matcher-bytes` in
+>    `(byte-machine private ir)` is the single canonicalization spine;
+>    `exact-byte-matcher-byte` carries the tag guard; `verify.sls`'s
+>    `pass-overlap`, `normal-ir.sls`'s lowering, and `interpret.sls`'s
+>    membership test all call it. **Gate met**: `4236938459847922092`,
+>    `9098559711816935340`, `15725897457025557005` and both committed goldens
+>    (`generated-one-byte.golden.sls`, `generated-pause.golden.sls`) are
+>    byte-identical on the shipped tree — shown by the cross-commit diff
+>    against the branch's merge base, `git diff --stat
+>    $(git merge-base main HEAD)..HEAD -- test/fixtures/` (`a9de657..f7d6234`
+>    at close-out), empty. (A plain `git status --porcelain` only shows the
+>    working tree matches HEAD; it is blind to a golden re-baselined inside a
+>    branch commit, which is exactly what this gate exists to catch — the
+>    per-task uses of `git status` elsewhere in this plan are fine, since
+>    there the surrounding commit is untouched.) Task 1.
+> 2. **The constructors.** `make-byte-set-matcher`, `make-byte-range-matcher`,
+>    `make-byte-complement-matcher`, `ascii-bytes`, the widened
+>    `make-byte-case` guard, and decision 0017's degenerate-shape rejections
+>    are exported from `graph.sls`'s `export` and `only` import lists
+>    (`graph.sls:12-20`, mirrored at `:22-30`) alongside `matcher?` and the
+>    four class predicates/accessors. Task 2.
+> 3. **Rewritten `pass-overlap`.** `verify.sls`'s `pass-overlap` is now a thin
+>    wrapper over `node-overlaps`, which enumerates each colliding **pair** of
+>    cases once via `byte-sets-overlap?` over canonical sets — measured: a
+>    200-byte overlapping pair reports one diagnostic, not ~200. Task 3.
+> 4. **Normalizer lowering; emitter zero change recorded.** Per-byte lowering
+>    is witnessed (range triples, dedup, a 254-byte complement, two
+>    interleaved classes, a vacuous complement at 0 transitions, a double
+>    complement at 256); `compile.sls` carries a comment at the site recording
+>    why the emitter needed no change, confirmed by the complement fixture
+>    rendering 254 sibling arms inside its one `(case b ...)`. Tasks 1 and 4.
+> 5. **Interpreter matcher dispatch through the canonical form.**
+>    `interpret.sls`'s dispatch test is `(memv byte (matcher-bytes
+>    (byte-case-matcher (car cs))))`, not a bare `=` against one exact byte.
+>    Task 1.
+> 6. **All-256 class, complement and ASCII lanes, both executors, both
+>    execution lanes.** `byte-machine.unit.byte-class.chez.{source,aot}`
+>    (absolute, through the interpreter) and
+>    `byte-machine.differential.byte-class.chez.{source,aot}`
+>    (interpreter ≡ generated) are all four green on the shipped tree
+>    (`release`/`pr` 76/76). Tasks 5 and 6.
+>
+> **The two places this plan departed from §5, each dispositioned rather than
+> corrected, because the work they describe has closed:**
+>
+> 1. **The `graph-tests.sps:5` rider was wrong when written and stayed wrong.**
+>    §5 item 2 claimed "adding the new matcher predicates and accessors
+>    closes [`graph-tests.sps:5`'s reach into `(byte-machine private ir)`]
+>    in the same edit." On the pre-slice tree, `graph-tests.sps:5` was
+>    `(only (byte-machine private ir) machine? machine-entry
+>    machine-default-eof-error))` — three **machine** accessors. No matcher
+>    predicate or accessor supplies a machine accessor, so widening the
+>    façade with matcher exports cannot close that import, and it did not:
+>    the shipped `graph-tests.sps` still carries the identical private-`ir`
+>    import (now at line 11, below a comment explaining why machine
+>    accessors stay private while matcher predicates came through the
+>    façade — §9.1 fixes the public construction surface and lists no
+>    accessors). The rider conflated "the façade gained matcher exports"
+>    with "the one private reach this file has closes," which do not imply
+>    each other (§0 D5).
+> 2. **The "Mutation pins that die in this slice" list was incomplete.** It
+>    named `SchemeMutationSuite.cmake:2967` (`verify.sls`'s
+>    `(if (memv b seen)` overlap pin) but not `:3267`
+>    (`interpret.sls`'s `(= byte (exact-byte-matcher-byte ...))` dispatch
+>    pin), even though Task 1 Step 1 names `interpret.sls`'s exact-byte
+>    comparison as one of the three consumers the same canonicalization
+>    spine change replaces (§0 D9) — both pins' `FIND` text vanishes from
+>    the tree at the same commit, for the same reason. Both needed
+>    **re-anchoring** (not literal deletion, despite "dies" and "deleted
+>    outright" above): Task 1 Step 9 re-anchored both, shipped as the
+>    `verify.sls` mutation now labeled "verify: two cases sharing a byte are
+>    never found to overlap" and the `interpret.sls` mutation still labeled
+>    "interpret: dispatch matches every byte to the first case," both
+>    present and caught on the shipped tree.
 
 ## 6. Slice ② — Sequence dispatch and prefix lowering
 

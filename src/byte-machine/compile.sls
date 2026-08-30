@@ -79,6 +79,14 @@
 
   (define (render-transition-arm tr)
     ;; tr = (byte target mode) -> "((<byte>) <loop-tail>)"
+    ;; Milestone 3 Slice ① changed nothing here, and that is a decision rather
+    ;; than an oversight: byte classes lower to one transition per byte
+    ;; (decision 0014), so a complement renders up to 256 sibling arms inside the
+    ;; single `(case b ...)` below. §19.2:1009 asks for "canonical membership
+    ;; code selected for simplicity, not speculative density optimization", and a
+    ;; grouped datum list or a membership table is the optimization §29:1743
+    ;; defers and §23.3:1369 gates behind compiled benchmarks that cannot exist
+    ;; yet (`bench/` holds two .gitkeep files).
     (string-append "               ((" (number->string (car tr)) ") "
                    (loop-tail (cadr tr) (caddr tr)) ")\n"))
 

@@ -15,7 +15,9 @@ project will use it to define and generate one.
 *Status: pre-release.* No versioned release exists yet — the target is =0.1.0=,
 and the API is not yet stable. Milestones 0 (portability and harness spike), 1
 (minimal executable machine), and 2 (incremental execution and lifecycle) have
-closed; Milestone 3 (byte classes and sequences) has not started.
+closed; Milestone 3 (byte classes and sequences) is in progress — Slice ①
+(byte classes) has closed, Slices ② (sequence dispatch and prefix lowering)
+and ③ (multiple alternatives, ambiguity, and cycle analysis) are open.
 =src/byte-machine/= holds the construction API, the verifier, the normalizer and
 emitter, the reference interpreter, and the runtime, each exercised in both the
 source and ahead-of-time execution lanes. See

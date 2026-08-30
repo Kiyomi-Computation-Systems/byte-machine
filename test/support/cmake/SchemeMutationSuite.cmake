@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# THIRTY-ONE PASSES, BECAUSE THIRTY-ONE DIFFERENT WITNESSES ARE NEEDED
+# FORTY-ONE PASSES, BECAUSE FORTY-ONE DIFFERENT WITNESSES ARE NEEDED
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -145,20 +145,20 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "THIRTY-ONE PASSES..." above. Declared here, rather than only in
-# prose, so the count enforced at the bottom of this file is the same text a
-# reader checks by eye at the top -- one number to keep in sync, not two
-# that can quietly disagree. 25 passes / 60 mutations before the aot task;
-# pass 26 adds two (C3, C3b) and passes 27 to 29 add one each, so 25 + 4 =
-# 29 passes and 60 + 2 + 1 + 1 + 1 = 65 mutations before this task; W9 adds
-# three mutations across two passes, not one -- pass 30 (the split
-# character, the combining order) and pass 31 (the exit constant, which
-# turned out witnessable after all once its manifest was allowed to be
-# self-referential on purpose, superseding the declared survivor the plan
-# first carried for it) -- so 29 + 2 = 31 passes and 65 + 3 = 68 mutations.
-# Milestone 1 Phase 1's adapter os-table mapping mutation joins the existing
-# self-test batch (pass 31, already declared) rather than opening a new pass,
-# so passes stay at 31 and 68 + 1 = 69 mutations.
+# See "FORTY-ONE PASSES..." above. Declared here, rather than only in prose, so the
+# count enforced at the bottom of this file is the same text a reader checks by
+# eye at the top -- one number to keep in sync, not two that can quietly
+# disagree. 25 passes / 60 mutations before the aot task; pass 26 adds two (C3,
+# C3b) and passes 27 to 29 add one each, so 25 + 4 = 29 passes and 60 + 2 + 1 +
+# 1 + 1 = 65 mutations before this task; W9 adds three mutations across two
+# passes, not one -- pass 30 (the split character, the combining order) and
+# pass 31 (the exit constant, which turned out witnessable after all once its
+# manifest was allowed to be self-referential on purpose, superseding the
+# declared survivor the plan first carried for it) -- so 29 + 2 = 31 passes and
+# 65 + 3 = 68 mutations. Milestone 1 Phase 1's adapter os-table mapping
+# mutation joins the existing self-test batch (pass 31, already declared)
+# rather than opening a new pass, so passes stay at 31 and 68 + 1 = 69
+# mutations.
 #
 # Milestone 1 Phase 2 (semantic core) opens one new pass per executor module,
 # each appended after pass 31 below, for three new passes: 31 + 3 = 34.
@@ -551,8 +551,28 @@ cmake_minimum_required(VERSION 3.26)
 # One more mutation joins this same pass (see "runtime: the feed pause arm
 # swaps consumed and stream offset"). Passes stay at 38; mutations become
 # 164 + 1 = 165.
-set(EXPECTED_PASSES 38)
-set(EXPECTED_MUTATIONS 165)
+# Milestone 3 Slice ① Task 1 adds Pass 42 (matcher canonicalization and the
+# tag-guarded accessor) with two mutations, and re-anchors two existing pins
+# without adding either. Passes become 38 + 1 = 39; mutations 165 + 2 = 167.
+# Slice ① Task 2 adds five constructor and canonicalization mutations to
+# Pass 42. Passes stay at 39; mutations become 167 + 5 = 172.
+# Slice ① Task 2's review fix wave 1 adds six more to the same pass: one per
+# remaining tag-guarded class-matcher accessor (four -- byte-set-matcher-
+# bytes, byte-range-matcher-low, byte-range-matcher-high, byte-complement-
+# matcher-matcher), decision 0014's ordering half, and matcher-bytes' else
+# arm. The predicted-count cap that stopped Task 2 from closing these is
+# withdrawn; every count here is measured. Passes stay at 39; mutations
+# become 172 + 6 = 178.
+# Slice ① Task 3 adds three pair-enumeration mutations to Pass 33.
+# Passes stay at 39; mutations become 178 + 3 = 181.
+# Slice ① Task 4 adds two per-byte-expansion mutations to Pass 35.
+# Passes stay at 39; mutations become 181 + 2 = 183.
+# Slice ① Task 5 adds Pass 43 (class membership and recursive canonicalization)
+# with two mutations. Passes become 39 + 1 = 40; mutations 183 + 2 = 185.
+# Slice ① Task 6 adds Pass 44 (byte-class differential non-vacuity) with one
+# mutation. Passes become 40 + 1 = 41; mutations 185 + 1 = 186.
+set(EXPECTED_PASSES 41)
+set(EXPECTED_MUTATIONS 186)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -2961,11 +2981,56 @@ byte_machine_mutation(
   FIND [[(make-diagnostic 'unreachable-node (node-name n) "node is unreachable")]]
   REPLACE [[#f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "unreachable-node")
 
+# Re-anchored in Milestone 3 Slice ① Task 1: pass-overlap now compares canonical
+# matcher BYTE SETS, so the old `(if (memv b seen)` line no longer exists. The
+# decision is unchanged -- two cases matching the same byte must be reported --
+# and it is pinned on the helper's body rather than on the loop, so Slice ①
+# Task 3's per-colliding-pair rewrite of the loop leaves this pin standing.
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: overlap check treats every byte as distinct"
-  FIND [[(if (memv b seen)]]
-  REPLACE [[(if #f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "overlapping-cases")
+  LABEL "verify: two cases sharing a byte are never found to overlap"
+  FIND [[(and (pair? a) (or (and (memv (car a) b) #t) (byte-sets-overlap? (cdr a) b)))]]
+  REPLACE [[#f]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "same byte overlap: overlapping-cases")
+
+# Slice ① Task 3: the pair enumeration itself. The helper pin above proves the
+# disjointness TEST fires; these three prove the pass reaches every pair, reports
+# each once, and does not stop at the first collision it finds.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: only the first case is compared against the others"
+  FIND [[(outer (cdr ss)]]
+  REPLACE [[(outer '()]]
+  # Fix wave 1: the bare case tail collided with two other Pass 33 mutants'
+  # captured output (the pre-existing "two cases sharing a byte are never
+  # found to overlap" helper mutant, which also drives this case's count to
+  # 0, and this mutation's own sibling "a case is compared against itself",
+  # which fails the same case with a different got). Appending this
+  # mutation's own measured "got" tail excludes the sibling (its got is 4,
+  # not 0) and cuts the collision set from two to one; the helper mutant
+  # still collides because it genuinely produces the identical got 0 for
+  # this case -- disabling byte-sets-overlap? entirely is indistinguishable
+  # from dropping every case but the first, on this one fixture.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "second and third cases is found: one pair -- expected 1, got 0")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a case's collisions after the first are dropped"
+  FIND [[(inner (cdr rest)]]
+  REPLACE [[(inner '()]]
+  # Fix wave 1: same trade as the mutation above, on the mirror fixture --
+  # appending this mutation's own measured "got" tail excludes the sibling
+  # self-comparison mutant (got 4 there, got 0 here) and cuts the collision
+  # set from two to one; the pre-existing helper mutant still collides for
+  # the same reason.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "first and third cases is found: one pair -- expected 1, got 0")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a case is compared against itself"
+  FIND [[(let inner ((rest (cdr ss)) (out out))]]
+  REPLACE [[(let inner ((rest ss) (out out))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "do not overlap: none")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -3217,6 +3282,27 @@ byte_machine_mutation(
                             (let ((cn (lookup nodes (pause-node-continuation n))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "pause machine verifies: accepted")
 
+# Whole-branch review (a9de657..c302cdd): Task 3's new "verify: a case is
+# compared against itself" mutation (this pass, above) is now a SECOND
+# sibling colliding with this pin, alongside the pre-existing "a pause
+# continuation is an out-target (resolution + reachability)" mutation
+# (below). Task 3's self-comparison mutant makes every dispatch case overlap
+# itself, which reddens the well-formed pause fixture's "accepted" check for
+# a reason this mutation names nothing about.
+#
+# Measured on this SPEC lane (verify-tests.sps): the gate mutation above
+# emits exactly one FAIL record --
+#   "FAIL pause nodes (Slice 3).a well-formed pause machine verifies:
+#    accepted -- expected a true value"
+# -- and the self-comparison mutant emits ten, one of which is that same
+# record, byte-for-byte identical (no "got" value on a boolean `check`, so
+# there is no varying detail to key on). Every FAIL line the gate mutation
+# can produce is thus a subset of the self-comparison mutant's output, so no
+# EXPECT_OUTPUT_MATCHES string can separate the two -- this is the subsumed
+# case AGENTS.md distinguishes from under-anchored: not a tighter pin to
+# find, a genuine overlap of what the two mutants break. Left declared and
+# collided, matching the pre-existing sibling's disposition.
+
 # Cleanup follow-up: the second site's gap above is closed here too -- not by
 # VERDICT (still genuinely impossible, per the measurement above) but by
 # ATTRIBUTION. diagnostic-node was already exported but unused by any test.
@@ -3261,10 +3347,13 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/common/interpret-tests.sps")
 
+# Re-anchored in Milestone 3 Slice ① Task 1: the interpreter's membership test is
+# now `memv` over the canonical byte set, not `=` against a single exact byte.
+# Same decision, same witness, same signature -- re-measured, not merely retyped.
 byte_machine_mutation(
   FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
   LABEL "interpret: dispatch matches every byte to the first case"
-  FIND [[((= byte (exact-byte-matcher-byte (byte-case-matcher (car cs))))]]
+  FIND [[((memv byte (matcher-bytes (byte-case-matcher (car cs))))]]
   REPLACE [[(#t]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "no byte in 1..255 misbehaved")
 
 byte_machine_mutation(
@@ -3333,9 +3422,63 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: dispatch cases are not sorted ascending by byte"
+  # Re-anchored by Task 4's Pass 35 collision sweep: the bare "bytes" pin was
+  # sound when written (one dispatch case, one FAIL line), but Task 4's
+  # per-byte expansion runs through this SAME list-sort call, so reversing it
+  # now also breaks two of the new byte-class checks ("bytes" is their check
+  # name too) -- measured 3 FAIL lines in this mutant's own output where the
+  # rule (AGENTS.md; "a sound pin resolves to exactly one (case, check) pair")
+  # allows 1. Pinned to the full FAIL line of the ORIGINAL witness instead.
   FIND [[(list-sort (lambda (a b) (< (car a) (car b)))]]
   REPLACE [[(list-sort (lambda (a b) (> (car a) (car b)))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "bytes")
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "transitions are sorted ascending by byte: bytes -- expected \\(2 5\\), got \\(5 2\\)")
+
+# Slice ① Task 4 (decision 0014): the per-byte expansion itself. The first
+# keeps only each class's lowest byte, so a range of four bytes lowers to one
+# transition instead of four. The second makes a vacuous class -- a
+# complement whose canonical set is empty, e.g. the complement of the full
+# range -- still emit one transition (on byte 0), which the vacuous-
+# complement case (decision 0017 point 2) catches; matcher-bytes's own
+# de-duplication (ir.sls, out of scope for this task) is untouched by either.
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a byte class lowers to only its lowest byte"
+  # Re-anchored by the whole-branch review (a9de657..c302cdd): the prior pin
+  # "one transition per byte, ascending: transitions" was under-anchored --
+  # the sibling mutation above ("dispatch cases are not sorted ascending by
+  # byte") fails the SAME (case, check) pair, because Task 4's sweep
+  # re-anchored that sibling's pin without checking it against the pin being
+  # added here. Both mutants touch the transition list this pass's fixtures
+  # build, so both redden the "a range lowers to one transition per byte,
+  # ascending" case's "transitions" check.
+  #
+  # Re-measured both mutants' whole output on this SPEC lane and picked a
+  # record that only THIS mutant produces: this mutant keeps one byte per
+  # class, so the "a complement lowers to 254 transitions covering the
+  # universe minus two" case's "count" check goes 254 -> 1; the sibling only
+  # reverses order, so that case's length is unchanged (254 -> 254, "count"
+  # passes) and it instead fails at check "first" (0 -> 255). Separable in
+  # both directions: this pin does not occur anywhere in the sibling's
+  # output, and the sibling's own pin ("transitions are sorted ascending by
+  # byte: bytes -- expected (2 5), got (5 2)", on the "entry and transition
+  # order" group) does not occur in this one's output either -- not because
+  # this mutant skips that group (it runs there too, same as everywhere
+  # else), but because that group's fixture ("two") uses only exact-byte
+  # matchers, whose matcher-bytes is already a one-element list, so taking
+  # the car of it is a no-op and the check still passes.
+  FIND [[(bs (matcher-bytes (byte-case-matcher c)))]]
+  REPLACE [[(bs (list (car (matcher-bytes (byte-case-matcher c)))))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "a complement lowers to 254 transitions covering the universe minus two: count -- expected 254, got 1")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a class matching no bytes still contributes a transition"
+  FIND [[                                                                   bs)))]]
+  REPLACE [[                                                                   (if (null? bs) (list 0) bs))))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "zero transitions \\(decision 0017 point 2\\): none")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
@@ -3835,9 +3978,349 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
+# --- Pass 42: matcher canonicalization and the tag-guarded accessor (M3 Slice
+# ① Task 1), plus the class-matcher constructors and ascii-bytes (M3 Slice ①
+# Task 2) ---------------------------------------------------------------------
+#
+# ir-tests.sps is the first program to reach (byte-machine private ir)'s
+# canonicalization spine directly, and no pass has ever mutated ir.sls: every
+# earlier pass reaches it only through a consumer. The first mutation swaps
+# the exact-byte arm's returned byte for a constant 0, so an exact matcher
+# canonicalizes to the wrong one-element set instead of its own byte; the
+# second removes the accessor's tag guard, so a foreign vector reads slot 1
+# and returns instead of raising -- the exact defect design §5 says must not
+# be allowed to reach pass-overlap or list-sort. Verify command uses both
+# library roots, an empty object guard, the ir program.
+#
+# FIND is matched as a literal substring (MutationRunner.cmake), not a regex
+# and not whitespace-insensitive; it is written without leading whitespace,
+# which is what tolerates indentation drift in the matched line. SITES
+# defaults to 1 and is asserted exactly.
+#
+# Task 2 adds five mutations to this same pass rather than opening a new one,
+# since they exercise the same canonicalization spine the first two already
+# prove ir-tests.sps can reach: the byte-set and byte-range constructors'
+# degenerate-shape guards (decision 0017), ascii-bytes' non-ASCII guard, and
+# matcher-bytes' new byte-set-canonical and complement arms. Passes stay at
+# 39; mutations become 167 + 5 = 172.
+#
+# Task 2's review fix wave 1 adds six more, still in this same pass, still
+# against ir-tests.sps: the tag guards on the four remaining class-matcher
+# accessors this task's own review found uncaught, decision 0014's ordering
+# half, and matcher-bytes' else arm (carried open from Task 1's own report).
+# See each mutation's own comment for what it measures. Two pre-existing pins
+# in this pass -- "the exact-byte accessor reads slot 1 of any vector" and "a
+# byte set is canonicalized without de-duplication" -- were re-anchored in the
+# same commit: adding mutations here widened both pins' collision sets (a
+# full Pass 42 pin sweep -- byte_machine_mutation_verdict, every pin against
+# every other mutant's captured output, 156 ordered pairs across all 13
+# mutations -- found exactly these two, both now carrying the case's full
+# name or its own measured "got" instead of the bare check label). No other
+# pair in the pass collides.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/ir-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: an exact-byte matcher does not canonicalize to its own byte"
+  FIND [[(list (exact-byte-matcher-byte m))]]
+  REPLACE [[(list 0)]]
+  # Comparison-caught, not raise-based: the exact-byte arm still runs, so
+  # matcher-bytes returns a set instead of raising, and check-equal's "set"
+  # comparison is what catches the wrong byte. Measured (not predicted):
+  # this also leaves "canonicalizing a foreign vector is a contract
+  # violation" passing under the mutant, since that case's else branch is
+  # untouched -- unlike the prior raise-based mutation, which routed every
+  # case through the same else and made that third case pass for the wrong
+  # reason.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "one-element set: set -- expected \\(7\\), got \\(0\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: the exact-byte accessor reads slot 1 of any vector"
+  FIND [[(byte-machine-contract-violation 'exact-byte-matcher-byte 'invalid-argument 'matcher)]]
+  REPLACE [[#f]]
+  # Re-anchored in Fix wave 1: bare "refuses a foreign vector: refused" cross-
+  # matched the four new tag-guard mutations below, since every accessor in
+  # that guard class shares the same check label and case-name tail. Re-
+  # measured (byte_machine_mutation_verdict against all 12 other Pass 42
+  # mutants' captured output): the full case name is unique in the pass.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the exact-byte accessor refuses a foreign vector: refused")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: an empty byte set is accepted"
+  FIND [[(unless (and (list? bytes) (pair? bytes)]]
+  REPLACE [[(unless (and (list? bytes)]]
+  # Comparison-caught via check-raises' own expected-vs-actual assertion, not
+  # an incidental raise: dropping (pair? bytes) lets '() satisfy the rest of
+  # the guard (for-all over '() is vacuously true), so construction succeeds
+  # and check-raises reports "expected a raise, but the thunk returned ...".
+  # Measured (not predicted): this mutant also fails the ascii-bytes empty-
+  # string case ("and cannot become a byte set"), since that check-raises
+  # reaches the same guard; the pin below is the first FAIL line only.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "an empty byte set is rejected: empty set")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: a reversed byte range is accepted"
+  FIND [[(unless (<= low high)]]
+  REPLACE [[(unless #t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "low greater than high is rejected: reversed")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: ascii-bytes admits a non-ASCII character"
+  FIND [[(unless (<= 0 c 127)]]
+  REPLACE [[(unless #t]]
+  # Measured (not predicted): the case name is lowercase ("a non-ASCII
+  # character is rejected"), not the plan's predicted "A non-ASCII...".
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "a non-ASCII character is rejected: non-ascii")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: a byte set is canonicalized without de-duplication"
+  FIND [[((and (pair? acc) (= (car s) (car acc))) (loop (cdr s) acc))]]
+  REPLACE [[((and (pair? acc) (< (car s) (car acc))) (loop (cdr s) acc))]]
+  # Re-anchored in Fix wave 1: the bare case+check pin cross-matched the new
+  # ordering mutation below, which breaks the same check ("ascending and
+  # de-duplicated: set") with a different measured "got". Each of the two
+  # sibling mutations now carries its own measured "got" tuple, the same
+  # trade the pre-existing one-byte-fingerprint pins made (see the header
+  # note above EXPECTED_PASSES/EXPECTED_MUTATIONS).
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "ascending and de-duplicated: set -- expected \\(0 1 2 254 255\\), got \\(0 1 1 2 254 255\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: a complement is not the universe minus the inner set"
+  FIND [[((memv b inner) (loop (- b 1) acc))]]
+  REPLACE [[((memv b inner) (loop (- b 1) (cons b acc)))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "minus the inner set: count")
+
+# --- Fix wave 1 (Task 2 review): the four remaining tag-guarded class-matcher
+# accessors, decision 0014's ordering half, and matcher-bytes' else arm -----
+#
+# The mutation-count cap that stopped Task 2 from closing these is withdrawn
+# (see the Global Constraints note this fix wave was dispatched under); every
+# mutation below is measured, not predicted, against this file's own tree.
+#
+# The first four are one instance per class-matcher accessor of the same tag-
+# guard defect Pass 42's second mutation already proves for
+# exact-byte-matcher-byte: dropping the tag check lets the accessor read
+# whatever slot N of a foreign vector without raising. Four mutations, not
+# one, because each guard sits at its own source line -- deleting
+# byte-range-matcher-low's `unless` does not touch byte-range-matcher-high's,
+# so a single representative mutation would leave three of the four exactly
+# as unguarded as before this fix wave. Each is caught by check-raises' own
+# expected-vs-actual assertion (comparison-caught, not raise-based): the
+# guard's replacement is `#f`, not a raise, so execution falls through to the
+# bare vector-ref and the thunk returns instead of raising.
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: byte-set-matcher-bytes reads slot 1 of any vector"
+  FIND [[(byte-machine-contract-violation 'byte-set-matcher-bytes 'invalid-argument 'matcher)]]
+  REPLACE [[#f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "byte-set-matcher-bytes refuses a foreign vector: refused")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: byte-range-matcher-low reads slot 1 of any vector"
+  FIND [[(byte-machine-contract-violation 'byte-range-matcher-low 'invalid-argument 'matcher)]]
+  REPLACE [[#f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "byte-range-matcher-low refuses a foreign vector: refused")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: byte-range-matcher-high reads slot 2 of any vector"
+  FIND [[(byte-machine-contract-violation 'byte-range-matcher-high 'invalid-argument 'matcher)]]
+  REPLACE [[#f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "byte-range-matcher-high refuses a foreign vector: refused")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: byte-complement-matcher-matcher reads slot 1 of any vector"
+  FIND [[(byte-machine-contract-violation 'byte-complement-matcher-matcher
+                                       'invalid-argument 'matcher)]]
+  REPLACE [[#f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "byte-complement-matcher-matcher refuses a foreign vector: refused")
+
+# Decision 0014's ordering half (Minor 4): the existing de-duplication
+# mutation above proves the `=` comparison in byte-set-canonical's loop is
+# load-bearing, but nothing proved `list-sort` itself is. Dropping it leaves
+# input-order bytes with no adjacent duplicates untouched by the loop, so the
+# result comes back in the caller's order instead of ascending --
+# comparison-caught by the same check the de-duplication mutation uses,
+# distinguished from it by its own measured "got" (see that mutation's
+# re-anchored pin comment above).
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: a byte set canonicalizes without ascending order"
+  FIND [[(list-sort < bs)]]
+  REPLACE [[bs]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "ascending and de-duplicated: set -- expected \\(0 1 2 254 255\\), got \\(254 1 0 1 255 2\\)")
+
+# matcher-bytes' contract-violation else arm (Minor 5, carried from Task 1):
+# REPLACE returns the empty list instead of raising, witnessed by the
+# existing "canonicalizing a foreign vector is a contract violation" case.
+# Comparison-caught via check-raises' own expected-vs-actual assertion.
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: matcher-bytes canonicalizes a foreign vector instead of raising"
+  FIND [[(byte-machine-contract-violation 'matcher-bytes
+                                                 'invalid-argument 'matcher)]]
+  REPLACE [['()]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a contract violation: refused -- expected a raise, but the thunk returned \\(\\)")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 43: class membership and recursive canonicalization (M3 Slice ①
+# Task 5) --------------------------------------------------------------------
+#
+# byte-class-interpret-tests.sps drives five class fixtures over all 256 bytes
+# with ABSOLUTE expected outcomes. Two decisions here are unreachable from every
+# earlier lane, because every earlier fixture's matcher is a one-element set:
+# `memv` over the whole canonical set (for a singleton, `memv` and `= (car ...)`
+# agree, so Pass 34's one-byte machine cannot separate them), and the recursion
+# through a nested complement. The first mutation matches only a class's lowest
+# byte; the second stops complement canonicalization recursing, so a
+# complement-of-a-complement is read as its own inner matcher. Verify command
+# uses both library roots, an empty object guard, the byte-class program.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/byte-class-interpret-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.byte-class.chez.source
+  LABEL "interpret: class membership matches only the class's lowest byte"
+  FIND [[((memv byte (matcher-bytes (byte-case-matcher (car cs))))]]
+  REPLACE [[((= byte (car (matcher-bytes (byte-case-matcher (car cs)))))]]
+  # The brief's own predicted pin, "accepted exactly the class size", was a
+  # bare check label the brief flagged as possibly colliding. At the time
+  # this pass was first written, it did not merely collide, it never fired at
+  # all: `hits` counted membership in the test's own precomputed `accepted`
+  # list (memv b accepted), not whether the byte actually stopped, so that
+  # check passed unchanged under this mutant regardless of matcher behaviour.
+  # A whole-branch review fix wave made `hits` a genuine behavioural count
+  # (observed stopped/consumed = 1, not list membership), and re-measuring
+  # this mutation against the fixed test shows "accepted exactly the class
+  # size" now reddens as originally predicted: with only the class's lowest
+  # canonical byte still matching the dispatch case, exactly one byte ever
+  # stops, so `hits` collapses to 1 for every fixture while the class size it
+  # is compared against (5, 26, 254, 10, 3) differs per fixture. Pinned to
+  # this check, not "no byte misbehaved" (which also still reddens here), so
+  # this pass demonstrates the fixed sentinel is the one doing the catching.
+  # Measured FAIL line: "FAIL all 256 byte values, per class.byte-set accepts
+  # exactly its class: accepted exactly the class size -- expected 5, got 1".
+  # Each fixture's "expected N" is unique across the whole run, so the bare
+  # detail alone would already resolve to one (case, check) pair, but the
+  # case-name prefix is kept for robustness against a future fixture whose
+  # class size happens to coincide.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "byte-set accepts exactly its class: accepted exactly the class size -- expected 5, got 1")
+
+# The REPLACE below canonicalizes a complement's inner matcher normally UNLESS
+# that inner matcher is itself a complement, in which case it reads as the empty
+# set -- so a nested complement becomes the full universe while every
+# single-level complement is untouched. That isolates the recursion specifically,
+# and it is caught by a failed comparison rather than by a raise (AGENTS.md):
+# handing `memv` a vector instead of a list would crash somewhere incidental
+# rather than redden the assertion that names the decision.
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.byte-class.chez.source
+  LABEL "ir: complement canonicalization does not recurse"
+  FIND [[(let ((inner (matcher-bytes (byte-complement-matcher-matcher m))))]]
+  REPLACE [[(let ((inner (if (byte-complement-matcher? (byte-complement-matcher-matcher m)) (quote ()) (matcher-bytes (byte-complement-matcher-matcher m)))))]]
+  # The prior pin, "nested-complement accepts exactly its class", matched only
+  # the case-name segment. That case carries three checks, so the pin was
+  # case-scoped, not signature-scoped -- any of the three failing would have
+  # satisfied it, not just the one this mutation is meant to demonstrate.
+  # Extended to the full measured line so the pin names exactly one
+  # (case, check) pair. Re-measured after the `hits` fix wave: the
+  # mis-canonicalized nested complement now reads as accepting the whole
+  # universe, so both "no byte misbehaved" (byte 0 is the first byte that
+  # wrongly stops) and "accepted exactly the class size" (hits climbs to 256)
+  # redden on this same case; pinned to "no byte misbehaved" because it fires
+  # first in check order and is the more direct statement of the defect --
+  # the matcher accepting bytes it must reject -- while "accepted exactly the
+  # class size" is downstream arithmetic on the same wrong behaviour. No
+  # CMake-regex metacharacters in the pin, so no escaping is needed.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "nested-complement accepts exactly its class: no byte misbehaved -- expected none, got 0")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 44: the byte-class differential is non-vacuous (M3 Slice ① Task 6) --
+#
+# differential-byte-class-tests.sps compares the interpreter against the emitted
+# library over all 256 bytes for five class fixtures. Shifting every rendered
+# transition byte by one makes the generated executor accept a class shifted one
+# byte up, so the comparison diverges at the class's first byte. Verify command
+# uses both library roots, an empty object guard, the differential program.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/differential-byte-class-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.byte-class.chez.source
+  LABEL "compile: every rendered transition byte is shifted by one"
+  FIND [[(string-append "               ((" (number->string (car tr)) ") "]]
+  REPLACE [[(string-append "               ((" (number->string (+ 1 (car tr))) ") "]]
+  # Measured against a scratch tree: byte-set is the first fixture in
+  # class-machines, so it is the first case in "interpreter and generated agree
+  # on every byte, for every class" to run, and its lowest class byte (0) is the
+  # one whose rendered arm is shifted away from key 0 to key 1 -- so the
+  # generated side stops matching it and falls through to the dispatch node's
+  # own reject/reexecute default, diverging from the (unmutated) interpreter at
+  # byte 0. Measured FAIL line: "byte-machine-harness: FAIL interpreter and
+  # generated agree on every byte, for every class.byte-set agrees on all 256
+  # bytes: no byte disagreed -- expected none, got 0". Pinned to byte-set's own
+  # case name plus the check label so the pin resolves to one (case, check)
+  # pair, not the five fixtures' shared case-name tail ("agrees on all 256
+  # bytes: no byte disagreed") the brief flagged as needing narrowing.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "byte-set agrees on all 256 bytes: no byte disagreed -- expected none, got 0")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "THIRTY-ONE PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FORTY-ONE PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

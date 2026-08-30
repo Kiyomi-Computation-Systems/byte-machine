@@ -15,6 +15,12 @@
           byte-dispatch-node-eof-target
           make-byte-case byte-case? byte-case-matcher byte-case-edge
           make-exact-byte-matcher exact-byte-matcher? exact-byte-matcher-byte
+          make-byte-set-matcher byte-set-matcher? byte-set-matcher-bytes
+          make-byte-range-matcher byte-range-matcher?
+          byte-range-matcher-low byte-range-matcher-high
+          make-byte-complement-matcher byte-complement-matcher?
+          byte-complement-matcher-matcher
+          matcher? matcher-bytes ascii-bytes
           make-edge edge? edge-target edge-mode
           make-stop-node stop-node? stop-node-name
           make-finish-node finish-node? finish-node-name
@@ -35,15 +41,155 @@
     (unless (symbol? v)
       (byte-machine-contract-violation who 'invalid-argument what))
     v)
+  ;; A byte is an exact integer in 0..255; this shape is checked at four call
+  ;; sites (a lone byte, a byte inside a set, a range's low, a range's high),
+  ;; so it is a pure predicate (byte-value?, reused by the for-all below) plus
+  ;; a require-symbol sibling (require-byte) that threads who/what the same
+  ;; way.
+  (define (byte-value? x) (and (integer? x) (exact? x) (<= 0 x 255)))
+  (define (require-byte who what v)
+    (unless (byte-value? v)
+      (byte-machine-contract-violation who 'invalid-argument what))
+    v)
 
   ;; --- exact-byte matcher ---
   (define exact-byte-matcher-tag (tag 'byte-machine-exact-byte-matcher))
   (define (make-exact-byte-matcher byte)
-    (unless (and (integer? byte) (exact? byte) (<= 0 byte 255))
-      (byte-machine-contract-violation 'make-exact-byte-matcher 'invalid-argument 'byte))
+    (require-byte 'make-exact-byte-matcher 'byte byte)
     (vector exact-byte-matcher-tag byte))
   (define (exact-byte-matcher? x) (tagged? exact-byte-matcher-tag x))
-  (define (exact-byte-matcher-byte m) (vector-ref m 1))
+  ;; Tag-guarded: an unguarded (vector-ref m 1) on a matcher of another kind
+  ;; pulls a byte LIST out of the wrong slot and fails far away, inside
+  ;; arithmetic or a sort predicate, rather than at the contract boundary.
+  (define (exact-byte-matcher-byte m)
+    (unless (exact-byte-matcher? m)
+      (byte-machine-contract-violation 'exact-byte-matcher-byte 'invalid-argument 'matcher))
+    (vector-ref m 1))
+
+  ;; --- byte-set matcher (§9.1:292; decision 0017 points 1 and 3) ---
+  ;; The caller's element order and duplicates are stored verbatim -- sorting
+  ;; or de-duplicating here would be a construction-time semantic transform,
+  ;; which §9.1:322 forbids; matcher-bytes does both, once, at
+  ;; canonicalization. The list is copied on BOTH sides of the descriptor,
+  ;; with `(append bytes '())` rather than `list-copy` (unbound under a bare
+  ;; `(rnrs)` import): once at construction, and again below in
+  ;; byte-set-matcher-bytes -- so §9.1's "immutable-by-API descriptor" holds
+  ;; in both directions. A caller who mutates the list they passed in
+  ;; (set-car!, etc.) cannot reach back into an already-built matcher, and a
+  ;; caller who mutates the list this accessor just handed them cannot reach
+  ;; the matcher's own storage either -- both routes go through `(rnrs
+  ;; mutable-pairs)` and this closes both. Copying is not the transform
+  ;; decision 0017 point 3 forbids -- it changes the list's identity, not its
+  ;; order or membership; the copy byte-set-matcher-bytes returns is unsorted
+  ;; and undeduplicated, same as the stored list. The degenerate `(append '()
+  ;; z)` case (which would return `z` itself, aliasing it) cannot occur on
+  ;; either side: `make-byte-set-matcher` requires `(pair? bytes)`, so the
+  ;; stored list -- and therefore the accessor's `(vector-ref m 1)` -- is
+  ;; always a non-empty proper list.
+  ;;
+  ;; byte-complement-matcher-matcher below does NOT get the same treatment --
+  ;; it hands back the nested matcher object itself (a tagged vector), not a
+  ;; copy. That is a real, separate exposure (`vector-set!` can overwrite a
+  ;; nested matcher's own slots in place), but it is a different route
+  ;; through a different mutable primitive than the one this fix closes, and
+  ;; closing it would mean deep-copying an arbitrarily nested matcher tree on
+  ;; every read -- out of scope here.
+  (define byte-set-matcher-tag (tag 'byte-machine-byte-set-matcher))
+  (define (make-byte-set-matcher bytes)
+    (unless (and (list? bytes) (pair? bytes) (for-all byte-value? bytes))
+      (byte-machine-contract-violation 'make-byte-set-matcher 'invalid-argument 'bytes))
+    (vector byte-set-matcher-tag (append bytes '())))
+  (define (byte-set-matcher? x) (tagged? byte-set-matcher-tag x))
+  (define (byte-set-matcher-bytes m)
+    (unless (byte-set-matcher? m)
+      (byte-machine-contract-violation 'byte-set-matcher-bytes 'invalid-argument 'matcher))
+    (append (vector-ref m 1) '()))
+
+  ;; --- byte-range matcher (§9.1:293; decision 0017 points 1 and 2) ---
+  ;; low = high is legal: a redundant but well-formed exact byte.
+  (define byte-range-matcher-tag (tag 'byte-machine-byte-range-matcher))
+  (define (make-byte-range-matcher low high)
+    (require-byte 'make-byte-range-matcher 'low low)
+    (require-byte 'make-byte-range-matcher 'high high)
+    (unless (<= low high)
+      (byte-machine-contract-violation 'make-byte-range-matcher 'invalid-argument 'range))
+    (vector byte-range-matcher-tag low high))
+  (define (byte-range-matcher? x) (tagged? byte-range-matcher-tag x))
+  (define (byte-range-matcher-low m)
+    (unless (byte-range-matcher? m)
+      (byte-machine-contract-violation 'byte-range-matcher-low 'invalid-argument 'matcher))
+    (vector-ref m 1))
+  (define (byte-range-matcher-high m)
+    (unless (byte-range-matcher? m)
+      (byte-machine-contract-violation 'byte-range-matcher-high 'invalid-argument 'matcher))
+    (vector-ref m 2))
+
+  ;; --- byte-complement matcher (§9.1:294) ---
+  ;; It complements a MATCHER, not a byte list, so complements nest and
+  ;; canonicalization is recursive. The complement of a full-universe matcher is
+  ;; the empty set of transitions on a node whose fallback then takes every byte
+  ;; -- vacuous, not malformed (decision 0017 point 2).
+  (define byte-complement-matcher-tag (tag 'byte-machine-byte-complement-matcher))
+  (define (make-byte-complement-matcher matcher)
+    (unless (matcher? matcher)
+      (byte-machine-contract-violation 'make-byte-complement-matcher 'invalid-argument 'matcher))
+    (vector byte-complement-matcher-tag matcher))
+  (define (byte-complement-matcher? x) (tagged? byte-complement-matcher-tag x))
+  (define (byte-complement-matcher-matcher m)
+    (unless (byte-complement-matcher? m)
+      (byte-machine-contract-violation 'byte-complement-matcher-matcher
+                                       'invalid-argument 'matcher))
+    (vector-ref m 1))
+
+  (define (matcher? x)
+    (or (exact-byte-matcher? x) (byte-set-matcher? x)
+        (byte-range-matcher? x) (byte-complement-matcher? x)))
+
+  ;; ascii-bytes (§9.1:299): a string's code points as a proper list of exact
+  ;; integers, in string order, with no de-duplication -- §9.1:318 names `bytes`
+  ;; a proper list, so this composes directly with make-byte-set-matcher. It is a
+  ;; helper, not a matcher constructor, so the empty string is legal and yields
+  ;; '(); make-byte-set-matcher is where that becomes a contract violation.
+  (define (ascii-bytes s)
+    (unless (string? s)
+      (byte-machine-contract-violation 'ascii-bytes 'invalid-argument 'string))
+    (let loop ((i (- (string-length s) 1)) (acc '()))
+      (if (< i 0)
+          acc
+          (let ((c (char->integer (string-ref s i))))
+            (unless (<= 0 c 127)
+              (byte-machine-contract-violation 'ascii-bytes 'invalid-argument 'non-ascii))
+            (loop (- i 1) (cons c acc))))))
+
+  ;; --- matcher canonicalization (parent §10.6:538, §16.3:921; decision 0014) ---
+  ;; Every matcher denotes a subset of the closed byte universe 0..255. This is
+  ;; the one place that subset is computed: the verifier's overlap analysis, the
+  ;; normalizer's per-byte lowering and the interpreter's membership test all
+  ;; call it, so a matcher kind taught here is understood by all three at once.
+  ;; The result is a proper list of exact integers, ascending and duplicate-free
+  ;; -- ordering and de-duplication are what keep the normalizer's
+  ;; ascending-by-byte transition sort a TOTAL order (decision 0014).
+  (define (byte-set-canonical bs)
+    (let loop ((s (list-sort < bs)) (acc '()))
+      (cond ((null? s) (reverse acc))
+            ((and (pair? acc) (= (car s) (car acc))) (loop (cdr s) acc))
+            (else (loop (cdr s) (cons (car s) acc))))))
+  (define (matcher-bytes m)
+    (cond ((exact-byte-matcher? m) (list (exact-byte-matcher-byte m)))
+          ((byte-set-matcher? m) (byte-set-canonical (byte-set-matcher-bytes m)))
+          ((byte-range-matcher? m)
+           (let loop ((b (byte-range-matcher-high m)) (acc '()))
+             (if (< b (byte-range-matcher-low m))
+                 acc
+                 (loop (- b 1) (cons b acc)))))
+          ((byte-complement-matcher? m)
+           (let ((inner (matcher-bytes (byte-complement-matcher-matcher m))))
+             (let loop ((b 255) (acc '()))
+               (cond ((< b 0) acc)
+                     ((memv b inner) (loop (- b 1) acc))
+                     (else (loop (- b 1) (cons b acc)))))))
+          (else (byte-machine-contract-violation 'matcher-bytes
+                                                 'invalid-argument 'matcher))))
 
   ;; --- edge ---
   (define edge-tag (tag 'byte-machine-edge))
@@ -59,7 +205,7 @@
   ;; --- byte case ---
   (define byte-case-tag (tag 'byte-machine-byte-case))
   (define (make-byte-case matcher edge source-label)
-    (unless (exact-byte-matcher? matcher)
+    (unless (matcher? matcher)
       (byte-machine-contract-violation 'make-byte-case 'invalid-argument 'matcher))
     (unless (edge? edge)
       (byte-machine-contract-violation 'make-byte-case 'invalid-argument 'edge))
