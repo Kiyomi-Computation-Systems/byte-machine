@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FORTY-TWO PASSES, BECAUSE FORTY-TWO DIFFERENT WITNESSES ARE NEEDED
+# FORTY-THREE PASSES, BECAUSE FORTY-THREE DIFFERENT WITNESSES ARE NEEDED
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -145,7 +145,7 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "FORTY-TWO PASSES..." above. Declared here, rather than only in prose, so the
+# See "FORTY-THREE PASSES..." above. Declared here, rather than only in prose, so the
 # count enforced at the bottom of this file is the same text a reader checks by
 # eye at the top -- one number to keep in sync, not two that can quietly
 # disagree. 25 passes / 60 mutations before the aot task; pass 26 adds two (C3,
@@ -628,8 +628,26 @@ cmake_minimum_required(VERSION 3.26)
 # three are comparison-caught, pins measured against a scratch stage (not the
 # committed tree) and cross-checked pairwise so no two of the three share a
 # FAIL line. Passes become 41 + 1 = 42; mutations 218 + 3 = 221.
-set(EXPECTED_PASSES 42)
-set(EXPECTED_MUTATIONS 221)
+# Slice ② Task 5 adds Pass 46 (the sequence-node differential's own
+# non-vacuity, byte-machine.differential.sequence-node.chez.source) with one
+# mutation: render-transition-arm's byte shift, the same decision Pass 44
+# (byte-class) and Pass 39 (property) already carry, re-anchored under this
+# lane's own SPEC because a mutation's witness lives in its own SPEC lane's
+# program (AGENTS.md) -- both executors read the same source IR here, so the
+# emitter is the only place a mutation can make them disagree at all.
+# Comparison-caught. A measured sweep against the other passes that also
+# mutate compile.sls found the FIRST tuple failure is not this mutation's own:
+# Pass 36's "advance transition lowered as reexecute" mutation reaches the
+# identical "(error 0 0 0 unexpected-byte)" line by a different mechanism when
+# re-measured against this same program. Pinned instead to the all-256-bytes
+# check, whose "got" value this sweep confirmed differs from every Pass 36
+# variant checked; Pass 39's mod-256 mutation reproduces this pin exactly, which
+# is expected -- for bytes 1-4 it is arithmetically the same shift, so it is
+# the same decision re-witnessed under a different lane, not a collision. See
+# the mutation's own comment for the full measurement. Passes become
+# 42 + 1 = 43; mutations 221 + 1 = 222.
+set(EXPECTED_PASSES 43)
+set(EXPECTED_MUTATIONS 222)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -5292,9 +5310,85 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
+# --- Pass 46: the sequence-node differential is non-vacuous (M3 Slice ② -----
+# Task 5) ------------------------------------------------------------------
+#
+# differential-sequence-node-tests.sps is the slice's independent oracle: a
+# single-alternative sequence node must reproduce sequence-machine.sls's four
+# CHAINED DISPATCH NODES exactly, over tuples measured before this node kind
+# existed. Both executors read the same source IR (the normalizer lowers a
+# sequence-dispatch node to an ordinary trie of dispatch nodes before the
+# emitter ever sees it -- decision 0015 point 1), so agreement alone cannot
+# prove the lane is worth its runtime: a divergence has to be reachable, and
+# the interpreter never reads compile.sls, so the emitter is the only module a
+# mutation here can touch and still make the two sides disagree. Verify
+# command uses both library roots, an empty object guard, the new
+# differential program.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/differential-sequence-node-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.sequence-node.chez.source
+  LABEL "compile: every rendered transition byte is shifted by one (sequence-node lane)"
+  FIND [[(string-append "               ((" (number->string (car tr)) ") "]]
+  REPLACE [[(string-append "               ((" (number->string (+ 1 (car tr))) ") "]]
+  # Same FIND/REPLACE as Pass 44's byte-class mutation, and (for the small
+  # byte values this lane's sequence uses) functionally the same shift as
+  # Pass 39's mod-256 mutation. Legitimate per AGENTS.md/SITES being
+  # per-mutation: each byte_machine_mutation() call reads a pristine copy of
+  # compile.sls and restores it afterward, so three passes carrying the same
+  # render-transition-arm decision under three different SPEC lanes is the
+  # same defect re-witnessed where each lane's own fixture can see it, not
+  # three copies of one test (AGENTS.md: "a mutation's witnessing test lives
+  # in its own SPEC lane's program"). FIND measured unique in the file (one
+  # occurrence, confirmed on a scratch copy).
+  #
+  # Measured against a scratch stage, not the committed tree: baseline
+  # cases=12 checks=25 failures=0 status=0; mutant cases=12 failed-cases=12
+  # checks=25 failures=13 status=1. Comparison-caught throughout (check-equal
+  # failures, no raise).
+  #
+  # Pin sweep, both directions, against every other pass that also mutates
+  # compile.sls (Passes 36-40, 44). The mutant's very FIRST reported failure --
+  # "the full sequence in one slice stops after four bytes in both: generated
+  # -- expected (stopped 4 4 4 #f), got (error 0 0 0 unexpected-byte)" -- is
+  # NOT usable as this mutation's pin: re-measured, Pass 36's "advance
+  # transition lowered as reexecute" mutation, run against this same program,
+  # reaches the byte-identical line by a different mechanism (state 0's
+  # matching transition stops advancing pos/off, so state 1 then fails to
+  # match the still-unconsumed byte and lands on the same all-zero error
+  # tuple). Re-measured the full output of that mutation and Pass 36's
+  # "reexecute fallback lowered as advance" and "error arm omits the resolved
+  # code" siblings against this program too: none of the three touches the
+  # dispatch CASE key this mutation shifts, so all three diverge first at byte
+  # 0 ("(advance 0 0)" / "(reexecute 0 0)" / "(reexecute 0 0)" on the
+  # all-256-bytes check) where this mutation diverges first at byte 1
+  # ("(reexecute 0 1)", because the shift moves state 0's own accepted byte
+  # from 1 to 2). Pinned to that check instead, which the sweep confirms no
+  # sibling reaches. Pass 39's mod-256 mutation reproduces this pin exactly
+  # when re-measured against this program (expected: `(+ 1 b)` and
+  # `(mod (+ 1 b) 256)` agree for b in 1..4, so it is the same decision, not a
+  # collision -- and it is declared under a different SPEC, so it never
+  # actually runs against this verify command). Control: this lane and
+  # mutation do not exist on `main`, so there is no prior baseline to
+  # re-measure; the meaningful control is the sweep above, against the
+  # sibling passes that already exist on this branch.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "256 x 4 positions match, in both mismatch modes: no \\(mode position byte\\) disagreed -- expected none, got \\(reexecute 0 1\\)")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FORTY-TWO PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FORTY-THREE PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

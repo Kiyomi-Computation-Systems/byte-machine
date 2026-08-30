@@ -1105,6 +1105,33 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/sequence-interpret-tests.sps"
   TIMEOUT 120)
 
+# --- Milestone 3 Slice ②: interpreter≡generated over a sequence node ----------
+# The slice's independent oracle. A single-alternative sequence node must
+# reproduce sequence-machine.sls -- four CHAINED DISPATCH NODES -- exactly: the
+# construct is new, the expected behaviour is not, and it was measured by a
+# different mechanism before this node kind existed.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.sequence-node.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-sequence-node-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/sequence-node-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-sequence-node-tests.sps"
+  TIMEOUT 180)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.sequence-node.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-sequence-node-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/sequence-node-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-sequence-node-tests.sps"
+  TIMEOUT 180)
+
 # --- Milestone 1 Phase 3 Slice B: D7 identifier repertoire + binary LF -------
 byte_machine_add_scheme_lane(
   NAME byte-machine.verify.identifier-repertoire.chez.source
