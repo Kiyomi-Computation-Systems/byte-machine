@@ -125,6 +125,37 @@
   mutations to lanes another branch has audited, that branch must re-measure
   after the merge — and the obligation belongs in the tree, named by mutation
   LABEL rather than line number, not in a session transcript.
+* **Re-judge a pin sweep in BOTH directions — re-anchoring the incumbent is half of it.**
+  The rule above says adding a mutation widens existing pins' collision sets. It
+  reads one-directional and is not: you must also check whether an *existing*
+  mutant matches the pin you are *adding*. Milestone 3 Slice ① Task 4 measured
+  the pre-existing `normal-ir: dispatch cases are not sorted ascending by byte`
+  mutant's output and re-anchored that pin — and never checked the reverse, so
+  its own new pin was matched by that same sibling. Both failed the identical
+  `(case, check)` pair, leaving decision 0014's headline claim pinned to a
+  signature two mutations produce. Six per-task sweeps on that branch found
+  three real collisions; the whole-branch review found the seventh *in the
+  sweeps themselves*. Run a control on the merge base — a pass that is
+  collision-free there and colliding at HEAD is the branch's doing, and that
+  distinguishes an introduced defect from inherited debt. Record a genuinely
+  subsumed residue **in the tree**, beside the pin, named by mutation LABEL: the
+  session ledger is git-ignored, so an obligation left there has not been
+  recorded.
+* **A completion sentinel must read the observed value, and the loop over the loops needs one too.**
+  No suite here declares an expected case or check count — `harness-summary`
+  reports only what ran — so an exhaustive loop that never executes passes
+  vacuously, and a sentinel is how that is closed. A sentinel computed from the
+  *test's own expectation* closes nothing. Milestone 3 Slice ①'s `hits` counter
+  incremented inside the `(memv b accepted)` branch, so it equalled the class
+  size for every possible behaviour of the machine under test and could only
+  fail if a fixture's own data held a duplicate — a fixture-integrity check
+  wearing a behavioural sentinel's label, with a comment claiming it closed the
+  "matcher accepts nothing" mode. Derive counters from what the system under
+  test returned. And apply the rule one level up: the outer `for-each` over five
+  fixtures had no sentinel at all, so dropping a fixture would have silently
+  shrunk two groups and left the lane green. Assert the collection's own length
+  where you iterate one. Note what found the vacuous sentinel: a mutation pin
+  that never fired. Mutation testing catching a bad test is the argument for it.
 * **A measurement that cannot fail visibly needs a control, not a re-read.**
   Slice ③'s close-out produced two plausible-and-wrong counts from two different
   methods, each returning a number that gave no reason to distrust it. Reading
