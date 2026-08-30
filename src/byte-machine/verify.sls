@@ -11,8 +11,11 @@
 ;;; resolution and reachability, its mismatch edge's reexecute mode joins the
 ;;; zero-progress walk, and its eof-target joins the EOF-shape and :908/:909
 ;;; terminal checks. Milestone 3 Slice ③ added pass-sequence-ambiguity
-;;; (§16.2:894). Cross-alternative sequence collision stays out of pass-overlap
-;;; permanently -- it is :894's, not :893's; see pass-overlap's own filter.
+;;; (§16.2:894) and taught pass-zero-progress's REPORT set the sixth kind
+;;; (§25:1533), so a sequence node whose reexecute mismatch edge reaches itself
+;;; is now a zero-progress cycle rather than a hang. Cross-alternative sequence
+;;; collision stays out of pass-overlap permanently -- it is :894's, not
+;;; :893's; see pass-overlap's own filter.
 ;;; Diagnostics are compared by code, never by text.
 (library (byte-machine verify)
   (export verify-machine verification-ok? verification-diagnostics
@@ -263,22 +266,49 @@
               ((pause-node? n) (list (pause-node-continuation n)))
               ;; Only the mismatch edge can be reexecute; every case edge
               ;; advances by construction (§10.6:546). This teaches the WALK to
-              ;; see through a sequence node. Adding sequence nodes to the
-              ;; REPORTED set is §25:1533's cycle extension, which is Slice ③ --
-              ;; a self-targeting sequence node going unflagged here is correct.
-              ;; Fix wave 2 (Important 1), measured 2026-08-30: a sequence node
+              ;; see through a sequence node, and Milestone 3 Slice ③ added the
+              ;; sixth kind to the REPORTED set below (§25:1533), so a
+              ;; self-targeting reexecute mismatch edge is now flagged.
+              ;;
+              ;; Why the source-level walk is exact enough at lowered
+              ;; granularity: NO ZERO-WIDTH EDGE CAN ENTER A POSITION->=1 PREFIX
+              ;; STATE. Every trie edge advances, so a prefix state at position
+              ;; k >= 1 is reached only by consuming a byte; the only zero-width
+              ;; edge out of any sequence-derived state is the shared mismatch
+              ;; edge this arm returns. The lowered zero-width cycle set is
+              ;; therefore exactly the source-level one and no position->=1
+              ;; state can be a cycle MEMBER -- which is why verification never
+              ;; needs the lowered graph (§17:951). Design §7's phrasing
+              ;; ("positions >=1 reach position 0 only after an advance") is
+              ;; about the path INTO the state, not the edge out of it, and is
+              ;; not the load-bearing property.
+              ;;
+              ;; KNOWN, DELIBERATE OVER-REJECTION, inherited not introduced:
+              ;; reaches-self? is a pure edge walk and never asks whether the
+              ;; arm closing the cycle is reachable for any byte. A sequence
+              ;; node whose alternatives' first bytes cover all 256 values has a
+              ;; dead root fallback and cannot loop, yet is reported. Measured:
+              ;; 256 alternatives (b 0) -> stop, mismatch reexecute -> itself,
+              ;; terminates on every input. The incumbent byte-dispatch
+              ;; analysis is already exactly this conservative -- a node whose
+              ;; single case is (make-byte-range-matcher 0 255) with a
+              ;; reexecute self-fallback reports zero-progress-cycle today,
+              ;; measured -- so this preserves a uniform shipped conservatism.
+              ;; Making it exact would need the same reachability refinement for
+              ;; byte-dispatch fallbacks and would change existing verdicts.
+              ;;
+              ;; Fix wave 2 (Important 1), measured 2026-08-30 under Slice ②,
+              ;; preserved as the record of what was true then: a sequence node
               ;; whose mismatch edge reexecutes into itself -- one alternative,
-              ;; no other nodes -- verifies with ok #t and zero diagnostics
-              ;; today, where the byte-identical shape built from a
-              ;; byte-dispatch node reports zero-progress-cycle. Feeding it one
-              ;; byte that does not match the alternative's first byte does not
-              ;; return: reproduced under a timeout in both the interpreted
-              ;; lane (parser-feed-op!'s `(loop pos)`, runtime.sls:200) and the
+              ;; no other nodes -- verified with ok #t and zero diagnostics,
+              ;; where the byte-identical shape built from a byte-dispatch node
+              ;; reported zero-progress-cycle. Feeding it one byte that does not
+              ;; match the alternative's first byte did not return: reproduced
+              ;; under a timeout in both the interpreted lane
+              ;; (parser-feed-op!'s `(loop pos)`, runtime.sls:200) and the
               ;; generated lane (compile.sls's emitted `(loop pos <target>
-              ;; off)` fallback), since neither has a local cycle guard and
-              ;; both rely on this REPORT set, which does not yet see the
-              ;; sequence node. Deferred consequence, not a new defect --
-              ;; closed when Slice ③ extends the REPORT set above.
+              ;; off)` fallback), since neither has a local cycle guard and both
+              ;; rely on this REPORT set. CLOSED by Slice ③'s extension above.
               ((sequence-dispatch-node? n)
                (if (eq? (edge-mode (sequence-dispatch-node-mismatch n)) 'reexecute)
                    (list (edge-target (sequence-dispatch-node-mismatch n))) '()))
@@ -293,7 +323,8 @@
                               (cons (car frontier) seen)))))))
       (filter values
               (map (lambda (n)
-                     (if (and (or (byte-dispatch-node? n) (pause-node? n)) (reaches-self? (node-name n)))
+                     (if (and (or (byte-dispatch-node? n) (pause-node? n) (sequence-dispatch-node? n))
+                              (reaches-self? (node-name n)))
                          (make-diagnostic 'zero-progress-cycle (node-name n)
                                           "a zero-width cycle (reexecute edges/pause continuations) makes no progress")
                          #f))

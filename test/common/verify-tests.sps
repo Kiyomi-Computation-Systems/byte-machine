@@ -592,6 +592,35 @@
                         (make-error-node 'reject 'rejected #f))
                   'default-eof #f)
                 'zero-progress-cycle))))
+    ;; Milestone 3 Slice ③ Task 2: §25:1533's cycle extension, and BOTH halves
+    ;; of exit criterion §25:1540. Slice ② taught reexec-targets to see THROUGH
+    ;; a sequence node while deliberately leaving it out of the REPORTED set;
+    ;; this is the report. Measured on `main` before the extension: the first
+    ;; fixture verified ok #t with ZERO diagnostics and HUNG both executors
+    ;; (exit 124 under timeout), while the byte-identical shape built from a
+    ;; byte-dispatch node reported zero-progress-cycle.
+    (harness-case "a sequence node whose reexecute mismatch edge targets itself is a zero-progress cycle"
+      (lambda ()
+        (let ((m (make-machine 'selfseq 'seq '() '() '() errs
+                   (list (seq-node (one-alt '(65 66) 'stop) (make-edge 'seq 'reexecute) #f)
+                         (make-stop-node 'stop #f))
+                   'default-eof #f)))
+          (check "rejected" (not (verification-ok? (verify-machine m))))
+          (check "zero-progress-cycle" (has-code? m 'zero-progress-cycle)))))
+    ;; The other half of :1540. The mismatch edge's MODE is the whole decision:
+    ;; an advance edge consumes the mismatching byte, so the loop makes
+    ;; progress and must verify clean. reexec-targets already discriminates on
+    ;; mode (verify.sls:312-314); this case is what stops the report guard from
+    ;; being widened past it.
+    (harness-case "the same self-target with an advance mismatch edge is a consuming cycle and passes"
+      (lambda ()
+        (let ((v (verify-machine
+                  (make-machine 'advseq 'seq '() '() '() errs
+                    (list (seq-node (one-alt '(65 66) 'stop) (make-edge 'seq 'advance) #f)
+                          (make-stop-node 'stop #f))
+                    'default-eof #f))))
+          (check "ok" (verification-ok? v))
+          (check-equal "diagnostic count" (length (verification-diagnostics v)) 0))))
     ;; arm 4 -- pass-eof: eof-target resolution
     (harness-case "a sequence eof-target that names no node is invalid-eof-target"
       (lambda ()
@@ -677,24 +706,29 @@
     ;; warns reports "separable but deliberately declined" as clean too --
     ;; count-not-witness is the fix that shape needs, precedented by
     ;; verify-tests.sps's own "both EOF terminals reported" and "three pairs"
-    ;; checks above. Each case below puts TWO independent occurrences of one
-    ;; decision in a single machine -- one on a byte-dispatch node (which the
-    ;; competing broader mutation ALSO breaks, so the count drops by the
-    ;; byte-dispatch contribution too) and one on a sequence node reached
-    ;; only through the arm's own mechanism (which only the arm's narrower
-    ;; mutation breaks) -- so the two mutations report different "got" values
-    ;; on the same check. Measured directly against both mutants, not
-    ;; predicted; see SchemeMutationSuite.cmake's arms 3/5/6 for the sweep.
-    (harness-case "a byte-dispatch self-loop and a sequence-mismatch cycle are two zero-progress cycles"
+    ;; checks above. Each case below puts at least TWO independent occurrences
+    ;; of one decision in a single machine -- one on a byte-dispatch node
+    ;; (which the competing broader mutation ALSO breaks, so the count drops
+    ;; by the byte-dispatch contribution too) and one on a sequence node
+    ;; reached only through the arm's own mechanism (which only the arm's
+    ;; narrower mutation breaks) -- so the two mutations report different
+    ;; "got" values on the same check. Measured directly against both mutants,
+    ;; not predicted; see SchemeMutationSuite.cmake's arms 3/5/6 for the
+    ;; sweep. Slice ③ Task 2 added a THIRD occurrence to the first case below
+    ;; -- 'seq itself, once the REPORT set saw it (§25:1533) -- so that one
+    ;; separates three mutations rather than two; its own table says which.
+    (harness-case "a byte-dispatch self-loop, a dispatch-through-sequence cycle and the sequence node itself are three zero-progress cycles"
       (lambda ()
-        ;; arm 3 (reexec-targets' sequence clause) vs "verify: zero-progress
-        ;; detection never fires" (mut06): 'x's case+fallback both reexecute
-        ;; into itself, a decision arm 3 never touches; 'start -> 'seq ->
-        ;; 'start is the sequence-mismatch cycle arm 3's own case above
-        ;; already witnesses by existence. Correct code reports 2 (one per
-        ;; cycle); mut06 disables PASS 5 outright, reporting 0; arm 3 still
-        ;; finds 'x's plain self-loop but can no longer walk through 'seq,
-        ;; reporting 1.
+        ;; Count-don't-witness, and Slice ③ makes it four-way. Measured against
+        ;; this one check:
+        ;;   correct code                                       -> 3
+        ;;   PASS 5's REPORT guard loses its sequence clause     -> 2
+        ;;   reexec-targets loses its sequence arm (arm 3)       -> 1
+        ;;   PASS 5's report conditional replaced by (if #f      -> 0
+        ;; 'x's case and fallback both reexecute into itself, a decision only
+        ;; the last of those touches; 'start -> 'seq -> 'start is the cycle the
+        ;; walk must see THROUGH; and 'seq itself is what Slice ③ added to the
+        ;; REPORTED set.
         (check-equal "zero-progress-cycle count"
                      (length (filter (lambda (c) (eq? c 'zero-progress-cycle))
                                      (codes
@@ -710,7 +744,7 @@
                                               (make-stop-node 'stop #f)
                                               (make-error-node 'reject 'rejected #f))
                                         'default-eof #f))))
-                     2)))
+                     3)))
     (harness-case "a byte-dispatch eof self-loop and a two-node dispatch/sequence eof cycle are three eof-zero-progress cycles"
       (lambda ()
         ;; arm 5 (eof-terminal's sequence clause) vs "verify: an eof-target

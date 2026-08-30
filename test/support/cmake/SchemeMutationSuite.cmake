@@ -674,8 +674,17 @@ cmake_minimum_required(VERSION 3.26)
 # re-swept whole in both directions at 40 mutations, and Pass 34 -- whose
 # SPEC-lane program this task also edits -- at 12; see Pass 33's own audit
 # block for the result. Passes stay at 43; mutations become 223 + 6 = 229.
+# Milestone 3 Slice ③ Task 2 (§25:1533, extending pass-zero-progress's REPORT
+# set to the sixth node kind) adds ONE mutation to Pass 33 -- the report guard
+# losing its sequence disjunct -- and re-anchors three existing declarations
+# the one-line source edit moved: two byte-identical FINDs onto the reflowed
+# guard (one of them needing its REPLACE narrowed too, or it would have become
+# a duplicate of the new mutation), and arm 3's pin onto the renamed
+# count-not-witness case whose correct value moved 2 -> 3. Pass 33 was re-swept
+# whole in both directions at 41 mutations; see Pass 33's own audit block.
+# Passes stay at 43; mutations become 229 + 1 = 230.
 set(EXPECTED_PASSES 43)
-set(EXPECTED_MUTATIONS 229)
+set(EXPECTED_MUTATIONS 230)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3179,6 +3188,33 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 #     recorded as genuinely subsumed at arm 6's own pin.
 # Residual cross-matches at 40 mutations, re-measured after that fix: the four
 # subsumed pairs listed above, plus arm 6 < arm 1. Nothing else.
+#
+# WHOLE-PASS PIN AUDIT, Milestone 3 Slice ③ Task 2 (§25:1533). One mutation
+# joined this pass, two FINDs were re-anchored onto the reflowed report guard,
+# one pin was re-anchored, and a CASE WAS RENAMED -- which rewrites the FAIL
+# text every pin in the pass is judged against, so this sweep was the least
+# optional of the three. Same method, both directions. 41 mutations, 1640
+# ordered pairs, five colliding. The control was the pre-task tree (8fc2680,
+# 40 mutations, 1560 pairs): it reports the identical five, so this task
+# introduced none and closed none.
+#   pause continuations < zero-progress detection never fires
+#   a byte-reachable pause's continuation chain is an EOF path
+#       < an EOF-reachable stop terminal is accepted
+#   a pause-only zero-progress cycle is not flagged < both of the first two
+#   arm 6 (:908) < arm 1 (node-out-targets)
+# All five are the pairs the paragraphs above already record, in the same
+# direction, and by the exhaustion test rather than the subset test alone:
+# exactly four mutants in the pass own no FAIL record that no sibling emits,
+# and they are the four narrow sides listed here -- unchanged from the control.
+# The three mutations this task touched each own one: "zero-progress detection
+# never fires" and arm 3 keep theirs through the rename, and the new mutation's
+# is the renamed case's "got 2". The count check that separates them is now
+# four-way and every value was measured, not predicted -- correct 3, new
+# mutation 2, arm 3 1, never-fires 0. Two other mutants (arm 5 and arm 7)
+# print "got 1" and "got 2" on the neighbouring combined5 case, whose check
+# label is `eof-zero-progress-cycle count` -- a superstring of this one's, and
+# the reason all three pins carry the case-name tail rather than the check
+# label alone.
 
 byte_machine_mutation_reset()
 
@@ -3270,7 +3306,11 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: zero-progress detection never fires"
-  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)) (reaches-self? (node-name n)))]]
+  # FIND re-anchored by Milestone 3 Slice ③ Task 2: PASS 5's report guard gained
+  # a `(sequence-dispatch-node? n)` disjunct (§25:1533) and was reflowed onto
+  # two lines. The decision, the REPLACE and the pin are unchanged.
+  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n) (sequence-dispatch-node? n))
+                              (reaches-self? (node-name n)))]]
   REPLACE [[(if #f]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "a reexecute self-loop is a zero-progress cycle: zero-progress-cycle")
@@ -3640,8 +3680,27 @@ byte_machine_mutation(
   # zero-progress walk" -- re-run against all 34 mutants' captured output
   # (including the three new count-not-witness fixtures this task added),
   # with no change to this record either before or after.
-  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)) (reaches-self? (node-name n)))]]
-  REPLACE [[(if (and (byte-dispatch-node? n) (reaches-self? (node-name n)))]]
+  #
+  # Re-anchored by Milestone 3 Slice ③ Task 2, FIND *and* REPLACE. The guard
+  # gained a `(sequence-dispatch-node? n)` disjunct (§25:1533), and the shipped
+  # REPLACE -- which named byte-dispatch alone -- would now drop the sequence
+  # clause as well as the pause one, making this a second copy of "verify: a
+  # self-targeting sequence node is not reported as a zero-progress cycle
+  # (§25:1533)" below and destroying both pins' uniqueness. Narrowed to drop
+  # only the pause clause, which is what this LABEL claims; the paragraph
+  # above says "back to byte-dispatch nodes" because that was the whole filter
+  # when it was written, and the kinds this edit now leaves in are
+  # byte-dispatch AND sequence. The nesting it records is unchanged -- this
+  # edit still removes a strict subset of what the WALK mutation removes.
+  # Re-swept whole at 41 mutations: still exactly ONE FAIL record, its own
+  # pinned EOF-pause one, still a full-set subset of both siblings named above
+  # and owning nothing unique lane-wide, and the zero-progress-cycle count
+  # case still reports 3 -- so this mutant does not reach the four-way check
+  # the new mutation below is pinned to.
+  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n) (sequence-dispatch-node? n))
+                              (reaches-self? (node-name n)))]]
+  REPLACE [[(if (and (or (byte-dispatch-node? n) (sequence-dispatch-node? n))
+                              (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "chain of pauses that cycles is a zero-progress EOF cycle: zero-progress-cycle diagnostic")
 
 # Second: the `(memq (node-name n) br)` byte-reachability gate shared by both
@@ -3853,9 +3912,31 @@ byte_machine_mutation(
   # mutants in this pass produces on this check. UNDER-ANCHORED, not
   # subsumed: re-anchored to that record, which "zero-progress detection
   # never fires" own captured output does not match (it has "got 0" there).
+  #
+  # Re-anchored by Milestone 3 Slice ③ Task 2: extending PASS 5's REPORT set to
+  # the sixth kind adds 'seq itself to this case's count, so the correct value
+  # moved 2 -> 3 and the case was renamed to say what it now counts. The pin's
+  # "got 1" is unchanged and was re-measured, not assumed: with the arm
+  # removed, 'x's plain self-loop is still found, 'start no longer reaches
+  # itself, and 'seq is not reported -- 1. The check is now four-way
+  # (3 / 2 / 1 / 0); see the case's own comment for the table.
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "a byte-dispatch self-loop and a sequence-mismatch cycle are two zero-progress cycles: zero-progress-cycle count -- expected 2, got 1")
+    "and the sequence node itself are three zero-progress cycles: zero-progress-cycle count -- expected 3, got 1")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a self-targeting sequence node is not reported as a zero-progress cycle (§25:1533)"
+  # The REPORT set, not the walk: arm 3 above mutates reexec-targets and lands
+  # on "got 1", "zero-progress detection never fires" lands on "got 0", and
+  # this one lands on "got 2" -- three distinct values on one check, all
+  # measured, none predicted. Comparison-caught: the count check fails outright
+  # rather than depending on where a mutant happens to crash.
+  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n) (sequence-dispatch-node? n))]]
+  REPLACE [[(if (and (or (byte-dispatch-node? n) (pause-node? n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "and the sequence node itself are three zero-progress cycles: zero-progress-cycle count -- expected 3, got 2")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -4090,9 +4171,12 @@ byte_machine_mutation(
   #
   # Cross-case ordering dependency (Minor, review fix wave): R1 and R2
   # resolve to two (case, check) pairs in two DIFFERENT harness-case forms
-  # (verify-tests.sps: R1's case at ~616, R2's at ~665, with a third case
-  # -- arm 6's -- between them at ~655), unlike the precedent at :4129
-  # ("interpret: seq-step filters live alternatives by position..."), whose
+  # (verify-tests.sps: R1's case at ~645, R2's at ~694, with a third case
+  # -- arm 6's -- between them at ~684; Slice ③ Task 2 moved all three down
+  # by the two cases it inserted after arm 3's), unlike the precedent in
+  # "interpret: seq-step filters live alternatives by position..." (named by
+  # LABEL, not line: the ":4129" this sentence used to carry had already
+  # drifted onto an unrelated line before this task moved it again), whose
   # combined pin joins two checks inside a SINGLE case. The order in
   # the regex is therefore an order across cases, not just across checks
   # within one, and it holds for a structural reason: harness.sls's
