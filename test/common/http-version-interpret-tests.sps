@@ -10,9 +10,9 @@
 ;;; touches the normalizer (interpret.sls's header, §18), so the trie is
 ;;; normal-ir-tests.sps's to assert, not this file's.
 ;;;
-;;; Proving the two executors AGREE is a different lane's job, and it is the
-;;; interpreter≡generated differential this slice adds next -- named here as
-;;; intent, not as a file that exists yet.
+;;; Proving the two executors AGREE is a different lane's job, and that lane now
+;;; exists: differential-http-version-tests.sps drives this same fixture through
+;;; both executors.
 (import (rnrs)
         (byte-machine test harness)
         (byte-machine test http-version-machine)

@@ -1,10 +1,20 @@
 ;;; The Milestone 3 Slice ③ multi-alternative proving machines: the §21.2:1065
 ;;; grammar production `version = "HTTP/1.0" / "HTTP/1.1"`. The graph is written
 ;;; once and exported (pause-machine.sls's convention) for the absolute
-;;; interpreter lane that drives it today, and for the interpreter≡generated
-;;; differential and the determinism golden this slice adds next -- which is
-;;; why the exports below outrun the one program importing them so far. Built
+;;; interpreter lane and the interpreter≡generated differential that both drive
+;;; it today, and for the determinism golden this slice adds next. Every export
+;;; below now has an importer -- `http-version-bytes` gained its first with the
+;;; differential, which is why the list no longer outruns the programs. Built
 ;;; only through (byte-machine graph).
+;;;
+;;; The emitter needed no new arm for this shape, confirmed rather than assumed:
+;;; the normalizer lowers the two alternatives to a trie before compile.sls sees
+;;; them, so the BRANCHING prefix state renders as an ordinary multi-arm
+;;; `(case b ((48) ...) ((49) ...) (else ...))` -- indistinguishable in form from
+;;; a one-alternative state's single arm. Measured on the reexecute machine:
+;;; `git diff --stat 6535682 -- src/byte-machine/compile.sls` is empty and the
+;;; emitted library is 3849 bytes, which is the evidence it rendered at all
+;;; rather than merely failing to change the emitter.
 ;;;
 ;;; Why this fixture and not an invented one: it exercises a shared NONTERMINAL
 ;;; prefix with a distinguishing terminal byte (§10.6:544), it comes from the

@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FORTY-FOUR PASSES, BECAUSE FORTY-FOUR DIFFERENT WITNESSES ARE NEEDED
+# FORTY-FIVE PASSES, BECAUSE FORTY-FIVE DIFFERENT WITNESSES ARE NEEDED
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -145,7 +145,7 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "FORTY-FOUR PASSES..." above. Declared here, rather than only in prose, so the
+# See "FORTY-FIVE PASSES..." above. Declared here, rather than only in prose, so the
 # count enforced at the bottom of this file is the same text a reader checks by
 # eye at the top -- one number to keep in sync, not two that can quietly
 # disagree. 25 passes / 60 mutations before the aot task; pass 26 adds two (C3,
@@ -691,14 +691,28 @@ cmake_minimum_required(VERSION 3.26)
 # to leave the single-alternative lane (sequence-interpret-tests.sps) passing
 # unchanged. NOT because this is the only lane that drives a branching sequence
 # node: interpret-tests.sps has driven AB/AC and AB/XY alternatives through the
-# interpreter since Slice ② and catches both of these mutations. Pass 47's own
-# header carries the measured counts for all three programs. The same task adds
-# a group to
+# interpreter since Slice ② and catches both of these mutations. Pass 47
+# carries the measured counts for all three programs: its header block for
+# sequence-interpret-tests.sps and interpret-tests.sps, its two mutation bodies
+# for http-version-interpret-tests.sps itself. The same task adds a group to
 # normal-ir-tests.sps, so Pass 35 (whose SPEC lane runs that program) was
 # re-swept whole in both directions at 22 mutations; see Pass 35's own audit
 # block. Passes become 43 + 1 = 44; mutations become 230 + 2 = 232.
-set(EXPECTED_PASSES 44)
-set(EXPECTED_MUTATIONS 232)
+# Milestone 3 Slice ③ Task 4 (the interpreter≡generated differential over the
+# same two alternatives) opens Pass 48 with two mutations -- the emitter's
+# per-state transition-arm list truncated to its FIRST arm and to its LAST --
+# declared under the new differential lane's own SPEC. They are the generated-
+# side twin of Pass 47's interpreter-side pair: the branch state is the only
+# state in this fixture with more than one arm, so truncating renders one
+# alternative unreachable in the emitted library while the interpreter still
+# accepts it, and the two executors disagree. Measured to leave the
+# SINGLE-alternative differential (differential-sequence-node-tests.sps) and
+# the same fixture's interpreter-only lane (http-version-interpret-tests.sps)
+# passing unchanged; see Pass 48's own header for the numbers and for the two
+# lanes that do redden. Passes become 44 + 1 = 45; mutations become
+# 232 + 2 = 234.
+set(EXPECTED_PASSES 45)
+set(EXPECTED_MUTATIONS 234)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -4569,11 +4583,12 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # for two separate chains, which is 18, measured by normalizing two eight-byte
 # alternatives sharing nothing; 39 is trie-put's disabled equal-byte arm
 # appending a second alist entry at every one of the seven shared levels, so
-# the duplicated subtree compounds down the chain), "normal-ir: trie children are not
-# kept ascending by byte", "normal-ir: internal prefix states do not append
-# after the declared block", and "normal-ir: a terminal trie child consumes an
-# id it should not" (state count 13). Named by LABEL, not by line number: this
-# branch has already caught three stale line citations into this file.
+# the duplicated subtree compounds down the chain), "normal-ir: trie children
+# are not kept ascending by byte", "normal-ir: internal prefix states do not
+# append after the declared block", and "normal-ir: a terminal trie child
+# consumes an id it should not" (state count 13). Named by LABEL, not by line
+# number: this branch has already caught three stale line citations into this
+# file.
 
 byte_machine_mutation_reset()
 
@@ -6141,9 +6156,133 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
+# --- Pass 48: the multi-alternative differential is non-vacuous (M3 Slice ③ ---
+# Task 4) ----------------------------------------------------------------------
+#
+# differential-http-version-tests.sps drives the §21.2 `version` production
+# through BOTH executors and compares their five-field result tuples: at every
+# single-cut split, over seeded multi-split schedules, and across all 256 bytes
+# at all eight prefix positions in both mismatch modes. Both executors read the
+# same source IR, so agreement alone cannot carry the lane -- a divergence has
+# to be reachable, and only a module that exactly ONE executor reads can
+# produce one: the normalizer and the emitter on the generated side,
+# interpret.sls on the reference side (interpret.sls's header, §18). Shared
+# code -- runtime.sls, verify.sls -- makes both executors wrong identically and
+# leaves the comparison green. The pair below takes the generated side.
+#
+# The pair below truncates render-state-arm's per-state transition list to its
+# FIRST arm and to its LAST. In this fixture the branch state is the only state
+# with more than one arm -- the seven shared-prefix states each have exactly one
+# -- so each truncation renders one alternative unreachable in the emitted
+# library while the interpreter still accepts it. They are the generated-side
+# twin of Pass 47's interpreter-side alternative-filter pair, and the pair is
+# what pins "the emitter renders EVERY arm of a branching state" to both
+# alternatives rather than to whichever one happens to be rendered.
+#
+# Why this lane's own SPEC, measured rather than asserted (AGENTS.md: a
+# mutation's witnessing test lives in its own SPEC lane's program). Both mutants
+# were run on a scratch stage against the two neighbouring lanes and leave both
+# passing UNCHANGED -- byte-identical summaries to those programs' own
+# unmutated baselines on the same stage:
+#   differential-sequence-node-tests.sps (Pass 46's SPEC program, the
+#   SINGLE-alternative differential): baseline and both mutants all report
+#   cases=14 failed-cases=0 checks=30 failures=0 status=0, because with one
+#   alternative every dispatch state has exactly one arm and truncating a
+#   one-element list is the identity;
+#   http-version-interpret-tests.sps (Pass 47's SPEC program, this same fixture
+#   through the interpreter alone): baseline and both mutants all report
+#   cases=12 failed-cases=0 checks=19 failures=0 status=0, because that program
+#   never emits.
+#
+# Stated rather than implied, because "no other lane catches this" would be
+# false: re-measured on the same stage, differential-byte-class-tests.sps
+# reddens for both (cases=13 checks=26; failed-cases=5 failures=5 for FIRST,
+# failed-cases=10 failures=15 for LAST) and property-differential-tests.sps
+# reddens for both (cases=2 failed-cases=1 checks=83 failures=30). Those
+# fixtures reach MANY-ARM dispatch states by a different route -- a byte class
+# lowers to one transition per byte (decision 0014) -- and they run under
+# different SPECs, so neither can witness this pass's mutations. What is
+# specific to this lane is the arm count arising from a BRANCHING PREFIX, which
+# is exactly what the single-alternative differential above cannot produce.
+#
+# Verify command uses both library roots, an empty object guard, the new
+# differential program.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/differential-http-version-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.http-version.chez.source
+  LABEL "compile: a branching state renders only its FIRST transition arm"
+  # Keeping the head leaves `HTTP/1.0` -- the lower branch byte, 48 -- rendered
+  # and `HTTP/1.1` falling through to the state's else fallback, so the
+  # generated executor rejects at offset 7 where the interpreter stops at 8.
+  # FIND measured unique in the file (one occurrence, confirmed on a scratch
+  # copy); SITES therefore stays at its default of 1.
+  #
+  # Measured against a scratch stage, not the committed tree: baseline cases=8
+  # failed-cases=0 checks=20 failures=0 status=0; mutant cases=8
+  # failed-cases=4 checks=20 failures=6 status=1. Comparison-caught throughout
+  # (check-equal failures, no raise) -- every dispatch state in this fixture
+  # has at least one transition, so `car` never sees an empty list.
+  #
+  # Pinned to the exhaustive group's own sentinel rather than to any of the
+  # five other failing checks, because that check reports the FIRST
+  # (mode position byte) triple that disagreed and the triple names the defect
+  # exactly: (reexecute 7 49) is prefix position 7 -- the branch -- and byte 49,
+  # `HTTP/1.1`'s distinguishing byte, the one this truncation drops. The
+  # sibling's is the mirror, (reexecute 7 48).
+  FIND [[(apply string-append (map render-transition-arm (normal-dispatch-transitions s)))]]
+  REPLACE [[(apply string-append (map render-transition-arm (list (car (normal-dispatch-transitions s)))))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "256 x 8 positions match, in both mismatch modes: no \\(mode position byte\\) disagreed -- expected none, got \\(reexecute 7 49\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.http-version.chez.source
+  LABEL "compile: a branching state renders only its LAST transition arm"
+  # The opposite truncation, and the reason both are here: keeping only the
+  # head leaves `HTTP/1.0` coincidentally correct, so on its own it cannot show
+  # that the zero alternative is reached by having its OWN arm rendered rather
+  # than by being the one arm the emitter ever writes. Keeping only the tail is
+  # the mirror -- `HTTP/1.1` accepts, `HTTP/1.0` rejects at offset 7. Same FIND
+  # as the mutation above (each byte_machine_mutation() call reads a pristine
+  # copy of compile.sls and restores it afterward, so sharing a FIND is a
+  # different edit, not a repeated one).
+  #
+  # Measured against the same scratch stage: mutant cases=8 failed-cases=6
+  # checks=20 failures=9 status=1 -- two failed cases and three failures more
+  # than the sibling, and the two extra cases are exactly the "nonzero-offset
+  # and empty slices agree" pair, which feeds `HTTP/1.0` and so is untouched by
+  # the sibling's truncation. Comparison-caught.
+  #
+  # Pin sweep, both directions, against every other mutation under this pass's
+  # verify command -- which is the sibling above and nothing else: 2 mutations,
+  # 4 ordered pairs, every pin re-judged through byte_machine_mutation_verdict
+  # against both captured outputs. Result: each pin caught its own mutant and
+  # returned wrong-reason against the other's; zero collisions. The two pins
+  # differ only in the branch byte they name (49 vs 48), and each mutant's
+  # output contains exactly one of the two.
+  # Control: this lane, this program and both mutations are new on this branch,
+  # so there is no prior baseline to re-measure; the meaningful control is the
+  # neighbouring-lane measurement recorded in this pass's header, which shows
+  # both mutants surviving the two lanes they are NOT declared under.
+  FIND [[(apply string-append (map render-transition-arm (normal-dispatch-transitions s)))]]
+  REPLACE [[(apply string-append (map render-transition-arm (list (car (reverse (normal-dispatch-transitions s))))))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "256 x 8 positions match, in both mismatch modes: no \\(mode position byte\\) disagreed -- expected none, got \\(reexecute 7 48\\)")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FORTY-FOUR PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FORTY-FIVE PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

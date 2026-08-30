@@ -1156,6 +1156,32 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/http-version-interpret-tests.sps"
   TIMEOUT 120)
 
+# The interpreter≡generated differential over the same production. Separate from
+# the unit lanes above because it emits, loads and evals a generated library:
+# that needs the emitter (CORE_EMIT rather than CORE_ALL) and prng.sls for the
+# seeded split schedules, neither of which the absolute interpreter lane uses.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.http-version.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-http-version-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-version-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-http-version-tests.sps"
+  TIMEOUT 180)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.http-version.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-http-version-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-version-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-http-version-tests.sps"
+  TIMEOUT 180)
+
 # --- Milestone 1 Phase 3 Slice B: D7 identifier repertoire + binary LF -------
 byte_machine_add_scheme_lane(
   NAME byte-machine.verify.identifier-repertoire.chez.source
