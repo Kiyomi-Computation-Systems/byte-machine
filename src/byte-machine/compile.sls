@@ -98,6 +98,13 @@
         (string-append "(byte-machine-make-feed-outcome/v1 (quote error) pos (quote "
                        (symbol->string (cdr eof)) ") " id " off)")))
 
+  ;; Milestone 3 Slice ② changed nothing here either, and that is decision 0015
+  ;; point 1 rather than an oversight: a lowered sequence-prefix state IS an
+  ;; ordinary normalized dispatch state, so it renders through this same arm, the
+  ;; encoding gains no tag, the format version byte stays 1, and the need-input
+  ;; resume point below gives cross-feed resumability with no new mechanism. No
+  ;; new emitted local means reserved-member-3 (decision 0012 item 4) is
+  ;; unchanged -- checked, not assumed, since it has no automated drift guard.
   (define (render-state-arm s)
     (let ((id (number->string (normal-state-id s))))
       (case (normal-state-kind s)

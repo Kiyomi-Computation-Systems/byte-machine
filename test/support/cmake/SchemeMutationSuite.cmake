@@ -600,8 +600,22 @@ cmake_minimum_required(VERSION 3.26)
 # Minor 3 (trie-insert's bs-null-branch trie-interior? guard, previously
 # witnessed only by a green check-raises with no mutation behind it). Passes
 # stay at 41; mutations become 207 + 2 = 209.
+# Slice ② Task 3 (decision 0015 points 3-5) adds nine mutations to the
+# existing Pass 34 (the interpreter): kind and dispatch's handling of a
+# compound (name . path) current (2), seq-step's path-vs-position-index
+# filter -- the corrected §0 D1 design defect (1), the mismatch edge and the
+# completed-alternative-target decisions (2), eof-target-of's compound
+# dereference (1), the interpreter's own copies of the two internal trie
+# guards (2), and kind/dispatch's recognition of a bare not-yet-entered
+# sequence node -- a value-audit finding distinct from the compound branches,
+# confirmed separable by two different condition signatures (2). No pin
+# collisions in Pass 34 (pre-existing or new) survived measurement; one
+# pairwise collision found during the sweep (the position-index mutation and
+# the mismatch-edge mutation share their "at offset 1" line) was resolved by
+# a two-substring spanning pin, not by declaring it subsumed. Passes stay at
+# 41; mutations become 209 + 9 = 218.
 set(EXPECTED_PASSES 41)
-set(EXPECTED_MUTATIONS 209)
+set(EXPECTED_MUTATIONS 218)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3735,6 +3749,183 @@ byte_machine_mutation(
   FIND [[((finish-node? n) 'finish)]]
   REPLACE [[((finish-node? n) 'stop)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish with no input is idle completion -> finished: finished")
+
+# Milestone 3 Slice ② Task 3: sequence prefix tracking through a compound
+# current (name . path). interpret-tests.sps grows a "sequence prefix tracking
+# through the interpreter" group, an AB/XY group naming the corrected §0 D1
+# defect, the two internal guards (mirroring normal-ir-tests.sps's own two),
+# an advance-mode group, and an EOF-through-a-compound group added specifically
+# to give eof-target-of's compound branch a witness -- none of Step 1's own
+# fixtures ever call parser-finish! while `current` is a compound. Re-measured
+# the three pre-existing mutations above against the enlarged file: none of
+# their pins moved (each still produces exactly its original FAIL text; the
+# new groups add no line any of the three touches).
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
+  LABEL "interpret: kind of a compound current is not reported as dispatch"
+  # kind's `(if (pair? name) 'dispatch ...)` branch is what lets the runtime
+  # keep reading bytes once `current` becomes a mid-sequence compound. Without
+  # it, the compound is reported as a stop -- and the dispatch loop reaches
+  # that check on the very same call that just built the compound (a
+  # single-byte slice hits end-of-slice exactly there), so every multi-byte
+  # sequence stops dead after its first byte. Comparison-caught.
+  FIND [[            'dispatch                   ; mid-sequence: always reading a byte]]
+  REPLACE [[            'stop                   ; mid-sequence: always reading a byte]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "the full sequence stops after four bytes: stopped -- expected \\(stopped 1 1 4 #f\\), got \\(stopped 0 0 1 #f\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
+  LABEL "interpret: seq-step filters live alternatives by position, not the accumulated path (§0 D1)"
+  # This IS design §4.2's own defect, reproduced deliberately: §4.2 illustrates
+  # the compound as (s . k), a bare position index. Replacing prefix?'s
+  # full-path walk with a position-k comparison against the CURRENT byte alone
+  # reproduces exactly that defect -- with AB and XY, after consuming A a
+  # position index finds Y at position 1 in XY and accepts it, even though A
+  # never matched X. The AB/AC fixture does not witness this (both share byte
+  # 0, so a position check and a path check agree there); only AB/XY, which
+  # diverges at position 0, can tell the two representations apart.
+  # Comparison-caught. Pin sweep: this mutation's two failing checks are each
+  # individually reproduced by a DIFFERENT sibling mutation alone (the
+  # "mismatch" line by the kind-of-compound mutation above, byte-identical;
+  # the "at offset 1" line by the mismatch-edge-not-taken mutation below,
+  # byte-identical) -- neither line alone separates this mutation from its
+  # neighbor. The pin below requires both, in this order, from the SAME run;
+  # verified by matching it against every sibling mutation's own captured
+  # output in this pass and confirming it resolves to this mutation alone.
+  FIND [[                                (and (> (length bs) k) (prefix? new bs))))]]
+  REPLACE [[                                (and (> (length bs) k) (= byte (list-ref bs k)))))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "A then Y mismatches rather than following the XY alternative: mismatch -- expected error, got stopped.*at offset 1 -- expected 1, got 2")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
+  LABEL "interpret: the mismatch edge is not taken when no alternative matches"
+  # Disabling the null-hit clause (via an unreachable `#f` conjunct, the same
+  # idiom normal-ir.sls's own guard mutations below use) falls through to the
+  # final `else`, so a byte that matches nothing still gets folded into a new
+  # compound state instead of routing to the declared mismatch edge -- the
+  # mismatching byte is silently accepted into the sequence rather than
+  # rejected. Comparison-caught; pinned to "pos 0", not "at offset 1" in the
+  # AB/XY case, because "at offset 1" is byte-identical to the position-index
+  # mutation's own output above (measured) and "pos 0" is this mutation's
+  # alone (measured against every sibling in this pass).
+  FIND [[          (cond ((null? hit)]]
+  REPLACE [[          (cond ((and (null? hit) #f)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "a wrong byte at each position errors at that between-byte offset: pos 0 -- expected \\(error 0 0 0 unexpected-byte\\), got \\(need-input 1 1 1 #f\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
+  LABEL "interpret: a completed alternative routes to another prefix instead of its declared target"
+  # The `(pair? ends)` clause is what lands a fully-consumed alternative on
+  # its OWN declared target; folding it into the same "extend the compound"
+  # shape the `else` clause uses instead means a complete sequence never
+  # actually terminates -- it just grows a compound state forever, so the
+  # parser reports need-input after the sequence's own last byte rather than
+  # stopping. Comparison-caught, pinned to the same four-byte fixture as the
+  # kind-of-compound mutation above but discriminated by the "got" value
+  # (need-input here, stopped there) -- verified distinct by direct
+  # cross-check against that sibling's captured output.
+  FIND [[                ((pair? ends) (cons (sequence-case-target (car ends)) 'advance))]]
+  REPLACE [[                ((pair? ends) (cons (cons (sequence-dispatch-node-name n) new) 'advance))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "the full sequence stops after four bytes: stopped -- expected \\(stopped 1 1 4 #f\\), got \\(need-input 1 1 4 #f\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
+  LABEL "interpret: eof-target-of does not dereference a compound back to its source node"
+  # Passing `cur` straight through instead of extracting `(car cur)` sends a
+  # (name . path) pair to `lookup`, whose `eq?` name comparison can never
+  # match a pair against any declared node name -- lookup returns #f, and the
+  # unguarded byte-dispatch-node-eof-target accessor then vector-refs #f.
+  # Raise-caught, not comparison-caught: there is no representable "wrong but
+  # valid" node name to fall back to here (every alternative extraction --
+  # `cur` raw, `(cdr cur)`, an inverted pair? test -- feeds a non-node-name
+  # into the same unguarded accessor chain), so every variant of this defect
+  # crashes the same way. This is the value Task 2's review pattern warns
+  # about (an internal value with no witness): none of the brief's own Step 1
+  # fixtures ever call parser-finish! on a compound current, so this test
+  # group was added specifically to give this value one.
+  FIND [[        (let ((n (lookup nodes (if (pair? cur) (car cur) cur))))]]
+  REPLACE [[        (let ((n (lookup nodes cur)))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "EOF mid-sequence routes through the sequence node's own eof-target, not the machine default: case raised -- Exception in vector-ref: #f is not a vector")
+
+# The same two internal invariants normal-ir.sls's own trie asserts (decision
+# 0015 point 2), disabled the same way normal-ir.sls's own guard mutations
+# disable them (an unreachable `#f` conjunct) -- see "the duplicate-alternative
+# guard is dropped" and "the ambiguous-prefix guard is dropped" in Pass 35
+# below for the shared idiom and its own rationale. check-raises cases are not
+# vacuous (without the guard, the malformed hit set is silently accepted
+# instead of raising) -- and per the fix-wave finding recorded in this task's
+# report, the predicate is raises-interpret-assertion? (structured: who is
+# 'interpret, message is the exact string), not (lambda (e) #t), so a mutation
+# swapping which message either guard raises would also be caught; no such
+# mutation is declared here because the two messages are literal string
+# constants no earlier pass in this file already exercises swapping.
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
+  LABEL "interpret: the ambiguous-terminal-prefix guard is dropped"
+  FIND [[                ((and (pair? ends) (pair? conts))
+                 (assertion-violation 'interpret "ambiguous terminal prefix"
+                                      (sequence-dispatch-node-name n)))]]
+  REPLACE [[                ((and (pair? ends) (pair? conts) #f)
+                 (assertion-violation 'interpret "ambiguous terminal prefix"
+                                      (sequence-dispatch-node-name n)))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "an ambiguous terminal prefix is an assertion violation: AB\\|ABC -- expected a raise, but the thunk returned \\(stopped 1 1 2 #f\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
+  LABEL "interpret: the duplicate-sequence-alternative guard is dropped"
+  FIND [[                ((> (length ends) 1)
+                 (assertion-violation 'interpret "duplicate sequence alternative"
+                                      (sequence-dispatch-node-name n)))]]
+  REPLACE [[                ((and (> (length ends) 1) #f)
+                 (assertion-violation 'interpret "duplicate sequence alternative"
+                                      (sequence-dispatch-node-name n)))]]
+  # Pinned with the trailing " -- expected" immediately after "AB|AB", not
+  # "AB|AB" alone: "AB|AB" is a literal substring of the sibling mutation's own
+  # "AB|ABC", so an unanchored pin on the bare alternatives text would match
+  # both mutants' output (measured). Requiring " -- expected" right after
+  # forces the fifth character to be the case-name delimiter, not "C".
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "two identical alternatives are an assertion violation: AB\\|AB -- expected a raise, but the thunk returned \\(stopped 1 1 2 #f\\)")
+
+# Value audit (task report): kind's and dispatch's own recognition of a BARE
+# (not-yet-entered) sequence-dispatch-node name are two more decisions distinct
+# from the compound-current branches above -- every seq-m fixture's entry is a
+# bare symbol on its first byte, so disabling either one reproduces exactly
+# Step 2's original red (the sixth node kind unhandled), but from two different
+# sites. Measured to be genuinely separable, not merely assumed so: disabling
+# kind's arm raises interpret's own byte-machine-contract condition (code
+# internal, who* interpret, detail seq) before dispatch is ever reached;
+# disabling dispatch's arm leaves kind correct, so dispatch falls into the
+# byte-dispatch loop instead -- byte-dispatch-node-cases and sequence-dispatch-
+# node-cases both read vector slot 2, so it silently reads the sequence's OWN
+# case list, and byte-case-matcher (vector slot 1) then reads back the FIRST
+# case's byte list as though it were a matcher, which matcher-bytes' own guard
+# then refuses (code invalid-argument, who* matcher-bytes, detail matcher) --
+# a different condition, from a different site, confirmed by direct comparison
+# of the two captured outputs.
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
+  LABEL "interpret: kind does not recognize a bare (not yet entered) sequence node"
+  FIND [[                    ((sequence-dispatch-node? n) 'dispatch)]]
+  REPLACE [[                    ((and (sequence-dispatch-node? n) #f) 'dispatch)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "the full sequence stops after four bytes: case raised.*code: internal.*who\\*: interpret.*detail: seq")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
+  LABEL "interpret: dispatch does not recognize a bare (not yet entered) sequence node"
+  FIND [[              (if (sequence-dispatch-node? n)
+                  (seq-step n '() byte)]]
+  REPLACE [[              (if (and (sequence-dispatch-node? n) #f)
+                  (seq-step n '() byte)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "the full sequence stops after four bytes: case raised.*code: invalid-argument.*who\\*: matcher-bytes.*detail: matcher")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
