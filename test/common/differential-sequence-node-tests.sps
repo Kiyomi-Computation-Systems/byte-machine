@@ -6,7 +6,10 @@
 ;;; (test/common/differential-sequence-tests.sps).
 ;;;
 ;;; Agreement alone cannot carry the lane -- both executors read the same source
-;;; IR -- so every group also asserts the GENERATED side absolutely.
+;;; IR -- so every group but the 256-byte exhaustive comparison also asserts
+;;; the GENERATED side absolutely; that group's own value is exhaustive
+;;; coverage across all 256 byte values at all four positions, in both
+;;; mismatch modes, which no fixed set of literal tuples could stand in for.
 (import (rnrs) (rnrs eval)
         (only (chezscheme) load)
         (byte-machine test harness)
@@ -25,6 +28,20 @@
         (assertion-violation 'differential-sequence-node
                              "BYTE_MACHINE_TEST_TMPDIR is unset" d))))
 
+;; Emit, load and eval one fixture's generated library. The binding,
+;; <machine-name>-parser, is derived from this function's own `name` argument.
+;; The library name, (generated <machine-name>), is NOT: emit-machine draws it
+;; from the compiled machine's own `machine-name` field, set inside
+;; sequence-node-machine.sls at construction time. The two agree today only
+;; because this fixture's `build` helper reuses the identical symbol for both
+;; its `name` argument here (`'seqnode`/`'advseq`) and the name passed to
+;; `make-machine` -- an invariant held by convention, asserted nowhere, and
+;; enforced only by `environment` (below) failing loudly with a
+;; library-not-found error if a future fixture's label and machine-name ever
+;; diverge: `load` installs whatever library name the generated file declares
+;; and succeeds regardless; it is `(environment (list 'generated name))`, the
+;; only form that consumes this function's own `name` argument, that raises
+;; when the two disagree.
 (define (generated-machine name machine)
   (let ((genfile (string-append tmpdir "/generated-" (symbol->string name) ".sls"))
         (binding (string->symbol (string-append (symbol->string name) "-parser"))))
@@ -132,22 +149,39 @@
 (harness-group "every fragmentation of the sequence reaches stopped in both lanes"
   (lambda ()
     (define all-cut-sets '(() (1) (2) (3) (1 2) (1 3) (2 3) (1 2 3)))
-    (harness-case "each of the eight split sets stops at offset 4 in both"
+    ;; status and stream-offset alone are identical for a split and an unsplit
+    ;; feed (they are 'stopped/4 regardless of how many pieces the sequence
+    ;; arrived in), so a slices-for that ignored `cuts` and returned one whole
+    ;; slice would leave a status+stream-offset check green for every set.
+    ;; `next`/`consumed` are the fields that actually witness a split -- pin
+    ;; the full tuple, measured per cut-set, not just the fields cuts cannot
+    ;; move.
+    (define expected-tuples
+      (list '(stopped 4 4 4 #f) '(stopped 4 3 4 #f) '(stopped 4 2 4 #f) '(stopped 4 1 4 #f)
+            '(stopped 4 2 4 #f) '(stopped 4 1 4 #f) '(stopped 4 1 4 #f) '(stopped 4 1 4 #f)))
+    (harness-case "each of the eight split sets stops with an exact tuple in both"
       (lambda ()
         (let ((bad 'none) (sets 0))
           (for-each
-           (lambda (cuts)
+           (lambda (cuts exp)
              (set! sets (+ sets 1))
              (let ((ri (run-slices cm-ref (slices-for cuts)))
                    (rg (run-slices cm-gen (slices-for cuts))))
-               (unless (and (eq? (car ri) 'stopped) (= (cadddr ri) 4)
-                            (eq? (car rg) 'stopped) (= (cadddr rg) 4)
-                            (equal? ri rg))
+               (unless (and (equal? ri exp) (equal? rg exp))
                  (when (eq? bad 'none) (set! bad (schedule->string cuts))))))
-           all-cut-sets)
+           all-cut-sets expected-tuples)
           (check-equal "no split misbehaved" bad 'none)
           (check-equal "all eight cut-sets ran" sets 8))))
-    (harness-case "leading / intermediate / trailing empty feeds still accept"
+    ;; with-empties (above, inherited verbatim from the M2 oracle) inserts
+    ;; an empty feed before every real slice, including the last -- so its
+    ;; schedule is EMPTY (0 1) EMPTY (1 2) EMPTY (2 3) EMPTY EMPTY (3 4): the
+    ;; final feed is still a DATA slice, and the case below exercises leading
+    ;; and intermediate empties only. A genuinely trailing empty -- fed after
+    ;; the sequence has already stopped -- is a separate scenario, covered by
+    ;; the next case; do not fold the two, and do not change with-empties'
+    ;; shape (it must keep reproducing the M2 oracle's own gap, not diverge
+    ;; from it).
+    (harness-case "leading / intermediate empty feeds still accept"
       (lambda ()
         (check-equal "interpreter with empties"
                      (car (run-slices cm-ref (with-empties (slices-for '(1 2 3))))) 'stopped)
@@ -156,6 +190,19 @@
         (check-equal "empties do not change agreement"
                      (run-slices cm-ref (with-empties (slices-for '(1 2 3))))
                      (run-slices cm-gen (with-empties (slices-for '(1 2 3)))))))
+    ;; A genuinely trailing empty feed: fed AFTER the sequence has already
+    ;; reached 'stopped, not before the final data slice. The parser is
+    ;; already sticky by then (§12.2), so this pins the sticky-stopped
+    ;; short-circuit's own tuple for this fixture, absolutely, on both
+    ;; executors -- measured, not assumed.
+    (harness-case "a trailing empty feed after the sequence completes stays stopped"
+      (lambda ()
+        (define after-complete
+          (append (slices-for '(1 2 3)) (list (list seq-input 0 0))))
+        (check-equal "interpreter after completion"
+                     (run-slices cm-ref after-complete) '(stopped 0 0 4 #f))
+        (check-equal "generated after completion"
+                     (run-slices cm-gen after-complete) '(stopped 0 0 4 #f))))
     (harness-case "a deterministic random multi-split schedule accepts and agrees"
       (lambda ()
         (define seed 20260830)
@@ -216,6 +263,17 @@
         (check-equal "k=3" (drive ad-gen '(1 2 3) 200) '(error 1 1 4 unexpected-byte))))
     (harness-case "both modes accept the sequence identically"
       (lambda ()
+        ;; advseq's accept path had no absolute (literal-tuple) assertion
+        ;; anywhere in the tree before this line -- neither interpreted nor
+        ;; generated (Task 4's sequence-interpret-tests.sps only asserts a
+        ;; status class for its accepting byte, and this file's own accept-
+        ;; path coverage of ad-gen was agreement-only: the 256-byte loop
+        ;; compares ad-ref to ad-gen, and this case compared cm-gen to
+        ;; ad-gen -- both agreement, never a literal). Measured against the
+        ;; real tree, not copied from cm-gen's tuple.
+        (check-equal "advance accept"
+                     (run-slices ad-gen (list (list (u8v 1 2 3 4) 0 4)))
+                     '(stopped 4 4 4 #f))
         (check-equal "same accept"
                      (run-slices cm-gen (list (list (u8v 1 2 3 4) 0 4)))
                      (run-slices ad-gen (list (list (u8v 1 2 3 4) 0 4))))))))
