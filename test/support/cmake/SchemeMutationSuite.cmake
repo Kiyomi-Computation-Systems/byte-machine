@@ -3488,10 +3488,20 @@ byte_machine_mutation(
   # zero-progress detection never fires". Dropping the pause arm from PASS
   # 5's reexec-targets can only REMOVE zero-progress-cycle diagnostics, and
   # that mutation removes all of them, so this mutant's failure set is a
-  # strict subset (3 records of that one's 4; the record it lacks is the
-  # pure byte-dispatch self-loop, which needs no pause arm to be found).
-  # Measured by exhaustion over the whole pass, not argued. Left pinned to
-  # the check that states this decision.
+  # strict subset.
+  #
+  # Re-measured at 34 mutations (Milestone 3 Slice ② re-measurement
+  # obligation): main's own count -- "3 records of that one's 4" -- is now
+  # stale, not wrong when written. This branch's arm 3 gave "verify:
+  # zero-progress detection never fires" a fifth record (the sequence node's
+  # reexecute-mismatch cycle entered from a byte-dispatch node, see arm 3's
+  # own pin below), so the subset is now 3 of 5, and this mutant lacks TWO
+  # records, not one: the pure byte-dispatch self-loop (main's original
+  # finding) and arm 3's new sequence-mismatch-edge cycle, neither of which
+  # needs a pause arm to be found. Re-swept over all 34 mutations, not just
+  # the two named here: still a clean subset both before and after this
+  # comment's count correction. Left pinned to the check that states this
+  # decision.
   FIND [[;; advance is a zero-progress cycle.
               ((pause-node? n) (list (pause-node-continuation n)))]]
   REPLACE [[;; advance is a zero-progress cycle.
@@ -3515,11 +3525,17 @@ byte_machine_mutation(
   # accepted". Not walking a byte-reachable pause's continuation chain removes
   # eof-reachable-stop diagnostics that arise THROUGH a pause; classifying a
   # stop node as a finish removes every eof-reachable-stop diagnostic there
-  # is, pause-borne ones included. Strict subset (4 records of that one's 8),
-  # measured by exhaustion over the whole pass. That mutation is now anchored
-  # on the pre-pause eof-target case, which is one of the four records this
-  # one does NOT emit, so the collision is one-directional: this pin does not
-  # match that mutant.
+  # is, pause-borne ones included. Strict subset, measured by exhaustion over
+  # the whole pass.
+  #
+  # Re-measured at 34 mutations (Milestone 3 Slice ② re-measurement
+  # obligation): "4 records of that one's 8" is stale, not wrong when
+  # written -- this branch's arm 7 gave "verify: an EOF-reachable stop
+  # terminal is accepted" a ninth record (the sequence node's own eof-target
+  # reaching a stop directly, see arm 7's own pin below), so the subset is
+  # now 4 of 9. That mutation is now anchored on the pre-pause eof-target
+  # case, which is one of the five records this one does NOT emit, so the
+  # collision is one-directional: this pin does not match that mutant.
   FIND [[(case (eof-terminal m (pause-node-continuation n))]]
   REPLACE [[(case 'finish]]
   EXPECT_STATUS 1
@@ -3893,24 +3909,43 @@ byte_machine_mutation(
   # OWN captured output was "single-line". Measured: it is not -- THIS
   # mutant's own run reports failed-cases=2, failures=2 (the self-loop cycle
   # case above plus this fixture's own case), matching the header note at
-  # :3403-3411 exactly. The pin below still separates arm 7 from arm 5,
-  # because the collision the next paragraph documents is with a DIFFERENT
-  # mutation's output, not with arm 5's.
+  # :3403-3411 exactly.
   #
-  # Pin sweep (Step 12): this pin's own FAIL record is ALSO produced by the
-  # pre-existing "verify: an EOF-reachable stop terminal is accepted"
-  # mutation (eof-terminal's stop-classification line is shared by every
-  # walker -- byte-dispatch, sequence, and pause). Re-measured: that
-  # mutation's own captured output reports failed-cases=5, failures=8 (its
-  # own originating case, three pause cases at two checks each, and this
-  # arm's own case) -- not the "seven cases" this comment previously
-  # claimed. Genuinely subsumed, not under-anchored: that mutation's own pin
-  # is anchored to its own distinct originating case and does not appear in
-  # THIS mutant's (arm 7's) two-case output, so the collision is
-  # one-directional and unfixable by re-wording either pin.
+  # Milestone 3 Slice ② re-measurement obligation (AGENTS.md's "a pin is only
+  # ever verified against the mutants that existed when it was measured" --
+  # the merge of main #32 widened Pass 33 from 27 to 34 mutations, and this
+  # pin's prior "genuinely subsumed" verdict was never re-run against the
+  # merged tree). Re-swept from scratch at HEAD 2e5a1ab: the single-mutant
+  # subsumption claim below was WRONG, not stale -- a plain factual error the
+  # earlier pass never verified by exhaustion. This mutant's failure set is
+  # two records, NEITHER of which is a subset relationship with any ONE other
+  # mutant in the pass:
+  #   R1 "an eof chain that cycles through a sequence node is an EOF cycle:
+  #       eof-zero-progress-cycle" (the self-loop case, shared with arm 5 --
+  #       see the header note -- AND with "verify: an eof-target cycle is
+  #       classified as a finish terminal", which also disables cycle
+  #       detection globally)
+  #   R2 "a sequence eof path reaching a stop terminal is eof-reachable-stop:
+  #       eof-reachable-stop" (this arm's own fixture, shared with "verify:
+  #       an EOF-reachable stop terminal is accepted", which now reports
+  #       failed-cases=6, failures=9 post-merge -- not the 5/8 previously
+  #       claimed here, since this arm's own fixture is itself one of the
+  #       nine now that both mutations reach it)
+  # No single mutant in the pass emits both R1 and R2: the set emitting R1 is
+  # {this arm, "verify: eof-terminal does not classify a sequence node
+  # reached mid-chain (arm 5)", "verify: an eof-target cycle is classified as
+  # a finish terminal"}, the set emitting R2 is {this arm, "verify: an
+  # EOF-reachable stop terminal is accepted"}, and their intersection is only
+  # this arm -- confirmed by grepping all 34 captured outputs for each record
+  # verbatim, not argued. UNDER-ANCHORED, not subsumed: a tighter pin exists
+  # without any new test content. Anchored to BOTH records together, R1
+  # before R2 with `.*` spanning the FAIL-CONTEXT line and summary noise
+  # between them (CMake `.` crosses newlines) -- verified directly against
+  # cmake's own regex engine (not predicted) that this combined pattern
+  # matches exactly one of the 34 captured outputs: this one.
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "a sequence eof path reaching a stop terminal is eof-reachable-stop: eof-reachable-stop")
+    "an eof chain that cycles through a sequence node is an EOF cycle: eof-zero-progress-cycle.*a sequence eof path reaching a stop terminal is eof-reachable-stop: eof-reachable-stop")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
