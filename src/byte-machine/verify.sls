@@ -5,6 +5,11 @@
 ;;; cycles, terminal/EOF shape, and generated-name safety (reserved-set
 ;;; member 1 — Gate 0 §3.3). Error references are symbolic names resolved
 ;;; against the error declarations.
+;;; Milestone 3 Slice ② adds the sixth node kind, sequence-dispatch (§9.1:297,
+;;; §10.6:542-546), to every one of these passes: its case targets and
+;;; mismatch edge are out-targets and eof-targets for name resolution and
+;;; reachability, its mismatch edge's reexecute mode joins the zero-progress
+;;; walk, and its eof-target joins the EOF-shape and :908/:909 terminal checks.
 ;;; Diagnostics are compared by code, never by text.
 (library (byte-machine verify)
   (export verify-machine verification-ok? verification-diagnostics
@@ -54,14 +59,21 @@
           ;; walked by reachability. The §16.2:908 dispatch check below filters
           ;; on byte-dispatch-node?, so this arm does not feed it.
           ((pause-node? n) (list (pause-node-continuation n)))
+          ;; A sequence node's byte out-edges: every alternative's target plus
+          ;; the mismatch edge's. Feeding this arm also repairs pass-names'
+          ;; target resolution and byte-reached, which both walk this function.
+          ((sequence-dispatch-node? n)
+           (append (map sequence-case-target (sequence-dispatch-node-cases n))
+                   (list (edge-target (sequence-dispatch-node-mismatch n)))))
           (else '())))
-  ;; byte out-targets PLUS a dispatch node's eof-target (for reachability only).
+  ;; byte out-targets PLUS a dispatch/sequence node's eof-target (for
+  ;; reachability only).
   (define (all-out-targets n)
     (append (node-out-targets n)
-            (if (byte-dispatch-node? n)
-                (let ((t (byte-dispatch-node-eof-target n)))
-                  (if (symbol? t) (list t) '()))
-                '())))
+            (let ((t (cond ((byte-dispatch-node? n) (byte-dispatch-node-eof-target n))
+                           ((sequence-dispatch-node? n) (sequence-dispatch-node-eof-target n))
+                           (else #f))))
+              (if (symbol? t) (list t) '()))))
 
   ;; Visited-set DFS from the machine's entry, following whatever edge
   ;; function `targets` selects (node-out-targets, all-out-targets, ...).
@@ -176,6 +188,14 @@
               ;; is a zero-width edge, so a reexecute/pause-only cycle with no
               ;; advance is a zero-progress cycle.
               ((pause-node? n) (list (pause-node-continuation n)))
+              ;; Only the mismatch edge can be reexecute; every case edge
+              ;; advances by construction (§10.6:546). This teaches the WALK to
+              ;; see through a sequence node. Adding sequence nodes to the
+              ;; REPORTED set is §25:1533's cycle extension, which is Slice ③ --
+              ;; a self-targeting sequence node going unflagged here is correct.
+              ((sequence-dispatch-node? n)
+               (if (eq? (edge-mode (sequence-dispatch-node-mismatch n)) 'reexecute)
+                   (list (edge-target (sequence-dispatch-node-mismatch n))) '()))
               (else '())))
       (define (reaches-self? start)
         (let loop ((frontier (reexec-targets (lookup nodes start))) (seen '()))
@@ -203,12 +223,12 @@
                                   "machine default eof error names no declared error")))
        (apply append
               (map (lambda (n)
-                     (if (byte-dispatch-node? n)
-                         (let ((t (byte-dispatch-node-eof-target n)))
-                           (if (or (eq? t #f) (lookup nodes t)) '()
-                               (list (make-diagnostic 'invalid-eof-target (node-name n)
-                                                      "eof-target names no node"))))
-                         '()))
+                     (let ((t (cond ((byte-dispatch-node? n) (byte-dispatch-node-eof-target n))
+                                    ((sequence-dispatch-node? n) (sequence-dispatch-node-eof-target n))
+                                    (else #f))))
+                       (if (or (eq? t #f) (lookup nodes t)) '()
+                           (list (make-diagnostic 'invalid-eof-target (node-name n)
+                                                  "eof-target names no node")))))
                    nodes)))))
 
   ;; Walk the eof-target chain from `start`, classifying its terminal.
@@ -225,6 +245,9 @@
                     ((byte-dispatch-node? n)
                      (let ((t (byte-dispatch-node-eof-target n)))
                        (if (symbol? t) (loop t (cons name seen)) 'default-error)))
+                    ((sequence-dispatch-node? n)
+                     (let ((t (sequence-dispatch-node-eof-target n)))
+                       (if (symbol? t) (loop t (cons name seen)) 'default-error)))
                     (else 'unknown)))))))
 
   ;; Byte-flow reachability (feed can arrive): entry DFS over node-out-targets
@@ -240,7 +263,7 @@
        ;; :908 — a byte edge (case or fallback) into a finish terminal.
        (apply append
               (map (lambda (n)
-                     (if (byte-dispatch-node? n)
+                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n))
                          (filter values
                                  (map (lambda (t)
                                         (let ((tn (lookup nodes t)))
@@ -254,8 +277,10 @@
        ;; :909 + the EOF-cycle check — walk each dispatch node's eof-target chain.
        (apply append
               (map (lambda (n)
-                     (if (byte-dispatch-node? n)
-                         (let ((t (byte-dispatch-node-eof-target n)))
+                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n))
+                         (let ((t (if (byte-dispatch-node? n)
+                                      (byte-dispatch-node-eof-target n)
+                                      (sequence-dispatch-node-eof-target n))))
                            (if (symbol? t)
                                (case (eof-terminal m t)
                                  ((eof-reachable-stop)

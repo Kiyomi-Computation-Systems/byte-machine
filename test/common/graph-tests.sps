@@ -71,4 +71,28 @@
                 (byte-complement-matcher-matcher
                  (make-byte-complement-matcher (make-exact-byte-matcher 3)))))))))
 
+(harness-group "the façade builds a sequence machine"
+  (lambda ()
+    (harness-case "a single-alternative sequence machine builds through the façade"
+      (lambda ()
+        (let* ((eof-decl (make-error-declaration 'default-eof 'eof "unexpected end of input" #f))
+               (rej-decl (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))
+               (m (make-machine
+                   'seqnode 'seq '() '() '()
+                   (list eof-decl rej-decl)
+                   (list (make-sequence-dispatch-node
+                          'seq (list (make-sequence-case '(1 2 3 4) 'stop #f))
+                          (make-edge 'reject 'reexecute) #f #f)
+                         (make-stop-node 'stop #f)
+                         (make-error-node 'reject 'rejected #f))
+                   'default-eof #f)))
+          (check "is a machine" (machine? m))
+          (check-equal "entry" (machine-entry m) 'seq))))
+    (harness-case "the façade exports the sequence predicates and accessors"
+      (lambda ()
+        (let ((c (make-sequence-case '(1 2) 'stop #f)))
+          (check "sequence-case?" (sequence-case? c))
+          (check-equal "bytes" (sequence-case-bytes c) '(1 2))
+          (check-equal "target" (sequence-case-target c) 'stop))))))
+
 (harness-finish)

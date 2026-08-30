@@ -438,4 +438,154 @@
                                            (to-stop (make-byte-range-matcher 8 20)))))
                      3)))))
 
+;; Milestone 3 Slice ② Task 1: the sixth node kind, at all seven of verify.sls's
+;; permissive fall-throughs. A sequence node added to ir.sls but NOT to verify.sls
+;; VERIFIES CLEAN -- targets never resolution-checked, cycles never detected, EOF
+;; chain never walked -- and only crashes later in the normalizer. That is why
+;; these land in the same commit as the node kind.
+(define (seq-node cases mismatch eof-target)
+  (make-sequence-dispatch-node 'seq cases mismatch eof-target #f))
+(define (one-alt bytes target) (list (make-sequence-case bytes target #f)))
+(define (seq-machine* name nodes eof-name)
+  (make-machine name 'seq '() '() '() errs nodes eof-name #f))
+(define (seq-machine nodes) (seq-machine* 'seqnode nodes 'default-eof))
+(define (well-formed-seq-nodes)
+  (list (seq-node (one-alt '(1 2) 'stop) (make-edge 'reject 'reexecute) #f)
+        (make-stop-node 'stop #f)
+        (make-error-node 'reject 'rejected #f)))
+
+(harness-group "sequence dispatch reaches every verifier arm"
+  (lambda ()
+    (harness-case "a well-formed sequence machine verifies with no diagnostics"
+      (lambda ()
+        (let ((v (verify-machine (seq-machine (well-formed-seq-nodes)))))
+          (check "ok" (verification-ok? v))
+          (check-equal "diagnostic count" (length (verification-diagnostics v)) 0))))
+    ;; arm 1 -- node-out-targets: a case target
+    (harness-case "a case target that names no node is missing-target"
+      (lambda ()
+        (check "missing-target"
+               (has-code? (seq-machine
+                           (list (seq-node (one-alt '(1 2) 'nowhere)
+                                           (make-edge 'reject 'reexecute) #f)
+                                 (make-stop-node 'stop #f)
+                                 (make-error-node 'reject 'rejected #f)))
+                          'missing-target))))
+    ;; arm 1 -- node-out-targets: the mismatch edge target
+    (harness-case "a mismatch target that names no node is missing-target"
+      (lambda ()
+        (check "missing-target"
+               (has-code? (seq-machine
+                           (list (seq-node (one-alt '(1 2) 'stop)
+                                           (make-edge 'nowhere 'reexecute) #f)
+                                 (make-stop-node 'stop #f)
+                                 (make-error-node 'reject 'rejected #f)))
+                          'missing-target))))
+    ;; arm 2 -- all-out-targets: a node reachable ONLY through the sequence eof-target
+    (harness-case "a node reached only through the sequence eof-target is reachable"
+      (lambda ()
+        (check-equal "no unreachable-node"
+                     (length (filter (lambda (c) (eq? c 'unreachable-node))
+                                     (codes (seq-machine
+                                             (list (seq-node (one-alt '(1 2) 'stop)
+                                                             (make-edge 'reject 'reexecute)
+                                                             'done)
+                                                   (make-stop-node 'stop #f)
+                                                   (make-error-node 'reject 'rejected #f)
+                                                   (make-finish-node 'done #f))))))
+                     0)))
+    ;; arm 3 -- reexec-targets: a dispatch node whose cycle runs through a sequence
+    (harness-case "a reexecute cycle through a sequence node's mismatch edge is found"
+      (lambda ()
+        (check "zero-progress-cycle"
+               (has-code?
+                (make-machine 'cyc 'start '() '() '() errs
+                  (list (dispatch (list (make-byte-case (make-exact-byte-matcher 0)
+                                                        (make-edge 'seq 'reexecute) #f))
+                                  (make-edge 'seq 'reexecute))
+                        (seq-node (one-alt '(1 2) 'stop) (make-edge 'start 'reexecute) #f)
+                        (make-stop-node 'stop #f)
+                        (make-error-node 'reject 'rejected #f))
+                  'default-eof #f)
+                'zero-progress-cycle))))
+    ;; arm 4 -- pass-eof: eof-target resolution
+    (harness-case "a sequence eof-target that names no node is invalid-eof-target"
+      (lambda ()
+        (check "invalid-eof-target"
+               (has-code? (seq-machine
+                           (list (seq-node (one-alt '(1 2) 'stop)
+                                           (make-edge 'reject 'reexecute) 'ghost)
+                                 (make-stop-node 'stop #f)
+                                 (make-error-node 'reject 'rejected #f)))
+                          'invalid-eof-target))))
+    ;; arm 5 -- eof-terminal: the chain is walked THROUGH a sequence node
+    ;; Measured plan defect (brief §6): the literal fixture pointed the
+    ;; sequence node's eof-target at 'start, but the file's `dispatch` helper
+    ;; (line 15) hard-wires 'start's own eof-target to #f, so the walk
+    ;; terminates at 'default-error on its first step and never even revisits
+    ;; a node, let alone cycles -- confirmed by hand-tracing eof-terminal and
+    ;; by the measured Step 7 red not clearing until this fixture changed. A
+    ;; self-targeting eof-target ('seq instead of 'start) makes the sequence
+    ;; node genuinely revisit itself, which is what exercises eof-terminal's
+    ;; new sequence-dispatch-node? branch (arm 5) rather than terminating
+    ;; before ever reaching it.
+    (harness-case "an eof chain that cycles through a sequence node is an EOF cycle"
+      (lambda ()
+        (check "eof-zero-progress-cycle"
+               (has-code?
+                (make-machine 'eofcyc 'start '() '() '() errs
+                  (list (dispatch (list accept-case) (make-edge 'reject 'reexecute))
+                        (seq-node (one-alt '(1 2) 'stop) (make-edge 'reject 'reexecute) 'seq)
+                        (make-stop-node 'stop #f)
+                        (make-error-node 'reject 'rejected #f))
+                  'default-eof #f)
+                'eof-zero-progress-cycle))))
+    ;; Second arm-5 witness, added during mutation measurement (Step 11/12):
+    ;; the self-loop fixture above is caught not only by removing arm 5 (the
+    ;; sequence-dispatch-node? branch INSIDE eof-terminal) but also by
+    ;; removing arm 7's own OUTER filter disjunct in pass-eof-execution --
+    ;; with 'seq excluded from that map, eof-terminal is never even called
+    ;; starting from 'seq, so its own inner branch is moot and both mutants
+    ;; produce byte-identical FAIL output on that one case (measured; see the
+    ;; mutation suite's arm 5 pin comment). A genuine two-node cycle entered
+    ;; from a BYTE-DISPATCH node separates them: 'start's own eof-target
+    ;; check (arm 7 never touches byte-dispatch-node? entries) drives the
+    ;; walk INTO 'seq, and only arm 5's branch lets the walk continue back
+    ;; out through 'seq's own eof-target to close the cycle. Measured: arm
+    ;; 5's mutant fails this case (the walk reads 'unknown at 'seq and stops
+    ;; short of the cycle); arm 7's mutant still finds the cycle via 'start's
+    ;; independent check and leaves this case green.
+    (harness-case "an eof chain that cycles from a dispatch node through a sequence node's own eof-target is an EOF cycle"
+      (lambda ()
+        (check "eof-zero-progress-cycle"
+               (has-code?
+                (make-machine 'eofcyc2 'start '() '() '() errs
+                  (list (make-byte-dispatch-node 'start (list accept-case)
+                                                  (make-edge 'reject 'reexecute) 'seq #f)
+                        (seq-node (one-alt '(1 2) 'stop) (make-edge 'reject 'reexecute) 'start)
+                        (make-stop-node 'stop #f)
+                        (make-error-node 'reject 'rejected #f))
+                  'default-eof #f)
+                'eof-zero-progress-cycle))))
+    ;; arm 6 -- :908, a sequence BYTE edge into a finish terminal
+    (harness-case "a sequence case targeting a finish terminal is non-eof-into-finish"
+      (lambda ()
+        (check "non-eof-into-finish"
+               (has-code? (seq-machine
+                           (list (seq-node (one-alt '(1 2) 'done)
+                                           (make-edge 'reject 'reexecute) #f)
+                                 (make-error-node 'reject 'rejected #f)
+                                 (make-finish-node 'done #f)))
+                          'non-eof-into-finish))))
+    ;; arm 7 -- :909, the sequence node's own eof chain reaching a stop
+    (harness-case "a sequence eof path reaching a stop terminal is eof-reachable-stop"
+      (lambda ()
+        (check "eof-reachable-stop"
+               (has-code? (seq-machine
+                           (list (seq-node (one-alt '(1 2) 'stop)
+                                           (make-edge 'reject 'reexecute) 'stop)
+                                 (make-stop-node 'stop #f)
+                                 (make-error-node 'reject 'rejected #f)))
+                          'eof-reachable-stop))))))
+
 (harness-finish)

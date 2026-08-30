@@ -17,7 +17,12 @@
           matcher? exact-byte-matcher? exact-byte-matcher-byte
           byte-set-matcher? byte-set-matcher-bytes
           byte-range-matcher? byte-range-matcher-low byte-range-matcher-high
-          byte-complement-matcher? byte-complement-matcher-matcher)
+          byte-complement-matcher? byte-complement-matcher-matcher
+          make-sequence-dispatch-node make-sequence-case
+          sequence-dispatch-node? sequence-dispatch-node-name
+          sequence-dispatch-node-cases sequence-dispatch-node-mismatch
+          sequence-dispatch-node-eof-target
+          sequence-case? sequence-case-bytes sequence-case-target)
   (import (only (byte-machine private ir)
                 make-machine make-byte-dispatch-node make-byte-case
                 make-exact-byte-matcher make-edge make-stop-node make-finish-node
@@ -27,4 +32,9 @@
                 matcher? exact-byte-matcher? exact-byte-matcher-byte
                 byte-set-matcher? byte-set-matcher-bytes
                 byte-range-matcher? byte-range-matcher-low byte-range-matcher-high
-                byte-complement-matcher? byte-complement-matcher-matcher)))
+                byte-complement-matcher? byte-complement-matcher-matcher
+                make-sequence-dispatch-node make-sequence-case
+                sequence-dispatch-node? sequence-dispatch-node-name
+                sequence-dispatch-node-cases sequence-dispatch-node-mismatch
+                sequence-dispatch-node-eof-target
+                sequence-case? sequence-case-bytes sequence-case-target)))

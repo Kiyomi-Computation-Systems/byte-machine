@@ -255,4 +255,73 @@
                       (lambda () (make-byte-case (make-edge 'stop 'advance)
                                                  (make-edge 'stop 'advance) #f)))))))
 
+(harness-group "the sequence node and its cases (parent §9.1:297-298)"
+  (lambda ()
+    (harness-case "a sequence case carries its bytes and target"
+      (lambda ()
+        (let ((c (make-sequence-case '(1 2 3) 'stop #f)))
+          (check "is a sequence case" (sequence-case? c))
+          (check-equal "bytes" (sequence-case-bytes c) '(1 2 3))
+          (check-equal "target" (sequence-case-target c) 'stop))))
+    (harness-case "the bytes accessor returns a copy, not the stored chain"
+      (lambda ()
+        (let ((c (make-sequence-case '(1 2 3) 'stop #f)))
+          (check "not eq" (not (eq? (sequence-case-bytes c) (sequence-case-bytes c))))
+          (check-equal "still equal" (sequence-case-bytes c) '(1 2 3)))))
+    (harness-case "a length-1 sequence is legal (decision 0017 point 2)"
+      (lambda ()
+        (check-equal "single" (sequence-case-bytes (make-sequence-case '(7) 'stop #f)) '(7))))
+    (harness-case "duplicate bytes inside one alternative are legal"
+      (lambda ()
+        (check-equal "aa" (sequence-case-bytes (make-sequence-case '(97 97) 'stop #f)) '(97 97))))
+    (harness-case "an empty sequence is rejected (decision 0017 point 1)"
+      (lambda ()
+        (check-raises "empty" (contract-violation? 'make-sequence-case 'bytes)
+                      (lambda () (make-sequence-case '() 'stop #f)))))
+    (harness-case "a non-byte inside a sequence is rejected"
+      (lambda ()
+        (check-raises "256" (contract-violation? 'make-sequence-case 'bytes)
+                      (lambda () (make-sequence-case '(1 256) 'stop #f)))))
+    (harness-case "a non-symbol target is rejected"
+      (lambda ()
+        (check-raises "target" (contract-violation? 'make-sequence-case 'target)
+                      (lambda () (make-sequence-case '(1) 42 #f)))))
+    (harness-case "a sequence node carries its cases, mismatch edge and eof-target"
+      (lambda ()
+        (let* ((c (make-sequence-case '(1 2) 'stop #f))
+               (mm (make-edge 'reject 'reexecute))
+               (n (make-sequence-dispatch-node 'seq (list c) mm 'done #f)))
+          (check "is a sequence node" (sequence-dispatch-node? n))
+          (check-equal "name" (sequence-dispatch-node-name n) 'seq)
+          (check-equal "case count" (length (sequence-dispatch-node-cases n)) 1)
+          (check-equal "mismatch target" (edge-target (sequence-dispatch-node-mismatch n)) 'reject)
+          (check-equal "mismatch mode" (edge-mode (sequence-dispatch-node-mismatch n)) 'reexecute)
+          (check-equal "eof-target" (sequence-dispatch-node-eof-target n) 'done))))
+    (harness-case "an eof-target of #f is legal and means the default eof error"
+      (lambda ()
+        (check-equal "false"
+                     (sequence-dispatch-node-eof-target
+                      (make-sequence-dispatch-node
+                       'seq (list (make-sequence-case '(1) 'stop #f))
+                       (make-edge 'reject 'reexecute) #f #f))
+                     #f)))
+    (harness-case "an empty case list is rejected"
+      (lambda ()
+        (check-raises "no cases" (contract-violation? 'make-sequence-dispatch-node 'cases)
+                      (lambda () (make-sequence-dispatch-node
+                                  'seq '() (make-edge 'reject 'reexecute) #f #f)))))
+    (harness-case "a bare target handed in as the mismatch edge is rejected"
+      (lambda ()
+        (check-raises "not an edge" (contract-violation? 'make-sequence-dispatch-node 'mismatch)
+                      (lambda () (make-sequence-dispatch-node
+                                  'seq (list (make-sequence-case '(1) 'stop #f))
+                                  'reject #f #f)))))
+    (harness-case "a sequence node is a node, and reports its own name"
+      (lambda ()
+        (let ((n (make-sequence-dispatch-node
+                  'seq (list (make-sequence-case '(1) 'stop #f))
+                  (make-edge 'reject 'reexecute) #f #f)))
+          (check "node?" (node? n))
+          (check-equal "node-name" (node-name n) 'seq))))))
+
 (harness-finish)

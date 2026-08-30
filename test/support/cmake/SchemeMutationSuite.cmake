@@ -571,8 +571,14 @@ cmake_minimum_required(VERSION 3.26)
 # with two mutations. Passes become 39 + 1 = 40; mutations 183 + 2 = 185.
 # Slice ① Task 6 adds Pass 44 (byte-class differential non-vacuity) with one
 # mutation. Passes become 40 + 1 = 41; mutations 185 + 1 = 186.
+# Slice ② Task 1 adds no new pass -- the sixth node kind and all seven
+# verifier arms land in the two existing passes that already mutate ir.sls
+# (Pass 42) and verify.sls (Pass 33). Pass 33 gains seven mutations, one per
+# verifier arm; Pass 42 gains four (node?, node-name, the empty-sequence
+# guard, and the bytes-accessor copy). Passes stay at 41; mutations become
+# 186 + 7 + 4 = 197.
 set(EXPECTED_PASSES 41)
-set(EXPECTED_MUTATIONS 186)
+set(EXPECTED_MUTATIONS 197)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -2979,7 +2985,14 @@ byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: reachability never reports an unreachable node"
   FIND [[(make-diagnostic 'unreachable-node (node-name n) "node is unreachable")]]
-  REPLACE [[#f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "unreachable-node")
+  REPLACE [[#f]] EXPECT_STATUS 1
+  # Re-anchored in M3 Slice ② Task 1's pin sweep: this construction site is
+  # shared by every node kind pass-reachability walks, so the bare code name
+  # "unreachable-node" is not just loose in principle -- it was measured to
+  # ALSO match this task's own new arm-1 and arm-2 sequence mutants' captured
+  # output (control run on main: absent there, since no sibling case existed
+  # to collide with). Anchored to this mutation's own originating case.
+  EXPECT_OUTPUT_MATCHES "an unreachable node is rejected: unreachable-node")
 
 # Re-anchored in Milestone 3 Slice ① Task 1: pass-overlap now compares canonical
 # matcher BYTE SETS, so the old `(if (memv b seen)` line no longer exists. The
@@ -3068,7 +3081,14 @@ byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: the default-eof-error membership check is suppressed"
   FIND [[(if (memq (machine-default-eof-error m) (error-names m)) '()]]
-  REPLACE [[(if #t '()]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid-eof-target")
+  REPLACE [[(if #t '()]] EXPECT_STATUS 1
+  # Re-anchored in M3 Slice ② Task 1's pin sweep: the bare code name
+  # "invalid-eof-target" is shared with a second, unrelated decision (a
+  # per-node eof-target resolution failure) -- measured to ALSO match this
+  # task's new arm-4 sequence mutant's captured output. Anchored to this
+  # mutation's own originating case.
+  EXPECT_OUTPUT_MATCHES
+    "a default-eof-error naming no declared error is invalid-eof-target: invalid-eof-target")
 
 # The remaining five decisions the verifier emits but the first eight mutations
 # did not reach: the schema guard, the duplicate-error-declaration branch, the
@@ -3116,21 +3136,53 @@ byte_machine_mutation(
   LABEL "verify: a byte edge into a finish terminal is accepted"
   FIND [[(if (and tn (finish-node? tn))]]
   REPLACE [[(if (and tn #f)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "non-eof-into-finish")
+  EXPECT_STATUS 1
+  # Re-anchored in M3 Slice ② Task 1's pin sweep: this inner check is shared
+  # by node-out-targets' byte-dispatch AND sequence-dispatch arms alike, so
+  # the bare code name "non-eof-into-finish" was measured to ALSO match this
+  # task's new arm-6 sequence mutant's captured output. Anchored to this
+  # mutation's own originating case; the reverse direction (this mutant's own
+  # output also containing arm 6's case, since the check really is shared
+  # code) is genuine and left as documented residue beside arm 6's own pin
+  # below.
+  EXPECT_OUTPUT_MATCHES
+    "a byte case targeting a finish node is rejected \\(non-eof-into-finish\\): has non-eof-into-finish")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: an EOF-reachable stop terminal is accepted"
   FIND [[((stop-node? n) 'eof-reachable-stop)]]
   REPLACE [[((stop-node? n) 'finish)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "eof-reachable-stop")
+  EXPECT_STATUS 1
+  # Re-anchored in M3 Slice ② Task 1's pin sweep: eof-terminal's
+  # stop-classification is the single shared walk every eof-target chain
+  # runs through (byte-dispatch, sequence, and pause alike), so the bare code
+  # name "eof-reachable-stop" was measured matching SEVEN cases' captured
+  # output -- its own, five pre-existing pause cases, and this task's new
+  # arm-7 sequence mutant. Anchored to this mutation's own originating case;
+  # the reverse direction (this mutant's own output also containing arm 7's
+  # case, since the walk really is shared code) is genuine and left as
+  # documented residue beside arm 7's own pin below.
+  EXPECT_OUTPUT_MATCHES
+    "an eof-target reaching a stop terminal is rejected \\(eof-reachable-stop\\): has eof-reachable-stop")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: an eof-target cycle is classified as a finish terminal"
   FIND [[(if (memq name seen) 'cycle]]
   REPLACE [[(if (memq name seen) 'finish]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "eof-zero-progress-cycle")
+  EXPECT_STATUS 1
+  # Re-anchored in M3 Slice ② Task 1's pin sweep: eof-terminal's own
+  # cycle-detection guard is the single shared check every eof-target chain
+  # runs through, so the bare code name "eof-zero-progress-cycle" was
+  # measured matching its own case, two pre-existing pause cases, and BOTH of
+  # this task's new arm-5 sequence mutant's fixtures. Anchored to this
+  # mutation's own originating case; the reverse direction (this mutant's own
+  # output also containing arm 5's cases, since the guard really is shared
+  # code) is genuine and left as documented residue beside arm 5's own pin
+  # below.
+  EXPECT_OUTPUT_MATCHES
+    "an eof-target cycle is rejected \\(eof-zero-progress-cycle\\): has eof-zero-progress-cycle")
 
 # Milestone 2 Slice ③'s Task 1 (the pause node) adds five more decisions to
 # this pass: a pause continuation is an out-target for both name resolution
@@ -3157,10 +3209,17 @@ byte_machine_mutation(
   # exactly once in verify-tests.sps. The case name itself ends in
   # "(§16.2:905)", whose parentheses are CMake regex metacharacters, so the
   # unique check label is the anchor rather than a case-name tail.
-  FIND [[((pause-node? n) (list (pause-node-continuation n)))
-          (else '())]]
-  REPLACE [[((pause-node? n) '())
-          (else '())]]
+  #
+  # Re-anchored in M3 Slice ② Task 1: node-out-targets grew a new
+  # sequence-dispatch-node? cond clause between the pause-node? arm and its
+  # `(else '())`, so the old two-line adjacency stopped matching outright
+  # (SITES=1, asserted exactly; 0 occurrences is as loud a failure as 2).
+  # Anchored to the arm's own preceding comment line instead, which no other
+  # cond clause in this file shares.
+  FIND [[;; on byte-dispatch-node?, so this arm does not feed it.
+          ((pause-node? n) (list (pause-node-continuation n)))]]
+  REPLACE [[;; on byte-dispatch-node?, so this arm does not feed it.
+          ((pause-node? n) '())]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "missing-target diagnostic")
 
 byte_machine_mutation(
@@ -3199,10 +3258,17 @@ byte_machine_mutation(
   # each a distinct decision), so it does not by itself prove which one
   # failed. Measured: this mutation's own primary witness is the reexecute/
   # pause-only cycle case; pinned to it.
-  FIND [[((pause-node? n) (list (pause-node-continuation n)))
-              (else '())]]
-  REPLACE [[((pause-node? n) '())
-              (else '())]]
+  #
+  # Re-anchored in M3 Slice ② Task 1: reexec-targets grew a new
+  # sequence-dispatch-node? cond clause between the pause-node? arm and its
+  # `(else '())`, so the old two-line adjacency stopped matching (0
+  # occurrences, SITES=1 asserted exactly). Anchored to the arm's own
+  # preceding comment line, unique to this site (node-out-targets' pause
+  # comment above reads differently).
+  FIND [[;; advance is a zero-progress cycle.
+              ((pause-node? n) (list (pause-node-continuation n)))]]
+  REPLACE [[;; advance is a zero-progress cycle.
+              ((pause-node? n) '())]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "cycle with no advance makes no progress: zero-progress-cycle diagnostic")
 
 byte_machine_mutation(
@@ -3324,6 +3390,238 @@ byte_machine_mutation(
                             (case (eof-terminal m (pause-node-continuation n))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "chain of pauses that cycles is a zero-progress EOF cycle: no eof-zero-progress-cycle attributed to pa")
+
+# Milestone 3 Slice ② Task 1: the sixth node kind, sequence-dispatch, at all
+# seven of verify.sls's permissive fall-throughs (§0 D2). Adds seven mutations
+# to this same Pass 33 rather than opening a new one -- one per arm, since a
+# silently-clean verifier is the hazard this task closes and each arm needs
+# its own witness that reddens when it is removed. Every FIND/REPLACE and
+# EXPECT_OUTPUT_MATCHES below is measured against this file's own tree (a
+# scratch copy, mutated, run through chez-source.ss directly), never
+# predicted. Passes stay at 41; mutations become 186 + 7 = 193.
+#
+# Arms 5 and 7 both touch pass-eof-execution's :909 machinery and, measured
+# together, turned out to share one FAIL record: the self-loop fixture
+# ("an eof chain that cycles through a sequence node is an EOF cycle") is
+# broken by EITHER removing eof-terminal's sequence-dispatch-node? branch
+# (arm 5) or removing the OUTER filter's sequence-dispatch-node? disjunct
+# (arm 7) -- with 'seq excluded from the outer map, eof-terminal is never
+# even called starting from it, so arm 5's own inner branch is moot and the
+# two mutants' captured output for that one case is byte-identical. A second
+# fixture below -- a genuine two-node cycle entered from a BYTE-DISPATCH
+# node, whose own eof-target check the outer filter never gates on
+# sequence-dispatch-node? -- separates them: arm 5's mutant still fails it
+# (the walk reads 'unknown at the sequence node and the cycle is never
+# closed) while arm 7's mutant leaves it green (the byte-dispatch entry's own
+# check still finds the cycle independently of whether the sequence node is
+# ALSO iterated by the outer filter). Each arm below is pinned to the one
+# fixture that is not also broken by its sibling.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a sequence node's case and mismatch targets are not out-targets (arm 1, node-out-targets)"
+  FIND [[((sequence-dispatch-node? n)
+           (append (map sequence-case-target (sequence-dispatch-node-cases n))
+                   (list (edge-target (sequence-dispatch-node-mismatch n)))))
+          (else '())))]]
+  REPLACE [[(else '())))]]
+  # Comparison-caught: with the arm removed, a sequence case's bad target is
+  # never fed to pass-names' resolution loop, so the missing-target diagnostic
+  # never fires and the case's own `check` reports "expected a true value".
+  # Measured: this mutant also breaks four OTHER cases (the well-formed
+  # control, the mismatch-target sibling, arm 2's reachability case, and arm
+  # 6's non-eof-into-finish case), since node-out-targets feeds all of them --
+  # this is the FIRST FAIL line CMake's MATCHES search reaches, and it is
+  # unique to this one case.
+  #
+  # Pin sweep (Step 12): this pin's own FAIL record is also produced,
+  # byte-identical, by the pre-existing "verify: a missing transition target
+  # is not reported" mutation (which deletes pass-names' missing-target
+  # diagnostic construction entirely -- a strictly broader decision covering
+  # every node kind's out-targets, old and new). Genuinely subsumed, not
+  # under-anchored: that mutation's own failure set is a strict superset of
+  # this one's, so no pin wording on either side separates them. Left
+  # declared and collided, matching this pass's pre-existing "a case is
+  # compared against itself" residue above.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a case target that names no node is missing-target: missing-target")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a sequence node's eof-target does not feed reachability (arm 2, all-out-targets)"
+  FIND [[    (append (node-out-targets n)
+            (let ((t (cond ((byte-dispatch-node? n) (byte-dispatch-node-eof-target n))
+                           ((sequence-dispatch-node? n) (sequence-dispatch-node-eof-target n))
+                           (else #f))))
+              (if (symbol? t) (list t) '()))))]]
+  REPLACE [[    (append (node-out-targets n)
+            (if (byte-dispatch-node? n)
+                (let ((t (byte-dispatch-node-eof-target n)))
+                  (if (symbol? t) (list t) '()))
+                '())))]]
+  # Comparison-caught: the finish node reached only via the sequence node's
+  # eof-target goes unreached, so pass-reachability's own unreachable-node
+  # diagnostic fires where the test expects none -- a clean, single-case
+  # witness (measured: no other case in this file is affected).
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a node reached only through the sequence eof-target is reachable: no unreachable-node -- expected 0, got 1")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a sequence node's reexecute mismatch edge is invisible to the zero-progress walk (arm 3, reexec-targets)"
+  FIND [[((sequence-dispatch-node? n)
+               (if (eq? (edge-mode (sequence-dispatch-node-mismatch n)) 'reexecute)
+                   (list (edge-target (sequence-dispatch-node-mismatch n))) '()))
+              (else '())))]]
+  REPLACE [[(else '())))]]
+  # Comparison-caught: with the arm removed, reexec-targets no longer sees
+  # through the sequence node, so the dispatch node's own reexecute-only
+  # cycle through it goes undetected and zero-progress-cycle never fires.
+  # Measured: a clean, single-case witness against every OTHER mutation in
+  # this pass except one.
+  #
+  # Pin sweep (Step 12): this pin's own FAIL record is also produced,
+  # byte-identical, by the pre-existing "verify: zero-progress detection
+  # never fires" mutation (which disables pass-zero-progress's report
+  # conditional outright -- a strictly broader decision covering every
+  # zero-progress-cycle witness in this file, old and new). Genuinely
+  # subsumed, not under-anchored: that mutation's own pin is already anchored
+  # to its own distinct originating case ("a reexecute self-loop is a
+  # zero-progress cycle"), which does not appear in THIS mutant's narrower
+  # output, so the collision is one-directional and unfixable by re-wording
+  # either pin.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a reexecute cycle through a sequence node's mismatch edge is found: zero-progress-cycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a sequence node's eof-target is not resolution-checked (arm 4, pass-eof)"
+  FIND [[              (map (lambda (n)
+                     (let ((t (cond ((byte-dispatch-node? n) (byte-dispatch-node-eof-target n))
+                                    ((sequence-dispatch-node? n) (sequence-dispatch-node-eof-target n))
+                                    (else #f))))
+                       (if (or (eq? t #f) (lookup nodes t)) '()
+                           (list (make-diagnostic 'invalid-eof-target (node-name n)
+                                                  "eof-target names no node")))))
+                   nodes)))))]]
+  REPLACE [[              (map (lambda (n)
+                     (if (byte-dispatch-node? n)
+                         (let ((t (byte-dispatch-node-eof-target n)))
+                           (if (or (eq? t #f) (lookup nodes t)) '()
+                               (list (make-diagnostic 'invalid-eof-target (node-name n)
+                                                      "eof-target names no node"))))
+                         '()))
+                   nodes)))))]]
+  # Comparison-caught: with the arm reverted to byte-dispatch-only, a
+  # sequence node's dangling eof-target is never checked against the node
+  # table, so invalid-eof-target never fires. Measured: a clean, single-case
+  # witness.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a sequence eof-target that names no node is invalid-eof-target: invalid-eof-target")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: eof-terminal does not classify a sequence node reached mid-chain (arm 5)"
+  FIND [[((sequence-dispatch-node? n)
+                     (let ((t (sequence-dispatch-node-eof-target n)))
+                       (if (symbol? t) (loop t (cons name seen)) 'default-error)))
+                    (else 'unknown)))))))]]
+  REPLACE [[(else 'unknown)))))))]]
+  # Comparison-caught: with the arm removed, eof-terminal falls to its
+  # `(else 'unknown)` the moment the walk reaches a sequence node, so a cycle
+  # that must pass back OUT through that node's own eof-target is never
+  # closed. Pinned to the two-node (byte-dispatch <-> sequence) fixture, not
+  # the self-loop sibling above it: measured, this mutant's FAIL record for
+  # the self-loop case is byte-identical to arm 7's mutant's (see the header
+  # note), but this fixture is unaffected by arm 7's own mutation -- arm 7
+  # only gates whether the OUTER pass-eof-execution walk starts an
+  # eof-terminal call from a sequence node; here the walk is entered from the
+  # byte-dispatch node's own (untouched) eof-target check, so only arm 5's
+  # removal breaks it.
+  #
+  # Pin sweep (Step 12): this pin's own FAIL record is ALSO produced,
+  # byte-identical, by the pre-existing "verify: an eof-target cycle is
+  # classified as a finish terminal" mutation (which disables eof-terminal's
+  # own `(memq name seen)` cycle guard outright -- a strictly broader
+  # decision covering every eof-target chain's cycle detection, old and new;
+  # that mutation's measured output contains BOTH of this case's sibling
+  # fixtures). Genuinely subsumed, not under-anchored: that mutation's own
+  # pin is anchored to its own distinct originating case and does not appear
+  # in either of arm 5's fixtures' narrower output, so the collision is
+  # one-directional and unfixable by re-wording either pin.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an eof chain that cycles from a dispatch node through a sequence node's own eof-target is an EOF cycle: eof-zero-progress-cycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a sequence case's byte edge into a finish terminal is not flagged (arm 6, :908)"
+  FIND [[       ;; :908 — a byte edge (case or fallback) into a finish terminal.
+       (apply append
+              (map (lambda (n)
+                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n))]]
+  REPLACE [[       ;; :908 — a byte edge (case or fallback) into a finish terminal.
+       (apply append
+              (map (lambda (n)
+                     (if (byte-dispatch-node? n)]]
+  # Comparison-caught: with the filter narrowed back to byte-dispatch-only, a
+  # sequence case whose target is a finish terminal is never inspected here,
+  # so non-eof-into-finish never fires.
+  #
+  # Pin sweep (Step 12): this pin's own FAIL record is ALSO produced,
+  # byte-identical, by TWO other mutations in this pass: the pre-existing
+  # "verify: a byte edge into a finish terminal is accepted" (the :908 inner
+  # check itself is shared code, reached by both node kinds through the
+  # filter this arm widens) and this task's own arm 1 above (removing a
+  # sequence node's out-targets entirely also empties what :908 has to
+  # inspect for it). Both are strictly broader decisions whose failure sets
+  # are supersets of this one's. Genuinely subsumed on both sides, not
+  # under-anchored: neither sibling's own pin appears in THIS mutant's
+  # single-line output, so the collision is one-directional each way and
+  # unfixable by re-wording any of the three pins.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a sequence case targeting a finish terminal is non-eof-into-finish: non-eof-into-finish")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a sequence node's own eof-target chain is not walked (arm 7, :909)"
+  FIND [[       ;; :909 + the EOF-cycle check — walk each dispatch node's eof-target chain.
+       (apply append
+              (map (lambda (n)
+                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n))
+                         (let ((t (if (byte-dispatch-node? n)
+                                      (byte-dispatch-node-eof-target n)
+                                      (sequence-dispatch-node-eof-target n))))]]
+  REPLACE [[       ;; :909 + the EOF-cycle check — walk each dispatch node's eof-target chain.
+       (apply append
+              (map (lambda (n)
+                     (if (byte-dispatch-node? n)
+                         (let ((t (byte-dispatch-node-eof-target n)))]]
+  # Comparison-caught: with the filter narrowed back to byte-dispatch-only, a
+  # sequence node's own eof-target chain is never walked from this site, so
+  # neither eof-reachable-stop nor eof-zero-progress-cycle ever fires FOR
+  # THAT NODE'S OWN entry. Pinned to the eof-reachable-stop fixture, not the
+  # self-loop cycle case above it: measured, this mutant's FAIL record for
+  # the cycle case is byte-identical to arm 5's mutant's (see the header
+  # note), but this fixture's sole diagnostic source is this site's own
+  # per-node iteration over the sequence node, which arm 5's mutation never
+  # touches -- so only arm 7's removal breaks it.
+  #
+  # Pin sweep (Step 12): this pin's own FAIL record is ALSO produced,
+  # byte-identical, by the pre-existing "verify: an EOF-reachable stop
+  # terminal is accepted" mutation (eof-terminal's stop-classification line
+  # is shared by every walker -- byte-dispatch, sequence, and pause -- that
+  # mutation's measured output contains SEVEN cases including this one).
+  # Genuinely subsumed, not under-anchored: that mutation's own pin is
+  # anchored to its own distinct originating case and does not appear in
+  # THIS mutant's single-line output, so the collision is one-directional and
+  # unfixable by re-wording either pin.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a sequence eof path reaching a stop terminal is eof-reachable-stop: eof-reachable-stop")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -4060,8 +4358,17 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
   LABEL "ir: an empty byte set is accepted"
-  FIND [[(unless (and (list? bytes) (pair? bytes)]]
-  REPLACE [[(unless (and (list? bytes)]]
+  # Re-anchored in M3 Slice ② Task 1: make-sequence-case's own empty-list
+  # guard (added by this task) is byte-for-byte the same shape as this one,
+  # so the bare `(unless (and (list? bytes) (pair? bytes)` FIND stopped being
+  # unique in this file (SITES=1, asserted exactly) the moment that
+  # constructor landed -- exactly the "module was refactored" case the SITES
+  # check exists to catch loudly. Anchored to the preceding `define` line,
+  # which the sequence-case constructor's does not share.
+  FIND [[(define (make-byte-set-matcher bytes)
+    (unless (and (list? bytes) (pair? bytes)]]
+  REPLACE [[(define (make-byte-set-matcher bytes)
+    (unless (and (list? bytes)]]
   # Comparison-caught via check-raises' own expected-vs-actual assertion, not
   # an incidental raise: dropping (pair? bytes) lets '() satisfy the rest of
   # the guard (for-all over '() is vacuously true), so construction succeeds
@@ -4190,6 +4497,67 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "a contract violation: refused -- expected a raise, but the thunk returned \\(\\)")
+
+# Milestone 3 Slice ② Task 1: the sequence node kind and its cases (§9.1:
+# 297-298), still on this same Pass 42 -- ir-tests.sps already proves this
+# lane can reach ir.sls's own constructors directly, and these four mutations
+# exercise the same file. Every FIND/REPLACE and EXPECT_OUTPUT_MATCHES is
+# measured against this file's own tree, not predicted. Passes stay at 41;
+# mutations become 193 + 4 = 197 (with the seven verify.sls arm mutations
+# above, this pass's own share rose from 13 to 17).
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node? does not admit a sequence node"
+  FIND [[(or (byte-dispatch-node? x) (sequence-dispatch-node? x) (stop-node? x)]]
+  REPLACE [[(or (byte-dispatch-node? x) (stop-node? x)]]
+  # Comparison-caught: with the disjunct removed, node? is false for a
+  # sequence node (which would also make make-machine reject it outright),
+  # and the case's own `check "node?"` reports "expected a true value".
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a sequence node is a node, and reports its own name: node\\?")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node-name does not report a sequence node's name"
+  FIND [[((sequence-dispatch-node? x) (sequence-dispatch-node-name x))]]
+  REPLACE [[((sequence-dispatch-node? x) 'wrong-name)]]
+  # Comparison-caught, not raise-based: the clause still returns a value
+  # (the opposite-constant form AGENTS.md prefers over one that falls through
+  # to the else arm's raise), so check-equal reports the wrong symbol instead
+  # of the call failing to return at all.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a sequence node is a node, and reports its own name: node-name -- expected seq, got wrong-name")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: make-sequence-case accepts an empty byte list"
+  # Anchored to the preceding `define` line: make-byte-set-matcher's own
+  # empty-list guard (mutated above, in this same pass) is byte-for-byte the
+  # same shape, so the bare `(unless (and (list? bytes) (pair? bytes)` text
+  # is not unique in this file on its own (SITES=1, asserted exactly).
+  FIND [[  (define (make-sequence-case bytes target source-label)
+    (unless (and (list? bytes) (pair? bytes)]]
+  REPLACE [[  (define (make-sequence-case bytes target source-label)
+    (unless (and (list? bytes)]]
+  # Comparison-caught via check-raises' own expected-vs-actual assertion:
+  # dropping (pair? bytes) lets '() satisfy the rest of the guard (for-all
+  # over '() is vacuously true), so construction succeeds and check-raises
+  # reports the thunk returned instead of raising.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "an empty sequence is rejected \\(decision 0017 point 1\\): empty")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: sequence-case-bytes returns the stored chain rather than a copy"
+  FIND [[(append (vector-ref c 1) '())]]
+  REPLACE [[(vector-ref c 1)]]
+  # Comparison-caught: without the copy, two calls return the SAME pair
+  # chain, so `(not (eq? ...))` is false and the case's own "not eq" check
+  # reports "expected a true value".
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the bytes accessor returns a copy, not the stored chain: not eq")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

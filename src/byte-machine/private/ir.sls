@@ -28,6 +28,10 @@
           make-error-node error-node? error-node-name error-node-error-name
           make-error-declaration error-declaration? error-declaration-name
           error-declaration-code error-declaration-reason
+          make-sequence-dispatch-node sequence-dispatch-node?
+          sequence-dispatch-node-name sequence-dispatch-node-cases
+          sequence-dispatch-node-mismatch sequence-dispatch-node-eof-target
+          make-sequence-case sequence-case? sequence-case-bytes sequence-case-target
           node? node-name
           make-verification-result verification-result? verification-result-ok?
           verification-result-diagnostics verification-result-machine)
@@ -283,11 +287,59 @@
   (define (error-declaration-code d) (vector-ref d 2))
   (define (error-declaration-reason d) (vector-ref d 3))
 
+  ;; --- sequence case (§9.1:298) ---
+  ;; A byte list and a bare TARGET, with no mode. A successful sequence consumes
+  ;; every byte in it (§10.6:546), so giving a case an advance/reexecute mode
+  ;; would reintroduce the lookahead :546 forbids. The mismatch EDGE on the node
+  ;; below carries the only mode a sequence has. The accessor copies for the same
+  ;; reason byte-set-matcher-bytes does: §9.1 says constructors return
+  ;; immutable-by-API descriptors, and a copy preserves order and duplicates, so
+  ;; it is not the semantic transform §9.1:322 forbids.
+  (define sequence-case-tag (tag 'byte-machine-sequence-case))
+  (define (make-sequence-case bytes target source-label)
+    (unless (and (list? bytes) (pair? bytes) (for-all byte-value? bytes))
+      (byte-machine-contract-violation 'make-sequence-case 'invalid-argument 'bytes))
+    (require-symbol 'make-sequence-case 'target target)
+    (vector sequence-case-tag (append bytes '()) target source-label))
+  (define (sequence-case? x) (tagged? sequence-case-tag x))
+  (define (sequence-case-bytes c)
+    (unless (sequence-case? c)
+      (byte-machine-contract-violation 'sequence-case-bytes 'invalid-argument 'case))
+    (append (vector-ref c 1) '()))
+  (define (sequence-case-target c)
+    (unless (sequence-case? c)
+      (byte-machine-contract-violation 'sequence-case-target 'invalid-argument 'case))
+    (vector-ref c 2))
+
+  ;; --- sequence-dispatch node (§9.1:297, §10.6:542-546) ---
+  ;; The sixth node kind. Matches one of a finite set of exact byte sequences
+  ;; without backtracking; alternatives may share nonterminal prefixes. Whether
+  ;; two alternatives collide is a cross-case property, so it is verification's
+  ;; job, not this constructor's (decision 0017 point 4).
+  (define sequence-dispatch-node-tag (tag 'byte-machine-sequence-dispatch-node))
+  (define (make-sequence-dispatch-node name cases mismatch eof-target source-label)
+    (require-symbol 'make-sequence-dispatch-node 'name name)
+    (unless (and (list? cases) (pair? cases) (for-all sequence-case? cases))
+      (byte-machine-contract-violation 'make-sequence-dispatch-node 'invalid-argument 'cases))
+    (unless (edge? mismatch)
+      (byte-machine-contract-violation 'make-sequence-dispatch-node 'invalid-argument 'mismatch))
+    ;; eof-target is a node name, or #f for the machine default eof error.
+    (unless (or (symbol? eof-target) (eq? eof-target #f))
+      (byte-machine-contract-violation 'make-sequence-dispatch-node 'invalid-argument 'eof-target))
+    (vector sequence-dispatch-node-tag name cases mismatch eof-target source-label))
+  (define (sequence-dispatch-node? x) (tagged? sequence-dispatch-node-tag x))
+  (define (sequence-dispatch-node-name n) (vector-ref n 1))
+  (define (sequence-dispatch-node-cases n) (vector-ref n 2))
+  (define (sequence-dispatch-node-mismatch n) (vector-ref n 3))
+  (define (sequence-dispatch-node-eof-target n) (vector-ref n 4))
+
   ;; --- node dispatch ---
   (define (node? x)
-    (or (byte-dispatch-node? x) (stop-node? x) (error-node? x) (finish-node? x) (pause-node? x)))
+    (or (byte-dispatch-node? x) (sequence-dispatch-node? x) (stop-node? x)
+        (error-node? x) (finish-node? x) (pause-node? x)))
   (define (node-name x)
     (cond ((byte-dispatch-node? x) (byte-dispatch-node-name x))
+          ((sequence-dispatch-node? x) (sequence-dispatch-node-name x))
           ((stop-node? x) (stop-node-name x))
           ((error-node? x) (error-node-name x))
           ((finish-node? x) (finish-node-name x))
