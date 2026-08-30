@@ -4,7 +4,12 @@
 ;;;
 ;;; Absolute, not differential, on purpose: both executors are built from the
 ;;; same source IR, so a defect there makes them wrong IDENTICALLY and leaves a
-;;; comparison green. This program is what a trie-branching defect reddens.
+;;; comparison green. What this program reddens is a defect in the INTERPRETER's
+;;; own alternative walk -- seq-step's live-alternative filter and its path
+;;; bookkeeping. A LOWERING defect is invisible here: the interpreter never
+;;; touches the normalizer (interpret.sls's header, §18), so the trie is
+;;; normal-ir-tests.sps's to assert, not this file's.
+;;;
 ;;; Proving the two executors AGREE is a different lane's job, and it is the
 ;;; interpreter≡generated differential this slice adds next -- named here as
 ;;; intent, not as a file that exists yet.
@@ -59,10 +64,11 @@
     (define re (interp (make-http-version-machine)))
     ;; Both alternatives accept with the identical tuple -- both targets are
     ;; stop nodes, so `next` does NOT distinguish them and no check here can.
-    ;; What these cases DO catch is an alternative that stopped accepting at
-    ;; all, which is how a dropped or mis-merged trie branch shows up. The
-    ;; structural claim lives in normal-ir-tests.sps instead, for the reason
-    ;; spelled out below.
+    ;; What these cases DO catch is an alternative the interpreter stops keeping
+    ;; live -- which is exactly what Pass 47's two mutations do to seq-step's
+    ;; case walk. They do NOT catch a mis-lowered trie: nothing in this file
+    ;; reaches the normalizer. That claim lives in normal-ir-tests.sps instead,
+    ;; for the reason spelled out below.
     (harness-case "HTTP/1.0 stops at the zero target"
       (lambda ()
         (check-equal "one byte at a time" (feed-one-at-a-time re (bytes "HTTP/1.0"))
@@ -127,9 +133,14 @@
     (define re (interp (make-http-version-machine)))
     (harness-case "all seven proper prefixes of HTTP/1.0 return need-input"
       (lambda ()
-        ;; SENTINELS, both levels. `seen` counts what the PARSER returned, not
-        ;; what the fixture expects, so a loop that never runs cannot pass; and
-        ;; the outer length assertion is what catches a shortened prefix list.
+        ;; `seen` is the sentinel: it counts what the PARSER returned, not what
+        ;; the fixture expects, so a loop that never runs cannot pass. The
+        ;; length check below is NOT one -- it reads a literal against a literal
+        ;; and the loop bound is the hard-coded 7, so it can only catch the
+        ;; fixture string being edited. Fixture integrity, kept for that, and
+        ;; labelled as that (AGENTS.md: a sentinel computed from the test's own
+        ;; expectation closes nothing). The group-level sentinel is
+        ;; (length machines), asserted where the fixture list is iterated.
         (let ((full (bytes "HTTP/1.0")))
           (check-equal "the fixture is eight bytes long" (length full) 8)
           (let loop ((k 1) (seen 0) (bad 'none))

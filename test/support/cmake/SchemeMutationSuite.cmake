@@ -686,9 +686,14 @@ cmake_minimum_required(VERSION 3.26)
 # Milestone 3 Slice ③ Task 3 (the multi-alternative fixture and its absolute
 # interpreter lane) opens Pass 47 with two mutations -- seq-step's
 # live-alternative filter truncated to the first declared alternative and to
-# the last -- because the lane it proves non-vacuous is the only one that
-# drives a branching trie end to end, and both mutants pass the
-# single-alternative lane unchanged. The same task adds a group to
+# the last -- declared under the new lane's own SPEC because a mutation is
+# witnessed only by the tests that run in the lane its SPEC names, and measured
+# to leave the single-alternative lane (sequence-interpret-tests.sps) passing
+# unchanged. NOT because this is the only lane that drives a branching sequence
+# node: interpret-tests.sps has driven AB/AC and AB/XY alternatives through the
+# interpreter since Slice ② and catches both of these mutations. Pass 47's own
+# header carries the measured counts for all three programs. The same task adds
+# a group to
 # normal-ir-tests.sps, so Pass 35 (whose SPEC lane runs that program) was
 # re-swept whole in both directions at 22 mutations; see Pass 35's own audit
 # block. Passes become 43 + 1 = 44; mutations become 230 + 2 = 232.
@@ -4553,13 +4558,18 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # ordered pairs, ZERO collisions, and all 22 pins still catch their own mutant.
 # Control, because a colliding pass has to be told apart from an inherited one:
 # the identical sweep run against the pre-change normal-ir-tests.sps
-# (`git show HEAD:test/common/normal-ir-tests.sps`) is also 484 pairs and also
-# zero. Nothing inherited, nothing introduced.
+# (`git show c14bbc6:test/common/normal-ir-tests.sps` -- the base commit by
+# name, because HEAD stopped resolving to the pre-change file the moment this
+# group was committed) is also 484 pairs and also zero. Nothing inherited,
+# nothing introduced.
 #
 # The new group is not inert under this pass's own mutants -- four of the 22
 # redden it, measured on the same captures: "normal-ir: the trie does not merge
-# alternatives sharing a byte" (state count 39 rather than 11, which is the two
-# alternatives lowered as SEPARATE chains), "normal-ir: trie children are not
+# alternatives sharing a byte" (state count 39 rather than 11 -- NOT the count
+# for two separate chains, which is 18, measured by normalizing two eight-byte
+# alternatives sharing nothing; 39 is trie-put's disabled equal-byte arm
+# appending a second alist entry at every one of the seven shared levels, so
+# the duplicated subtree compounds down the chain), "normal-ir: trie children are not
 # kept ascending by byte", "normal-ir: internal prefix states do not append
 # after the declared block", and "normal-ir: a terminal trie child consumes an
 # id it should not" (state count 13). Named by LABEL, not by line number: this
