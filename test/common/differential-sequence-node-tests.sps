@@ -203,6 +203,32 @@
                      (run-slices cm-ref after-complete) '(stopped 0 0 4 #f))
         (check-equal "generated after completion"
                      (run-slices cm-gen after-complete) '(stopped 0 0 4 #f))))
+    ;; Re-review, Task 5 fix wave 2: the case above feeds from start 0, so its
+    ;; assertion cannot separate the correct decision (next = start) from a
+    ;; mutant that hardcodes next to a literal 0, OR from one that confuses
+    ;; start with the sticky arm's OTHER in-scope value, (parser-offset
+    ;; parser) -- all three read 0 there. This is the same trap the sticky
+    ;; error arm's `next` field and the pause arm's `next` field each already
+    ;; needed a dedicated nonzero-start fixture to close (runtime-tests.sps's
+    ;; "the error row returns the stored error after a feed error" and "a
+    ;; nonzero-start feed pause separates next, consumed, and stream offset",
+    ;; :411-431); the sticky-STOPPED arm had never had its own. padded's
+    ;; [1,5) slice completes the sequence with stream-offset 4, then the
+    ;; empty [5,5) feed lands on the sticky-stopped arm at a DIFFERENT
+    ;; nonzero start (5) -- start, the literal 0, and (parser-offset parser)
+    ;; are now pairwise distinct, so any of the three wrong answers reddens
+    ;; this case. Absolute on both executors, not just agreement: parser-
+    ;; feed!'s sticky arms run before either executor variant is dispatched
+    ;; to, so a mutation here would make interpreted and generated wrong
+    ;; identically, and a mere agreement check would not notice.
+    (harness-case "a nonzero-start trailing empty feed separates next from start, zero, and offset"
+      (lambda ()
+        (define padded (u8v 9 1 2 3 4 9))
+        (define after-complete (list (list padded 1 5) (list padded 5 5)))
+        (check-equal "interpreter after completion"
+                     (run-slices cm-ref after-complete) '(stopped 5 0 4 #f))
+        (check-equal "generated after completion"
+                     (run-slices cm-gen after-complete) '(stopped 5 0 4 #f))))
     (harness-case "a deterministic random multi-split schedule accepts and agrees"
       (lambda ()
         (define seed 20260830)

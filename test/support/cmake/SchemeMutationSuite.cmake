@@ -646,8 +646,25 @@ cmake_minimum_required(VERSION 3.26)
 # the same decision re-witnessed under a different lane, not a collision. See
 # the mutation's own comment for the full measurement. Passes become
 # 42 + 1 = 43; mutations 221 + 1 = 222.
+# Re-review, Task 5 fix wave 2 (an Important finding against fix wave 1) adds
+# one more mutation to this same Pass 46: parser-feed!'s sticky-stopped arm's
+# `next` field, hardcoded to a literal 0. Fix wave 1's own new "a trailing
+# empty feed after the sequence completes stays stopped" case feeds from
+# start 0, so it cannot separate that decision from a literal-0 hardcode --
+# the same trap already closed for the sticky ERROR and PAUSE arms' `next`
+# fields (both in Pass 32), never for the STOPPED arm's. Closed with a new
+# nonzero-start companion case in differential-sequence-node-tests.sps
+# (padded's [1,5) then [5,5), so start=5 and the persisted offset=4 are
+# pairwise distinct from each other and from 0) plus this mutation, declared
+# here rather than in Pass 32 because this lane's own new case -- not
+# runtime-tests.sps -- is what reddens for it under Pass 46's verify command
+# (AGENTS.md: a mutation's witness lives in its own SPEC lane's program). See
+# the mutation's own comment for the full measurement, including why a
+# sibling mutation swapping `start` for `(parser-offset parser)` on the same
+# arm was NOT added: it was already caught incidentally by two pre-existing
+# fixtures. Passes stay at 43; mutations become 222 + 1 = 223.
 set(EXPECTED_PASSES 43)
-set(EXPECTED_MUTATIONS 222)
+set(EXPECTED_MUTATIONS 223)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -5383,6 +5400,57 @@ byte_machine_mutation(
   # sibling passes that already exist on this branch.
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
     "256 x 4 positions match, in both mismatch modes: no \\(mode position byte\\) disagreed -- expected none, got \\(reexecute 0 1\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.sequence-node.chez.source
+  LABEL "runtime: the sticky-stopped row's next is the call's start, not a fixed zero (sequence-node lane)"
+  # Re-review, Task 5 fix wave 2: parser-feed!'s sticky-stopped arm is shared
+  # code reached before either executor variant is dispatched to, so this
+  # decision has nothing to do with the emitter the mutation above targets --
+  # it is witnessed here (rather than left to Pass 32, where the sibling
+  # error- and pause-arm `next` mutations already live) because this SPEC
+  # lane's own new nonzero-start case is what actually reddens for it
+  # (AGENTS.md: a mutation's witness lives in its own SPEC lane's program).
+  # FIND measured unique in the file (one occurrence).
+  #
+  # Before this task's new "a nonzero-start trailing empty feed separates
+  # next from start, zero, and offset" case existed, this exact mutation was
+  # UNCAUGHT by this program: measured directly against the unedited,
+  # committed differential-sequence-node-tests.sps (git show HEAD), status=0,
+  # no FAIL lines -- the pre-existing "a trailing empty feed after the
+  # sequence completes stays stopped" case feeds from start 0, so a next
+  # hardcoded to the literal 0 reads identically to the correct start there.
+  # (A DIFFERENT mutation of the same arm -- swapping `start` for
+  # `(parser-offset parser)` instead of a literal 0 -- was already caught by
+  # that same pre-existing case, and separately by runtime-tests.sps's
+  # pre-existing "a repeat feed on a terminal parser" case: both happen to
+  # reach the sticky arm with a nonzero persisted offset even though their
+  # own slice starts at 0, so offset and start already disagreed there. Only
+  # the plain literal-0 hardcode needed a new witness.)
+  #
+  # Measured against a scratch stage with this task's new case added: cases=14
+  # failed-cases=1 checks=30 failures=2 status=1, both failures on the new
+  # case's own two checks ("interpreter after completion" and "generated
+  # after completion"), each "expected (stopped 5 0 4 #f), got
+  # (stopped 0 0 4 #f)". Comparison-caught (check-equal failures, no raise).
+  #
+  # Pin sweep against the sibling compile.sls mutation above, both directions,
+  # re-measured on a scratch stage: that mutation never fails this case's
+  # "interpreter after completion" check at all (cm-ref never reads
+  # compile.sls, so no compile.sls mutation in this pass can produce that
+  # check's FAIL line), and its own "generated after completion" failure
+  # reads "got (error 5 0 0 unexpected-byte)" -- disjoint from this
+  # mutation's "got (stopped 0 0 4 #f)". Pinned to the "interpreter after
+  # completion" check for exactly that reason: it is structurally immune to
+  # every mutation this pass's sibling entry could ever carry. Control: this
+  # lane, case, and mutation do not exist on `main`, so there is no prior
+  # baseline to re-measure; the meaningful control is the sweep just
+  # described, against the one sibling mutation that already exists on this
+  # branch under the same verify command.
+  FIND [[(make-parser-result 'stopped start 0 (parser-offset parser) #f))]]
+  REPLACE [[(make-parser-result 'stopped 0 0 (parser-offset parser) #f))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "a nonzero-start trailing empty feed separates next from start, zero, and offset: interpreter after completion -- expected \\(stopped 5 0 4 #f\\), got \\(stopped 0 0 4 #f\\)")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
