@@ -3,9 +3,12 @@
 Status: design — approved shape, **Gate 0 discharged; Slice ① (byte classes)
 closed 2026-08-29** (every commit on branch `feat/milestone-3-slice-1` since it
 diverged from `main` at merge base `a9de657`, including this note's own
-commit; PR not yet opened as of this note). **Slices ② and
-③ not started.** Milestone 3 as a whole remains open — this slice discharges
-§5's scope, not the milestone's (see the dated §5 disposition below). Authored
+commit; PR not yet opened as of this note). **Slice ② (sequence dispatch and
+prefix lowering) closed 2026-08-30** (every commit on branch
+`feat/milestone-3-slice-2` since it diverged from `main` at merge base
+`2468881`; PR not yet opened as of this note). **Slice ③ not started.**
+Milestone 3 as a whole remains open — these slices discharge §5's and §6's
+scope, not the milestone's (see the dated §5 and §6 dispositions below). Authored
 2026-08-29, the day Milestone 2 closed
 (PR [#23](https://github.com/Kiyomi-Computation-Systems/byte-machine/pull/23),
 commit `5906ade`; status sweep PRs #24–#27). Written after a 92-agent audit of
@@ -224,6 +227,27 @@ depend on `list-sort` stability. Per-byte expansion preserves the guarantee.
   `normal-ir.sls:129` stays 1.
 - The reference interpreter represents "inside sequence *s* at prefix position
   *k*" as a **compound `current`** value, `(s . k)`.
+
+> **Amended 2026-08-30 (Task 6 close-out; Slice ② closed).** This
+> illustration's `(s . k)` — a prefix **position index** — is a measured
+> design defect, not merely superseded prose. Counterexample: alternatives
+> `AB` and `XY` on one sequence node. After consuming `A`, a position index
+> records only "position 1"; asked "is there an alternative with position 1
+> reached", it finds `XY` does (byte `Y` at index 1) and follows it —
+> accepting the byte pair `A` then `Y`, a sequence that appears on neither
+> alternative and was never on the input. A position index cannot
+> distinguish "which alternative(s) are still live" from "how far along am
+> I", and mismatch detection needs the former. The shipped representation is
+> the **consumed byte path** instead: `(name . path)`, where `path` is the
+> exact bytes read so far (`interpret.sls`'s `seq-step`, the sole producer of
+> the compound form — Task 3, commit `c4a2039`). Measured directly:
+> `interpret-tests.sps`'s "A then Y mismatches rather than following the XY
+> alternative" case feeds `AB`/`XY` the bytes `A` then `Y` and asserts
+> `(error 0 0 1 unexpected-byte)`, not an accept — the exact failure this
+> amendment's counterexample predicts if `path` were replaced by a bare
+> position. Decision 0015 needs no matching amendment: point 3 says only "a
+> compound `current` value" and never names `(s . k)` or any other concrete
+> shape, so it was never wrong — this design section's illustration was.
 
 **Why (lowering).** §10.6:546, §17:957 and §19.2:1010 all say "resumable prefix
 states", and a resumable byte-reading state *is* the shipped dispatch state. The
@@ -495,6 +519,34 @@ one exception is reachability: an unextended `all-out-targets` produces a *loud
 but false* `'unreachable-node` on every successor only a sequence reaches, which
 reads as a user grammar error rather than a verifier gap.
 
+> **Disposition, 2026-08-30 (Task 6 close-out; Slice ② closed).** This
+> paragraph's own count was wrong twice over, found by execution rather than
+> by re-reading it: it says "six sites" and then enumerates **seven**
+> references (`:56`, `:58-63`, `:158`, `:207`, `:185`, `:222`, `:236`); the
+> Slice ② implementation plan corrected the prose to "seven" (§0 D2) before
+> Task 1 began. Task 1's own review then found an **eighth**: `pass-overlap`
+> (§16.2:893 canonical byte-set overlap), which stayed filtering on
+> `byte-dispatch-node?` alone when the other seven landed, with no deferral
+> note recorded beside it. That non-extension is correct, not a bug —
+> cross-alternative sequence collision is §16.2:894 ambiguity, decision 0017
+> point 4 assigns it to the verifier, and §7 below assigns the check itself to
+> Slice ③, so `pass-overlap` has nothing to enforce yet — but it was
+> undocumented in a file whose entire stated hazard, one paragraph above, is
+> silent permissiveness. It is now documented in place, at both the file
+> header and the pass itself (`verify.sls:8-16`, `:176-180`). A later audit
+> for this close-out, enumerating **every** site in `verify.sls` that
+> dispatches on node kind — rather than grepping `byte-dispatch-node?`, which
+> cannot see a `cond` that dispatches through *other* kind predicates and so
+> cannot itself find an omission — confirms **eight** is the true count: six
+> sites extended to the sixth kind (`node-out-targets`; `node-eof-target`,
+> which Task 1's fix wave collapsed four near-duplicate accessor sites into;
+> `reexec-targets`; `eof-terminal`; and both `pass-eof-execution` filters,
+> §16.2:908/:909) plus two sites deliberately left unextended and each
+> documented in place: `pass-overlap` above, and `pass-zero-progress`'s report
+> guard (`(or (byte-dispatch-node? n) (pause-node? n))`, `verify.sls:228`),
+> whose sequence extension is §25:1533's zero-progress-cycle work — Slice ③,
+> not this one.
+
 **The lowering is trie-shaped from the start, and that is a correctness
 requirement rather than an early optimization.** `make-sequence-dispatch-node`
 takes a plural `cases` list (§9.1:297) and validates local shape only, and
@@ -548,6 +600,60 @@ Contents:
   says authors may deliberately choose either and "tests must make that choice
   explicit". An advance-mode mismatch edge silently shifts every reported position
   by one, and no existing test would look obviously wrong.
+
+> **Disposition, 2026-08-30 (Task 6 close-out; Slice ② closed).** Each item
+> above, against the shipped tree, re-checked rather than assumed:
+>
+> 1. **Source IR.** Shipped in Task 1 (commit `4ae825f`, fix wave `32146a0`):
+>    `make-sequence-dispatch-node`/`make-sequence-case` in `ir.sls`, both added
+>    to `node?`/`node-name`; ten names — not eight, as Task 1's own report
+>    first miscounted and later corrected by measuring
+>    `git diff 2468881..4ae825f -- src/byte-machine/graph.sls` — exported from
+>    `graph.sls`'s export list and its `only`-import list alike.
+> 2. **All verifier arms above** — **eight**, not six; see the dated
+>    disposition immediately above — plus `node-out-targets`'s repair of
+>    `pass-names`' target resolution and `byte-reached`. Task 1; measured
+>    mutation total 41 passes/200 after its fix wave (from 41/186 on `main`).
+> 3. **Trie-shaped prefix lowering** with decision 0016's two-phase id
+>    allocation and the amended `normal-ir-tests.sps:41-46` rule. Task 2
+>    (commit `b9f2be6`, fix wave `0b6a983`); measured mutation total 41
+>    passes/209.
+> 4. **Interpreter prefix tracking**, `lookup`/`kind` destructuring, the
+>    `(name . path)` representation (§4.2's dated amendment above, not the
+>    `(s . k)` this bullet's own cross-reference used to imply). Task 3
+>    (commit `c4a2039`); measured mutation total 41 passes/218.
+> 5. **Emitter: zero change, confirmed and recorded.** A comment above
+>    `render-state-arm` in `compile.sls`; no executable change.
+>    `reserved-member-3` checked and confirmed unchanged — no new emitted
+>    local. Task 3, same commit.
+> 6. **The oracle.** `differential-sequence-node-tests.sps` reproduces every
+>    `sequence-machine.sls` tuple pinned at
+>    `differential-sequence-tests.sps:118-201` exactly, over a
+>    single-alternative `1 2 3 4` machine, including all eight cut-sets and
+>    the seeded multi-split schedule. Task 5 (commits `e27e0ca`..`c6ae163`,
+>    two fix waves); measured mutation total 43 passes/223 (the slice's final
+>    total).
+> 7. **Both mismatch modes.** Fixtures for both `reexecute`- and
+>    `advance`-mode mismatch landed in Task 4 (commit `d435b6f`, two new
+>    lanes, `byte-machine.unit.sequence-node.chez.{source,aot}`; mutation
+>    total 42 passes/221) and were driven through the interpreter≡generated
+>    differential in Task 5
+>    (`byte-machine.differential.sequence-node.chez.{source,aot}`), closing
+>    the "zero coverage anywhere in the tree" gap this bullet warns about.
+>    Both new lane families use distinct five-segment names, avoiding the
+>    collision the closing "Naming" paragraph below warns against with the M2
+>    `byte-machine.differential.sequence.chez.*` pair.
+>
+> Final measured totals for the whole slice, re-taken for this close-out
+> (commands in `.superpowers/sdd/task-6-report.md`): `ctest --preset release`
+> 80/80 (from 76 on `main`); `ctest --preset no-scheme` 8/8 (unchanged);
+> Scheme mutation suite 43 passes/223 mutations (from 41/186 on `main`);
+> CMake mutation suite 1 pass/72 mutations (unchanged); 9 pre-existing
+> `EXPECT_SURVIVES`, none added, removed or edited since `main`
+> (`git diff 2468881..HEAD -- test/support/cmake/SchemeMutationSuite.cmake |
+> grep -E '^[+-].*EXPECT_SURVIVES'`, empty); the three pinned IR fingerprints
+> and both committed goldens byte-identical since `main`
+> (`git diff --stat 2468881..HEAD -- test/fixtures/`, empty).
 
 **Naming.** `byte-machine.differential.sequence.chez.{source,aot}` is already
 registered at `test/CMakeLists.txt:968-987` for the M2 chained-dispatch machine,
@@ -735,3 +841,12 @@ verification).
 | `runtime` | **No change.** `current` is opaque (no `symbol?` test anywhere), `parser-reset!` clears it at `:331`, and the `/v2` contract mentions no node kind. |
 | CMake `test/CMakeLists.txt` | New source+AOT lane pairs for the class, complement, ASCII, single-alternative-sequence, mismatch-mode, shared-prefix and ambiguity-rejection programs, each with a `TIMEOUT` and a unique five-segment name (`byte-machine.differential.sequence.*` is taken); every new fixture `.sls` in **both** lanes' `SOURCES`. |
 | `SchemeMutationSuite.cmake` | Mutations for every new decision, each with a measured failure signature; re-anchor `:2967` (deleted), `:2973`/`:3183` (double-pinned, `SITES` exact), and `:3059`/`:3066` if the eof helpers move; `EXPECTED_PASSES`/`EXPECTED_MUTATIONS` (`:554-555`) updated from measurement only. |
+
+> **Disposition, 2026-08-30 (Task 6 close-out; Slice ② closed).** The
+> `verify` row's "all six permissive fall-throughs ... (`:56`, `:58-63`,
+> `:158`, `:185`, `:207`, `:222`, `:236`)" repeats §6's miscount verbatim —
+> seven references under a count of six, and silent about the eighth
+> (`pass-overlap`, deliberately left unextended). See the dated disposition
+> at §6 above for the full count — eight sites, six extended and two
+> deliberately deferred to Slice ③, each documented in place in
+> `verify.sls` — rather than restating it here.

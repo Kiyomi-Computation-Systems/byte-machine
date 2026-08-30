@@ -663,6 +663,24 @@ arm of §0 D2, plus the well-formed control:
                           'eof-reachable-stop))))))
 ```
 
+> **Disposition, 2026-08-30 (Task 6 close-out).** Arm 5's fixture above
+> (`"an eof chain that cycles through a sequence node is an EOF cycle"`)
+> pointed the sequence node's `eof-target` at `'start`, a node built through
+> this file's pre-existing `dispatch` helper
+> (`(define (dispatch cases fallback) (make-byte-dispatch-node 'start cases
+> fallback #f #f))`), which hard-wires *its own* `eof-target` to `#f` — so
+> `eof-terminal`'s walk from `'seq` reached `'start`, found a non-symbol
+> eof-target on its very first step, and returned `'default-error` with no
+> revisit and no cycle, ever. The fixture never built the cycle it named.
+> Task 1 measured this directly (the one case that stayed red after all seven
+> arms landed) and fixed it by pointing the sequence node's `eof-target` at
+> itself (`'seq`, not `'start`), which genuinely self-cycles and exercises
+> arm 5's `eof-terminal` branch through real self-reference — documented in
+> place in `verify-tests.sps` beside the fixture. A second fixture was added
+> to isolate arm 5 from arm 7 (both otherwise reach the same
+> `eof-terminal` stop/cycle classification code), traced in both directions
+> by the review.
+
 - [ ] **Step 7: Run the verifier tests and confirm the expected red**
 
 ```bash
@@ -1022,6 +1040,34 @@ Append to `test/common/normal-ir-tests.sps` before `(harness-finish)`:
                                                                 ((65 66) . halt))
                                                          (list (make-stop-node 'halt #f))))))))))
 ```
+
+> **Disposition, 2026-08-30 (Task 6 close-out).** Two plan defects in this
+> block, both measured, neither an implementer deviation:
+> 1. **Both `check-raises` predicates above are `(lambda (e) #t)`** — accepts
+>    any raise at all, so a swapped message, a wrong `who`, or a later pass
+>    rejecting the fixture for an unrelated reason would all still show green.
+>    This is the exact vacuity Slice ①'s review had already tightened out of
+>    `ir-tests.sps`, under a house rule `conditions.sls` states in its own
+>    header. Task 2's own review found it here and fixed it: a
+>    `raises-normalize-assertion?` helper asserting `assertion-violation?`,
+>    `condition-who`, and the exact `condition-message`, wired into both call
+>    sites. Measured proof the gap was real: swapping the two guards' message
+>    strings in `normal-ir.sls` reddened both cases under the fixed
+>    predicates; both passed vacuously under the original `(lambda (e) #t)`.
+> 2. **No fixture above, nor any earlier in this harness-group, asserts an
+>    internal prefix state's own `id` field** — every check reaches a prefix
+>    state by its *position* in `normal-machine-states`, never by
+>    `normal-state-id`, so `seq-state`'s `id` argument could be wrong (e.g.
+>    hard-coded to `0`) and nothing would notice, even though the field is
+>    load-bearing at `compile.sls:102` (it derives each emitted state
+>    procedure's name). Task 2's own review found this surviving mutation and
+>    closed it with two new cases asserting `normal-state-id` directly on the
+>    four-byte and depth-first fixtures, plus a matching mutation, both
+>    measured caught.
+
+Neither defect changed this block's own `FIND`/`REPLACE` in
+`SchemeMutationSuite.cmake`; both are test-file fixes plus one new mutation,
+recorded at the commits above.
 
 **Amend the existing declaration-index case** — this edit is decision 0016 being
 applied, not routine test maintenance, and the commit must cite 0016. Replace
@@ -1413,6 +1459,19 @@ Append to `test/common/interpret-tests.sps` before `(harness-finish)`:
                         (feed-bytes (interp (seq-m 'dup '(((65 66) . stop) ((65 66) . halt))
                                                    'reexecute (list (make-stop-node 'halt #f))))
                                     '(65 66))))))))
+
+> **Disposition, 2026-08-30 (Task 6 close-out).** Both `check-raises`
+> predicates above are `(lambda (e) #t)`, the same plan-authored vacuity as
+> Task 2's block above — the third instance of this class from this plan.
+> Unlike Task 2's, this one was caught and fixed by the **implementer**
+> during Task 3 itself, not by a later review: replaced with a
+> `raises-interpret-assertion?` helper (mirroring `normal-ir-tests.sps`'s
+> `raises-normalize-assertion?`), asserting `assertion-violation?`,
+> `(eq? (condition-who e) 'interpret)`, and the exact message string, at both
+> call sites. Task 3 was also the first task on this branch to pass review
+> with zero fix-wave findings, and the difference was applying this exact
+> lesson up front rather than reaching for the weakest predicate that
+> compiles.
 
 (harness-group "advance-mode mismatch shifts every reported position by one (§11.5:664)"
   (lambda ()
@@ -1840,6 +1899,27 @@ Create `test/common/sequence-interpret-tests.sps`:
                (check-equal "exactly one byte per position continued" accepted 4))))))
      machines)))
 
+> **Disposition, 2026-08-30 (Task 6 close-out).** The accept branch above
+> (`(unless (memq (car r) '(need-input stopped)) ...)`, `(when (memq (car r)
+> '(need-input stopped)) (set! accepted (+ accepted 1)))`) asserts only
+> **status-class membership** — "the parser reported some form of progress" —
+> never a literal tuple. This loop runs for both `cmseq` (`reexecute`) and
+> `advseq` (`advance`), so after this block `advseq`'s accept path had **no
+> absolute assertion anywhere in the tree**, interpreted or generated — a gap
+> this task's own review flagged and carried forward rather than fixing here
+> (fixing it in place would have required narrowing this loop's generality,
+> which covers all four positions x 256 bytes x two machines). Closed in
+> Task 5: `differential-sequence-node-tests.sps` gained
+> `(check-equal "advance accept" (run-slices ad-gen (list (list (u8v 1 2 3 4)
+> 0 4))) '(stopped 4 4 4 #f))` on the generated executor, the missing
+> literal. (Traced separately: `advseq`'s and `cmseq`'s accept-path
+> transitions render through the same `compile.sls` code regardless of
+> mismatch mode — mismatch mode only selects the *fallback* edge — so the new
+> literal is real, non-decorative coverage for "does an absolute tuple
+> exist," though it is not independently mutation-discriminating from the
+> pre-existing `cmseq` accept literal; recorded as measured, not claimed
+> otherwise.)
+
 ;; §11.5:664 -- authors may deliberately choose either mismatch mode and "tests
 ;; must make that choice explicit". Every shipped fixture in this tree uses
 ;; reexecute, so before this slice the advance path had no coverage anywhere; an
@@ -2209,6 +2289,65 @@ Create `test/common/differential-sequence-node-tests.sps`:
 > re-confirm that sentinel rather than assuming — asserting "at least one draw
 > had ≥2 cuts" is what stops the case name from promising coverage the draws did
 > not produce.
+
+> **Disposition, 2026-08-30 (Task 6 close-out).** Four vacuity gaps in this
+> brief-supplied program, three found by Task 5's review rather than by the
+> plan or the implementer:
+> 1. **`with-empties` (above) never produces a trailing empty feed**, though
+>    its one caller's case name promises "leading / intermediate / **trailing**
+>    empty feeds still accept." Reading the loop: the `(null? (cdr ss))`
+>    branch conses the empty slice `e` onto the accumulator built so far and
+>    stops — the schedule always ends on a **data** slice, never on `e`. This
+>    helper is copied verbatim from the M2 oracle
+>    (`differential-sequence-tests.sps`), which has the identical gap — an M2
+>    finding surfaced by this slice, left as M2's own carried item, not fixed
+>    here. Fixed for *this* file: the existing case was renamed to "leading /
+>    intermediate empty feeds still accept" (accurate to what it tests), and a
+>    genuinely new case, "a trailing empty feed after the sequence completes
+>    stays stopped," was added, asserting an absolute tuple after a real
+>    trailing empty feed on both executors.
+> 2. **The eight-cut-set sweep (`"each of the eight split sets stops at
+>    offset 4 in both"`, above) asserted only `status` and `stream-offset`**,
+>    which are identical across every cut-set by construction, plus a
+>    loop-iteration counter — so a `slices-for` that silently ignored `cuts`
+>    and returned one whole slice would have left all eight green. Fixed:
+>    replaced with a full-tuple comparison against eight measured literals,
+>    one per cut-set (`consumed` — `next - start`, computed fresh per final
+>    slice — is 4, 3, 2, 1, 2, 1, 1, 1 across the eight sets in the order
+>    given; only `consumed` separates a real split from a whole-slice one).
+>    Sensitivity-checked by deliberately corrupting one literal and
+>    confirming the case reddened, not merely re-run clean.
+> 3. **`advseq`'s accept path had no absolute literal-tuple assertion
+>    anywhere in the tree**, in either executor — see the disposition on
+>    Task 4's "all 256 byte values" block above; the fix (`"advance
+>    accept"`) landed in this file's `"both mismatch modes, absolutely, on
+>    the generated executor"` group below.
+> 4. **This program's own header claimed "every group also asserts the
+>    GENERATED side absolutely"** (above, before the `import` clause), but
+>    the 256-byte exhaustive-agreement group asserts only *agreement*
+>    (`interpreter ≡ generated`), never a literal for any specific byte —
+>    correctly, since that group's job is exhaustive coverage across 256
+>    byte values x 4 positions x 2 mismatch modes, which no fixed literal
+>    tuple could stand in for. The header's universal claim was false, not
+>    the group's design; corrected to name the one group it excludes, rather
+>    than adding a redundant literal pin inside the 256-byte loop.
+>
+> **A fifth gap surfaced by the fix wave's own fix, not by the brief:** the
+> new trailing-empty case (item 1) first fed `start = 0` and asserted
+> `next = 0` — which cannot distinguish `next = start` (correct) from a
+> hardcoded literal `0` (wrong), the exact zero-start indistinguishability
+> trap this repository had already named and closed twice, for the sticky
+> `error` and `pause` arms, and never for `stopped`. Because
+> `parser-feed!`'s sticky arms run before any executor dispatch, a mutation
+> there breaks the interpreter and the generated executor identically, so no
+> agreement-based differential could ever have caught it either. Closed with
+> a second, nonzero-start case (`(stopped 5 0 4 #f)`, where `start=5 !=
+> offset=4 != 0` separates all three candidates) plus a mutation on
+> `consumed`; the offset-swap variant of the same trap turned out already
+> caught incidentally, so only the literal-`0` mutation was added.
+>
+> Final mutation total for this file's lane: 43 passes/223 (from 42/221
+> before Task 5).
 
 - [ ] **Step 2: Register the two lanes**
 
