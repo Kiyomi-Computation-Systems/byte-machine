@@ -1080,6 +1080,31 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-byte-class-tests.sps"
   TIMEOUT 180)
 
+# --- Milestone 3 Slice ②: sequence dispatch through the interpreter -----------
+# ABSOLUTE expected outcomes for a single-alternative sequence node and its
+# advance-mismatch twin. Absolute rather than differential because both executors
+# read the same source IR: a defect there is invisible to a comparison and
+# visible here.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.sequence-node.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/sequence-interpret-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/sequence-node-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/sequence-interpret-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.sequence-node.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/sequence-interpret-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/sequence-node-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/sequence-interpret-tests.sps"
+  TIMEOUT 120)
+
 # --- Milestone 1 Phase 3 Slice B: D7 identifier repertoire + binary LF -------
 byte_machine_add_scheme_lane(
   NAME byte-machine.verify.identifier-repertoire.chez.source

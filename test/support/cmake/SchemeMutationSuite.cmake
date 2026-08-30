@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FORTY-ONE PASSES, BECAUSE FORTY-ONE DIFFERENT WITNESSES ARE NEEDED
+# FORTY-TWO PASSES, BECAUSE FORTY-TWO DIFFERENT WITNESSES ARE NEEDED
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -145,7 +145,7 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "FORTY-ONE PASSES..." above. Declared here, rather than only in prose, so the
+# See "FORTY-TWO PASSES..." above. Declared here, rather than only in prose, so the
 # count enforced at the bottom of this file is the same text a reader checks by
 # eye at the top -- one number to keep in sync, not two that can quietly
 # disagree. 25 passes / 60 mutations before the aot task; pass 26 adds two (C3,
@@ -614,8 +614,22 @@ cmake_minimum_required(VERSION 3.26)
 # the mismatch-edge mutation share their "at offset 1" line) was resolved by
 # a two-substring spanning pin, not by declaring it subsumed. Passes stay at
 # 41; mutations become 209 + 9 = 218.
-set(EXPECTED_PASSES 41)
-set(EXPECTED_MUTATIONS 218)
+# Slice ② Task 4 adds Pass 45 (the sequence-node absolute interpreter lane,
+# byte-machine.unit.sequence-node.chez.source) with three mutations: the
+# mismatch edge's mode decision, in both directions -- hardcoding
+# `(edge-mode mm)` to 'advance is caught only by the reexecute fixture
+# (seqnode), hardcoding it to 'reexecute is caught only by the advance fixture
+# (advseq), together proving the interpreter reads the declared mode rather
+# than assuming one -- and the completed-alternative-target decision,
+# re-witnessed through this lane's own single-alternative fixture (the same
+# code Pass 34's Task 3 mutation already covers, but that pass's witness runs
+# through interpret-tests.sps's multi-alternative trie fixtures, a different
+# SPEC; per AGENTS.md a mutation's witness lives in its own SPEC lane). All
+# three are comparison-caught, pins measured against a scratch stage (not the
+# committed tree) and cross-checked pairwise so no two of the three share a
+# FAIL line. Passes become 41 + 1 = 42; mutations 218 + 3 = 221.
+set(EXPECTED_PASSES 42)
+set(EXPECTED_MUTATIONS 221)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -5194,9 +5208,93 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
+# --- Pass 45: the sequence-node absolute interpreter lane is non-vacuous (M3 --
+# Slice ② Task 4) ---------------------------------------------------------------
+#
+# sequence-interpret-tests.sps is the first fixture anywhere in this tree built
+# with mismatch mode 'advance (make-advance-mismatch-machine, 'advseq) --
+# every other shipped sequence fixture (sequence-machine.sls, pause-machine.sls,
+# and Task 3's own interpret-tests.sps fixtures) uses 'reexecute, so the
+# advance-mode arithmetic (consumed=1, next=1, offset=k+1 rather than
+# consumed=0, next=0, offset=k) has had no witness anywhere before this pass.
+# Both mutations below hardcode seq-step's `(edge-mode mm)` read to a fixed
+# symbol, so the interpreter answers with one mode's arithmetic regardless of
+# what the machine actually declared; the third re-witnesses the completed-
+# alternative-target decision through this lane's own single-alternative
+# fixture. Verify command uses both library roots, an empty object guard, the
+# new absolute program.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/sequence-interpret-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.sequence-node.chez.source
+  LABEL "interpret: the mismatch edge's declared mode is ignored in favour of reexecute"
+  # Hardcoding to 'advance leaves the REEXECUTE fixture (seqnode) wrong -- a
+  # mismatching byte gets consumed and every position shifts by one -- while
+  # the ADVANCE fixture (advseq) is left coincidentally correct, so only
+  # seqnode's own checks can catch this. Measured against a scratch stage, not
+  # the committed tree: cases=10 checks=25 failures=5, failing seqnode's
+  # all-256 case (one check) and all four k= checks in "reexecute leaves next
+  # and consumed at zero and the offset at the prefix". Comparison-caught.
+  # Pin sweep: this pin's exact tuple pair is the mirror image of the
+  # 'reexecute mutation below's own pin (0 0 0 / 1 1 1 vs 1 1 1 / 0 0 0) and
+  # absent from that mutation's captured output and from the completed-
+  # alternative-target mutation's output (both re-measured and grepped).
+  FIND [[(cons (edge-target mm) (edge-mode mm))))]]
+  REPLACE [[(cons (edge-target mm) 'advance)))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "k=0 -- expected \\(error 0 0 0 unexpected-byte\\), got \\(error 1 1 1 unexpected-byte\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.sequence-node.chez.source
+  LABEL "interpret: the mismatch edge's declared mode is ignored in favour of advance"
+  # The opposite hardcode: the ADVANCE fixture (advseq) is now wrong and the
+  # REEXECUTE fixture (seqnode) is coincidentally correct, so only advseq's own
+  # checks catch it -- proving 'reexecute is genuinely read too, not merely
+  # the default every machine happens to declare. Measured against a scratch
+  # stage: cases=10 checks=25 failures=5, failing advseq's all-256 case and all
+  # four k= checks in "advance consumes the offending byte and shifts every
+  # position by one". Comparison-caught.
+  FIND [[(cons (edge-target mm) (edge-mode mm))))]]
+  REPLACE [[(cons (edge-target mm) 'reexecute)))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "k=0 -- expected \\(error 1 1 1 unexpected-byte\\), got \\(error 0 0 0 unexpected-byte\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.sequence-node.chez.source
+  LABEL "interpret: a completed alternative routes to another prefix instead of its declared target"
+  # Same defect, same FIND/REPLACE, as Pass 34's Task 3 mutation of the same
+  # name -- deliberately: that mutation's witness runs through
+  # interpret-tests.sps's multi-alternative AB/XY trie fixtures under a
+  # DIFFERENT SPEC (byte-machine.unit.interpret.chez.source); this lane's own
+  # single-alternative fixture needs its own witness of the same decision
+  # (AGENTS.md: a mutation's witnessing test lives in its own SPEC lane's
+  # program). Folding a completed alternative into the "extend the compound"
+  # shape means the four-byte sequence never terminates: the parser reports
+  # need-input at stream-offset 4 instead of stopping. Measured against a
+  # scratch stage: cases=10 checks=25 failures=1, only "the full sequence
+  # stops at stream-offset 4" failing -- the all-256 group and the mismatch-
+  # mode group are untouched by this mutation (re-measured and grepped against
+  # both mode mutations' captured output above: this pin appears in neither).
+  # Comparison-caught.
+  FIND [[((pair? ends) (cons (sequence-case-target (car ends)) 'advance))]]
+  REPLACE [[((pair? ends) (cons (cons (sequence-dispatch-node-name n) new) 'advance))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "the full sequence stops at stream-offset 4: stopped -- expected \\(stopped 1 1 4 #f\\), got \\(need-input 1 1 4 #f\\)")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FORTY-ONE PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FORTY-TWO PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.
