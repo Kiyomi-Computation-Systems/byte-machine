@@ -670,6 +670,122 @@
                                            (make-edge 'reject 'reexecute) 'stop)
                                  (make-stop-node 'stop #f)
                                  (make-error-node 'reject 'rejected #f)))
-                          'eof-reachable-stop))))))
+                          'eof-reachable-stop))))
+    ;; Review fix wave (Critical): arm 3, arm 5, and arm 6 above were each
+    ;; classified SUBSUMED by a whole-FAIL-record subset test alone (a
+    ;; mutant's failure set was a full subset of a sibling's), which AGENTS.md
+    ;; warns reports "separable but deliberately declined" as clean too --
+    ;; count-not-witness is the fix that shape needs, precedented by
+    ;; verify-tests.sps's own "both EOF terminals reported" and "three pairs"
+    ;; checks above. Each case below puts TWO independent occurrences of one
+    ;; decision in a single machine -- one on a byte-dispatch node (which the
+    ;; competing broader mutation ALSO breaks, so the count drops by the
+    ;; byte-dispatch contribution too) and one on a sequence node reached
+    ;; only through the arm's own mechanism (which only the arm's narrower
+    ;; mutation breaks) -- so the two mutations report different "got" values
+    ;; on the same check. Measured directly against both mutants, not
+    ;; predicted; see SchemeMutationSuite.cmake's arms 3/5/6 for the sweep.
+    (harness-case "a byte-dispatch self-loop and a sequence-mismatch cycle are two zero-progress cycles"
+      (lambda ()
+        ;; arm 3 (reexec-targets' sequence clause) vs "verify: zero-progress
+        ;; detection never fires" (mut06): 'x's case+fallback both reexecute
+        ;; into itself, a decision arm 3 never touches; 'start -> 'seq ->
+        ;; 'start is the sequence-mismatch cycle arm 3's own case above
+        ;; already witnesses by existence. Correct code reports 2 (one per
+        ;; cycle); mut06 disables PASS 5 outright, reporting 0; arm 3 still
+        ;; finds 'x's plain self-loop but can no longer walk through 'seq,
+        ;; reporting 1.
+        (check-equal "zero-progress-cycle count"
+                     (length (filter (lambda (c) (eq? c 'zero-progress-cycle))
+                                     (codes
+                                      (make-machine 'combined3 'x '() '() '() errs
+                                        (list (make-byte-dispatch-node 'x
+                                                (list (make-byte-case (make-exact-byte-matcher 0)
+                                                                      (make-edge 'x 'reexecute) #f))
+                                                (make-edge 'x 'reexecute) #f #f)
+                                              (dispatch (list (make-byte-case (make-exact-byte-matcher 0)
+                                                                              (make-edge 'seq 'reexecute) #f))
+                                                        (make-edge 'seq 'reexecute))
+                                              (seq-node (one-alt '(1 2) 'stop) (make-edge 'start 'reexecute) #f)
+                                              (make-stop-node 'stop #f)
+                                              (make-error-node 'reject 'rejected #f))
+                                        'default-eof #f))))
+                     2)))
+    (harness-case "a byte-dispatch eof self-loop and a two-node dispatch/sequence eof cycle are three eof-zero-progress cycles"
+      (lambda ()
+        ;; arm 5 (eof-terminal's sequence clause) vs "verify: an eof-target
+        ;; cycle is classified as a finish terminal" (mut19): 'x's own
+        ;; eof-target chain cycles through itself without ever touching a
+        ;; sequence node, a decision arm 5 never reaches. 'start <-> 'seq is
+        ;; the SAME two-node cycle as arm 5's own "an eof chain that cycles
+        ;; from a dispatch node through a sequence node's own eof-target"
+        ;; case above; under correct code BOTH nodes' own eof-target-chain
+        ;; walks find the cycle, so this pair alone contributes 2. A
+        ;; self-loop entirely at the sequence node (arm 5's OTHER own case,
+        ;; and arm 7's fixture) was tried here first and rejected: it does
+        ;; not separate arm 5 from arm 7, because a walk that starts AND ends
+        ;; at the sequence node without ever passing through a byte-dispatch
+        ;; node is killed identically by either mutation (measured: both
+        ;; reported "got 1" on that design). The 'start/'seq pair is entered
+        ;; from a byte-dispatch node's own eof-target, which only arm 5's
+        ;; inner eof-terminal change touches -- arm 7's outer-filter change
+        ;; is irrelevant to a chain that never STARTS at the sequence node.
+        ;; Measured: correct code reports 3; mut19 disables eof-terminal's
+        ;; cycle guard globally, reporting 0; arm 5 still finds 'x's own
+        ;; cycle but every walk that must pass through 'seq now returns
+        ;; 'unknown, reporting 1; arm 7 (measured as a control, not just
+        ;; mut19) still finds 'x's cycle and 'start's own eof-target-chain
+        ;; walk (arm 7 never touches eof-terminal, and 'start stays in the
+        ;; :909 outer filter under arm 7's mutation), losing only 'seq's own
+        ;; entry, reporting 2 -- three distinct "got" values, so this check
+        ;; also happens to separate arm 5 from arm 7 as a byproduct.
+        (check-equal "eof-zero-progress-cycle count"
+                     (length (filter (lambda (c) (eq? c 'eof-zero-progress-cycle))
+                                     (codes
+                                      (make-machine 'combined5 'start '() '() '() errs
+                                        (list (make-byte-dispatch-node 'x '()
+                                                (make-edge 'reject 'reexecute) 'x #f)
+                                              (make-byte-dispatch-node 'start (list accept-case)
+                                                (make-edge 'reject 'reexecute) 'seq #f)
+                                              (seq-node (one-alt '(1 2) 'stop) (make-edge 'reject 'reexecute) 'start)
+                                              (make-stop-node 'stop #f)
+                                              (make-error-node 'reject 'rejected #f))
+                                        'default-eof #f))))
+                     3)))
+    (harness-case "a byte case and a sequence case both into a finish terminal are two non-eof-into-finish diagnostics"
+      (lambda ()
+        ;; arm 6 (the :908 outer filter's sequence disjunct) vs "verify: a
+        ;; byte edge into a finish terminal is accepted" (mut17): 's0's own
+        ;; byte case into 'done is the decision mut17's own case above
+        ;; witnesses by existence and arm 6 never touches (byte-dispatch
+        ;; nodes stay in the :908 filter under arm 6's mutation); 'seq's own
+        ;; case into 'done is arm 6's own case above. Correct code reports 2;
+        ;; mut17 disables the shared finish-check for every node kind,
+        ;; reporting 0; arm 6 narrows the filter to byte-dispatch only, so
+        ;; 's0 still reports but 'seq no longer does, reporting 1.
+        ;;
+        ;; Measured NOT to separate arm 6 from "verify: a sequence node's
+        ;; case and mismatch targets are not out-targets" (arm 1): arm 1
+        ;; empties node-out-targets for every sequence node, which starves
+        ;; THIS check's :908 loop identically to arm 6's own narrower filter
+        ;; -- both report 1 here, and every other record this case's fixture
+        ;; could produce is one arm 6 never reaches either (arm 1's own extra
+        ;; failures -- the well-formed-machine, both missing-target, and the
+        ;; unreachable-node checks above -- come from node-out-targets being
+        ;; used elsewhere in the pass, which arm 6 does not touch). Left
+        ;; genuinely subsumed on that side; see the mutation suite's arm 6
+        ;; comment for the exhaustive measurement.
+        (check-equal "non-eof-into-finish count"
+                     (length (filter (lambda (c) (eq? c 'non-eof-into-finish))
+                                     (codes
+                                      (make-machine 'combined6 's0 '() '() '() errs
+                                        (list (make-byte-dispatch-node 's0
+                                                (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'done 'advance) #f))
+                                                (make-edge 'reject 'reexecute) #f #f)
+                                              (seq-node (one-alt '(1 2) 'done) (make-edge 'reject 'reexecute) #f)
+                                              (make-finish-node 'done #f)
+                                              (make-error-node 'reject 'rejected #f))
+                                        'default-eof #f))))
+                     2)))))
 
 (harness-finish)

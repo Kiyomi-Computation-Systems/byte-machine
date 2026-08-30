@@ -3575,6 +3575,13 @@ byte_machine_mutation(
   # nodes whose cycle runs through one; disabling the check stops everything.
   # Each removes a superset of the last, so there is no record the narrowest
   # of them owns. Measured by exhaustion over the whole pass.
+  #
+  # Re-swept at 34 mutations post-merge (2e5a1ab), review fix wave: still a
+  # single FAIL record, still a full-set subset of both "verify: zero-progress
+  # detection never fires" and "verify: pause continuations join the
+  # zero-progress walk" -- re-run against all 34 mutants' captured output
+  # (including the three new count-not-witness fixtures this task added),
+  # with no change to this record either before or after.
   FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)) (reaches-self? (node-name n)))]]
   REPLACE [[(if (and (byte-dispatch-node? n) (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "chain of pauses that cycles is a zero-progress EOF cycle: zero-progress-cycle diagnostic")
@@ -3714,6 +3721,13 @@ byte_machine_mutation(
   # sequence case's and mismatch edge's targets) go unreachable, so
   # pass-reachability adds two `unreachable-node` diagnostics where the
   # well-formed fixture expects none.
+  #
+  # Review fix wave (Critical), re-measured at 34 mutations: arm 6's own
+  # subsumption by this mutation (mentioned in passing above) is now the
+  # SURVIVING half of a two-sided residue -- arm 6's own count fixture
+  # separated it from "verify: a byte edge into a finish terminal is
+  # accepted" but not from this mutation, confirmed genuinely subsumed by
+  # exhaustion at this size. See arm 6's own pin below for the measurement.
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "a well-formed sequence machine verifies with no diagnostics: diagnostic count -- expected 0, got 2")
@@ -3762,16 +3776,28 @@ byte_machine_mutation(
   # Pin sweep (Step 12): this pin's own FAIL record is also produced,
   # byte-identical, by the pre-existing "verify: zero-progress detection
   # never fires" mutation (which disables pass-zero-progress's report
-  # conditional outright -- a strictly broader decision covering every
-  # zero-progress-cycle witness in this file, old and new). Genuinely
-  # subsumed, not under-anchored: that mutation's own pin is already anchored
-  # to its own distinct originating case ("a reexecute self-loop is a
-  # zero-progress cycle"), which does not appear in THIS mutant's narrower
-  # output, so the collision is one-directional and unfixable by re-wording
-  # either pin.
+  # conditional outright). Filed genuinely subsumed here and left collided.
+  #
+  # Review fix wave (Critical), re-measured at 34 mutations: a whole-FAIL-
+  # record subset test alone reports AGENTS.md's bucket 3 ("separable but
+  # deliberately declined") as clean too, and that is what happened above --
+  # the collision was separable, just not by any check this pass had before
+  # this task. verify-tests.sps's "a byte-dispatch self-loop and a
+  # sequence-mismatch cycle are two zero-progress cycles" case puts an
+  # INDEPENDENT plain self-loop (a decision only "zero-progress detection
+  # never fires" touches, never this mutation) beside the sequence-mismatch
+  # cycle this mutation's own case above already witnesses by existence, and
+  # counts both. Measured directly against all 34 mutants' captured output,
+  # not predicted: correct code reports 2; "zero-progress detection never
+  # fires" disables PASS 5 outright and reports 0 on this check; this
+  # mutation still finds the plain self-loop but can no longer walk through
+  # the sequence node, reporting 1 -- a "got" value no other of the 34
+  # mutants in this pass produces on this check. UNDER-ANCHORED, not
+  # subsumed: re-anchored to that record, which "zero-progress detection
+  # never fires" own captured output does not match (it has "got 0" there).
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "a reexecute cycle through a sequence node's mismatch edge is found: zero-progress-cycle")
+    "a byte-dispatch self-loop and a sequence-mismatch cycle are two zero-progress cycles: zero-progress-cycle count -- expected 2, got 1")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -3828,13 +3854,40 @@ byte_machine_mutation(
   # own `(memq name seen)` cycle guard outright -- a strictly broader
   # decision covering every eof-target chain's cycle detection, old and new;
   # that mutation's measured output contains BOTH of this case's sibling
-  # fixtures). Genuinely subsumed, not under-anchored: that mutation's own
-  # pin is anchored to its own distinct originating case and does not appear
-  # in either of arm 5's fixtures' narrower output, so the collision is
-  # one-directional and unfixable by re-wording either pin.
+  # fixtures). Filed genuinely subsumed here and left collided.
+  #
+  # Review fix wave (Critical), re-measured at 34 mutations: a whole-FAIL-
+  # record subset test alone reports AGENTS.md's bucket 3 ("separable but
+  # deliberately declined") as clean too. verify-tests.sps's "a byte-dispatch
+  # eof self-loop and a two-node dispatch/sequence eof cycle are three
+  # eof-zero-progress cycles" case puts an INDEPENDENT byte-dispatch eof
+  # self-loop (a decision only "an eof-target cycle is classified as a
+  # finish terminal" touches, never this mutation) beside the SAME two-node
+  # dispatch/sequence cycle this mutation's own second case above already
+  # witnesses by existence, and counts all eof-zero-progress-cycle
+  # diagnostics. A design entirely local to the sequence node (a
+  # self-referencing 'seq, matching this mutation's OWN first case and arm
+  # 7's fixture) was tried first and rejected: measured, it does not
+  # separate this mutation from arm 7 -- a walk that starts and ends at the
+  # sequence node without ever passing through a byte-dispatch node is
+  # killed identically by dropping eof-terminal's sequence clause (this
+  # mutation) or by dropping the :909 outer filter's sequence disjunct
+  # (arm 7), both reporting "got 1" on that design. The two-node pair avoids
+  # this because it is entered from the byte-dispatch node's own eof-target,
+  # which only this mutation's inner change touches -- arm 7's outer-filter
+  # change is irrelevant to a chain that never STARTS at the sequence node.
+  # Measured directly against all 34 mutants' captured output: correct code
+  # reports 3; "an eof-target cycle is classified as a finish terminal"
+  # disables the cycle guard globally and reports 0; this mutation still
+  # finds the self-loop's own cycle but every walk through the sequence node
+  # now returns 'unknown, reporting 1 -- a "got" value no other of the 34
+  # mutants produces on this check (arm 7 reports 2, confirmed as a control).
+  # UNDER-ANCHORED, not subsumed: re-anchored to that record, which "an
+  # eof-target cycle is classified as a finish terminal"'s own captured
+  # output does not match (it has "got 0" there).
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "an eof chain that cycles from a dispatch node through a sequence node's own eof-target is an EOF cycle: eof-zero-progress-cycle")
+    "a byte-dispatch eof self-loop and a two-node dispatch/sequence eof cycle are three eof-zero-progress cycles: eof-zero-progress-cycle count -- expected 3, got 1")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -3858,9 +3911,8 @@ byte_machine_mutation(
   # filter this arm widens) and this task's own arm 1 above (removing a
   # sequence node's out-targets entirely also empties what :908 has to
   # inspect for it). Both are strictly broader decisions whose failure sets
-  # are supersets of this one's. Genuinely subsumed on both sides, not
-  # under-anchored: neither sibling's own pin appears in THIS mutant's
-  # captured output.
+  # are supersets of this one's. Filed genuinely subsumed on both sides here
+  # and left collided.
   #
   # Milestone 3 Slice ② Task 2 comment fix: the paragraph above previously
   # described that captured output only as "single-line" -- the same
@@ -3869,9 +3921,43 @@ byte_machine_mutation(
   # failures=1 (only this fixture's own case), so the collision claim above
   # stands as written -- "single-line" happened to be accurate for arm 6,
   # unlike arm 7, but it was still an assertion nobody had measured.
+  #
+  # Review fix wave (Critical), re-measured at 34 mutations: a whole-FAIL-
+  # record subset test alone reports AGENTS.md's bucket 3 ("separable but
+  # deliberately declined") as clean too, and the "on both sides" verdict
+  # above was exactly that for ONE of the two sides. verify-tests.sps's "a
+  # byte case and a sequence case both into a finish terminal are two
+  # non-eof-into-finish diagnostics" case puts an INDEPENDENT byte-dispatch
+  # case into a finish node (a decision only "a byte edge into a finish
+  # terminal is accepted" touches, never this mutation, since byte-dispatch
+  # nodes stay in the :908 filter under this mutation) beside this mutation's
+  # own case above, and counts both. Measured directly against all 34
+  # mutants' captured output: correct code reports 2; "a byte edge into a
+  # finish terminal is accepted" disables the shared finish-check for every
+  # node kind and reports 0; this mutation still finds the byte-dispatch
+  # violation but not the sequence one, reporting 1 -- a "got" value "a byte
+  # edge into a finish terminal is accepted" never produces on this check
+  # (it has "got 0"). UNDER-ANCHORED against THAT sibling, not subsumed:
+  # re-anchored to the combined record below, which closes that half.
+  #
+  # The OTHER side does not close. Arm 1 empties node-out-targets for every
+  # sequence node, which starves this same :908 loop identically to this
+  # mutation's own narrower filter -- both report "got 1" on the very check
+  # just used to close the other side (measured; grepped both captured
+  # outputs directly). This mutation's entire two-record failure set --
+  # "non-eof-into-finish" on its own case above, and "got 1" on the new
+  # count check -- is still a full subset of arm 1's larger failure set at
+  # this size (arm 1 additionally fails the well-formed-machine, both
+  # missing-target, and the unreachable-node checks, none of which this
+  # mutation touches: node-out-targets feeds passes this mutation's own
+  # :908-filter change never reaches). No fixture built from this mutation's
+  # own effect can differ from arm 1's, because arm 1's blast radius is a
+  # strict superset of this one's wherever a sequence node's :908
+  # contribution is concerned. GENUINELY SUBSUMED by arm 1, confirmed by
+  # exhaustion at 34 mutations, not by default: see arm 1's own pin below.
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "a sequence case targeting a finish terminal is non-eof-into-finish: non-eof-into-finish")
+    "a byte case and a sequence case both into a finish terminal are two non-eof-into-finish diagnostics: non-eof-into-finish count -- expected 2, got 1")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -3943,6 +4029,27 @@ byte_machine_mutation(
   # between them (CMake `.` crosses newlines) -- verified directly against
   # cmake's own regex engine (not predicted) that this combined pattern
   # matches exactly one of the 34 captured outputs: this one.
+  #
+  # Cross-case ordering dependency (Minor, review fix wave): R1 and R2
+  # resolve to two (case, check) pairs in two DIFFERENT harness-case forms
+  # (verify-tests.sps: R1's case at ~616, R2's at ~665, with a third case
+  # -- arm 6's -- between them at ~655), unlike the precedent at :4129
+  # ("interpret: seq-step filters live alternatives by position..."), whose
+  # combined pin joins two checks inside a SINGLE case. The order in
+  # the regex is therefore an order across cases, not just across checks
+  # within one, and it holds for a structural reason: harness.sls's
+  # harness-record-failure! (:409) streams each FAIL line to output the
+  # moment a check fails, so the FAIL lines a run produces appear in the same
+  # order the harness-group body evaluates its cases -- source order, not a
+  # sort or a collection sorted later. R1 belongs to arm 5's own fixture-case
+  # ("an eof chain that cycles through a sequence node is an EOF cycle"),
+  # not to any case this mutation's own arm added -- this mutation's sole
+  # contribution to verify-tests.sps is R2's case. Reordering the group's
+  # cases (R1's case after R2's, or moving arm 6's case to split them the
+  # other way) would flip the order this pin's `.*` depends on and break the
+  # pin -- loudly, to `wrong-reason` (MutationRunner.cmake's verdict, not a
+  # silent false-caught), since the regex would then fail to match at all
+  # rather than match something else.
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "an eof chain that cycles through a sequence node is an EOF cycle: eof-zero-progress-cycle.*a sequence eof path reaching a stop terminal is eof-reachable-stop: eof-reachable-stop")
