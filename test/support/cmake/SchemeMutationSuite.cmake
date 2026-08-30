@@ -595,8 +595,13 @@ cmake_minimum_required(VERSION 3.26)
 # substring matched, so the old pin now also matched two unrelated mutants;
 # tightened to the (case, check) text it actually witnesses, not added or
 # removed. Passes stay at 41; mutations become 200 + 7 = 207.
+# Slice ② Task 2's review fix wave 1 adds two more to Pass 35: Important 2
+# (an internal prefix state's own `id` field, previously unwitnessed) and
+# Minor 3 (trie-insert's bs-null-branch trie-interior? guard, previously
+# witnessed only by a green check-raises with no mutation behind it). Passes
+# stay at 41; mutations become 207 + 2 = 209.
 set(EXPECTED_PASSES 41)
-set(EXPECTED_MUTATIONS 207)
+set(EXPECTED_MUTATIONS 209)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -4099,6 +4104,49 @@ byte_machine_mutation(
 ]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
     "an ambiguous terminal prefix is an assertion violation: AB\\|ABC -- expected a raise, but the thunk returned")
+
+# Fix wave 1, Important 2: seq-state's own `id` argument (the internal prefix
+# state's own state-id field, distinct from its POSITION in the states
+# vector) had no witness -- normal-state-id was asserted for every declared
+# state but no internal one, so the `internal` binding's call site could pass
+# the wrong id and nothing would notice (every other check reads a state by
+# its vector position, never its own id field). normal-ir-tests.sps now
+# asserts normal-state-id on the four-byte fixture's three internal states
+# (ids 3, 4, 5) and the depth-first fixture's three (ids 5, 6, 7). Zeroing
+# every internal state's id (the reviewer's own mutation) collides ids 3, 4
+# and 5 all onto 0. Anchored to "id 4", not "id 3": id 3 also reads
+# "expected 3, got 0" in the sibling "internal prefix states do not append
+# after the declared block" mutation's own output above (that mutation
+# renumbers the whole internal block starting at 0, so ITS first internal
+# state's id is also, coincidentally, 0) -- measured by running both mutants
+# and cross-checking pairwise, per the both-directions pin sweep.
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: an internal prefix state's own id field is wrong"
+  FIND [[(map (lambda (kv) (seq-state n (car kv) ids (cdr kv))) ids)))]]
+  REPLACE [[(map (lambda (kv) (seq-state n (car kv) ids 0)) ids)))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "internal prefix states carry their own id, not a placeholder: id 4 -- expected 4, got 0")
+
+# Fix wave 1, Minor 3: trie-insert's bs-null branch carries a THIRD guard --
+# (when (trie-interior? t) ...) -- distinct from the bs-non-null branch's own
+# trie-terminal guard the "ambiguous-prefix guard is dropped" mutation above
+# witnesses. It fires only when a LONGER alternative is inserted BEFORE its
+# own prefix (every fixture above inserts short-first, so nothing reached this
+# clause). normal-ir-tests.sps gains a reverse-order fixture (ABC before AB)
+# to witness it; disabling the guard lets that fixture's ambiguous prefix
+# build silently instead of raising.
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the bs-null-branch ambiguous-prefix guard is dropped"
+  FIND [[          (when (trie-interior? t)
+            (assertion-violation 'normalize-machine "ambiguous terminal prefix" target))
+]]
+  REPLACE [[          (when #f
+            (assertion-violation 'normalize-machine "ambiguous terminal prefix" target))
+]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "an ambiguous terminal prefix inserted in reverse order is also caught: ABC\\|AB -- expected a raise, but the thunk returned")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

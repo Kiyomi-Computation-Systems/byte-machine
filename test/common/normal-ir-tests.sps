@@ -250,6 +250,16 @@
         (check-equal "prefix 2" (trs-of four-byte 4) '((3 5 advance)))
         (check-equal "prefix 3 targets the alternative's declared target"
                      (trs-of four-byte 5) '((4 1 advance)))))
+    ;; Every other check here reaches a prefix state through its VECTOR
+    ;; POSITION (state-of); none reads the state's own `id` field, so a lowered
+    ;; state carrying the wrong id passes every check above unnoticed. This is
+    ;; the one place that field is asserted for an internal (non-declared)
+    ;; state at all.
+    (harness-case "internal prefix states carry their own id, not a placeholder"
+      (lambda ()
+        (check-equal "id 3" (normal-state-id (state-of four-byte 3)) 3)
+        (check-equal "id 4" (normal-state-id (state-of four-byte 4)) 4)
+        (check-equal "id 5" (normal-state-id (state-of four-byte 5)) 5)))
     (harness-case "every prefix state inherits the mismatch edge as its fallback"
       (lambda ()
         (for-each (lambda (i)
@@ -311,7 +321,16 @@
         (check-equal "A's child is 5" (trs-of ordered 5) '((66 1 advance) (67 6 advance)))
         (check-equal "C's child is 6, nested under 5" (trs-of ordered 6) '((68 3 advance)))
         (check-equal "X's child is 7, after the whole A subtree" (trs-of ordered 7)
-                     '((89 4 advance)))))))
+                     '((89 4 advance)))))
+    ;; Same gap as the four-byte fixture above: this is the ordering-sensitive
+    ;; fixture, so it is also the strongest witness that each internal state's
+    ;; own `id` field -- not just its position in the states vector -- matches
+    ;; the depth-first allocation order.
+    (harness-case "internal prefix states' own ids match the depth-first allocation"
+      (lambda ()
+        (check-equal "A's id" (normal-state-id (state-of ordered 5)) 5)
+        (check-equal "C's id" (normal-state-id (state-of ordered 6)) 6)
+        (check-equal "X's id" (normal-state-id (state-of ordered 7)) 7)))))
 
 (harness-group "two sequence nodes never share prefix states (decision 0016 point 3)"
   (lambda ()
@@ -331,19 +350,44 @@
         (check-equal "sb prefix states are 6,7" (trs-of two 6) '((2 7 advance)))
         (check-equal "state count" (state-count two) 8)))))
 
+;; house convention (conditions.sls header, and ir-tests.sps's own
+;; contract-violation? helper): tests compare the condition's structured
+;; fields, never rendered text. These two guards raise a plain R6RS assertion
+;; violation (not the byte-machine contract condition), so the predicate
+;; asserts assertion-violation?, that `who` is normalize-machine's own name,
+;; and which of the two messages it carries -- (lambda (e) #t) would pass on
+;; ANY raise, including one from the two messages swapped between the guards,
+;; or from an unrelated later pass rejecting the same fixture outright.
+(define (raises-normalize-assertion? message)
+  (lambda (e)
+    (and (assertion-violation? e)
+         (eq? (condition-who e) 'normalize-machine)
+         (equal? (condition-message e) message))))
+
 (harness-group "the two unrepresentable trie shapes fail loudly (decision 0015 point 2)"
   (lambda ()
     (harness-case "an ambiguous terminal prefix is an assertion violation"
       (lambda ()
-        (check-raises "AB|ABC" (lambda (e) #t)
+        (check-raises "AB|ABC" (raises-normalize-assertion? "ambiguous terminal prefix")
                       (lambda () (normalize (seq-machine 'amb '(((65 66) . stop)
                                                                 ((65 66 67) . halt))
                                                          (list (make-stop-node 'halt #f))))))))
     (harness-case "two identical alternatives are an assertion violation"
       (lambda ()
-        (check-raises "AB|AB" (lambda (e) #t)
+        (check-raises "AB|AB" (raises-normalize-assertion? "duplicate sequence alternative")
                       (lambda () (normalize (seq-machine 'dup '(((65 66) . stop)
                                                                 ((65 66) . halt))
+                                                         (list (make-stop-node 'halt #f))))))))
+    ;; Minor 3 (Fix wave 1): trie-insert's bs-NULL branch carries a THIRD guard
+    ;; -- (when (trie-interior? t) ...) -- distinct from the bs-non-null-branch
+    ;; guard the "AB|ABC" case above witnesses. It fires only when a LONGER
+    ;; alternative is inserted BEFORE its own prefix (every fixture above
+    ;; inserts short-first). Reversing the order is what reaches it.
+    (harness-case "an ambiguous terminal prefix inserted in reverse order is also caught"
+      (lambda ()
+        (check-raises "ABC|AB" (raises-normalize-assertion? "ambiguous terminal prefix")
+                      (lambda () (normalize (seq-machine 'amb-rev '(((65 66 67) . halt)
+                                                                    ((65 66) . stop))
                                                          (list (make-stop-node 'halt #f))))))))))
 
 (harness-finish)

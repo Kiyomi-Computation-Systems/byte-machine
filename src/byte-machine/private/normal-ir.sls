@@ -69,9 +69,11 @@
       (put-u16be p (bytevector-length b)) (put-bytevector p b)))
   (define (mode->byte m) (if (eq? m 'advance) 0 1))
 
-  ;; The `else` guards below are unreachable-today safety for a sixth node/state
-  ;; kind beyond dispatch/stop/error/finish/pause; verified by inspection, not
-  ;; mutation.
+  ;; The `else` guards below are unreachable-today safety for a SEVENTH
+  ;; node/state kind beyond the six now handled -- dispatch/stop/error/finish/
+  ;; pause/sequence (sequence lowers to ordinary dispatch states, decision
+  ;; 0015 point 1, so it adds no new case of its own); verified by inspection,
+  ;; not mutation.
 
   ;; --- sequence prefix trie (decisions 0015, 0016) ---
   ;; A trie node is (children . terminal); children is an alist (byte . node)
@@ -95,7 +97,8 @@
   ;; unwanted. §16.2:894's ambiguity check rejects it as a diagnostic -- and that
   ;; check is Slice ③, so between ② and ③ such a node is constructible and
   ;; verifies clean. These fail loudly instead of silently dropping an
-  ;; alternative. (byte-machine interpret) carries the same two guards.
+  ;; alternative. (byte-machine interpret) will carry the same two guards once
+  ;; Task 3 lands them (decision 0015 point 2).
   (define (trie-insert t bs target)
     (if (null? bs)
         (begin
@@ -170,7 +173,9 @@
                         (loop (cdr ns) next acc))))))
            (block-of (lambda (n)
                        (let loop ((bs prefix-blocks))
-                         (cond ((null? bs) #f)
+                         (cond ((null? bs)
+                                (assertion-violation 'normalize-machine
+                                  "sequence node has no prefix block" n))
                                ((eq? (car (car bs)) n) (car bs))
                                (else (loop (cdr bs)))))))
            (trie-transitions
@@ -200,6 +205,11 @@
                            (cond
                              ((byte-dispatch-node? n)
                               (let ((trs (list-sort (lambda (a b) (< (car a) (car b)))
+                                           ;; One transition per byte of each case's
+                                           ;; canonical set (decision 0014): the encoding,
+                                           ;; its tag bytes and its format version byte are
+                                           ;; unchanged, and every machine expressible
+                                           ;; before Milestone 3 encodes identically.
                                            (apply append
                                              (map (lambda (c)
                                                     (let ((e (byte-case-edge c))
