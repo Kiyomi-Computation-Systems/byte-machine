@@ -585,8 +585,18 @@ cmake_minimum_required(VERSION 3.26)
 # subsumed to under-anchored and fixed; arms 2, 4 and 7, whose FIND text
 # moved onto the new node-eof-target helper), not added or removed. Passes
 # stay at 41; mutations become 197 + 3 = 200.
+# Slice ② Task 2 (decisions 0015, 0016) adds seven mutations to Pass 35 (the
+# normalizer): the trie's merge and ascending-order arms, depth-first vs
+# breadth-first id allocation, the declared/internal id split, a terminal
+# child consuming no id, and the two internal guards (duplicate, ambiguous).
+# One pre-existing Pass 35 pin ("unexpected-byte") was re-anchored to its full
+# check line -- Task 2's own check-raises cases print their whole returned
+# machine on failure, which carries the SAME resolved error code the bare
+# substring matched, so the old pin now also matched two unrelated mutants;
+# tightened to the (case, check) text it actually witnesses, not added or
+# removed. Passes stay at 41; mutations become 200 + 7 = 207.
 set(EXPECTED_PASSES 41)
-set(EXPECTED_MUTATIONS 200)
+set(EXPECTED_MUTATIONS 207)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3432,12 +3442,14 @@ byte_machine_mutation(
                    (list (edge-target (sequence-dispatch-node-mismatch n)))))
           (else '())))]]
   REPLACE [[(else '())))]]
-  # Comparison-caught: with the arm removed, a sequence case's bad target is
-  # never fed to pass-names' resolution loop, so the missing-target diagnostic
-  # never fires and the case's own `check` reports "expected a true value".
-  # Measured: this mutant also breaks four OTHER cases (the well-formed
-  # control, the mismatch-target sibling, arm 2's reachability case, and arm
-  # 6's non-eof-into-finish case), since node-out-targets feeds all of them.
+  # Comparison-caught: with the arm removed, the well-formed fixture's
+  # sequence case and mismatch edge targets ('stop and 'reject) are never fed
+  # to node-out-targets, so pass-reachability treats both as unreached and the
+  # well-formed control's own diagnostic-count check goes from 0 to 2 -- the
+  # case this mutation is pinned to below. Measured: this mutant also breaks
+  # four OTHER cases (the case-target case, the mismatch-target sibling, arm
+  # 2's reachability case, and arm 6's non-eof-into-finish case), since
+  # node-out-targets feeds all of them.
   #
   # Fix wave 1 (Important 1): the bare-missing-target pin above was declared
   # "genuinely subsumed" by the pre-existing "verify: a missing transition
@@ -3604,8 +3616,15 @@ byte_machine_mutation(
   # inspect for it). Both are strictly broader decisions whose failure sets
   # are supersets of this one's. Genuinely subsumed on both sides, not
   # under-anchored: neither sibling's own pin appears in THIS mutant's
-  # single-line output, so the collision is one-directional each way and
-  # unfixable by re-wording any of the three pins.
+  # captured output.
+  #
+  # Milestone 3 Slice ② Task 2 comment fix: the paragraph above previously
+  # described that captured output only as "single-line" -- the same
+  # unverified phrasing Task 1's fix wave measured wrong at arm 7 below.
+  # Measured here too: THIS mutant's own run reports failed-cases=1,
+  # failures=1 (only this fixture's own case), so the collision claim above
+  # stands as written -- "single-line" happened to be accurate for arm 6,
+  # unlike arm 7, but it was still an assertion nobody had measured.
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "a sequence case targeting a finish terminal is non-eof-into-finish: non-eof-into-finish")
@@ -3816,16 +3835,31 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: a class matching no bytes still contributes a transition"
-  FIND [[                                                                   bs)))]]
-  REPLACE [[                                                                   (if (null? bs) (list 0) bs))))]]
+  # Re-anchored by Task 2 (decisions 0015/0016): the trie-lowering rewrite of
+  # lower-machine's let* moved the byte-dispatch-node branch out of
+  # `states (list->vector (let loop ...))` into its own `declared` binding, two
+  # indent levels shallower. FIND is whitespace-sensitive by design (disambiguating
+  # this closing `bs)))` from others), so it goes stale on ANY reindentation of
+  # this branch even though the branch's own code is untouched by Task 2 -- update
+  # the indentation rather than deleting the mutation.
+  FIND [[                                                           bs)))]]
+  REPLACE [[                                                           (if (null? bs) (list 0) bs))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "zero transitions \\(decision 0017 point 2\\): none")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: an error node resolves to the declaration name, not its code"
+  # Re-anchored by Task 2's pin sweep (decisions 0015/0016): the bare
+  # "unexpected-byte" pin was sound when written, but Task 2's check-raises
+  # cases ("the two unrepresentable trie shapes fail loudly") fail by printing
+  # their whole returned normal-machine, whose error state carries this SAME
+  # resolved code -- 'unexpected-byte is rej-decl's code in every seq-machine
+  # fixture too -- so the bare substring now also occurs in two unrelated
+  # mutants' output. Anchored to the full check line instead, which resolves
+  # to the one (case, check) pair this mutation actually witnesses.
   FIND [[(error-declaration-code (car es)) (loop (cdr es))]]
   REPLACE [[(error-declaration-name (car es)) (loop (cdr es))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "unexpected-byte")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "code -- expected unexpected-byte, got rejected")
 
 # Milestone 2 Slice ②b-2 (Task 2): the dispatch eof routing is now part of the
 # canonical encoding, so a dispatch state's resolved eof (the one-byte machine
@@ -3929,6 +3963,142 @@ byte_machine_mutation(
   REPLACE [[(put-u8 p 3)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "pause fingerprint -- expected 15725897457025557005, got 5068390459764251309")
+
+# Milestone 3 Slice ② Task 2 (decisions 0015, 0016): the sequence prefix trie
+# and its two-phase state-id allocation. Each mutation witnesses one decision
+# the trie section rests on; the two-guard pair proves normal-ir-tests.sps's
+# check-raises cases are not vacuous (without the guard, the malformed trie
+# node is silently built and normalize-machine returns instead of raising).
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the trie does not merge alternatives sharing a byte"
+  # trie-put's equal-byte arm is what makes AB/AC share one root state instead
+  # of the last-inserted alternative silently winning a byte-key tie (the
+  # slice's whole reason to exist). Disabling only the "=" arm -- via a bound
+  # no real byte value can cross -- leaves "<" and "else" untouched, so a
+  # repeated byte falls through to "else" and is appended as a SECOND alist
+  # entry instead of replacing the first: two (65 . _) transitions out of one
+  # state where the trie should hold one.
+  FIND [[          ((= b (caar cs)) (cons (cons b child) (cdr cs)))]]
+  REPLACE [[          ((< b (- (caar cs) 1000000)) (cons (cons b child) (cdr cs)))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "a shared first byte becomes ONE transition into ONE state: root has a single transition -- expected \\(\\(65 4 advance\\)\\), got \\(\\(65 4 advance\\) \\(65 5 advance\\)\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: trie children are not kept ascending by byte"
+  # trie-put's "<" arm is the insert-before-if-less test that keeps a trie
+  # node's children alist sorted ascending -- decision 0016 point 1's
+  # pre-order depends on this, and decision 0014's ascending-by-byte sort
+  # needs it too, on the lowered states. Flipping "<" to ">" sorts descending
+  # instead: two alternatives diverging at position 0 (65, 88) come out of the
+  # root in the wrong order.
+  FIND [[          ((< b (caar cs)) (cons (cons b child) cs))]]
+  REPLACE [[          ((> b (caar cs)) (cons (cons b child) cs))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "alternatives that diverge at position 0 get separate states: root -- expected \\(\\(65 4 advance\\) \\(88 5 advance\\)\\), got \\(\\(88 4 advance\\) \\(65 5 advance\\)\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: internal prefix ids are allocated breadth-first, not depth-first"
+  # allocate-prefix-ids's own recursion is what makes id assignment DEPTH-first
+  # pre-order (decision 0016 point 1): before moving to the next sibling, it
+  # fully numbers the current child's whole subtree. The replacement below is a
+  # level-order (breadth-first) walk over a queue of trie nodes instead:
+  # every node's DIRECT interior children get consecutive ids before any
+  # grandchild does. Over the A->{B terminal, C->D}, X->Y fixture this still
+  # gives A id 5 (both walks visit the root's own children first), but C (A's
+  # nested child) and X (A's root-level sibling) swap: depth-first finishes
+  # A's subtree before X (C=6, X=7); breadth-first finishes the whole root
+  # level before descending (X=6, C=7).
+  FIND [[  (define (allocate-prefix-ids t next)
+    (let walk ((cs (trie-children t)) (acc '()) (next next))
+      (if (null? cs) (values (reverse acc) next)
+          (let ((child (cdar cs)))
+            (if (trie-interior? child)
+                (let-values (((sub next2) (allocate-prefix-ids child (+ next 1))))
+                  (walk (cdr cs) (append (reverse sub) (cons (cons child next) acc)) next2))
+                (walk (cdr cs) acc next))))))]]
+  REPLACE [[  (define (allocate-prefix-ids t next)
+    (let loop ((queue (list t)) (next next) (acc '()))
+      (if (null? queue) (values (reverse acc) next)
+          (let* ((cs (trie-children (car queue)))
+                 (interior (filter (lambda (kv) (trie-interior? (cdr kv))) cs)))
+            (let assign ((items interior) (next next) (acc acc) (kids '()))
+              (if (null? items)
+                  (loop (append (cdr queue) (reverse kids)) next acc)
+                  (let ((child (cdr (car items))))
+                    (assign (cdr items) (+ next 1) (cons (cons child next) acc) (cons child kids)))))))))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "depth-first pre-order, not breadth-first: root -- expected \\(\\(65 5 advance\\) \\(88 7 advance\\)\\), got \\(\\(65 5 advance\\) \\(88 6 advance\\)\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: internal prefix states do not append after the declared block"
+  # prefix-blocks threads id allocation starting at declared-count, which is
+  # decision 0016 point 1's "declared nodes keep their declaration index; every
+  # internal state appends after the whole declared block". Starting at 0
+  # instead collides internal ids with the declared nodes' own ids (0 is
+  # 'seq's own id), corrupting the positional states vector.
+  FIND [[            (let loop ((ns nodes) (next declared-count) (acc '()))]]
+  REPLACE [[            (let loop ((ns nodes) (next 0) (acc '()))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "the declared node keeps its declaration index and the prefix states append: root -- expected \\(\\(1 3 advance\\)\\), got \\(\\(1 0 advance\\)\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a terminal trie child consumes an id it should not"
+  # allocate-prefix-ids's non-interior branch is what makes a TERMINAL child
+  # (an alternative's own byte-run end) consume no id -- its byte routes
+  # straight to the alternative's declared target, never to a lowered prefix
+  # state. Making it allocate one anyway grows the four-byte single-alternative
+  # fixture from 6 states to 7 and shifts every id after the first terminal.
+  FIND [[                (walk (cdr cs) acc next))))))]]
+  REPLACE [[                (walk (cdr cs) (cons (cons child next) acc) (+ next 1)))))))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "three declared nodes plus three internal prefix states: count -- expected 6, got 7")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the duplicate-alternative guard is dropped"
+  # trie-insert's bs-null branch is where an alternative's OWN path ends;
+  # trie-terminal already set there means some earlier alternative ended at
+  # the exact same byte run (decision 0015 point 2's unrepresentable shape,
+  # direction 1). Disabling this guard silently overwrites the earlier
+  # target instead of raising, so "two identical alternatives are an
+  # assertion violation" (normal-ir-tests.sps) goes from a raise to a normal
+  # return -- proving that check-raises case is not vacuous.
+  FIND [[          (when (trie-terminal t)
+            (assertion-violation 'normalize-machine "duplicate sequence alternative" target))
+]]
+  REPLACE [[          (when #f
+            (assertion-violation 'normalize-machine "duplicate sequence alternative" target))
+]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "two identical alternatives are an assertion violation: AB\\|AB -- expected a raise, but the thunk returned")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the ambiguous-prefix guard is dropped"
+  # trie-insert's bs-non-null branch is where a LATER alternative's path tries
+  # to descend past a node an earlier alternative already terminated at
+  # (decision 0015 point 2's unrepresentable shape, direction 2 -- AB is a
+  # strict prefix of ABC). Disabling this guard lets insertion continue,
+  # silently producing a trie node that is both terminal and interior; later
+  # code treats it as interior only, so the earlier alternative's target
+  # becomes unreachable with nothing failing -- exactly the miscompile the
+  # slice exists to prevent -- instead "AB|ABC" goes from a raise to a normal
+  # return.
+  FIND [[        (begin
+          (when (trie-terminal t)
+            (assertion-violation 'normalize-machine "ambiguous terminal prefix" target))
+]]
+  REPLACE [[        (begin
+          (when #f
+            (assertion-violation 'normalize-machine "ambiguous terminal prefix" target))
+]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "an ambiguous terminal prefix is an assertion violation: AB\\|ABC -- expected a raise, but the thunk returned")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
