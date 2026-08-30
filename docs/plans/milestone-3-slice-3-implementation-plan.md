@@ -1896,8 +1896,12 @@ mutation is only witnessed by tests that run in the lane named by its SPEC**:
 # --- Pass 47: the multi-alternative absolute lane is non-vacuous (M3 Slice ③ --
 # Task 3) ----------------------------------------------------------------------
 # A seq-step decision mutated under THIS lane's SPEC, because a mutation is
-# witnessed only by the tests that run in its own SPEC lane (AGENTS.md) and this
-# is the only lane that drives a BRANCHING trie end to end. Pass 45 does the
+# witnessed only by the tests that run in its own SPEC lane (AGENTS.md).
+# Justify the new SPEC by MEASUREMENT, not by novelty: run your chosen mutants
+# against Pass 45's SPEC-lane program too, and state that they pass it
+# unchanged. Do NOT write "the first lane to drive a branching sequence node" --
+# interpret-tests.sps has driven AB/AC since Slice ②, under a different SPEC,
+# and it catches these mutations. What is new is the SHAPE. Pass 45 does the
 # same thing for the single-alternative lane, and its comment at :5611-5617 is
 # the shipped precedent for duplicating an edit under a different SPEC. Do NOT
 # describe this as "the same FIND/REPLACE as Pass 34's mutation of the same
@@ -1977,18 +1981,32 @@ machine and the byte strings driven through it.
 - [ ] **Step 2: Write the program**
 
 The differential's job here is the one thing Slice ② could not do: prove the two
-executors agree on a **branching** trie, at every split point, for both
-alternatives, and at a mismatch on the distinguishing byte. The design's own gap
-statement is that "no end-to-end lane drives the trie MERGE (the differential is
-single-alternative)"; this closes it.
+**executors agree** on a branching trie, at every split point, for both
+alternatives, and at a mismatch on the distinguishing byte.
+
+> **Correction, 2026-08-30 (found during Task 3 execution).** An earlier version
+> of this paragraph, and of the program's own header below, said "no lane in this
+> tree exercised the trie MERGE". **Measured: false.** Slice ② already ships two
+> lanes that do — `normal-ir-tests.sps:280-287` asserts structurally that "a
+> shared first byte becomes ONE transition into ONE state" and pins the branch's
+> transition list, and `interpret-tests.sps:166-171` executes `AB`/`AC` through
+> the interpreter. The design's gap statement is true **only with its own
+> qualifier**: *the **differential** is single-alternative*. Dropping that
+> qualifier turned a true claim into a false one — AGENTS.md's "keep a count next
+> to the qualifier that makes it true", applied to a claim rather than a number.
+> What is genuinely new here is the **differential** over a branch; what Task 3
+> adds is depth, absolute tuples and both mismatch modes. Task 6's §7 disposition
+> must say it that way.
 
 **Measured:** this program was run verbatim against the shipped tree during plan
 authoring and reports `cases=8 checks=20 failures=0`.
 
 ```scheme
 ;;; interpreter ≡ generated over a MULTI-ALTERNATIVE sequence node (parent §18,
-;;; §22.4, §22.5). Slice ②'s differential drove a single alternative, so no lane
-;;; in this tree exercised the trie MERGE end to end: two alternatives sharing
+;;; §22.4, §22.5). Slice ② pinned the trie merge structurally (normal-ir-tests)
+;;; and executed it through the interpreter (interpret-tests), but its
+;;; DIFFERENTIAL drove a single alternative -- so no lane has compared the two
+;;; EXECUTORS across a branch: two alternatives sharing
 ;;; `HTTP/1.` descend into one chain and part at one state, and a lowering that
 ;;; resumed into the wrong prefix state across a feed boundary would be caught
 ;;; here and nowhere else.
@@ -2735,8 +2753,9 @@ Task 1 Step 4; `pass-overlap` still byte-dispatch-only → §0 D1, resolved as
 **permanent** rather than deferred; `pass-zero-progress`'s REPORT guard and its
 measured hang → Task 2; the guard fixtures' "symmetric known work" → §0 D5,
 **corrected by measurement — only `interpret-tests.sps` is affected, and it is
-rewritten rather than deleted**; no end-to-end lane driving the trie MERGE →
-Task 4; the one Pass 33 subsumption (arm 6 vs arm 1) → untouched, and the sweeps
+rewritten rather than deleted**; no **differential** over a branching trie
+(the design's gap statement, with its qualifier restored — see Task 4 Step 2's
+dated correction) → Task 4; the one Pass 33 subsumption (arm 6 vs arm 1) → untouched, and the sweeps
 in Tasks 1-2 must not silently reclassify it; the vacuous-complement gap → §0 D10b,
 **named rather than closed**, with Task 6 recording it.
 
