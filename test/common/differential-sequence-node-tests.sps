@@ -256,10 +256,21 @@
   (lambda ()
     (harness-case "256 x 4 positions match, in both mismatch modes"
       (lambda ()
-        (let ((bad 'none) (last-byte 'unset) (positions 0))
+        ;; SENTINEL: ONE counter over both loops, not one per loop. The shape
+        ;; this replaced -- a `last-byte` slot shared across the four positions
+        ;; plus a `positions` counter incremented from the literal '(0 1 2 3)
+        ;; the for-each walks -- asserted nothing about the nesting. `positions`
+        ;; was 4 by construction, so its check could only fail if the literal
+        ;; itself were edited; and `last-byte` reaches 255 as soon as ANY one
+        ;; inner loop completes, so "256 bytes at position 3 and none at 0-2"
+        ;; passed green. That is AGENTS.md's fixture-integrity check wearing a
+        ;; behavioural sentinel's label. Counting (position byte) drives closes
+        ;; it: 4 x 256 = 1024 is exactly what the group name claims, and no
+        ;; partial run reaches it. Same remedy, same reasoning as
+        ;; differential-http-version-tests.sps's 8 x 256 = 2048 sentinel.
+        (let ((bad 'none) (drives 0))
           (for-each
            (lambda (k)
-             (set! positions (+ positions 1))
              (let ((prefix (head-n seq-bytes k)))
                (let loop ((b 0))
                  (when (< b 256)
@@ -267,12 +278,12 @@
                      (when (eq? bad 'none) (set! bad (list 'reexecute k b))))
                    (unless (equal? (drive ad-ref prefix b) (drive ad-gen prefix b))
                      (when (eq? bad 'none) (set! bad (list 'advance k b))))
-                   (set! last-byte b)
+                   (set! drives (+ drives 1))
                    (loop (+ b 1))))))
            '(0 1 2 3))
           (check-equal "no (mode position byte) disagreed" bad 'none)
-          (check-equal "the byte loop ran all 256 values" last-byte 255)
-          (check-equal "the position loop ran all four" positions 4))))))
+          (check-equal "the loops ran all 4 x 256 (position byte) drives"
+                       drives 1024))))))
 
 ;; §11.5:664 -- the advance path had no coverage anywhere in this tree before
 ;; Slice ②, and an advance-mode mismatch shifts every reported position by one.

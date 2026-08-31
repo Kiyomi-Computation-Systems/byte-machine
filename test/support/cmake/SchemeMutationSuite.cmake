@@ -725,8 +725,14 @@ cmake_minimum_required(VERSION 3.26)
 # leave the other two determinism programs passing unchanged; see Pass 49's own
 # header for those numbers and for the lanes that do redden.
 # Passes become 45 + 1 = 46; mutations become 234 + 1 = 235.
+#
+# Whole-branch review fix wave (Important 3): Pass 33 gains one mutation --
+# "verify: the sequence mismatch edge's MODE is not tested (arm 3,
+# reexec-targets)" -- for the one decision in reexec-targets' sequence arm that
+# had no mutation, the `eq? ... 'reexecute` test itself. No pass is added, so
+# passes stay at 46 and mutations become 235 + 1 = 236.
 set(EXPECTED_PASSES 46)
-set(EXPECTED_MUTATIONS 235)
+set(EXPECTED_MUTATIONS 236)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3151,7 +3157,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 #
 # Sorted by the test AGENTS.md names -- do the two mutants' FAIL RECORD sets
 # actually differ, and does the narrow one own a record no sibling emits? --
-# they were three kinds, and only the third is unfixable:
+# they were three kinds, and only the third was left unclosed:
 #
 # (1) UNDER-ANCHORED, five pairs, fixed by re-anchoring alone. The three
 # pre-pause EOF mutations were pinned on a bare diagnostic CODE
@@ -3178,17 +3184,34 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 #     graph is not symmetric under the two ways the pair enumeration can be
 #     truncated -- the mutually-colliding triple made both truncations report 2.
 #
-# (3) SUBSUMED, four pairs, genuinely unfixable by any pin. Recorded at each
-# pin below, named by the LABEL of the mutation that subsumes it, because
-# AGENTS.md requires the residue to live in the tree beside the pin. All four
-# are a decision killed again by a switch above it, so the narrow mutant's
-# whole FAIL-record set is a subset of the broad one's:
+# (3) SUBSUMED, four pairs. Recorded at each pin below, named by the LABEL of
+# the mutation that subsumes it, because AGENTS.md requires the residue to live
+# in the tree beside the pin. All four are a decision killed again by a switch
+# above it, so the narrow mutant's whole FAIL-record set is a subset of the
+# broad one's:
 #   "pause continuations join the zero-progress walk" < "zero-progress
 #   detection never fires"; "a pause-only zero-progress cycle is not flagged" <
 #   both of those; "a byte-reachable pause's continuation chain is an EOF path"
 #   < "an EOF-reachable stop terminal is accepted".
 # Proved by exhaustion, not by argument: no FAIL record any of the three emits
 # is absent from the subsuming mutant's output.
+#
+# AMENDED, whole-branch review fix wave (2026-08-30), to the taxonomy commit
+# 49c8cc4 wrote into AGENTS.md after this paragraph was measured. What this
+# paragraph called "genuinely unfixable by any pin" is not a property any
+# exhaustion test can establish. Zero unique FAIL records across the lane is a
+# signal that the SPECIFICATION is under-specified here -- the lane has no
+# check that separates these decisions -- not that no pin exists; only what
+# survives an actual separating attempt may be called subsumed, and the attempt
+# must be recorded with its measurement. Two of the three narrow mutants above
+# ("pause continuations join the zero-progress walk", and "a byte-reachable
+# pause's continuation chain is an EOF path") are nested by construction, which
+# is the closed case. The third, "a pause-only zero-progress cycle is not
+# flagged", is NOT closed: no separating fix has been attempted for it, in this
+# cycle or any earlier one, and the obligation is recorded beside that
+# mutation's own pin below, named by LABEL. Both remedies this pass already
+# ships -- attribution checks, and count-don't-witness fixtures -- were reached
+# for by other mutations here and neither has been tried on it.
 #
 # Residual cross-matches in this pass after the fixes: those four pairs, and
 # nothing else. Re-measured after every edit above, since a new check changes
@@ -3257,6 +3280,40 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # label is `eof-zero-progress-cycle count` -- a superstring of this one's, and
 # the reason all three pins carry the case-name tail rather than the check
 # label alone.
+#
+# WHOLE-PASS PIN AUDIT, whole-branch review fix wave (Important 3). One
+# mutation joined this pass ("verify: the sequence mismatch edge's MODE is not
+# tested (arm 3, reexec-targets)") and ONE CHECK joined verify-tests.sps -- the
+# advance case's "no zero-progress-cycle" attribution check, which that
+# mutation's pin needed and which the sweep is what found necessary. A check
+# widens pins exactly as a mutation does, so the whole pass was re-measured by
+# the method the blocks above describe, in BOTH directions: 42 mutations,
+# 1722 ordered pairs, every pin re-judged through byte_machine_mutation_verdict
+# against every OTHER mutant's captured output, plus a self-check that each pin
+# still catches its own. All 42 pins catch their own mutant. FIVE colliding
+# pairs -- and they are the same five, in the same direction, that the Task 2
+# block above records:
+#   pause continuations < zero-progress detection never fires
+#   a byte-reachable pause's continuation chain is an EOF path
+#       < an EOF-reachable stop terminal is accepted
+#   a pause-only zero-progress cycle is not flagged < both of the first two
+#   arm 6 (:908) < arm 1 (node-out-targets)
+# Control, run because inherited debt has to be told from introduced debt: the
+# identical sweep against the pre-fix-wave tree -- this branch's tip before the
+# fix wave, named that way rather than by commit hash because the branch is
+# squash-merged and deleted; 41 mutations, 1640 ordered pairs -- reports the
+# identical five. This fix wave introduced none and
+# closed none of them; four of the five are also the exhaustion result --
+# exactly four mutants in the pass own no FAIL record no sibling emits, and
+# they are the four narrow sides above. See the amendment to bucket (3) in the
+# Task 3 audit block at the top of this pass for how the fourth, "a pause-only
+# zero-progress cycle is not flagged", is now classified, and its own pin for
+# the open obligation that goes with it.
+#
+# The new mutation is NOT among the residue: measured at 42, it emits three
+# FAIL records, one of which is unique lane-wide, and that is what its pin
+# names. Before the attribution check it emitted two and owned neither -- see
+# its own comment.
 
 byte_machine_mutation_reset()
 
@@ -3739,6 +3796,39 @@ byte_machine_mutation(
   # and owning nothing unique lane-wide, and the zero-progress-cycle count
   # case still reports 3 -- so this mutant does not reach the four-way check
   # the new mutation below is pinned to.
+  #
+  # OPEN OBLIGATION, whole-branch review fix wave (2026-08-30). Amending the
+  # two paragraphs above rather than rewording them: "no pin can close either"
+  # and "there is no record the narrowest of them owns" state a conclusion the
+  # measurement does not support. Under the taxonomy 49c8cc4 put in AGENTS.md,
+  # a mutant owning ZERO unique FAIL records lane-wide is a signal that this
+  # SPEC is under-specified -- verify-tests.sps has no case on which dropping
+  # the pause clause of PASS 5's report guard produces a number, or a
+  # diagnostic set, that dropping the walk or the whole check does not -- and
+  # a subsumption claim may only be made about what survived an actual
+  # separating attempt, recorded with its measurement. NO SUCH ATTEMPT HAS
+  # BEEN MADE, here or in any earlier cycle: every re-sweep above re-ran the
+  # exhaustion test and none tried to add a separating check. This is
+  # therefore recorded as an open specification gap against THIS LABEL, not as
+  # a closed residue.
+  #
+  # Where an attempt would start, for whoever takes it. The likely remedy is
+  # count-don't-witness, the one this pass already uses two mutations below,
+  # and the ONE thing measured about it here is negative: the existing
+  # three-cycle case cannot serve, because it contains no pause cycle at all,
+  # which is why this mutant leaves it at the correct 3 (measured at 42
+  # mutations, recorded above). A fixture that counted a pause cycle beside
+  # the sequence ones would have to separate this edit from BOTH siblings, and
+  # the second is the harder half: dropping the pause clause of the REPORT
+  # guard and narrowing the WALK's pause arm remove overlapping sets of
+  # reported nodes, so a fixture holding only self-cycles will not tell them
+  # apart -- it needs a cycle that runs THROUGH a pause without being one,
+  # which the walk mutation kills and this one does not. No arithmetic for any
+  # candidate fixture is asserted here, because none has been run; that is
+  # precisely the attempt still owed. It is a design task carrying its own new
+  # fixture rather than a re-anchoring, and the whole-branch review scoped it
+  # out of this fix wave deliberately; the pin below is unchanged and still
+  # catches its own mutant.
   FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n) (sequence-dispatch-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[(if (and (or (byte-dispatch-node? n) (sequence-dispatch-node? n))
@@ -3957,14 +4047,68 @@ byte_machine_mutation(
   #
   # Re-anchored by Milestone 3 Slice ③ Task 2: extending PASS 5's REPORT set to
   # the sixth kind adds 'seq itself to this case's count, so the correct value
-  # moved 2 -> 3 and the case was renamed to say what it now counts. The pin's
-  # "got 1" is unchanged and was re-measured, not assumed: with the arm
+  # moved 2 -> 3 and the case was renamed to say what it now counts -- from
+  # "a byte-dispatch self-loop and a sequence-mismatch cycle are two
+  # zero-progress cycles" to "a byte-dispatch self-loop, a
+  # dispatch-through-sequence cycle and the sequence node itself are three
+  # zero-progress cycles", which is the live name and the one the pin below
+  # quotes. The retired name matches no harness-case in verify-tests.sps; its
+  # only other appearance anywhere in the tree is in Slice ③'s implementation
+  # plan, as that plan's own record of the pin before the rename (searched
+  # whitespace-normalised as well as line-wise, since a name this long wraps).
+  # So the paragraph above naming it is a record of what was measured, not a
+  # lookup key. The pin's "got 1" is unchanged and was re-measured, not assumed: with the arm
   # removed, 'x's plain self-loop is still found, 'start no longer reaches
   # itself, and 'seq is not reported -- 1. The check is now four-way
   # (3 / 2 / 1 / 0); see the case's own comment for the table.
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "and the sequence node itself are three zero-progress cycles: zero-progress-cycle count -- expected 3, got 1")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the sequence mismatch edge's MODE is not tested (arm 3, reexec-targets)"
+  # Added by the whole-branch review fix wave (Important 3). Arm 3's mutation
+  # above deletes the WHOLE arm, so it never tests the arm's own `if`: whether
+  # a sequence node's mismatch target joins the zero-progress walk is
+  # conditional on the edge's MODE, and that condition is what keeps an
+  # ADVANCE-mode self-target accepted -- an advance edge consumes the
+  # mismatching byte, so the cycle makes progress. The design's exit-criterion
+  # :1540 disposition asserts that verify-tests.sps's advance case "is what
+  # stops the report guard from being widened past the mismatch edge's mode",
+  # and this case's own comment said the same; until this mutation, nothing
+  # measured either claim.
+  # `(if #t` rather than `(if #f`, per AGENTS.md's opposite-constant rule:
+  # `(if #f` reproduces arm 3's own deletion and would be a second copy of it,
+  # while `(if #t` makes reaches-self? true for the advance fixture and is
+  # caught by a failed comparison on a case that passes in the baseline.
+  #
+  # MEASURED, not predicted. Baseline cases=57 checks=77 failures=0 status=0;
+  # this mutant cases=57 failed-cases=1 checks=77 failures=3 status=1, all
+  # three failures on the advance case and nothing else.
+  #
+  # The pin is the attribution check, and the first pin tried was wrong. The
+  # obvious anchor -- "diagnostic count -- expected 0, got 1" -- was measured
+  # UNDER-ANCHORED at 42 mutations: "a sequence node's case and mismatch
+  # targets are not out-targets (arm 1, node-out-targets)" reddens the same
+  # two checks with an unreachable-node on 'stop, and "a sequence alternative
+  # is compared against itself" with an ambiguous-sequence-prefix, so a count
+  # of 1 is reached three ways and this mutant owned NO unique FAIL record.
+  # AGENTS.md's remedy for that signal is an attribution check, so the advance
+  # case gained "no zero-progress-cycle" (see its own comment for the table of
+  # three diagnostics). Re-measured after the check landed: this mutant emits
+  # three FAIL records, exactly one of which is unique lane-wide, and this pin
+  # names it. It carries the case-name tail as well as the check label because
+  # the bare string "zero-progress-cycle" is a substring of nine other check
+  # labels and one case name in verify-tests.sps (measured over its `check`,
+  # `check-equal`, `harness-case` and `harness-group` labels, excluding this
+  # mutation's own "no zero-progress-cycle"); no regex metacharacter appears
+  # in the pin.
+  FIND [[(if (eq? (edge-mode (sequence-dispatch-node-mismatch n)) 'reexecute)]]
+  REPLACE [[(if #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "advance mismatch edge is a consuming cycle and passes: no zero-progress-cycle")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -4582,13 +4726,20 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # audit blocks describe: apply each mutation to a staged copy, capture the SPEC
 # lane's full stdout+stderr, then re-judge every pin through
 # byte_machine_mutation_verdict against every OTHER mutant's captured output,
-# plus a self-check that each pin still catches its own. 22 mutations, 484
+# plus a self-check that each pin still catches its own. 22 mutations, 462
 # ordered pairs, ZERO collisions, and all 22 pins still catch their own mutant.
+# "Ordered pairs" is n(n-1) throughout this file -- ordered pairs of DISTINCT
+# mutants, one pin judged against one OTHER mutant's capture; the 22 self-
+# checks are a separate count and are reported separately in the same sentence.
+# (Corrected from 484 by the whole-branch review fix wave: 484 is 22 squared,
+# which counts each pin against its own capture a second time under the pair
+# heading. The sweep itself is unchanged -- every judgement was run, and the
+# self-checks all passed -- only the arithmetic reported for it.)
 # Control, because a colliding pass has to be told apart from an inherited one:
 # the identical sweep run against the pre-change normal-ir-tests.sps
 # (`git show c14bbc6:test/common/normal-ir-tests.sps` -- the base commit by
 # name, because HEAD stopped resolving to the pre-change file the moment this
-# group was committed) is also 484 pairs and also zero. Nothing inherited,
+# group was committed) is also 462 pairs and also zero. Nothing inherited,
 # nothing introduced.
 #
 # The new group is not inert under this pass's own mutants -- four of the 22
@@ -5960,6 +6111,24 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # mutation here can touch and still make the two sides disagree. Verify
 # command uses both library roots, an empty object guard, the new
 # differential program.
+#
+# AMENDMENT, whole-branch review fix wave (2026-08-30): this program's baseline
+# CHECK count moved, so every measurement recorded below and in Pass 49's
+# header that quotes it is quoting the tree it was taken against, not this one.
+# The exhaustive group's case ("256 x 4 positions match, in both mismatch
+# modes") shipped a vacuous sentinel -- a `positions` counter incremented from
+# the literal '(0 1 2 3) the for-each walks, so 4 by construction, and a
+# `last-byte` slot shared across the four positions, so 255 as soon as any one
+# inner loop finished. Both were replaced by one (position byte) drive counter
+# asserted at 1024, which is three checks becoming two. Measured after the
+# change on a scratch stage: baseline cases=14 failed-cases=0 CHECKS=29
+# failures=0 status=0 (it was checks=30 in every record below). Both mutations
+# in this pass were re-measured against it -- the byte shift now reports
+# cases=14 failed-cases=14 checks=29 failures=16 status=1, the sticky-stopped
+# row cases=14 failed-cases=1 checks=29 failures=2 status=1 -- and both pins
+# still catch their own mutant, neither pin naming a check that changed. Pin
+# sweep re-run in both directions at 2 mutations / 2 ordered pairs (n(n-1)):
+# zero collisions, unchanged from the record at each pin.
 
 byte_machine_mutation_reset()
 
@@ -6132,11 +6301,14 @@ byte_machine_mutation(
   #
   # Pin sweep, both directions, against every other mutation under this pass's
   # verify command -- which is the sibling below and nothing else: 2 mutations,
-  # 4 ordered pairs, every pin re-judged through byte_machine_mutation_verdict
-  # against both captures. Zero collisions, and each pin still catches its own
-  # mutant. The two failure sets are mirror images -- this mutant reports only
-  # the HTTP/1.1 cases, the sibling only the HTTP/1.0 ones -- so neither pin
-  # can match the other's output.
+  # 2 ordered pairs (n(n-1), this file's convention: ordered pairs of DISTINCT
+  # mutants; corrected from 4 by the whole-branch review fix wave, which is
+  # 2 squared and double-counts the two self-checks under the pair heading).
+  # Every pin re-judged through byte_machine_mutation_verdict against both
+  # captures. Zero collisions, and -- counted separately -- each pin still
+  # catches its own mutant. The two failure sets are mirror images -- this
+  # mutant reports only the HTTP/1.1 cases, the sibling only the HTTP/1.0 ones
+  # -- so neither pin can match the other's output.
   # Control: this lane and both mutations are new on this branch, so there is
   # no prior baseline to re-measure; the meaningful control is the
   # sequence-interpret-tests.sps run recorded in this pass's header, which
@@ -6203,6 +6375,11 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 #   cases=14 failed-cases=0 checks=30 failures=0 status=0, because with one
 #   alternative every dispatch state has exactly one arm and truncating a
 #   one-element list is the identity;
+#   (AMENDED, whole-branch review fix wave 2026-08-30: that program's check
+#   count is now 29, its all-256 case having traded a vacuous two-counter
+#   sentinel for one 1024-drive counter. The finding this line makes -- that
+#   both mutants leave it green -- is unaffected; see Pass 46's header
+#   amendment for the measurement.)
 #   http-version-interpret-tests.sps (Pass 47's SPEC program, this same fixture
 #   through the interpreter alone): baseline and both mutants all report
 #   cases=12 failed-cases=0 checks=19 failures=0 status=0, because that program
@@ -6286,10 +6463,14 @@ byte_machine_mutation(
   #
   # Pin sweep, both directions, against every other mutation under this pass's
   # verify command -- which is the sibling above and nothing else: 2 mutations,
-  # 4 ordered pairs, every pin re-judged through byte_machine_mutation_verdict
-  # against both captured outputs. Result: each pin caught its own mutant and
-  # returned wrong-reason against the other's; zero collisions. The two pins
-  # differ only in the branch byte they name (49 vs 48), and each mutant's
+  # 2 ordered pairs (n(n-1), this file's convention: ordered pairs of DISTINCT
+  # mutants; corrected from 4 by the whole-branch review fix wave, which is
+  # 2 squared and double-counts the two self-checks under the pair heading).
+  # Every pin re-judged through byte_machine_mutation_verdict against both
+  # captured outputs. Result: counted separately, each pin caught its own
+  # mutant, and each returned wrong-reason against the other's; zero
+  # collisions. The two pins differ only in the branch byte they name (49 vs
+  # 48), and each mutant's
   # output contains exactly one of the two.
   # Control: this lane, this program and both mutations are new on this branch,
   # so there is no prior baseline to re-measure; the meaningful control is the
@@ -6383,11 +6564,16 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 #   differential-http-version-tests.sps failed-cases=4 failures=6 and
 #   normal-ir-tests.sps failed-cases=7 failures=10. It needs no new witness.
 #
-# Pin sweep, both directions. This pass declares one mutation, so there is one
-# ordered pair -- the pin against its own capture -- and no sibling under this
-# verify command to collide with; no OTHER pass runs this program, so no
-# existing pin's collision set widened when this one was added. The pin is the
-# case-name tail plus the check label, which resolves to the single (case,
+# Pin sweep, both directions. This pass declares one mutation, so under this
+# file's n(n-1) convention there are ZERO ordered pairs of distinct mutants --
+# there is no sibling under this verify command to collide with. What was
+# actually run is the self-check, counted separately: the pin against its own
+# capture, which it matches. (Corrected from "one ordered pair -- the pin
+# against its own capture" by the whole-branch review fix wave; a self-check is
+# not an ordered pair, and calling it one made this pass's arithmetic disagree
+# with every other audit block in the file.) No OTHER pass runs this program,
+# so no existing pin's collision set widened when this one was added. The pin
+# is the case-name tail plus the check label, which resolves to the single (case,
 # check) pair "the emitted bytes equal the committed sequence golden" /
 # "golden": this program declares exactly one check with that label, and the pin
 # contains no regex metacharacter. Pinning the measured DETAIL was considered

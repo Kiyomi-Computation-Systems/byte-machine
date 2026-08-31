@@ -15,11 +15,13 @@
 ;;;     would make `start` a reexecute-only self-loop -- a zero-progress
 ;;;     cycle that (byte-machine verify)'s pass-zero-progress rejects, since a
 ;;;     case with (target . start) is by itself enough to make `reaches-self?`
-;;;     true for the entry node (verify.sls:134-141).
+;;;     true for the entry node (`reaches-self?` in `pass-zero-progress`,
+;;;     verify.sls -- named rather than cited by line, because the two line
+;;;     ranges this comment used to carry had both drifted onto `pass-names`).
 ;;;   - the FIRST generated case always targets `stop` (with `advance`, so it
 ;;;     also proves an accepting path exists). Without this, a machine whose
 ;;;     every case happens to draw {reject, start} leaves `stop` unreachable
-;;;     from the entry, which pass-reachability rejects (verify.sls:110-121).
+;;;     from the entry, which `pass-reachability` (verify.sls) rejects.
 ;;;     `reject` needs no equivalent guarantee: the node's fixed fallback edge
 ;;;     `(make-edge 'reject 'reexecute)` always reaches it regardless of what
 ;;;     the cases draw.

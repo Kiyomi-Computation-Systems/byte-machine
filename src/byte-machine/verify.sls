@@ -189,8 +189,15 @@
 
   ;; Sequence ambiguity (§16.2:894), an unnumbered pass beside PASS 3 because
   ;; §16.2 lists :893 and :894 adjacently and because renumbering PASS 4-7 would
-  ;; stale thirteen comment references for nothing. pass-eof-execution below is
-  ;; the shipped precedent for an unnumbered pass.
+  ;; stale every existing reference to those numbers for nothing. The count
+  ;; carries its scope, because it has been three different numbers under three
+  ;; different scopes and the argument does not depend on which: FOURTEEN
+  ;; occurrences of `PASS <n>` for n in 4..7 across the live tree (`src/` and
+  ;; `test/`), excluding this comment block, measured at the whole-branch
+  ;; review fix wave -- this file's own pass headers, verify-tests.sps, and
+  ;; SchemeMutationSuite.cmake's Pass 33 commentary -- plus the plan documents
+  ;; under `docs/` that quote them, which is a different and larger set.
+  ;; pass-eof-execution below is the shipped precedent for an unnumbered pass.
   ;;
   ;; "After prefix analysis" is what the pairwise test below IS: one alternative
   ;; being a terminal prefix of another is decidable from the source byte lists

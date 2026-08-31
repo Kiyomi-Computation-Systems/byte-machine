@@ -517,12 +517,31 @@
 
 ;; Milestone 3 Slice ② Task 1: the sixth node kind, at the verify.sls sites it
 ;; is actually extended to. Slice ③ Task 2 added the seventh. RECOUNTED at
-;; Milestone 3's close by enumerating every site in verify.sls that dispatches
-;; on node KIND -- not by grepping byte-dispatch-node?, which cannot see a cond
-;; dispatching through OTHER kind predicates and so cannot find its own
-;; omission: EIGHT sites, SEVEN extended and ONE permanently not. This project
-;; has miscounted this set twice (design §6 said six and enumerated seven; a
-;; later audit found the eighth), so the number is derived, not inherited.
+;; Milestone 3's close, and the RULE that reproduces the number is stated here
+;; because the rule is what a later reader re-derives from: not "every site in
+;; verify.sls that dispatches on node KIND", which yields TWELVE at HEAD, and
+;; not a grep for byte-dispatch-node?, which cannot see a cond dispatching
+;; through OTHER kind predicates and so cannot find its own omission. It is
+;;
+;;   every kind dispatch with a PERMISSIVE FALL-THROUGH that a sequence node's
+;;   own data could pass through unexamined
+;;
+;; -- a site whose non-matching branch quietly yields '() or #f while the sixth
+;; kind carries exactly the data the site exists to inspect. That rule gives
+;; EIGHT sites, SEVEN extended and ONE permanently not.
+;;
+;; The four kind-dispatching sites the looser wording sweeps in, and why the
+;; rule excludes each: pass-names' error-node? filter (a sequence node has no
+;; error name to leave undeclared); pass-eof-execution's TWO byte-reachability
+;; gates for D4(b)/(d), which select pause nodes to inspect a CONTINUATION a
+;; sequence node does not have -- these are NOT the pass's two :908/:909
+;; filters, which are in the eight and were extended; and
+;; pass-sequence-ambiguity, excluded for its own separate reason below. Each
+;; positively selects one kind rather than falling through past another's data.
+;;
+;; This project has miscounted this set twice (design §6 said six and
+;; enumerated seven; a later audit found the eighth), so the number is derived,
+;; not inherited.
 ;;
 ;; The seven extended, each with an arm here: node-out-targets; node-eof-target
 ;; -- the site Task 1's own fix wave collapsed three near-duplicate accessors
@@ -631,9 +650,24 @@
           (check "zero-progress-cycle" (has-code? m 'zero-progress-cycle)))))
     ;; The other half of :1540. The mismatch edge's MODE is the whole decision:
     ;; an advance edge consumes the mismatching byte, so the loop makes
-    ;; progress and must verify clean. reexec-targets already discriminates on
-    ;; mode (verify.sls:312-314); this case is what stops the report guard from
+    ;; progress and must verify clean. reexec-targets' sequence arm is what
+    ;; discriminates on mode; this case is what stops the report guard from
     ;; being widened past it.
+    ;;
+    ;; The third check is an ATTRIBUTION check, and the whole-branch review fix
+    ;; wave added it on a measurement rather than on a reading. "ok" and
+    ;; "diagnostic count" are unattributed: they say the machine verified
+    ;; clean, not WHICH diagnostic would have been wrong. Measured at 42
+    ;; mutations, three different Pass 33 mutants redden both of them here with
+    ;; three different diagnostics -- the mode test deleted (zero-progress-cycle
+    ;; on 'seq), node-out-targets' sequence arm deleted (unreachable-node on
+    ;; 'stop), and the sequence-alternative self-comparison
+    ;; (ambiguous-sequence-prefix) -- so a count of 1 is reached three ways and
+    ;; the mode decision owned no FAIL record of its own. Naming the code that
+    ;; must be ABSENT splits them: only losing the mode test can put a
+    ;; zero-progress-cycle on a machine whose mismatch edge consumes a byte.
+    ;; This is the same remedy the pause group's "no unreachable-node" /
+    ;; "no non-eof-into-finish" checks above use, for the same reason.
     (harness-case "the same self-target with an advance mismatch edge is a consuming cycle and passes"
       (lambda ()
         (let ((v (verify-machine
@@ -642,7 +676,11 @@
                           (make-stop-node 'stop #f))
                     'default-eof #f))))
           (check "ok" (verification-ok? v))
-          (check-equal "diagnostic count" (length (verification-diagnostics v)) 0))))
+          (check-equal "diagnostic count" (length (verification-diagnostics v)) 0)
+          (check "no zero-progress-cycle"
+                 (not (memq 'zero-progress-cycle
+                            (map diagnostic-code
+                                 (verification-diagnostics v))))))))
     ;; arm 4 -- pass-eof: eof-target resolution
     (harness-case "a sequence eof-target that names no node is invalid-eof-target"
       (lambda ()
