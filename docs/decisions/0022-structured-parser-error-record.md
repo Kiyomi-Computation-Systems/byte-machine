@@ -6,8 +6,12 @@ Milestone: 4, Gate 0 (milestone-4-design.md §4.5)
 
 ## Context
 
-Decided against the tree at `a942327`, the commit Milestone 3 closed at. `HEAD`
-(`0a267de`) adds only the Milestone 4 design document; no product file differs.
+Decided against the shipped tree at `a942327`, the commit Milestone 3 closed at.
+Nineteen commits sit between `a942327` and this record and none touches `src/`
+(`git diff a942327..HEAD -- src/` is empty). One of them, `1dcb804`, edits
+`docs/plans/byte-machine-implementation-plan.md` — the file this record cites by
+line more than any other — but only as a single line substituted for another, at
+§9.5:442; no downstream line moves.
 
 **Today the error slot is a bare code symbol.** `parser-result-error` is
 `(vector-ref r 5)` of the parser-result vector (runtime.sls:88-95), and every
@@ -65,7 +69,7 @@ point on their own:
 
 | Error source | Stored position |
 | --- | --- |
-| Reexecute mismatch or rejected current digit | `byte` at the current stream offset |
+| Reexecute mismatch / rejected digit | `byte` at the current offset |
 | Error edge after an advance | `boundary` after the committed byte |
 
 One error node reached by a reexecute edge reports `byte`; the *same* node
@@ -80,9 +84,11 @@ stream offset).
 **All three kinds are already producible, which is why the family is
 front-loadable.** `byte` comes from a reexecute fallback, `boundary` from an
 advance-mode edge, and `eof` from a `finish!` over exhausted input — byte
-dispatch and error nodes only, both shipped in Milestones 1 and 2. The whole
-family can therefore be proved in a slice that adds no node kind; Slice ② adds
-:770's row and Slice ③ :773's overflow rider to a table that already works.
+dispatch and error nodes, both shipped in Milestone 1 (§25:1457-1461); Milestone
+2 adds no node kind here, only `finish!`/EOF execution (§25:1503), without which
+the `eof` kind has no producer. The whole family can therefore be proved in a
+slice that adds no node kind; Slice ② adds :770's row and Slice ③ :773's
+overflow rider to a table that already works.
 
 ## Decision
 
@@ -95,6 +101,14 @@ family can therefore be proved in a slice that adds no node kind; Slice ② adds
    names are mirrored into `reserved-member-2` (compile.sls:44-52, twenty
    symbols at `a942327`) in the same commit that exports them, per decision 0012
    item 4, so the `reserved-drift-tests.sps` guard stays load-bearing.
+
+   **The reserved constructor takes five arguments per call site, not eight.**
+   `(byte-machine-make-parser-error/v1 (vector-ref errs N) (quote name) id off
+   pk)` — the `errs`-table entry (packing `code` and `reason`), the public
+   source-node name, the state id, the absolute offset, and the position kind.
+   `domain` and `detail` are not call-site arguments at all: the constructor
+   fixes them internally to decision 2's values, `machine` and `#f`, so no
+   generated site ever writes them.
 2. **Every accessor ships at once, and `domain`/`detail` ship at their
    *specified* machine-domain values.** `domain` is `machine` and `detail` is
    `#f` at every Milestone 4 construction site. `#f` is not a placeholder:
@@ -126,15 +140,46 @@ family can therefore be proved in a slice that adds no node kind; Slice ② adds
    the EOF-chain jump → `eof`; and — the case Milestone 4's seam slice cannot
    itself produce, fixed here so Slices ② and ③ inherit a rule instead of each
    choosing one — a **zero-width jump → `boundary` at the current stream
-   offset**, per §12.7:770. Initialize to `byte` at loop entry: nothing has been
-   consumed in this call, so a resumed feed entering an error state directly
-   reports the current byte. In the generated lane it is a fourth argument to
+   offset**, per §12.7:770. Initialize to `boundary` at loop entry, for the same
+   zero-width reason as the rule above: nothing has been consumed in this call,
+   so a resumed feed entering an error state directly reports a boundary at the
+   current stream offset. In the generated lane it is a fourth argument to
    the emitted `loop` (header at compile.sls:157; both `loop-tail` forms at
    compile.sls:75-78), and it joins `reserved-member-3` (compile.sls:53) in the
    commit that emits it. In the interpreter it is a second loop variable in
    `parser-feed-op!` (runtime.sls:171-201, whose dispatch arm already has the
    mode in hand at :196) and a constant `eof` in `parser-finish-op!`
    (runtime.sls:274-311).
+
+   **This closes a gap the old initialization left open.** A pause's
+   continuation is reachable as an error node directly — for a byte-reachable
+   pause the verifier rejects only a `finish` continuation and
+   `eof-reachable-stop`/`cycle` (verify.sls:438-457), while `eof-terminal`
+   classifies an error continuation as `'error` (verify.sls:364) — and
+   `parser-feed-op!` parks `current` on that continuation (runtime.sls:186). A
+   pause's continuation is itself a zero-width edge (verify.sls:270-271,
+   :333-336), so a feed resumed directly onto an error state has consumed
+   nothing in this call: the same "nothing consumed" condition the rule above
+   assigns `boundary` for, not `byte`. Reporting `byte` there would name an
+   offending byte at an offset the parser has never read.
+
+   **The generated lane's default-EOF arm sits outside every jump rule above
+   and takes a per-site literal `eof` instead.** Unlike a normalized error
+   state — reached by one of the four jumps this record classifies, whose
+   emitted arm (`render-state-arm`, compile.sls:113-115) is keyed on state id
+   alone and genuinely cannot see which edge arrived, which is why position
+   kind is *not* a per-site literal there — the default-EOF arm
+   (`render-eof-branch`, compile.sls:95-99) is a terminal construction reached
+   by no jump at all: `parser-finish-v2!` (runtime.sls:260-262) calls `exec`
+   over an empty slice, so `pos >= end` immediately and this arm fires with the
+   loop variable still at its initialization. §12.7:771 fixes `eof` there
+   regardless, so this arm takes the same shape with a literal `(quote eof)`,
+   matching the interpreter's own constant `eof` in `parser-finish-op!` above.
+   The differential will catch a generated lane that instead inherits the loop
+   variable here — but the tempting green-restoring repair is making the
+   *interpreter* agree at `byte` instead, which is consistently wrong: both
+   lanes reach this arm by exhausted dispatch with no jump taken, and §12.7:771
+   admits only `eof`.
 6. **The absolute offset needs no new arithmetic.** `off` is already bumped on
    advance and not on reexecute — in the interpreter at runtime.sls:196-200 and
    in the emitted tails at compile.sls:75-78 — so `(off, position-kind)` *is*
@@ -152,6 +197,14 @@ family can therefore be proved in a slice that adds no node kind; Slice ② adds
    :40, :49, :58, :67, :76) because `render-eof-branch` renders at every
    dispatch state. Per-site literals would repeat each reason string once per
    site. `errs` joins `reserved-member-3` with the loop variable.
+
+   **The table's entries are ordered exactly as `machine-errors` declares them,
+   and a site's table index is that declaration's position in that list.** The
+   worked example — `(vector-ref errs 1)` at a `reject` error node — is the
+   second of `http-version-machine.sls`'s two declarations, `(list eof-decl
+   rej-decl)` (:55-57); `errcode` already walks `machine-errors` in this same
+   order today to resolve a declaration name to its code
+   (normal-ir.sls:144-147).
 8. **`parser-error-state-id` is the single accessor excluded from cross-lane
    differential comparison, on §12.7:777's authority** — generated IDs "are
    deterministic for a given normalized graph, but an independently interpreted
@@ -172,6 +225,20 @@ family can therefore be proved in a slice that adds no node kind; Slice ② adds
    milestone-3-design.md:1008-1009 already established the fingerprint argument
    — "`encode-normal` is called as `(encode-normal entry states)` and never sees
    names" — and that call is unchanged at private/normal-ir.sls:286.
+
+   **A default-EOF error has no error node, so its `node-name` is the *dispatch*
+   node's — the one whose EOF-target chain was exhausted, which is where
+   truncation was detected.** The design fixes this: the default-EOF arm "takes
+   the same shape with a literal `(quote eof)` and the *dispatch* node's name,
+   which is where truncation was detected." §12.7:777 makes source-node name
+   semantic and required to match between lanes, so this is not a debug nicety.
+   The generated lane already has that node's public name in hand at emission
+   time, the same way it has the node's other per-site literals. The interpreter
+   does not: `default-eof-value` (interpret.sls:108-109) takes no argument and
+   has no node in hand, so it must gain one — the enclosing `(dispatch)` arm in
+   `parser-finish-op!` (runtime.sls:303-310) already holds the exhausted
+   dispatch node as `node` and can thread it through the `default-eof-value`
+   message.
 
 ## Consequences
 

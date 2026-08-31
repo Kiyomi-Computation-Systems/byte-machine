@@ -653,9 +653,10 @@ omission.
    `boundary`, `reexecute` → `byte`, the EOF-chain jump → `eof`, and — the
    fourth case ①a cannot itself produce, stated here so ② and ③ inherit a rule
    instead of each picking one — **a zero-width jump → `boundary`, at the
-   current stream offset, per §12.7:770**. Initialize to `byte` at loop entry:
-   nothing has been consumed in this call, so a resumed feed entering an error
-   state directly reports the current byte. The absolute offset needs no new
+   current stream offset, per §12.7:770**. Initialize to `boundary` at loop
+   entry, the same zero-width case above: nothing has been consumed in this
+   call, so a resumed feed entering an error state directly reports a boundary
+   at the current offset. The absolute offset needs no new
    arithmetic: `off` is already bumped on advance and not on reexecute, so
    `(off, pk)` *is* §12.7's stored position in both executors, which is the
    strongest available evidence the lowering is 1:1. In the generated lane the
