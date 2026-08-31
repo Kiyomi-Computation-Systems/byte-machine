@@ -602,10 +602,13 @@ omission.
    parameter's name joins `reserved-member-3` here, not in ②. Carry the growable
    payload as **one quoted vector**, not a rest-arg: a rest-arg lets the payload
    grow without a version bump, and the version check is the only thing standing
-   between a stale object and silent wrong answers. It renders as `(quote #())`
-   today, introducing no new callable identifier into the emitted body — the
-   reason the existing arms say `(quote error)` rather than calling anything.
-   Member 0 is the field initials, empty here. The version number is duplicated
+   between a stale object and silent wrong answers. It renders as `(quote
+   #(#()))` today — a one-member vector whose member 0 is the empty
+   field-initials vector — introducing no new callable identifier into the
+   emitted body, the reason the existing arms say `(quote error)` rather than
+   calling anything. Member 0 is the field initials, an empty vector until Slice
+   ①b populates it, so a zero-field machine renders identically in ①a, ①b, ② and
+   ③. The version number is duplicated
    by construction: compile.sls does not import the runtime (compile.sls:14-17),
    so the emitted `byte-machine-make-compiled-machine/v2 2` literal (pre-slice,
    in `render-machine`, compile.sls:164) and `current-abi-version` are two
@@ -688,9 +691,12 @@ omission.
    forward on every advance/reexecute jump. In the interpreter it is a second
    loop variable in `parser-feed-op!`'s dispatch arm (pre-slice,
    runtime.sls:188-200, whose `(if (eq? mode 'advance) …)` at :196 already has
-   the mode in hand), a constant `boundary` in `parser-finish-op!`'s error arm,
-   and a constant `eof` in its dispatch arm's default-eof path (pre-slice,
-   runtime.sls:274-311). *Static payload.* Render one immutable table per
+   the mode in hand), and a second loop variable in `parser-finish-op!` too
+   (pre-slice, runtime.sls:274-311): initialized `boundary` and set to `eof`
+   on the eof-target hop out of its dispatch arm, then read by its error arm
+   rather than hardcoded; the dispatch arm's default-eof path keeps a constant
+   `eof`, since that terminal is reached by no jump at all. *Static payload.*
+   Render one immutable table per
    generated library — `(define errs (quote #(#(<code> <reason>) …)))`, one
    entry per error *declaration*, which is §19.1:996's "immutable
    field/callback/debug metadata" literally — and build the record at each site
@@ -805,10 +811,13 @@ interpret.sls pins to sweep:
   pass", not "a code was reused". The three `invalid-name` pins (`:3421`,
   `:3484`, `:3490`) are case-anchored ("an uppercase machine name is
   invalid-name: invalid-name" and its two siblings), so the new case's NAME must
-  not contain any of them as a substring; Pass 33's own header (`:3230-3241`)
-  records that a case name containing an existing pin's regex broke three pins
-  at once in M3 Slice ③. Run the whole-pass audit in both directions with a
-  merge-base control, by the method that header describes. Pass 37's two
+  not contain any of them as a substring; the incident that makes this concrete
+  sits at `:3246-3250`: a case Slice ② added, whose NAME contained an existing
+  pin's regex as a substring, left one pin — "verify: a byte-reachable pause
+  into finish is rejected" — matched by three siblings, an under-anchoring fixed
+  by re-anchoring alone. Run the whole-pass audit in both directions with a
+  merge-base control, by the method Pass 33's own header describes
+  (`:3230-3241`). Pass 37's two
   verify.sls pins (`:5333`, `:5342`) target `valid-name?` itself, which Task 1
   reuses rather than edits; re-check their `SITES` rather than assuming them.
 - Both ABI-guard pins. `runtime: a mismatched generated-runtime ABI version is
@@ -867,9 +876,9 @@ the tree beside its pin by LABEL. `reserved-member-2` holds 31 symbols and
 drift lane is green and names a deleted entry when one is removed. `rg
 'byte-machine-make-compiled-machine/v[12]' test/fixtures/` returns zero matches,
 and all three goldens name the unversioned constructor, ABI version 3, and a
-`(quote #())` metadata argument. Each of the four superseded fingerprint values
-returns zero matches from `rg -o '<value>' test/ src/`, and each successor
-appears at the same per-file counts (2 in `compile-tests.sps`, 3 in
+`(quote #(#()))` metadata argument. Each of the four superseded fingerprint
+values returns zero matches from `rg -o '<value>' test/ src/`, and each
+successor appears at the same per-file counts (2 in `compile-tests.sps`, 3 in
 `normal-ir-tests.sps`, 1 per golden, 11 in `SchemeMutationSuite.cmake`).
 `parser-error?` is true at every error site of all three shipped fixtures in
 both executors, with the five §22.4:1271 members equal across lanes and the
@@ -1354,8 +1363,8 @@ plausible value — the defect §4.7 item 4 closes in Slice ③.
    neither new kind in `ir.sls`, so nothing confounds the refactor with new-arm
    behaviour. **Gate: `ctest --preset pr` and `--preset release` green with zero
    diagnostic-code or diagnostic-count edits in `test/common/verify-tests.sps`,
-   and the three pinned IR fingerprints and all three committed goldens
-   (`test/fixtures/generated-{one-byte,pause,http-version}.golden.sls`)
+   and the three `normal-ir-tests.sps` IR fingerprints and all three committed
+   goldens (`test/fixtures/generated-{one-byte,pause,http-version}.golden.sls`)
    byte-identical (`git diff --stat $(git merge-base main HEAD)..HEAD --
    test/fixtures/` empty).**
 
@@ -1640,9 +1649,9 @@ survivor** — ①b declared the `parser-reset!` field-restore limitation
 (`MutationRunner.cmake:63-66`), so either ②'s lanes reach a
 store-then-reset-then-read and the pin is re-declared `EXPECT_STATUS 1` with a
 measured failure signature, or the slice states the measurement showing they
-still do not and the survivor stands; and the three pinned IR fingerprints and
-all three committed goldens byte-identical since `main` (`git diff --stat $(git
-merge-base main HEAD)..HEAD -- test/fixtures/` empty).
+still do not and the survivor stands; and the three `normal-ir-tests.sps` IR
+fingerprints and all three committed goldens byte-identical since `main` (`git
+diff --stat $(git merge-base main HEAD)..HEAD -- test/fixtures/` empty).
 
 ## 8. Slice ③ — Integer accumulate
 
@@ -1831,9 +1840,9 @@ comment and in the all-byte test's group header, in the constructor's commit.
    `else` guards in `lower-machine` and `encode-normal` (pre-slice,
    `normal-ir.sls:239`, `:280-281`) stay assertion violations. **Gate: a
    tag-collision mutation for tag 7, mirroring the shipped `normal-ir: the pause
-   tag collides with finish's tag`; and the three existing fingerprints
-   unchanged since Slice ①a's re-baseline, no existing machine gaining an
-   accumulate state.**
+   tag collides with finish's tag`; and the three `normal-ir-tests.sps`
+   fingerprints unchanged since Slice ①a's re-baseline, no existing machine
+   gaining an accumulate state.**
 
 6. **The emitter arm — the checked multiply-add's *second*, independent
    writing.** §4.6's emission-time fan-out resolution produces straight-line
@@ -2069,10 +2078,11 @@ Scheme mutation suite green at its new `EXPECTED_PASSES`/`EXPECTED_MUTATIONS`
 `:554-555`); the CMake mutation suite unchanged at 1 pass / 72 mutations; the
 `EXPECT_SURVIVES` directives unchanged at the count Slice ② closed with, shown
 by `git diff <base>..HEAD -- test/support/cmake/SchemeMutationSuite.cmake | grep
--E '^[+-].*EXPECT_SURVIVES'` returning empty; and the three pinned IR
-fingerprints and all three committed goldens byte-identical **since Slice ①a's
-re-baseline** (`git diff --stat <①a>..HEAD -- test/fixtures/`, empty) — not
-since `main`, which ①a's format-version bump 1→2 moved by design.
+-E '^[+-].*EXPECT_SURVIVES'` returning empty; and the three
+`normal-ir-tests.sps` IR fingerprints and all three committed goldens
+byte-identical **since Slice ①a's re-baseline** (`git diff --stat <①a>..HEAD --
+test/fixtures/`, empty) — not since `main`, which ①a's format-version bump 1→2
+moved by design.
 
 ## Exit (full Milestone 4)
 
@@ -2295,8 +2305,6 @@ restated with their qualifiers at close:
 - `AGENTS.md` — testing and mutation discipline, documentation and record
   discipline, and the closing ritual.
 
-The section is complete and verified. Returning it now.
-
 ## Appendix — per-library change map
 
 | Library | M4 change |
@@ -2304,7 +2312,7 @@ The section is complete and verified. Returning it now.
 | `graph`/`private ir` | **①a: no change, and record it** — the ABI collapse (§4.1), the format-version bump and the `parser-error` family are all downstream of the source IR, and the `fields` argument of `make-machine` (pre-slice `ir.sls:352-366`) plus `machine-fields` (pre-slice `ir.sls:370`) already exist. Measured: `rg -n 'machine-fields' src/ test/` returns **two hits, `ir.sls:10` and `ir.sls:370`** — the export and the definition. It is a shipped accessor with **zero readers anywhere in the tree**; ①b is what first reads it. **①b:** `make-uint-field` (§9.1:283, `(make-uint-field name width initial source-label)`), `uint-field?`, and one accessor per §10.2:488-491 part (name, width, initial, optional label), with §4.3's construction-time checks (`width` in {8,16,32,64}, `initial` an exact integer in range); `make-machine`'s existing `(list? l)` collection loop (pre-slice `ir.sls:357-360`) gains `(for-all uint-field? fields)` beside the shipped `(for-all node? nodes)` (pre-slice `ir.sls:361-362`); `machine-ir-version` (pre-slice `ir.sls:351`, a bare `define` stamped into machine slot 1 at pre-slice `:365` with **no accessor anywhere**) gains one, so `pass-schema` can read it (§4.7 item 3). **②:** `make-field-action-node` and `make-field-branch-node`, each carrying the operation or predicate tag that §4.6's emission-time fan-out expands, and the field-action `error` slot that is a target node name or `#f` (§4.3's `error`-slot rule, on the `eof-target` precedent at §9.1:318 whose shipped shape is the `(or (symbol? eof-target) (eq? eof-target #f))` guard at pre-slice `ir.sls:230-231`). **③:** `make-integer-accumulate-node`, plus §4.7 item 4's tag guards on `byte-dispatch-node-cases`/`-fallback`/`-eof-target` (pre-slice `ir.sls:235-237`, three bare `vector-ref`s). Those three are not uniquely unguarded — every node accessor in the file is a bare `vector-ref`, and the only tag-guarded accessors here are the matcher and sequence-case ones (pre-slice `:68-71`, `:107-110`, `:122-129`, `:142-146`, `:305-312`). What singles these three out is that `interpret`'s `eof-target-of` and `dispatch` reach them with a node of another kind (census sites 20 and 21); nothing reaches the four sequence accessors (pre-slice `:331-334`) that way, so they stay out of scope with the reason stated in place. ② and ③ each add their kinds to `node?` (pre-slice `ir.sls:337-339`) and `node-name` (pre-slice `ir.sls:340-347`). Every one of ①b, ② and ③ edits `graph.sls`'s export list (pre-slice `graph.sls:12-25`) **and** its `only` import list (pre-slice `graph.sls:26-40`) — the M3 rule, unchanged. Internal canonicalization helpers stay unexported for the reason recorded at pre-slice `graph.sls:8-10` about `matcher-bytes`. |
 | `verify` | **①a: exactly one edit** (§5's must-not-touch paragraph) — `pass-names-valid` (pre-slice `verify.sls:461-477`) is extended over `error-declaration-reason` with §10.1:480's printable-ASCII-plus-LF repertoire, *inside the existing `machine-errors` arm's* condition and its single diagnostic (pre-slice `:472-477`), reusing the existing `invalid-name` code (§4.7 item 1). It adds no fourth `invalid-name`-emitting site and no new code, so §4.6's two-new-codes budget holds. Every other pass is matcher-, node- and field-agnostic in ①a — recorded here because an implementer "extending every pass for M4" breaks their pins for nothing. Because a check joins the pass, ①a owes the whole-pass pin sweep in the `SchemeMutationSuite.cmake` row below. **①b:** `pass-schema` (pre-slice `verify.sls:107-108`, a single-line `machine?` tag test) gains §16.2:884's unsupported-IR-version check (§4.7 item 3 — note the plan line is **:884**, not :885); and new **pass 6a, declaration half only** — duplicate field names and portable field names, reusing `valid-name?` (pre-slice `verify.sls:43-50`) exactly as `pass-names-valid` does — carrying **one** code, `invalid-field-declaration`, with the offending FIELD name in the diagnostic's existing `node` slot (pre-slice `verify.sls:29`, `:33`). Pass 6a is a separate pass precisely so `pass-names-valid` grows no further arm. **②:** pass 6a gains the **operand half** — exact arity against the operation or predicate, `field` naming a declared field, `constant` and `mask` within the referenced field's declared width, `low <= high` for `range` — under the second code, `invalid-field-operand`, and the pass joins `verify-machine`'s `append` (pre-slice `verify.sls:480-490`) after `pass-names`. The two zero-width kinds are taught to the census sites below **in the same commit as the kinds**. Both are zero-width like pause, so `reexec-targets` (pre-slice `verify.sls:263-322`) and `pass-zero-progress`'s REPORT guard (pre-slice `verify.sls:333`) must gain them or a `store`-into-itself machine verifies clean and hangs — the exact failure M3 Slice ② measured and recorded at pre-slice `verify.sls:307-318`. For §16.2:908/:909 they follow the **pause** precedent (§4.6): the byte-reachability gates at pre-slice `verify.sls:438` and `:448`, **not** the unconditional source-kind filters at pre-slice `:400` and `:414`, which stay byte-dispatch/sequence-only. `pass-overlap` (pre-slice `verify.sls:185-188`) and `pass-sequence-ambiguity` (pre-slice `verify.sls:246-249`) stay unextended, permanently, for the reasons already written beside them. **③:** integer-accumulate's four explicit targets join `node-out-targets` (pre-slice `verify.sls:58-74`) and `node-eof-target` (pre-slice `verify.sls:82-85`); the declared-field-reference check discharges §16.2:904, reported under ②'s `invalid-field-operand` with no new code, and the design records that with exactly one field type that bullet has no independent content (§4.6). |
 | `private normal-ir` | **①a: the encoding format version byte goes 1→2** (pre-slice `normal-ir.sls:254`, the `(put-u8 p 1)` that is the first byte `encode-normal` writes), and the same bump carries §4.2's two pre-provisionings and one debug deliverable: the **reserved field table encoded as a count of zero**; the error declaration's static **`reason`** appended after the code at **both** encode sites, the error arm (pre-slice `:276`) and the dispatch default-eof arm (pre-slice `:274`), which normalization discards today (`errcode`, pre-slice `:144-147`, resolves a declaration name to `error-declaration-code` and nothing else); and §17:963's state-ID-to-source-name debug map as a **fifth member** of the normal-machine vector (pre-slice `make-normal-machine`, `normal-ir.sls:28`, today the four-slot `(vector nm-tag entry states fp)`), built here and totalized over internal prefix states. The map cannot perturb a fingerprint: `encode-normal` is called as `(encode-normal entry states)` (pre-slice `:285-286`) and never sees names. The `compile` row emits it. This is the one place M4's re-baseline is paid: **every existing IR fingerprint moves once, here**, and ①b then fills a slot that already exists so a zero-field machine encodes byte-identically and **no existing golden or fingerprint moves in ①b** (§4.2). Hazard for whoever pins this: the literal text `(put-u8 p 1)` occurs **three times** in `encode-normal` — the format-version byte at pre-slice `:254`, the stop tag at pre-slice `:275`, and the default-eof tag inside pre-slice `:274` — so any mutation anchored on it must use a longer surrounding string or the suite reports "pattern occurs 3 times ... expected 1". **①b:** the reserved table filled from `machine-fields`. **② and ③:** §4.6's three new normalized state kinds, tags 5, 6 and 7, at exactly two sites each — `declared`'s lowering `cond` (pre-slice `normal-ir.sls:206-239`) and `encode-normal`'s `case` (pre-slice `normal-ir.sls:260-281`), both with LOUD `else` assertion-violations (pre-slice `:239`, `:280-281`). The `ns-tag` slot map comment (pre-slice `normal-ir.sls:35-40`) and the header comment claiming the repertoire is "six kinds ... a SEVENTH" (pre-slice `normal-ir.sls:72-76`, repeated at pre-slice `:236-238`) are **wrong the moment ② lands** and must be rewritten, not left; `normal-pause-target` (pre-slice `normal-ir.sls:47`, a bare `(cdr (vector-ref s 6))` with no kind guard) is the shipped precedent for a kind-specific accessor reading a shared slot. `prefix-blocks` (pre-slice `normal-ir.sls:166-174`) stays sequence-only and its silently-skipping `else` is **correct** for the new kinds — §4.6's lowering is 1:1, so they allocate no internal states. Record that, because the census below flags that site as silent and a reader will otherwise "fix" it. |
-| `compile` (emitter) | **①a:** `reserved-member-2` (pre-slice `compile.sls:44-52`) is the hand-maintained mirror of the runtime's exports, so §4.1's rename **and** the `parser-error` family must land in it in the same commit or `reserved-drift-tests.sps` fails — it asserts set equality against `environment-symbols` (`reserved-drift-tests.sps:32-40`), which is the one automated guard here that already works. `reserved-member-3` (pre-slice `compile.sls:53`, twelve symbols) gets the drift guard §4.7 item 2 asks for; the code states the gap itself at pre-slice `compile.sls:101-107` ("checked, not assumed, since it has no automated drift guard"). The emitted constructor call (pre-slice `compile.sls:164`, `"(byte-machine-make-compiled-machine/v2 2 "`) becomes the unversioned name with §4.1's growable payload, carrying the empty field-initials slot and the state-id→source-name debug map. **①b:** the same call site now computes the initials vector from the declarations — for a zero-field machine the emitted text is **identical** to ①a's, which is what makes §4.2's "no golden moves in ①b" true rather than hoped — and `reserved-member-2` gains `parser-field-ref` in that commit, or the reserved-drift lanes redden. `reserved-member-3` is untouched in ①b: the initials ride the payload as a literal, not as a new emitted `define`. **② and ③:** `render-state-arm` (pre-slice `compile.sls:108-138`) is where §4.6's emitter fan-out to seven arms lives; this single `case` grows more than any other construct in M4. Every new emitted local joins `reserved-member-3` in the same commit — now enforced rather than eyeballed, and the emitted field-store local is Slice ②'s (①b emits none). **No `/v3`** (§4.1). |
+| `compile` (emitter) | **①a:** `reserved-member-2` (pre-slice `compile.sls:44-52`) is the hand-maintained mirror of the runtime's exports, so §4.1's rename **and** the `parser-error` family must land in it in the same commit or `reserved-drift-tests.sps` fails — it asserts set equality against `environment-symbols` (`reserved-drift-tests.sps:32-40`), which is the one automated guard here that already works. `reserved-member-3` (pre-slice `compile.sls:53`, twelve symbols) gets the drift guard §4.7 item 2 asks for; the code states the gap itself at pre-slice `compile.sls:101-107` ("checked, not assumed, since it has no automated drift guard"). The emitted constructor call (pre-slice `compile.sls:164`, `"(byte-machine-make-compiled-machine/v2 2 "`) becomes the unversioned name with §4.1's growable payload, carrying the empty field-initials slot; the state-id→source-name debug map is normalizer output the emitter consumes at emission time as per-site name literals (decision 0022 item 9), not a payload member — no record puts the map itself in the constructor call. **①b:** the same call site now computes the initials vector from the declarations — for a zero-field machine the emitted text is **identical** to ①a's, which is what makes §4.2's "no golden moves in ①b" true rather than hoped — and `reserved-member-2` gains `parser-field-ref` in that commit, or the reserved-drift lanes redden. `reserved-member-3` is untouched in ①b: the initials ride the payload as a literal, not as a new emitted `define`. **② and ③:** `render-state-arm` (pre-slice `compile.sls:108-138`) is where §4.6's emitter fan-out to seven arms lives; this single `case` grows more than any other construct in M4. Every new emitted local joins `reserved-member-3` in the same commit — now enforced rather than eyeballed, and the emitted field-store local is Slice ②'s (①b emits none). **No `/v3`** (§4.1). |
 | `runtime` | The heaviest ①a row. §4.1 collapses `byte-machine-make-compiled-machine/v1` (pre-slice `runtime.sls:50-56`) and `/v2` (pre-slice `runtime.sls:65-71`) into one unversioned constructor whose first action is the `(= abi-version current-abi-version)` check; `current-abi-version` (pre-slice `runtime.sls:49`) goes 2→3; both old names stay exported as tombstones (pre-slice `runtime.sls:12`). Measured warrant, re-checked here: `/v1` already **rejects** abi 1 because it compares against `current-abi-version`, which is 2, and its only two call sites in the whole suite are `runtime-tests.sps:195` and `:245`. The `parser-error` record, §9.3:397's predicate and :398-405's eight accessors land here and are exported; `parser-result-error` (pre-slice `runtime.sls:95`) now yields the record instead of a bare code symbol, which is what moves every `parser-result-error` comparison in the test programs. **①b:** field storage as a new ninth parser slot (index 8) beside `stored-error` (pre-slice `runtime.sls:98`'s layout comment and the accessor block at pre-slice `:124-135`), initialized in the generated lane from the ABI payload's initials and in the interpreted lane by `make-parser`'s `'op` arm asking the closure (the shipped asymmetry at pre-slice `runtime.sls:114` versus `:117-118`), and restored by `parser-reset!` (pre-slice `runtime.sls:330-334`) — whose own comment at pre-slice `:328-329` ("Field, span, and poisoned/busy state do not exist yet (M4/M5)") is the pre-slice marker for exactly this edit. ①b also ships `parser-field-ref` (§9.3:410), the read accessor over that slot, raising `byte-machine-contract-violation` with the new `accessor-misuse` code (§6 task 7); it is the *mechanism* half of §25:1564's "callback-visible field accessors", and only the callback that makes access callback-visible waits on M5. **② and ③:** `parser-feed-op!`'s `(case (op 'kind node) ...)` (pre-slice `runtime.sls:175-201`) and `parser-finish-op!`'s (pre-slice `runtime.sls:284-311`) gain one arm per new kind; both `else` arms raise, so a missed kind crashes rather than misbehaves. **Cross-file hazard worth carrying into ②'s task list:** `parser-finish-op!` has **no local cycle guard** and says so at pre-slice `runtime.sls:274-280` — it relies entirely on the verifier's EOF checks — so a zero-width field-action chain on an EOF path hangs there unless `eof-terminal` (pre-slice `verify.sls:356-385`) learns the new kinds in the same commit. |
 | `interpret` | **①a:** whatever the `parser-error` seam needs from the oracle side (public source-node name is already the interpreter's native currency — it dispatches on node NAMES, not ids). **①b:** one new op-message arm, `'field-initials`, in the `op` closure's `case` (pre-slice `interpret.sls:119-127`) — the eighth message arm beside the seven at `:120-126`, per §6 task 6's asking-lane precedent (`(op 'entry)`, `runtime.sls:114`). `kind`, `dispatch`, `seq-step` and `eof-target-of` are untouched in ①b. **②:** new `kind` symbols and new op messages; two sites, both in the census — `kind` (pre-slice `interpret.sls:80-90`) and the op-message `case` (pre-slice `interpret.sls:119-127`, LOUD `else`). `dispatch` is deliberately not touched in ②: neither zero-width kind can reach it, because `kind` answers them separately and `parser-feed-op!` routes them to their own arms. **③:** the accumulate node, **and §4.7 item 4's fix**: `eof-target-of` (pre-slice `interpret.sls:112-116`) is a two-way `if` with **no else arm**, falling through into `byte-dispatch-node-eof-target`, a bare `(vector-ref n 4)` (pre-slice `ir.sls:237`). On an integer-accumulate node slot 4 is `digit-target`, a symbol — so it returns a **plausible-looking node name** and silently routes EOF into the digit path. Fix it with the first input-reading node, not after; `dispatch`'s guard lands in the same commit, with the byte-dispatch accessor tag guards. The independence rule at pre-slice `interpret.sls:36-42` (this library imports no normalizer library and shares no walker with one, decision 0015 point 3) governs the new kinds too: the interpreter derives field semantics from the source IR, and a proposal to share an "operation applier" with the emitter is a decision change, not a refactor. |
 | `private conditions` | **No change expected in any slice, and the design should say so rather than leave it open.** `parser-error` is a *value* §12.7:751-760 calls a record, not a raised condition; the one condition type here (pre-slice `conditions.sls:13-17`) is the contract-violation for programmer errors against the public API, and `accessor-misuse` is a new *code* passed to `byte-machine-contract-violation` (`conditions.sls:19-20`), not a new type. If an implementer finds themselves adding a condition type here, the seam has moved and §6 is wrong. |

@@ -132,9 +132,10 @@ overflow rider to a table that already works.
    amendment, an optimization "gated on benchmark evidence" (§23) that cannot
    exist yet: `bench/` holds two `.gitkeep` files. Consequently the sticky-error
    rows (runtime.sls:150-151 and :245-246), the four `parser-set-stored-error!`
-   call sites (:161, :268, :301, :309) and the slot's setter (:135) take no
-   edit: they store and return whatever the executor produced. That is the
-   amendment working rather than an omission.
+   call sites that store a produced error (:161, :268, :301, :309) — a fifth,
+   `parser-reset!`'s clear to `#f` at :334, is unrelated — and the slot's setter
+   (:135) take no edit: they store and return whatever the executor produced.
+   That is the amendment working rather than an omission.
 5. **Position kind is carried as one more loop variable in each executor,
    set from a literal at each jump.** `advance` → `boundary`; `reexecute` →
    `byte`; the EOF-chain jump → `eof`; and — the case Milestone 4's seam slice
@@ -158,13 +159,20 @@ overflow rider to a table that already works.
    that emits it. The interpreter keeps this same split across two functions
    rather than one flag: `parser-feed-op!` gains a second loop variable,
    initialized to `boundary` (runtime.sls:171-201, whose dispatch arm already
-   has the mode in hand at :196), and `parser-finish-op!`'s error arm
-   (runtime.sls:297-302) is fixed at the constant `boundary` too, in place of
-   the bare code symbol it returns today. `eof` is reserved for where
-   truncation actually occurs: `render-eof-branch`'s default-EOF arm, which
-   already gets its own per-site `(quote eof)` literal (compile.sls:95-99), and
-   `parser-finish-op!`'s `(dispatch)` arm, whose `default-eof-value` message is
-   the interpreter's matching path (runtime.sls:303-310).
+   has the mode in hand at :196), and `parser-finish-op!` gains one too,
+   threaded through its own `loop` (runtime.sls:283-311): initialized to
+   `boundary` and set to `eof` on the eof-target hop out of its `(dispatch)`
+   arm — the `(loop t)` at runtime.sls:306 — then read, not hardcoded, by its
+   error arm (runtime.sls:297-302), in place of the bare code symbol it
+   returns today. `eof` is reserved for where truncation actually occurs or is
+   inherited along the EOF-target chain: the loop variable itself, set to
+   `eof` at the chain hop — `render-eof-branch`'s node case in the generated
+   lane, and `parser-finish-op!`'s `(loop t)` above in the interpreter — and
+   its terminal counterpart, reached by no jump at all once the chain is
+   exhausted: `render-eof-branch`'s default-EOF arm, which takes its own
+   per-site `(quote eof)` literal (compile.sls:95-99), and
+   `parser-finish-op!`'s `(dispatch)` arm's `default-eof-value` message, the
+   interpreter's matching path (runtime.sls:303-310).
 
    **This closes a gap the old initialization left open.** A pause's
    continuation is reachable as an error node directly — for a byte-reachable
@@ -216,9 +224,10 @@ overflow rider to a table that already works.
    Because the loop-entry initialization is `boundary` unconditionally, as
    fixed above, the generated lane reports `boundary` here. The interpreter
    reaches the same parked node through `parser-finish-op!`'s `((error) …)` arm
-   (runtime.sls:297-302), fixed above at the constant `boundary` too — not
-   `eof`, because nothing is truncated by a `finish!` call that merely observes
-   an error node a prior feed already reached. Both lanes therefore agree: the
+   (runtime.sls:297-302), reading the same loop variable fixed above — at its
+   initialization value here too, since this arrival takes no jump — not `eof`,
+   because nothing is truncated by a `finish!` call that merely observes an
+   error node a prior feed already reached. Both lanes therefore agree: the
    parked continuation is the same zero-width edge whichever API call arrives
    on it, so it reports the same `boundary` a feed resuming onto it already
    reports (the paragraph above) — position kind is a property of the
@@ -254,7 +263,12 @@ overflow rider to a table that already works.
    deterministic for a given normalized graph, but an independently interpreted
    machine need not report the same ID. Differential tests do not compare that
    accessor across executor kinds." Both lanes must still *report* one; only the
-   comparison omits it. The exclusion is expressed once, in one shared
+   comparison omits it. The interpreter reports the node's declaration index —
+   its position in `machine-nodes` (`ir.sls:374`) — the same mapping
+   `lower-machine` builds as `name->id` (`private/normal-ir.sls:140-142`);
+   §12.7:777 licenses the two lanes to differ here, so this is the
+   interpreter's own deterministic choice, not a requirement that it match the
+   generated lane's id. The exclusion is expressed once, in one shared
    projection over the §22.4:1271 five, and asserted **positively** — a check
    that fails if the exclusion is ever widened to drop a comparable member —
    because the differential's obvious repair for the red this record causes is

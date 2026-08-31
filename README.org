@@ -78,6 +78,7 @@ cmake --preset no-scheme && ctest --preset no-scheme
 - [[file:docs/plans/milestone-1-design.md][Milestone 1 design]] — the minimal executable machine
 - [[file:docs/plans/milestone-2-design.md][Milestone 2 design]] — incremental execution and lifecycle
 - [[file:docs/plans/milestone-3-design.md][Milestone 3 design]] — byte classes and sequences
+- [[file:docs/plans/milestone-4-design.md][Milestone 4 design]] — fields, actions, and branches
 - [[file:docs/decisions/][Architecture decisions]]
 - [[file:CHANGELOG.md][Changelog]]
 

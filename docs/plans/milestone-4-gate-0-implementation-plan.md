@@ -56,10 +56,10 @@
 > shipped (AGENTS.md, "Correct a stale instruction in place; annotate a
 > stale record"). A re-run must reconcile against the shipped records
 > rather than transcribing these verbatim. Three examples from that
-> review, not an inventory of every correction it made: Task 5's body
-> still initializes the position-kind loop variable to `byte` where
-> decision 0022 now conditions it on `finish?` (`boundary` on a feed call,
-> `eof` on a finish call); Task 5's body still calls `0a267de` `HEAD`; and
+> review, not an inventory of every correction it made: Task 5's body still
+> initializes the position-kind loop variable to `byte` where decision 0022 now
+> initializes it to `boundary` unconditionally, in both a feed call and a finish
+> call, with no `finish?` key; Task 5's body still calls `0a267de` `HEAD`; and
 > Task 5's position table still carries an over-wide row.
 
 ## Task 1: Decision 0018 — One unversioned generated-ABI constructor, with the version check first

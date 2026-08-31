@@ -36,7 +36,7 @@ hole that admits exactly the stale files decision 0012 item 1 added it to
 refuse, and one that fails late: such an object loads, `exec` has the same
 arity, nothing raises. `/v1` inverts instead, accepting only the new live
 number and nothing else, so the one name whose contract is "the old shape" would
-admit the newest one and hand a `/v2`-shaped `exec` to the four-argument `feed`
+admit the newest one and hand a `/v2`-shaped `exec` to the five-argument `feed`
 path.
 
 **`/v1` has two call sites in the whole tree, both in one test program.**
@@ -66,12 +66,15 @@ stale generated object meeting a newer runtime is reachable inside this
 repository's own build, not only across releases. What that argument justifies
 is a check, not a name.
 
-**Unversioned names are already the norm on this surface.**
-`reserved-member-2` (`compile.sls:44-52`), the hand-maintained mirror of the
-runtime's exports asserted set-equal to `environment-symbols` by
+**Unversioned names are already the norm on this surface, outside its
+constructors.** `reserved-member-2` (`compile.sls:44-52`), the hand-maintained
+mirror of the runtime's exports asserted set-equal to `environment-symbols` by
 `reserved-drift-tests.sps:32-40`, carries twenty symbols, seventeen of which
-have no version suffix. Nothing in the mirror or its drift guard depends on a
-reserved name being versioned.
+have no version suffix — but the exception is exact: of the mirror's three
+generated-ABI constructors, `byte-machine-make-compiled-machine/v1`, `/v2`, and
+`byte-machine-make-feed-outcome/v1`, all three are versioned; the seventeen
+unversioned entries are everything else on the list. Nothing in the mirror or
+its drift guard depends on a reserved name being versioned.
 
 ## Decision
 
@@ -86,12 +89,14 @@ reserved name being versioned.
 2. **The growable payload is one quoted vector, not a rest-arg.** A rest-arg
    would let the payload grow *without* a version bump, and the version check is
    the only thing standing between a stale object and silent wrong answers; the
-   vector keeps growth and the check coupled. It renders as `(quote #())` today,
-   introducing no new callable identifier into the emitted body — the reason the
-   shipped arms say `(quote error)` rather than calling anything
-   (`generated-one-byte.golden.sls:17`). Member 0 is the field initials, empty
-   until Slice ①b. This is §19.1:996's "immutable field/callback/debug
-   metadata", carried positionally.
+   vector keeps growth and the check coupled. It renders as `(quote #(#()))`
+   today — a one-member vector whose member 0 is the empty field-initials
+   vector, not the empty vector itself — introducing no new callable
+   identifier into the emitted body, the reason the shipped arms say `(quote
+   error)` rather than calling anything (`generated-one-byte.golden.sls:17`).
+   Member 0 is the field initials, an empty vector until Slice ①b populates
+   it, so a zero-field machine renders identically in ①a, ①b, ② and ③. This is
+   §19.1:996's "immutable field/callback/debug metadata", carried positionally.
 
 3. **`current-abi-version` goes from 2 to 3 (`runtime.sls:49`), and the
    emitter's literal moves in the same commit.** The number is duplicated by
@@ -107,7 +112,7 @@ reserved name being versioned.
    above require: a tombstone that still accepts a number is a hole. The textual
    distinctness is a hard constraint, not style. All mutations run at the
    default `SITES`, which "defaults to 1 and is asserted exactly"
-   (`MutationRunner.cmake:58-59`) and fails loudly with "pattern occurs N times
+   (`MutationRunner.cmake:59`) and fails loudly with "pattern occurs N times
    … expected N" (`MutationRunner.cmake:342-345`); AGENTS.md:147 records that
    `SITES` fails in *both* directions, so new code duplicating a pinned line
    breaks the suite at declaration. The `/v1` guard is pinned verbatim —

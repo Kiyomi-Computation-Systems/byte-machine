@@ -67,7 +67,7 @@ parameter added in Slice ② would therefore change the emitted text of *every*
 machine, including the zero-field ones, and all three goldens would move in ②
 — falsifying the milestone's own oracle that ①b, ② and ③ move no existing
 golden (milestone-4-design.md's appendix row for the three golden fixtures,
-`:2283` at the time of writing) one to two slices after this record is
+`:2323` at the time of writing) one to two slices after this record is
 made.
 
 **The version byte has never distinguished anything.** It has read 1 through
@@ -107,8 +107,9 @@ Note also that no record owns that byte: normal-ir.sls:250 credits the layout to
    (a) *The encoding's field table* — a `u16be` count of zero with no per-field
    records, in `encode-normal`. Filled in ①b.
    (b) *The ABI payload's field-initials member* — member 0 of the single quoted
-   metadata vector the unversioned constructor takes (§4.1), rendering as
-   `(quote #())`. Filled in ①b.
+   metadata vector the unversioned constructor takes (§4.1), itself rendering as
+   an empty vector, so the metadata vector as a whole renders `(quote #(#()))`.
+   Filled in ①b.
    (c) *Emitted `exec`'s seventh parameter* — the template at `compile.sls:156`
    goes from six parameters to seven, both call sites (`runtime.sls:218`,
    `:262`) pass an empty vector, and the new parameter's name joins
@@ -140,12 +141,13 @@ Note also that no record owns that byte: normal-ir.sls:250 credits the layout to
 ## Consequences
 
 - **The re-baseline this concentrates in ①a, measured.** Four distinct IR
-  fingerprint values are pinned at **nineteen sites across six files**, and none
-  in `src/`: `4236938459847922092` (9 sites), `15725897457025557005` (5),
-  `9098559711816935340` (3), `12299125921751534854` (2). By file — one per
-  golden (`generated-one-byte.golden.sls:20`, `generated-pause.golden.sls:33`,
-  `generated-http-version.golden.sls:85`), two in `compile-tests.sps` (`:165`,
-  `:212`), three in `normal-ir-tests.sps` (`:73`, `:122`, `:147`), and eleven in
+  fingerprint values are pinned at **nineteen sites across six files in
+  `test/`**, and none in `src/`: `4236938459847922092` (9 sites),
+  `15725897457025557005` (5), `9098559711816935340` (3), `12299125921751534854`
+  (2). By file — one per golden (`generated-one-byte.golden.sls:20`,
+  `generated-pause.golden.sls:33`, `generated-http-version.golden.sls:85`), two
+  in `compile-tests.sps` (`:165`, `:212`), three in `normal-ir-tests.sps`
+  (`:73`, `:122`, `:147`), and eleven in
   `test/support/cmake/SchemeMutationSuite.cmake`. **Seven of those eleven are
   mutation pins carrying a measured `got` digest** — `:4773`, `:4780`, `:4787`,
   `:4889`, `:4907`, `:4958`, `:4980` — and `SchemeMutationSuite.cmake:843-852`
@@ -177,13 +179,14 @@ Note also that no record owns that byte: normal-ir.sls:250 credits the layout to
   commit.
 
 - **What it removes from ①b, ② and ③.** ①b fills a count that is already zero
-  and a payload member that is already `(quote #())`, so a machine declaring no
-  fields encodes *and renders* byte-identically. ② adds its field store to a
-  parameter that already exists in the emitted text. ③ adds a node kind, which
-  moves nothing existing because no shipped fixture uses one. Each of the three
-  therefore gets "no existing golden and no existing fingerprint moved" as a
-  gate assertable by `git diff` against ①a's merge — a falsifiable oracle they
-  would otherwise not have, and the only thing that pays back ①a's bill.
+  and a payload member — the metadata vector's member 0 — that is already an
+  empty vector, so a machine declaring no fields encodes *and renders*
+  byte-identically. ② adds its field store to a parameter that already exists in
+  the emitted text. ③ adds a node kind, which moves nothing existing because no
+  shipped fixture uses one. Each of the three therefore gets "no existing golden
+  and no existing fingerprint moved" as a gate assertable by `git diff` against
+  ①a's merge — a falsifiable oracle they would otherwise not have, and the only
+  thing that pays back ①a's bill.
 
 - **Decision 0009 is extended by the field table, not falsified, and takes no
   dated amendment.** 0009 fixes the IR fingerprint's *input* ("computed over the

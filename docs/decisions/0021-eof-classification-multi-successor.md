@@ -107,9 +107,9 @@ it.
    accept an unhandled kind silently, so a rewrite landing in the same commit
    as a new kind has no clean oracle, since a changed diagnostic could be
    either. Gate: `ctest --preset pr` and `--preset release` green, zero
-   diagnostic-code or diagnostic-count edits in
-   `test/common/verify-tests.sps`, and the three pinned IR fingerprints and all
-   three committed goldens byte-identical.
+   diagnostic-code or diagnostic-count edits in `test/common/verify-tests.sps`,
+   and the three `normal-ir-tests.sps` IR fingerprints and all three committed
+   goldens byte-identical.
    The gate above is silent on the artifact this rewrite most certainly touches:
    `test/support/cmake/SchemeMutationSuite.cmake` pins six mutation anchors to
    `eof-terminal`'s body or its two call sites — `:3532` (`(if (memq name seen)
