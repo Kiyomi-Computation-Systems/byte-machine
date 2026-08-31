@@ -400,7 +400,9 @@ git add docs/decisions/0018-unversioned-generated-abi-constructor.md \
 git commit -m "docs: decision 0018 — one unversioned generated-ABI constructor
 
 Amends 0012 item 1 and 0010 item 4 with dated notes, and corrects the
-reserved-binding sentence at parent plan 9.5:442 in place."
+reserved-binding sentence at parent plan 9.5:442 in place.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
 One commit, not four. A record that retires a mechanism while the parent plan still names it leaves the spec asserting something the decision has killed.
@@ -1493,7 +1495,9 @@ Expected: five `OK` lines.
 
 ```bash
 git add docs/plans/milestone-4-design.md
-git commit -m "docs: discharge Milestone 4 Gate 0 — map design §4 to decisions 0018-0022"
+git commit -m "docs: discharge Milestone 4 Gate 0 — map design §4 to decisions 0018-0022
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
 ---

@@ -154,7 +154,10 @@ files.
    construction, and the inductive step is exactly the four operations below
    shown to preserve it, the three checked operations' error edge refusing any
    commit that would not, and §15's checked multiply-add doing the same for
-   integer accumulate:
+   integer accumulate. The set of writers is itself closed: those are the only
+   constructs in §10.6's node repertoire that write a field, and §13:801 bars
+   the one other candidate — "Machine-field access from a callback is
+   read-only". Nothing else can move a field out of `[0, M]`:
    - `store (field constant)` — writes `constant`, which pass 6a has already
      bounded by `M`. **Cannot fail.**
    - `clear (field)` — writes `0`, in range at every width. **Cannot fail.**
@@ -174,13 +177,19 @@ files.
    permitted** because a spurious target is not caught anywhere downstream:
    `pass-reachability` (`verify.sls:252-258`) walks `all-out-targets`
    (`verify.sls:88-91`), a purely syntactic graph walk with no notion of which
-   operations can fail, and `milestone-4-design.md:1355` feeds a field-action
+   operations can fail, and `milestone-4-design.md:1359` — §7's census row 3 —
+   feeds a field-action
    node's `error` into `node-out-targets` whenever it is a symbol — so an
    `error` target on a safe operation is *reached* by that walk exactly like a
    real one and trips no `'unreachable-node` diagnostic, or any other check.
    Nothing downstream distinguishes a live error target from a dead one; the
    constructor is the only place able to catch a spurious target at all, which
-   is why `#f` is required and not merely permitted. The rule completes a
+   is why `#f` is required and not merely permitted. That a spurious target is
+   worth catching is the premise the old §16.4:947 argument supplied and this
+   one must state outright: it is a node that ships, is walked by every pass, is
+   counted by the census, and is entered by no execution — the dead weight
+   §16.4:947 exists to keep out, arriving by a route that section cannot see.
+   The rule completes a
    three-way pattern across the three new constructors, and nothing else is left
    open in it: integer accumulate's `overflow-error` is mandatory, because
    §15:864-868's multiply-add can always fail; field action's `error` is
@@ -216,7 +225,7 @@ files.
    closes a listed-and-unimplemented gap rather than re-closing one, and it pays
    for its unreachability with an `EXPECT_SURVIVES` Slice ①b is to declare, its
    reason measured on the staged tree only when that slice runs it
-   (`milestone-4-design.md:957`), not measured here.
+   (`milestone-4-design.md:957-961`), not measured here.
 
 ## Consequences
 
