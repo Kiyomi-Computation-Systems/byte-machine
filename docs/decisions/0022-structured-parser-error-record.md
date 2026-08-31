@@ -135,29 +135,36 @@ overflow rider to a table that already works.
    call sites (:161, :268, :301, :309) and the slot's setter (:135) take no
    edit: they store and return whatever the executor produced. That is the
    amendment working rather than an omission.
-5. **Position kind is carried as one more loop variable in each executor, set
-   from a literal at each jump.** `advance` → `boundary`; `reexecute` → `byte`;
-   the EOF-chain jump → `eof`; and — the case Milestone 4's seam slice cannot
-   itself produce, fixed here so Slices ② and ③ inherit a rule instead of each
-   choosing one — a **zero-width jump → `boundary` at the current stream
-   offset**, per §12.7:770. Initialize to `boundary` at loop entry for a feed
-   call, for the same zero-width reason as the rule above: nothing has been
-   consumed in this call, so a resumed feed entering an error state directly
-   reports a boundary at the current stream offset. **A finish call initializes
-   to `eof` instead**, for the symmetric reason: calling `finish!` is the
-   caller's own declaration that no further bytes are coming, so the offset a
-   finish call reports is the final stream offset by definition, before any
-   jump runs — the same fact §12.7:771 states for every truncated-`finish!`
-   error. In the generated lane both initial values are one literal at the loop
-   header, chosen from `finish?`, which `exec` already receives as a parameter
-   (compile.sls:156); the fourth argument to the emitted `loop` (header at
-   compile.sls:157; both `loop-tail` forms at compile.sls:75-78) reads it, and
-   joins `reserved-member-3` (compile.sls:53) in the commit that emits it. The
-   interpreter keeps this same split across two functions rather than one flag,
-   and needs no edit for it: a second loop variable, initialized to `boundary`,
-   in `parser-feed-op!` (runtime.sls:171-201, whose dispatch arm already has
-   the mode in hand at :196), and a constant `eof` in `parser-finish-op!`
-   (runtime.sls:274-311).
+5. **Position kind is carried as one more loop variable in each executor,
+   set from a literal at each jump.** `advance` → `boundary`; `reexecute` →
+   `byte`; the EOF-chain jump → `eof`; and — the case Milestone 4's seam slice
+   cannot itself produce, fixed here so Slices ② and ③ inherit a rule instead
+   of each choosing one — a **zero-width jump → `boundary` at the current
+   stream offset**, per §12.7:770. **The loop-entry initialization is
+   `boundary`, unconditionally, in both lanes, with no `finish?` key.** Nothing
+   has been consumed since either kind of call began, so an error state reached
+   with no jump taken reports a boundary at the current stream offset
+   regardless of whether a feed or a `finish!` call is the one observing it —
+   the parked-continuation case discussed below shows both lanes agreeing at
+   exactly that value, which is the same value a feed resuming onto the
+   identical state already reports below. §12.7:771's truncated-`finish!` row
+   does not license a different initialization here: nothing is truncated by a
+   call that merely observes an error state reached earlier. In the generated
+   lane the initial value is one literal at the loop header — the `(let loop
+   ((pos start) (st state) (off offset)))` header at compile.sls:157 gains a
+   fourth argument, `(quote boundary)`, unconditionally — and both `loop-tail`
+   forms (compile.sls:75-78) carry it forward on every advance/reexecute jump
+   they render; it joins `reserved-member-3` (compile.sls:53) in the commit
+   that emits it. The interpreter keeps this same split across two functions
+   rather than one flag: `parser-feed-op!` gains a second loop variable,
+   initialized to `boundary` (runtime.sls:171-201, whose dispatch arm already
+   has the mode in hand at :196), and `parser-finish-op!`'s error arm
+   (runtime.sls:297-302) is fixed at the constant `boundary` too, in place of
+   the bare code symbol it returns today. `eof` is reserved for where
+   truncation actually occurs: `render-eof-branch`'s default-EOF arm, which
+   already gets its own per-site `(quote eof)` literal (compile.sls:95-99), and
+   `parser-finish-op!`'s `(dispatch)` arm, whose `default-eof-value` message is
+   the interpreter's matching path (runtime.sls:303-310).
 
    **This closes a gap the old initialization left open.** A pause's
    continuation is reachable as an error node directly — for a byte-reachable
@@ -179,23 +186,24 @@ overflow rider to a table that already works.
    constructions a jump does not lead into. **The first is the generated lane's
    default-EOF arm, which takes a per-site literal `eof` instead of the loop
    variable.** The default-EOF arm (`render-eof-branch`, compile.sls:95-99) is
-   a terminal construction reached by no jump at all: `parser-finish-v2!`
-   (runtime.sls:260-262) calls `exec` over an empty slice, so `pos >= end`
-   immediately. This arm fires with the loop variable still at its
-   initialization only when the EOF-target chain has no hop before it; when
-   `render-eof-branch`'s own node case (compile.sls:96-97) has jumped a prior
-   hop there first, the variable already reads `eof` — "still at its
-   initialization" is not true of every site, only of those reached with no
-   prior hop. §12.7:771 fixes `eof` regardless of which, so this arm takes the
-   same shape with a literal `(quote eof)`, matching the interpreter's own
-   constant `eof` in `parser-finish-op!` above. The differential will catch a
-   generated lane that instead inherits the loop variable here — but the
-   tempting green-restoring repair is making the *interpreter* agree at `byte`
-   instead, which is consistently wrong: both lanes reach this arm by exhausted
-   dispatch with no jump taken, and §12.7:771 admits only `eof`.
+   a terminal construction: on the EOF-target chain's first dispatch it is
+   reached by no jump at all, because `parser-finish-v2!` (runtime.sls:260-262)
+   calls `exec` over an empty slice, so `pos >= end` immediately. This arm
+   fires with the loop variable still at its initialization only when the
+   EOF-target chain has no hop before it; when `render-eof-branch`'s own node
+   case (compile.sls:96-97) has jumped a prior hop there first, the variable
+   already reads `eof` — "still at its initialization" is not true of every
+   site, only of those reached with no prior hop. §12.7:771 fixes `eof`
+   regardless of which, so this arm takes the same shape with a literal `(quote
+   eof)`, matching the interpreter's own constant `eof` in `parser-finish-op!`
+   above. The differential will catch a generated lane that instead inherits
+   the loop variable here — but the tempting green-restoring repair is making
+   the *interpreter* agree at `byte` instead, which is consistently wrong: both
+   lanes reach this arm by exhausted dispatch, whether or not a prior hop ran,
+   and §12.7:771 admits only `eof` either way.
 
    **The second is the parked error state a `finish!` call inherits from a
-   pause, and it carries the opposite lane asymmetry.** `parser-finish-v2!`
+   pause, and both lanes agree at `boundary` for it.** `parser-finish-v2!`
    (runtime.sls:260-262) passes `(parser-current parser)` into `exec`
    unconditionally, including when a prior pause parked `current` directly on a
    normalized **error** state — the case the paragraph above establishes as
@@ -204,17 +212,18 @@ overflow rider to a table that already works.
    `exec`'s `case st` then reaches `render-state-arm`'s error arm
    (compile.sls:113-115) on its first dispatch, no jump taken, with the loop
    variable at its initialization — the same site shape as the first, reached
-   through `parser-finish-v2!` rather than the exhausted-dispatch default. The
-   interpreter reaches the same parked node through `parser-finish-op!`'s
-   `((error) …)` arm (runtime.sls:297-302), fixed above at a constant `eof`.
-   Left at a flat `boundary`, the generated lane would disagree with the
-   interpreter for this exact machine and this exact call — `boundary` in one
-   lane, `eof` in the other, the mismatch §12.7:777 forbids. This is why the
-   loop's initial value above reads `finish?` rather than being one constant: a
-   finish call's offset is already the final stream offset before any jump
-   runs, so reading `finish?` is what makes the two lanes agree here, without
-   adding a second per-site literal to an arm that also serves the ordinary
-   resumed-feed case.
+   through `parser-finish-v2!` rather than the exhausted-dispatch default.
+   Because the loop-entry initialization is `boundary` unconditionally, as
+   fixed above, the generated lane reports `boundary` here. The interpreter
+   reaches the same parked node through `parser-finish-op!`'s `((error) …)` arm
+   (runtime.sls:297-302), fixed above at the constant `boundary` too — not
+   `eof`, because nothing is truncated by a `finish!` call that merely observes
+   an error node a prior feed already reached. Both lanes therefore agree: the
+   parked continuation is the same zero-width edge whichever API call arrives
+   on it, so it reports the same `boundary` a feed resuming onto it already
+   reports (the paragraph above) — position kind is a property of the
+   transition that arrived, not of which call observes it, exactly as the
+   Context above states it.
 6. **The absolute offset needs no new arithmetic.** `off` is already bumped on
    advance and not on reexecute — in the interpreter at runtime.sls:196-200 and
    in the emitted tails at compile.sls:75-78 — so `(off, position-kind)` *is*
@@ -281,8 +290,8 @@ overflow rider to a table that already works.
    representation `eof-target-of` already unwraps as `(if (pair? cur) (car cur)
    cur)` (interpret.sls:112-113). This is the common case, not the exception:
    states 4-10 of `generated-http-version.golden.sls` are internal prefix
-   states, so seven of the eight default-EOF sites this record's own Context
-   already counts (:10, :22, :31, :40, :49, :58, :67, :76) sit on them.
+   states, so seven of the eight default-EOF sites Decision item 7 already
+   counts (:10, :22, :31, :40, :49, :58, :67, :76) sit on them.
    `default-eof-value` must unwrap `node` the same way before it becomes
    `parser-error-node-name`'s value — `(if (pair? node) (car node) node)` — so
    both lanes report the enclosing declared node's public name, never the raw

@@ -653,26 +653,27 @@ omission.
    `boundary`, `reexecute` → `byte`, the EOF-chain jump → `eof`, and — the
    fourth case ①a cannot itself produce, stated here so ② and ③ inherit a rule
    instead of each picking one — **a zero-width jump → `boundary`, at the
-   current stream offset, per §12.7:770**. Initialize to `boundary` at loop
-   entry for a feed call, the same zero-width case above: nothing has been
-   consumed in this call, so a resumed feed entering an error state directly
-   reports a boundary at the current offset. A finish call initializes to
-   `eof` instead: calling `finish!` is the caller's declaration that no
-   further bytes are coming, so the offset it reports is already the final
-   stream offset, before any jump runs — this is what keeps the generated
-   lane's one shared `exec` agreeing with the interpreter's separate
-   `parser-finish-op!` constant `eof` below when a prior pause has parked
-   `current` directly on an error state (decision 0022 item 5). The absolute
-   offset needs no new
-   arithmetic: `off` is already bumped on advance and not on reexecute, so
-   `(off, pk)` *is* §12.7's stored position in both executors, which is the
-   strongest available evidence the lowering is 1:1. In the generated lane the
-   kind is a fourth argument to the emitted `loop` — the `(let loop ((pos start)
-   (st state) (off offset))` header rendered at pre-slice compile.sls:157, and
-   both `loop-tail` forms, compile.sls:75-78. In the interpreter it is a second
+   current stream offset, per §12.7:770**. **The loop-entry initialization is
+   `boundary`, unconditionally, in both a feed call and a finish call — no
+   `finish?` key.** Nothing has been consumed since either kind of call began,
+   so an error state reached with no jump taken reports a boundary at the
+   current stream offset regardless of which call observes it: the same value
+   a feed resuming directly onto a pause's parked continuation already
+   reports, and now the same value the interpreter's separate
+   `parser-finish-op!` reports for that continuation too (decision 0022 item
+   5), so the two lanes agree without reading `finish?`. The absolute offset
+   needs no new arithmetic: `off` is already bumped on advance and not on
+   reexecute, so `(off, pk)` *is* §12.7's stored position in both executors,
+   which is the strongest available evidence the lowering is 1:1. In the
+   generated lane the kind is a fourth argument to the emitted `loop` — the
+   `(let loop ((pos start) (st state) (off offset))` header rendered at
+   pre-slice compile.sls:157 gains a fourth argument, `(quote boundary)`,
+   unconditionally, and both `loop-tail` forms, compile.sls:75-78, carry it
+   forward on every advance/reexecute jump. In the interpreter it is a second
    loop variable in `parser-feed-op!`'s dispatch arm (pre-slice,
    runtime.sls:188-200, whose `(if (eq? mode 'advance) …)` at :196 already has
-   the mode in hand) and a constant `eof` in `parser-finish-op!` (pre-slice,
+   the mode in hand), a constant `boundary` in `parser-finish-op!`'s error arm,
+   and a constant `eof` in its dispatch arm's default-eof path (pre-slice,
    runtime.sls:274-311). *Static payload.* Render one immutable table per
    generated library — `(define errs (quote #(#(<code> <reason>) …)))`, one
    entry per error *declaration*, which is §19.1:996's "immutable
