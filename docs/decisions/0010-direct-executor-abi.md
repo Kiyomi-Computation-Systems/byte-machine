@@ -94,14 +94,21 @@ load-bearing by that mutation, not by the arrival of a new export, so item 5's
 > written above" points at.
 >
 > *What* stays gated is not in doubt, only which item the sentence named.
-> Measured 2026-08-31: every other place that cites this note pairs the
-> reservation with the Consequences bullet and item 5's deferral with item 5 —
-> this record's own 2026-08-31 note,
-> [decision 0012](./0012-generated-abi-v2-finish.md)'s Context and its third
-> Consequences bullet,
-> [decision 0018](./0018-unversioned-generated-abi-constructor.md)'s
-> Consequences, and Milestone 4's design and Gate 0 plan. This note is the sole
-> outlier.
+> Measured 2026-08-31 against `f215af7`, over every citation of this note in
+> `docs/` — **16 sites in 8 files**: this record itself, decisions
+> [0012](./0012-generated-abi-v2-finish.md) (twice),
+> [0018](./0018-unversioned-generated-abi-constructor.md) and
+> [0022](./0022-structured-parser-error-record.md), and the Milestone 2 and
+> Milestone 4 design and Gate 0 plans. **All 16 pair the reservation with the
+> Consequences bullet**, and none attributes it to item 5. This note is the
+> sole outlier.
+>
+> The confusion was already named once. `milestone-2-gate-0-implementation-plan.md`
+> opens with it as audit finding A5 — item 4 is the arity-break warrant, item 5
+> is the coded ABI-mismatch deferral, "the **benchmark-gated `feed-outcome`
+> `/v2`** lives in 0010 Consequences and its Slice-B amendment. Cite each
+> precisely; do not conflate." That audit swept the records citing this one and
+> did not reach the sentence inside it.
 >
 > It is annotated rather than corrected because it was wrong on the day it was
 > written — no later decision made it wrong — and because it is load-bearing:

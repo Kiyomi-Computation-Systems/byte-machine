@@ -158,7 +158,7 @@ rg -n "compiled-machine/v1|current-abi-version|feed-outcome|/v2|extends by|versi
 rg -n "Generated runtime ABI|byte-machine-make-compiled-machine|ABI version|CHANGELOG|changelog" docs/plans/byte-machine-implementation-plan.md
 rg -n "reserved-member-2|reserved-member-3" src/byte-machine/compile.sls
 ```
-Expected: 0010 **item 4** (the `/v2`-not-arity-break warrant, lines ~30-32), **item 5** (the ABI-mismatch coded-condition deferral, ~33-36), and the **Consequences / Slice-B amendment** benchmark `/v2` (~44-45, ~52-54); parent §9.5's ABI paragraph and its CHANGELOG requirement; the current `reserved-member-2`/`-3` lists in compile.sls. Read ~10 lines around each.
+Expected: 0010 **item 4** (the `/v2`-not-arity-break warrant), **item 5** (the ABI-mismatch coded-condition deferral), and the **Consequences / Slice-B amendment** benchmark `/v2` — cited by name because line numbers into that record have since moved; parent §9.5's ABI paragraph and its CHANGELOG requirement; the current `reserved-member-2`/`-3` lists in compile.sls. Read ~10 lines around each.
 
 - [ ] **Step 2: Write the decision record**
 

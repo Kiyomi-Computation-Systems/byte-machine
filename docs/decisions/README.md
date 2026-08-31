@@ -119,11 +119,29 @@ as what was believed, and against which tree, on the day it was written.
   the next item (`2.`, `3.`, …) is absorbed into the blockquote as lazy
   continuation, because an ordered list can only interrupt a paragraph when it
   starts at `1`.
-- **Adding a header shifts every line in the file.** Before committing, `rg` the
-  tree for `NNNN…\.md:[0-9]` and `NNNN:[0-9]` citations into the record and
-  repair them — preferably by replacing the line number with the quoted
-  sentence, which cannot go stale again. Nothing else catches this: a link
-  checker sees a valid file, and a grep sees a valid number. The sweep that
-  added these headers moved one such citation —
-  `milestone-0-close-out-implementation-plan.md`'s pointer at
-  `0001-toolchain-discovery.md:86`, repaired to the quoted sentence.
+- **Adding a header shifts every line in the file.** Before committing, sweep
+  the tree for citations into the record and repair them — preferably by
+  replacing the line number with a quoted sentence or an item name, which cannot
+  go stale again. Nothing else catches this: a link checker sees a valid file,
+  and a grep sees a valid number.
+
+  Sweep for **three** forms, because one pattern does not find them all:
+
+  ```bash
+  rg -n -e '00[0-9]{2}[a-z0-9-]*\.md:[0-9]+' -e '\b00[0-9]{2}:[0-9]+' -e 'lines? ~?[0-9]+[-–][0-9]+' -g '!.git' .
+  ```
+
+  The first two are the `path:line` and `NNNN:line` shorthands. The third is
+  prose — "item 4 (the warrant, lines ~30-32)" — and it is the one that gets
+  missed: this convention's own first sweep ran only the first two and left
+  `milestone-2-gate-0-implementation-plan.md`'s three approximate ranges into
+  0010 pointing eighteen lines short, found a commit later. Repaired by name;
+  `milestone-0-close-out-implementation-plan.md`'s `0001-toolchain-discovery.md:86`
+  was repaired to the quoted sentence.
+
+- **A citation can be line-wrapped, so `rg` will not see it.** Measuring who
+  cites a note is a multi-line problem: "decision 0010's Consequences /
+  Slice-B\n   amendment" hides from a line-based search for
+  `Slice-B amendment`. Re-measuring this way turned a four-item enumeration
+  into the true 16. Use a `re.S` search, or grep for the shortest fragment that
+  cannot wrap.

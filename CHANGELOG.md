@@ -770,7 +770,9 @@ delivered. No versioned release exists yet.
   and Gate 0 plan — pairs it with the Consequences bullet, so what stays gated
   was never in doubt, only which item the sentence named. Annotated rather than
   corrected because it was wrong when written rather than made wrong by a later
-  decision, and because those citations reach it.
+  decision, and because those citations reach it. Re-measured against the merged
+  Milestone 4 Gate 0: 16 citation sites in 8 files, all pairing the reservation
+  with the Consequences bullet.
 - Chez discovery now probes each candidate name in turn instead of committing to
   the first one `find_program` returns. A host with an unrelated `scheme` earlier
   on PATH than its Chez previously failed to configure.
