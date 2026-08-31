@@ -10,7 +10,9 @@ Milestone: 1, Phase 3 Slice A
 >
 > - **2026-08-23 (Slice B)** — records that Slice B shipped the runtime-export
 >   drift guard with no `/v2` export, so the benchmark-gated `/v2` reservation
->   stays open. Nothing above it became false.
+>   stays open. Nothing above it became false. **The note itself carries a
+>   2026-08-31 annotation**: its "item 5's `/v2`" names the wrong item — the
+>   reservation is the third Consequences bullet's, not item 5's.
 > - **2026-08-28 (Milestone 2) — the functional /v2 lands** — annotates item 4:
 >   [decision 0012](./0012-generated-abi-v2-finish.md) takes up the extension
 >   item 4 reserved the version tag for.
@@ -82,6 +84,29 @@ asserted equal to `compile.sls`'s exported `reserved-member-2`, witnessed by a
 mutation that drops an entry). It ships **no `/v2` export**: the guard is made
 load-bearing by that mutation, not by the arrival of a new export, so item 5's
 `/v2` remains gated on benchmark evidence exactly as written above.
+
+> **Annotated 2026-08-31 — "item 5's `/v2`" names the wrong item.** Item 5 is
+> the deferral of a coded `generated-runtime-abi-mismatch` condition; it mentions
+> no `/v2` and no benchmark gate. The reservation this note leaves standing is
+> the third **Consequences** bullet — "Slice B may revisit the `feed-outcome`
+> seam under a `/v2` ABI if benchmark evidence ever calls for it (parent §23);
+> the version tag exists for exactly that" — which is also the text "exactly as
+> written above" points at.
+>
+> *What* stays gated is not in doubt, only which item the sentence named.
+> Measured 2026-08-31: every other place that cites this note pairs the
+> reservation with the Consequences bullet and item 5's deferral with item 5 —
+> this record's own 2026-08-31 note,
+> [decision 0012](./0012-generated-abi-v2-finish.md)'s Context and its third
+> Consequences bullet,
+> [decision 0018](./0018-unversioned-generated-abi-constructor.md)'s
+> Consequences, and Milestone 4's design and Gate 0 plan. This note is the sole
+> outlier.
+>
+> It is annotated rather than corrected because it was wrong on the day it was
+> written — no later decision made it wrong — and because it is load-bearing:
+> the citations listed above reach it, and a reader who follows one needs to see
+> what it actually said. AGENTS.md's third case.
 
 ## 2026-08-28 (Milestone 2) — the functional /v2 lands
 

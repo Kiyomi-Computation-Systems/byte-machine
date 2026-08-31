@@ -761,6 +761,16 @@ delivered. No versioned release exists yet.
   [docs/decisions/README.md](docs/decisions/README.md), whose previous wording
   covered supersession only. The one-bullet-per-note invariant ships with the
   command that checks it.
+- [Decision 0010](docs/decisions/0010-direct-executor-abi.md)'s 2026-08-23
+  Slice-B note gains a dated annotation: its "item 5's `/v2` remains gated on
+  benchmark evidence" names the wrong item. Item 5 is the deferral of a coded
+  ABI-mismatch condition and mentions no `/v2` and no benchmark gate; the
+  reservation is the third Consequences bullet's. Every other citation of that
+  note — 0012 twice, 0018, 0010's own Milestone 4 note, and Milestone 4's design
+  and Gate 0 plan — pairs it with the Consequences bullet, so what stays gated
+  was never in doubt, only which item the sentence named. Annotated rather than
+  corrected because it was wrong when written rather than made wrong by a later
+  decision, and because those citations reach it.
 - Chez discovery now probes each candidate name in turn instead of committing to
   the first one `find_program` returns. A host with an unrelated `scheme` earlier
   on PATH than its Chez previously failed to configure.

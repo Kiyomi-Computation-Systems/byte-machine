@@ -54,19 +54,33 @@ says which verb applies:
 A note whose whole content is short enough may live in the bullet itself, with
 nothing at the foot to point at (see
 [0004](./0004-content-fingerprint-and-provenance.md)'s 2026-08-18 entry). So
-bullets may outnumber notes, never the reverse. The invariant, in the direction
-that is checkable:
+bullets may outnumber notes, never the reverse.
+
+An annotation **on a note** — a correction to what the note itself says — rides
+that note's bullet and does not get one of its own (see
+[0010](./0010-direct-executor-abi.md)'s 2026-08-23 entry). The header block
+indexes the record's notes, not every dated act inside them; a second bullet
+would also collide with a real note's date and blunt the check below.
+
+The invariant, in the direction that is checkable:
 
 **Every dated note in a record is named by a bullet in that record's header
 block.**
 
 ```bash
-for f in docs/decisions/0*.md; do head=$(sed -n '/^> /p' "$f"); for d in $(rg -o '^## .*?(20[0-9]{2}-[0-9]{2}-[0-9]{2})' -r '$1' "$f" | sort -u); do case "$head" in *"$d"*) ;; *) echo "$f: dated note $d has no bullet in the header block";; esac; done; done
+for f in docs/decisions/0*.md; do keys=$(sed -n '1,/^## /p' "$f" | sed -n '/^> - /p'); for d in $(rg -o '^## .*?(20[0-9]{2}-[0-9]{2}-[0-9]{2})' -r '$1' "$f" | sort -u); do case "$keys" in *"$d"*) ;; *) echo "$f: dated note $d has no bullet in the header block";; esac; done; done
 ```
 
 Silence is a pass. It fails on the two ways this drifts: appending a note and
 forgetting the bullet, and deleting a bullet — both measured against this tree
 on 2026-08-31, each reported by exactly that line.
+
+Two narrowings are load-bearing, and the check was measured surviving both
+mutations before they were made. It reads only the **header block** (up to the
+first `##`), because a body blockquote at column 0 would otherwise be scooped up
+as header text; and it keys on a bullet's **first line** (`^> - `), because a
+date mentioned in continuation prose would otherwise stand in for a missing
+bullet. This is why a bullet opens with its note's date.
 
 ### 2. Text a note makes false carries a marker at the site
 
