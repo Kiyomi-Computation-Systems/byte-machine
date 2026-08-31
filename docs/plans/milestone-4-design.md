@@ -218,6 +218,16 @@ version **number** bump is the requirement and it survives; only the versioned
 *name* goes. 0012 gets a dated amendment note, not a rewrite: the tree it was
 decided against is its evidence.
 
+**A vocabulary sweep found a second record to annotate, and it matters more than
+0012.** [Decision 0010](../decisions/0010-direct-executor-abi.md) item 4 carries
+the *general* rule this resolution replaces — the seam "extends by a `/v2`
+constructor rather than an arity break" — and it, not 0012, is what a reader
+looking for "how do we change the ABI" reaches first. It takes its own dated
+note. That note must also say what the rename does **not** reach: 0010's
+Consequences separately reserve a benchmark-gated `feed-outcome` `/v2`, a
+different family still gated on §23 evidence, which would otherwise read as
+having died with the constructor it shares a suffix with.
+
 ### 4.2 The normalized encoding gains format version 2, pre-provisioned
 
 Bump the canonical encoding's format version from 1 to 2 in Slice ①a, and in the
