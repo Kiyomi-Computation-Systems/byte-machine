@@ -748,6 +748,31 @@ delivered. No versioned release exists yet.
 
 ### Changed
 
+- Decision records now say **at the top** when a later decision reached back
+  into them, and **at the site** on the item a later note makes false. Five
+  records carried dated amendment notes with nothing above the fold pointing at
+  them (0001, 0004, 0010, 0012, 0013); 0010 had accumulated four such notes, and
+  its item 4 read "extends by a `/v2` constructor" forty-seven lines above the
+  note recording that
+  [decision 0018](docs/decisions/0018-unversioned-generated-abi-constructor.md)
+  had replaced that mechanism. Nothing above a note was rewritten — the pointers
+  are additions, and the convention and its boundary (a pointer routes; it never
+  restates) are stated in
+  [docs/decisions/README.md](docs/decisions/README.md), whose previous wording
+  covered supersession only. The one-bullet-per-note invariant ships with the
+  command that checks it.
+- [Decision 0010](docs/decisions/0010-direct-executor-abi.md)'s 2026-08-23
+  Slice-B note gains a dated annotation: its "item 5's `/v2` remains gated on
+  benchmark evidence" names the wrong item. Item 5 is the deferral of a coded
+  ABI-mismatch condition and mentions no `/v2` and no benchmark gate; the
+  reservation is the third Consequences bullet's. Every other citation of that
+  note — 0012 twice, 0018, 0010's own Milestone 4 note, and Milestone 4's design
+  and Gate 0 plan — pairs it with the Consequences bullet, so what stays gated
+  was never in doubt, only which item the sentence named. Annotated rather than
+  corrected because it was wrong when written rather than made wrong by a later
+  decision, and because those citations reach it. Re-measured against the merged
+  Milestone 4 Gate 0: 16 citation sites in 8 files, all pairing the reservation
+  with the Consequences bullet.
 - Chez discovery now probes each candidate name in turn instead of committing to
   the first one `find_program` returns. A host with an unrelated `scheme` earlier
   on PATH than its Chez previously failed to configure.

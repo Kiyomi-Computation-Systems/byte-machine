@@ -4,6 +4,27 @@ Date: 2026-08-23
 Status: accepted
 Milestone: 1, Phase 3 Slice A
 
+> **Amendments** — four later notes at the foot of this file reach back into the
+> text above them. Nothing above a note is rewritten: the tree each decision was
+> taken against is its evidence.
+>
+> - **2026-08-23 (Slice B)** — records that Slice B shipped the runtime-export
+>   drift guard with no `/v2` export, so the benchmark-gated `/v2` reservation
+>   stays open. Nothing above it became false. **The note itself carries a
+>   2026-08-31 annotation**: its "item 5's `/v2`" names the wrong item — the
+>   reservation is the third Consequences bullet's, not item 5's.
+> - **2026-08-28 (Milestone 2) — the functional /v2 lands** — annotates item 4:
+>   [decision 0012](./0012-generated-abi-v2-finish.md) takes up the extension
+>   item 4 reserved the version tag for.
+> - **2026-08-28 (Milestone 2) — item 5's manifest blocker discharged** —
+>   **amends item 5**: [decision 0013](./0013-runtime-coded-conditions.md)
+>   removes the manifest reason item 5 gives for its deferral. The deferral
+>   itself stands.
+> - **2026-08-31 (Milestone 4)** — **amends item 4**:
+>   [decision 0018](./0018-unversioned-generated-abi-constructor.md) replaces the
+>   `/v2`-constructor extension mechanism. Item 4's purpose and the version tag
+>   survive; the mechanism does not.
+
 ## Context
 
 Milestone 1's design (§6) deferred the generated-code ABI to Phase 3. The Phase 2
@@ -30,10 +51,21 @@ interpreter≡generated differential (parent §18, §22.4) to lowering defects.
 4. The runtime↔generated seam carries the named `feed-outcome` record (not a
    positional value tuple), so the ABI is self-documenting and extends by a `/v2`
    constructor rather than an arity break.
+
+   > **Amended 2026-08-31 (Milestone 4)** by
+   > [decision 0018](./0018-unversioned-generated-abi-constructor.md) — the
+   > `/v2`-constructor mechanism named here is replaced. See the dated note
+   > below; the sentence above is left as decided.
+
 5. In Slice A an ABI-version mismatch raises `assertion-violation`; a coded
    `generated-runtime-abi-mismatch` condition (parent §9.4) is deferred to avoid a
    runtime→conditions dependency that would duplicate `conditions.sls` in the
    `CORE_ALL` lane manifest.
+
+   > **Amended 2026-08-28 (Milestone 2)** by
+   > [decision 0013](./0013-runtime-coded-conditions.md) — the manifest reason
+   > given here is discharged; the deferral itself stands. See the dated note
+   > below.
 
 ## Consequences
 
@@ -52,6 +84,36 @@ asserted equal to `compile.sls`'s exported `reserved-member-2`, witnessed by a
 mutation that drops an entry). It ships **no `/v2` export**: the guard is made
 load-bearing by that mutation, not by the arrival of a new export, so item 5's
 `/v2` remains gated on benchmark evidence exactly as written above.
+
+> **Annotated 2026-08-31 — "item 5's `/v2`" names the wrong item.** Item 5 is
+> the deferral of a coded `generated-runtime-abi-mismatch` condition; it mentions
+> no `/v2` and no benchmark gate. The reservation this note leaves standing is
+> the third **Consequences** bullet — "Slice B may revisit the `feed-outcome`
+> seam under a `/v2` ABI if benchmark evidence ever calls for it (parent §23);
+> the version tag exists for exactly that" — which is also the text "exactly as
+> written above" points at.
+>
+> *What* stays gated is not in doubt, only which item the sentence named.
+> Measured 2026-08-31 against `f215af7`, over every citation of this note in
+> `docs/` — **16 sites in 8 files**: this record itself, decisions
+> [0012](./0012-generated-abi-v2-finish.md) (twice),
+> [0018](./0018-unversioned-generated-abi-constructor.md) and
+> [0022](./0022-structured-parser-error-record.md), and the Milestone 2 and
+> Milestone 4 design and Gate 0 plans. **All 16 pair the reservation with the
+> Consequences bullet**, and none attributes it to item 5. This note is the
+> sole outlier.
+>
+> The confusion was already named once. `milestone-2-gate-0-implementation-plan.md`
+> opens with it as audit finding A5 — item 4 is the arity-break warrant, item 5
+> is the coded ABI-mismatch deferral, "the **benchmark-gated `feed-outcome`
+> `/v2`** lives in 0010 Consequences and its Slice-B amendment. Cite each
+> precisely; do not conflate." That audit swept the records citing this one and
+> did not reach the sentence inside it.
+>
+> It is annotated rather than corrected because it was wrong on the day it was
+> written — no later decision made it wrong — and because it is load-bearing:
+> the citations listed above reach it, and a reader who follows one needs to see
+> what it actually said. AGENTS.md's third case.
 
 ## 2026-08-28 (Milestone 2) — the functional /v2 lands
 

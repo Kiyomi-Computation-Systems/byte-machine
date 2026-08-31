@@ -4,6 +4,14 @@ Date: 2026-08-15
 Status: accepted
 Milestone: 0, slice 1
 
+> **Amendments** — a later note at the foot of this file reaches back into the
+> text above it. Nothing above a note is rewritten.
+>
+> - **Note added 2026-08-22** — **amends the Evidence bullet** on the CMake
+>   mutation lane: its "It runs in CI as ..." sentence was never true. The same
+>   note records that deliverable D8 (CI) moved to Milestone 1 by
+>   [decision 0007](./0007-milestone-0-closes-at-the-harness.md).
+
 ## Context
 
 byte-machine has to find a Chez and a Gambit on hosts it does not control.
@@ -85,6 +93,9 @@ Measured on Darwin 25.5.0 arm64, 2026-08-15:
   decision in turn on a staged copy and requires the owning specification to
   notice. It runs in CI as
   `byte-machine.harness.cmake-mutation.cmake.direct`.
+
+  > **Amended by the note added 2026-08-22** — the CI sentence was never true.
+  > See that note below; the sentence above is left exactly as written.
 
 ## Consequences
 
