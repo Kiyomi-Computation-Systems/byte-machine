@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FORTY-FIVE PASSES, BECAUSE FORTY-FIVE DIFFERENT WITNESSES ARE NEEDED
+# FORTY-SIX PASSES, BECAUSE FORTY-SIX DIFFERENT WITNESSES ARE NEEDED
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -141,11 +141,14 @@
 # additionally needs BYTE_MACHINE_GOLDEN_FILE (naming
 # test/fixtures/generated-one-byte.golden.sls), which the same ctest
 # registration supplies and which execute_process passes through unmodified
-# to that pass's own verify command.
+# to that pass's own verify command. Pass 49's baseline needs
+# BYTE_MACHINE_HTTP_VERSION_GOLDEN_FILE (naming
+# test/fixtures/generated-http-version.golden.sls) by the same mechanism, for
+# the same reason.
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "FORTY-FIVE PASSES..." above. Declared here, rather than only in prose,
+# See "FORTY-SIX PASSES..." above. Declared here, rather than only in prose,
 # so the count enforced at the bottom of this file is the same text a reader
 # checks by eye at the top -- one number to keep in sync, not two that can
 # quietly disagree. 25 passes / 60 mutations before the aot task; pass 26 adds
@@ -711,8 +714,19 @@ cmake_minimum_required(VERSION 3.26)
 # passing unchanged; see Pass 48's own header for the numbers and for the two
 # lanes that do redden. Passes become 44 + 1 = 45; mutations become
 # 232 + 2 = 234.
-set(EXPECTED_PASSES 45)
-set(EXPECTED_MUTATIONS 234)
+# Milestone 3 Slice ③ Task 5 (the sequence determinism golden) opens Pass 49
+# with one mutation -- trie-put's insert-before-if-less arm flipped, so a trie
+# node's children come out DESCENDING by byte -- declared under the new
+# determinism lane's own SPEC. It is the same one-line edit Pass 35 already
+# carries as "normal-ir: trie children are not kept ascending by byte", and it
+# is re-anchored here for the reason Pass 46 re-anchors Pass 44's byte shift: a
+# mutation is witnessed only by the tests that run in the lane its SPEC names,
+# and no golden in the tree contained a BRANCH before this task. Measured to
+# leave the other two determinism programs passing unchanged; see Pass 49's own
+# header for those numbers and for the lanes that do redden.
+# Passes become 45 + 1 = 46; mutations become 234 + 1 = 235.
+set(EXPECTED_PASSES 46)
+set(EXPECTED_MUTATIONS 235)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -6288,9 +6302,146 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
+# --- Pass 49: the sequence determinism golden is non-vacuous (M3 Slice ③ -----
+# Task 5) ---------------------------------------------------------------------
+#
+# determinism-http-version-tests.sps compares the emitted bytes of the §21.2
+# `version` production against test/fixtures/generated-http-version.golden.sls,
+# the first committed golden whose machine contains a BRANCH. The mutation below
+# flips trie-put's insert-before-if-less arm, so a trie node's children come out
+# DESCENDING by byte instead of ascending -- decision 0016 point 1's child rule,
+# and the unstable branch order that §25:1539's "normalized output is
+# deterministic" would otherwise lose.
+#
+# trie-put is the whole of that rule for a SEQUENCE prefix state: the `list-sort`
+# at the head of the byte-dispatch arm (decision 0014) never sees these states,
+# and this fixture declares no byte-dispatch node at all. Measured as a control
+# rather than read off the source -- flipping that comparator
+# `(< (car a) (car b))` -> `(> ...)` on the same scratch stage re-emits this
+# machine BYTE-IDENTICALLY to the committed golden, and leaves this pass's own
+# program green (cases=3 failed-cases=0 checks=8 failures=0 status=0). The
+# Slice ③ implementation plan's draft of this lane named `list-sort` as the
+# mechanism (docs/plans/milestone-3-slice-3-implementation-plan.md, Task 5);
+# that is true of a byte-dispatch node -- decision 0014's ascending-by-byte
+# transition sort -- and false of a sequence prefix state, which is what this
+# fixture is made of.
+#
+# It is the same one-line edit Pass 35 declares as "normal-ir: trie children are
+# not kept ascending by byte", re-anchored under this lane's SPEC for the reason
+# Pass 46 re-anchors Pass 44's byte shift (AGENTS.md: a mutation is witnessed
+# only by the tests that run in the lane its SPEC names). What is new is the
+# witness kind: Pass 35 asserts the lowered transition list structurally, and
+# this pass asserts the EMITTED BYTES.
+#
+# Why the new golden is what witnesses it, measured rather than argued. On a
+# scratch stage the mutant leaves the tree's other two determinism programs
+# passing UNCHANGED -- byte-identical summaries to their own unmutated baselines
+# on the same stage, because neither machine contains a sequence node, so
+# trie-put is never called:
+#   determinism-one-byte-tests.sps: cases=3 failed-cases=0 checks=4 failures=0
+#   status=0, baseline and mutant alike;
+#   determinism-pause-tests.sps: cases=4 failed-cases=0 checks=8 failures=0
+#   status=0, baseline and mutant alike.
+#
+# Stated rather than implied, because "no other lane catches this" would be
+# false, and because the set that does NOT catch it is the surprising half.
+# Re-measured on the same stage, exactly one other program reddens:
+#   normal-ir-tests.sps (Pass 35's SPEC program, where this same edit is already
+#   declared): cases=38 failed-cases=4 checks=82 failures=9 status=1.
+# Both lanes that drive this same branching fixture through an EXECUTOR stay
+# green: differential-http-version-tests.sps (cases=8 failed-cases=0 checks=19
+# failures=0 status=0) and http-version-interpret-tests.sps (cases=12
+# failed-cases=0 checks=19 failures=0 status=0). So do the neighbouring
+# sequence and core lanes, measured on the same stage --
+# differential-sequence-node-tests.sps, sequence-interpret-tests.sps,
+# interpret-tests.sps, compile-tests.sps, ir-tests.sps and verify-tests.sps, all
+# status=0. That is not an accident of these fixtures: reordering the two arms
+# of a `case` over disjoint byte sets is BEHAVIOUR-PRESERVING, so the two
+# executors still agree and no differential can see it. Emission ORDER is
+# observable only in the bytes, which is what a golden is for.
+#
+# The mutant's library is also 3849 bytes -- the same length as the golden -- so
+# a size check would not notice either. Diffed against the committed golden, the
+# whole difference is the branch state's two arms swapping ((48) before (49)
+# becomes (49) before (48)) and the v2 fingerprint moving
+# 12299125921751534854 -> 14649231454401036534.
+#
+# Three neighbouring edits were measured on the same stage and NOT declared
+# here, recorded so the next reader does not re-derive them:
+#   allocate-prefix-ids walked breadth-first instead of depth-first (Pass 35
+#   carries this edit) is INERT on this fixture -- cases=3 failed-cases=0
+#   checks=8 failures=0 status=0. Every interior trie node here has exactly one
+#   interior child, so the two walks number the chain identically. Declaring it
+#   under this SPEC would have been an uncaught mutation.
+#   prefix ids started at 0 rather than declared-count (also Pass 35) IS caught
+#   here (failed-cases=2 failures=6) but corrupts the states vector outright, so
+#   it reddens the execution group as well as the golden and says nothing about
+#   the branch's ORDER.
+#   trie-put's merge (=) arm disabled (also Pass 35) IS caught here
+#   (failed-cases=2 failures=3), but it changes BEHAVIOUR -- `HTTP/1.1` becomes
+#   unreachable -- so the lanes that already exist see it: measured
+#   differential-http-version-tests.sps failed-cases=4 failures=6 and
+#   normal-ir-tests.sps failed-cases=7 failures=10. It needs no new witness.
+#
+# Pin sweep, both directions. This pass declares one mutation, so there is one
+# ordered pair -- the pin against its own capture -- and no sibling under this
+# verify command to collide with; no OTHER pass runs this program, so no
+# existing pin's collision set widened when this one was added. The pin is the
+# case-name tail plus the check label, which resolves to the single (case,
+# check) pair "the emitted bytes equal the committed golden" / "golden": this
+# program declares exactly one check with that label, and the pin contains no
+# regex metacharacter. Pinning the measured DETAIL was considered and declined:
+# it is a 3849-element bytevector dump, so any pin drawn from it embeds the
+# golden's own bytes in this file, and there is no collision here for it to
+# resolve. The identical text is Pass 38's pin, which is sound because a pin is
+# only ever matched against the output of its own mutation's verify command,
+# and Pass 38's is a different program in a different lane.
+# Control: this lane, this program and this mutation are all new on this branch,
+# so there is no prior baseline to re-measure; the control that carries the
+# claim is the neighbouring-determinism measurement above, which shows the
+# mutant surviving the two determinism lanes it is NOT declared under.
+#
+# Verify command uses both library roots, an empty object guard, the new
+# determinism program.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/determinism-http-version-tests.sps"
+  # the golden lives in the source tree; the staged program reads it via env
+  # (BYTE_MACHINE_HTTP_VERSION_GOLDEN_FILE, supplied by this suite's own ctest
+  # registration and inherited unmodified through execute_process -- see "WHAT
+  # THIS SUITE NEEDS FROM ITS ENVIRONMENT" above)
+  )
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls
+  SPEC byte-machine.determinism.http-version.chez.source
+  LABEL "normal-ir: a branching trie's children are emitted descending by byte"
+  # FIND measured unique in the file (one occurrence, confirmed on a scratch
+  # copy); SITES therefore stays at its default of 1.
+  #
+  # Measured against a scratch stage, not the committed tree: baseline cases=3
+  # failed-cases=0 checks=8 failures=0 status=0; mutant cases=3 failed-cases=1
+  # checks=8 failures=1 status=1, the one failure being the golden comparison
+  # and nothing else. Comparison-caught (a check-equal failure, no raise): the
+  # emitted library still loads and both alternatives still walk, which is
+  # exactly why the golden rather than the execution group is what notices.
+  FIND [[          ((< b (caar cs)) (cons (cons b child) cs))]]
+  REPLACE [[          ((> b (caar cs)) (cons (cons b child) cs))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the emitted bytes equal the committed golden: golden")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FORTY-FIVE PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FORTY-SIX PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.
