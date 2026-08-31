@@ -72,3 +72,26 @@ manifest fragment and de-duplicating `CORE_ALL` to resolve the basename collisio
 item 5 flagged. Item 5's own deferral — the coded ABI-version-mismatch condition —
 is thereby *unblocked* but not yet taken: the mismatch still raises
 `assertion-violation` until a slice upgrades it.
+
+## 2026-08-31 (Milestone 4) — the extension mechanism changes; the version tag stays
+
+Milestone 4 Gate 0 (decision 0018, milestone-4-design.md §4.1) replaces item 4's
+extension *mechanism*. The seam no longer "extends by a `/v2` constructor": it
+extends by a growable quoted-vector payload behind **one** unversioned
+`byte-machine-make-compiled-machine` whose first action is the
+`(= abi-version current-abi-version)` check. Item 4's purpose is unchanged — a
+self-documenting seam that grows without an arity break — and the version tag
+this record reserved "for exactly that" is precisely what makes a growable
+payload safe, so it stays load-bearing rather than being retired with the name.
+`current-abi-version` goes 2 → 3. Slice ①a lands it.
+
+**What this note does not reach.** The Consequences bullet reserving a
+`feed-outcome` `/v2` under benchmark evidence (parent §23) is a *different
+family*. `byte-machine-make-feed-outcome/v1` keeps its versioned name, that
+reservation stays open and still gated on §23 evidence, and `bench/` still holds
+only `.gitkeep`. A reader who takes 0018's rename as having retired it has read
+one shared suffix as one decision.
+
+Item 5's deferral of a coded `generated-runtime-abi-mismatch` condition is also
+untouched: 0018 changes which procedure raises the mismatch, not the condition
+kind (decision 0013 item 3).
