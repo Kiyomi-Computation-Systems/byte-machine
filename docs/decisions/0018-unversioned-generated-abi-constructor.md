@@ -173,8 +173,8 @@ reserved name being versioned.
   the mutation rather than deleting it" case, not `EXPECT_SURVIVES`. Refusing
   *every* version still refuses abi 1, so `runtime-tests.sps:243-245` (`/v1`)
   and `runtime-tests.sps:305-306` (`/v2`) keep raising and keep catching a
-  mutant that stops raising. The `/v2` pin is named nowhere above; left
-  un-updated it fails loudly at declaration, not at either test.
+  mutant that stops raising. Neither is discharged by its witness surviving:
+  left un-updated, each fails loudly at declaration rather than at a test.
 - **This is distinct from the benchmark-gated `feed-outcome` `/v2`** reserved by
   decision 0010's Consequences and its Slice-B amendment, which stays gated on
   §23 evidence. That `/v2` is a change to the outcome *record*; this record
