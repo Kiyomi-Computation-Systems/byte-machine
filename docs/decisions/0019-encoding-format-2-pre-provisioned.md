@@ -66,7 +66,8 @@ goldens carry that six-parameter line verbatim at line 4. A field-store
 parameter added in Slice ② would therefore change the emitted text of *every*
 machine, including the zero-field ones, and all three goldens would move in ②
 — falsifying the milestone's own oracle that ①b, ② and ③ move no existing
-golden (milestone-4-design.md:2272) one to two slices after this record is
+golden (milestone-4-design.md's appendix row for the three golden fixtures,
+`:2283` at the time of writing) one to two slices after this record is
 made.
 
 **The version byte has never distinguished anything.** It has read 1 through

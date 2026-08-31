@@ -177,7 +177,9 @@ files.
    permitted** because a spurious target is not caught anywhere downstream:
    `pass-reachability` (`verify.sls:252-258`) walks `all-out-targets`
    (`verify.sls:88-91`), a purely syntactic graph walk with no notion of which
-   operations can fail, and `milestone-4-design.md:1359` — §7's census row 3 —
+   operations can fail, and `milestone-4-design.md` §7's census row 3 (the
+   `node-out-targets` row,
+   `:1363` at the time of writing) —
    feeds a field-action
    node's `error` into `node-out-targets` whenever it is a symbol — so an
    `error` target on a safe operation is *reached* by that walk exactly like a
@@ -225,7 +227,8 @@ files.
    closes a listed-and-unimplemented gap rather than re-closing one, and it pays
    for its unreachability with an `EXPECT_SURVIVES` Slice ①b is to declare, its
    reason measured on the staged tree only when that slice runs it
-   (`milestone-4-design.md:957-961`), not measured here.
+   (`milestone-4-design.md` §6 task 3's `EXPECT_SURVIVES`-with-a-measured-reason
+   resolution, `:957-961` at the time of writing), not measured here.
 
 ## Consequences
 
