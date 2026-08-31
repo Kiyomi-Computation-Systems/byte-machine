@@ -26,7 +26,7 @@ proceeds while one exists (§16.1:878).
 **Decision 0017's reasoning does not transfer, and the difference is one line
 of §16.2.** 0017's Context turns on an absence: "§16.2's list of required
 checks — an itemized enumeration with no open-ended qualifier — has **no**
-invalid-matcher entry at all" (0017:17-19), so a matcher-validity *diagnostic*
+invalid-matcher entry at all" (0017:16-17), so a matcher-validity *diagnostic*
 would have been an addition to that list. §16.2:889 is the opposite case: it
 names the field items outright — "invalid field widths, initial values,
 constants, masks, and operations". Closing them at the constructor therefore
@@ -44,7 +44,7 @@ arm for it: its only `edge-mode` reads are inside `pass-zero-progress`
 validate a mode, and none of its fourteen diagnostic codes names one. §16.2:896
 is discharged wholly at the constructor today. Two other shipped constructors
 supply the shapes M4 reuses: `make-byte-dispatch-node`'s `(or (symbol?
-eof-target) (eq? eof-target #f))` (`ir.sls:229-231`) is the target-or-`#f`
+eof-target) (eq? eof-target #f))` (`ir.sls:230-231`) is the target-or-`#f`
 slot, and 0017 point 1's range checks are local shape.
 
 A reader who finds §16.2:889 and `make-edge` and no record will
@@ -60,18 +60,20 @@ files.
 
 ## Decision
 
-1. **The constructor checks closed-set membership and the local shape of the
-   one value being built, and nothing else.** `width` in `{8, 16, 32, 64}`;
+1. **The constructor checks closed-set membership and the local shape of the one
+   value being built, and nothing else.** `width` in `{8, 16, 32, 64}`;
    `initial` an exact integer in `[0, 2^width - 1]`; `operation` in the closed
    seven of §9.1:326-334; `predicate` in the closed seven of §9.1:336-346;
    `base` in `{10, 16}`; `arguments` a proper list; `name`, `field`, `next`,
    `true-target`, `false-target`, `digit-target` and `overflow-error` symbols;
-   `eof-target` a symbol or `#f` (§9.1:318); `nondigit-edge` an `edge?`. Each is
-   a `byte-machine-contract-violation`, on the `make-edge` precedent. `initial`
-   is in this list and the field-action `constant` is not, for one reason worth
-   stating because the predicate is identical: `make-uint-field` receives the
-   width in its own argument list (§9.1:283), so the bound is local; a
-   field-action node names its field by symbol, so the bound is somewhere else.
+   `eof-target` a symbol or `#f` (§9.1:318); `error` a symbol or `#f`, item 5
+   below fixing which one a given `operation` requires; `nondigit-edge` an
+   `edge?`. Each is a `byte-machine-contract-violation`, on the `make-edge`
+   precedent. `initial` is in this list and the field-action `constant` is not,
+   for one reason worth stating because the predicate is identical:
+   `make-uint-field` receives the width in its own argument list (§9.1:283), so
+   the bound is local; a field-action node names its field by symbol, so the
+   bound is somewhere else.
 
 2. **`arguments` is checked as a proper list and no further; the schema is not
    read at construction.** This single line fixes the whole boundary for the
@@ -91,7 +93,12 @@ files.
    field, `constant` and `mask` within the *referenced* field's declared width,
    `low <= high` for `range`, duplicate field names, and portable field names
    (§10.1:480). "6a" is this design's label; the source name follows the
-   unnumbered-pass convention `verify.sls:190-200` records.
+   unnumbered-pass convention `verify.sls:190-200` records. **The number is a
+   false friend:** the shipped file numbers passes by implementation order, not
+   by §16.3's own item numbers, and that numbering skips §16.3 items 6 and 7
+   (this pass, and span-state dataflow) entirely, so `verify.sls`'s own PASS 6
+   (`verify.sls:340`) is EOF shape, §16.3 item 8, not this pass — a reader who
+   greps `PASS 6` lands there, not here.
 
 4. **§16.2:889's five items split three and two.** Widths, initial values and
    **operations** are discharged at construction — a raised contract violation,
@@ -99,23 +106,55 @@ files.
    **masks** stay diagnostics, in pass 6a, under `invalid-field-operand`. That
    is the exact split, and it is not a departure from §9.1:322, whose sentence
    states its own criterion: "Constructors validate only local shape and return
-   immutable-by-API descriptors ... Cross-reference, graph, and semantic checks
-   belong to `verify-machine` so callers can accumulate structured
-   diagnostics." Accumulation is what cross-reference checks are *for*, and
-   every item on the constructor side is evaluable from the one value being
-   built while every item on the verifier side needs a second object — the
-   field declaration — to evaluate at all. What callers lose is the ability to
-   collect a width or an operation error beside other diagnostics; they get a
-   raise at the offending constructor instead. That is 0017's Consequences trade
-   taken again, for consistency, and not re-litigated per constructor.
+   immutable-by-API descriptors (from Milestone 3 that validation includes
+   rejecting an empty byte set, a range with `low > high`, and an empty sequence
+   — decision 0017). Cross-reference, graph, and semantic checks belong to
+   `verify-machine` so callers can accumulate structured diagnostics." That
+   parenthetical names the very check item 2 reverses for the `range` predicate
+   — `low > high`, moved here from `make-byte-range-matcher`'s named parameters
+   to a list position the constructor may not read. Accumulation is what
+   cross-reference checks are *for*, and every item on the constructor side is
+   evaluable from the one value being built while every item on the verifier
+   side needs a second object — the field declaration — to evaluate at all. What
+   callers lose is the ability to collect a width or an operation error beside
+   other diagnostics; they get a raise at the offending constructor instead.
+   That is 0017's Consequences trade taken again, for consistency, and not
+   re-litigated per constructor.
+
+   §9.1:348 is a third pointer sitting under the very tables this record cites
+   four times, and it needs the same treatment: "The verifier enforces exact
+   arity, declared-field references, operand range, and `low <= high`; it
+   rejects arbitrary operation names or extra arguments." Arity and extra
+   arguments are pass 6a's, per item 2; declared-field references and operand
+   range are pass 6a's, per item 3; **"arbitrary operation names" is the one
+   clause pass 6a does not carry**, and it is discharged instead by item 1's
+   closed-set check on `operation` — the same split this item already makes for
+   §16.2:889's "operations" bullet, reasoned identically. §9.1:322's own
+   sentence assigns cross-reference, graph, and **semantic** checks to
+   `verify-machine`, three categories where the paragraph above engages only the
+   first: membership in a plan-fixed closed set of seven symbols (§9.1:326-334)
+   is local shape under any of the three, the same reasoning already given for
+   `operation`'s sibling `predicate`, and for `width` and `base`.
 
 5. **The `error` slot of `make-field-action-node` names a target node, and is
    `#f` exactly when the operation cannot fail.** Not "may be" — exactly. The
    partition is a property of the operation symbol alone, so it is a second
    closed-set lookup on a value item 1 already closes, and it stays inside "the
-   local shape of the one value being built". Reasoning over all seven
-   operations against their §9.1:326-334 schemas, a field of width `w`, its
-   maximum `M = 2^w - 1`, and the invariant that a stored value is in `[0, M]`:
+   local shape of the one value being built". A sharper, per-call partition is
+   conceivable — `add (field 0)` cannot fail regardless of the field's current
+   value — but item 2 already forbids reading `arguments` at construction, so an
+   instance-level rule has no argument value available to inspect and is
+   unimplementable here; the operation symbol is the only thing the constructor
+   may partition on.
+
+   Reasoning over all seven operations against their §9.1:326-334 schemas, a
+   field of width `w`, its maximum `M = 2^w - 1`, and the invariant that a
+   stored value is always in `[0, M]` — closed, not merely asserted: the base
+   case is item 1's `initial` check, already bounding the field to that range at
+   construction, and the inductive step is exactly the four operations below
+   shown to preserve it, the three checked operations' error edge refusing any
+   commit that would not, and §15's checked multiply-add doing the same for
+   integer accumulate:
    - `store (field constant)` — writes `constant`, which pass 6a has already
      bounded by `M`. **Cannot fail.**
    - `clear (field)` — writes `0`, in range at every width. **Cannot fail.**
@@ -132,17 +171,23 @@ files.
    Four safe, three failing, which is exactly §10.6:560's "Underflow, overflow,
    or an out-of-range result takes an explicit error edge" once the third
    disjunct is discharged by pass 6a. **`#f` is required and not merely
-   permitted** because the alternative writes unreachable nodes into user
-   grammars: an `error` target on a safe operation is a node no execution can
-   enter, and §16.4:947 makes unreachable nodes errors in v0.1, so the author
-   would be obliged to author a node the verifier is then obliged to reject.
-   The rule completes a three-way pattern across the three new constructors,
-   and nothing else is left open in it: integer accumulate's `overflow-error`
-   is mandatory, because §15:864-868's multiply-add can always fail; field
-   action's `error` is conditional, by this rule; field branch has no error
-   slot at all (§9.1:305-306), because a predicate over an in-range field and a
-   bounded operand is total and §10.6:582 already demands "an explicit target
-   for every possible result".
+   permitted** because a spurious target is not caught anywhere downstream:
+   `pass-reachability` (`verify.sls:252-258`) walks `all-out-targets`
+   (`verify.sls:88-91`), a purely syntactic graph walk with no notion of which
+   operations can fail, and `milestone-4-design.md:1355` feeds a field-action
+   node's `error` into `node-out-targets` whenever it is a symbol — so an
+   `error` target on a safe operation is *reached* by that walk exactly like a
+   real one and trips no `'unreachable-node` diagnostic, or any other check.
+   Nothing downstream distinguishes a live error target from a dead one; the
+   constructor is the only place able to catch a spurious target at all, which
+   is why `#f` is required and not merely permitted. The rule completes a
+   three-way pattern across the three new constructors, and nothing else is left
+   open in it: integer accumulate's `overflow-error` is mandatory, because
+   §15:864-868's multiply-add can always fail; field action's `error` is
+   conditional, by this rule; field branch has no error slot at all
+   (§9.1:305-306), because a predicate over an in-range field and a bounded
+   operand is total and §10.6:582 already requires it: "Every possible result
+   must have an explicit target."
 
 6. **No unreachable duplicate arm is admissible anywhere in Milestone 4, and
    the `base` arm of milestone-4-design.md §8 task 3 is dropped.** Where the
@@ -163,13 +208,15 @@ files.
    mutation witness across two sites that `SITES` asserts exactly and that fail
    in both directions (`AGENTS.md:147`; `MutationRunner.cmake:59-62`), and owe
    an `EXPECT_SURVIVES` for a check the tree already has a reachable rejection
-   for. The one arm that *is* admissible under the same rule is not a duplicate:
-   `pass-schema`'s §16.2:884 IR-version check is the sole rejection site for
-   that requirement — `make-machine` stamps `machine-ir-version` as a constant
-   (`ir.sls:351`, into slot 1 at `:365`) and `machine-tag` is unforgeable
-   (`ir.sls:41-43`) — so it closes a listed-and-unimplemented gap rather than
-   re-closing one, and it pays for its unreachability with the measured
-   `EXPECT_SURVIVES` Slice ①b declares.
+   for. `pass-schema`'s §16.2:884 IR-version check also survives, but not as an
+   instance of that rule: it duplicates nothing, so the rule above does not
+   reach it either way. It is the sole rejection site for that requirement —
+   `make-machine` stamps `machine-ir-version` as a constant (`ir.sls:351`, into
+   slot 1 at `:365`) and `machine-tag` is unforgeable (`ir.sls:41-43`) — so it
+   closes a listed-and-unimplemented gap rather than re-closing one, and it pays
+   for its unreachability with an `EXPECT_SURVIVES` Slice ①b is to declare, its
+   reason measured on the staged tree only when that slice runs it
+   (`milestone-4-design.md:957`), not measured here.
 
 ## Consequences
 

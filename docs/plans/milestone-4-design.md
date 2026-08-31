@@ -180,9 +180,11 @@ following is an open design call.
   (§9.1:318), and that applies to integer accumulate because it is an input
   node.
 - **Diagnostics compare structure and codes, never rendered text** (§16.4:945).
-- **Unreachable nodes are errors in v0.1** (§16.4:947), which is why §4.3's
-  `#f`-when-the-operation-cannot-fail rule matters: the alternative forces
-  authors to write error nodes that no execution can reach.
+- **Unreachable nodes are errors in v0.1** (§16.4:947), but a spurious `error`
+  target on a safe operation is not one: `node-out-targets` feeds it into the
+  reachability walk whenever it is a symbol, so it is *reached* and no pass
+  catches it. That is why §4.3's `#f`-when-the-operation-cannot-fail rule is
+  enforced at the constructor — the only place that can.
 - **The interpreter may not share the normalizer's lowering** (§18:970-972). See
   §2's last rejection.
 
@@ -292,8 +294,10 @@ task 3 documents for `pass-schema`'s version check.
 **target node**, and must be `#f` **exactly when the operation cannot fail**.
 `store`, `clear`, `set-mask` and `clear-mask` provably cannot fail once the
 constant or mask is range-checked against the field width; `increment`,
-`decrement` and `add` can. Requiring a target on the four safe operations would
-force authors to write error nodes no execution can reach, against §16.4:947.
+`decrement` and `add` can. Permitting a target on the four safe operations would
+not fail loudly: `node-out-targets` feeds a symbol `error` into the reachability
+walk unconditionally, so the target is *reached* and no pass checks whether the
+operation can actually fail — the constructor is the only place that can.
 Precedent for a target-or-`#f` slot: `eof-target` (§9.1:318).
 
 ### 4.4 EOF-chain classification generalizes to multi-successor zero-width nodes
@@ -1758,15 +1762,18 @@ comment and in the all-byte test's group header, in the constructor's commit.
    with the offending **field** name in the diagnostic's `node` slot; record
    that with one field type "incompatible field" has no content beyond
    "declared" (§29:1754 defers what would give it content). Its *base* half is
-   unreachable through the public API, Task 2's constructor rejecting any base
-   outside `{10, 16}`, so it is a recorded defense-in-depth arm — admissible
-   where §4.3 leaves width and initial value wholly to the constructor because
-   pass 6a already visits this node to resolve its `field`, so the base test
-   adds a clause to a walk that runs anyway, not a new pass or `FIND` site.
-   `normal-ir.sls`'s trie guards are the shipped precedent (decision 0015 point
-   2). **Gate: one `verify-tests.sps` case per arm, grouped under a header
-   stating the site census and its derivation, following the "sequence dispatch
-   reaches every verifier arm" precedent.**
+   discharged wholly by Task 2's constructor, which rejects any base outside
+   `{10, 16}`; per decision 0020 item 6's one-rejection-site rule, pass 6a
+   carries **no** arm for it, and the field walk records the assignment in
+   place, the way `pass-overlap` documents its own non-extension.
+   `normal-ir.sls`'s trie guards (decision 0015 point 2) are not a precedent for
+   a pass-6a arm here: those guards stay reachable through `normalize-machine`'s
+   own public entry point, while a machine holding an out-of-range `base` cannot
+   be constructed at all, so an arm here would ship dead and owe an
+   `EXPECT_SURVIVES` this task does not budget for — decision 0020 item 6 works
+   this exact case through in full. **Gate: one `verify-tests.sps` case per arm,
+   grouped under a header stating the site census and its derivation, following
+   the "sequence dispatch reaches every verifier arm" precedent.**
 
 4. **The interpreter arm, and the checked multiply-add — first writing.**
    §15:858-870 is normative and its inequality is quoted exactly, not restated:
