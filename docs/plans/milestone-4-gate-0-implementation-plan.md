@@ -46,6 +46,21 @@
 **Deliberately untouched.** `docs/decisions/0009-content-and-ir-fingerprints.md` (see Global Constraints), every `.sls` and `.sps`, every CMake file, `README.org` and `CHANGELOG.md` — the milestone's status surfaces move when the milestone *closes*, not when Gate 0 discharges. Task 1's vocabulary sweep reads those two files but changes neither.
 
 ---
+---
+
+> **The record bodies embedded below are the drafts as dispatched, not the
+> records as shipped.** Every one of Tasks 1–5 went through a review that
+> corrected its record in the tree — in three cases a *semantic* correction, not
+> a wording one. `docs/decisions/0018`–`0022` are authoritative; these blocks are
+> the work orders they were built from, kept because the record of what was asked
+> is not the record of what shipped (AGENTS.md, "Correct a stale instruction in
+> place; annotate a stale record"). A re-run must reconcile against the shipped
+> records rather than transcribing these verbatim. The known divergences at the
+> time of this note: Task 5's body still initializes the position-kind loop
+> variable to `byte` where decision 0022 now conditions it on `finish?`
+> (`boundary` on a feed call, `eof` on a finish call); Task 5's body still calls
+> `0a267de` `HEAD`; and Task 5's position table still carries an over-wide row.
+
 ## Task 1: Decision 0018 — One unversioned generated-ABI constructor, with the version check first
 
 **Files:**
@@ -490,9 +505,9 @@ a different closure. All three committed goldens carry that six-parameter line
 verbatim at line 4. A field-store parameter added in Slice ② would therefore
 change the emitted text of *every* machine, including the zero-field ones, and
 all three goldens would move in ② — falsifying the milestone's own oracle that
-①b, ② and ③ move no existing golden (milestone-4-design.md §1's dependency-order paragraph, and its appendix row
-for the three golden fixtures) one to
-two slices after this record is made.
+①b, ② and ③ move no existing golden (milestone-4-design.md §1's dependency-order
+paragraph, and its appendix row for the three golden fixtures) one to two slices
+after this record is made.
 
 **The version byte has never distinguished anything.** It has read 1 through
 every encoding change so far: Milestone 2 appended eof routing to the dispatch
