@@ -144,6 +144,25 @@
   check contained a bare pin as a substring and broke a pin sixteen mutations
   above it), and a first attempt can collide with a third mutant — one fix here
   had to be redesigned after its initial shape tied with a sibling.
+* **`SITES` fails in BOTH directions — new code that DUPLICATES a pinned line breaks it too.**
+  The familiar failure is "found 0, expected 1": an edit changed a `FIND`'s text.
+  The one that gets missed is **"pattern occurs 2 times ... expected 1"**, when a
+  *newly added* function duplicates a line some shipped mutation pins. Milestone 3
+  Slice ③ drafted `pass-sequence-ambiguity` as a structural clone of
+  `pass-overlap`'s `node-overlaps` — same `let outer`/`let inner` skeleton, same
+  `ss`/`rest`/`out` bindings — and three shipped mutations pin **single lines** of
+  that skeleton, so the clone took each from one occurrence to two and would have
+  hard-failed the suite three times over, for mutations the slice never touched.
+  Caught in planning, not by CI. The fix is to **rename the new function's
+  bindings**, never to widen three shipped `FIND`s: cheaper, and it leaves the
+  shipped pins alone. Copying a neighbouring pass's skeleton is the natural move
+  here and is exactly the trap. To check, lex every `byte_machine_mutation(` block,
+  keep those whose `FILE` is the file you touched, and count each `FIND` in the
+  post-edit source against its declared `SITES` — counting by **FILE**, not by
+  SPEC, because a SPEC census cannot see a second pass mutating the same file
+  under a different lane (Pass 37 mutates `verify.sls` under the
+  identifier-repertoire SPEC, invisible to a census of `verify.rejections`).
+
 * **A pin is only ever verified against the mutants that existed when it was measured.**
   This is the same shape as the exit-path rule above: adding mutations to a lane
   can widen an existing pin's collision set, silently. When a branch adds
