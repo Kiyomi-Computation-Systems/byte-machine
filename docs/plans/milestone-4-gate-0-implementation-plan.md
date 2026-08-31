@@ -647,7 +647,9 @@ Expected: the design subsection this record is the durable form of; and `0` — 
 
 ```bash
 git add docs/decisions/0019-encoding-format-2-pre-provisioned.md
-git commit -m "docs: decision 0019 — the normalized encoding gains format version 2, pre-provisioned"
+git commit -m "docs: decision 0019 — the normalized encoding gains format version 2, pre-provisioned
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
 ---
@@ -911,7 +913,9 @@ Expected: the design subsection this record is the durable form of; and `0` — 
 
 ```bash
 git add docs/decisions/0020-field-shape-is-a-constructor-contract.md
-git commit -m "docs: decision 0020 — field shape is a constructor contract"
+git commit -m "docs: decision 0020 — field shape is a constructor contract
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
 ---
@@ -1121,7 +1125,9 @@ Expected: the design subsection this record is the durable form of; and `0` — 
 
 ```bash
 git add docs/decisions/0021-eof-classification-multi-successor.md
-git commit -m "docs: decision 0021 — EOF-chain classification generalizes to multi-successor nodes"
+git commit -m "docs: decision 0021 — EOF-chain classification generalizes to multi-successor nodes
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
 ---
@@ -1395,7 +1401,9 @@ Expected: the design subsection this record is the durable form of; and `0` — 
 
 ```bash
 git add docs/decisions/0022-structured-parser-error-record.md
-git commit -m "docs: decision 0022 — the structured parser-error record"
+git commit -m "docs: decision 0022 — the structured parser-error record
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
 ---
