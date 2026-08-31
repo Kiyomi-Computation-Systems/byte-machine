@@ -636,12 +636,14 @@ delivered. No versioned release exists yet.
   disagreements. `pass-overlap` is **not** extended to sequence nodes, now or
   later: §16.2:893 and :894 are two entries, two checks and two codes
   ([decision 0017](docs/decisions/0017-degenerate-shapes-are-contract-violations.md)
-  point 4), and the internal guards asserting the same two invariants — in
-  `normal-ir.sls`'s trie, where the ambiguity invariant is checked in both
-  directions and so occupies the three sites counted above, and in
-  `interpret.sls`'s `seq-step`, where it occupies two — are kept as
-  defense-in-depth for a caller who reaches `normalize-machine` without
-  verifying, or who forges a verification result. Scope bullet §25:1532.
+  point 4), and the guards for the same two invariants are kept as
+  defense-in-depth in both files — **three** assertion sites in
+  `normal-ir.sls`'s `trie-insert`, because the ambiguity invariant is checked in
+  both directions there, and **two** in `interpret.sls`'s `seq-step` — for a
+  caller who reaches `normalize-machine` without verifying, or who forges a
+  verification result. (Per invariant: ambiguity holds two of the normalizer's
+  three sites and one of the interpreter's two; duplicate-alternative holds one
+  of each.) Scope bullet §25:1532.
   Together with the REPORT-guard extension below, this closes both of the two
   verifier sites the Milestone 3 Slice ② entry above records as deferred to this
   slice — one by extending it, the other by establishing that it is never

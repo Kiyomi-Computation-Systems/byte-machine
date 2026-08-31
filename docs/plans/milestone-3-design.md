@@ -94,8 +94,8 @@ M3 is one milestone delivered as an ordered Gate 0 plus three slices:
 | --- | --- | --- | --- |
 | **Gate 0** | decisions only | 4 records | the calls §25, §10.6 and §16.2 leave open |
 | **Slice ① — Byte classes** | product | canonicalization spine; `make-byte-set-matcher` / `make-byte-range-matcher` / `make-byte-complement-matcher` / `ascii-bytes`; rewritten overlap pass; per-byte lowering; all-256 class lanes | §25:1527-1528, exit :1537 |
-| **Slice ② — Sequence dispatch and prefix lowering** | product | the sixth node kind and every verifier arm; trie-shaped prefix lowering; state-id allocation; independent interpreter tracking; both mismatch modes | §25:1530-1531 and the single-alternative half of :1529, exit :1538 |
-| **Slice ③ — Multiple alternatives and ambiguity** | product | multi-alternative fixtures over Slice ②'s trie; ambiguous-terminal-prefix rejection; the **zero-progress** half of the cycle extension (:1533's EOF-cycle half shipped in Slice ②); determinism pins; the `HTTP/1.0`⁄`HTTP/1.1` fixture | the multi-alternative half of §25:1529, plus :1532 and the zero-progress half of :1533, exits :1539-:1540 |
+| **Slice ② — Sequence dispatch and prefix lowering** | product | the sixth node kind and every verifier arm; trie-shaped prefix lowering; state-id allocation; independent interpreter tracking; both mismatch modes | §25:1530-1531 and the single-alternative half of :1529, exit :1538, and the Slice ② half of exit :1539 |
+| **Slice ③ — Multiple alternatives and ambiguity** | product | multi-alternative fixtures over Slice ②'s trie; ambiguous-terminal-prefix rejection; the **zero-progress** half of the cycle extension (:1533's EOF-cycle half shipped in Slice ②); determinism pins; the `HTTP/1.0`⁄`HTTP/1.1` fixture | the multi-alternative half of §25:1529, plus :1532 and the zero-progress half of :1533, the Slice ③ half of exit :1539, and exit :1540 |
 
 Dependency order is strict. Gate 0 unblocks everything. Slice ① is purely
 additive to the normalized encoding, so it can assert *no fingerprint moved* as
@@ -723,14 +723,24 @@ verification).
 >    `test/support/harness/byte-machine/test/http-version-machine.sls` (both
 >    mismatch-mode machines, written once and shared by three programs);
 >    `test/common/http-version-interpret-tests.sps` with the lane pair
->    `byte-machine.unit.http-version.chez.{source,aot}`, whose four groups assert
->    **absolute** interpreter outcomes ("each alternative reaches its OWN target
->    through the shared prefix", "mismatch positioning, at the branch and before
->    it (§11.5:664)", "every proper prefix is need-input, never paused (decision
->    0015 point 5)"); `test/common/differential-http-version-tests.sps` with
+>    `byte-machine.unit.http-version.chez.{source,aot}`, whose four groups are
+>    **three** of **absolute** interpreter outcomes ("each alternative reaches
+>    its OWN target through the shared prefix", "mismatch positioning, at the
+>    branch and before it (§11.5:664)", "every proper prefix is need-input,
+>    never paused (decision 0015 point 5)") plus **one** verification check
+>    ("both fixtures verify clean under the §16.2:894 pass") — three absolute and
+>    one verifying, not four absolute;
+>    `test/common/differential-http-version-tests.sps` with
 >    `byte-machine.differential.http-version.chez.{source,aot}`; and a structural
->    group in `normal-ir-tests.sps` ("alternatives share prefix states wherever
->    they agree").
+>    group in `normal-ir-tests.sps`, **"two alternatives over a shared prefix
+>    lower to one trie"** ("the shared prefix is not duplicated", "the chain is
+>    linear until the distinguishing byte", "the branch state routes each
+>    alternative to its OWN declared node"). That is *not* "alternatives share
+>    prefix states wherever they agree", which is **Slice ②'s** — it is present at
+>    Slice ②'s merged tip `49c8cc4` and absent from this slice's diff — and is
+>    the very group whose cases the narrowing below credits to Slice ②. An
+>    earlier draft of this disposition named that group here, crediting one group
+>    to both slices four lines apart.
 >    **NARROWED, by measurement.** This bullet's second sentence — "this slice is
 >    where more than one alternative is first constructed, lowered and executed
 >    end to end" — is **false as written**, and the plan that inherited it was
@@ -811,12 +821,23 @@ verification).
 >    flip is a real mutation and the byte-identity is not an artifact. The task
 >    stands; only the named mechanism was wrong, and the corrected mechanism is
 >    written into the shipped program's header.
->    One scoping note, so this disposition does not contradict §7's own opening
->    sentence two paragraphs above: that sentence claims exit :1539 for this
->    slice, and the milestone exit disposition below credits it to **Slice ② and
->    Slice ③ together** — Slice ②'s `normal-ir-tests.sps` "caller order does not
->    change the canonical result" is the other half, and predates this slice.
->    The same is true of :1533's opening claim, corrected in halves in item 3.
+>    One scoping note, so this disposition does not contradict the two other
+>    places in this file that allocate exit :1539. §7's own opening sentence two
+>    paragraphs above claims :1539 for this slice, and §1's phase table said the
+>    same in Slice ③'s "Discharges" cell. The milestone exit disposition below
+>    credits it to **Slice ② and Slice ③ together** — Slice ②'s
+>    `normal-ir-tests.sps` "caller order does not change the canonical result" is
+>    the other half, present at Slice ②'s merged tip `49c8cc4` and absent from
+>    this slice's diff, so the attribution is measured rather than assumed.
+>    §7's opening sentence is a closed instruction and stands as written; **§1's
+>    two phase-table cells were corrected in place at this close**, because that
+>    table is a navigational map that has to be true, and a half-narrowed cell —
+>    Slice ③'s :1533 split into halves while :1539 still read whole — is the
+>    worst of the three states: it reads as measured and current while asserting
+>    what the measurement disproved. Slice ②'s row now names its half of :1539
+>    too, so the pair is symmetric rather than leaving the criterion
+>    under-allocated. The same halving applies to :1533's opening claim,
+>    corrected in item 3 above.
 > 5. **The `HTTP/1.0` ⁄ `HTTP/1.1` fixture.** Built in Task 3 over §21.2:1065's
 >    `version = "HTTP/1.0" / "HTTP/1.1"`, driven by Tasks 4 and 5. Measured
 >    lowering: entry 0, 11 states, seven internal prefix states appended after the
@@ -1093,7 +1114,20 @@ note cites.
 >
 > - **`verify`.** Both Slice ③ entries shipped: `pass-sequence-ambiguity` with
 >   the one new code `'ambiguous-sequence-prefix`, and the zero-progress REPORT
->   guard extended to a self-targeting `reexecute` mismatch edge. The row's
+>   guard extended to a self-targeting `reexecute` mismatch edge. **That moves
+>   the node-kind site census §6's disposition records from six extended plus two
+>   unextended to SEVEN extended plus ONE**, the one being `pass-overlap`,
+>   permanently rather than deferred; the eight-site membership is unchanged.
+>   Recounted at this close by enumerating every site in `verify.sls` that
+>   dispatches on node kind rather than by grepping `byte-dispatch-node?`, which
+>   cannot see a `cond` dispatching through other kind predicates. The number's
+>   primary home is beside the arms that cover it, in `verify-tests.sps`'s
+>   "sequence dispatch reaches every verifier arm" group header, which carries
+>   the derivation; it is repeated here only because this set has been miscounted
+>   twice and §6 above would otherwise leave a design-only reader on the old
+>   split. `pass-sequence-ambiguity` is a ninth kind-dispatching site and
+>   deliberately outside that census — sequence-only by construction, never a
+>   permissive fall-through that had to be taught the sixth kind. The row's
 >   "`pass-reachability` and `reaches-self?` are **unchanged**" **held**, with
 >   the qualifier that makes it true: the `reaches-self?` *procedure* and
 >   `pass-reachability` are byte-for-byte unchanged on this branch; what Slice ③
