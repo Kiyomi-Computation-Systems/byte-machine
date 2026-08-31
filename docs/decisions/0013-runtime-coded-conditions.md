@@ -4,6 +4,16 @@ Date: 2026-08-28
 Status: accepted
 Milestone: 2, Gate 0 (milestone-2-design.md §3.3)
 
+> **Amendments** — two later notes at the foot of this file reach back into the
+> text above them. Nothing above a note is rewritten.
+>
+> - **2026-08-28 (Slice ②a)** — **amends item 2**: the "shared conditions
+>   manifest fragment" was realized without a separate named fragment. The
+>   outcome item 2 requires is unchanged.
+> - **2026-08-29 (Slice ③)** — annotates item 1: the lifecycle-misuse family
+>   shipped as a single code, `'lifecycle-violation`, covering every §12.2 cell
+>   Milestone 2 makes reachable.
+
 ## Context
 
 Parent §12.6/§9.4 require prohibited and lifecycle-misuse operations to "raise
@@ -23,6 +33,10 @@ deferral's blocker is removed here.
    while ready, finish while paused, and so on) and the §11.1 invalid-slice
    contract raise `&byte-machine-contract` with a stable `code`/`who` the tests
    assert directly. One condition type keyed by `code`/`who` suffices (§9.4).
+
+   > **Annotated 2026-08-29 (Slice ③)** — the misuse family as shipped is one
+   > code, `'lifecycle-violation`. See the dated note below.
+
 2. **The stored `CORE_ALL` manifest is de-duplicated.** Adding the import puts
    `conditions.sls` in both `BYTE_MACHINE_CORE_RUNTIME` and (via graph/ir)
    `BYTE_MACHINE_CORE_VERIFY`, which would collide as a duplicate basename inside
@@ -30,6 +44,12 @@ deferral's blocker is removed here.
    `CORE_ALL` value is de-duplicated before it is reused (before `CORE_EMIT` is
    set), so the per-lane `byte_machine_lane_duplicate_basenames` guard stays green.
    No dependency cycle is introduced: `conditions.sls` imports only `(rnrs)`.
+
+   > **Amended 2026-08-28 (Slice ②a)** — no separate named fragment was
+   > factored; `conditions.sls` is prepended directly to
+   > `BYTE_MACHINE_CORE_RUNTIME`. See the dated note below; the item above is
+   > left as decided.
+
 3. **Item 5's coded ABI-mismatch condition is unblocked but not required by
    Milestone 2.** Decision 0010 item 5 deferred that condition for the same
    manifest reason. With the runtime->conditions dependency now present, that

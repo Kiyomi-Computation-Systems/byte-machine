@@ -247,7 +247,18 @@
   A stale sentence is corrected or annotated according to what it does, not
   which file it sits in. A **record** — a measurement, a finding, a decision
   record's Context — gets an amendment note, because a record edited to agree
-  with a later decision stops being evidence of anything. An **instruction** —
+  with a later decision stops being evidence of anything. The note is half the
+  job: a reader who arrives at a numbered item by citation never scrolls to the
+  foot of the file, so the **top** of the record must also say a later note
+  reached back into it, and the amended item must say so at the site.
+  `docs/decisions/README.md` states that convention and the boundary it must
+  not cross — a pointer routes, it never restates, because one that summarises
+  the correction hands a reader the later decision's conclusion without the
+  evidence the note carries, which is this bullet's rewrite arriving by the
+  back door. Decision 0010 item 4 read "extends by a `/v2` constructor" with
+  the note replacing that mechanism forty-seven lines below and three like it
+  already in the file, and nothing at the top of the record saying so.
+  An **instruction** —
   a work order, an exit criterion, a Deliver or Scope list, a deliverable
   entry, or a comment in live code saying what the code is for — gets corrected
   in place, because leaving a false one is not preserving evidence, it is

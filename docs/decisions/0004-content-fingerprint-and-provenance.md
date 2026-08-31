@@ -4,13 +4,20 @@ Date: 2026-08-17
 Status: accepted
 Milestone: 0, slice 5a
 
-> Amended 2026-08-18 by [decision 0006](./0006-inline-libraries.md): the
-> include collapse renamed `SHARED_BODIES` to `SOURCES` (decision 3 below
-> names the old spelling) and replaced `fingerprint-manifest.ss`'s verbatim
-> `load` with an import of `(byte-machine test fingerprint)` (decision 4
-> records the `load` mechanism). Both disciplines those decisions state —
-> the manifest is declared and required at registration; provenance is
-> skipped, never refused, at run time — are unchanged.
+> **Amendments** — two later notes reach back into this record. Nothing above a
+> note is rewritten.
+>
+> - **2026-08-18** by [decision 0006](./0006-inline-libraries.md) — **amends
+>   Decision 3 and Decision 4**: the include collapse renamed `SHARED_BODIES` to
+>   `SOURCES` (decision 3 below names the old spelling) and replaced
+>   `fingerprint-manifest.ss`'s verbatim `load` with an import of
+>   `(byte-machine test fingerprint)` (decision 4 records the `load` mechanism).
+>   Both disciplines those decisions state — the manifest is declared and
+>   required at registration; provenance is skipped, never refused, at run
+>   time — are unchanged.
+> - **2026-08-21 (the slice 5b remainder)** — **amends the Consequences
+>   paragraph** that records the open provenance gap. That note is inline at the
+>   paragraph it corrects, not at the foot of this file.
 
 ## Context
 
@@ -188,6 +195,10 @@ below are copied from that table.
    rather than inverted, because a lane asserting that a skip *skips* passes
    whether or not the code checks anything.
 
+   > **Amended 2026-08-18** by [decision 0006](./0006-inline-libraries.md) —
+   > `SHARED_BODIES` is now spelled `SOURCES`. See the header above; the
+   > sentence is left as decided.
+
 4. **The build-time expectation is computed by a Chez process (design
    §6.1), so a Chez lane compares Chez against itself; the Gambit lane is
    what makes claim 2 cross-runtime.** `fingerprint-manifest.ss` runs under
@@ -198,6 +209,11 @@ below are copied from that table.
    places. Only the Gambit lane renders under one runtime and compares
    against a value produced by the other; that is where claim 2's evidence
    actually lives, not a weakness to work around.
+
+   > **Amended 2026-08-18** by [decision 0006](./0006-inline-libraries.md) — the
+   > verbatim `load` of `fingerprint.scm` is now an import of
+   > `(byte-machine test fingerprint)`. See the header above; the sentence is
+   > left as decided.
 
    **No mutation in this slice demonstrates this.** F6 was expected to and,
    measured above, does not. This is not a gap this slice's suite happens to

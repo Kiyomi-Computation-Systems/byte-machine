@@ -748,6 +748,19 @@ delivered. No versioned release exists yet.
 
 ### Changed
 
+- Decision records now say **at the top** when a later decision reached back
+  into them, and **at the site** on the item a later note makes false. Five
+  records carried dated amendment notes with nothing above the fold pointing at
+  them (0001, 0004, 0010, 0012, 0013); 0010 had accumulated four such notes, and
+  its item 4 read "extends by a `/v2` constructor" forty-seven lines above the
+  note recording that
+  [decision 0018](docs/decisions/0018-unversioned-generated-abi-constructor.md)
+  had replaced that mechanism. Nothing above a note was rewritten — the pointers
+  are additions, and the convention and its boundary (a pointer routes; it never
+  restates) are stated in
+  [docs/decisions/README.md](docs/decisions/README.md), whose previous wording
+  covered supersession only. The one-bullet-per-note invariant ships with the
+  command that checks it.
 - Chez discovery now probes each candidate name in turn instead of committing to
   the first one `find_program` returns. A host with an unrelated `scheme` earlier
   on PATH than its Chez previously failed to configure.

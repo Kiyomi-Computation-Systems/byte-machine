@@ -4,6 +4,25 @@ Date: 2026-08-23
 Status: accepted
 Milestone: 1, Phase 3 Slice A
 
+> **Amendments** — four later notes at the foot of this file reach back into the
+> text above them. Nothing above a note is rewritten: the tree each decision was
+> taken against is its evidence.
+>
+> - **2026-08-23 (Slice B)** — records that Slice B shipped the runtime-export
+>   drift guard with no `/v2` export, so the benchmark-gated `/v2` reservation
+>   stays open. Nothing above it became false.
+> - **2026-08-28 (Milestone 2) — the functional /v2 lands** — annotates item 4:
+>   [decision 0012](./0012-generated-abi-v2-finish.md) takes up the extension
+>   item 4 reserved the version tag for.
+> - **2026-08-28 (Milestone 2) — item 5's manifest blocker discharged** —
+>   **amends item 5**: [decision 0013](./0013-runtime-coded-conditions.md)
+>   removes the manifest reason item 5 gives for its deferral. The deferral
+>   itself stands.
+> - **2026-08-31 (Milestone 4)** — **amends item 4**:
+>   [decision 0018](./0018-unversioned-generated-abi-constructor.md) replaces the
+>   `/v2`-constructor extension mechanism. Item 4's purpose and the version tag
+>   survive; the mechanism does not.
+
 ## Context
 
 Milestone 1's design (§6) deferred the generated-code ABI to Phase 3. The Phase 2
@@ -30,10 +49,21 @@ interpreter≡generated differential (parent §18, §22.4) to lowering defects.
 4. The runtime↔generated seam carries the named `feed-outcome` record (not a
    positional value tuple), so the ABI is self-documenting and extends by a `/v2`
    constructor rather than an arity break.
+
+   > **Amended 2026-08-31 (Milestone 4)** by
+   > [decision 0018](./0018-unversioned-generated-abi-constructor.md) — the
+   > `/v2`-constructor mechanism named here is replaced. See the dated note
+   > below; the sentence above is left as decided.
+
 5. In Slice A an ABI-version mismatch raises `assertion-violation`; a coded
    `generated-runtime-abi-mismatch` condition (parent §9.4) is deferred to avoid a
    runtime→conditions dependency that would duplicate `conditions.sls` in the
    `CORE_ALL` lane manifest.
+
+   > **Amended 2026-08-28 (Milestone 2)** by
+   > [decision 0013](./0013-runtime-coded-conditions.md) — the manifest reason
+   > given here is discharged; the deferral itself stands. See the dated note
+   > below.
 
 ## Consequences
 

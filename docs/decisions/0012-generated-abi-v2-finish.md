@@ -4,6 +4,16 @@ Date: 2026-08-28
 Status: accepted
 Milestone: 2, Gate 0 (milestone-2-design.md §3.2)
 
+> **Amendments** — a later note at the foot of this file reaches back into the
+> text above it. Nothing above a note is rewritten: the tree this record was
+> decided against is its evidence.
+>
+> - **2026-08-31 (Milestone 4)** — **amends item 1 and the first Consequences
+>   bullet**: [decision 0018](./0018-unversioned-generated-abi-constructor.md)
+>   retires the `/vN` constructor *name* for one unversioned constructor. The
+>   version check item 1 exists to protect is kept, and the note records items 2,
+>   3 and 4 as standing.
+
 ## Context
 
 `parser-finish!` (decision 0011) must drive the *generated* executor with no
@@ -22,6 +32,13 @@ are *not* this: 0010's Consequences / Slice-B amendment reserve a benchmark-gate
    means from emitter *output* only — keeping the `/v1` export lets a stale
    generated file embedding version 1 fail the ABI-version *check* cleanly (an
    assertion), not fail at import with an unbound identifier.
+
+   > **Amended 2026-08-31 (Milestone 4)** by
+   > [decision 0018](./0018-unversioned-generated-abi-constructor.md) — the
+   > emitter no longer emits `/v2` and `current-abi-version` is no longer 2. The
+   > reason given here for keeping the old export is carried forward unchanged.
+   > See the dated note below; the item above is left as decided.
+
 2. **The generated machine exposes one unified `exec` closure carrying a `finish?`
    flag**, not two closures. `exec` is Milestone 1's feed loop; the only *branch*
    that changes is the exhausted-dispatch arm — feed returns `need-input`, finish
@@ -46,6 +63,12 @@ are *not* this: 0010's Consequences / Slice-B amendment reserve a benchmark-gate
 
 - The emitter renders `exec` with the `finish?` branch and a distinct `finish`
   arm, and constructs the binding via `byte-machine-make-compiled-machine/v2`.
+
+  > **Amended 2026-08-31 (Milestone 4)** by
+  > [decision 0018](./0018-unversioned-generated-abi-constructor.md) — the
+  > emitter constructs the binding via the unversioned
+  > `byte-machine-make-compiled-machine`. See the dated note below.
+
 - Retiring `/v1` from emitter output inverts the Milestone 1 `/v1` runtime-test
   group and moves the two goldens (the rendered string embeds the ABI tag and the
   IR fingerprint, which also moves under decision 0011's EOF encoding); Slice ②

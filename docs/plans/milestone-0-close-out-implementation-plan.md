@@ -595,7 +595,7 @@ Expected: no matching paths (`exit=1` from `rg` finding nothing). This is the ev
 
 - [ ] **Step 2: Annotate 0001, do not edit it (row R1)**
 
-The claim at `docs/decisions/0001-toolchain-discovery.md:86` is category 3 — false when written, not superseded, and load-bearing (it is cited as evidence for that record's own Consequences). Leave the sentence exactly as it stands. Append a note at the end of the file:
+The claim at `docs/decisions/0001-toolchain-discovery.md`'s Evidence bullet — "It runs in CI as `byte-machine.harness.cmake-mutation.cmake.direct`" — is category 3 — false when written, not superseded, and load-bearing (it is cited as evidence for that record's own Consequences). Leave the sentence exactly as it stands. Append a note at the end of the file:
 
 ```markdown
 
