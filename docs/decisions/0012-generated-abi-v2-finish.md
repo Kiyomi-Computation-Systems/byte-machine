@@ -55,3 +55,54 @@ are *not* this: 0010's Consequences / Slice-B amendment reserve a benchmark-gate
   (0010 Consequences / Slice-B amendment, still gated on §23) and from the coded
   ABI-mismatch condition (0010 item 5, still deferred — decision 0013 only unblocks
   it).
+
+## 2026-08-31 (Milestone 4) — the versioned name is retired; the check is not
+
+Milestone 4 Gate 0 (decision 0018, milestone-4-design.md §4.1) replaces the
+`byte-machine-make-compiled-machine/vN` family with **one unversioned
+`byte-machine-make-compiled-machine`** whose first action is the
+`(= abi-version current-abi-version)` check, and whose payload is carried as a
+quoted vector so it can grow without an arity break. `current-abi-version` goes
+2 → 3. Slice ①a lands it. This annotates item 1 and the first Consequences
+bullet; the tree those were decided against is their evidence, so they are not
+rewritten.
+
+**Item 1's purpose survives; only its mechanism goes.** The reason given here
+for keeping the `/v1` export — that a stale generated file embedding an old
+version must "fail the ABI-version *check* cleanly (an assertion), not fail at
+import with an unbound identifier" — is carried forward unchanged and is the
+whole warrant for the new arrangement. `/v1` and `/v2` both remain exported, as
+tombstones, for exactly that. What changes is how they discharge it: each is
+rewritten to refuse *every* version unconditionally, rather than to reject as a
+side effect of a version comparison.
+
+**Measured, against `a942327`.** `/v1` (runtime.sls:50-56) compares against
+`current-abi-version`, which is 2 (runtime.sls:49), so it already rejects the
+version 1 it is named for: it is not a compatibility path and never was. `/v2`
+(runtime.sls:65-71) does **not** compare against `current-abi-version` — it
+tests the literal `2` at runtime.sls:66 — so bumping the constant to 3 does not
+retire it; without the rewrite it would keep accepting the version it names.
+The two old constructors therefore do not inherit their refusal from the bump
+and must each be given it explicitly.
+
+**False from Slice ①a onward:**
+
+- item 1's "The emitter emits `/v2`", and the first Consequences bullet's
+  "constructs the binding via `byte-machine-make-compiled-machine/v2`". The
+  emitter emits the unversioned name; the pre-slice `/v2` literal is at
+  `compile.sls:164`.
+- item 1's "bump `current-abi-version` to 2" as a statement of the current
+  value. 2 is what Milestone 2 set; the constant is 3 from Slice ①a.
+
+**Untouched.** Items 2 and 3 stand: one unified `exec` closure carrying a
+`finish?` flag, one distinct arm per terminal kind, and the reused
+`feed-outcome` record with new status symbols. (Slice ①a widens `exec`'s
+emitted parameter list from six to seven under a separate Gate 0 record,
+milestone-4-design.md §4.2; that is an arity change to item 2's closure, not a
+change to its shape.) Item 4's mirror obligation stands and is what governs:
+`reserved-member-2` keeps `/v1`, `/v2` and the `/v1` feed-outcome constructor,
+gains the unversioned name, and is updated in the same commit as the exports it
+mirrors. `byte-machine-make-feed-outcome/v1` keeps its versioned name; 0018
+reaches only the compiled-machine family. The general rule this record invoked —
+decision 0010 item 4's seam that "extends by a `/v2` constructor rather than an
+arity break" — is amended by 0018 as well.
