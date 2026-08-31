@@ -41,7 +41,7 @@ against `(advance reexecute)` at construction (`ir.sls:200-204`, the check at
 among the verifier's required checks — and, measured, `verify.sls` carries no
 arm for it: its only `edge-mode` reads are inside `pass-zero-progress`
 (`verify.sls:266`, `:268`, `:320`), where they classify progress rather than
-validate a mode, and none of its eleven diagnostic codes names one. §16.2:896
+validate a mode, and none of its fourteen diagnostic codes names one. §16.2:896
 is discharged wholly at the constructor today. Two other shipped constructors
 supply the shapes M4 reuses: `make-byte-dispatch-node`'s `(or (symbol?
 eof-target) (eq? eof-target #f))` (`ir.sls:229-231`) is the target-or-`#f`
