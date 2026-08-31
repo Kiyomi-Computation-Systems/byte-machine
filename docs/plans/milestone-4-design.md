@@ -194,6 +194,22 @@ Decision-only. No product code is written in Gate 0. writing-plans assigns the
 record numbers (next free in `docs/decisions/` is **0018**) and confirms whether
 any splits or merges of the five below are warranted.
 
+> **Gate 0 discharged 2026-08-31.** §4.1 → decision
+> [0018](../decisions/0018-unversioned-generated-abi-constructor.md), §4.2 →
+> [0019](../decisions/0019-encoding-format-2-pre-provisioned.md), §4.3 →
+> [0020](../decisions/0020-field-shape-is-a-constructor-contract.md), §4.4 →
+> [0021](../decisions/0021-eof-classification-multi-successor.md), §4.5 →
+> [0022](../decisions/0022-structured-parser-error-record.md). Neither merge
+> §10 asked about was taken, and neither was §4.3's internal split: the
+> reasoning is in §10's first bullet, and each record states its own boundary.
+> §4.6's nine resolutions and §4.7's four scope additions stayed in this
+> document by design and have no records. 0018 additionally carried dated
+> amendment notes onto **two** records — decision 0012 item 1 and decision 0010
+> item 4, the latter found by a vocabulary sweep rather than by §4.1's original
+> text — and one in-place correction into the parent plan's §9.5:442. §9.5:444
+> was deliberately left alone: bumping `current-abi-version` 2 → 3 satisfies its
+> "generated-ABI version bump" requirement rather than contradicting it.
+
 ### 4.1 The generated ABI keeps its version number and drops its versioned name
 
 Replace the `byte-machine-make-compiled-machine/vN` family with one unversioned
@@ -2160,6 +2176,14 @@ restated with their qualifiers at close:
   constructor/verifier split because its enforcement *is* that split. §4.1 must
   additionally carry its dated amendment note onto decision 0012 itself, and its
   parent-plan amendment into §9.5.
+
+  **Resolved:** five records, no merges. §4.1 and §4.2 stayed separate — 0018
+  carries an amendment to 0012 and 0019 carries a fingerprint re-baseline, and a
+  reader looking for either would not find it in a record named for the other.
+  §4.3's `error`-slot rule stayed inside 0020, because deciding which operations
+  can fail is the same act as deciding where that is checked, and a reader who
+  applied one without the other would require an unreachable error node on
+  `store`.
 - **Exact proving machines.** §5–§8 specify the *properties*; writing-plans pins
   the concrete node wiring — the four distinct non-zero initials and the ≥2^60
   u64 initial that prove storage in ①b, together with that slice's accepted `0`
