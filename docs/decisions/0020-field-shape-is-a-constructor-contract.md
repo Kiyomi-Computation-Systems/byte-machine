@@ -178,7 +178,8 @@ files.
    `pass-reachability` (`verify.sls:252-258`) walks `all-out-targets`
    (`verify.sls:88-91`), a purely syntactic graph walk with no notion of which
    operations can fail, and `milestone-4-design.md` §7's census row 3 (the
-   `node-out-targets` row, `:2380` at the time of writing) — feeds a
+   `node-out-targets` row, `:1396` at the time of writing — not the
+   Appendix's census row of the same number) — feeds a
    field-action node's `error` into `node-out-targets` whenever it is a symbol —
    so an `error` target on a safe operation is *reached* by that walk exactly
    like a real one and trips no `'unreachable-node` diagnostic, or any other
