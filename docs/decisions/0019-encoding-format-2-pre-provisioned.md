@@ -7,8 +7,17 @@ Milestone: 4, Gate 0 (milestone-4-design.md §4.2)
 ## Context
 
 Measured against the shipped tree at commit `a942327`, the commit Milestone 3
-closed at. The only later commit adds `docs/plans/milestone-4-design.md` and
-touches no `src/`, so every line cited below is the line Slice ①a will open.
+closed at. Seven commits sit between `a942327` and this record and none
+touches `src/`. One of them, `1dcb804`, edits
+`docs/plans/byte-machine-implementation-plan.md` — the file this record cites
+by line throughout — but only as a single line substituted for another, at
+§9.5:442 (`git show 1dcb804 --stat` shows `2 +-`, one insertion for one
+deletion); no downstream line moves, verified by re-checking the cited
+§10.1:480, §16.2:884 and §20:1043 lines against the current tree below. The
+other six commits add `docs/plans/milestone-4-design.md`, the Gate 0
+implementation plan, decision 0018, and dated amendments to decisions 0010
+and 0012 — none of which this record cites by line — so every `src/` line
+cited below is still the line Slice ①a will open.
 
 **What `encode-normal` encodes, and what it cannot see.** It takes two
 parameters — `(define (encode-normal entry states)`, normal-ir.sls:251 — and has
@@ -50,13 +59,14 @@ substring.
 one template string — `"  (define (exec state offset bv start end finish?)\n"`,
 compile.sls:156 — and a generated `exec` is called with six arguments at exactly
 two sites, `runtime.sls:218` (feed, `#f`) and `runtime.sls:262` (finish, `#t`).
-Those are the only two: `runtime.sls:206-208` is the `/v1` five-argument `feed`,
-a different closure. All three committed goldens carry that six-parameter line
-verbatim at line 4. A field-store parameter added in Slice ② would therefore
-change the emitted text of *every* machine, including the zero-field ones, and
-all three goldens would move in ② — falsifying the milestone's own oracle that
-①b, ② and ③ move no existing golden (milestone-4-design.md:71-72, :2262) one to
-two slices after this record is made.
+Those are the only two: `runtime.sls:207` is the `/v1` five-argument `feed`
+call, inside the different closure defined at `:205`. All three committed
+goldens carry that six-parameter line verbatim at line 4. A field-store
+parameter added in Slice ② would therefore change the emitted text of *every*
+machine, including the zero-field ones, and all three goldens would move in ②
+— falsifying the milestone's own oracle that ①b, ② and ③ move no existing
+golden (milestone-4-design.md:2272) one to two slices after this record is
+made.
 
 **The version byte has never distinguished anything.** It has read 1 through
 every encoding change so far: Milestone 2 appended eof routing to the dispatch
@@ -75,8 +85,9 @@ Note also that no record owns that byte: normal-ir.sls:250 credits the layout to
 1. **The canonical encoding's format version byte goes 1 → 2 in Slice ①a**, at
    `normal-ir.sls:254`, and this record is its owner from that commit forward.
    The bump is not what forces the re-baseline — encoding the `reason` does that
-   — which is exactly why it is taken here: it is nearly free in ①a and free in
-   no other slice. From ①a the byte names one encoding rather than three.
+   — which is exactly why it is taken here: the byte write itself is nearly
+   free in ①a and free in no other slice; slot (c) below is not (Consequences).
+   From ①a the byte names one encoding rather than three.
 
 2. **The same bump introduces the error declaration's static `reason` into the
    encoding**, appended after the code at both sites that emit one: the error
@@ -102,7 +113,8 @@ Note also that no record owns that byte: normal-ir.sls:250 credits the layout to
    `reserved-member-3` (`compile.sls:53`, today twelve symbols carrying the
    other six) in the same commit. Filled in ②.
    Slot (c) is the one a reader will miss, because it is not in the encoding at
-   all; it is reserved here for the same reason and by the same argument.
+   all; it is reserved here for the same reason and by the same argument. Its
+   own two-site breakage is Consequences' second bullet, not this inventory.
 
 4. **This is a format decision, not a transformation, so §17:966 does not reach
    it.** That line reads: "Normalization must not perform speculative
@@ -146,6 +158,20 @@ Note also that no record owns that byte: normal-ir.sls:250 credits the layout to
   "~15"; the measured counts today are seven and nineteen, so it is re-measured
   in the same slice rather than cited as current.
 
+- **Slot (c) also breaks two sites outside that fingerprint inventory, because
+  they match text and arity, not a value.** Widening `runtime.sls:218` and
+  `:262` to seven arguments leaves
+  `test/support/cmake/SchemeMutationSuite.cmake:2714`'s `FIND` — verbatim
+  `runtime.sls:262`'s six-argument line — unmatchable, and `SITES` is asserted
+  exactly (`MutationRunner.cmake:59`), so this fails the mutation's own
+  declaration rather than being silently skipped. It also leaves
+  `test/common/runtime-tests.sps:276`'s
+  `(define (stub-exec state offset bv start end finish?)` — a hand-written
+  six-parameter exec driven through both widened call sites, the feed at `:296`
+  and the finish at `:300`, via `v2-machine` at `:289` — one parameter short, so
+  the runtime unit lane dies on arity unless it gains the seventh in the same
+  commit.
+
 - **What it removes from ①b, ② and ③.** ①b fills a count that is already zero
   and a payload member that is already `(quote #())`, so a machine declaring no
   fields encodes *and renders* byte-identically. ② adds its field store to a
@@ -186,8 +212,9 @@ Note also that no record owns that byte: normal-ir.sls:250 credits the layout to
   `pass-schema` that is still a bare `machine?` tag test (verify.sls:107-108);
   closing that is Slice ①b's. No `graph.sls` or `ir.sls` change: `make-machine`
   has taken a `fields` argument (ir.sls:352) and `machine-fields` has been
-  exported (ir.sls:370) since M1 with no reader anywhere in `src/` or `test/`,
-  and this reservation mirrors that shipped precedent one layer down. And this
+  exported (ir.sls:10; defined at :370) since M1 with no reader anywhere in
+  `src/` or `test/`, and this reservation mirrors that shipped precedent one
+  layer down. And this
   record settles only that the `reason` is *encoded* — its portability check in
   `pass-names-valid` and the writer's escaping of `"`, `\` and LF are Slice ①a's
   own tasks under §10.1:480 and §20:1039, not consequences of the format.
