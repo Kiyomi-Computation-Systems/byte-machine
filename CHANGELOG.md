@@ -736,6 +736,16 @@ delivered. No versioned release exists yet.
   added, removed or edited on this branch), the CMake mutation suite unchanged
   at 1 pass/72 mutations.
 
+  **Amended 2026-08-30 (whole-branch review fix wave).** The paragraph above is
+  the measurement taken at the slice's close and stands as written. The review's
+  fix wave then added one mutation to Pass 33 — `"verify: the sequence mismatch
+  edge's MODE is not tested (arm 3, reexec-targets)"`, for the `reexecute` test
+  in `reexec-targets`' sequence arm, which had no mutation — and one attribution
+  check to `verify-tests.sps` that its pin needed. The suite ships at **46
+  passes / 236 mutations**, 227 caught; every other number above is unchanged
+  and was re-measured, including the three fingerprints, both goldens and the
+  nine `EXPECT_SURVIVES`.
+
 ### Changed
 
 - Chez discovery now probes each candidate name in turn instead of committing to

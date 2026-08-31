@@ -563,6 +563,20 @@ reads as a user grammar error rather than a verifier gap.
 > whose sequence extension is §25:1533's zero-progress-cycle work — Slice ③,
 > not this one.
 
+> **Disposition, 2026-08-30 (whole-branch review fix wave; Slice ③ closed, and
+> Milestone 3 with it).** Slice ③ Task 2 did that §25:1533 work — the report
+> guard above now reads
+> `(or (byte-dispatch-node? n) (pause-node? n) (sequence-dispatch-node? n))` —
+> so of the two sites the disposition above left unextended, one is now
+> extended and one (`pass-overlap`) is permanently not: the census is **eight
+> sites, seven extended, one never**, membership unchanged. The number's
+> primary home is the derivation beside the arms that cover it, in
+> `verify-tests.sps`'s "sequence dispatch reaches every verifier arm" group
+> header; the appendix's Task 6 close-out disposition on the `verify` row
+> (Slice ③ closed) records the same move. The paragraph and the disposition
+> above are left as written, being the record of what was measured under
+> Slice ②.
+
 **The lowering is trie-shaped from the start, and that is a correctness
 requirement rather than an early optimization.** `make-sequence-dispatch-node`
 takes a plural `cases` list (§9.1:297) and validates local shape only, and
@@ -884,6 +898,17 @@ note cites.
 > carrying any of the three fingerprints changed in `normal-ir-tests.sps` over
 > the same range. That was Slice ①'s own oracle and it held through ② and ③.
 >
+> **Amended 2026-08-30 (whole-branch review fix wave).** The totals above are
+> the close-out measurement and stand as written. The fix wave that followed
+> added one mutation to Pass 33 — `"verify: the sequence mismatch edge's MODE
+> is not tested (arm 3, reexec-targets)"` — plus the one attribution check in
+> `verify-tests.sps` its pin needed, so the shipped suite is **46 passes / 236
+> mutations**. Everything else in this paragraph was re-measured and is
+> unchanged: `release` 86/86, `no-scheme` 8/8, zero `UNCAUGHT`, zero `FATAL`,
+> nine `SURVIVES (expected)` with no diff line touching an `EXPECT_SURVIVES`,
+> CMake 1 pass / 72 mutations, and the three fingerprints and both pre-existing
+> goldens byte-identical.
+>
 > 1. **:1537 — "all-byte class tests pass": MET, by Slice ①.**
 >    `byte-class-interpret-tests.sps` ("all 256 byte values, per class", "the
 >    ASCII helper rejects the high half") and `differential-byte-class-tests.sps`
@@ -1164,3 +1189,9 @@ note cites.
 >   **46 passes / 235 mutations**; §9's "38/165 today at
 >   `SchemeMutationSuite.cmake:554-555`" was the pre-M3 value at authoring time
 >   and likewise stands as a record rather than being updated.
+>   *Amended 2026-08-30 (whole-branch review fix wave):* one mutation was added
+>   to Pass 33 after that close, so the shipped declaration is **46 passes /
+>   236 mutations**; the `SchemeMutationSuite.cmake` line count quoted a few
+>   lines above ("6470 at this close") was taken at that same moment and has
+>   grown with the fix wave's edits to that file. Both sentences stand as the
+>   record of what was measured at the close.

@@ -632,6 +632,12 @@ dated amendment appended to the record, never a rewrite, and never a new `0018`.
 > **1 pass / 72** unchanged as predicted. Design §9's rule that sizing is a floor
 > held for the third slice running.
 >
+> *Amended 2026-08-30 (whole-branch review fix wave).* The measurement above is
+> this plan's own close-out record and stands as written. The review's fix wave
+> then added one mutation to Pass 33 and one attribution check to
+> `verify-tests.sps`, so the shipped suite is **46 passes / 236 mutations**; the
+> other three totals are unchanged and were re-measured.
+>
 > **This plan's `file:line` citations into files its own tasks edited are stale
 > by construction and are left as written.** `verify.sls`'s line numbers shift by
 > the length of Task 1's new pass, so D6's `:241`, D1's `:176-180` and the File
