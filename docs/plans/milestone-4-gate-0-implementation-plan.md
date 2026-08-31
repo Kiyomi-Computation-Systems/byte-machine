@@ -946,8 +946,6 @@ Expected: no `0021-*` file exists yet, and the `rg` prints exactly one line — 
 Create `docs/decisions/0021-eof-classification-multi-successor.md` with exactly this content:
 
 ````markdown
-The record is finished and every citation in it was re-read against the tree.
-
 # 0021: EOF-chain classification is a multi-successor search — one DFS, worst case over all paths
 
 Date: 2026-08-31
