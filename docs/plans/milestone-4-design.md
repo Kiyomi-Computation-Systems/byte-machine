@@ -654,9 +654,16 @@ omission.
    fourth case ①a cannot itself produce, stated here so ② and ③ inherit a rule
    instead of each picking one — **a zero-width jump → `boundary`, at the
    current stream offset, per §12.7:770**. Initialize to `boundary` at loop
-   entry, the same zero-width case above: nothing has been consumed in this
-   call, so a resumed feed entering an error state directly reports a boundary
-   at the current offset. The absolute offset needs no new
+   entry for a feed call, the same zero-width case above: nothing has been
+   consumed in this call, so a resumed feed entering an error state directly
+   reports a boundary at the current offset. A finish call initializes to
+   `eof` instead: calling `finish!` is the caller's declaration that no
+   further bytes are coming, so the offset it reports is already the final
+   stream offset, before any jump runs — this is what keeps the generated
+   lane's one shared `exec` agreeing with the interpreter's separate
+   `parser-finish-op!` constant `eof` below when a prior pause has parked
+   `current` directly on an error state (decision 0022 item 5). The absolute
+   offset needs no new
    arithmetic: `off` is already bumped on advance and not on reexecute, so
    `(off, pk)` *is* §12.7's stored position in both executors, which is the
    strongest available evidence the lowering is 1:1. In the generated lane the
