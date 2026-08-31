@@ -583,6 +583,64 @@ Consequences + 0009. **0014-0017 have never been amended** (one commit,
 `f29edf7`); if this slice ships anything that changes what they assert, that is a
 dated amendment appended to the record, never a rewrite, and never a new `0018`.
 
+> **Disposition, 2026-08-30 (Task 6 close-out; Slice ③ closed, and Milestone 3
+> with it).** §0's work has closed, so per AGENTS.md's "an instruction changes
+> category when its work closes" rule these calls are dispositioned here rather
+> than reworded to match what shipped. Each was re-checked against HEAD.
+>
+> **All fourteen calls held** — D1-D12 plus D8b and D10b — and each was found in
+> the tree rather than asserted from memory: D1 `pass-overlap`'s
+> byte-dispatch-only filter with its comment corrected from "deferred" to
+> "permanent"; D2 the single code `'ambiguous-sequence-prefix`; D3 the
+> source-level pairwise test with its 469-set equivalence control recorded at the
+> site; D4 `pass-sequence-ambiguity` as an unnumbered pass between `pass-overlap`
+> and `pass-reachability`, PASS 1-7 unrenumbered; D5 `normal-ir-tests.sps`
+> untouched by Task 1 (measured: its diff against `main` over Task 1's commits is
+> empty) with `interpret-tests.sps` rewritten and both internal guards kept and
+> re-witnessed through a forged `make-verification-result`, which is what kept
+> both Pass 34 mutations and all nine `EXPECT_SURVIVES` alive; D6 the one-line
+> REPORT-guard edit, with §25:1533 attributed in halves in the design's exit
+> disposition; D7 the inherited over-approximation and the corrected invariant
+> written at the site in `verify.sls`; D8/D8b the two `FIND` re-anchors, the one
+> pin re-anchor and the renamed bindings, all of which the suite's exact `SITES`
+> assertions check on every run and which are green at close; D9 the fixture,
+> three programs, six lanes and the third golden, re-measured at 3849 bytes, IR
+> fingerprint `12299125921751534854`, 11 states; D10 this close-out; D11 no
+> normalizer, emitter or runtime change; D12 `docs/decisions/` unchanged on this
+> branch, 0014-0017 unamended.
+>
+> **D10b held in the direction that matters: the gap is still open.** No lane
+> compiles and executes a vacuous complement. Re-confirmed at HEAD, not carried
+> as a claim: the construct appears in `normal-ir-tests.sps` and
+> `verify-tests.sps` only. It is recorded in `CHANGELOG.md`'s limitations list
+> and in the design's exit disposition under criterion :1537, with its ledger
+> provenance, and closes with the milestone.
+>
+> **No §0 entry needed a dated amendment.** Three of this plan's claims *were*
+> measured false during execution, and all three sat in task bodies rather than
+> in §0: the trie-MERGE premise (corrected in place at Task 4 Step 2 while this
+> plan was still an instruction), the differential's "caught here and nowhere
+> else" claim (corrected in the shipped program's header by Task 4), and the
+> `list-sort` justification for the third golden (dispositioned at Task 5 Step 1
+> above, and corrected in the shipped program's header by Task 5). Each was a
+> novelty-or-mechanism claim that read as true and was not, and none was caught
+> by reading.
+>
+> **Predictions versus measurements**, from Global Constraints above: release/pr
+> predicted **86**, measured **86/86**; Scheme mutations predicted **46 passes /
+> ~240**, measured **46 passes / 235**; `no-scheme` **8/8** and the CMake suite
+> **1 pass / 72** unchanged as predicted. Design §9's rule that sizing is a floor
+> held for the third slice running.
+>
+> **This plan's `file:line` citations into files its own tasks edited are stale
+> by construction and are left as written.** `verify.sls`'s line numbers shift by
+> the length of Task 1's new pass, so D6's `:241`, D1's `:176-180` and the File
+> Structure table's anchors no longer resolve; every
+> `SchemeMutationSuite.cmake:NNNN` in D8, D8b and the design's appendix moved as
+> the file grew from 3858 lines at M3's merge base to 6470 at this close. The
+> obligations they name are recorded in the tree beside the pins, by mutation
+> LABEL rather than line number, which is why the drift costs nothing.
+
 ---
 
 ## File Structure
@@ -2001,6 +2059,23 @@ alternatives, and at a mismatch on the distinguishing byte.
 **Measured:** this program was run verbatim against the shipped tree during plan
 authoring and reports `cases=8 checks=20 failures=0`.
 
+> **Disposition, 2026-08-30 (Task 6 close-out).** This plan is now a record of
+> what was asked, so the numbers and names below stand as written and are
+> annotated rather than corrected. The **shipped** program reports `cases=8
+> checks=19 failures=0` in both lanes, re-measured at close
+> (`byte-machine.differential.http-version.chez.{source,aot}`); `checks=20`
+> also appears at Task 4 Step 3's expected result and in the Self-Review's
+> placeholder scan below. The check count moved during Task 4's review, which
+> replaced the `last-byte`/`positions` sentinel pair (drafted above at the
+> exhaustive group) with a single `drives` counter asserted at 2048: the pair
+> could not distinguish "256 bytes at 8 positions" from "256 at one position and
+> none at the other seven", which is exactly the vacuous-sentinel shape
+> AGENTS.md names. Two checks became one. Several drafted case names were
+> superseded in the same pass — the first group's case is shipped as "seven
+> interior cuts plus the uncut sequence at both ends all agree and accept" and
+> its loop sentinel as "the loop ran 2 alternatives x 2 modes x 9 iterations".
+> The shipped program is the authority on its own names and counts.
+
 ```scheme
 ;;; interpreter ≡ generated over a MULTI-ALTERNATIVE sequence node (parent §18,
 ;;; §22.4, §22.5). Slice ② pinned the trie merge structurally (normal-ir-tests)
@@ -2357,6 +2432,33 @@ assumed; :1315 (compile and execute) is the emit/`load`/`eval` group. Bullet
 `upload-artifact` step exists in `.github/workflows/ci.yml`) and this task does
 not build it — but do not write a close-out sentence claiming §22.9 is fully
 discharged.
+
+> **Disposition, 2026-08-30 (Task 6 close-out).** The paragraph above held and
+> was honoured: the milestone's exit disposition
+> (`milestone-3-design.md`'s "Exit (full Milestone 3)" block, criterion :1539)
+> records :1314 as **not built** and states that :1312 and :1314 are established
+> transitively, not directly.
+>
+> **The task's stated JUSTIFICATION, however, was measured false**, and it
+> appears twice below — in the program header at Step 2 ("a `list-sort` tie at
+> the branch is precisely how §25:1539 would be lost") and again in Step 4's
+> lane comment ("the only shape that can witness a `list-sort` tie at the
+> branch"). The branch's child order comes from `trie-put`'s ascending alist
+> insertion, **not** from the `list-sort` that orders a byte-dispatch node's
+> transitions (decision 0014); this fixture declares no byte-dispatch node, so
+> that comparator never runs for it. Established with a control rather than by
+> reading: flipping `list-sort`'s comparator re-emits this machine
+> **byte-identically**, while the same flip *does* reorder a two-case
+> byte-dispatch node's arms — so the flip is a real mutation and the
+> byte-identity is not an artifact. **The task still stands**: the third golden
+> pins a branching emission no other golden covers, and `trie-put`'s ordering is
+> what it guards. Only the named mechanism was wrong, and the corrected
+> mechanism is written into the shipped program's own header and beside the
+> mutation suite's Pass 49. Both sentences below are left as the record of what
+> was asked. The drafted case name at Step 2 ("the emitted bytes equal the
+> committed golden") shipped as "the emitted bytes equal the committed
+> **sequence** golden", renamed with its mutation pin in the same edit because
+> the drafted pin was byte-identical to Pass 38's.
 
 - [ ] **Step 2: Write the failing program**
 

@@ -1,15 +1,20 @@
 # Milestone 3 Design — Byte Classes and Sequences
 
-Status: design — approved shape, **Gate 0 discharged; Slice ① (byte classes)
-closed 2026-08-29** (every commit on branch `feat/milestone-3-slice-1` since it
-diverged from `main` at merge base `a9de657`, including this note's own
-commit; PR not yet opened as of this note). **Slice ② (sequence dispatch and
-prefix lowering) closed 2026-08-30** (every commit on branch
-`feat/milestone-3-slice-2` since it diverged from `main` at merge base
-`2468881`; PR not yet opened as of this note). **Slice ③ not started.**
-Milestone 3 as a whole remains open — these slices discharge §5's and §6's
-scope, not the milestone's (see the dated §5 and §6 dispositions below). Authored
-2026-08-29, the day Milestone 2 closed
+Status: **MILESTONE 3 CLOSED 2026-08-30.** Gate 0 discharged; **Slice ① (byte
+classes) closed 2026-08-29**, merged as PR
+[#30](https://github.com/Kiyomi-Computation-Systems/byte-machine/pull/30)
+(`7d6ef3d`); **Slice ② (sequence dispatch and prefix lowering) closed
+2026-08-30**, merged as PR
+[#33](https://github.com/Kiyomi-Computation-Systems/byte-machine/pull/33)
+(`819a5b1`); **Slice ③ (multiple alternatives, ambiguity, and cycle analysis)
+closed 2026-08-30 and closes the milestone with it** (every commit on branch
+`feat/milestone-3-slice-3` since it diverged from `main` at merge base
+`49c8cc4`, including this note's own commit; PR not yet opened as of this
+note). The three slices together discharge §5's, §6's and §7's scope — each
+with its own dated disposition below — and the **milestone's** exit criteria
+are dispositioned per criterion in the "Exit (full Milestone 3)" block that
+follows §7, which the parent plan's §25 close note cites rather than restates.
+Authored 2026-08-29, the day Milestone 2 closed
 (PR [#23](https://github.com/Kiyomi-Computation-Systems/byte-machine/pull/23),
 commit `5906ade`; status sweep PRs #24–#27). Written after a 92-agent audit of
 this milestone's requirements against the shipped tree, in which every gap claim
@@ -90,14 +95,20 @@ M3 is one milestone delivered as an ordered Gate 0 plus three slices:
 | **Gate 0** | decisions only | 4 records | the calls §25, §10.6 and §16.2 leave open |
 | **Slice ① — Byte classes** | product | canonicalization spine; `make-byte-set-matcher` / `make-byte-range-matcher` / `make-byte-complement-matcher` / `ascii-bytes`; rewritten overlap pass; per-byte lowering; all-256 class lanes | §25:1527-1528, exit :1537 |
 | **Slice ② — Sequence dispatch and prefix lowering** | product | the sixth node kind and every verifier arm; trie-shaped prefix lowering; state-id allocation; independent interpreter tracking; both mismatch modes | §25:1530-1531 and the single-alternative half of :1529, exit :1538 |
-| **Slice ③ — Multiple alternatives and ambiguity** | product | multi-alternative fixtures over Slice ②'s trie; ambiguous-terminal-prefix rejection; the zero-progress/EOF-cycle extension; determinism pins; the `HTTP/1.0`⁄`HTTP/1.1` fixture | the multi-alternative half of §25:1529, plus :1532-1533, exits :1539-:1540 |
+| **Slice ③ — Multiple alternatives and ambiguity** | product | multi-alternative fixtures over Slice ②'s trie; ambiguous-terminal-prefix rejection; the **zero-progress** half of the cycle extension (:1533's EOF-cycle half shipped in Slice ②); determinism pins; the `HTTP/1.0`⁄`HTTP/1.1` fixture | the multi-alternative half of §25:1529, plus :1532 and the zero-progress half of :1533, exits :1539-:1540 |
 
 Dependency order is strict. Gate 0 unblocks everything. Slice ① is purely
 additive to the normalized encoding, so it can assert *no fingerprint moved* as
 its own oracle. Slice ② lands the node kind and the trie-shaped lowering, and is
 validated against a machine already on `main`. Slice ③ adds the milestone's
-remaining new analysis — ambiguous-terminal-prefix rejection and the cycle
-extension — together with the fixtures that exercise more than one alternative.
+remaining new analysis — ambiguous-terminal-prefix rejection and the
+zero-progress half of the cycle extension — together with the first lanes that
+drive more than one alternative end to end through **both** executors. That last
+clause is deliberately narrow, and was narrowed by measurement during Slice ③'s
+execution: Slice ② had already pinned the trie merge structurally in
+`normal-ir-tests.sps` and executed `AB`/`AC` through the interpreter in
+`interpret-tests.sps`, so what ③ adds over it is the **differential** across a
+branch, a seven-byte shared prefix, absolute tuples, and both mismatch modes.
 Every slice runs in **both execution lanes** and is checked by the
 **interpreter≡generated differential** (parent §18, §22.4).
 
@@ -700,6 +711,226 @@ verification).
   fixture that exercises shared nonterminal prefixes with a distinguishing
   terminal byte.
 
+> **Disposition, 2026-08-30 (Task 6 close-out; Slice ③ closed, and Milestone 3
+> with it).** §7's own work has closed, so per AGENTS.md's "an instruction
+> changes category when its work closes" rule its five bullets are dispositioned
+> here rather than reworded to match what shipped. Each was re-checked against
+> the tree. **Three of this slice's novelty-or-mechanism claims were measured
+> FALSE during execution**, none of them by reading; the narrowed claims are the
+> ones below, and the originals stand above as the record of what was asked.
+>
+> 1. **Multi-alternative fixtures over Slice ②'s trie.** Shipped in Tasks 3-5:
+>    `test/support/harness/byte-machine/test/http-version-machine.sls` (both
+>    mismatch-mode machines, written once and shared by three programs);
+>    `test/common/http-version-interpret-tests.sps` with the lane pair
+>    `byte-machine.unit.http-version.chez.{source,aot}`, whose four groups assert
+>    **absolute** interpreter outcomes ("each alternative reaches its OWN target
+>    through the shared prefix", "mismatch positioning, at the branch and before
+>    it (§11.5:664)", "every proper prefix is need-input, never paused (decision
+>    0015 point 5)"); `test/common/differential-http-version-tests.sps` with
+>    `byte-machine.differential.http-version.chez.{source,aot}`; and a structural
+>    group in `normal-ir-tests.sps` ("alternatives share prefix states wherever
+>    they agree").
+>    **NARROWED, by measurement.** This bullet's second sentence — "this slice is
+>    where more than one alternative is first constructed, lowered and executed
+>    end to end" — is **false as written**, and the plan that inherited it was
+>    corrected before Task 3 ran. Slice ② already ships two lanes that drive the
+>    trie MERGE: `normal-ir-tests.sps` pins structurally that a shared first byte
+>    becomes one transition into one state and pins the branch's transition list,
+>    and `interpret-tests.sps` executes `AB`/`AC` through the interpreter. The
+>    gap statement is true only with its own qualifier — *the **differential** is
+>    single-alternative*. What Slice ③ adds is the differential over a branch,
+>    plus depth (a seven-byte shared prefix), absolute tuples, and both mismatch
+>    modes. No sentence in this milestone's records may say "first to exercise
+>    the trie merge".
+>    **A second narrowing, inside that differential and measured the same way.**
+>    Its first draft claimed that a defect resuming into the wrong prefix state
+>    across a feed boundary would be caught there and nowhere else. False:
+>    rendering the need-input resume id as the entry state instead of the current
+>    one also reddens `differential-sequence-node-tests.sps` (failed-cases=9,
+>    failures=10), because a single-alternative chain has prefix states to resume
+>    into too. What needs a **branch** is *losing* an alternative, not *resuming*
+>    — a one-arm state and a truncated one-arm state are the same state. The
+>    corrected claim is written into the shipped program's own header.
+> 2. **Ambiguous-terminal-prefix rejection, one new diagnostic code (§4.5).**
+>    Task 1: `pass-sequence-ambiguity` with its `byte-prefix?` and
+>    `node-ambiguities` helpers in `verify.sls`, called from `verify-machine`
+>    directly after `pass-overlap` as an unnumbered pass, reporting exactly one
+>    `'ambiguous-sequence-prefix` per colliding pair. Witnessed by
+>    `verify-tests.sps`'s group "sequence ambiguity (§16.2:894)" — including
+>    "alternatives that merely share a prefix are not ambiguous", which is what
+>    stops the check from rejecting every branching machine — and by
+>    `interpret-tests.sps`'s "§16.2:894 rejects both unrepresentable shapes before
+>    the interpreter". `pass-overlap` is **permanently** not extended (§0 D1 of
+>    the slice plan; decision 0017 point 4), and the guards for the same two
+>    internal invariants are **kept** as defense-in-depth in both files — three
+>    assertion sites in `normal-ir.sls`'s `trie-insert`, because the ambiguity
+>    invariant is checked in both directions, and two in `interpret.sls`'s
+>    `seq-step` — each with the reason written at its site. The normalizer's
+>    three keep their witnesses in `normal-ir-tests.sps` ("an ambiguous terminal
+>    prefix is an assertion violation" and "an ambiguous terminal prefix inserted
+>    in reverse order is also caught"), which the new pass left untouched because
+>    that program takes `verification-machine` without consulting
+>    `verification-ok?`. The interpreter's two are re-witnessed through a forged
+>    `make-verification-result` in `interpret-tests.sps`'s "the interpreter's own
+>    guards still fire for a caller that skips verification" — which is what kept
+>    Pass 34's two shipped mutations ("interpret: the ambiguous-terminal-prefix
+>    guard is dropped" and "interpret: the duplicate-sequence-alternative guard is
+>    dropped") alive rather than uncaught, with neither pin changed.
+> 3. **The cycle extension.** Task 2, one line: `pass-zero-progress`'s REPORT
+>    guard gained `sequence-dispatch-node?`. **Attributed in halves.** §25:1533
+>    reads "zero-progress **and EOF-cycle** analysis", and its **EOF-cycle half
+>    shipped in Slice ②** — `eof-terminal`'s sequence arm and
+>    `pass-eof-execution`'s two filters, witnessed by `verify-tests.sps`'s "an eof
+>    chain that cycles through a sequence node is an EOF cycle" and "an eof chain
+>    that cycles from a dispatch node through a sequence node's own eof-target is
+>    an EOF cycle". Measured on unmodified `main` before Slice ③ began: a sequence
+>    node with a self-cycling `eof-target` already reported
+>    `eof-zero-progress-cycle`. Slice ③ owns the **zero-progress** half only.
+>    This bullet's own phrasing — "positions ≥1 reach position 0 only after an
+>    advance" — was found imprecise and misleading to an implementer; the
+>    load-bearing invariant is **"no zero-width edge can ENTER a position-≥1
+>    prefix state"**, from which the lowered zero-width cycle set equals the
+>    source-level one. That invariant, and the extension's deliberate inherited
+>    over-approximation, are written into `verify.sls` at the site rather than
+>    left in this document.
+> 4. **Determinism pins for sequence machines (§22.9).** Task 5:
+>    `test/common/determinism-http-version-tests.sps` and the lane pair
+>    `byte-machine.determinism.http-version.chez.{source,aot}`, plus the third
+>    committed golden `test/fixtures/generated-http-version.golden.sls` — 3849
+>    bytes, generated by the shipped emitter, IR fingerprint
+>    `12299125921751534854`, 11 normalized states.
+>    **NARROWED, and this one was the task's own stated justification.** The plan
+>    said "a `list-sort` tie at the branch is precisely how §25:1539 would be
+>    lost". **False.** The branch's child order comes from `trie-put`'s ascending
+>    alist insertion, not from the `list-sort` that orders a byte-dispatch node's
+>    transitions (decision 0014); this fixture declares no byte-dispatch node at
+>    all. Established with a control rather than by reading: flipping
+>    `list-sort`'s comparator re-emits this machine **byte-identically**, while
+>    the same flip *does* reorder a two-case byte-dispatch node's arms — so the
+>    flip is a real mutation and the byte-identity is not an artifact. The task
+>    stands; only the named mechanism was wrong, and the corrected mechanism is
+>    written into the shipped program's header.
+>    One scoping note, so this disposition does not contradict §7's own opening
+>    sentence two paragraphs above: that sentence claims exit :1539 for this
+>    slice, and the milestone exit disposition below credits it to **Slice ② and
+>    Slice ③ together** — Slice ②'s `normal-ir-tests.sps` "caller order does not
+>    change the canonical result" is the other half, and predates this slice.
+>    The same is true of :1533's opening claim, corrected in halves in item 3.
+> 5. **The `HTTP/1.0` ⁄ `HTTP/1.1` fixture.** Built in Task 3 over §21.2:1065's
+>    `version = "HTTP/1.0" / "HTTP/1.1"`, driven by Tasks 4 and 5. Measured
+>    lowering: entry 0, 11 states, seven internal prefix states appended after the
+>    four declared ones (decision 0016 point 2), the branch at id 10 after the
+>    seven-byte shared prefix `HTTP/1.`, every prefix state carrying the source
+>    node's mismatch edge as its fallback and inheriting its EOF edge (§12.4:727).
+>    The emitter needed **zero** change: state 10 renders as an ordinary two-arm
+>    `(case b ...)`.
+>
+> **The slice's implementation plan is a record now, and diverged from the tree
+> in three places that are dispositioned there rather than edited** (see its own
+> dated close-out disposition): the differential program's measured shape moved
+> from `cases=8 checks=20` to `cases=8 checks=19` when a review replaced the
+> `last-byte`/`positions` sentinel pair with one `drives` counter asserted at
+> 2048 — the pair could not distinguish "256 bytes at 8 positions" from "256 at
+> one position and none at the other seven" — and several drafted case names and
+> the `list-sort` justification were superseded as above.
+
+**Exit (full Milestone 3).** The parent plan's four exit criteria (§25:1537-1540),
+each dispositioned against the shipped tree. Two of the four (:1537, :1538) were
+discharged by *other* slices outright and a third (:1539) only in part, so this
+list — not any one slice's own disposition — is what the parent plan's §25 close
+note cites.
+
+> **Dispositioned 2026-08-30 at close.** Every "met" below names the file and
+> the case in the tree that meets it, found there rather than asserted from
+> memory. Measured totals for the whole milestone as it closes, re-taken for
+> this close-out (commands in `.superpowers/sdd/task-6-report.md`):
+> `ctest --preset release` **86/86** and `--preset pr` **86/86** (from 80 at
+> Slice ②'s close, 76 at Slice ①'s); `--preset no-scheme` **8/8** (unchanged
+> across all three slices); Scheme mutation suite **46 passes / 235 mutations**
+> (from 43/223 at Slice ②'s close), zero `UNCAUGHT`, zero `FATAL`, **nine**
+> `SURVIVES (expected)`, none added, removed or edited by any of the three
+> slices — measured across the whole milestone, not only this slice
+> (`git diff a9de657..HEAD -- test/support/cmake/SchemeMutationSuite.cmake |
+> grep -E '^[+-].*EXPECT_SURVIVES'`, empty, where `a9de657` is Slice ①'s merge
+> base — the last commit before any M3 product code landed);
+> CMake mutation suite **1 pass / 72 mutations**, unchanged. The three
+> pinned IR fingerprints (`4236938459847922092`, `9098559711816935340`,
+> `15725897457025557005`) and both pre-existing committed goldens are
+> byte-identical across the **whole** milestone, not merely across its last
+> slice: `git diff --stat a9de657..HEAD -- test/fixtures/` shows exactly one
+> changed path, the new `generated-http-version.golden.sls`, and no line
+> carrying any of the three fingerprints changed in `normal-ir-tests.sps` over
+> the same range. That was Slice ①'s own oracle and it held through ② and ③.
+>
+> 1. **:1537 — "all-byte class tests pass": MET, by Slice ①.**
+>    `byte-class-interpret-tests.sps` ("all 256 byte values, per class", "the
+>    ASCII helper rejects the high half") and `differential-byte-class-tests.sps`
+>    ("interpreter and generated agree on every byte, for every class"), each in
+>    a source and an AOT lane, over the shared fixture list in
+>    `class-machine.sls` whose own completeness is asserted by a group in both
+>    programs.
+>    **Residue, named rather than closed (§0 D10b of the Slice ③ plan).** No lane
+>    compiles and executes a machine whose only case is a vacuous complement,
+>    `(make-byte-complement-matcher (make-byte-range-matcher 0 255))`. That
+>    construct is exercised by the normalizer (`normal-ir-tests.sps`, "a vacuous
+>    complement lowers to zero transitions (decision 0017 point 2)") and by the
+>    verifier (`verify-tests.sps`, "a vacuous complement collides with nothing"),
+>    and by nothing that compiles and runs it. Confirmed still open at this
+>    close, not merely inherited as a claim. It belongs to §25:1527 and to this
+>    criterion — **Slice ①'s** scope — so Slice ③ did not widen to close it, and
+>    it closes with the milestone. Provenance: carried in the Milestone 3 session
+>    ledger out of Slice ① into Slice ②'s close-out, and thence into Slice ③'s
+>    implementation plan as §0 D10b.
+> 2. **:1538 — "every sequence split and mismatch position passes": MET, by
+>    Slice ②, extended to a branching trie by Slice ③.** Slice ②:
+>    `differential-sequence-node-tests.sps` ("the M2 chained-dispatch tuples are
+>    reproduced exactly", "every fragmentation of the sequence reaches stopped in
+>    both lanes", "nonzero-offset slices report exact next / consumed /
+>    stream-offset", "both mismatch modes, absolutely, on the generated
+>    executor") and `sequence-interpret-tests.sps` ("all 256 byte values at every
+>    sequence position", "the two mismatch modes report different positions,
+>    explicitly"). Slice ③ Tasks 3-4 re-point that rig at two alternatives over a
+>    seven-byte shared prefix, in both mismatch modes, including the cut at the
+>    branch boundary asserted by name.
+>    **Limitation, recorded rather than glossed (§8).** Mismatch positions are
+>    asserted through `status`/`next`/`consumed`/`stream-offset`/`code` only. The
+>    structured parser-error record (`parser-error-node-name`, `-state-id`,
+>    `-position-kind`) is deferred to M4/M5 by milestone-2-design.md §7, which
+>    forbids populating one field of an otherwise-deferred family. This is the
+>    same limitation Slice ② recorded against this criterion; the branching
+>    fixtures do not change it.
+> 3. **:1539 — "normalized output is deterministic": MET, by Slice ② and Slice ③
+>    together.** Slice ②: `normal-ir-tests.sps`'s "caller order does not change
+>    the canonical result", which normalizes the same two alternatives in both
+>    declaration orders and compares fingerprints. Slice ③ Task 5:
+>    `determinism-http-version-tests.sps`'s "rendering twice in one process
+>    yields identical bytes" and "the emitted bytes equal the committed sequence
+>    golden", in a source and an AOT lane, against the third committed golden —
+>    the first golden containing a branch.
+>    **Limitation, recorded rather than glossed.** §22.9's bullet at :1314 —
+>    generate in every Tier 1 cell and compare output byte for byte across
+>    operating systems and architectures — is **not built**:
+>    `.github/workflows/ci.yml` has no `upload-artifact` step and no cross-cell
+>    comparison job, so no cross-cell artifact is retained or compared.
+>    "Deterministic" as discharged here means byte-identical within one process,
+>    identical across the source and AOT lanes (:1313), and equal to a committed
+>    golden; cross-process (:1312) and cross-cell (:1314) identity follow
+>    **transitively** from every lane comparing against the same committed bytes,
+>    not from a direct measurement. M9 completes the four-cell matrix with the
+>    same goldens.
+> 4. **:1540 — "consuming cycles pass and zero-progress cycles fail
+>    verification": MET, by Slice ③ Task 2, one case per half.** `verify-tests.sps`:
+>    "a sequence node whose reexecute mismatch edge targets itself is a
+>    zero-progress cycle" (the failing half) and "the same self-target with an
+>    advance mismatch edge is a consuming cycle and passes" (the passing half,
+>    which asserts `ok` **and** a diagnostic count of zero). The passing half is
+>    as load-bearing as the failing one: it is what stops the report guard from
+>    being widened past the mismatch edge's mode. Measured on `main` before the
+>    change, the failing half's fixture verified clean with zero diagnostics and
+>    did not return when fed a non-matching byte, in the interpreted and the
+>    generated lane alike.
+
 ## 8. Explicitly out of Milestone 3
 
 - **Trie/sequence specialization, sequence unrolling, peephole optimization,
@@ -855,3 +1086,47 @@ verification).
 > at §6 above for the full count — eight sites, six extended and two
 > deliberately deferred to Slice ③, each documented in place in
 > `verify.sls` — rather than restating it here.
+
+> **Disposition, 2026-08-30 (Task 6 close-out; Slice ③ closed, and Milestone 3
+> with it).** The remaining Slice ③ entries in this table, against the shipped
+> tree:
+>
+> - **`verify`.** Both Slice ③ entries shipped: `pass-sequence-ambiguity` with
+>   the one new code `'ambiguous-sequence-prefix`, and the zero-progress REPORT
+>   guard extended to a self-targeting `reexecute` mismatch edge. The row's
+>   "`pass-reachability` and `reaches-self?` are **unchanged**" **held**, with
+>   the qualifier that makes it true: the `reaches-self?` *procedure* and
+>   `pass-reachability` are byte-for-byte unchanged on this branch; what Slice ③
+>   edited is the one line in `pass-zero-progress` that *calls* `reaches-self?`,
+>   which is that pass's report filter and not the walk.
+> - **`private normal-ir`.** "Slice ③ adds no further normalizer change"
+>   **held.** The file's entire diff against `main` for this slice is one
+>   comment block; the branching structure its fixtures exercise was already
+>   there. Verified by reading the diff, not by trusting a stat line.
+> - **`compile` (emitter) and `runtime`.** Zero change in Slice ③ as well, not
+>   only in ① and ②: neither file appears in this branch's diff at all, and no
+>   new emitted local means `reserved-member-3` is untouched. The branching
+>   prefix state renders as an ordinary two-arm `(case b ...)`.
+> - **`interpret`.** Slice ③'s only edit is a comment at `seq-step`'s two
+>   guards, recording that §16.2:894 now rejects both shapes at verification and
+>   that the guards are kept as defense-in-depth. No behavioural change, as the
+>   slice plan's global constraints required.
+> - **CMake `test/CMakeLists.txt`.** The row predicted a lane pair for an
+>   "ambiguity-rejection program"; **no such program or lane was built, and none
+>   was needed.** The §16.2:894 check is a verifier pass, so its witnesses are
+>   groups inside the already-registered `verify-tests.sps` and
+>   `interpret-tests.sps` programs. Slice ③ registered six lanes, three
+>   source+AOT pairs, all for the `HTTP/1.0`⁄`HTTP/1.1` fixture:
+>   `byte-machine.{unit,differential,determinism}.http-version.chez.{source,aot}`.
+> - **`SchemeMutationSuite.cmake`.** Every line number in this row is stale by
+>   construction — the file went from 3858 lines at `a9de657`, the last commit
+>   before any M3 product code landed (the same 3858 at `f29edf7`, the
+>   decisions-only Gate 0 commit),
+>   to 6470 at this close — and is left as the record of where those anchors sat
+>   when the design was written. The obligations they name were discharged and
+>   are recorded in the tree beside the pins, by mutation LABEL rather than by
+>   line number, as AGENTS.md requires.
+>   `EXPECTED_PASSES`/`EXPECTED_MUTATIONS` closed the milestone at a measured
+>   **46 passes / 235 mutations**; §9's "38/165 today at
+>   `SchemeMutationSuite.cmake:554-555`" was the pre-M3 value at authoring time
+>   and likewise stands as a record rather than being updated.

@@ -1,6 +1,6 @@
 # Byte Machine Implementation Plan
 
-Status: milestones 0, 1, and 2 are closed — 0 on 2026-08-22 ([the spike](./milestone-0-portability-spike.md), [the close-out](./milestone-0-close-out.md), [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md)), 1 on 2026-08-23 ([milestone-1-design.md](./milestone-1-design.md)), and 2 on 2026-08-29 ([milestone-2-design.md](./milestone-2-design.md)); each carries a dated close note under its own §25 subsection below, and each of those cites where its exit criteria are dispositioned. Milestone 3 (byte classes and sequences) is in progress ([milestone-3-design.md](./milestone-3-design.md)): Slice ① (byte classes) closed 2026-08-29; Slice ② (sequence dispatch and prefix lowering) closed 2026-08-30; Slice ③ (multiple alternatives, ambiguity, and cycle analysis) is open. Decisions amended by 0005 (Chez-only) via [chez-only-simplification.md](./chez-only-simplification.md) §2, and by 0006 (inline libraries)
+Status: milestones 0, 1, 2, and 3 are closed — 0 on 2026-08-22 ([the spike](./milestone-0-portability-spike.md), [the close-out](./milestone-0-close-out.md), [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md)), 1 on 2026-08-23 ([milestone-1-design.md](./milestone-1-design.md)), 2 on 2026-08-29 ([milestone-2-design.md](./milestone-2-design.md)), and 3 on 2026-08-30 ([milestone-3-design.md](./milestone-3-design.md)); each carries a dated close note under its own §25 subsection below, and each of those cites where its exit criteria are dispositioned. Milestone 3 was delivered as a Gate 0 plus three slices: Slice ① (byte classes) closed 2026-08-29, Slice ② (sequence dispatch and prefix lowering) closed 2026-08-30, and Slice ③ (multiple alternatives, ambiguity, and cycle analysis) closed 2026-08-30 with the milestone. Milestone 4 (fields, actions, and branches) has not started. Decisions amended by 0005 (Chez-only) via [chez-only-simplification.md](./chez-only-simplification.md) §2, and by 0006 (inline libraries)
 
 Date: 2026-08-15
 
@@ -1538,6 +1538,19 @@ Exit criteria:
 - every sequence split and mismatch position passes;
 - normalized output is deterministic;
 - consuming cycles pass and zero-progress cycles fail verification.
+
+> **Closed 2026-08-30 by [milestone-3-design.md](./milestone-3-design.md)** —
+> Gate 0 and the design (PR #28, `f29edf7`, decisions 0014–0017), Slice ①
+> byte classes (PR #30, `7d6ef3d`), Slice ② sequence dispatch and trie-shaped
+> prefix lowering (PR #33, `819a5b1`), and Slice ③ multiple alternatives,
+> ambiguity, and cycle analysis. All four criteria are met against the shipped
+> tree; that document's own "Exit (full Milestone 3)" list dispositions each
+> individually, naming the slice that discharged it and the file and case in
+> the tree that meets it, and recording the three limitations this milestone
+> closes over rather than glossing them. Scope bullet :1533 is discharged in
+> **halves** — its EOF-cycle half in Slice ②, its zero-progress half in
+> Slice ③ — and that disposition attributes it that way. See CHANGELOG.md's
+> Milestone 3 entries for the release-facing summary.
 
 ### Milestone 4: Fields, actions, and branches
 
