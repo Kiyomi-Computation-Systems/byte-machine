@@ -147,19 +147,34 @@ reserved name being versioned.
   the ABI literal and the IR fingerprint:
   `test/fixtures/generated-one-byte.golden.sls:20`,
   `test/fixtures/generated-pause.golden.sls:33`, and
-  `test/fixtures/generated-http-version.golden.sls:85`.
+  `test/fixtures/generated-http-version.golden.sls:85`. The same call is
+  asserted as a literal string at one more site outside `test/fixtures/`,
+  `test/common/compile-tests.sps:165`, which moves with them.
 - **The runtime's `'v1` executor path becomes unconstructable**, and its
   disposition is owed by the slice that lands this, not by this record. Once
   `/v1` refuses every version, nothing can build a `'v1`-variant compiled
   machine, so `make-parser`'s `'v1` arm (`runtime.sls:120-123`),
   `parser-feed!`'s `else` (`runtime.sls:157`), `parser-feed-v1!`
   (`runtime.sls:205`) and `parser-finish!`'s raising `v1` arm
-  (`runtime.sls:253`) lose their only witness — with them three shipped
+  (`runtime.sls:253`) lose their only witness — with them two shipped
   mutations, named by LABEL because the lines are stale on arrival: "runtime: a
-  v1 machine is driven down the op path", "runtime: a mismatched
-  generated-runtime ABI version is accepted", and "runtime: the v1 result status
-  is hard-wired to stopped". An arm no public API can reach cannot be witnessed
+  v1 machine is driven down the op path" and "runtime: the v1 result status is
+  hard-wired to stopped". An arm no public API can reach cannot be witnessed
   and would ship dead owing an `EXPECT_SURVIVES`.
+- **Two other pinned mutations re-anchor; neither loses its witness.** The
+  `/v1` constructor's guard is a separate site from the executor path above:
+  its `FIND` (`SchemeMutationSuite.cmake:2544`, LABEL "runtime: a mismatched
+  generated-runtime ABI version is accepted") targets the guard at
+  `runtime.sls:51`, still reachable because `/v1` stays exported. The `/v2`
+  guard's `FIND` (`SchemeMutationSuite.cmake:2725`, LABEL "runtime: a
+  mismatched /v2 ABI version is accepted") likewise targets `runtime.sls:66`.
+  Item 4's tombstone rewrite deletes both guard texts outright, so both
+  `FIND`s drop to zero occurrences — `MutationRunner.cmake:344-346`'s "update
+  the mutation rather than deleting it" case, not `EXPECT_SURVIVES`. Refusing
+  *every* version still refuses abi 1, so `runtime-tests.sps:243-245` (`/v1`)
+  and `runtime-tests.sps:305-306` (`/v2`) keep raising and keep catching a
+  mutant that stops raising. The `/v2` pin is named nowhere above; left
+  un-updated it fails loudly at declaration, not at either test.
 - **This is distinct from the benchmark-gated `feed-outcome` `/v2`** reserved by
   decision 0010's Consequences and its Slice-B amendment, which stays gated on
   §23 evidence. That `/v2` is a change to the outcome *record*; this record
