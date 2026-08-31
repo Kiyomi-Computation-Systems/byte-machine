@@ -39,7 +39,7 @@
       (lambda ()
         (check-equal "twice" (render-machine ok 'http-version-parser)
                      (render-machine ok 'http-version-parser))))
-    (harness-case "the emitted bytes equal the committed golden"
+    (harness-case "the emitted bytes equal the committed sequence golden"
       (lambda ()
         (check-equal "golden" (render-machine ok 'http-version-parser)
                      (adapter-file-bytes golden-file))))))
@@ -73,18 +73,26 @@
             ;; shared prefix lower to one trie" group and in the golden's own
             ;; bytes, which this group already pins.
             ;;
-            ;; What the two accepts DO catch is a generated machine that lost an
-            ;; alternative -- measured, not assumed: dropping the branch state's
-            ;; first transition arm reddens "HTTP/1.1 status" and "HTTP/1.1
-            ;; consumed", and nothing else in this group. The mismatch pair
-            ;; below catches a different thing, the DEPTH of the shared-prefix
-            ;; walk: that the seven prefix states chain and the branch is
-            ;; consulted at offset 7. It does not catch a lost alternative --
-            ;; on that same mutant byte 50 still falls through to the same
-            ;; mismatch edge at the same offset and both checks stay green.
-            ;; What reddens it is a mis-numbered prefix block: prefix ids
-            ;; starting at 0 rather than after the declared block report
-            ;; offset 1.
+            ;; What the two accepts DO catch is a generated machine that lost
+            ;; an alternative. Measured against this program with both of
+            ;; SchemeMutationSuite.cmake's Pass 48 truncations -- note each
+            ;; KEEPS one arm and drops the other, so the arm named is the one
+            ;; that survives, not the one that goes:
+            ;;   "compile: a branching state renders only its FIRST transition
+            ;;   arm" keeps `HTTP/1.0`'s arm and reddens "HTTP/1.1 status" and
+            ;;   "HTTP/1.1 consumed";
+            ;;   "compile: a branching state renders only its LAST transition
+            ;;   arm" keeps `HTTP/1.1`'s and reddens the HTTP/1.0 pair.
+            ;; Nothing else in this group moves for either.
+            ;;
+            ;; The mismatch pair below catches a different thing, the DEPTH of
+            ;; the shared-prefix walk: that the seven prefix states chain and
+            ;; the branch is consulted at offset 7. It does not catch a lost
+            ;; alternative -- under either truncation above byte 50 still falls
+            ;; through to the same mismatch edge at the same offset, and both
+            ;; checks stay green. What reddens it is a mis-numbered prefix
+            ;; block: prefix ids starting at 0 rather than after the declared
+            ;; block report offset 1.
             (check-equal "HTTP/1.2 status" (parser-result-status rx) 'error)
             (check-equal "HTTP/1.2 stops at the branch byte"
                          (parser-result-stream-offset rx) 7)))))))

@@ -6388,14 +6388,21 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # verify command to collide with; no OTHER pass runs this program, so no
 # existing pin's collision set widened when this one was added. The pin is the
 # case-name tail plus the check label, which resolves to the single (case,
-# check) pair "the emitted bytes equal the committed golden" / "golden": this
-# program declares exactly one check with that label, and the pin contains no
-# regex metacharacter. Pinning the measured DETAIL was considered and declined:
-# it is a 3849-element bytevector dump, so any pin drawn from it embeds the
-# golden's own bytes in this file, and there is no collision here for it to
-# resolve. The identical text is Pass 38's pin, which is sound because a pin is
-# only ever matched against the output of its own mutation's verify command,
-# and Pass 38's is a different program in a different lane.
+# check) pair "the emitted bytes equal the committed sequence golden" /
+# "golden": this program declares exactly one check with that label, and the pin
+# contains no regex metacharacter. Pinning the measured DETAIL was considered
+# and declined: it is a 3849-element bytevector dump, so any pin drawn from it
+# embeds the golden's own bytes in this file, and there is no collision here for
+# it to resolve.
+#
+# The word "sequence" in that case name is load-bearing, not decoration. Without
+# it this program's case AND check names are byte-identical to Pass 38's
+# (determinism-one-byte-tests.sps), so the two pins would be the same string.
+# That is sound as this suite works today -- BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+# is set per pass, each names one --program, and byte_machine_mutation_verdict
+# judges a pin only against its own mutation's captured output -- but uniqueness
+# costs nothing here, and it stays correct if a future pass's verify command
+# ever runs more than one determinism program.
 # Control: this lane, this program and this mutation are all new on this branch,
 # so there is no prior baseline to re-measure; the control that carries the
 # claim is the neighbouring-determinism measurement above, which shows the
@@ -6435,7 +6442,8 @@ byte_machine_mutation(
   FIND [[          ((< b (caar cs)) (cons (cons b child) cs))]]
   REPLACE [[          ((> b (caar cs)) (cons (cons b child) cs))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the emitted bytes equal the committed golden: golden")
+  EXPECT_OUTPUT_MATCHES
+    "the emitted bytes equal the committed sequence golden: golden")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
