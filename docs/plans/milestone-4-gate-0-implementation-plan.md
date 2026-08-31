@@ -64,7 +64,7 @@
 Run:
 ```bash
 ls docs/decisions/
-rg -n "^### §4.1 " docs/plans/milestone-4-design.md
+rg -n "^### 4.1 " docs/plans/milestone-4-design.md
 ```
 Expected: no `0018-*` file exists yet, and the `rg` prints exactly one line — design §4.1, this record's source. Read that subsection in full before writing. If `0018` is taken because a record landed from another branch, use the next free number and carry it through every cross-reference in this plan.
 
@@ -424,7 +424,7 @@ One commit, not four. A record that retires a mechanism while the parent plan st
 Run:
 ```bash
 ls docs/decisions/
-rg -n "^### §4.2 " docs/plans/milestone-4-design.md
+rg -n "^### 4.2 " docs/plans/milestone-4-design.md
 ```
 Expected: no `0019-*` file exists yet, and the `rg` prints exactly one line — design §4.2, this record's source. Read that subsection in full before writing. If `0019` is taken because a record landed from another branch, use the next free number and carry it through every cross-reference in this plan.
 
@@ -641,9 +641,9 @@ Expected: the four header lines, with `Milestone: 4, Gate 0 (milestone-4-design.
 Then check the record against its source and against decision 0009:
 ```bash
 rg -n "§4.2" docs/plans/milestone-4-design.md
-rg -c "2026-08-31" docs/decisions/0009-content-and-ir-fingerprints.md
+rg -c "2026-08-31" docs/decisions/0009-content-and-ir-fingerprints.md || echo 0
 ```
-Expected: the design subsection this record is the durable form of; and `0` — decision 0009 takes **no** amendment in this phase (Global Constraints). Re-read the design subsection against the record and reconcile any divergence before committing; if the design is wrong, stop and say so rather than encoding the error.
+Expected: the design subsection this record is the durable form of; and `0` — decision 0009 takes **no** amendment in this phase (Global Constraints). Note `rg -c` prints nothing and exits 1 on zero matches, hence the `|| echo 0`. Re-read the design subsection against the record and reconcile any divergence before committing; if the design is wrong, stop and say so rather than encoding the error.
 
 - [ ] **Step 4: Commit**
 
@@ -671,7 +671,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 Run:
 ```bash
 ls docs/decisions/
-rg -n "^### §4.3 " docs/plans/milestone-4-design.md
+rg -n "^### 4.3 " docs/plans/milestone-4-design.md
 ```
 Expected: no `0020-*` file exists yet, and the `rg` prints exactly one line — design §4.3, this record's source. Read that subsection in full before writing. If `0020` is taken because a record landed from another branch, use the next free number and carry it through every cross-reference in this plan.
 
@@ -907,9 +907,9 @@ Expected: the four header lines, with `Milestone: 4, Gate 0 (milestone-4-design.
 Then check the record against its source and against decision 0009:
 ```bash
 rg -n "§4.3" docs/plans/milestone-4-design.md
-rg -c "2026-08-31" docs/decisions/0009-content-and-ir-fingerprints.md
+rg -c "2026-08-31" docs/decisions/0009-content-and-ir-fingerprints.md || echo 0
 ```
-Expected: the design subsection this record is the durable form of; and `0` — decision 0009 takes **no** amendment in this phase (Global Constraints). Re-read the design subsection against the record and reconcile any divergence before committing; if the design is wrong, stop and say so rather than encoding the error.
+Expected: the design subsection this record is the durable form of; and `0` — decision 0009 takes **no** amendment in this phase (Global Constraints). Note `rg -c` prints nothing and exits 1 on zero matches, hence the `|| echo 0`. Re-read the design subsection against the record and reconcile any divergence before committing; if the design is wrong, stop and say so rather than encoding the error.
 
 - [ ] **Step 4: Commit**
 
@@ -937,7 +937,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 Run:
 ```bash
 ls docs/decisions/
-rg -n "^### §4.4 " docs/plans/milestone-4-design.md
+rg -n "^### 4.4 " docs/plans/milestone-4-design.md
 ```
 Expected: no `0021-*` file exists yet, and the `rg` prints exactly one line — design §4.4, this record's source. Read that subsection in full before writing. If `0021` is taken because a record landed from another branch, use the next free number and carry it through every cross-reference in this plan.
 
@@ -1117,9 +1117,9 @@ Expected: the four header lines, with `Milestone: 4, Gate 0 (milestone-4-design.
 Then check the record against its source and against decision 0009:
 ```bash
 rg -n "§4.4" docs/plans/milestone-4-design.md
-rg -c "2026-08-31" docs/decisions/0009-content-and-ir-fingerprints.md
+rg -c "2026-08-31" docs/decisions/0009-content-and-ir-fingerprints.md || echo 0
 ```
-Expected: the design subsection this record is the durable form of; and `0` — decision 0009 takes **no** amendment in this phase (Global Constraints). Re-read the design subsection against the record and reconcile any divergence before committing; if the design is wrong, stop and say so rather than encoding the error.
+Expected: the design subsection this record is the durable form of; and `0` — decision 0009 takes **no** amendment in this phase (Global Constraints). Note `rg -c` prints nothing and exits 1 on zero matches, hence the `|| echo 0`. Re-read the design subsection against the record and reconcile any divergence before committing; if the design is wrong, stop and say so rather than encoding the error.
 
 - [ ] **Step 4: Commit**
 
@@ -1147,7 +1147,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 Run:
 ```bash
 ls docs/decisions/
-rg -n "^### §4.5 " docs/plans/milestone-4-design.md
+rg -n "^### 4.5 " docs/plans/milestone-4-design.md
 ```
 Expected: no `0022-*` file exists yet, and the `rg` prints exactly one line — design §4.5, this record's source. Read that subsection in full before writing. If `0022` is taken because a record landed from another branch, use the next free number and carry it through every cross-reference in this plan.
 
@@ -1393,9 +1393,9 @@ Expected: the four header lines, with `Milestone: 4, Gate 0 (milestone-4-design.
 Then check the record against its source and against decision 0009:
 ```bash
 rg -n "§4.5" docs/plans/milestone-4-design.md
-rg -c "2026-08-31" docs/decisions/0009-content-and-ir-fingerprints.md
+rg -c "2026-08-31" docs/decisions/0009-content-and-ir-fingerprints.md || echo 0
 ```
-Expected: the design subsection this record is the durable form of; and `0` — decision 0009 takes **no** amendment in this phase (Global Constraints). Re-read the design subsection against the record and reconcile any divergence before committing; if the design is wrong, stop and say so rather than encoding the error.
+Expected: the design subsection this record is the durable form of; and `0` — decision 0009 takes **no** amendment in this phase (Global Constraints). Note `rg -c` prints nothing and exits 1 on zero matches, hence the `|| echo 0`. Re-read the design subsection against the record and reconcile any divergence before committing; if the design is wrong, stop and say so rather than encoding the error.
 
 - [ ] **Step 4: Commit**
 
