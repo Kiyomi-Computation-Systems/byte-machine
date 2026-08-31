@@ -515,17 +515,39 @@
                                            (to-stop (make-exact-byte-matcher 50)))))
                      3)))))
 
-;; Milestone 3 Slice ② Task 1: the sixth node kind, at the six verify.sls sites
-;; it is actually extended to (design §6's dated disposition). Arms 2 and 4
-;; below both exercise node-eof-target -- the site Task 1's own fix wave
-;; collapsed three near-duplicate accessors into -- through its two different
-;; callers, all-out-targets and pass-eof, respectively. pass-overlap and
-;; pass-zero-progress's report guard are the two sites deliberately left
-;; unextended until Slice ③, and are not covered by an arm here. A sequence
-;; node added to ir.sls but NOT to verify.sls VERIFIES CLEAN -- targets never
-;; resolution-checked, cycles never detected, EOF chain never walked -- and
-;; only crashes later in the normalizer. That is why the six live sites land
-;; in the same commit as the node kind.
+;; Milestone 3 Slice ② Task 1: the sixth node kind, at the verify.sls sites it
+;; is actually extended to. Slice ③ Task 2 added the seventh. RECOUNTED at
+;; Milestone 3's close by enumerating every site in verify.sls that dispatches
+;; on node KIND -- not by grepping byte-dispatch-node?, which cannot see a cond
+;; dispatching through OTHER kind predicates and so cannot find its own
+;; omission: EIGHT sites, SEVEN extended and ONE permanently not. This project
+;; has miscounted this set twice (design §6 said six and enumerated seven; a
+;; later audit found the eighth), so the number is derived, not inherited.
+;;
+;; The seven extended, each with an arm here: node-out-targets; node-eof-target
+;; -- the site Task 1's own fix wave collapsed three near-duplicate accessors
+;; into, exercised by arms 2 and 4 below through its two different callers,
+;; all-out-targets and pass-eof respectively; reexec-targets; eof-terminal;
+;; pass-eof-execution's two filters (§16.2:908 and :909); and
+;; pass-zero-progress's REPORT guard, which Slice ② deliberately left out and
+;; Slice ③ added (§25:1533) -- covered by the two zero-progress cases below,
+;; "a sequence node whose reexecute mismatch edge targets itself ..." and its
+;; advance-mode twin, which sit between arms 3 and 4.
+;;
+;; The eighth, pass-overlap, is the one site deliberately NOT extended, and
+;; PERMANENTLY so rather than deferred: decision 0017 point 4 keeps §16.2:893
+;; and :894 as two entries with two checks and two codes, and :894 is
+;; pass-sequence-ambiguity's, not this pass's. It has no arm here and will not
+;; get one. pass-sequence-ambiguity is itself a ninth kind-dispatching site but
+;; is NOT in the census above: it is sequence-only by construction, born in
+;; Slice ③ already knowing the sixth kind, and was never a permissive
+;; fall-through that had to be taught it. Its own group is at the end of this
+;; file.
+;;
+;; A sequence node added to ir.sls but NOT to verify.sls VERIFIES CLEAN --
+;; targets never resolution-checked, cycles never detected, EOF chain never
+;; walked -- and only crashes later in the normalizer. That is why Slice ②'s
+;; six live sites landed in the same commit as the node kind.
 (define (seq-node cases mismatch eof-target)
   (make-sequence-dispatch-node 'seq cases mismatch eof-target #f))
 (define (one-alt bytes target) (list (make-sequence-case bytes target #f)))
