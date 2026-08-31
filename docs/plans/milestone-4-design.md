@@ -309,12 +309,15 @@ the verdict is the worst case over all paths: any path reaching a stop yields
 per-path, or the join tolerates re-visits.
 
 The rejected alternative was forbidding field-action and field-branch nodes on
-EOF chains, which would reject a legitimate and obvious machine — at EOF, branch
-on whether a length field was ever set — that §21.3's fixture will want.
-Resolving the branch statically is not available: field values depend on
-consumed input. This extends [decision
-0011](../decisions/0011-eof-execution-model.md)'s analysis without changing its
-rules.
+EOF chains. [Decision 0011](../decisions/0011-eof-execution-model.md) item 3
+already declined an "eof-target must resolve directly to a terminal"
+restriction so that intermediate nodes could sit on an EOF chain; forbidding an
+entire node kind there would re-impose that restriction for two kinds
+specifically, and the rejected alternative supplies no justification for
+singling them out. A machine that, at EOF, branches on whether a length field
+was ever set is a legitimate use of that permission, and the branch cannot be
+resolved statically: field values depend on consumed input. This extends
+0011's analysis without changing its rules.
 
 **The walk is one DFS carrying two structures, and that settles the join.** A
 path stack detects cycles — a back edge to a node on the current path is a
