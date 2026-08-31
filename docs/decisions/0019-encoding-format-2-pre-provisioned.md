@@ -14,10 +14,11 @@ by line throughout — but only as a single line substituted for another, at
 §9.5:442 (`git show 1dcb804 --stat` shows `2 +-`, one insertion for one
 deletion); no downstream line moves, verified by re-checking the cited
 §10.1:480, §16.2:884 and §20:1043 lines against the current tree below. The
-other six commits add `docs/plans/milestone-4-design.md`, the Gate 0
-implementation plan, decision 0018, and dated amendments to decisions 0010
-and 0012 — none of which this record cites by line — so every `src/` line
-cited below is still the line Slice ①a will open.
+same commit also appends dated amendment notes to decisions 0010 and 0012,
+and the other six add `docs/plans/milestone-4-design.md`, the Gate 0
+implementation plan and decision 0018 — none of which this record cites by
+line — so every `src/` line cited below is still the line Slice ①a will
+open.
 
 **What `encode-normal` encodes, and what it cannot see.** It takes two
 parameters — `(define (encode-normal entry states)`, normal-ir.sls:251 — and has
@@ -164,7 +165,9 @@ Note also that no record owns that byte: normal-ir.sls:250 credits the layout to
   `test/support/cmake/SchemeMutationSuite.cmake:2714`'s `FIND` — verbatim
   `runtime.sls:262`'s six-argument line — unmatchable, and `SITES` is asserted
   exactly (`MutationRunner.cmake:59`), so this fails the mutation's own
-  declaration rather than being silently skipped. It also leaves
+  declaration rather than being silently skipped; the repair is to re-anchor
+  that `FIND` on the new seven-argument text, not to delete the pin
+  (`MutationRunner.cmake:344-346`). It also leaves
   `test/common/runtime-tests.sps:276`'s
   `(define (stub-exec state offset bv start end finish?)` — a hand-written
   six-parameter exec driven through both widened call sites, the feed at `:296`
