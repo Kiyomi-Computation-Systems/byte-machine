@@ -27,6 +27,19 @@
   A test that passes whether the code is right or wrong is worse than no test.
   Every decision in a module gets a mutation that breaks it, and the owning
   specification must notice. Seed an output variable before asserting it is empty.
+* **A fix that makes two lanes agree can disarm the test that caught them.**
+  When a differential shows the interpreter and the generated lane disagreeing,
+  the repair has two ways to be wrong: they can agree on the wrong value, and
+  they can be made to agree by making the difference *unobservable*. Milestone 4
+  Gate 0 shipped the second and caught it one review later: keying the generated
+  lane's position-kind initialization on `finish?` made both lanes report `eof`
+  at the default-EOF arm — and made that arm's per-site `(quote eof)` literal
+  observationally identical to the inherited loop variable, so no differential
+  and no mutation could tell them apart. A pin written from that record would
+  have survived. After any cross-lane fix ask both questions: which value do they
+  now agree on, and does the spec's own principle pick it? And can the mutant
+  still be told from the baseline?
+
 * **Treat an uncaught mutation as a test to strengthen, never to loosen.**
   An uncaught mutation is a finding about the tests, not a reason to loosen it.
   Find something that can witness the decision before concluding nothing can —
@@ -236,6 +249,25 @@
   bare driver with no harness and false of the shipped harness-integrated lane,
   and it propagated into five documents before review caught it. Decision 0002
   models the handling — re-measure, then state what was measured against what.
+* **A decision and the reason it states fail independently — check the reason
+  against the tree, not against the document.**
+  A design call can be correct, well-argued and agreed while the sentence
+  supporting it describes behaviour the code does not have, and the false reason
+  is what the next slice acts on. Milestone 4's Gate 0 shipped three in five
+  records, two of them originating in the design and propagated by the record
+  that transcribed it: decision 0020 justified its `error`-slot rule by claiming
+  the verifier rejects a spurious target as unreachable, when `pass-reachability`
+  is a purely *syntactic* walk that reaches it and flags nothing (the rule was
+  right; the true argument was the opposite and stronger); decision 0021
+  justified permitting field nodes on EOF chains by a requirement §21 never
+  states; decision 0022 cited §12.7's truncation row for a path where nothing is
+  truncated. Put the instruction in the reviewer's prompt verbatim — *check what
+  this claims the code or the spec DOES against the code and the spec, not
+  against the prose* — because the task-scoped reviews that lacked it caught
+  none of the three, and the one that carried it caught all three. When a finding
+  lands, repair the reason without weakening the decision, then check whether the
+  same sentence sits upstream in the design.
+
 * **Sweep a retired concept's whole vocabulary, not just its name.**
   A removal gate that greps the departed name is an inventory check, not a
   vocabulary check. The Chez-only cut's `rg -i gambit` cleared every file while
