@@ -94,11 +94,12 @@
   ;; The two guards below are internal invariants, not user diagnostics. Decision
   ;; 0015 point 2: a prefix state has no "accept here" slot, so a trie node that
   ;; is both terminal and interior is UNREPRESENTABLE rather than merely
-  ;; unwanted. §16.2:894's ambiguity check rejects it as a diagnostic -- and that
-  ;; check is Slice ③, so between ② and ③ such a node is constructible and
-  ;; verifies clean. These fail loudly instead of silently dropping an
-  ;; alternative. (byte-machine interpret) will carry the same two guards once
-  ;; Task 3 lands them (decision 0015 point 2).
+  ;; unwanted. Milestone 3 Slice ③'s pass-sequence-ambiguity (§16.2:894) now
+  ;; rejects both shapes at verify-machine, so a verified machine cannot reach
+  ;; them. They are KEPT as defense-in-depth because normalize-machine is a
+  ;; public entry point that does not itself verify: a caller who skips
+  ;; verification must fail loudly here rather than silently lose an
+  ;; alternative. (byte-machine interpret)'s seq-step carries the same two.
   (define (trie-insert t bs target)
     (if (null? bs)
         (begin

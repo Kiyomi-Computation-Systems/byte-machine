@@ -7,7 +7,8 @@
         (byte-machine verify)
         (byte-machine interpret)
         (byte-machine runtime)
-        (byte-machine private conditions))
+        (byte-machine private conditions)
+        (only (byte-machine private ir) make-verification-result))
 
 (harness-begin "unit.interpret")
 
@@ -183,21 +184,65 @@
          (eq? (condition-who e) 'interpret)
          (equal? (condition-message e) message))))
 
-(harness-group "the interpreter carries the same two internal guards as the normalizer"
+;; Milestone 3 Slice ③ Task 1. §16.2:894 now rejects both unrepresentable shapes
+;; at verify-machine, and make-interpreted-machine refuses an unverified machine
+;; (interpret.sls:25-28) -- so `interp` can no longer carry one this far. The
+;; guards below are NOT thereby dead: normalize-machine and make-interpreted-
+;; machine both remain reachable by a caller that skips verification, and
+;; (byte-machine private ir) exports make-verification-result, so that caller is
+;; expressible here. Forging an ok? verification the verifier would never
+;; produce is precisely the shape the guards exist to catch, and witnessing them
+;; that way keeps SchemeMutationSuite.cmake's two Pass 34 guard mutations alive
+;; with their pins unchanged.
+(define (unverified m) (make-verification-result #t '() m))
+(define (interp-unverified m) (make-interpreted-machine (unverified m)))
+
+(harness-group "§16.2:894 rejects both unrepresentable shapes before the interpreter"
+  (lambda ()
+    (harness-case "an ambiguous terminal prefix is a verification diagnostic"
+      (lambda ()
+        (let ((v (verify-machine (seq-m 'amb '(((65 66) . stop) ((65 66 67) . halt))
+                                        'reexecute (list (make-stop-node 'halt #f))))))
+          (check "rejected" (not (verification-ok? v)))
+          (check "ambiguous-sequence-prefix"
+                 (exists (lambda (d) (eq? (diagnostic-code d) 'ambiguous-sequence-prefix))
+                         (verification-diagnostics v))))))
+    (harness-case "two identical alternatives are the same diagnostic"
+      (lambda ()
+        (let ((v (verify-machine (seq-m 'dup '(((65 66) . stop) ((65 66) . halt))
+                                        'reexecute (list (make-stop-node 'halt #f))))))
+          (check "rejected" (not (verification-ok? v)))
+          (check "ambiguous-sequence-prefix"
+                 (exists (lambda (d) (eq? (diagnostic-code d) 'ambiguous-sequence-prefix))
+                         (verification-diagnostics v))))))
+    (harness-case "handing the rejected machine to the interpreter is a contract violation"
+      (lambda ()
+        (check-raises "unverified-machine"
+                      (lambda (e)
+                        (and (byte-machine-contract-condition? e)
+                             (eq? (byte-machine-contract-condition-code e) 'unverified-machine)
+                             (eq? (byte-machine-contract-condition-who e) 'make-interpreted-machine)))
+                      (lambda ()
+                        (interp (seq-m 'amb2 '(((65 66) . stop) ((65 66 67) . halt))
+                                       'reexecute (list (make-stop-node 'halt #f))))))))))
+
+(harness-group "the interpreter's own guards still fire for a caller that skips verification"
   (lambda ()
     (harness-case "an ambiguous terminal prefix is an assertion violation"
       (lambda ()
         (check-raises "AB|ABC" (raises-interpret-assertion? "ambiguous terminal prefix")
                       (lambda ()
-                        (feed-bytes (interp (seq-m 'amb '(((65 66) . stop) ((65 66 67) . halt))
-                                                   'reexecute (list (make-stop-node 'halt #f))))
+                        (feed-bytes (interp-unverified
+                                     (seq-m 'amb '(((65 66) . stop) ((65 66 67) . halt))
+                                            'reexecute (list (make-stop-node 'halt #f))))
                                     '(65 66))))))
     (harness-case "two identical alternatives are an assertion violation"
       (lambda ()
         (check-raises "AB|AB" (raises-interpret-assertion? "duplicate sequence alternative")
                       (lambda ()
-                        (feed-bytes (interp (seq-m 'dup '(((65 66) . stop) ((65 66) . halt))
-                                                   'reexecute (list (make-stop-node 'halt #f))))
+                        (feed-bytes (interp-unverified
+                                     (seq-m 'dup '(((65 66) . stop) ((65 66) . halt))
+                                            'reexecute (list (make-stop-node 'halt #f))))
                                     '(65 66))))))))
 
 (harness-group "advance-mode mismatch shifts every reported position by one (§11.5:664)"

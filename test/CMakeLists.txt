@@ -577,7 +577,10 @@ byte_machine_add_scheme_lane(
 # variable must be set here. Pass 38 (D6 determinism, Slice B) reads the
 # committed golden the same way, through BYTE_MACHINE_GOLDEN_FILE, so it is
 # set here too rather than inside SchemeMutationSuite.cmake -- the same
-# mechanism, for the same reason, as BYTE_MACHINE_FINGERPRINT_SAMPLE.
+# mechanism, for the same reason, as BYTE_MACHINE_FINGERPRINT_SAMPLE. Pass 49
+# (Slice ③, the sequence golden) adds the third variable for the same reason;
+# without it that pass's BASELINE fails, and a failing baseline reads as a
+# mutation defect rather than as the missing environment it is.
 if(BYTE_MACHINE_CHEZ_EXECUTABLE)
   byte_machine_add_test(
     NAME byte-machine.harness.scheme-mutation.cmake.direct
@@ -588,7 +591,8 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     LABELS unit
     ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source"
                 "BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin"
-                "BYTE_MACHINE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-one-byte.golden.sls")
+                "BYTE_MACHINE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-one-byte.golden.sls"
+                "BYTE_MACHINE_HTTP_VERSION_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-http-version.golden.sls")
 endif()
 
 # --- Provenance ------------------------------------------------------------
@@ -1132,6 +1136,56 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-sequence-node-tests.sps"
   TIMEOUT 180)
 
+# --- Milestone 3 Slice ③: multiple alternatives over a shared prefix ---------
+# The §21.2 `version = "HTTP/1.0" / "HTTP/1.1"` production. Both lanes list the
+# fixture .sls in SOURCES because the aot lane resolves libraries only through
+# objects compiled from its own SOURCES (the source-guard blocks fallback).
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.http-version.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/http-version-interpret-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-version-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/http-version-interpret-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.http-version.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/http-version-interpret-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-version-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/http-version-interpret-tests.sps"
+  TIMEOUT 120)
+
+# The interpreter≡generated differential over the same production. Separate from
+# the unit lanes above because it emits, loads and evals a generated library:
+# that needs the emitter (CORE_EMIT rather than CORE_ALL) and prng.sls for the
+# seeded split schedules, neither of which the absolute interpreter lane uses.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.http-version.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-http-version-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-version-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-http-version-tests.sps"
+  TIMEOUT 180)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.http-version.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-http-version-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-version-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-http-version-tests.sps"
+  TIMEOUT 180)
+
 # --- Milestone 1 Phase 3 Slice B: D7 identifier repertoire + binary LF -------
 byte_machine_add_scheme_lane(
   NAME byte-machine.verify.identifier-repertoire.chez.source
@@ -1199,6 +1253,39 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/determinism-pause-tests.sps"
   TIMEOUT 120
   ENVIRONMENT "BYTE_MACHINE_PAUSE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-pause.golden.sls")
+
+# --- Milestone 3 Slice ③: determinism against a committed golden (sequence) ---
+# The third golden. Unlike the one-byte and pause goldens, this machine has a
+# BRANCHING prefix state, which is the only shape whose child order can be
+# unstable at all -- decision 0016's ascending-byte child rule, and the way
+# §25:1539's "normalized output is deterministic" would otherwise be lost. The
+# rule lives in trie-put, not in the `list-sort` that orders a byte-dispatch
+# node's transitions; SchemeMutationSuite.cmake's Pass 49 carries the
+# measurement that separates the two. Like the pause block above, this program
+# imports its machine from a fixture library, so both lanes list
+# http-version-machine.sls in SOURCES: the aot lane resolves libraries only
+# through objects compiled from its own SOURCES.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.determinism.http-version.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/determinism-http-version-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-version-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/determinism-http-version-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_HTTP_VERSION_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-http-version.golden.sls")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.determinism.http-version.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/determinism-http-version-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-version-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/determinism-http-version-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_HTTP_VERSION_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-http-version.golden.sls")
 
 # --- Milestone 1 Phase 3 Slice B: property generator + differential ----------
 byte_machine_add_scheme_lane(

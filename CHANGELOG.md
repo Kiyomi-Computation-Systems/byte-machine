@@ -6,11 +6,12 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ## [Unreleased]
 
-Milestones 0 through 2 (portability spike, minimal executable machine,
-incremental execution and lifecycle) have closed. Milestone 3 (byte classes
-and sequences) is **in progress**: Slices ① (byte classes) and ② (sequence
-dispatch and prefix lowering) have closed; Slice ③ (multiple alternatives,
-ambiguity, and cycle analysis) is open. See
+Milestones 0 through 3 (portability spike, minimal executable machine,
+incremental execution and lifecycle, byte classes and sequences) have closed.
+Milestone 3 closed **2026-08-30** with Slice ③ (multiple alternatives,
+ambiguity, and cycle analysis), after Slices ① (byte classes) and ② (sequence
+dispatch and prefix lowering); Milestone 4 (fields, actions, and branches) has
+not started. See
 [the implementation plan](docs/plans/byte-machine-implementation-plan.md) §25
 for overall scope; the entries below record what each milestone actually
 delivered. No versioned release exists yet.
@@ -619,6 +620,131 @@ delivered. No versioned release exists yet.
   `EXPECT_SURVIVES`, all pre-existing and none from this slice, confirmed by
   a cross-commit diff against `main` rather than `git status`), the CMake
   mutation suite unchanged at 1 pass/72 mutations.
+
+- Multiple alternatives, ambiguity and cycle analysis (Milestone 3 Slice ③) —
+  **the slice that closes Milestone 3**. `verify-machine` gains
+  `pass-sequence-ambiguity`, the parent plan's §16.2:894 check, with one new
+  diagnostic code `'ambiguous-sequence-prefix` and one diagnostic per colliding
+  pair: one alternative being a terminal prefix of another is now rejected at
+  verification rather than only asserted inside the normalizer and the
+  interpreter, and duplicate alternatives report the same code as the maximal
+  case of the same relation. The check is a source-level pairwise test over the
+  node's own byte lists, so it never inspects the lowered graph and §17:951's
+  verify-before-normalize ordering is preserved; it was measured equivalent to
+  the normalizer's three trie guards over all 469 nonempty alternative-sets of
+  size ≤ 3 drawn from the 14 binary strings of length 1–3, with zero
+  disagreements. `pass-overlap` is **not** extended to sequence nodes, now or
+  later: §16.2:893 and :894 are two entries, two checks and two codes
+  ([decision 0017](docs/decisions/0017-degenerate-shapes-are-contract-violations.md)
+  point 4), and the guards for the same two invariants are kept as
+  defense-in-depth in both files — **three** assertion sites in
+  `normal-ir.sls`'s `trie-insert`, because the ambiguity invariant is checked in
+  both directions there, and **two** in `interpret.sls`'s `seq-step` — for a
+  caller who reaches `normalize-machine` without verifying, or who forges a
+  verification result. (Per invariant: ambiguity holds two of the normalizer's
+  three sites and one of the interpreter's two; duplicate-alternative holds one
+  of each.) Scope bullet §25:1532.
+  Together with the REPORT-guard extension below, this closes both of the two
+  verifier sites the Milestone 3 Slice ② entry above records as deferred to this
+  slice — one by extending it, the other by establishing that it is never
+  extended; that entry's "deliberately deferred to Slice ③" and its "verifies
+  with zero diagnostics today" are the record of the tree as it stood at Slice
+  ②'s close, and stand as written.
+- `pass-zero-progress`'s REPORT set gains the sixth node kind, so a sequence
+  node whose `reexecute` mismatch edge reaches itself is reported as a
+  `zero-progress-cycle` instead of verifying clean and hanging both executors
+  (the hang was measured on `main` before the change: `exit=124` under a
+  timeout, in the interpreted and the generated lane alike). The walk already
+  saw through such a node — that shipped in Slice ②. An `advance` mismatch edge
+  consumes the offending byte, so the same self-target stays accepted: both
+  halves of exit criterion §25:1540, one case each. Scope bullet §25:1533 is
+  discharged **in halves** — this is its zero-progress half; its EOF-cycle half
+  shipped in Slice ②, in `eof-terminal`'s sequence arm and `pass-eof-execution`'s
+  two filters, and a sequence node with a self-cycling `eof-target` already
+  reported `eof-zero-progress-cycle` before this slice began. The extension
+  inherits the incumbent's deliberate over-approximation — `reaches-self?` is a
+  pure edge walk and never asks whether the arm closing the cycle is reachable
+  for any byte — which a byte-dispatch node whose single case is
+  `(make-byte-range-matcher 0 255)` already exhibited on `main`; recorded at the
+  site rather than silently widened.
+- The `HTTP/1.0` ⁄ `HTTP/1.1` fixture from the parent plan's §21.2:1065 grammar
+  (`version = "HTTP/1.0" / "HTTP/1.1"`), two alternatives over the seven-byte
+  shared prefix `HTTP/1.`, in both mismatch modes: an absolute interpreter lane
+  pair, an interpreter≡generated differential lane pair, and a structural group
+  in the already-registered normalizer program — six new lanes in all, three
+  source+AOT pairs, counting the determinism pair below.
+  **What is new here is stated narrowly.** Slice ② already
+  drove the trie merge — `normal-ir-tests.sps` pins structurally that a shared
+  first byte becomes one transition into one state, and `interpret-tests.sps`
+  executes `AB`/`AC` through the interpreter — so this slice adds the
+  **differential** over a branch, plus depth, absolute tuples and both mismatch
+  modes. Measured, not assumed, about what that differential is for: a lowering
+  that **loses** an alternative is caught here and not by the single-alternative
+  differential, where a one-arm state and a truncated one-arm state are the same
+  state; a defect that **resumed** into the wrong prefix state across a feed
+  boundary reddens the single-alternative differential too, so that is not this
+  lane's alone. Multi-alternative half of scope bullet §25:1529; exit criterion
+  §25:1538 extended from Slice ②'s linear chain to a branching trie.
+- §22.9 determinism pins over a branching sequence machine, and a third
+  committed golden, `test/fixtures/generated-http-version.golden.sls` (3849
+  bytes, generated by the shipped emitter, never hand-written; IR fingerprint
+  `12299125921751534854`, 11 normalized states). Neither the one-byte nor the
+  pause golden contains a branch, and a branch is the only shape that can
+  witness an unstable child order at the branching prefix state. The order in
+  question is `trie-put`'s own ascending alist insertion, **not** the
+  `list-sort` that orders a byte-dispatch node's transitions: measured with a
+  control — flipping `list-sort`'s comparator re-emits this machine
+  byte-identically while it does reorder a two-case byte-dispatch node's arms,
+  so the flip is a real mutation and the byte-identity is not an artifact. Exit
+  criterion §25:1539.
+
+  **Three limitations are recorded rather than glossed, and the count carries
+  its qualifier: three, among the limitations Milestone 3 closes over.**
+  (i) Mismatch positions in this slice's lanes are asserted through
+  `status`/`next`/`consumed`/`stream-offset`/`code` only — the structured
+  `parser-error-*` record (`parser-error-node-name`, `-state-id`,
+  `-position-kind`) is deferred to M4/M5 by milestone-2-design.md §7, which
+  forbids populating one field of an otherwise-deferred family; the same
+  limitation Slice ② recorded against §25:1538, unchanged by the branching
+  fixtures. (ii) §22.9's bullet at :1314 — generate in every Tier 1 cell and
+  compare output byte for byte across operating systems and architectures — is
+  **not built**: `.github/workflows/ci.yml` has no `upload-artifact` step and no
+  cross-cell comparison job. "Deterministic" here therefore means byte-identical
+  within one process, identical across the source and AOT lanes, and equal to a
+  committed golden; cross-process (:1312) and cross-cell (:1314) identity follow
+  **transitively** from every lane comparing against the same committed bytes,
+  not from a direct measurement. (iii) No lane compiles and executes a machine
+  whose only case is a vacuous complement,
+  `(make-byte-complement-matcher (make-byte-range-matcher 0 255))` — that
+  construct is exercised by the normalizer (`normal-ir-tests.sps`, "a vacuous
+  complement lowers to zero transitions (decision 0017 point 2)") and the
+  verifier (`verify-tests.sps`, "a vacuous complement collides with nothing")
+  but never compiled and run.
+  It belongs to scope bullet §25:1527 and exit criterion §25:1537 — **Slice ①'s**
+  scope, not this slice's — and so closes with the milestone. Provenance: the
+  Milestone 3 session ledger carried it out of Slice ① into Slice ②'s close-out
+  and thence into this slice's implementation plan as §0 D10b, which confirmed
+  it still open and assigned this record.
+
+  Nothing in the normalizer, the emitter, `runtime.sls` or the `/v2` ABI
+  changed; `private/normal-ir.sls`'s only edit on this branch is a comment. The
+  three pinned IR fingerprints (`4236938459847922092`, `9098559711816935340`,
+  `15725897457025557005`) and both pre-existing committed goldens are
+  byte-identical. Measured on the shipped tree: `release`/`pr` 86/86,
+  `no-scheme` 8/8, the Scheme mutation suite 46 passes/235 mutations (226
+  caught, zero uncaught, 9 declared `EXPECT_SURVIVES`, all pre-existing and none
+  added, removed or edited on this branch), the CMake mutation suite unchanged
+  at 1 pass/72 mutations.
+
+  **Amended 2026-08-30 (whole-branch review fix wave).** The paragraph above is
+  the measurement taken at the slice's close and stands as written. The review's
+  fix wave then added one mutation to Pass 33 — `"verify: the sequence mismatch
+  edge's MODE is not tested (arm 3, reexec-targets)"`, for the `reexecute` test
+  in `reexec-targets`' sequence arm, which had no mutation — and one attribution
+  check to `verify-tests.sps` that its pin needed. The suite ships at **46
+  passes / 236 mutations**, 227 caught; every other number above is unchanged
+  and was re-measured, including the three fingerprints, both goldens and the
+  nine `EXPECT_SURVIVES`.
 
 ### Changed
 

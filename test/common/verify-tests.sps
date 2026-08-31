@@ -515,17 +515,58 @@
                                            (to-stop (make-exact-byte-matcher 50)))))
                      3)))))
 
-;; Milestone 3 Slice ② Task 1: the sixth node kind, at the six verify.sls sites
-;; it is actually extended to (design §6's dated disposition). Arms 2 and 4
-;; below both exercise node-eof-target -- the site Task 1's own fix wave
-;; collapsed three near-duplicate accessors into -- through its two different
-;; callers, all-out-targets and pass-eof, respectively. pass-overlap and
-;; pass-zero-progress's report guard are the two sites deliberately left
-;; unextended until Slice ③, and are not covered by an arm here. A sequence
-;; node added to ir.sls but NOT to verify.sls VERIFIES CLEAN -- targets never
-;; resolution-checked, cycles never detected, EOF chain never walked -- and
-;; only crashes later in the normalizer. That is why the six live sites land
-;; in the same commit as the node kind.
+;; Milestone 3 Slice ② Task 1: the sixth node kind, at the verify.sls sites it
+;; is actually extended to. Slice ③ Task 2 added the seventh. RECOUNTED at
+;; Milestone 3's close, and the RULE that reproduces the number is stated here
+;; because the rule is what a later reader re-derives from: not "every site in
+;; verify.sls that dispatches on node KIND", which yields TWELVE at HEAD, and
+;; not a grep for byte-dispatch-node?, which cannot see a cond dispatching
+;; through OTHER kind predicates and so cannot find its own omission. It is
+;;
+;;   every kind dispatch with a PERMISSIVE FALL-THROUGH that a sequence node's
+;;   own data could pass through unexamined
+;;
+;; -- a site whose non-matching branch quietly yields '() or #f while the sixth
+;; kind carries exactly the data the site exists to inspect. That rule gives
+;; EIGHT sites, SEVEN extended and ONE permanently not.
+;;
+;; The four kind-dispatching sites the looser wording sweeps in, and why the
+;; rule excludes each: pass-names' error-node? filter (a sequence node has no
+;; error name to leave undeclared); pass-eof-execution's TWO byte-reachability
+;; gates for D4(b)/(d), which select pause nodes to inspect a CONTINUATION a
+;; sequence node does not have -- these are NOT the pass's two :908/:909
+;; filters, which are in the eight and were extended; and
+;; pass-sequence-ambiguity, excluded for its own separate reason below. Each
+;; positively selects one kind rather than falling through past another's data.
+;;
+;; This project has miscounted this set twice (design §6 said six and
+;; enumerated seven; a later audit found the eighth), so the number is derived,
+;; not inherited.
+;;
+;; The seven extended, each with an arm here: node-out-targets; node-eof-target
+;; -- the site Task 1's own fix wave collapsed three near-duplicate accessors
+;; into, exercised by arms 2 and 4 below through its two different callers,
+;; all-out-targets and pass-eof respectively; reexec-targets; eof-terminal;
+;; pass-eof-execution's two filters (§16.2:908 and :909); and
+;; pass-zero-progress's REPORT guard, which Slice ② deliberately left out and
+;; Slice ③ added (§25:1533) -- covered by the two zero-progress cases below,
+;; "a sequence node whose reexecute mismatch edge targets itself ..." and its
+;; advance-mode twin, which sit between arms 3 and 4.
+;;
+;; The eighth, pass-overlap, is the one site deliberately NOT extended, and
+;; PERMANENTLY so rather than deferred: decision 0017 point 4 keeps §16.2:893
+;; and :894 as two entries with two checks and two codes, and :894 is
+;; pass-sequence-ambiguity's, not this pass's. It has no arm here and will not
+;; get one. pass-sequence-ambiguity is itself a ninth kind-dispatching site but
+;; is NOT in the census above: it is sequence-only by construction, born in
+;; Slice ③ already knowing the sixth kind, and was never a permissive
+;; fall-through that had to be taught it. Its own group is at the end of this
+;; file.
+;;
+;; A sequence node added to ir.sls but NOT to verify.sls VERIFIES CLEAN --
+;; targets never resolution-checked, cycles never detected, EOF chain never
+;; walked -- and only crashes later in the normalizer. That is why Slice ②'s
+;; six live sites landed in the same commit as the node kind.
 (define (seq-node cases mismatch eof-target)
   (make-sequence-dispatch-node 'seq cases mismatch eof-target #f))
 (define (one-alt bytes target) (list (make-sequence-case bytes target #f)))
@@ -592,6 +633,54 @@
                         (make-error-node 'reject 'rejected #f))
                   'default-eof #f)
                 'zero-progress-cycle))))
+    ;; Milestone 3 Slice ③ Task 2: §25:1533's cycle extension, and BOTH halves
+    ;; of exit criterion §25:1540. Slice ② taught reexec-targets to see THROUGH
+    ;; a sequence node while deliberately leaving it out of the REPORTED set;
+    ;; this is the report. Measured on `main` before the extension: the first
+    ;; fixture verified ok #t with ZERO diagnostics and HUNG both executors
+    ;; (exit 124 under timeout), while the byte-identical shape built from a
+    ;; byte-dispatch node reported zero-progress-cycle.
+    (harness-case "a sequence node whose reexecute mismatch edge targets itself is a zero-progress cycle"
+      (lambda ()
+        (let ((m (make-machine 'selfseq 'seq '() '() '() errs
+                   (list (seq-node (one-alt '(65 66) 'stop) (make-edge 'seq 'reexecute) #f)
+                         (make-stop-node 'stop #f))
+                   'default-eof #f)))
+          (check "rejected" (not (verification-ok? (verify-machine m))))
+          (check "zero-progress-cycle" (has-code? m 'zero-progress-cycle)))))
+    ;; The other half of :1540. The mismatch edge's MODE is the whole decision:
+    ;; an advance edge consumes the mismatching byte, so the loop makes
+    ;; progress and must verify clean. reexec-targets' sequence arm is what
+    ;; discriminates on mode; this case is what stops the report guard from
+    ;; being widened past it.
+    ;;
+    ;; The third check is an ATTRIBUTION check, and the whole-branch review fix
+    ;; wave added it on a measurement rather than on a reading. "ok" and
+    ;; "diagnostic count" are unattributed: they say the machine verified
+    ;; clean, not WHICH diagnostic would have been wrong. Measured at 42
+    ;; mutations, three different Pass 33 mutants redden both of them here with
+    ;; three different diagnostics -- the mode test deleted (zero-progress-cycle
+    ;; on 'seq), node-out-targets' sequence arm deleted (unreachable-node on
+    ;; 'stop), and the sequence-alternative self-comparison
+    ;; (ambiguous-sequence-prefix) -- so a count of 1 is reached three ways and
+    ;; the mode decision owned no FAIL record of its own. Naming the code that
+    ;; must be ABSENT splits them: only losing the mode test can put a
+    ;; zero-progress-cycle on a machine whose mismatch edge consumes a byte.
+    ;; This is the same remedy the pause group's "no unreachable-node" /
+    ;; "no non-eof-into-finish" checks above use, for the same reason.
+    (harness-case "the same self-target with an advance mismatch edge is a consuming cycle and passes"
+      (lambda ()
+        (let ((v (verify-machine
+                  (make-machine 'advseq 'seq '() '() '() errs
+                    (list (seq-node (one-alt '(65 66) 'stop) (make-edge 'seq 'advance) #f)
+                          (make-stop-node 'stop #f))
+                    'default-eof #f))))
+          (check "ok" (verification-ok? v))
+          (check-equal "diagnostic count" (length (verification-diagnostics v)) 0)
+          (check "no zero-progress-cycle"
+                 (not (memq 'zero-progress-cycle
+                            (map diagnostic-code
+                                 (verification-diagnostics v))))))))
     ;; arm 4 -- pass-eof: eof-target resolution
     (harness-case "a sequence eof-target that names no node is invalid-eof-target"
       (lambda ()
@@ -677,24 +766,29 @@
     ;; warns reports "separable but deliberately declined" as clean too --
     ;; count-not-witness is the fix that shape needs, precedented by
     ;; verify-tests.sps's own "both EOF terminals reported" and "three pairs"
-    ;; checks above. Each case below puts TWO independent occurrences of one
-    ;; decision in a single machine -- one on a byte-dispatch node (which the
-    ;; competing broader mutation ALSO breaks, so the count drops by the
-    ;; byte-dispatch contribution too) and one on a sequence node reached
-    ;; only through the arm's own mechanism (which only the arm's narrower
-    ;; mutation breaks) -- so the two mutations report different "got" values
-    ;; on the same check. Measured directly against both mutants, not
-    ;; predicted; see SchemeMutationSuite.cmake's arms 3/5/6 for the sweep.
-    (harness-case "a byte-dispatch self-loop and a sequence-mismatch cycle are two zero-progress cycles"
+    ;; checks above. Each case below puts at least TWO independent occurrences
+    ;; of one decision in a single machine -- one on a byte-dispatch node
+    ;; (which the competing broader mutation ALSO breaks, so the count drops
+    ;; by the byte-dispatch contribution too) and one on a sequence node
+    ;; reached only through the arm's own mechanism (which only the arm's
+    ;; narrower mutation breaks) -- so the two mutations report different
+    ;; "got" values on the same check. Measured directly against both mutants,
+    ;; not predicted; see SchemeMutationSuite.cmake's arms 3/5/6 for the
+    ;; sweep. Slice ③ Task 2 added a THIRD occurrence to the first case below
+    ;; -- 'seq itself, once the REPORT set saw it (§25:1533) -- so that one
+    ;; separates three mutations rather than two; its own table says which.
+    (harness-case "a byte-dispatch self-loop, a dispatch-through-sequence cycle and the sequence node itself are three zero-progress cycles"
       (lambda ()
-        ;; arm 3 (reexec-targets' sequence clause) vs "verify: zero-progress
-        ;; detection never fires" (mut06): 'x's case+fallback both reexecute
-        ;; into itself, a decision arm 3 never touches; 'start -> 'seq ->
-        ;; 'start is the sequence-mismatch cycle arm 3's own case above
-        ;; already witnesses by existence. Correct code reports 2 (one per
-        ;; cycle); mut06 disables PASS 5 outright, reporting 0; arm 3 still
-        ;; finds 'x's plain self-loop but can no longer walk through 'seq,
-        ;; reporting 1.
+        ;; Count-don't-witness, and Slice ③ makes it four-way. Measured against
+        ;; this one check:
+        ;;   correct code                                       -> 3
+        ;;   PASS 5's REPORT guard loses its sequence clause     -> 2
+        ;;   reexec-targets loses its sequence arm (arm 3)       -> 1
+        ;;   PASS 5's report conditional replaced by (if #f      -> 0
+        ;; 'x's case and fallback both reexecute into itself, a decision only
+        ;; the last of those touches; 'start -> 'seq -> 'start is the cycle the
+        ;; walk must see THROUGH; and 'seq itself is what Slice ③ added to the
+        ;; REPORTED set.
         (check-equal "zero-progress-cycle count"
                      (length (filter (lambda (c) (eq? c 'zero-progress-cycle))
                                      (codes
@@ -710,7 +804,7 @@
                                               (make-stop-node 'stop #f)
                                               (make-error-node 'reject 'rejected #f))
                                         'default-eof #f))))
-                     2)))
+                     3)))
     (harness-case "a byte-dispatch eof self-loop and a two-node dispatch/sequence eof cycle are three eof-zero-progress cycles"
       (lambda ()
         ;; arm 5 (eof-terminal's sequence clause) vs "verify: an eof-target
@@ -787,5 +881,85 @@
                                               (make-error-node 'reject 'rejected #f))
                                         'default-eof #f))))
                      2)))))
+
+;; Milestone 3 Slice ③ Task 1: §16.2:894 sequence ambiguity. One alternative
+;; being a terminal prefix of another is UNREPRESENTABLE (decision 0015 point
+;; 2: a prefix state has no "accept here" slot), so it is rejected here rather
+;; than left to the normalizer's internal guard. Duplicate alternatives are the
+;; maximal case of the same relation -- `AB` is a terminal prefix of `AB` -- so
+;; both shapes carry the one code design §4.5 allows. Reported once per
+;; colliding PAIR, like pass-overlap (§16.4:937-943).
+(define (amb-machine name alts extra-nodes)
+  (make-machine name 'seq '() '() '() errs
+    (append (list (make-sequence-dispatch-node 'seq
+                    (map (lambda (a) (make-sequence-case (car a) (cdr a) #f)) alts)
+                    (make-edge 'reject 'reexecute) #f #f)
+                  (make-stop-node 'stop #f)
+                  (make-error-node 'reject 'rejected #f))
+            extra-nodes)
+    'default-eof #f))
+(define two-more (list (make-stop-node 'halt #f) (make-stop-node 'done #f)))
+(define three-more (append two-more (list (make-stop-node 'more #f))))
+;; Counters read the OBSERVED diagnostic list, never the fixture's own shape.
+(define (ambiguity-count m)
+  (length (filter (lambda (c) (eq? c 'ambiguous-sequence-prefix)) (codes m))))
+(define nested-short-first
+  (amb-machine 'nest '(((65) . stop) ((65 66) . halt) ((65 66 67) . done)) two-more))
+(define nested-long-first
+  (amb-machine 'nest-rev '(((65 66 67) . done) ((65 66) . halt) ((65) . stop)) two-more))
+
+(harness-group "sequence ambiguity (§16.2:894)"
+  (lambda ()
+    (harness-case "an alternative that is a terminal prefix of another is rejected"
+      (lambda ()
+        (let ((m (amb-machine 'amb '(((65 66) . stop) ((65 66 67) . halt))
+                              (list (make-stop-node 'halt #f)))))
+          (check "rejected" (not (verification-ok? (verify-machine m))))
+          (check "ambiguous-sequence-prefix" (has-code? m 'ambiguous-sequence-prefix)))))
+    (harness-case "two identical alternatives are the maximal case of the same relation"
+      (lambda ()
+        (let ((m (amb-machine 'dup '(((65 66) . stop) ((65 66) . halt))
+                              (list (make-stop-node 'halt #f)))))
+          (check "rejected" (not (verification-ok? (verify-machine m))))
+          (check "ambiguous-sequence-prefix" (has-code? m 'ambiguous-sequence-prefix)))))
+    ;; The count fixtures. SUMMED over both declaration orders, deliberately:
+    ;; a short-first list is caught by a one-directional test as well as by a
+    ;; correct one, so a per-ordering check leaves the one-directional
+    ;; mutation's whole failure set inside the never-run mutation's -- the
+    ;; subsumed shape AGENTS.md names. The sum separates them (6 / 3 / 0).
+    (harness-case "the prefix test asks both directions, counted over both declaration orders"
+      (lambda ()
+        (check-equal "ambiguity count over both orderings"
+                     (+ (ambiguity-count nested-short-first)
+                        (ambiguity-count nested-long-first))
+                     6)))
+    ;; The over-rejection direction, which nothing else in this file tests: a
+    ;; SHARED first byte is not ambiguity (§10.6:544 permits shared nonterminal
+    ;; prefixes; the trie merges them), and a check that cannot tell the two
+    ;; apart would reject every branching machine this slice ships.
+    (harness-case "alternatives that merely share a prefix are not ambiguous"
+      (lambda ()
+        (check-equal "ambiguity count"
+                     (ambiguity-count
+                      (amb-machine 'ok '(((65 66) . stop) ((65 67) . halt) ((88 89) . done))
+                                   two-more))
+                     0)))
+    ;; The pair ENUMERATION, mirroring pass-overlap's own three enumeration
+    ;; mutations. A nested family of three (3 pairs) plus a disjoint pair
+    ;; (1 pair) = 4; the three ways to break the walk give 2, 3 and 9, all
+    ;; distinct and all distinct from the two mutations above.
+    (harness-case "every pair is enumerated once, across a nested family and a disjoint one"
+      (lambda ()
+        (check-equal "ambiguity count"
+                     (ambiguity-count
+                      (amb-machine 'fam '(((65) . stop) ((65 66) . halt) ((65 66 67) . done)
+                                          ((88) . more) ((88 89) . stop))
+                                   three-more))
+                     4)))
+    (harness-case "a byte-dispatch machine contributes no sequence ambiguity"
+      (lambda ()
+        (check-equal "ambiguity count"
+                     (ambiguity-count (machine (one-byte-nodes (make-edge 'reject 'reexecute))))
+                     0)))))
 
 (harness-finish)

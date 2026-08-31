@@ -5,15 +5,17 @@
 ;;; cycles, terminal/EOF shape, and generated-name safety (reserved-set
 ;;; member 1 — Gate 0 §3.3). Error references are symbolic names resolved
 ;;; against the error declarations.
-;;; Milestone 3 Slice ② adds the sixth node kind, sequence-dispatch (§9.1:297,
+;;; Milestone 3 Slice ② added the sixth node kind, sequence-dispatch (§9.1:297,
 ;;; §10.6:542-546), to every one of these passes EXCEPT overlap: its case
 ;;; targets and mismatch edge are out-targets and eof-targets for name
 ;;; resolution and reachability, its mismatch edge's reexecute mode joins the
 ;;; zero-progress walk, and its eof-target joins the EOF-shape and :908/:909
-;;; terminal checks. Cross-alternative sequence collision (§16.2:894) stays
-;;; out of pass-overlap -- decision 0017 point 4 assigns it to the verifier,
-;;; and design §7 assigns it to Slice ③ -- see pass-overlap's own filter,
-;;; below.
+;;; terminal checks. Milestone 3 Slice ③ added pass-sequence-ambiguity
+;;; (§16.2:894) and taught pass-zero-progress's REPORT set the sixth kind
+;;; (§25:1533), so a sequence node whose reexecute mismatch edge reaches itself
+;;; is now a zero-progress cycle rather than a hang. Cross-alternative sequence
+;;; collision stays out of pass-overlap permanently -- it is :894's, not
+;;; :893's; see pass-overlap's own filter.
 ;;; Diagnostics are compared by code, never by text.
 (library (byte-machine verify)
   (export verify-machine verification-ok? verification-diagnostics
@@ -173,14 +175,77 @@
                                                            "two cases match the same byte or bytes")
                                           out)
                                     out)))))))))
-  ;; Deliberately NOT extended to sequence-dispatch-node? (Milestone 3 Slice
-  ;; ②): whether two sequence alternatives collide is §16.2:894 sequence
-  ;; ambiguity, which decision 0017 point 4 assigns to the verifier and
-  ;; design §7 assigns to Slice ③. A sequence node is invisible to this pass
-  ;; between ② and ③.
+  ;; NOT extended to sequence-dispatch-node?, and not deferred either: whether
+  ;; two sequence ALTERNATIVES collide is §16.2:894 ambiguity, which
+  ;; pass-sequence-ambiguity below owns. Decision 0017 point 4 keeps :893 and
+  ;; :894 as two entries with two checks and two codes, and the predicates
+  ;; genuinely differ -- this pass compares canonical matcher byte SETS within
+  ;; one byte-dispatch node; that one compares the prefix relation between byte
+  ;; STRINGS. A sequence node is invisible to this pass permanently.
   (define (pass-overlap m)
     (apply append
            (map (lambda (n) (if (byte-dispatch-node? n) (node-overlaps n) '()))
+                (machine-nodes m))))
+
+  ;; Sequence ambiguity (§16.2:894), an unnumbered pass beside PASS 3 because
+  ;; §16.2 lists :893 and :894 adjacently and because renumbering PASS 4-7 would
+  ;; stale every existing reference to those numbers for nothing. The count
+  ;; carries its scope, because it has been three different numbers under three
+  ;; different scopes and the argument does not depend on which: FOURTEEN
+  ;; occurrences of `PASS <n>` for n in 4..7 across the live tree (`src/` and
+  ;; `test/`), excluding this comment block, measured at the whole-branch
+  ;; review fix wave -- this file's own pass headers, verify-tests.sps, and
+  ;; SchemeMutationSuite.cmake's Pass 33 commentary -- plus the plan documents
+  ;; under `docs/` that quote them, which is a different and larger set.
+  ;; pass-eof-execution below is the shipped precedent for an unnumbered pass.
+  ;;
+  ;; "After prefix analysis" is what the pairwise test below IS: one alternative
+  ;; being a terminal prefix of another is decidable from the source byte lists
+  ;; alone, so this pass never inspects the lowered graph and §17:951's
+  ;; verify-before-normalize ordering is preserved. Measured equivalent to the
+  ;; normalizer's three trie guards (normal-ir.sls:103-117) over all 469
+  ;; nonempty alternative-sets of size <= 3 drawn from the 14 binary strings of
+  ;; length 1..3: zero disagreements.
+  ;;
+  ;; Duplicate alternatives are the MAXIMAL case of the same relation (`AB` is a
+  ;; terminal prefix of `AB`), so both shapes carry the one new code design §4.5
+  ;; allows. Alternatives that merely SHARE a nonterminal prefix -- `AB` and
+  ;; `AC` -- are explicitly legal (§10.6:544); the trie merges them, and a check
+  ;; that could not tell the two apart would reject every branching machine.
+  (define (byte-prefix? a b)
+    (cond ((null? a) #t)
+          ((null? b) #f)
+          ((= (car a) (car b)) (byte-prefix? (cdr a) (cdr b)))
+          (else #f)))
+  ;; One diagnostic per COLLIDING PAIR, enumerated i < j so a pair is reported
+  ;; once -- pass-overlap's convention above, and §16.4:937-943's one finding
+  ;; per decision. Every diagnostic a node contributes shares that node's
+  ;; (code, node, message) triple, so no pair carries an identity of its own and
+  ;; the relative order of two diagnostics from one node is not promised.
+  ;;
+  ;; The bindings are deliberately NOT node-overlaps' (`ss`/`outer`/`rest`/
+  ;; `inner`/`out`): three shipped mutations pin single lines of that skeleton,
+  ;; and a structural clone takes each from one occurrence to two, failing the
+  ;; suite with "pattern occurs 2 times ... expected 1" (§0 D8b).
+  (define (node-ambiguities n)
+    (let ((alts (map sequence-case-bytes (sequence-dispatch-node-cases n))))
+      (let scan ((as alts) (found '()))
+        (if (null? as)
+            found
+            (scan (cdr as)
+                  (let against ((others (cdr as)) (found found))
+                    (if (null? others)
+                        found
+                        (against (cdr others)
+                                 (if (or (byte-prefix? (car as) (car others))
+                                         (byte-prefix? (car others) (car as)))
+                                     (cons (make-diagnostic 'ambiguous-sequence-prefix (node-name n)
+                                                            "one alternative is a terminal prefix of another")
+                                           found)
+                                     found)))))))))
+  (define (pass-sequence-ambiguity m)
+    (apply append
+           (map (lambda (n) (if (sequence-dispatch-node? n) (node-ambiguities n) '()))
                 (machine-nodes m))))
 
   ;; PASS 4: reachability from entry.
@@ -208,22 +273,49 @@
               ((pause-node? n) (list (pause-node-continuation n)))
               ;; Only the mismatch edge can be reexecute; every case edge
               ;; advances by construction (§10.6:546). This teaches the WALK to
-              ;; see through a sequence node. Adding sequence nodes to the
-              ;; REPORTED set is §25:1533's cycle extension, which is Slice ③ --
-              ;; a self-targeting sequence node going unflagged here is correct.
-              ;; Fix wave 2 (Important 1), measured 2026-08-30: a sequence node
+              ;; see through a sequence node, and Milestone 3 Slice ③ added the
+              ;; sixth kind to the REPORTED set below (§25:1533), so a
+              ;; self-targeting reexecute mismatch edge is now flagged.
+              ;;
+              ;; Why the source-level walk is exact enough at lowered
+              ;; granularity: NO ZERO-WIDTH EDGE CAN ENTER A POSITION->=1 PREFIX
+              ;; STATE. Every trie edge advances, so a prefix state at position
+              ;; k >= 1 is reached only by consuming a byte; the only zero-width
+              ;; edge out of any sequence-derived state is the shared mismatch
+              ;; edge this arm returns. The lowered zero-width cycle set is
+              ;; therefore exactly the source-level one and no position->=1
+              ;; state can be a cycle MEMBER -- which is why verification never
+              ;; needs the lowered graph (§17:951). Design §7's phrasing
+              ;; ("positions >=1 reach position 0 only after an advance") is
+              ;; about the path INTO the state, not the edge out of it, and is
+              ;; not the load-bearing property.
+              ;;
+              ;; KNOWN, DELIBERATE OVER-REJECTION, inherited not introduced:
+              ;; reaches-self? is a pure edge walk and never asks whether the
+              ;; arm closing the cycle is reachable for any byte. A sequence
+              ;; node whose alternatives' first bytes cover all 256 values has a
+              ;; dead root fallback and cannot loop, yet is reported. Measured:
+              ;; 256 alternatives (b 0) -> stop, mismatch reexecute -> itself,
+              ;; terminates on every input. The incumbent byte-dispatch
+              ;; analysis is already exactly this conservative -- a node whose
+              ;; single case is (make-byte-range-matcher 0 255) with a
+              ;; reexecute self-fallback reports zero-progress-cycle today,
+              ;; measured -- so this preserves a uniform shipped conservatism.
+              ;; Making it exact would need the same reachability refinement for
+              ;; byte-dispatch fallbacks and would change existing verdicts.
+              ;;
+              ;; Fix wave 2 (Important 1), measured 2026-08-30 under Slice ②,
+              ;; preserved as the record of what was true then: a sequence node
               ;; whose mismatch edge reexecutes into itself -- one alternative,
-              ;; no other nodes -- verifies with ok #t and zero diagnostics
-              ;; today, where the byte-identical shape built from a
-              ;; byte-dispatch node reports zero-progress-cycle. Feeding it one
-              ;; byte that does not match the alternative's first byte does not
-              ;; return: reproduced under a timeout in both the interpreted
-              ;; lane (parser-feed-op!'s `(loop pos)`, runtime.sls:200) and the
+              ;; no other nodes -- verified with ok #t and zero diagnostics,
+              ;; where the byte-identical shape built from a byte-dispatch node
+              ;; reported zero-progress-cycle. Feeding it one byte that does not
+              ;; match the alternative's first byte did not return: reproduced
+              ;; under a timeout in both the interpreted lane
+              ;; (parser-feed-op!'s `(loop pos)`, runtime.sls:200) and the
               ;; generated lane (compile.sls's emitted `(loop pos <target>
-              ;; off)` fallback), since neither has a local cycle guard and
-              ;; both rely on this REPORT set, which does not yet see the
-              ;; sequence node. Deferred consequence, not a new defect --
-              ;; closed when Slice ③ extends the REPORT set above.
+              ;; off)` fallback), since neither has a local cycle guard and both
+              ;; rely on this REPORT set. CLOSED by Slice ③'s extension above.
               ((sequence-dispatch-node? n)
                (if (eq? (edge-mode (sequence-dispatch-node-mismatch n)) 'reexecute)
                    (list (edge-target (sequence-dispatch-node-mismatch n))) '()))
@@ -238,7 +330,8 @@
                               (cons (car frontier) seen)))))))
       (filter values
               (map (lambda (n)
-                     (if (and (or (byte-dispatch-node? n) (pause-node? n)) (reaches-self? (node-name n)))
+                     (if (and (or (byte-dispatch-node? n) (pause-node? n) (sequence-dispatch-node? n))
+                              (reaches-self? (node-name n)))
                          (make-diagnostic 'zero-progress-cycle (node-name n)
                                           "a zero-width cycle (reexecute edges/pause continuations) makes no progress")
                          #f))
@@ -388,6 +481,7 @@
                       (if (machine? machine)
                           (append (pass-names machine)
                                   (pass-overlap machine)
+                                  (pass-sequence-ambiguity machine)
                                   (pass-reachability machine)
                                   (pass-zero-progress machine)
                                   (pass-eof machine)

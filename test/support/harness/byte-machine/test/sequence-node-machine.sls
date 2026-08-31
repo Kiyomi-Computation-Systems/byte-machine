@@ -11,10 +11,16 @@
 ;;; to be explicit, because an advance-mode mismatch shifts every reported
 ;;; position by one and nothing would look obviously wrong.
 ;;;
-;;; One alternative, not several: what this slice reproduces is a
-;;; single-alternative oracle. The LOWERING is trie-shaped and
-;;; multi-alternative-capable, and Tasks 2-3 pin that at unit level; Slice ③ is
-;;; where more than one alternative is executed end to end.
+;;; One alternative, not several: what this fixture reproduces is a
+;;; single-alternative oracle, and it stays one -- Milestone 3 closed without
+;;; widening it. The LOWERING is trie-shaped and multi-alternative-capable, and
+;;; Slice ②'s own Tasks 2-3 pin that at unit level: normal-ir-tests.sps asserts
+;;; the merge structurally, and interpret-tests.sps executes AB/AC through the
+;;; interpreter. Slice ③'s multi-alternative fixture is http-version-machine.sls,
+;;; and what it added over the two lanes above is depth (a seven-byte shared
+;;; prefix), absolute tuples, both mismatch modes, and the
+;;; interpreter≡generated DIFFERENTIAL across a branch -- not the first
+;;; execution of a shared prefix, which is Slice ②'s.
 (library (byte-machine test sequence-node-machine)
   (export make-sequence-node-machine make-advance-mismatch-machine
           sequence-node-bytes)

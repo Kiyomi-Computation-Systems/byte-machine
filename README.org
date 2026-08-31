@@ -14,10 +14,11 @@ project will use it to define and generate one.
 
 *Status: pre-release.* No versioned release exists yet — the target is =0.1.0=,
 and the API is not yet stable. Milestones 0 (portability and harness spike), 1
-(minimal executable machine), and 2 (incremental execution and lifecycle) have
-closed; Milestone 3 (byte classes and sequences) is in progress — Slices ①
-(byte classes) and ② (sequence dispatch and prefix lowering) have closed,
-Slice ③ (multiple alternatives, ambiguity, and cycle analysis) is open.
+(minimal executable machine), 2 (incremental execution and lifecycle), and 3
+(byte classes and sequences) have closed; Milestone 3 closed 2026-08-30 with
+Slice ③ (multiple alternatives, ambiguity, and cycle analysis), after Slices ①
+(byte classes) and ② (sequence dispatch and prefix lowering). Milestone 4
+(fields, actions, and branches) has not started.
 =src/byte-machine/= holds the construction API, the verifier, the normalizer and
 emitter, the reference interpreter, and the runtime, each exercised in both the
 source and ahead-of-time execution lanes. See
@@ -76,6 +77,7 @@ cmake --preset no-scheme && ctest --preset no-scheme
 - [[file:docs/plans/milestone-0-portability-spike.md][Milestone 0 plan]] — the portability and harness spike
 - [[file:docs/plans/milestone-1-design.md][Milestone 1 design]] — the minimal executable machine
 - [[file:docs/plans/milestone-2-design.md][Milestone 2 design]] — incremental execution and lifecycle
+- [[file:docs/plans/milestone-3-design.md][Milestone 3 design]] — byte classes and sequences
 - [[file:docs/decisions/][Architecture decisions]]
 - [[file:CHANGELOG.md][Changelog]]
 
