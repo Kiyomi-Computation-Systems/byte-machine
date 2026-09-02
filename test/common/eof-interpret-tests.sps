@@ -48,7 +48,10 @@
           (check-equal "next is the entry offset" (parser-result-next r) 0)
           (check-equal "consumed is zero" (parser-result-consumed r) 0)
           (check-equal "stream-offset is zero" (parser-result-stream-offset r) 0)
-          (check-equal "no error" (error-code-of r) #f))))
+          ;; The SLOT, not the code projection: error-code-of maps every
+          ;; non-record to #f, so asserting it here would pass for any wrong
+          ;; value in the slot, not only for the absence of an error.
+          (check-equal "no error" (parser-result-error r) #f))))
     (harness-case "every byte b != 1 fed at s0 errors at offset 0 with unexpected-byte"
       (lambda ()
         (let ((bad 'none))

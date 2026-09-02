@@ -110,7 +110,13 @@
       ;; requirement that it equal the generated lane's.
       (define (declaration-index name)
         (let walk ((ns nodes) (i 0))
-          (cond ((null? ns) 0)
+          (cond ((null? ns)
+                 ;; LOUD, not 0. Zero is the entry state's own id, so falling
+                 ;; back to it reports a plausible, wrong state id rather than a
+                 ;; defect -- and §12.7:777 makes the id a value both lanes must
+                 ;; report. Unreachable through the public API: every name handed
+                 ;; here came from a node the verifier already resolved.
+                 (byte-machine-contract-violation 'interpret 'internal name))
                 ((eq? (node-name (car ns)) name) i)
                 (else (walk (cdr ns) (+ i 1))))))
       ;; Both producers hand the runtime the record's inputs rather than a bare

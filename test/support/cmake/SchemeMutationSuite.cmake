@@ -6,7 +6,11 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FORTY-SIX PASSES, BECAUSE FORTY-SIX DIFFERENT WITNESSES ARE NEEDED
+# FORTY-EIGHT PASSES, BECAUSE FORTY-EIGHT DIFFERENT WITNESSES ARE NEEDED
+# (46 through Milestone 3; Milestone 4 Slice ①a adds the member-3 drift
+# guard and the position-kind lane. The count in prose and the count the
+# constants enforce are kept in step deliberately -- a banner left at the
+# old number is the one surface no test can check.)
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -148,7 +152,7 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "FORTY-SIX PASSES..." above. Declared here, rather than only in prose,
+# See "FORTY-EIGHT PASSES..." above. Declared here, rather than only in prose,
 # so the count enforced at the bottom of this file is the same text a reader
 # checks by eye at the top -- one number to keep in sync, not two that can
 # quietly disagree. 25 passes / 60 mutations before the aot task; pass 26 adds
@@ -2581,6 +2585,13 @@ byte_machine_mutation(
   # parser 'error))` two-line pairing with the finished arm no longer occurs.
   # Still anchored on the same error-arm-then-finished-arm adjacency that makes
   # it unique to parser-feed! (parser-finish-v2! orders its arms differently).
+  #
+  # 2026-09-02: an earlier version of this note justified the detail anchor by
+  # reference to "runtime: the v1 result status is hard-wired to stopped", which
+  # Milestone 4 Slice ①a deleted with the 'v1 executor path. The uniqueness
+  # argument above stands on its own and does not depend on that sibling; the
+  # reference is removed rather than left pointing at a mutation no maintainer
+  # can find.
   FIND [[((error) (parser-set-lifecycle! parser 'error)
                     (parser-set-stored-error! parser (parser-result-error r)))
            ((finished) (parser-set-lifecycle! parser 'finished))]]
@@ -2734,11 +2745,10 @@ byte_machine_mutation(
   # mutation runs at the default SITES of 1, asserted exactly, so writing any two
   # of the live guard and the two tombstones alike takes one FIND from one site
   # to two and fails the suite at declaration.
-  FIND [[  (define (byte-machine-make-compiled-machine/v2 abi-version . ignored)
-    (assertion-violation 'byte-machine-make-compiled-machine/v2]]
-  REPLACE [[  (define (byte-machine-make-compiled-machine/v2 abi-version . ignored)
-    (list 'accepted
-          'byte-machine-make-compiled-machine/v2]]
+  FIND [[    (assertion-violation 'byte-machine-make-compiled-machine/v2
+                         "retired generated-runtime ABI (superseded by the unversioned constructor)"]]
+  REPLACE [[    (list 'accepted
+                         "retired generated-runtime ABI (superseded by the unversioned constructor)"]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "the retired constructors refuse every version: none accepted")
 
 # Milestone 2 Slice ③'s Task 2 (pause/resume + the full §12.2 operation
@@ -5556,7 +5566,10 @@ byte_machine_mutation(
   LABEL "compile: the final newline is emitted as CRLF"
   # Re-anchored in Slice ①a task 3. The pin's FIND is compile.sls's render TAIL,
   # which the metadata PAYLOAD's placement rewrote -- not the constructor rename
-  # one line above it, which is what design:834-836 attributed the death to.
+  # one line above it, which is what the design's own die-list attributed the
+  # death to (§5, the "Five compile.sls emitter-text pins" bullet -- cited by
+  # content because a line number into that file is stale the moment anything
+  # is inserted above it, which this branch's own merge demonstrated).
   FIND [[" exec (quote #(#())))))\n"))))]]
   REPLACE [[" exec (quote #(#())))))\r\n"))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "no carriage return byte appears and the last byte is LF: carriage return present")
@@ -6984,7 +6997,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FORTY-SIX PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FORTY-EIGHT PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

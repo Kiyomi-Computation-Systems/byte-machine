@@ -287,8 +287,15 @@
                                     bad-version)))
           (check "interpreter reports a state id" (integer? (error-state-id ie)))
           (check "generated reports a state id" (integer? (error-state-id ge)))
-          (check-equal "the projection is the agreed width"
-                       (length (project-error ie)) projected-members)
+          ;; Against a LITERAL, not against projected-members: comparing the
+          ;; library's output to the library's own constant five lines away is a
+          ;; self-consistency check that one edit satisfies in both places. Six
+          ;; is §22.4:1271's five plus `reason`; a seventh member appearing here
+          ;; means the exclusion was widened or narrowed and this must be
+          ;; re-derived from the spec, not from the code.
+          (check-equal "the projection is §22.4:1271's five plus reason"
+                       (length (project-error ie)) 6)
+          (check-equal "and the library agrees with the spec" projected-members 6)
           (check-equal "and both lanes project identically"
                        (project-error ie) (project-error ge)))))
     (harness-case "reason and detail are compared rather than left as orphans"

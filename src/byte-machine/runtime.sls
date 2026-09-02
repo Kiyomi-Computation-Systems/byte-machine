@@ -91,8 +91,14 @@
     (assertion-violation 'byte-machine-make-compiled-machine/v1
                          "retired generated-runtime ABI" abi-version))
   (define (byte-machine-make-compiled-machine/v2 abi-version . ignored)
+    ;; Deliberately worded differently from /v1's body above, not only named
+    ;; differently: every mutation runs at the default SITES of 1, asserted
+    ;; exactly, so a FIND anchored on a shared line would report two sites and
+    ;; fail the suite at declaration. Distinctness has to hold for the whole
+    ;; body, which is what the first version of these two tombstones missed.
     (assertion-violation 'byte-machine-make-compiled-machine/v2
-                         "retired generated-runtime ABI" abi-version))
+                         "retired generated-runtime ABI (superseded by the unversioned constructor)"
+                         abi-version))
   (define (compiled-machine-v2-exec cm) (vector-ref cm 2))
   (define (compiled-machine-v2-entry-state cm) (vector-ref cm 3))
   (define empty-bv (make-bytevector 0))

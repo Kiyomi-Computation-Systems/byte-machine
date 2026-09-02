@@ -1206,7 +1206,6 @@ byte_machine_add_scheme_lane(
   BACKEND chez
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/position-kind-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
-          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
           ${BYTE_MACHINE_CORE_EMIT}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-version-machine.sls"
@@ -1219,7 +1218,6 @@ byte_machine_add_scheme_lane(
   BACKEND chez
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/position-kind-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
-          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
           ${BYTE_MACHINE_CORE_EMIT}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-version-machine.sls"

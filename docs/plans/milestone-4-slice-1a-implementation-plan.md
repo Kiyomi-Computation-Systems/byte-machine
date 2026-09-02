@@ -437,7 +437,10 @@ across **all four** values. Measured per value at HEAD:
 | `15725897457025557005` | pause | 0 | 1 | 1 | 3 | **5** |
 | `12299125921751534854` | http-version | 0 | 0 | 1 | 1 | **2** |
 
-19 total in `src/` + `test/`, **none in `src/`**. Value B has no committed golden and value
+19 total in `src/` + `test/`, **none in `src/`** — measured **pre-slice**. Task 4's own three
+new mutations each embed the one-byte successor, so the post-slice per-file counts are larger;
+re-derive them at close-out rather than checking against this table, which describes the tree
+this plan was written against. Value B has no committed golden and value
 D has no `normal-ir-tests.sps` assertion, so "each new value is measured once and written at
 every site" means four different site sets, not four copies of one. `CHANGELOG.md` carries
 **eight further occurrences** (3/2/2/1) which are **records of what was measured then** and
@@ -1414,7 +1417,10 @@ there; a gate whose before-value is unknown cannot be read as a pass.
 ```bash
 rg -c 'error-projection.sls' test/CMakeLists.txt
 ```
-Expected: `16`.
+Expected: `16` **at the end of this task**, and **18** at the end of the slice — Task 7 adds a
+lane pair that also lists the projection. Re-derive it at close-out rather than carrying this
+task's number forward, which is the trap the plan itself warns about two lines above: omitting
+an entry reddens nothing, so the count is the only check there is.
 
 And: a fixture whose reason contains `"`, `\` and LF emits a library that `load`s, with its
 `errs` entry rendering `\"`, `\\` and `\n` rather than the raw characters — Task 1's writer
@@ -1772,9 +1778,11 @@ In the tree, at close-out, each as a literal:
    shipped fixture verifies with **exactly 0**; a reason containing `"`, `\` and LF verifies
    with **exactly 0**, emits with `\"`, `\\` and `\n` in the `errs` entry, and yields a
    generated library that `load`s without a reader error.
-2. Pass 33 holds **43** mutations after the edit, against **42** pre-slice (the design's 44
-   is `verify.sls` across the whole file: 42 + Pass 37's 2), and its sweep judges
-   43 × 42 = **1806** ordered pairs in both directions against the merge-base control. Every
+2. Pass 33 holds **44** mutations after the edit, against **42** pre-slice — Task 1 shipped
+   **two**, one per direction of the repertoire decision, not the one this plan first
+   predicted — and its sweep judges 44 × 43 = **1892** ordered pairs in both directions
+   against the merge-base control. (The design's 44 is a different number answering a
+   different question: `verify.sls` across the whole *file*, 42 + Pass 37's 2.) Every
    residue is recorded in the tree beside its pin by LABEL, with its measurement, and
    classified into one of the three buckets — under-anchored, subsumed, or separable but
    declined — never by a subset test alone.
@@ -1925,8 +1933,45 @@ must differ in fingerprint, or the fingerprint stops identifying what was emitte
 emitter-side fix — build the table from reached declarations — was implemented, measured to
 close the gap exactly, and then **reverted**: it changes what decision 0022 item 7 says ("one
 entry per error **declaration**") and moves the committed pause golden, whose `default-eof`
-declaration is genuinely unreached. Diverging from a record needs a record. **62 Minor findings
-remain untriaged.**
+declaration is genuinely unreached. Diverging from a record needs a record.
+
+### The Minor findings, triaged 2026-09-02
+
+Sixty-two reports collapsing to forty-four distinct issues. Several were already closed by the
+Important pass. Twelve were real; the rest were duplicates or refuted.
+
+**Three were more than cosmetic.**
+
+- **`declaration-index` returned `0` for a name it could not find** — and `0` is the *entry
+  state's* id, so a lookup failure would have reported a plausible, wrong state id rather than
+  a defect, on a member §12.7:777 makes semantic. Now loud. Unreachable through the public API
+  today; that is a reason to make it fail loudly, not a reason to leave it.
+- **An `#f` assertion was weakened by my own helper.** `(check-equal "no error"
+  (parser-result-error r) #f)` had become `(error-code-of r)`, which maps *every* non-record to
+  `#f` — so it would have passed for any wrong value in the slot, not only for the absence of
+  an error. Reads the slot again.
+- **The two tombstone bodies shared a byte-identical line.** Distinctness is a hard `SITES`
+  constraint and it has to hold for the whole body, not just the head — which is exactly what
+  decision 0018 item 4 says and what I half-did.
+
+**Also fixed:** the projection-width check compared the library's output against the library's
+own constant five lines away — a self-consistency check one edit satisfies in both places, now
+a literal derived from §22.4:1271; both position-kind lanes declared `prng.sls`, which nothing
+in their closure imports, copied in from the block I cloned them from; the emitter's debug-map
+read is loud rather than surfacing as `(cdr #f)` inside a `string-append`; the suite's
+`FORTY-SIX PASSES` banner and its two cross-references, left at 46 while the enforced constants
+moved to 48 — the one surface no test can check; a comment justifying an anchor by reference to
+a mutation this branch deleted; a `design:834-836` citation, now cited **by content**, because a
+line number into that file is stale the moment anything is inserted above it — which this
+branch's own merge demonstrated; two `### Changed` headings under one release in `CHANGELOG.md`,
+merged; the CHANGELOG's claim that the record is "constructed identically by the reference
+interpreter and by generated code", which is false of the **state ID** — deliberately, and it is
+now the entry that says so; and three of this plan's own numbers, each re-scoped to the question
+it answers (Pass 33 is 44 / 1892, not 43 / 1806; the `SOURCES` count is 16 at Task 5 and 18 at
+close; the H9 matrix is a **pre-slice** measurement).
+
+**Refuted or already closed:** the rest, including several reports of stale comments the
+Important pass had already corrected.
 
 ## Self-Review (run after all eight tasks)
 

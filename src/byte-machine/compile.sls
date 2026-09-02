@@ -164,7 +164,17 @@
   ;; render-machine rather than derived here.
   (define (render-state-arm s names index-of)
     (let ((id (number->string (normal-state-id s)))
-          (nm (lambda (i) (symbol->string (cdr (assv i names))))))
+          ;; Total by construction: the debug map and the internal state list
+          ;; are built from the same prefix-block id alists, so every id in
+          ;; `states` has an entry. Loud rather than trusting that, because a
+          ;; missing key would otherwise surface as `(cdr #f)` deep inside a
+          ;; string-append with nothing naming the state.
+          (nm (lambda (i)
+                (let ((hit (assv i names)))
+                  (unless hit
+                    (assertion-violation 'render-machine
+                                         "no source name for normalized state" i))
+                  (symbol->string (cdr hit))))))
       (case (normal-state-kind s)
         ((stop)
          (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote stopped) pos #f " id " off))\n"))
