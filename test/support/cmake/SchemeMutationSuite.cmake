@@ -736,7 +736,7 @@ cmake_minimum_required(VERSION 3.26)
 # had no mutation, the `eq? ... 'reexecute` test itself. No pass is added, so
 # passes stay at 46 and mutations become 235 + 1 = 236.
 set(EXPECTED_PASSES 48)
-set(EXPECTED_MUTATIONS 250)
+set(EXPECTED_MUTATIONS 253)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -6093,6 +6093,39 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "a bare target handed in as the mismatch edge is rejected: not an edge")
+
+# Milestone 4 Slice ①b task 1: the uint field descriptor. Three decisions --
+# the closed width set, the initial's range, and the machine guard that makes
+# the descriptor load-bearing at all.
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: the uint field width set is not closed"
+  FIND [[    (unless (memq width '(8 16 32 64))]]
+  REPLACE [[    (unless #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the width set is closed at 8, 16, 32 and 64: refused")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: a uint field initial is not range-checked against its width"
+  # Comparison-caught on the upper bound, which is what §25:1568's
+  # declaration-time share turns on: 2^w is accepted where it must be refused.
+  FIND [[                 (<= 0 initial (- (expt 2 width) 1)))]]
+  REPLACE [[                 (<= 0 initial (expt 2 width)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the initial is an exact integer inside the declared width: over the top")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: make-machine accepts fields that are not field descriptors"
+  # Without this guard the collection loop checks only list?, so any proper list
+  # passes -- measured before the guard landed, a machine could carry
+  # (junk 42 "string") as its fields and nothing read it. This is the mutation
+  # that says the descriptor is load-bearing rather than decorative.
+  FIND [[    (unless (for-all uint-field? fields)]]
+  REPLACE [[    (unless #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "and refuses a list of anything else: junk fields")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
