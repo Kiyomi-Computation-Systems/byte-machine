@@ -21,6 +21,7 @@
           parser-error-domain parser-error-code parser-error-reason
           parser-error-detail parser-error-node-name parser-error-state-id
           parser-error-offset parser-error-position-kind
+          parser-field-ref
           callback-continue callback-pause)
   (import (rnrs)
           (byte-machine private conditions))
@@ -36,7 +37,7 @@
 
   ;; --- compiled machine: two variants behind one type ---
   ;; op:  (vector tag 'op op-closure)                    -- the reference interpreter
-  ;; v2:  (vector tag 'v2 exec entry-state fingerprint)  -- generated code, one
+  ;; v2:  (vector tag 'v2 exec entry-state fingerprint fields) -- generated code, one
   ;;      unified `exec` closure carrying a finish? flag. Built by the ONE
   ;;      unversioned constructor below; the variant tag outlived the /vN name
   ;;      (decision 0018) and is now an internal shape label, not an ABI version.
@@ -65,8 +66,15 @@
   ;; rather than a rest-arg: a rest-arg would let the payload grow WITHOUT a
   ;; version bump, and the version check is the only thing standing between a
   ;; stale object and silent wrong answers, so the vector keeps growth and the
-  ;; check coupled. Member 0 is the field-initials vector, empty until Slice ①b
-  ;; fills it, so a zero-field machine renders identically across ①a, ①b, ② and ③.
+  ;; check coupled. Member 0 is the field declarations, `#()` for a machine that
+  ;; declares none, which is why a zero-field machine renders identically across
+  ;; ①a, ①b, ② and ③.
+  ;;
+  ;; Slice ①b fills it, as (name . initial) pairs in SLOT ORDER. The member is
+  ;; named for the initials and carries the names too because the slot is the
+  ;; pair's POSITION: one member determines both the values a fresh parser starts
+  ;; from and the name-to-slot resolution parser-field-ref answers by, and a
+  ;; second member would be a second ABI growth for data the first already fixes.
   (define (byte-machine-make-compiled-machine abi-version ir-fingerprint entry-state exec metadata)
     (unless (and (integer? abi-version) (= abi-version current-abi-version))
       (assertion-violation 'byte-machine-make-compiled-machine
@@ -76,7 +84,8 @@
     (unless (and (vector? metadata) (>= (vector-length metadata) 1))
       (assertion-violation 'byte-machine-make-compiled-machine
                            "metadata must be a vector with at least one member" metadata))
-    (vector compiled-machine-tag 'v2 exec entry-state ir-fingerprint))
+    (vector compiled-machine-tag 'v2 exec entry-state ir-fingerprint
+            (vector-ref metadata 0)))
 
   ;; Tombstones. /v1 and /v2 stay exported so a stale generated file fails with a
   ;; clean ABI-mismatch assertion instead of an unbound-identifier import error,
@@ -101,6 +110,7 @@
                          abi-version))
   (define (compiled-machine-v2-exec cm) (vector-ref cm 2))
   (define (compiled-machine-v2-entry-state cm) (vector-ref cm 3))
+  (define (compiled-machine-v2-fields cm) (vector-ref cm 5))
   (define empty-bv (make-bytevector 0))
   ;; Emitted `exec`'s seventh parameter, reserved empty by decision 0019 item
   ;; 3(c). It is dead weight in this slice and in ①b, and it is the whole reason
@@ -167,7 +177,8 @@
   (define (parser-error-position-kind e) (vector-ref e 8))
 
   ;; --- parser (mutable state behind procedures) ---
-  ;; (vector tag variant executor entry current offset lifecycle stored-error)
+  ;; (vector tag variant executor entry current offset lifecycle stored-error
+  ;;         field-values field-decls)
   ;; lifecycle: ready | paused-feed | paused-finish | finish-ready | stopped |
   ;; error | finished (§12.1; poisoned/busy are M5 rows). Sticky rows
   ;; short-circuit at the operation entry and synthesize the §12.2 tuple
@@ -177,18 +188,43 @@
   ;; `current` on a dispatch node (②b-2 final review).
   ;; stored-error (slot 7) is the error value the error row returns; #f
   ;; otherwise. M5's full stored-result short-circuit (callbacks) stays deferred.
+  ;;
+  ;; field-values (slot 8, Milestone 4 Slice ①b) is a MUTABLE vector of exact
+  ;; integers indexed by slot; field-decls (slot 9) is the IMMUTABLE (name .
+  ;; initial) vector the compiled machine carries, in slot order. Two slots
+  ;; rather than one pair: they have different lifetimes and different owners --
+  ;; the decls are per compiled machine and never written, the values per parser
+  ;; and written constantly -- and parser-reset! must restore exactly one of them
+  ;; FROM the other.
+  ;;
+  ;; The storage cannot live in the shared op/exec closure. That closure is built
+  ;; once per compiled machine and every parser from it copies the same reference
+  ;; into slot 2, and the tree already builds many parsers per compiled machine
+  ;; inside per-byte loops (byte-class-interpret-tests.sps,
+  ;; differential-one-byte-tests.sps, determinism-http-version-tests.sps), so
+  ;; closure-held storage would let one parser's writes be read by another. Slot
+  ;; 9 is where the initials RIDE, because once a parser is built it holds a
+  ;; reference to nothing else.
   (define parser-tag (tag 'byte-machine-parser))
   (define (make-parser compiled-machine callback-bindings user-context)
     (unless (compiled-machine? compiled-machine)
       (assertion-violation 'make-parser "not a compiled machine" compiled-machine))
     (cond
+      ;; The two arms reach the declarations by the SHIPPED per-lane asymmetry
+      ;; rather than a uniform mechanism: the interpreter holds the verified
+      ;; source machine and is asked, the generated lane holds only what the ABI
+      ;; payload carried and reads member 0. There is nothing both could consult.
       ((eq? (compiled-machine-variant compiled-machine) 'op)
-       (let* ((op (vector-ref compiled-machine 2)) (entry (op 'entry)))
-         (vector parser-tag 'op op entry entry 0 'ready #f)))
+       (let* ((op (vector-ref compiled-machine 2)) (entry (op 'entry))
+              (decls (op 'field-initials)))
+         (vector parser-tag 'op op entry entry 0 'ready #f
+                 (initial-values decls) decls)))
       ((eq? (compiled-machine-variant compiled-machine) 'v2)
        (let ((exec (compiled-machine-v2-exec compiled-machine))
-             (entry-state (compiled-machine-v2-entry-state compiled-machine)))
-         (vector parser-tag 'v2 exec entry-state entry-state 0 'ready #f)))
+             (entry-state (compiled-machine-v2-entry-state compiled-machine))
+             (decls (compiled-machine-v2-fields compiled-machine)))
+         (vector parser-tag 'v2 exec entry-state entry-state 0 'ready #f
+                 (initial-values decls) decls)))
       ;; Unreachable through the public API: the only two constructors build 'op
       ;; and 'v2. Kept LOUD rather than deleted, the same convention as
       ;; compile.sls's and normal-ir.sls's own unreachable else arms.
@@ -206,6 +242,17 @@
   (define (parser-set-lifecycle! p v) (vector-set! p 6 v))
   (define (parser-stored-error p) (vector-ref p 7))
   (define (parser-set-stored-error! p v) (vector-set! p 7 v))
+  (define (parser-field-values p) (vector-ref p 8))
+  (define (parser-field-decls p) (vector-ref p 9))
+  ;; A FRESH vector every call, never a shared one: two parsers from one compiled
+  ;; machine must not share storage, and parser-reset! must not hand back a
+  ;; vector an earlier reset also handed out.
+  (define (initial-values decls)
+    (let ((v (make-vector (vector-length decls) 0)))
+      (let loop ((i 0))
+        (if (>= i (vector-length decls)) v
+            (begin (vector-set! v i (cdr (vector-ref decls i)))
+                   (loop (+ i 1)))))))
 
   (define (parser-feed! parser bv start end)
     (unless (and (bytevector? bv) (<= 0 start end (bytevector-length bv)))
@@ -402,10 +449,42 @@
   ;; the stored error cleared. `current := entry` is also what clears the pause
   ;; continuation under this representation -- D3 parks it on `current` with no
   ;; separate saved-continuation field, so restoring `current` restores both.
-  ;; Field, span, and poisoned/busy state do not exist yet (M4/M5). Returns
-  ;; unspecified.
+  ;; FIELD state exists as of Milestone 4 Slice ①b and is restored here, to the
+  ;; DECLARED initials rather than to zero: §12.5:738 returns the parser to its
+  ;; just-constructed state, and a just-constructed parser holds the declared
+  ;; initials. Zeroing would silently make `u8 count = 3` mean 3 before the first
+  ;; reset and 0 after it. Span and poisoned/busy state still do not exist (②/③
+  ;; and M5). Returns unspecified.
+  ;;
+  ;; It writes slot 8 and never slot 9: the declarations belong to the compiled
+  ;; machine and outlive every reset.
+  ;; §9.3:410. READ-ONLY, with no mutating sibling, and that is a design
+  ;; decision rather than an omission: §13:801 -- "Machine-field access from a
+  ;; callback is read-only. Allowing callbacks to mutate fields would bypass the
+  ;; closed IR and invalidate interpreter/generated equivalence."
+  ;;
+  ;; An undeclared name is a caller mistake, not a machine outcome, so it raises
+  ;; a CONTRACT VIOLATION rather than producing a parser-error: parser-error is
+  ;; the §9.3 record describing what the parsed INPUT did, and answering a
+  ;; misspelled field name with one would put a programming error into the same
+  ;; channel as a rejected byte. `accessor-misuse` is a new code for exactly
+  ;; that: reaching an accessor with something the machine never declared.
+  (define (parser-field-ref parser field-name)
+    (unless (parser? parser)
+      (byte-machine-contract-violation 'parser-field-ref 'invalid-argument parser))
+    (let* ((decls (parser-field-decls parser))
+           (n (vector-length decls)))
+      (let loop ((i 0))
+        (cond ((>= i n)
+               (byte-machine-contract-violation 'parser-field-ref 'accessor-misuse
+                                                field-name))
+              ((eq? (car (vector-ref decls i)) field-name)
+               (vector-ref (parser-field-values parser) i))
+              (else (loop (+ i 1)))))))
+
   (define (parser-reset! parser)
     (parser-set-current! parser (parser-entry parser))
     (parser-set-offset! parser 0)
     (parser-set-lifecycle! parser 'ready)
-    (parser-set-stored-error! parser #f)))
+    (parser-set-stored-error! parser #f)
+    (vector-set! parser 8 (initial-values (parser-field-decls parser)))))

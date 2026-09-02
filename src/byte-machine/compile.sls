@@ -57,6 +57,7 @@
       parser-error-detail parser-error-node-name parser-error-state-id
       parser-error-offset parser-error-position-kind
       byte-machine-make-compiled-machine
+      parser-field-ref
       callback-continue callback-pause))
   ;; Every identifier the emitted body binds, so a caller-chosen output binding
   ;; cannot collide with one. `fieldv` is emitted `exec`'s seventh parameter,
@@ -298,6 +299,27 @@
                                             "#(" (symbol->string (error-declaration-code (car ds)))
                                             " \"" (escape-string (error-declaration-reason (car ds)))
                                             "\")")))))
+           ;; Decision 0019 item 3(b)'s member 0, filled by Slice ①b. It renders
+           ;; the field DECLARATIONS as (name . initial) pairs in slot order,
+           ;; not bare initials: the parser needs the initials AND the
+           ;; name-to-slot resolution parser-field-ref answers by, the slot is
+           ;; the pair's position, so one member determines both and a second
+           ;; member would be a second ABI growth for data the first already
+           ;; carries. With no fields this is the empty string, so the member
+           ;; renders `#()` and the payload `#(#())` -- byte-identical to ①a,
+           ;; which is decision 0019 item 5 and the reason no golden moves.
+           ;;
+           ;; Rendered from the NORMALIZED table rather than from machine-fields,
+           ;; so the emitted slot order is the same object the IR fingerprint was
+           ;; computed over. Reading the source machine again would let the two
+           ;; disagree with nothing to notice.
+           (fields (let loop ((fs (normal-machine-fields normal)) (acc ""))
+                     (if (null? fs) acc
+                         (loop (cdr fs)
+                               (string-append
+                                acc (if (string=? acc "") "" " ")
+                                "(" (symbol->string (car (car fs)))
+                                " . " (number->string (caddr (car fs))) ")")))))
            (bstr (symbol->string binding)))
       (string->utf8
        (string-append
@@ -323,7 +345,7 @@
         "      (else (assertion-violation (quote exec) \"unknown state\" st)))))\n"
         "  (define " bstr "\n"
         "    (byte-machine-make-compiled-machine 3 " (number->string fp) " "
-        (number->string entry) " exec (quote #(#())))))\n"))))
+        (number->string entry) " exec (quote #(#(" fields "))))))\n"))))
 
   (define (emit-machine compilation binding port)
     (let ((bytes (render-machine compilation binding)))

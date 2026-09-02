@@ -771,8 +771,19 @@ cmake_minimum_required(VERSION 3.26)
 # pin RE-ANCHORED, killed by construction when the literal zero became the real
 # count. No pass is added, so passes stay at 48 and mutations become
 # 258 + 5 = 263.
-set(EXPECTED_PASSES 48)
-set(EXPECTED_MUTATIONS 263)
+#
+# Slice ①b tasks 6 and 7: ONE joins the compile pass (member 0 rendered empty
+# regardless of the declarations -- the zero-field rendering was already pinned,
+# the non-empty one was not), and a NEW pass 49 carries seven for
+# parser-field-ref, the only lane in which the field declarations are observable
+# at all. Six are pinned and one carries an EXPECT_SURVIVES with its measurement
+# and its reopening condition, taking the Scheme suite's declared survivors from
+# nine to TEN. Three further mutations were measured and deliberately not
+# written, each because its record set is identical -- not a subset, the same
+# set -- to one that is; the reasons are at pass 49's own head.
+# Passes become 48 + 1 = 49; mutations become 263 + 1 + 7 = 271.
+set(EXPECTED_PASSES 49)
+set(EXPECTED_MUTATIONS 271)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -5784,6 +5795,20 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "pause arm p1 -- expected \"paused 2\", got \"paused 1\"")
 
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: member 0 is emitted empty regardless of the declarations"
+  # Slice ①b task 6 fills decision 0019 item 3(b). The zero-field rendering is
+  # already pinned by the case one above this one -- `(quote #(#()))`, unchanged
+  # since ①a -- so what needed a mutation is the NON-empty rendering, which no
+  # existing check could have noticed.
+  FIND [[           (fields (let loop ((fs (normal-machine-fields normal)) (acc "")]]
+  REPLACE [[           (fields (let loop ((fs '()) (acc "")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a field-declaring machine renders its declarations in member 0: pairs in slot order -- expected a true value")
+
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 37: D7 identifier repertoire + LF (Slice B) -------------------------
@@ -5833,8 +5858,15 @@ byte_machine_mutation(
   # death to (§5, the "Five compile.sls emitter-text pins" bullet -- cited by
   # content because a line number into that file is stale the moment anything
   # is inserted above it, which this branch's own merge demonstrated).
-  FIND [[" exec (quote #(#())))))\n"))))]]
-  REPLACE [[" exec (quote #(#())))))\r\n"))))]]
+  # RE-ANCHORED AGAIN, Slice ①b task 6, and for the same reason as last time: the
+  # FIND is the render tail, and this slice fills decision 0019 item 3(b)'s
+  # member 0, so the literal payload `#(#())` became an interpolation. That is
+  # the second consecutive slice to move this pin without touching the decision
+  # it names -- the tail is where every payload change lands, and any pin
+  # anchored there will keep moving. Its REPLACE and its expectation are
+  # unchanged; only the text it sits on moved.
+  FIND [[" exec (quote #(#(" fields "))))))\n"))))]]
+  REPLACE [[" exec (quote #(#(" fields "))))))\r\n"))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "no carriage return byte appears and the last byte is LF: carriage return present")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
@@ -7326,6 +7358,117 @@ byte_machine_mutation(
   # error state a prior feed parked on is reached by NO jump, so only it can
   # observe what the loop was initialized to.
   EXPECT_OUTPUT_MATCHES "both lanes report boundary, not eof: interpreter -- expected boundary, got eof")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 49: parser-field-ref, across BOTH executors (Slice ①b tasks 6+7) ----
+#
+# field-access-tests.sps is the only lane in which the field declarations are
+# observable at all, and it drives both executors, which reach them by different
+# routes: the interpreter asks its op closure a 'field-initials message, the
+# generated lane reads member 0 of the ABI payload it was emitted with. Nothing
+# is shared between those two paths, so this pass carries a mutation for each
+# side separately. It emits and runtime-loads a generated library, so the verify
+# command is the differential shape -- both library roots, the shared object
+# guard, and BYTE_MACHINE_TEST_TMPDIR inherited from this suite's own test
+# environment.
+#
+# THREE further mutations were measured and are NOT written, each because its
+# record set is IDENTICAL to one that is -- not a subset, the same set:
+#   * make-parser's op arm discarding what it asked for, versus interpret.sls
+#     answering with nothing. One decision seen from the asker's side and the
+#     answerer's; the parser ends up with an empty table either way.
+#   * The emitter rendering a wrong field NAME, versus the v2 arm ignoring
+#     member 0 entirely. A name the parser cannot match is a table it cannot
+#     use, and both produce the same four raised cases.
+# In each case the written mutation is the one that lives in the file whose new
+# code it names.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/field-access-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.field-access.chez.source
+  LABEL "runtime: the v2 arm ignores the ABI payload's field member"
+  FIND [[            (vector-ref metadata 0)))]]
+  REPLACE [[            (vector)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "parser-field-ref \\(generated\\).a fresh parser reads the declared initials: case raised")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.field-access.chez.source
+  LABEL "interpret: the field-initials message answers with no declarations"
+  FIND [[                               (machine-fields m))))]]
+  REPLACE [[                               '())))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "parser-field-ref \\(interpreter\\).a fresh parser reads the declared initials: case raised")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.field-access.chez.source
+  LABEL "compile: an emitted field declaration carries initial zero"
+  # Pinned in THIS lane rather than the compile lane, where its record is
+  # indistinguishable from the member-0 mutation's: compile-tests asserts the
+  # rendered member by one substring, so every deviation reddens the same check.
+  # Here it is separated by the disagreement record -- the interpreter answers 7
+  # and the generated lane 0 -- which no other mutation in this pass produces.
+  FIND [[ " . " (number->string (caddr (car fs))) ")")]]
+  REPLACE [[ " . " (number->string 0) ")")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "every declared name reads the same through both: count -- expected 0, got 7")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.field-access.chez.source
+  LABEL "runtime: a fresh parser's field values are zero instead of the declared initials"
+  # §12.5:738's just-constructed state. Distinct from the emitter mutation above,
+  # which moves only the GENERATED half: this one moves both, so its record is
+  # the interpreter's, which that one never produces.
+  FIND [[            (begin (vector-set! v i (cdr (vector-ref decls i)))]]
+  REPLACE [[            (begin (vector-set! v i 0)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "parser-field-ref \\(interpreter\\).a fresh parser reads the declared initials: count -- expected 7, got 0")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.field-access.chez.source
+  LABEL "runtime: parser-field-ref answers an undeclared name instead of refusing"
+  # §13:801 makes an undeclared name a CALLER mistake, not a machine outcome, so
+  # it must reach a contract violation and never a parser-error.
+  FIND [[        (cond ((>= i n)
+               (byte-machine-contract-violation 'parser-field-ref 'accessor-misuse
+                                                field-name))]]
+  REPLACE [[        (cond ((>= i n) 0)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an undeclared field name is accessor-misuse: code -- expected accessor-misuse, got no-raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.field-access.chez.source
+  LABEL "runtime: parser-field-ref always reads slot zero"
+  # The reason the lane's fixture declares three fields with three DIFFERENT
+  # initials: with equal initials, or with one field, this mutation is invisible.
+  FIND [[               (vector-ref (parser-field-values parser) i))]]
+  REPLACE [[               (vector-ref (parser-field-values parser) 0))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a fresh parser reads the declared initials: limit -- expected 65535, got 7")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.field-access.chez.source
+  LABEL "runtime: parser-reset! does not restore the field values"
+  FIND [[    (vector-set! parser 8 (initial-values (parser-field-decls parser)))))]]
+  REPLACE [[    ))]]
+  EXPECT_SURVIVES
+    "measured, not assumed: this mutant passes the whole field-access lane unchanged. parser-field-ref is READ-ONLY by §13:801 and Slice ①b ships no writer at all, so slot 8 is constant for a parser's entire lifetime and restoring a constant is a no-op no caller can observe. The lane's reset case is not vacuous -- it fails against the initials mutation above, which is what proves reset reads the DECLARED values rather than zeros -- but it cannot separate a reset that restores from one that does not, because both leave the same numbers in place. The line is written NOW rather than deferred to Slice ② because ② adds the writer, and a ② that adds a field write without also adding the restore leaks one parse's field values into the next; the restore arriving first makes that a defect ② has to introduce rather than one it has to remember. Reopening condition: the same commit that gives fields a writer must delete this EXPECT_SURVIVES and pin the mutation, and the isolation case field-access-tests.sps declines for the same reason belongs there too.")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

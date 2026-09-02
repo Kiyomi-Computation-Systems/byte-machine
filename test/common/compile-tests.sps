@@ -36,6 +36,18 @@
           (make-stop-node 'unused #f))
     'default-eof #f))
 
+;; Slice ①b task 6: the same one-byte machine with two field declarations.
+(define with-fields
+  (make-machine 'one-byte 'start
+    (list (make-uint-field 'count 8 0 #f) (make-uint-field 'limit 16 65535 #f))
+    '() '() (list eof-decl rej-decl)
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 0) (make-edge 'stop 'advance) #f))
+            (make-edge 'reject 'reexecute) #f #f)
+          (make-stop-node 'stop #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+
 (define ok (compile-machine one-byte '()))
 (define (text) (utf8->string (render-machine ok 'one-byte-parser)))
 (define (has? needle) (harness-string-contains? (text) needle))
@@ -172,6 +184,25 @@
                (has? "(byte-machine-make-compiled-machine 3 14095574568398596535 0 exec (quote #(#())))"))
         (check "no versioned name survives"
                (not (has? "byte-machine-make-compiled-machine/v")))))
+    ;; Milestone 4 Slice ①b task 6 (decision 0019 item 3(b)). Member 0 stops
+    ;; being empty for a machine that DECLARES fields, and stays exactly `#()`
+    ;; for one that does not -- which is the whole content of ①a's reservation
+    ;; and the reason the case above still passes verbatim.
+    ;;
+    ;; It carries (name . initial) PAIRS rather than bare initials, though the
+    ;; member is named for the initials. The parser needs two things from the
+    ;; declarations -- the initial values, and the name-to-slot resolution
+    ;; `parser-field-ref` answers by -- and the slot is the pair's POSITION, so
+    ;; one member carries both and still renders `#()` when there are no fields.
+    ;; A second member would have been a second ABI growth for data the first
+    ;; already determines.
+    (harness-case "a field-declaring machine renders its declarations in member 0"
+      (lambda ()
+        (check "pairs in slot order"
+               (harness-string-contains?
+                (utf8->string (render-machine (compile-machine with-fields '())
+                                              'field-parser))
+                "exec (quote #(#((count . 0) (limit . 65535)))))"))))
     (harness-case "exec carries the reserved seventh parameter"
       (lambda ()
         ;; Reserved empty by decision 0019 item 3(c) and filled in Slice ②. The

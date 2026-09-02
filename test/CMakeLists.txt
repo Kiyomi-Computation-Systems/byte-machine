@@ -949,6 +949,31 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-one-byte-tests.sps"
   TIMEOUT 120)
 
+# Milestone 4 Slice ①b task 7: parser-field-ref across both executors. It emits
+# and runtime-loads a generated library, so it needs BYTE_MACHINE_CORE_EMIT and
+# the same TIMEOUT as the differential lanes -- and it imports (byte-machine
+# private conditions) to name the contract-violation code, which is already in
+# BYTE_MACHINE_CORE_EMIT. Every imported library is listed in BOTH lanes'
+# SOURCES: a library reached only through `environment` must be statically
+# imported or the AOT lane alone fails.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.field-access.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/field-access-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/field-access-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.field-access.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/field-access-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/field-access-tests.sps"
+  TIMEOUT 120)
+
 byte_machine_add_scheme_lane(
   NAME byte-machine.example.one-byte.chez.source
   BACKEND chez

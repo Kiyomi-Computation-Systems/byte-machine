@@ -29,6 +29,10 @@
 
 (define (one-byte-op msg . args)
   (case msg
+    ;; Slice ①b task 6: make-parser asks every op closure for the field
+    ;; declarations, so every hand-written stub answers it. These stubs declare
+    ;; no fields, which is what keeps their parsers byte-for-byte what they were.
+    ((field-initials) (vector))
     ((entry) 'start)
     ((kind) (case (car args) ((start) 'dispatch) ((stop) 'stop) ((reject) 'error)))
     ((dispatch)
@@ -99,6 +103,10 @@
 ;; witnessing parser-feed-op!'s finish arm (§12.2: finished x feed!).
 (define (eof-target-op msg . args)
   (case msg
+    ;; Slice ①b task 6: make-parser asks every op closure for the field
+    ;; declarations, so every hand-written stub answers it. These stubs declare
+    ;; no fields, which is what keeps their parsers byte-for-byte what they were.
+    ((field-initials) (vector))
     ((entry) 's0)
     ((kind) (case (car args) ((s0) 'dispatch) ((done) 'finish)
               (else (assertion-violation 'eof-target-op "bad node" (car args)))))
@@ -108,6 +116,10 @@
 
 (define (default-eof-op msg . args)
   (case msg
+    ;; Slice ①b task 6: make-parser asks every op closure for the field
+    ;; declarations, so every hand-written stub answers it. These stubs declare
+    ;; no fields, which is what keeps their parsers byte-for-byte what they were.
+    ((field-initials) (vector))
     ((entry) 's0)
     ((kind) (case (car args) ((s0) 'dispatch)
               (else (assertion-violation 'default-eof-op "bad node" (car args)))))
@@ -117,6 +129,10 @@
 
 (define (finish-feed-op msg . args)
   (case msg
+    ;; Slice ①b task 6: make-parser asks every op closure for the field
+    ;; declarations, so every hand-written stub answers it. These stubs declare
+    ;; no fields, which is what keeps their parsers byte-for-byte what they were.
+    ((field-initials) (vector))
     ((entry) 'done)
     ((kind) (case (car args) ((done) 'finish)
               (else (assertion-violation 'finish-feed-op "bad node" (car args)))))
@@ -139,6 +155,10 @@
 ;; separates them.
 (define (finish-pause-op msg . args)
   (case msg
+    ;; Slice ①b task 6: make-parser asks every op closure for the field
+    ;; declarations, so every hand-written stub answers it. These stubs declare
+    ;; no fields, which is what keeps their parsers byte-for-byte what they were.
+    ((field-initials) (vector))
     ((entry) 's0)
     ((kind) (case (car args)
               ((s0 s1) 'dispatch) ((fp p2) 'pause) ((done) 'finish) ((s2) 'stop)
@@ -417,6 +437,10 @@
 ;; eof-target, reject otherwise).
 (define (pause-op msg . args)
   (case msg
+    ;; Slice ①b task 6: make-parser asks every op closure for the field
+    ;; declarations, so every hand-written stub answers it. These stubs declare
+    ;; no fields, which is what keeps their parsers byte-for-byte what they were.
+    ((field-initials) (vector))
     ((entry) 's0)
     ((kind) (case (car args)
               ((s0 s1) 'dispatch) ((p pe) 'pause) ((stop) 'stop)

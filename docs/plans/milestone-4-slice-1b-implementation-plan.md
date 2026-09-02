@@ -487,9 +487,9 @@ Design §6 task 5; §17:962; decision 0019 item 3(a).
 
 Design §6 task 6; §12.5:738; decision 0019 item 3(b).
 
-- [ ] **Step 1: Failing tests first**, including `parser-reset!` restoring declared initials.
+- [x] **Step 1: Failing tests first**, including `parser-reset!` restoring declared initials.
 
-- [ ] **Step 2:** A ninth parser slot beside `stored-error`. Initials reach it through the
+- [x] **Step 2:** A ninth parser slot beside `stored-error`. Initials reach it through the
   **shipped per-lane asymmetry**, not a uniform mechanism: `make-parser`'s `'op` arm *asks*
   the closure (a new `'field-initials` message in `interpret.sls`), and the `'v2` arm *reads*
   the ABI payload's member 0, which ①a reserved empty. `compile.sls` computes that member from
@@ -497,12 +497,12 @@ Design §6 task 6; §12.5:738; decision 0019 item 3(b).
 
   **H2:** there are **two** variant arms plus a loud unreachable else, not three.
 
-- [ ] **Step 3:** `parser-reset!` restores the declared initials, and its comment at
+- [x] **Step 3:** `parser-reset!` restores the declared initials, and its comment at
   `runtime.sls:405` — "Field, span, and poisoned/busy state do not exist yet (M4/M5)" — is
   corrected in place to name what now exists and what still does not. **H5: that block ends at
   the file's last line and carries an `EXPECT_SURVIVES` pin.**
 
-- [ ] **Step 4: Gate.** No golden moves for a zero-field machine — the emitted text is
+- [x] **Step 4: Gate.** No golden moves for a zero-field machine — the emitted text is
   identical to ①a's, which is what makes 0019's reservation true rather than hoped.
 
 ---
@@ -511,20 +511,20 @@ Design §6 task 6; §12.5:738; decision 0019 item 3(b).
 
 Design §6 task 7; §9.3:410; §13:801.
 
-- [ ] **Step 1: Failing tests first.** Read-only per §13:801; there is no mutating sibling to
+- [x] **Step 1: Failing tests first.** Read-only per §13:801; there is no mutating sibling to
   design.
 
-- [ ] **Step 2:** Add the accessor, raising `byte-machine-contract-violation` with a new
+- [x] **Step 2:** Add the accessor, raising `byte-machine-contract-violation` with a new
   `accessor-misuse` code for an undeclared field name. Add `parser-field-ref` to
   `reserved-member-2` **by appending on a new line** — `SchemeMutationSuite.cmake:5723-5728`
   FINDs the interior of `compile.sls:51`, and a reflow takes it to 0 sites. The
   `reserved-drift` lane asserts set equality, so the export and the mirror land in one commit.
 
-- [ ] **Step 3: Lane bookkeeping.** New source+AOT pairs, five-segment names, `TIMEOUT` on
+- [x] **Step 3: Lane bookkeeping.** New source+AOT pairs, five-segment names, `TIMEOUT` on
   each, every imported library in **both** lanes' `SOURCES`. A library reached only through
   `environment` must be **statically imported** or the AOT lane alone fails.
 
-- [ ] **Step 4: Gate — the slice's exit evidence.** Each a literal:
+- [x] **Step 4: Gate — the slice's exit evidence.** Each a literal:
 
   1. `rg -c 'machine-fields' src/ test/` returns more than the two occurrences it returns
      today, with at least one inside the normalizer (**H6** — this gate survives §6 intact).
@@ -540,6 +540,71 @@ Design §6 task 7; §9.3:410; §13:801.
   6. `release`, `pr` and `no-scheme` green at their measured counts.
   7. `CHANGELOG.md` and the status surfaces updated — §25:1559 is discharged **whole** by this
      slice, which is a status change.
+
+---
+
+### Tasks 6 and 7 — executed 2026-09-02, in ONE commit
+
+**The plan asks task 6 for a test it cannot have, and that is why the two tasks ship
+together.** Step 1 reads *"Failing tests first, including `parser-reset!` restoring declared
+initials"* — but the parser's field slots have no reader until task 7's `parser-field-ref`
+exists, so every task-6-only assertion about them would be a test that cannot fail. Rather
+than write one, the storage and its accessor ship in one commit. Task 6 does have standalone
+evidence — the emitted member 0, and the unmoved zero-field golden — and it is asserted in
+`compile-tests.sps` either way.
+
+**Member 0 carries `(name . initial)` PAIRS, not bare initials.** Decision 0019 item 3(b)
+names it the field-initials member, and the parser needs two things from the declarations: the
+initial values, and the name-to-slot resolution `parser-field-ref` answers by. The slot is the
+pair's **position**, so one member fixes both, and it still renders `#()` when there are no
+fields — which is what keeps `(quote #(#()))` byte-identical to ①a. A second member would have
+been a second ABI growth for data the first already determines.
+
+**Two of the slice's own decisions turn out to have no witness in this slice, and both are
+recorded rather than papered over:**
+
+1. `parser-reset!`'s field restore. **Measured: the mutation that deletes it passes the whole
+   field-access lane unchanged.** `parser-field-ref` is read-only (§13:801) and ①b ships no
+   writer, so slot 8 is constant for a parser's lifetime and restoring a constant is a no-op.
+   It ships **now** under an `EXPECT_SURVIVES` carrying its measurement and its reopening
+   condition, rather than being deferred to ②: a ② that adds a write without adding the
+   restore leaks one parse's values into the next, and the restore arriving first makes that a
+   defect ② must *introduce* rather than one it must *remember*. **This moves the Scheme
+   suite's declared survivors from nine to ten, which contradicts step 4 gate item 5** — that
+   gate was written before the measurement, and the measurement wins.
+2. Per-parser **isolation** of the value storage, for the same reason. Two parsers sharing one
+   vector and two holding their own are observationally identical through a read-only API. No
+   case is written; the reason sits at the site, and the case belongs in ②'s writer commit.
+
+**The `'field-initials` message breaks every hand-written op-closure stub.** Six in
+`runtime-tests.sps`, each of which answered `bad message` and failed its whole group. They
+answer `#()` now. Worth knowing before ② adds another message: the op protocol has no default,
+so every addition to it is a change to every stub in the tree.
+
+**`fields` cannot be a top-level `define`** in a program importing `(rnrs)` — it is
+`define-record-type`'s auxiliary keyword, and the collision is a *"multiple definitions"*
+error at expand time, not a shadowing warning. The same trap as `put-string` in ①a.
+
+**Three mutations were measured and deliberately not written**, each because its record set is
+*identical* — not a subset, the same set — to one that is: `make-parser`'s op arm discarding
+what it asked for (versus `interpret.sls` answering with nothing), and the emitter rendering a
+wrong field name (versus the v2 arm ignoring member 0 entirely). The one written is in each
+case the one living in the file whose new code it names.
+
+**Gate (step 4), each measured:**
+
+1. `machine-fields` reaches **five sites in `normal-ir.sls`** and eight files overall, against
+   two before the slice. ✔
+2. Three committed goldens and all four pinned IR fingerprints **byte-identical to `51fd5f3`**
+   — `git diff --stat 51fd5f3..HEAD -- test/fixtures/` is empty. ✔
+3. `reserved-member-3` unchanged; `reserved-member-2` **31 → 32**, exactly one. ✔
+4. Declaration-time bounds at all four widths, discharged by the **constructor** in
+   `ir-tests.sps` — `0` and `2^w − 1` accepted, `2^w` and `-1` refused, plus inexact and
+   non-numeric. ✔
+5. `EXPECTED_PASSES`/`EXPECTED_MUTATIONS` at **49 / 271**; CMake suite **1 / 72**;
+   `EXPECT_SURVIVES` **10, not 9** — see the deviation above. ✔ (amended)
+6. `release` **92/92**, `pr` **92/92**, `no-scheme` **8/8**. ✔
+7. `CHANGELOG.md`, `README.org` updated; §25:1559 discharged whole. ✔
 
 ---
 
