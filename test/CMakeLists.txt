@@ -933,6 +933,7 @@ byte_machine_add_scheme_lane(
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-one-byte-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/one-byte-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/differential-one-byte-tests.sps"
   TIMEOUT 120)
@@ -943,6 +944,7 @@ byte_machine_add_scheme_lane(
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-one-byte-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/one-byte-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/differential-one-byte-tests.sps"
   TIMEOUT 120)
@@ -975,6 +977,7 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/sequence-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/differential-sequence-tests.sps"
   TIMEOUT 180)
@@ -986,6 +989,7 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/sequence-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/differential-sequence-tests.sps"
   TIMEOUT 180)
@@ -1000,6 +1004,7 @@ byte_machine_add_scheme_lane(
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-eof-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/eof-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/differential-eof-tests.sps"
   TIMEOUT 120)
@@ -1010,6 +1015,7 @@ byte_machine_add_scheme_lane(
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-eof-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/eof-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/differential-eof-tests.sps"
   TIMEOUT 120)
@@ -1021,6 +1027,7 @@ byte_machine_add_scheme_lane(
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-pause-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/pause-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/differential-pause-tests.sps"
   TIMEOUT 120)
@@ -1031,6 +1038,7 @@ byte_machine_add_scheme_lane(
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-pause-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/pause-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/differential-pause-tests.sps"
   TIMEOUT 120)
@@ -1070,6 +1078,7 @@ byte_machine_add_scheme_lane(
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-byte-class-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/class-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/differential-byte-class-tests.sps"
   TIMEOUT 180)
@@ -1080,6 +1089,7 @@ byte_machine_add_scheme_lane(
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-byte-class-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/class-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/differential-byte-class-tests.sps"
   TIMEOUT 180)
@@ -1121,6 +1131,7 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/sequence-node-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/differential-sequence-node-tests.sps"
   TIMEOUT 180)
@@ -1132,6 +1143,7 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/sequence-node-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/differential-sequence-node-tests.sps"
   TIMEOUT 180)
@@ -1171,6 +1183,7 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-version-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/differential-http-version-tests.sps"
   TIMEOUT 180)
@@ -1182,6 +1195,7 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-version-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/differential-http-version-tests.sps"
   TIMEOUT 180)
@@ -1296,6 +1310,7 @@ byte_machine_add_scheme_lane(
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-gen.sls"
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${CMAKE_SOURCE_DIR}/test/common/property-differential-tests.sps"
   TIMEOUT 180)
 
@@ -1307,6 +1322,7 @@ byte_machine_add_scheme_lane(
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-gen.sls"
           ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${CMAKE_SOURCE_DIR}/test/common/property-differential-tests.sps"
   TIMEOUT 180)
 

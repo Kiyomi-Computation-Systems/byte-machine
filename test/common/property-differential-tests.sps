@@ -12,6 +12,7 @@
 (import (rnrs) (rnrs eval)
         (only (chezscheme) load)
         (byte-machine test harness)
+        (byte-machine test error-projection)
         (byte-machine test prng)
         (byte-machine test machine-gen)
         (byte-machine graph)
@@ -35,7 +36,8 @@
 ;; result can show (mirrors differential-pause-tests.sps's own rfields).
 (define (rfields r p)
   (list (parser-result-status r) (parser-result-next r) (parser-result-consumed r)
-        (parser-result-stream-offset r) (parser-result-error r) (parser-lifecycle p)))
+        (parser-result-stream-offset r) (project-error (parser-result-error r))
+        (parser-lifecycle p)))
 
 ;; Emit `m` to a fresh file, load it, and return its compiled-machine. The
 ;; library name is (generated gen) for every machine, so each emission gets its

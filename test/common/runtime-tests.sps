@@ -9,6 +9,13 @@
 
 (harness-begin "unit.runtime")
 
+;; Slice ①a task 5: the error slot holds a parser-error record and is #f on
+;; every non-error result. These cases assert the CODE; the record's own shape
+;; is pinned by the dedicated parser-error group below.
+(define (error-code-of r)
+  (let ((e (parser-result-error r)))
+    (and (parser-error? e) (parser-error-code e))))
+
 (define (one-byte-op msg . args)
   (case msg
     ((entry) 'start)
@@ -16,7 +23,12 @@
     ((dispatch)
      (let ((byte (cadr args)))
        (if (= byte 0) (cons 'stop 'advance) (cons 'reject 'reexecute))))
-    ((error-value) 'unexpected-byte)
+    ;; Slice ①a task 5: the op protocol answers with the record's PARTS --
+    ;; (code reason node-name state-id) -- and the runtime supplies the offset
+    ;; and the position kind, which only its loop knows. These stubs implement
+    ;; the protocol independently of interpret.sls, so they do not redden when
+    ;; it changes; they are updated by hand, deliberately.
+    ((error-value) (list 'unexpected-byte "unexpected byte" 'reject 2))
     (else (assertion-violation 'one-byte-op "bad message" msg))))
 
 (define (feed-byte b)
@@ -48,7 +60,7 @@
         (let ((r (feed-byte 65)))
           (check-equal "status" (parser-result-status r) 'error)
           (check-equal "stream offset" (parser-result-stream-offset r) 0)
-          (check-equal "error value" (parser-result-error r) 'unexpected-byte))))
+          (check-equal "error value" (error-code-of r) 'unexpected-byte))))
     (harness-case "an empty slice needs input and reports no result yet"
       (lambda ()
         (let* ((p (make-parser (make-compiled-machine one-byte-op) '() #f))
@@ -80,7 +92,7 @@
     ((kind) (case (car args) ((s0) 'dispatch) ((done) 'finish)
               (else (assertion-violation 'eof-target-op "bad node" (car args)))))
     ((eof-target) (case (car args) ((s0) 'done) (else #f)))
-    ((default-eof-value) 'eof)
+    ((default-eof-value) (list 'eof "unexpected end of input" 's0 0))
     (else (assertion-violation 'eof-target-op "bad message" msg))))
 
 (define (default-eof-op msg . args)
@@ -89,7 +101,7 @@
     ((kind) (case (car args) ((s0) 'dispatch)
               (else (assertion-violation 'default-eof-op "bad node" (car args)))))
     ((eof-target) #f)
-    ((default-eof-value) 'eof)
+    ((default-eof-value) (list 'eof "unexpected end of input" 's0 0))
     (else (assertion-violation 'default-eof-op "bad message" msg))))
 
 (define (finish-feed-op msg . args)
@@ -129,7 +141,7 @@
          (else (assertion-violation 'finish-pause-op "unexpected dispatch" args)))))
     ((eof-target) (case (car args) ((s1) 'fp) (else #f)))
     ((pause-target) (case (car args) ((fp) 'done) ((p2) 's2)))
-    ((default-eof-value) 'eof)
+    ((default-eof-value) (list 'eof "unexpected end of input" 's0 0))
     (else (assertion-violation 'finish-pause-op "bad message" msg))))
 
 (harness-group "parser-finish!"
@@ -150,7 +162,7 @@
       (lambda ()
         (let ((r (parser-finish! (make-parser (make-compiled-machine default-eof-op) '() #f))))
           (check-equal "default-eof status" (parser-result-status r) 'error)
-          (check-equal "default-eof code" (parser-result-error r) 'eof))))
+          (check-equal "default-eof code" (error-code-of r) 'eof))))
     (harness-case "a parser parked at a finish node re-feeds to finished, consuming zero (§12.2)"
       (lambda ()
         (let* ((p (make-parser (make-compiled-machine finish-feed-op) '() #f))
@@ -190,12 +202,24 @@
   (let loop ((pos start) (st state) (off offset))
     (case st
       ((1) (byte-machine-make-feed-outcome/v1 'stopped pos #f 1 off))
-      ((2) (byte-machine-make-feed-outcome/v1 'error pos 'unexpected-byte 2 off))
+      ;; Slice ①a task 5: generated code now puts a parser-error record in the
+      ;; error slot, built through the reserved constructor from an errs-table
+      ;; entry plus the site's own literals and the loop's variables. This stub
+      ;; emulates that, by hand, exactly as it emulates the rest of exec.
+      ((2) (byte-machine-make-feed-outcome/v1
+            'error pos
+            (byte-machine-make-parser-error/v1
+             (vector 'unexpected-byte "unexpected byte") 'reject 2 off 'byte)
+            2 off))
       ((3) (byte-machine-make-feed-outcome/v1 'paused pos #f 1 off))
       (else
        (if (>= pos end)
            (if finish?
-               (byte-machine-make-feed-outcome/v1 'error pos 'eof 0 off)   ; eof-target #f -> default
+               (byte-machine-make-feed-outcome/v1
+                'error pos
+                (byte-machine-make-parser-error/v1
+                 (vector 'eof "unexpected end of input") 's0 0 off 'eof)
+                0 off)                    ; eof-target #f -> default
                (byte-machine-make-feed-outcome/v1 'need-input pos #f 0 off))
            (let ((b (bytevector-u8-ref bv pos)))
              (if (= b 0) (loop (+ pos 1) 1 (+ off 1)) (loop pos 2 off))))))))
@@ -284,7 +308,7 @@
       (lambda ()
         (let ((r (parser-finish! (make-parser (v2-machine) '() #f))))
           (check-equal "error" (parser-result-status r) 'error)
-          (check-equal "default-eof code" (parser-result-error r) 'eof))))
+          (check-equal "default-eof code" (error-code-of r) 'eof))))
     ;; Restored in Slice ①a task 3 when the retired /v1 group was deleted: no
     ;; other surviving case asserts the lifecycle a FEED records, and two shipped
     ;; mutations name exactly that decision. The stub encodes the same one-byte
@@ -313,7 +337,7 @@
           (parser-finish! p)                                    ; -> error, stores 'eof
           (check-equal "lifecycle" (parser-lifecycle p) 'error)
           (check-equal "finish repeats the stored /v2 error"
-                       (parser-result-error (parser-finish! p)) 'eof))))
+                       (error-code-of (parser-finish! p)) 'eof))))
     (harness-case "a /v2 finish reaching a pause state sets paused-finish"
       (lambda ()
         ;; Witnesses parser-finish-v2!'s own paused arm -- distinct code from
@@ -385,7 +409,9 @@
          ((s1) (if (= byte 2) (cons 'stop 'advance) (cons 'reject 'reexecute))))))
     ((pause-target) (case (car args) ((p) 's1) ((pe) 'done)))
     ((eof-target) (case (car args) ((s0) 'pe) ((s1) 'trunc)))
-    ((error-value) (case (car args) ((trunc) 'truncated-input) (else 'unexpected-byte)))
+    ((error-value) (case (car args)
+                     ((trunc) (list 'truncated-input "truncated input" 'trunc 4))
+                     (else (list 'unexpected-byte "unexpected byte" 'reject 7))))
     (else (assertion-violation 'pause-op "bad message" msg))))
 
 (define (pause-parser) (make-parser (make-compiled-machine pause-op) '() #f))
@@ -548,9 +574,9 @@
           (let ((r (parser-feed! p (make-bytevector 3 0) 1 3)))
             (check-equal "sticky status" (parser-result-status r) 'error)
             (check-equal "next is the new start" (parser-result-next r) 1)
-            (check-equal "feed-stored error value" (parser-result-error r) 'unexpected-byte))
+            (check-equal "feed-stored error value" (error-code-of r) 'unexpected-byte))
           (check-equal "finish repeats the feed-stored error"
-                       (parser-result-error (parser-finish! p)) 'unexpected-byte))))
+                       (error-code-of (parser-finish! p)) 'unexpected-byte))))
     (harness-case "the error row returns the stored error after a default-EOF truncation"
       (lambda ()
         ;; Closes the ②b-2 carry: with default-eof-op (eof-target #f), finish!
@@ -561,9 +587,9 @@
           (let ((r (parser-feed! p (make-bytevector 1 0) 0 1)))
             (check-equal "status stays error" (parser-result-status r) 'error)
             (check-equal "consumed zero" (parser-result-consumed r) 0)
-            (check-equal "stored error value" (parser-result-error r) 'eof))
+            (check-equal "stored error value" (error-code-of r) 'eof))
           (check-equal "finish repeats the stored error"
-                       (parser-result-error (parser-finish! p)) 'eof))))
+                       (error-code-of (parser-finish! p)) 'eof))))
     (harness-case "finish reaches a named error node via the eof-target chain and stores it"
       (lambda ()
         ;; Witnesses parser-finish-op!'s own plain error arm -- distinct from
@@ -577,10 +603,10 @@
           (parser-resume! p)                                     ; -> ready, current = s1
           (let ((r (parser-finish! p)))
             (check-equal "status" (parser-result-status r) 'error)
-            (check-equal "error value" (parser-result-error r) 'truncated-input)
+            (check-equal "error value" (error-code-of r) 'truncated-input)
             (check-equal "lifecycle" (parser-lifecycle p) 'error))
           (check-equal "finish repeats the finish-stored error"
-                       (parser-result-error (parser-finish! p)) 'truncated-input))))
+                       (error-code-of (parser-finish! p)) 'truncated-input))))
     ;; stopped and error are already covered by the pre-existing
     ;; "parser-reset!" group above; ready is trivial (reset is idempotent on
     ;; it). The four rows below are the ones this task's own lifecycle adds.

@@ -5,6 +5,7 @@
 (import (rnrs) (rnrs eval)
         (only (chezscheme) load)
         (byte-machine test harness)
+        (byte-machine test error-projection)
         (byte-machine test one-byte-machine)
         (byte-machine graph)
         (byte-machine verify)
@@ -31,7 +32,7 @@
 (define (rfields cm b)
   (let ((r (parser-feed! (make-parser cm '() #f) (make-bytevector 1 b) 0 1)))
     (list (parser-result-status r) (parser-result-next r) (parser-result-consumed r)
-          (parser-result-stream-offset r) (parser-result-error r))))
+          (parser-result-stream-offset r) (project-error (parser-result-error r)))))
 
 (harness-group "interpreter and generated agree on every byte"
   (lambda ()

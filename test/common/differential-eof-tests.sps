@@ -7,7 +7,8 @@
 ;;; the 256 first bytes fed then finished. The interpreter is the reference; a
 ;;; disagreement here is a real lowering defect in the eof encoding / finish arm.
 (import (rnrs) (rnrs eval) (only (chezscheme) load)
-        (byte-machine test harness) (byte-machine test eof-machine)
+        (byte-machine test harness)
+        (byte-machine test error-projection) (byte-machine test eof-machine)
         (byte-machine graph) (byte-machine verify) (byte-machine interpret)
         (byte-machine runtime) (byte-machine compile))
 (harness-begin "differential.eof")
@@ -25,7 +26,8 @@
   (let ((p (make-parser cm '() #f)))
     (for-each (lambda (b) (parser-feed! p (make-bytevector 1 b) 0 1)) bytes)
     (let ((rf (parser-finish! p)))
-      (list (parser-result-status rf) (parser-result-stream-offset rf) (parser-result-error rf)))))
+      (list (parser-result-status rf) (parser-result-stream-offset rf)
+            (project-error (parser-result-error rf))))))
 (harness-group "interpreter and generated agree on finish after every prefix"
   (lambda ()
     (harness-case "idle, one-byte truncation, and full sequence agree"

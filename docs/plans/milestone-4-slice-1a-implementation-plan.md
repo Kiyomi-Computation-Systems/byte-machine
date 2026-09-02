@@ -1327,6 +1327,19 @@ restores green while narrowing the comparison back to the single symbol it compa
 the family existed, shipping the family with no differential behind four of its five
 comparable members. Substitute the projection for the error member only.
 
+**Executed 2026-09-02. Four things the plan did not predict.** (1) Four of the eight
+differential programs still *passed* before the projection went in, because their two lanes'
+state ids happened to coincide — the projection belongs in all sixteen lanes, not only the
+red ones, and a red-driven edit would have left four lanes comparing a lane-local id by luck.
+(2) The single-executor unit lanes need an **`#f`-tolerant** code reader: `parser-result-error`
+is `#f` on every non-error result, so a blanket `parser-error-code` wrap raises on them. Each
+such program defines `error-code-of` locally. (3) `runtime-tests.sps`'s six hand-written `op`
+closures and its `stub-exec` return the record's parts and build the record by hand — they
+implement the protocol independently of `interpret.sls`, so they do not redden when it
+changes and must be updated deliberately. (4) The emitted default-eof arm's index mutation
+must force index **1**, not 0: the default-eof declaration *is* index 0 in every shipped
+fixture, so a 0 REPLACE is a no-op and shipped **UNCAUGHT** on its first run.
+
 **Fix the projection's treatment of `#f` explicitly.** `parser-result-error` is `#f` on every
 non-error result. If the projection returns `#f` for `#f`, twenty-nine `#f`-tailed literal
 tuples survive untouched (`differential-sequence-tests.sps` 8, `differential-sequence-node-tests.sps`

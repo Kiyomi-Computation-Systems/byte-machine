@@ -142,6 +142,14 @@
     (vector parser-error-tag 'machine (vector-ref entry 0) (vector-ref entry 1) #f
             node-name state-id offset position-kind))
   (define (parser-error? x) (tagged? parser-error-tag x))
+  ;; The interpreter's executor hands back (code reason node-name state-id); the
+  ;; loop supplies the offset and the position kind, which only it knows. Both
+  ;; lanes therefore build the same record from the same parts -- the generated
+  ;; one through byte-machine-make-parser-error/v1 at each emitted site, this one
+  ;; here.
+  (define (parts->parser-error parts off kind)
+    (byte-machine-make-parser-error/v1
+     (vector (car parts) (cadr parts)) (caddr parts) (cadddr parts) off kind))
   (define (parser-error-domain e) (vector-ref e 1))
   (define (parser-error-code e) (vector-ref e 2))
   (define (parser-error-reason e) (vector-ref e 3))
@@ -229,14 +237,19 @@
   ;; finish/pause.
   (define (parser-feed-op! parser bv start end)
     (let ((op (parser-executor parser)))
-      (let loop ((pos start))
+      ;; The position kind is a loop variable, set from a literal at each jump
+      ;; (decision 0022 item 5), initialized `boundary` unconditionally with no
+      ;; finish? key: nothing has been consumed since the call began, so an error
+      ;; state reached with no jump taken is a boundary at the current offset.
+      (let loop ((pos start) (pk 'boundary))
         (let ((node (parser-current parser)))
           (case (op 'kind node)
             ((stop)
              (make-parser-result 'stopped pos (- pos start) (parser-offset parser) #f))
             ((error)
              (make-parser-result 'error pos (- pos start) (parser-offset parser)
-                                 (op 'error-value node)))
+                                 (parts->parser-error (op 'error-value node)
+                                                      (parser-offset parser) pk)))
             ((finish)
              (make-parser-result 'finished pos (- pos start) (parser-offset parser) #f))
             ((pause)
@@ -255,8 +268,8 @@
                    (if (eq? mode 'advance)
                        (begin
                          (parser-set-offset! parser (+ 1 (parser-offset parser)))
-                         (loop (+ pos 1)))
-                       (loop pos)))))
+                         (loop (+ pos 1) 'boundary))
+                       (loop pos 'byte)))))
             (else (assertion-violation 'parser-feed! "unknown node kind" (op 'kind node))))))))
 
   ;; The generated /v2 path: exec owns the dispatch loop; finish? = #f for feed.
@@ -328,7 +341,15 @@
     ;; runtime either.
     (let ((op (parser-executor parser))
           (off (parser-offset parser)))
-      (let loop ((node (parser-current parser)))
+      ;; The same loop variable as parser-feed-op!, and for the same reason: an
+      ;; error node a prior feed parked on is reached here by NO jump, and
+      ;; nothing is truncated by a finish! call that merely observes it, so it
+      ;; reports the boundary a feed resuming onto it already reports. `eof` is
+      ;; reserved for where truncation actually occurs or is inherited along the
+      ;; EOF-target chain -- the hop below, and the default-EOF terminal, which
+      ;; is reached by no jump at all once the chain is exhausted and so takes
+      ;; its own constant.
+      (let loop ((node (parser-current parser)) (pk 'boundary))
         (case (op 'kind node)
           ((finish)
            (parser-set-current! parser node)
@@ -345,15 +366,15 @@
           ((error)
            (parser-set-current! parser node)
            (parser-set-lifecycle! parser 'error)
-           (let ((e (op 'error-value node)))
+           (let ((e (parts->parser-error (op 'error-value node) off pk)))
              (parser-set-stored-error! parser e)
              (make-parser-result 'error off 0 off e)))
           ((dispatch)
            (let ((t (op 'eof-target node)))
              (if t
-                 (begin (parser-set-current! parser t) (loop t))
+                 (begin (parser-set-current! parser t) (loop t 'eof))
                  (begin (parser-set-lifecycle! parser 'error)
-                        (let ((e (op 'default-eof-value)))
+                        (let ((e (parts->parser-error (op 'default-eof-value node) off 'eof)))
                           (parser-set-stored-error! parser e)
                           (make-parser-result 'error off 0 off e))))))
           (else (assertion-violation 'parser-finish! "unknown node kind" (op 'kind node)))))))

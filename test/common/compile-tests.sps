@@ -181,16 +181,21 @@
                (has? "(define (exec state offset bv start end finish? fieldv)"))))
     (harness-case "the accepted byte advances and the fallback reexecutes"
       (lambda ()
-        (check "advance arm" (has? "((0) (loop (+ pos 1) 1 (+ off 1)))"))
-        (check "fallback"    (has? "(else (loop pos 2 off))"))))
+        (check "advance arm" (has? "((0) (loop (+ pos 1) 1 (+ off 1) (quote boundary)))"))
+        (check "fallback"    (has? "(else (loop pos 2 off (quote byte)))"))))
     (harness-case "the error state emits the resolved code"
       (lambda ()
-        (check "error arm" (has? "(byte-machine-make-feed-outcome/v1 (quote error) pos (quote unexpected-byte) 2 off)"))))
+        (check "error arm"
+               (has? "(byte-machine-make-feed-outcome/v1 (quote error) pos (byte-machine-make-parser-error/v1 (vector-ref errs 1) (quote reject) 2 off pk) 2 off)"))
+        ;; The errs table is per DECLARATION, not per site: the default-eof arm
+        ;; alone renders at every dispatch state.
+        (check "errs table"
+               (has? "(define errs (quote #(#(eof \"unexpected end of input\") #(unexpected-byte \"unexpected byte\"))))"))))
     (harness-case "an exhausted dispatch branches on finish? and routes eof to the default error"
       (lambda ()
         (check "finish eof guard" (has? "(if finish?"))
         (check "eof routes to the default-eof error"
-               (has? "(byte-machine-make-feed-outcome/v1 (quote error) pos (quote eof) 0 off)"))))
+               (has? "(byte-machine-make-feed-outcome/v1 (quote error) pos (byte-machine-make-parser-error/v1 (vector-ref errs 0) (quote start) 0 off (quote eof)) 0 off)"))))
     (harness-case "a finish node renders the finished terminal arm"
       (lambda ()
         (check "finish machine compiles" (compilation-ok? eof-ok))

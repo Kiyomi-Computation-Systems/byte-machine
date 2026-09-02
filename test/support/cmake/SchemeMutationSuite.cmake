@@ -2487,8 +2487,14 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: advance does not consume the byte"
-  FIND [[(loop (+ pos 1))]]
-  REPLACE [[(loop pos)]]
+  # Re-anchored in Slice ①a task 5: the interpreter's feed loop gained the
+  # position-kind variable, so both tails carry it. FIND and REPLACE move in
+  # LOCKSTEP -- this is a swap pair with the reexecute tail, and updating only
+  # the FIND would leave the mutant replacing a two-argument tail with a
+  # one-argument one, failing as an arity error rather than as the
+  # consumed-count defect the pin names.
+  FIND [[(loop (+ pos 1) 'boundary)]]
+  REPLACE [[(loop pos 'byte)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "one-byte parser lifecycle\\.the accepted byte stops after consuming one byte: consumed")
 
@@ -2626,10 +2632,14 @@ byte_machine_mutation(
   # `(make-parser-result 'error off 0 off (op 'default-eof-value))` this FIND
   # anchored. Same routing decision, same reason; the store itself is a
   # separate decision, tested below.
-  FIND [[(let ((e (op 'default-eof-value)))
+  # Re-anchored again in Slice ①a task 5: default-eof-value gained the exhausted
+  # dispatch node (decision 0022 item 9 -- a default-EOF error has no error node,
+  # so its node-name is the dispatch node's), and the record is built here from
+  # the parts it returns.
+  FIND [[(let ((e (parts->parser-error (op 'default-eof-value node) off 'eof)))
                           (parser-set-stored-error! parser e)
                           (make-parser-result 'error off 0 off e))))))]]
-  REPLACE [[(let ((e (op 'default-eof-value)))
+  REPLACE [[(let ((e (parts->parser-error (op 'default-eof-value node) off 'eof)))
                           (parser-set-stored-error! parser e)
                           (make-parser-result 'stopped off 0 off e))))))]]
   EXPECT_STATUS 1
@@ -2644,10 +2654,10 @@ byte_machine_mutation(
   # Signature review: bare "stored error value" is a substring of a DIFFERENT
   # check's own label, "feed-stored error value" (the feed-side store's
   # witness below) -- pinned to this case's own name instead.
-  FIND [[(let ((e (op 'default-eof-value)))
+  FIND [[(let ((e (parts->parser-error (op 'default-eof-value node) off 'eof)))
                           (parser-set-stored-error! parser e)
                           (make-parser-result 'error off 0 off e))))))]]
-  REPLACE [[(let ((e (op 'default-eof-value)))
+  REPLACE [[(let ((e (parts->parser-error (op 'default-eof-value node) off 'eof)))
                           (make-parser-result 'error off 0 off e))))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "default-EOF truncation: stored error value")
 
@@ -2920,7 +2930,9 @@ byte_machine_mutation(
   # before this task (nothing drove an eof-target chain into a NAMED error
   # node); the new pause-op stub's s1 -> 'trunc closes that gap and witnesses
   # both this store and the arm's routing together.
-  FIND [[(let ((e (op 'error-value node)))
+  # Re-anchored in Slice ①a task 5: the arm builds the record from the parts the
+  # executor returns plus the loop's own offset and position kind.
+  FIND [[(let ((e (parts->parser-error (op 'error-value node) off pk)))
              (parser-set-stored-error! parser e)
              (make-parser-result 'error off 0 off e)))]]
   REPLACE [[(let ((e (op 'error-value node)))
@@ -5341,22 +5353,27 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: an advance transition is lowered as a reexecute"
-  FIND [[(string-append "(loop (+ pos 1) " (number->string target) " (+ off 1))")]]
-  REPLACE [[(string-append "(loop pos " (number->string target) " off)")]]
+  FIND [[(string-append "(loop (+ pos 1) " (number->string target) " (+ off 1) (quote boundary))")]]
+  REPLACE [[(string-append "(loop pos " (number->string target) " off (quote byte))")]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "advance arm")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: the reexecute fallback is lowered as an advance"
-  FIND [[(string-append "(loop pos " (number->string target) " off)")]]
-  REPLACE [[(string-append "(loop (+ pos 1) " (number->string target) " (+ off 1))")]]
+  FIND [[(string-append "(loop pos " (number->string target) " off (quote byte))")]]
+  REPLACE [[(string-append "(loop (+ pos 1) " (number->string target) " (+ off 1) (quote boundary))")]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "the accepted byte advances and the fallback reexecutes: fallback")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: the error arm omits the resolved code"
-  FIND [[(symbol->string (normal-error-code s)) ") " id " off))\n")]]
-  REPLACE [["internal" ") " id " off))\n")]]
+  # Re-anchored in Slice ①a task 5: the arm renders a parser-error record, so
+  # the resolved code now reaches it through the errs-table INDEX rather than as
+  # a rendered symbol. Dropping the index to a constant 0 makes every error
+  # report the first declaration's code -- the same decision, the same failed
+  # comparison in the same case.
+  FIND [[(number->string (index-of (normal-error-code s))) ") (quote "]]
+  REPLACE [["0" ") (quote "]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "error arm")
 
 # Milestone 2 Slice ②b-2 (Task 2): the emitter renders the /v2 unified `exec`
@@ -5374,8 +5391,13 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: the exhausted-dispatch eof branch drops the resolved default-eof code"
-  FIND [[(symbol->string (cdr eof)) ") " id " off)")]]
-  REPLACE [["internal" ") " id " off)")]]
+  # Re-anchored in Slice ①a task 5: the default-eof arm renders a parser-error
+  # record, so the resolved code reaches it through the errs-table index.
+  # NOT "0": the default-eof declaration IS index 0 in every shipped fixture, so
+  # that REPLACE is a no-op and the mutation shipped UNCAUGHT on its first run.
+  # Index 1 is the `rejected` declaration, so the arm reports the wrong code.
+  FIND [[(number->string (index-of (cdr eof))) ") (quote " (symbol->string name)]]
+  REPLACE [["1" ") (quote " (symbol->string name)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "eof routes to the default-eof error")
 
 byte_machine_mutation(

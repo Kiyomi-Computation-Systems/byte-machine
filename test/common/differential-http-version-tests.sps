@@ -25,12 +25,21 @@
 (import (rnrs) (rnrs eval)
         (only (chezscheme) load)
         (byte-machine test harness)
+        (byte-machine test error-projection)
         (byte-machine test http-version-machine)
         (byte-machine test prng)
         (byte-machine verify)
         (byte-machine interpret)
         (byte-machine runtime)
         (byte-machine compile))
+
+;; Slice ①a task 5: the tuple carries the §22.4:1271 projection. A reexecute
+;; mismatch reports `byte` AT the offending byte; an advance mismatch reports
+;; `boundary` after the committed one. Same error node, different arriving
+;; transition, different position kind -- which is decision 0022's whole point.
+(define (reject-at k) (list 'machine 'unexpected-byte "unexpected byte" 'reject k 'byte))
+(define (advance-reject-at k)
+  (list 'machine 'unexpected-byte "unexpected byte" 'reject k 'boundary))
 
 (harness-begin "differential.http-version")
 
@@ -55,7 +64,7 @@
 (define (rfields r)
   (list (parser-result-status r) (parser-result-next r)
         (parser-result-consumed r) (parser-result-stream-offset r)
-        (parser-result-error r)))
+        (project-error (parser-result-error r))))
 (define (u8 b) (make-bytevector 1 b))
 (define (head-n l k) (if (= k 0) '() (cons (car l) (head-n (cdr l) (- k 1)))))
 (define (drop-n l k) (if (= k 0) l (drop-n (cdr l) (- k 1))))
@@ -227,11 +236,11 @@
   (lambda ()
     (harness-case "reexecute keeps next and consumed at zero and points at the branch byte"
       (lambda ()
-        (check-equal "branch" (drive cm-gen shared 50) '(error 0 0 7 unexpected-byte))
-        (check-equal "position 0" (drive cm-gen '() 88) '(error 0 0 0 unexpected-byte))))
+        (check-equal "branch" (drive cm-gen shared 50) (list 'error 0 0 7 (reject-at 7)))
+        (check-equal "position 0" (drive cm-gen '() 88) (list 'error 0 0 0 (reject-at 0)))))
     (harness-case "advance consumes the offending byte and shifts the offset by one"
       (lambda ()
-        (check-equal "branch" (drive ad-gen shared 50) '(error 1 1 8 unexpected-byte))
-        (check-equal "position 0" (drive ad-gen '() 88) '(error 1 1 1 unexpected-byte))))))
+        (check-equal "branch" (drive ad-gen shared 50) (list 'error 1 1 8 (advance-reject-at 8)))
+        (check-equal "position 0" (drive ad-gen '() 88) (list 'error 1 1 1 (advance-reject-at 1)))))))
 
 (harness-finish)

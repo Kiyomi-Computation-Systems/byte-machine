@@ -15,6 +15,15 @@
 
 (harness-begin "unit.byte-class")
 
+;; Slice ①a task 5: the error slot holds a parser-error record, and is #f on
+;; every non-error result. These are single-executor lanes, so they compare the
+;; CODE rather than the §22.4:1271 projection the differential lanes use --
+;; but they must stay #f-tolerant, because the same accessor is read on results
+;; that carry no error at all.
+(define (error-code-of r)
+  (let ((e (parser-result-error r)))
+    (and (parser-error? e) (parser-error-code e))))
+
 (define (feed cm b)
   (parser-feed! (make-parser cm '() #f) (make-bytevector 1 b) 0 1))
 
@@ -72,7 +81,7 @@
                                       (= (parser-result-consumed r) 1))
                            (when (eq? bad 'none) (set! bad b)))
                          (unless (and (eq? (parser-result-status r) 'error)
-                                      (eq? (parser-result-error r) 'unexpected-byte)
+                                      (eq? (error-code-of r) 'unexpected-byte)
                                       (= (parser-result-stream-offset r) 0))
                            (when (eq? bad 'none) (set! bad b)))))
                    (set! last-byte b)
@@ -96,7 +105,7 @@
               (let ((r (feed cm b)))
                 (set! checked (+ checked 1))
                 (unless (and (eq? (parser-result-status r) 'error)
-                             (eq? (parser-result-error r) 'unexpected-byte)
+                             (eq? (error-code-of r) 'unexpected-byte)
                              (= (parser-result-stream-offset r) 0))
                   (when (eq? bad 'none) (set! bad b))))
               (set! last-byte b)

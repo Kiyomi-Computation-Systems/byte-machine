@@ -7,6 +7,7 @@
 (import (rnrs) (rnrs eval)
         (only (chezscheme) load)
         (byte-machine test harness)
+        (byte-machine test error-projection)
         (byte-machine test sequence-machine)
         (byte-machine test prng)
         (byte-machine graph)
@@ -14,6 +15,13 @@
         (byte-machine interpret)
         (byte-machine runtime)
         (byte-machine compile))
+
+;; Slice ①a task 5: the error slot now holds a parser-error, and the tuple
+;; carries its §22.4:1271 projection. A rejected byte at offset k reports the
+;; machine domain, the resolved code and reason, the public source-node name of
+;; the error node, that same absolute offset, and `byte` -- the reexecute edge's
+;; kind, since a mismatch does not consume the offending byte.
+(define (reject-at k) (list 'machine 'unexpected-byte "unexpected byte" 'reject k 'byte))
 
 (harness-begin "differential.sequence")
 
@@ -55,7 +63,7 @@
             (loop (cdr ss)
                   (list (parser-result-status r) (parser-result-next r)
                         (parser-result-consumed r) (parser-result-stream-offset r)
-                        (parser-result-error r))))))))
+                        (project-error (parser-result-error r)))))))))
 
 ;; Feed each byte of `prefix` (as its own [0,1) slice) then the test byte `b`.
 (define (drive cm prefix b)
@@ -76,7 +84,7 @@
         (for-each
          (lambda (k)
            (let ((prefix (list-head-n sequence-bytes k))
-                 (expect (list 'error 0 0 k 'unexpected-byte)))
+                 (expect (list 'error 0 0 k (reject-at k))))
              (check-equal (string-append "interpreter pos " (number->string k))
                           (drive cm-ref prefix 200) expect)
              (check-equal (string-append "generated pos " (number->string k))
