@@ -127,7 +127,8 @@ Every task's requirements implicitly include this section.
 - **AGENTS.md line citations in the design are all stale, and not by a constant.**
   `AGENTS.md` gained lines in `462d737` and `c3ceec2`, both after the design commit
   `f215af7`. Correct offsets, measured from `git diff f215af7..HEAD -- AGENTS.md` with
-  `--unified=0`: lines ≤29 unchanged; 30-238 **+13**; 239-250 **+32**; ≥251 **+43**. So
+  `--unified=0`: lines ≤29 unchanged; 30-238 **+13**; 239-249 **+32**; ≥251 **+43** (old line 250 was
+  replaced by a twelve-line block and has no single HEAD line). So
   design §4.3's `AGENTS.md:147` (SITES both directions) is HEAD **:160**; §5's `:170-171`
   (record by LABEL) is HEAD **:183-184**; §5's `:172-187` (sweep both directions) is HEAD
   **:185-200**; design:2265's `AGENTS.md:283-286` is HEAD **:296-299** only under the +13
@@ -1721,12 +1722,17 @@ In the tree, at close-out, each as a literal:
   moves `src/` for the first time since. State the tree a record was decided against, then
   disclose in a dated note what the change it authorised has altered — do not rewrite it as
   though it were written at the end, because the tree it was decided against is its evidence.
-- [ ] **Report the design defects upstream.** This plan's §0 records three contradictions
-  inside `milestone-4-design.md` (D1's three-way `reserved-member-3` disagreement, D7's
-  "reuses `valid-name?`" reading, and the `:5362` misattribution at design:834-836) and one
-  already-false status line at design:3. A defect found in planning and fixed only in the
-  plan leaves the design to mislead the next slice. Annotate the design, do not silently
-  diverge from it.
+- [x] **Report the design defects upstream — done 2026-09-01.**
+  `milestone-4-design.md` now carries an `> **Amendments**` pointer block after its Status
+  paragraph and a dated note at its foot, **2026-09-01 (Slice ①a planning)**, carrying items
+  A through J: this plan's §0 and §0b findings in the form the design's own readers need.
+  Two live work orders were corrected in place and marked at the site — §5 task 6's "two
+  entries" (now three) and §6 task 6's contradicting `reserved-member-3` sentence — and the
+  Status line, an instruction, was corrected from "NOT STARTED" to "IN PROGRESS". Everything
+  else is annotated rather than rewritten, because each named sentence was never true and is
+  load-bearing evidence of what the design believed. When a later slice finds another, it
+  goes in that note, not only here: a defect fixed only in a plan leaves the design to
+  mislead the next slice.
 - [ ] **The closing ritual (AGENTS.md), which needs the owner's go-ahead before the merge.**
   Check mergeable and CI first, then on the owner's yes: squash-merge the PR, fast-forward
   local `main`, delete the branch locally and on the remote, and reflect — durable facts into
