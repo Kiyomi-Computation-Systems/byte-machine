@@ -1,6 +1,10 @@
 # Milestone 4 Design — Fields, Actions, and Branches
 
-Status: **NOT STARTED.** Gate 0 not yet discharged; no slice begun. Authored
+Status: **IN PROGRESS.** Gate 0 discharged 2026-08-31 (PR
+[#37](https://github.com/Kiyomi-Computation-Systems/byte-machine/pull/37), commit
+`f215af7`); Slice ①a planned 2026-09-01 —
+`docs/plans/milestone-4-slice-1a-implementation-plan.md`, which lands with the
+slice itself — not yet merged; ①b, ② and ③ not begun. Authored
 2026-08-31, the day Milestone 3 closed (Slice ③ merged as PR
 [#35](https://github.com/Kiyomi-Computation-Systems/byte-machine/pull/35),
 commit `2351b58`; the standards follow-up as PR
@@ -12,6 +16,17 @@ the twice-deferred `parser-error-*` family; the generated ABI stops versioning
 its constructor *name* while keeping its version *check*; the milestone is cut
 into four product slices rather than three; and the `eof-terminal` rewrite is a
 task inside Slice ② rather than a slice of its own.
+
+> **Amendments** — later notes at the foot of this file reach back into the text
+> above them. Nothing above a note is rewritten; where a *live work order* was
+> false it is corrected in place and marked at the site, because a false
+> instruction is a landmine rather than evidence (AGENTS.md).
+>
+> - **2026-09-01 (Slice ①a planning)** — **amends §5 and §6**: ten findings from
+>   writing Slice ①a's plan against the tree at `c3ceec2`, including a three-way
+>   contradiction about `reserved-member-3`, a pin whose stated cause of death is
+>   the wrong edit, two counts that read distributively but are aggregates, and an
+>   obligation decision 0018 delegates to ①a that §5 never names.
 
 Governing plan:
 [byte-machine-implementation-plan.md](./byte-machine-implementation-plan.md) §25
@@ -523,7 +538,8 @@ declaration. Task 3 writes the three guards as three textually distinct forms
 and re-anchors both pins.
 
 **The second hazard is that the differential's own tuple silently stops
-comparing what §22.4:1271 requires.** Eight programs build a result tuple
+comparing what §22.4:1271 requires.** *(Amended 2026-09-01 — item I at the
+foot.)* Eight programs build a result tuple
 containing `(parser-result-error r)` and compare interpreter against generated
 by whole-value equality. Six end in that read
 (`differential-one-byte-tests.sps:34`, `differential-eof-tests.sps:28`,
@@ -738,9 +754,15 @@ omission.
 6. **The `reserved-member-3` drift guard.** `compile.sls:101-107` states the gap
    in its own words — `reserved-member-3` is "unchanged -- checked, not assumed,
    since it has no automated drift guard" — while `reserved-member-2` has had
-   one since `reserved-drift-tests.sps:32-40`. This slice adds two entries to
-   member-3, so the gap is demonstrated rather than theoretical. Build the guard
-   the way `reserved-drift-tests.sps` builds member-2's: render a fixture
+   one since `reserved-drift-tests.sps:32-40`. This slice adds **three** entries
+   to member-3 — the seventh `exec` parameter's name in task 3, and `errs` and
+   the position-kind loop variable in task 5 — taking `compile.sls:53` from
+   twelve to fifteen, so the gap is demonstrated rather than theoretical.
+   *(Corrected in place 2026-09-01 from "two entries"; item A at the foot.)*
+   Build the guard
+   the way `reserved-drift-tests.sps` builds member-2's *(amended 2026-09-01 —
+   item G at the foot: that file does no such thing, and the three subtractions
+   below leave eight symbols the subset assertion fails on)*: render a fixture
    exercising every state kind, `read` the emitted datum, collect every symbol
    **outside** a `quote` form, subtract `(environment-symbols (environment
    '(rnrs)))`, the runtime's export set, and the caller's binding, and assert
@@ -796,11 +818,13 @@ draw in Slice ③. Only the generator's remaining hardening — the bounded
 invalid-machine generator and deterministic failure-seed reporting — is M7
 (§25:1618-1621).
 
-**Mutation pins that die in this slice.** Re-anchoring is a re-**measurement**
+**Mutation pins that die in this slice.** *(Amended 2026-09-01 — item H at the
+foot.)* Re-anchoring is a re-**measurement**
 of each pin's failure signature, not a text edit, and per AGENTS.md:170-171 the
 obligation is recorded in the tree by mutation LABEL rather than line number;
 AGENTS.md:172-187 requires the sweep to run in both directions, including a
-control on the merge base. Measured on the shipped tree by `FILE`, with 44
+control on the merge base. *(Amended 2026-09-01 — item F at the foot.)* Measured
+on the shipped tree by `FILE`, with 44
 verify.sls, 42 runtime.sls, 24 compile.sls, 23 normal-ir.sls and 20
 interpret.sls pins to sweep:
 
@@ -817,9 +841,12 @@ interpret.sls pins to sweep:
   into finish is rejected" — matched by three siblings, an under-anchoring fixed
   by re-anchoring alone. Run the whole-pass audit in both directions with a
   merge-base control, by the method Pass 33's own header describes
-  (`:3230-3241`). Pass 37's two
+  (`:3230-3241`). *(Amended 2026-09-01 — item C at the foot.)*
+  Pass 37's two
   verify.sls pins (`:5333`, `:5342`) target `valid-name?` itself, which Task 1
-  reuses rather than edits; re-check their `SITES` rather than assuming them.
+  reuses rather than edits — the `invalid-name` *code*, not the predicate, which
+  cannot be applied to a reason (item J at the foot); re-check their `SITES`
+  rather than assuming them.
 - Both ABI-guard pins. `runtime: a mismatched generated-runtime ABI version is
   accepted` (`:2543-2544`) and `runtime: a mismatched /v2 ABI version is
   accepted` (`:2724-2725`) both FIND guard text this slice rewrites, and the
@@ -835,7 +862,8 @@ interpret.sls pins to sweep:
   (`:5252`), `compile: the exhausted-dispatch eof branch drops the resolved
   default-eof code` (`:5271`), and `compile: the final newline is emitted as
   CRLF` (`:5362`), whose FIND `" exec)))\n"))))` is the render tail the
-  constructor rename rewrites. The finish, pause and transition-byte pins
+  constructor rename rewrites. *(Amended 2026-09-01 — item B at the foot.)*
+  The finish, pause and transition-byte pins
   (`:5264`, `:5306`, `:5314`, `:5424`, `:5997`, `:6146`) survive textually and
   must be re-checked for `SITES`, not assumed.
 - The seven pins carrying a measured `got` digest — `:4773`, `:4780`, `:4787`,
@@ -845,7 +873,8 @@ interpret.sls pins to sweep:
   lane, but a 'got' digest can only be RE-MEASURED, by applying that one
   mutation to a staged copy and reading what it printed." Staging is destructive
   to unstaged work; commit before measuring.
-- Pass 49's branching-golden pass (`:6486`-`:6548`), whose narrative records the
+- Pass 49's branching-golden pass (`:6486`-`:6548`) *(Amended 2026-09-01 — item D
+  at the foot.)*, whose narrative records the
   mutant's own byte count and its digest `14649231454401036534`; both are
   measurements of a golden that moves three times inside this slice.
 - Rider: the format version byte at normal-ir.sls:254 has **no** pin — `rg` for
@@ -869,7 +898,8 @@ that reservation one layer down.
 nonportable reason, every shipped fixture still verifies clean, and a reason
 containing `"`, `\` and LF verifies clean, emits escaped, and yields a generated
 library that `load`s. Pass 33's pin count is recorded as measured after the edit
-(44 verify.sls pins by `FILE` pre-slice), and its whole-pass sweep is reported
+(44 verify.sls pins by `FILE` pre-slice) *(Amended 2026-09-01 — item C at the
+foot.)*, and its whole-pass sweep is reported
 in both directions against the merge-base control, with any residue recorded in
 the tree beside its pin by LABEL. `reserved-member-2` holds 31 symbols and
 `byte-machine.unit.reserved-drift.chez.{source,aot}` is green; the new member-3
@@ -880,6 +910,7 @@ and all three goldens name the unversioned constructor, ABI version 3, and a
 values returns zero matches from `rg -o '<value>' test/ src/`, and each
 successor appears at the same per-file counts (2 in `compile-tests.sps`, 3 in
 `normal-ir-tests.sps`, 1 per golden, 11 in `SchemeMutationSuite.cmake`).
+*(Amended 2026-09-01 — item E at the foot.)*
 `parser-error?` is true at every error site of all three shipped fixtures in
 both executors, with the five §22.4:1271 members equal across lanes and the
 state id asserted present-and-excluded; all three §12.7 position kinds are
@@ -1092,9 +1123,12 @@ Tasks, in an order where each step's gate is what makes the next one safe:
    `runtime.sls:114`) while the `'v2` arm *reads a slot* (`:117-118`) — so the
    interpreter lane answers a new `'field-initials` message and the generated
    lane reads ①a's reserved payload slot. Nothing here emits a new local: the
-   store first reaches `exec` in Slice ②, which owns that parameter's name and
-   its `reserved-member-3` entry, and that is what keeps a zero-field machine's
-   emitted text byte-identical to ①a's. `parser-reset!` then restores the
+   store first reaches `exec` in Slice ②, and that is what keeps a zero-field
+   machine's emitted text byte-identical to ①a's. *(Corrected in place
+   2026-09-01: this sentence also claimed Slice ② owns that parameter's name and
+   its `reserved-member-3` entry, contradicting §5 task 3 and decision 0019 item
+   3(c), which place both in ①a. Item A at the foot.)* `parser-reset!` then
+   restores the
    declared initials per §12.5:738, and its comment (pre-slice,
    `runtime.sls:328`, `;; Field, span, and poisoned/busy state do not exist yet
    (M4/M5).`) is amended to name what now exists and what still does not.
@@ -2411,3 +2445,124 @@ explicitly rather than relied on to land somewhere; `runtime.sls:250-254`,
 (`runtime.sls:145-164`, `:239-254`, `:318-322`) and feed-outcome-status dispatch
 (`runtime.sls:158-163`, `:265-270`) take **no M4 change** — poisoned/busy are M5
 rows, and M4 introduces no new status.
+
+---
+
+## 2026-09-01 (Slice ①a planning) — ten findings from planning §5 against the tree
+
+Measured at `c3ceec2` while writing
+`docs/plans/milestone-4-slice-1a-implementation-plan.md` — which lands with Slice
+①a, not with this note — whose §0 and §0b carry each item in the form a task can
+execute. This note is the
+record; the plan is the work order. Items A and G additionally corrected a *live*
+work order in place above, marked at the site, because a false instruction is a
+landmine and what it used to say is in git — every other item below is annotated
+only, because the sentence it names was never true and is load-bearing evidence
+of what the design believed.
+
+**A. `reserved-member-3` — a three-way contradiction, resolved by decision 0019.**
+§5 task 3 says the seventh `exec` parameter's name "joins `reserved-member-3`
+here, not in ②"; §6 task 6 said Slice ② "owns that parameter's name and its
+`reserved-member-3` entry"; §5 task 6 said "this slice adds two entries".
+[Decision 0019](../decisions/0019-encoding-format-2-pre-provisioned.md) item 3(c)
+is the binding record and agrees with §5 task 3 — the entry lands in ①a. The slice
+therefore adds **three** entries (the parameter in task 3, `errs` and the
+position-kind loop variable in task 5) and `compile.sls:53` goes from twelve to
+**fifteen**. §5 task 6 and §6 task 6 are corrected in place; §5 task 3 stands
+unchanged. The Appendix's `compile` row is consistent as written: the *field-store
+local* it assigns to Slice ② is a different identifier from the parameter.
+
+**B. The CRLF pin dies from the payload, not from the rename.** §5's die-list says
+`compile: the final newline is emitted as CRLF` (`:5362`) FINDs "the render tail the
+constructor rename rewrites". The rename is on `compile.sls:164`; the pinned FIND
+`" exec)))\n"))))` is `compile.sls:165`, which the *metadata payload's placement*
+rewrites. The pin does die — the attribution is what is wrong — and it is owed by
+the task that places the payload (§5 task 3), not by task 5.
+
+**C. "44 verify.sls pins" is a whole-FILE count, not Pass 33's.** Measured by
+`FILE` at `c3ceec2`: Pass 33 holds **42**; the other two are Pass 37's, declared
+under `byte-machine.verify.identifier-repertoire.chez.source`. §5's die-list and
+its exit evidence both attribute 44 to Pass 33, so an implementer recording 44 as
+the pre-slice baseline reports a wrong delta after task 1. The per-FILE counts §5
+gives for the five source files — 44, 42, 24, 23, 20 — are each correct.
+
+**D. Pass 49's cited range stops 86 lines short of the pass.** `:6486` is the
+header, but the pass runs to `byte_machine_mutation_run` at **`:6634`**: a second
+occurrence of the measured byte count `3849` at `:6580`, the verify command at
+`:6602-6613`, and a mutation block at `:6615-6632` carrying the 23rd
+`normal-ir.sls` pin. Re-baselining `:6486`-`:6548` alone leaves stale numbers in
+the same pass. `3849` has a third site the design does not name at all,
+`test/support/harness/byte-machine/test/http-version-machine.sls:19`.
+
+**E. The fingerprint per-file counts are an aggregate, read distributively.**
+"each successor appears at the same per-file counts (2 … 3 … 1 per golden, 11 …)"
+sums to 19 across **all four** values, not per value. Measured per value: the
+one-byte fingerprint appears 9 times, the node-routing eof one 3, the pause one 5,
+the http-version one 2 — 19 in `src/` + `test/`, none in `src/`. The node-routing
+value has **no committed golden** and the http-version value has **no
+`normal-ir-tests.sps` assertion**, so "each new value written at every site" means
+four different site sets. `CHANGELOG.md` carries eight further occurrences, which
+are records of what was measured then and are annotated, never rewritten.
+
+**F. Every `AGENTS.md` line citation in this document is stale.** `AGENTS.md`
+gained lines in `462d737` and `c3ceec2`, both after this document's commit
+`f215af7`. Offsets, from `git diff f215af7..HEAD -- AGENTS.md --unified=0`: lines
+≤29 unchanged, 30-238 **+13**, 239-**249** **+32**, ≥251 **+43** — old line 250 was
+replaced by a twelve-line block (`@@ -250 +282,12 @@`) and so has no single HEAD
+line at all. So §4.3's
+`AGENTS.md:147` is HEAD `:160`, §5's `:170-171` is `:183-184`, and §5's
+`:172-187` is `:185-200`. Each of HEAD's `:170-171` and `:172-187` is a *different*
+rule that reads plausibly, so a transcribed citation points at the wrong
+obligation rather than at a missing one.
+
+**G. §5 task 6's guard recipe describes something `reserved-drift-tests.sps` does
+not do.** That file sorts `reserved-member-2`, sorts
+`(environment-symbols (environment '(byte-machine runtime)))`, and asserts one
+`check-equal`; it renders nothing, `read`s nothing, and walks no `quote` forms. The
+member-3 guard is new construction. Two further facts the recipe omits:
+`reserved-member-3` is **not exported** from `(byte-machine compile)`
+(`compile.sls:11-13` exports six names), so the lane cannot read it without an
+export edit; and the three subtractions leave eight symbols the subset assertion
+fails on — `library`, `export`, `import`, `generated`, `rnrs`, `byte-machine`,
+`runtime`, and the machine name, which is *not* the caller's binding. Whether
+Chez's `(rnrs)` binds the library-header keywords as identifiers is asserted by
+nothing in this tree. Related and measured: `(rnrs)` **does** bind `fields`, as
+`define-record-type`'s auxiliary keyword, so naming the seventh `exec` parameter
+`fields` would make this same subtraction swallow it and its member-3 entry could
+never be exercised.
+
+**H. The die-list omits six pins, four of which die at *declaration*.** Named by
+LABEL, since the lines are stale on arrival: `runtime: a /v2 finish does not drive
+exec with finish? true` (its FIND is `runtime.sls:262`, inside `parser-finish-v2!`,
+so §5's catch-all for `parser-feed-op!`/`parser-finish-op!` does not reach it);
+`compile: reserved-member-2 drops a runtime export (silent drift)` (its FIND is the
+interior of `compile.sls:48`, which task 2 grows); `runtime: advance does not
+consume the byte` (a **swap pair** whose REPLACE is byte-identical to
+`runtime.sls:200`); `runtime: a finish reaching a named error node does not store
+its value` (its FIND is `runtime.sls:300-302` entire); and the two `normal-ir:`
+pins whose FINDs are `normal-ir.sls:274` and `:147` verbatim, which task 4 rewrites
+unless the reason is routed and `errcode` left alone.
+
+**I. The eight tuple builders are not the whole edit surface.** §5 reasons about
+"eight programs build a result tuple containing `(parser-result-error r)`".
+Measured: `parser-result-error` is read at **35 sites in 15 files** under
+`test/common/`. Beyond the eight, `differential-pause-tests.sps:112` is a
+bare-symbol assertion *inside* a differential program that a projection wired into
+`rfields` does not reach; `compile-tests.sps:172` and `:177` pin the emitted
+error-arm text with no `parser-result-error` in sight; and three
+`(not (eq? … 'unexpected-byte))` disjuncts sit inside accumulator guards that go
+red, not vacuous. The eight builders also have **five** different shapes, and
+`differential-sequence-tests.sps` has no `rfields` at all.
+
+**J. Two obligations §5 does not name.** First, `valid-name?` cannot be applied to
+a reason: it opens with `(symbol->string sym)` and a reason is a string
+(`ir.sls:282-283`), and §10.1:480 gives names and reasons two different
+repertoires. What §5 licenses is reuse of the `invalid-name` **code**, per
+§16.2:886; the predicate is new. Second,
+[decision 0018](../decisions/0018-unversioned-generated-abi-constructor.md)'s
+Consequences says the runtime's `'v1` executor path "becomes unconstructable, and
+its disposition is owed by the slice that lands this, not by this record" — and §5
+never names it. Measured: `runtime-tests.sps` calls `(v1-machine)` at eleven sites,
+all of which start raising once `/v1` refuses every version, so
+`byte-machine.unit.runtime.chez.{source,aot}` and Pass 32's baseline go red and two
+shipped mutations lose their only witness.
