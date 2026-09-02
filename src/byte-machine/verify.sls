@@ -120,8 +120,17 @@
       reached))
 
   ;; PASS 1: schema.
+  ;; PASS 1: §16.2:884 — invalid descriptor shapes AND unsupported IR versions.
+  ;; The version half was listed and unimplemented through Milestone 3 because
+  ;; the version had no accessor; Slice ①b gives it one. Both halves report
+  ;; `invalid-shape`: §16.2:884 states them as one bullet, and §4.6's
+  ;; two-new-codes budget for this milestone is spent on the field codes.
   (define (pass-schema m)
-    (if (machine? m) '() (list (make-diagnostic 'invalid-shape #f "not a machine"))))
+    (cond ((not (machine? m))
+           (list (make-diagnostic 'invalid-shape #f "not a machine")))
+          ((not (= (machine-ir-version-of m) supported-ir-version))
+           (list (make-diagnostic 'invalid-shape #f "unsupported IR version")))
+          (else '())))
 
   ;; PASS 2: name resolution — duplicate node names; duplicate error names; every
   ;; transition target and error reference resolves.

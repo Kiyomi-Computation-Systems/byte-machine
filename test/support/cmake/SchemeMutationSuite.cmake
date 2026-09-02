@@ -736,7 +736,7 @@ cmake_minimum_required(VERSION 3.26)
 # had no mutation, the `eq? ... 'reexecute` test itself. No pass is added, so
 # passes stay at 46 and mutations become 235 + 1 = 236.
 set(EXPECTED_PASSES 48)
-set(EXPECTED_MUTATIONS 253)
+set(EXPECTED_MUTATIONS 255)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3542,12 +3542,56 @@ byte_machine_mutation(
 # (distinct from the machine-name site above). Each has its own rejection case
 # in verify-tests.sps; the project's own SITES-2 split precedent (harness-group
 # vs with-cleanup) requires each site of a multi-site decision to be witnessed.
+# Milestone 4 Slice ①b task 3: §16.2:884's unsupported-IR-version half, listed
+# since Milestone 1 and unimplemented until this slice.
+#
+# BOTH directions are declared and BOTH are caught. The design (§6 task 3) said
+# the permissive direction was unwitnessable -- "a test cannot forge a machine?
+# object" -- and told the implementer to declare it EXPECT_SURVIVES. Measured
+# false: descriptors are bare R6RS vectors, so a test copies the tag with
+# (vector-ref m 0), an (rnrs) primitive needing no private import, and builds a
+# machine carrying any version it likes. AGENTS.md reserves EXPECT_SURVIVES for
+# the genuinely unwitnessable, and "this cannot be tested" is a claim to
+# demonstrate; here the demonstration goes the other way.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an unsupported IR version is accepted"
+  FIND [[          ((not (= (machine-ir-version-of m) supported-ir-version))]]
+  REPLACE [[          ((and #f (not (= (machine-ir-version-of m) supported-ir-version)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a machine carrying an unsupported IR version is invalid-shape: unsupported version is reported")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "ir: the supported IR version is not the one machines are stamped with"
+  # The restrictive direction, and the reason supported-ir-version is a second
+  # constant rather than a reuse of the stamp: forcing the STAMP changes what is
+  # built, forcing THIS changes what is accepted, and only the second is a
+  # verifier decision. Every shipped fixture becomes unsupported at once.
+  FIND [[  (define supported-ir-version 1)]]
+  REPLACE [[  (define supported-ir-version 2)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a machine at the supported IR version is not reported: no diagnostics")
+
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: the schema guard accepts a non-machine"
-  FIND [[(if (machine? m) '() (list (make-diagnostic 'invalid-shape #f "not a machine")))]]
-  REPLACE [[(if #t '() (list (make-diagnostic 'invalid-shape #f "not a machine")))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid-shape")
+  # Re-anchored in Milestone 4 Slice ①b task 3: pass-schema became a cond when
+  # §16.2:884's unsupported-IR-version half landed beside the shape half. The pin
+  # was also RE-ANCHORED ON ITS SIGNATURE, not only its FIND: bare "invalid-shape"
+  # is now emitted by two arms of the same pass, so it no longer resolves to one
+  # (case, check) pair. It names its own case now.
+  # Mutates the CODE the arm reports, not the guard that reaches it. Suppressing
+  # the guard was tried first and rejected on measurement: with pass-schema now a
+  # cond, skipping the shape arm lets the version arm call an accessor on a
+  # non-vector, so the mutant dies by a RAISE rather than by the failed
+  # comparison this pin names -- AGENTS.md's "try the opposite constant first".
+  # The FIND carries the message string because 'invalid-shape alone now occurs
+  # twice in this pass.
+  FIND [[           (list (make-diagnostic 'invalid-shape #f "not a machine")))]]
+  REPLACE [[           (list (make-diagnostic 'invalid-name #f "not a machine")))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a non-machine handed to verify-machine is invalid-shape: invalid-shape")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source

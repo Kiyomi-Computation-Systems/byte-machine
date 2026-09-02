@@ -26,6 +26,7 @@
           make-finish-node finish-node? finish-node-name
           make-pause-node pause-node? pause-node-name pause-node-continuation
           make-error-node error-node? error-node-name error-node-error-name
+          machine-ir-version-of supported-ir-version
           make-uint-field uint-field? uint-field-name uint-field-width
           uint-field-initial uint-field-source-label
           make-error-declaration error-declaration? error-declaration-name
@@ -385,6 +386,11 @@
   ;; --- machine (default-eof-error is a declared error NAME) ---
   (define machine-tag (tag 'byte-machine-machine))
   (define machine-ir-version 1)     ; stamped; v0.1 callers do not override (§9.1)
+  ;; The version pass-schema accepts. Named separately from the stamp so the two
+  ;; can be told apart by a mutation: forcing the stamp changes what is built,
+  ;; forcing this changes what is accepted, and only the second is a verifier
+  ;; decision.
+  (define supported-ir-version 1)
   (define (make-machine name entry fields callbacks spans errors nodes
                         default-eof-error source-label)
     (require-symbol 'make-machine 'name name)
@@ -406,6 +412,11 @@
     (vector machine-tag machine-ir-version name entry fields callbacks spans
             errors nodes default-eof-error source-label))
   (define (machine? x) (tagged? machine-tag x))
+  ;; Slot 1, stamped as the constant above and never taken from an argument.
+  ;; It had no accessor until Milestone 4 Slice ①b, which is why §16.2:884's
+  ;; unsupported-IR-version half was listed and unimplemented: pass-schema could
+  ;; not read what it was meant to check.
+  (define (machine-ir-version-of m) (vector-ref m 1))
   (define (machine-name m) (vector-ref m 2))
   (define (machine-entry m) (vector-ref m 3))
   (define (machine-fields m) (vector-ref m 4))

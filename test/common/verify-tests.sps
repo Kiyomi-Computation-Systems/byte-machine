@@ -151,6 +151,47 @@
                            'Default-Eof)))
           (check-equal "one finding" (length ds) 1)
           (check-equal "invalid-name" (car ds) 'invalid-name))))
+    ;; Milestone 4 Slice ①b task 3: §16.2:884's unsupported-IR-version half,
+    ;; listed since Milestone 1 and unimplemented until now.
+    ;;
+    ;; The design (§6 task 3) said no external test could reach this arm --
+    ;; "machine-tag is a freshly allocated, unexported vector compared with eq?,
+    ;; so a test cannot forge a machine? object" -- and on that ground told the
+    ;; implementer to declare the permissive direction EXPECT_SURVIVES. That was
+    ;; measured false before this slice began. Descriptors are bare R6RS vectors
+    ;; with no opacity, so (vector-ref m 0) yields the tag using an (rnrs)
+    ;; primitive and no private import.
+    ;;
+    ;; This is a TEST-ONLY device. It reaches through the representation on
+    ;; purpose, because make-machine stamps the version as a constant and §9.1's
+    ;; fixed arity gives the public API no way to produce a wrong one -- so this
+    ;; is the only thing that can witness the check. Confined to these two cases.
+    (harness-case "a machine carrying an unsupported IR version is invalid-shape"
+      (lambda ()
+        (let* ((good (machine (one-byte-nodes (make-edge 'reject 'reexecute))))
+               (forged (vector (vector-ref good 0) 99
+                               (vector-ref good 2) (vector-ref good 3)
+                               (vector-ref good 4) (vector-ref good 5)
+                               (vector-ref good 6) (vector-ref good 7)
+                               (vector-ref good 8) (vector-ref good 9)
+                               (vector-ref good 10))))
+          ;; The premise, asserted: if the representation ever changes so that
+          ;; the tag cannot be copied or the version leaves slot 1, the case
+          ;; below would pass vacuously -- reporting invalid-shape for "not a
+          ;; machine" rather than for the version -- instead of telling anyone
+          ;; the device broke. (machine? itself is private and does not come
+          ;; through the façade, so the premise is asserted structurally.)
+          (check "the tag was copied" (eq? (vector-ref forged 0) (vector-ref good 0)))
+          (check-equal "and the version is not the supported one"
+                       (vector-ref forged 1) 99)
+          (check "unsupported version is reported" (has-code? forged 'invalid-shape)))))
+    (harness-case "a machine at the supported IR version is not reported"
+      (lambda ()
+        ;; The other direction, and the one that fails if the supported constant
+        ;; is mutated: every shipped fixture becomes unsupported at once.
+        (let ((ds 'seed))
+          (set! ds (codes (machine (one-byte-nodes (make-edge 'reject 'reexecute)))))
+          (check-equal "no diagnostics" (length ds) 0))))
     (harness-case "a non-machine handed to verify-machine is invalid-shape"
       (lambda ()
         (check "invalid-shape" (has-code? 'not-a-machine 'invalid-shape))))
