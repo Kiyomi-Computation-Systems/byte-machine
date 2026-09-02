@@ -116,6 +116,20 @@
   (`\\.` for a dot). The discriminator is the *pair*
   (`EXPECT_STATUS`, `EXPECT_OUTPUT_MATCHES`): mutations sharing a pin but
   declaring different statuses are still separated.
+* **Re-anchor a mutation's REPLACE with its FIND, or the mutant changes two things and the pin proves neither.**
+  Re-anchoring is usually described as fixing the `FIND`, and that is the half
+  the suite reports: a stale `FIND` fails loudly at declaration. A stale
+  `REPLACE` fails at nothing. It still applies, the mutant still exits nonzero,
+  and the pin still matches — but the mutant now differs from the baseline in
+  **two** ways, so the failure it produces no longer isolates the decision the
+  mutation names. Measured here twice in one slice: a re-anchored `FIND` of
+  `parser-finish-op!`'s error arm left its `REPLACE` at the pre-slice text, so
+  the mutant dropped the store *and* reverted the error value; and a new
+  mutation's `REPLACE` was written as a no-op, which shipped `UNCAUGHT` and said
+  so. After re-anchoring, read the `FIND` and the `REPLACE` **together** and ask
+  what single decision separates them. A swap pair — where each mutation's
+  `REPLACE` is the other's `FIND` — must move in lockstep for the same reason.
+
 * **Judge a pin against the other mutants in its lane, not by reading it.**
   Static inspection cannot see a collision; re-judging each pin through
   `byte_machine_mutation_verdict` against every *other* mutation's captured
@@ -239,6 +253,21 @@
   exact literal, an exact count, or "no output / exit 1" — and when a step needs
   judgement ("read the surrounding lines and confirm the record's claim"), say so
   and separate it, so the mechanical half keeps a hard pass/fail.
+
+* **Append, never insert, into a file other documents cite by line.**
+  `byte-machine-implementation-plan.md` is navigated exclusively by
+  `§section:line`, and the design and every decision record carry dozens of
+  those pointers into it. An insertion anywhere in the body silently re-numbers
+  all of them, and no link check can see it because every citation still points
+  at a real line. Measured: a ten-line disposition note inserted at §25:1570
+  moved `§25:1572` — cited by decision 0022 for "callbacks are Milestone 5" —
+  and `§29:1754` onto unrelated text. Dispositions and dated notes therefore go
+  in an **appended** section at the foot, which shifts nothing above it. The
+  same rule applies to any file whose content other files address by line, and
+  the corollary is the safer habit: **cite by content where you can**, because a
+  line number into a file your own branch edits is stale on arrival — this
+  branch produced a second instance of exactly that, in a mutation comment
+  citing `design:834-836`, stale by its own merge.
 
 ### Documentation & record discipline
 
