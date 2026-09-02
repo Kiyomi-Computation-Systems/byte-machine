@@ -30,4 +30,4 @@
       ((7) (byte-machine-make-feed-outcome/v1 (quote error) pos (quote unexpected-byte) 7 off))
       (else (assertion-violation (quote exec) "unknown state" st)))))
   (define pausem
-    (byte-machine-make-compiled-machine 3 15725897457025557005 0 exec (quote #(#())))))
+    (byte-machine-make-compiled-machine 3 17903327606435836645 0 exec (quote #(#())))))

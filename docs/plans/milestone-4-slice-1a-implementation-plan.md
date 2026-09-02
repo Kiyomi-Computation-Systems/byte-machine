@@ -1026,8 +1026,11 @@ with the field count **0** and no per-field records.
 
 **`put-symbol` cannot carry a reason.** `normal-ir.sls:67-69`'s `put-symbol` calls
 `(symbol->string sym)`, which raises on a string, and `ir.sls:282-283` validates
-`(string? reason)`. Add a `put-string`-shaped helper; a step written as
-`(put-symbol p (reason …))` does not compile.
+`(string? reason)`. Add a helper of the same wire shape (u16be byte length, then UTF-8).
+
+**Do not name it `put-string`: `(rnrs)` exports that**, and a second definition in the
+library body is a duplicate-definition error at expand time — measured 2026-09-02, after
+writing it that way. It is `put-reason`.
 
 **Do not do a global replace of `(put-u8 p 1)` (H7).** It occurs three times — `:254` the
 version byte, `:274` the default-eof tag, `:275` the stop tag — and rewriting all three moves
@@ -1078,8 +1081,18 @@ Use the per-value matrix in **H9**, not the design's aggregate sentence. Each va
 
 Seven of the nineteen sites are `got` digests in mutation pins, which can only be
 **re-measured** by staging that one mutation and reading what it printed — never recomputed
-(`SchemeMutationSuite.cmake:843-852`, whose "five" is wrong at seven; H11). **Staging is
-destructive to unstaged work: commit before measuring.** Four more of the eleven
+(`SchemeMutationSuite.cmake:843-852`, whose "five" is wrong at seven; H11).
+
+**Executed 2026-09-02, and the order matters more than the plan said.** A blanket
+old→new replace across `src/ test/` is the right move for the twelve recomputable sites and
+the **wrong** one for the seven `got` digests: it writes the new *baseline* where the
+*mutant's own* digest belongs, and the suite then reports seven wrong-reason failures rather
+than passes. Do the blanket replace, then re-measure all seven from a staged copy and
+overwrite. Stage into a scratch directory and run `chez --libdirs` against it — **not** into
+the working tree, where the revert would take the task's own unstaged work with it.
+One of the seven, `normal-ir: a dispatch's default-eof routing is not encoded into the
+fingerprint`, additionally has its FIND rewritten by this task (H1), so it is re-anchored
+*before* it can be re-measured. Four more of the eleven
 `SchemeMutationSuite.cmake` occurrences are narrative comments no check reads (`:4942`,
 `:4943`, `:4951`, `:6548`) and must move too, or the exit evidence fails (H10).
 
@@ -1098,16 +1111,28 @@ The slice's own oracle is otherwise unwitnessed there.
 `:276`), so the pin must use a longer surrounding string unique in the file. Re-anchor
 `:4884`, whose FIND this task deletes (H1).
 
+**And the obvious REPLACE collides too — measured, not predicted.** Putting the byte back to
+**1** produces the *identical* one-byte digest as the shipped `normal-ir: the FNV offset
+basis is changed` mutation: flipping the basis's low bit and flipping the first hashed
+byte's low bit reach the same FNV-1a state, so neither pin can discriminate the other's
+mutant. Confirmed by running a control on each. The shipped pin is the incumbent and is left
+alone; the new mutation uses version **3**, which has never been emitted and collides with
+nothing. This is AGENTS.md's both-directions rule paying off inside a single task — the
+check that an *existing* mutant matches the pin you are *adding*.
+
 - [ ] **Step 9: Gate.**
 
 ```bash
 rg -n -F '(encode-normal entry states)' src/byte-machine/private/normal-ir.sls
 ```
-Expected: **exactly two** lines, both before and after this task — the definition header
-(`(define (encode-normal entry states)`, `:251`) and the call site (`:286`). The gate is that
-the **call** still reads `(encode-normal entry states)` with its two arguments unchanged,
-even though `:286` now also carries the debug-map argument to `make-normal-machine`. One
-line, or three, is the failure.
+Expected: the definition header and the call site, with the **call** still reading
+`(encode-normal entry states)` and its two arguments unchanged, even though its line now
+also carries the debug-map argument to `make-normal-machine`.
+
+**Measured 2026-09-02: three lines, not two.** The third is the comment this task adds above
+`normal-machine-debug-map`, which quotes the call as its evidence that the map cannot
+perturb the fingerprint. Count the two *code* occurrences; a bare line count is the wrong
+check here, and this is the plan predicting a literal that its own task then changed.
 
 For each superseded value V:
 ```bash

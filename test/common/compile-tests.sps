@@ -169,7 +169,7 @@
         ;; member 0 -- ①b would have to add one, moving every golden in the
         ;; slice whose headline invariant is that none moves.
         (check "unversioned call"
-               (has? "(byte-machine-make-compiled-machine 3 4236938459847922092 0 exec (quote #(#())))"))
+               (has? "(byte-machine-make-compiled-machine 3 14095574568398596535 0 exec (quote #(#())))"))
         (check "no versioned name survives"
                (not (has? "byte-machine-make-compiled-machine/v")))))
     (harness-case "exec carries the reserved seventh parameter"
@@ -225,7 +225,7 @@
       (lambda ()
         (let-values (((port get) (open-bytevector-output-port)))
           (let ((meta (emit-machine ok 'one-byte-parser port)))
-            (check-equal "fingerprint" (vector-ref meta 1) 4236938459847922092)
+            (check-equal "fingerprint" (vector-ref meta 1) 14095574568398596535)
             (check-equal "byte count matches render"
                          (vector-ref meta 2) (bytevector-length (render-machine ok 'one-byte-parser)))
             (check-equal "bytes written match render"

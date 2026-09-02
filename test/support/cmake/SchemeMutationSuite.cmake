@@ -732,7 +732,7 @@ cmake_minimum_required(VERSION 3.26)
 # had no mutation, the `eq? ... 'reexecute` test itself. No pass is added, so
 # passes stay at 46 and mutations become 235 + 1 = 236.
 set(EXPECTED_PASSES 46)
-set(EXPECTED_MUTATIONS 238)
+set(EXPECTED_MUTATIONS 241)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -4819,21 +4819,21 @@ byte_machine_mutation(
   LABEL "normal-ir: the FNV offset basis is changed"
   FIND [[(define fnv-offset 14695981039346656037)]]
   REPLACE [[(define fnv-offset 14695981039346656038)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 4236938459847922092, got 12950784969855027655")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 14095574568398596535, got 2974960947541485368")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: the FNV prime is changed"
   FIND [[(define fnv-prime  1099511628211)]]
   REPLACE [[(define fnv-prime  1099511628212)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 4236938459847922092, got 4383449027582801924")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 14095574568398596535, got 16123314695484888068")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: the byte is never mixed into the hash"
   FIND [[(* (bitwise-xor h (bytevector-u8-ref bv i)) fnv-prime)]]
   REPLACE [[(* h fnv-prime)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 4236938459847922092, got 11573569732163983077")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 14095574568398596535, got 1284000904169526997")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
@@ -4925,6 +4925,57 @@ byte_machine_mutation(
   REPLACE [[(error-declaration-name (car es)) (loop (cdr es))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "code -- expected unexpected-byte, got rejected")
 
+# Milestone 4 Slice ①a task 4 (decision 0019). Three decisions the encoding
+# gained here, none of which had a witness before: the format version byte, the
+# reserved field count, and the declaration's static reason.
+#
+# The version byte could not be pinned on its own text. `(put-u8 p 2)` occurs
+# TWICE after the bump -- the version byte and the error-state tag -- and
+# `(put-u8 p 1)` occurred three times before it, so a bare literal FIND reports
+# SITES 2 or 3 and fails at declaration. Each FIND below carries enough
+# surrounding text to be unique in the file.
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the format version byte names the wrong format"
+  # The obvious mutant -- put the byte back to 1 -- was measured and REJECTED: it
+  # produces the identical one-byte digest as the shipped "FNV offset basis is
+  # changed" mutation (2974960947541485368, confirmed by a control run of each).
+  # The two are arithmetically equivalent at FNV-1a's first mix step, since
+  # flipping the basis's low bit and flipping the first hashed byte's low bit
+  # reach the same state, so neither pin could discriminate the other's mutant.
+  # Version 3 has never been emitted and collides with nothing.
+  FIND [[       (put-u8 p 2)
+       (put-u32be p entry)]]
+  REPLACE [[       (put-u8 p 3)
+       (put-u32be p entry)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the IR fingerprint is the measured golden value: fingerprint -- expected 14095574568398596535, got 14172632155698282590")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the reserved field count is not written"
+  # Reserved empty by decision 0019 item 3(a) and read by nothing until Slice
+  # ①b. `encode-normal` is not exported and nothing in the tree decodes the byte
+  # stream, so the only observable of a reserved slot is the fingerprint it
+  # moves -- which is exactly why the slot is written NOW rather than in ①b.
+  FIND [[       (put-u32be p (vector-length states))
+       (put-u16be p 0)]]
+  REPLACE [[       (put-u32be p (vector-length states))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the IR fingerprint is the measured golden value: fingerprint -- expected 14095574568398596535, got 1041389063826219287")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: an error state's reason is dropped from the encoding"
+  # decision 0019 item 2: the reason must enter the ENCODING, not merely be
+  # readable from the source machine, or two machines differing only in a reason
+  # share a fingerprint and the fingerprint stops identifying what was emitted.
+  FIND [[               ((error) (put-u8 p 2) (put-symbol p (normal-error-code s))
+                        (put-reason p (normal-error-reason s)))]]
+  REPLACE [[               ((error) (put-u8 p 2) (put-symbol p (normal-error-code s)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the IR fingerprint is the measured golden value: fingerprint -- expected 14095574568398596535, got 3064965786472452921")
+
 # Milestone 2 Slice ②b-2 (Task 2): the dispatch eof routing is now part of the
 # canonical encoding, so a dispatch state's resolved eof (the one-byte machine
 # routes to the default-eof error, code 'eof) is mixed into the fingerprint.
@@ -4933,9 +4984,15 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: a dispatch's default-eof routing is not encoded into the fingerprint"
-  FIND [[(begin (put-u8 p 1) (put-symbol p (cdr eof)))]]
-  REPLACE [[(begin (put-u8 p 1))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 4236938459847922092, got 11399399754445376357")
+  # Re-anchored in Milestone 4 Slice ①a task 4: the arm gained the declaration's
+  # static reason (decision 0019 item 2), so the old FIND occurs zero times. The
+  # decision this witnesses is unchanged -- the default-eof CODE must reach the
+  # encoding -- so the REPLACE drops put-symbol and keeps the rest.
+  FIND [[(begin (put-u8 p 1) (put-symbol p (cdr eof))
+                             (put-reason p (normal-error-reason s)))]]
+  REPLACE [[(begin (put-u8 p 1)
+                             (put-reason p (normal-error-reason s)))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 14095574568398596535, got 11628869637435983804")
 
 # Milestone 2 whole-branch review (item d): the NODE-eof encode arm -- tag 0 +
 # u32be routed node id -- had no witnessing mutation and no golden, because no
@@ -4953,7 +5010,7 @@ byte_machine_mutation(
   LABEL "normal-ir: a dispatch's node-eof routing target is not encoded into the fingerprint"
   FIND [[(begin (put-u8 p 0) (put-u32be p (cdr eof)))]]
   REPLACE [[(begin (put-u8 p 0))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 9098559711816935340, got 5670164119345830887")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 13828870821654800916, got 15387434986975117383")
 
 # Milestone 2 Slice ③'s Task 4 (the pause node in the normalizer) adds three
 # more mutations to this pass rather than opening a new one. normal-ir-
@@ -4988,8 +5045,8 @@ byte_machine_mutation(
 # question the pin answers. The pair-wise matrix measured this label's FAIL
 # line in the output of SEVEN other mutants of this same pass: every
 # fingerprint-affecting mutation in the lane (FNV offset, FNV prime, byte
-# mixing and error-code resolution -- the four that pin "4236938459847922092"
-# -- node-eof routing, which pins "9098559711816935340", the pause lower arm,
+# mixing and error-code resolution -- the four that pin "14095574568398596535"
+# -- node-eof routing, which pins "13828870821654800916", the pause lower arm,
 # and the tag-value mutation below) moves the pause golden too, because the
 # pause machine is hashed by the same algorithm. So the bare label said only
 # "some fingerprint moved". What separates the siblings is the got value, which is
@@ -4997,14 +5054,14 @@ byte_machine_mutation(
 # That is the same convention as the five above, applied where it is now
 # measured to be necessary, and the re-baseline cost is real but bounded: a
 # future IR-encoding move already re-baselines the pause golden itself
-# (15725897457025557005, in normal-ir-tests.sps), and these two move with it.
+# (17903327606435836645, in normal-ir-tests.sps), and these two move with it.
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: the pause encode arm hashes tag and continuation"
   FIND [[((pause) (put-u8 p 4) (put-u32be p (normal-pause-target s)))]]
   REPLACE [[((pause) (put-u8 p 4))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "pause fingerprint -- expected 15725897457025557005, got 6626362746927380524")
+  EXPECT_OUTPUT_MATCHES "pause fingerprint -- expected 17903327606435836645, got 355204278510953480")
 
 # A third mutation targets the pause TAG VALUE alone (4 -> 3, colliding with
 # finish's own tag byte) rather than the whole payload mutation 2 above
@@ -5026,7 +5083,7 @@ byte_machine_mutation(
   FIND [[(put-u8 p 4)]]
   REPLACE [[(put-u8 p 3)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "pause fingerprint -- expected 15725897457025557005, got 5068390459764251309")
+  EXPECT_OUTPUT_MATCHES "pause fingerprint -- expected 17903327606435836645, got 15135366215981961045")
 
 # Milestone 3 Slice ② Task 2 (decisions 0015, 0016): the sequence prefix trie
 # and its two-phase state-id allocation. Each mutation witnesses one decision
@@ -6597,7 +6654,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # a size check would not notice either. Diffed against the committed golden, the
 # whole difference is the branch state's two arms swapping ((48) before (49)
 # becomes (49) before (48)) and the v2 fingerprint moving
-# 12299125921751534854 -> 14649231454401036534.
+# 16999772257989587335 -> 14649231454401036534.
 #
 # Three neighbouring edits were measured on the same stage and NOT declared
 # here, recorded so the next reader does not re-derive them:

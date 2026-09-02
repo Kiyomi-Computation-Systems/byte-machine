@@ -17,4 +17,4 @@
       ((2) (byte-machine-make-feed-outcome/v1 (quote error) pos (quote unexpected-byte) 2 off))
       (else (assertion-violation (quote exec) "unknown state" st)))))
   (define one-byte-parser
-    (byte-machine-make-compiled-machine 3 4236938459847922092 0 exec (quote #(#())))))
+    (byte-machine-make-compiled-machine 3 14095574568398596535 0 exec (quote #(#())))))

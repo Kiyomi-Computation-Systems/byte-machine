@@ -10,7 +10,8 @@
           normal-machine-fingerprint
           normal-state-kind normal-state-id
           normal-dispatch-transitions normal-dispatch-fallback
-          normal-error-code normal-dispatch-eof normal-pause-target)
+          normal-error-code normal-error-reason normal-dispatch-eof normal-pause-target
+          normal-machine-debug-map)
   (import (rnrs)
           (only (byte-machine private ir)
                 machine-nodes machine-entry machine-errors machine-default-eof-error
@@ -19,20 +20,40 @@
                 byte-case-matcher byte-case-edge matcher-bytes
                 edge-target edge-mode stop-node? error-node? error-node-error-name
                 finish-node? pause-node? pause-node-continuation
-                error-declaration-name error-declaration-code node-name
+                error-declaration-name error-declaration-code error-declaration-reason
+                node-name
                 sequence-dispatch-node? sequence-dispatch-node-cases
                 sequence-dispatch-node-mismatch sequence-dispatch-node-eof-target
                 sequence-case-bytes sequence-case-target))
 
   (define nm-tag (vector 'byte-machine-normal-machine))
-  (define (make-normal-machine entry states fp) (vector nm-tag entry states fp))
+  ;; The debug map is APPENDED after fp, never inserted before it:
+  ;; normal-machine-fingerprint is slot 3 and the emitter reads it, so putting the
+  ;; map ahead of fp would silently renumber that slot and render a debug map
+  ;; where the IR fingerprint belongs in the emitted constructor call.
+  (define (make-normal-machine entry states fp debug-map)
+    (vector nm-tag entry states fp debug-map))
   (define (normal-machine? x) (and (vector? x) (> (vector-length x) 0) (eq? (vector-ref x 0) nm-tag)))
   (define (normal-machine-entry m) (vector-ref m 1))
   (define (normal-machine-states m) (vector-ref m 2))
   (define (normal-machine-fingerprint m) (vector-ref m 3))
+  ;; §17:963's state-ID-to-source-name map, total over internal prefix states.
+  ;; It is what makes parser-error-node-name answerable in the generated lane,
+  ;; where the emitter needs each state's public name as an emission-time
+  ;; literal. It cannot perturb the fingerprint: encode-normal is called as
+  ;; (encode-normal entry states) and never sees names.
+  (define (normal-machine-debug-map m) (vector-ref m 4))
 
   (define ns-tag (vector 'byte-machine-normal-state))
-  ;; (vector ns-tag kind id transitions fallback code eof) ; unused slots #f.
+  ;; (vector ns-tag kind id transitions fallback code eof reason) ; unused slots #f.
+  ;; `reason` (slot 7, Milestone 4 Slice ①a) is the error declaration's static
+  ;; reason STRING, added as its own slot rather than by widening slot 5 or the
+  ;; eof pair: both of those are read by compile.sls through symbol->string, and
+  ;; the eof pair is additionally asserted by whole value in normal-ir-tests.sps,
+  ;; so widening either is three breakages for one slot. An error state carries
+  ;; its own declaration's reason; a dispatch state carries the machine
+  ;; default-eof declaration's when its eof routing is (default . code), and #f
+  ;; when it routes to a node.
   ;; eof (slot 6) is a dispatch state's resolved eof routing:
   ;;   (node . <id>)             -- an exhausted dispatch continues to node <id>
   ;;   (default . <code-symbol>) -- it routes to the machine default-eof error.
@@ -43,6 +64,7 @@
   (define (normal-dispatch-transitions s) (vector-ref s 3))
   (define (normal-dispatch-fallback s) (vector-ref s 4))
   (define (normal-error-code s) (vector-ref s 5))
+  (define (normal-error-reason s) (vector-ref s 7))
   (define (normal-dispatch-eof s) (vector-ref s 6))
   (define (normal-pause-target s) (cdr (vector-ref s 6)))
 
@@ -64,6 +86,15 @@
     (put-u8 p (bitwise-and 255 (bitwise-arithmetic-shift-right n 16)))
     (put-u8 p (bitwise-and 255 (bitwise-arithmetic-shift-right n 8)))
     (put-u8 p (bitwise-and 255 n)))
+  ;; A reason is a STRING, so put-symbol cannot carry it -- that helper calls
+  ;; symbol->string, which raises on one. Same wire shape as put-symbol
+  ;; (u16be byte-length then UTF-8 bytes), different input type. NOT named
+  ;; put-string: (rnrs) exports that, and a second definition in this body is a
+  ;; duplicate-definition error at expand time.
+  (define (put-reason p str)
+    (let ((bs (string->utf8 str)))
+      (put-u16be p (bytevector-length bs))
+      (put-bytevector p bs)))
   (define (put-symbol p sym)
     (let ((b (string->utf8 (symbol->string sym))))
       (put-u16be p (bytevector-length b)) (put-bytevector p b)))
@@ -134,7 +165,8 @@
                   (walk (cdr cs) (append (reverse sub) (cons (cons child next) acc)) next2))
                 (walk (cdr cs) acc next))))))
 
-  ;; Lowering: verified machine -> (values entry states-vector). No encoding.
+  ;; Lowering: verified machine -> (values entry states-vector debug-map).
+  ;; No encoding.
   (define (lower-machine machine)
     (let* ((nodes (machine-nodes machine))
            (name->id (let loop ((ns nodes) (i 0) (acc '()))
@@ -145,9 +177,21 @@
                       (let loop ((es (machine-errors machine)))
                         (if (eq? (error-declaration-name (car es)) nm)
                             (error-declaration-code (car es)) (loop (cdr es))))))
+           ;; A sibling rather than a widening of errcode: a mutation FINDs
+           ;; errcode's tail verbatim, and returning a pair from it would take
+           ;; that FIND to zero sites and fail the suite at declaration.
+           (errreason (lambda (nm)
+                        (let walk ((es (machine-errors machine)))
+                          (if (eq? (error-declaration-name (car es)) nm)
+                              (error-declaration-reason (car es)) (walk (cdr es))))))
            ;; A dispatch node's eof-target is a node NAME (resolved to its id) or
            ;; #f (route to the machine default-eof error, resolved to its code).
            (default-eof-code (errcode (machine-default-eof-error machine)))
+           (default-eof-reason (errreason (machine-default-eof-error machine)))
+           ;; A dispatch state's reason slot mirrors its eof routing: the machine
+           ;; default-eof declaration's reason when the routing is (default . code),
+           ;; and #f when it continues to a node, which carries no error of its own.
+           (eof-reason-of (lambda (eof) (if (eq? (car eof) 'node) #f default-eof-reason)))
            (eof-of (lambda (n)
                      (let ((t (byte-dispatch-node-eof-target n)))
                        (if (symbol? t)
@@ -196,7 +240,7 @@
               (let ((mm (sequence-dispatch-node-mismatch n)))
                 (vector ns-tag 'dispatch id (trie-transitions t ids)
                         (cons (id-of (edge-target mm)) (edge-mode mm)) #f
-                        (seq-eof-of n)))))
+                        (seq-eof-of n) (eof-reason-of (seq-eof-of n))))))
            (declared
             (let loop ((ns nodes) (i 0) (acc '()))
               (if (null? ns) (reverse acc)
@@ -207,10 +251,15 @@
                              ((byte-dispatch-node? n)
                               (let ((trs (list-sort (lambda (a b) (< (car a) (car b)))
                                            ;; One transition per byte of each case's
-                                           ;; canonical set (decision 0014): the encoding,
-                                           ;; its tag bytes and its format version byte are
-                                           ;; unchanged, and every machine expressible
-                                           ;; before Milestone 3 encodes identically.
+                                           ;; canonical set (decision 0014): the encoding
+                                           ;; and its tag bytes are unchanged, and every
+                                           ;; machine expressible before Milestone 3
+                                           ;; encodes identically to it. The format
+                                           ;; VERSION byte is no longer part of that
+                                           ;; claim -- it is 2 from Milestone 4 Slice ①a
+                                           ;; and every fingerprint moved with it
+                                           ;; (decision 0019). What 0014 fixes is the
+                                           ;; per-byte expansion, not the file format.
                                            (apply append
                                              (map (lambda (c)
                                                     (let ((e (byte-case-edge c))
@@ -223,16 +272,19 @@
                                     (fb (byte-dispatch-node-fallback n)))
                                 (vector ns-tag 'dispatch i trs
                                         (cons (id-of (edge-target fb)) (edge-mode fb)) #f
-                                        (eof-of n))))
+                                        (eof-of n) (eof-reason-of (eof-of n)))))
                              ((sequence-dispatch-node? n)
                               (let ((blk (block-of n)))
                                 (seq-state n (cadr blk) (caddr blk) i)))
-                             ((stop-node? n) (vector ns-tag 'stop i #f #f #f #f))
-                             ((error-node? n) (vector ns-tag 'error i #f #f (errcode (error-node-error-name n)) #f))
-                             ((finish-node? n) (vector ns-tag 'finish i #f #f #f #f))
+                             ((stop-node? n) (vector ns-tag 'stop i #f #f #f #f #f))
+                             ((error-node? n)
+                              (vector ns-tag 'error i #f #f
+                                      (errcode (error-node-error-name n)) #f
+                                      (errreason (error-node-error-name n))))
+                             ((finish-node? n) (vector ns-tag 'finish i #f #f #f #f #f))
                              ((pause-node? n)
                               (vector ns-tag 'pause i #f #f #f
-                                      (cons 'node (id-of (pause-node-continuation n)))))
+                                      (cons 'node (id-of (pause-node-continuation n))) #f))
                              ;; The repertoire is now these six kinds. A future
                              ;; kind reaching here must fail loudly, not lower to
                              ;; nothing.
@@ -244,16 +296,39 @@
                           (let ((n (car blk)) (ids (caddr blk)))
                             (map (lambda (kv) (seq-state n (car kv) ids (cdr kv))) ids)))
                         prefix-blocks)))
-           (states (list->vector (append declared internal))))
-      (values entry states)))
+           (states (list->vector (append declared internal)))
+           ;; §17:963's debug map, built in its OWN walk rather than inside the
+           ;; `internal` map above: that line is pinned verbatim by a mutation,
+           ;; and folding the map into it would take the FIND to zero sites.
+           ;; Total over internal prefix states -- name->id covers declared nodes
+           ;; only, and every prefix state answers with its DECLARING node's
+           ;; public name, which is what a default-EOF error reports.
+           (debug-map
+            (append (map (lambda (kv) (cons (cdr kv) (car kv))) name->id)
+                    (apply append
+                           (map (lambda (blk)
+                                  (let ((n (car blk)) (ids (caddr blk)))
+                                    (map (lambda (kv) (cons (cdr kv) (node-name n))) ids)))
+                                prefix-blocks)))))
+      (values entry states debug-map)))
 
   ;; Encoding: (entry, states) -> canonical bytes (decision 0009 layout).
   (define (encode-normal entry states)
     (call-with-bytevector-output-port
      (lambda (p)
-       (put-u8 p 1)
+       ;; Format version 2 (decision 0019). Header layout:
+       ;;   [version u8][entry u32be][state-count u32be][field-count u16be]
+       ;;   [field records...][state records...]
+       ;; The field count is written zero with no per-field records and is read
+       ;; by nothing until Slice ①b fills it. Its POSITION is fixed here rather
+       ;; than left to ①b: the byte stream has no self-description and nothing
+       ;; in the tree decodes it, so a later disagreement about where the table
+       ;; sits is a second unbudgeted re-baseline -- the outcome the ①a/①b split
+       ;; exists to avoid.
+       (put-u8 p 2)
        (put-u32be p entry)
        (put-u32be p (vector-length states))
+       (put-u16be p 0)
        (let loop ((i 0))
          (when (< i (vector-length states))
            (let ((s (vector-ref states i)))
@@ -271,9 +346,11 @@
                 (let ((eof (normal-dispatch-eof s)))
                   (if (eq? (car eof) 'node)
                       (begin (put-u8 p 0) (put-u32be p (cdr eof)))
-                      (begin (put-u8 p 1) (put-symbol p (cdr eof))))))
+                      (begin (put-u8 p 1) (put-symbol p (cdr eof))
+                             (put-reason p (normal-error-reason s))))))
                ((stop) (put-u8 p 1))
-               ((error) (put-u8 p 2) (put-symbol p (normal-error-code s)))
+               ((error) (put-u8 p 2) (put-symbol p (normal-error-code s))
+                        (put-reason p (normal-error-reason s)))
                ((finish) (put-u8 p 3))
                ;; pause: tag 4 + u32be continuation state id (D5).
                ((pause) (put-u8 p 4) (put-u32be p (normal-pause-target s)))
@@ -282,5 +359,6 @@
            (loop (+ i 1)))))))
 
   (define (normalize-machine machine)
-    (let-values (((entry states) (lower-machine machine)))
-      (make-normal-machine entry states (fnv1a-64 (encode-normal entry states))))))
+    (let-values (((entry states debug-map) (lower-machine machine)))
+      (make-normal-machine entry states (fnv1a-64 (encode-normal entry states))
+                           debug-map))))
