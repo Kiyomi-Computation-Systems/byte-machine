@@ -437,20 +437,49 @@ Design §6 task 4; §16.3:924 item 6; decision 0020's verifier half.
 
 Design §6 task 5; §17:962; decision 0019 item 3(a).
 
-- [ ] **Step 1: Failing test first** — two machines differing only in a field declaration must
+- [x] **Step 1: Failing test first** — two machines differing only in a field declaration must
   differ in fingerprint, and a zero-field machine must still encode a count of zero.
 
-- [ ] **Step 2:** `normal-ir.sls`'s `only` import gains the field accessors — it currently
+- [x] **Step 2:** `normal-ir.sls`'s `only` import gains the field accessors — it currently
   cannot see fields at all, which is why `lower-machine` never has. Assign slot = declaration
   index (**D4**).
 
-- [ ] **Step 3:** The reserved `u16be` count becomes the real count, with per-field records
+- [x] **Step 3:** The reserved `u16be` count becomes the real count, with per-field records
   following it in the position ①a fixed. **This kills a pin by construction (H4):** re-anchor
   `SchemeMutationSuite.cmake:5042-5053` in the same commit and re-measure it.
 
-- [ ] **Step 4: Gate.** All four fingerprints and all three goldens **unmoved** — a
+- [x] **Step 4: Gate.** All four fingerprints and all three goldens **unmoved** — a
   zero-field machine encodes identically. A new field-declaring fixture legitimately gets its
   own values (**D3**).
+
+  **Measured.** `git diff --stat 51fd5f3..HEAD -- test/fixtures/` is **empty** — no golden
+  moved and none was added. The three pre-existing `normal-ir-tests.sps` fingerprint literals
+  are unchanged; `14095574568398596535` now appears **twice** rather than once, the second
+  being the new *"filling the reservation does not move a zero-field fingerprint"* case, which
+  states decision 0019 item 5 as the invariant it is instead of leaving the goldens to notice.
+  One new value, `5570336114768739383`, for the slice's own two-field fixture.
+
+  **Record layout**, since neither the design nor 0019 fixes it: each record is
+  `[name-length u16be][name UTF-8][width u8][initial u64be]`, in slot order, and the **slot is
+  not written** — it is the record's position, and writing it too would let the stream express
+  a table whose slots disagree with their order. The initial is a fixed 64 bits regardless of
+  the declared width, so the layout does not vary with the value; a width-sized initial would
+  let two declarations of different widths share a byte string whenever the narrower value
+  fits, which is the collision the width byte exists to prevent.
+
+- [x] **Step 5 (the discipline's, not the plan's): the normal-ir pass's whole-pass sweep.**
+  Six cases joined that lane, and a check widens every existing pin exactly as a mutation
+  does. **30 pins, 870 ordered pairs, zero collisions**, every pin still catching its own
+  mutant; control at `51fd5f3`, 25 pins / 600 pairs, also zero. Recorded in the pass's own
+  audit block.
+
+  **The count byte cannot be pinned on any inequality case**, which is why this slice measures
+  a golden of its own rather than resting on the *"differ in fingerprint"* family: with the
+  per-field records still written, zeroing the count leaves every differing-field pair still
+  unequal and not one of them reddens. Symmetrically, the **slot number** is witnessed by no
+  fingerprint at all — it is deliberately not encoded — so the table assertion is its only
+  witness, and that is why the assertion states each entry **whole**, `(name width initial
+  slot)`, instead of checking the length and the names.
 
 ---
 

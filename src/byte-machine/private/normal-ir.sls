@@ -11,7 +11,7 @@
           normal-state-kind normal-state-id
           normal-dispatch-transitions normal-dispatch-fallback
           normal-error-code normal-error-reason normal-dispatch-eof normal-pause-target
-          normal-machine-debug-map)
+          normal-machine-debug-map normal-machine-fields)
   (import (rnrs)
           (only (byte-machine private ir)
                 machine-nodes machine-entry machine-errors machine-default-eof-error
@@ -24,15 +24,16 @@
                 node-name
                 sequence-dispatch-node? sequence-dispatch-node-cases
                 sequence-dispatch-node-mismatch sequence-dispatch-node-eof-target
-                sequence-case-bytes sequence-case-target))
+                sequence-case-bytes sequence-case-target
+                machine-fields uint-field-name uint-field-width uint-field-initial))
 
   (define nm-tag (vector 'byte-machine-normal-machine))
   ;; The debug map is APPENDED after fp, never inserted before it:
   ;; normal-machine-fingerprint is slot 3 and the emitter reads it, so putting the
   ;; map ahead of fp would silently renumber that slot and render a debug map
   ;; where the IR fingerprint belongs in the emitted constructor call.
-  (define (make-normal-machine entry states fp debug-map)
-    (vector nm-tag entry states fp debug-map))
+  (define (make-normal-machine entry states fp debug-map fields)
+    (vector nm-tag entry states fp debug-map fields))
   (define (normal-machine? x) (and (vector? x) (> (vector-length x) 0) (eq? (vector-ref x 0) nm-tag)))
   (define (normal-machine-entry m) (vector-ref m 1))
   (define (normal-machine-states m) (vector-ref m 2))
@@ -43,6 +44,13 @@
   ;; literal. It cannot perturb the fingerprint: encode-normal is called as
   ;; (encode-normal entry states) and never sees names.
   (define (normal-machine-debug-map m) (vector-ref m 4))
+  ;; §17:962's field slot assignment, appended for the same reason the debug map
+  ;; is: normal-machine-fingerprint is slot 3 and the emitter reads it by index.
+  ;; A list of (name width initial slot), slot ascending from 0 and equal to the
+  ;; list position -- redundant by construction, and carried anyway because every
+  ;; consumer downstream indexes BY SLOT and reading it from a position would
+  ;; make each of them re-derive the invariant instead of asserting it.
+  (define (normal-machine-fields m) (vector-ref m 5))
 
   (define ns-tag (vector 'byte-machine-normal-state))
   ;; (vector ns-tag kind id transitions fallback code eof reason) ; unused slots #f.
@@ -81,6 +89,16 @@
   (define (put-u16be p n)
     (put-u8 p (bitwise-and 255 (bitwise-arithmetic-shift-right n 8)))
     (put-u8 p (bitwise-and 255 n)))
+  ;; Field initials are encoded at a FIXED 64 bits regardless of the declared
+  ;; width, so the record layout does not vary with the value it carries. A
+  ;; width-sized initial would make two declarations of different widths share a
+  ;; byte string whenever the narrower one's value fits, which is the collision
+  ;; the width byte exists to prevent.
+  (define (put-u64be p n)
+    (let loop ((shift 56))
+      (when (>= shift 0)
+        (put-u8 p (bitwise-and 255 (bitwise-arithmetic-shift-right n shift)))
+        (loop (- shift 8)))))
   (define (put-u32be p n)
     (put-u8 p (bitwise-and 255 (bitwise-arithmetic-shift-right n 24)))
     (put-u8 p (bitwise-and 255 (bitwise-arithmetic-shift-right n 16)))
@@ -313,22 +331,35 @@
       (values entry states debug-map)))
 
   ;; Encoding: (entry, states) -> canonical bytes (decision 0009 layout).
-  (define (encode-normal entry states)
+  (define (encode-normal entry states fields)
     (call-with-bytevector-output-port
      (lambda (p)
        ;; Format version 2 (decision 0019). Header layout:
        ;;   [version u8][entry u32be][state-count u32be][field-count u16be]
        ;;   [field records...][state records...]
-       ;; The field count is written zero with no per-field records and is read
-       ;; by nothing until Slice ①b fills it. Its POSITION is fixed here rather
-       ;; than left to ①b: the byte stream has no self-description and nothing
-       ;; in the tree decodes it, so a later disagreement about where the table
-       ;; sits is a second unbudgeted re-baseline -- the outcome the ①a/①b split
-       ;; exists to avoid.
+       ;; Each field record is
+       ;;   [name-length u16be][name UTF-8][width u8][initial u64be]
+       ;; in SLOT ORDER. The slot itself is not written: it is the record's
+       ;; position, and writing it too would let the stream express a table whose
+       ;; slots disagree with their order.
+       ;;
+       ;; ①a wrote this count as a literal zero with no records, and Slice ①b
+       ;; fills it. Its POSITION was fixed there rather than here: the byte
+       ;; stream has no self-description and nothing in the tree decodes it, so a
+       ;; disagreement about where the table sits would have been a second
+       ;; unbudgeted re-baseline. Decision 0019 item 5 is the other half of that
+       ;; bargain and holds -- a zero-field machine encodes byte-identically to
+       ;; ①a's, which normal-ir-tests.sps asserts at ①a's own measured value
+       ;; rather than leaving it to the goldens to notice.
        (put-u8 p 2)
        (put-u32be p entry)
        (put-u32be p (vector-length states))
-       (put-u16be p 0)
+       (put-u16be p (length fields))
+       (for-each (lambda (f)
+                   (put-symbol p (car f))
+                   (put-u8 p (cadr f))
+                   (put-u64be p (caddr f)))
+                 fields)
        (let loop ((i 0))
          (when (< i (vector-length states))
            (let ((s (vector-ref states i)))
@@ -358,7 +389,22 @@
                                           (normal-state-kind s)))))
            (loop (+ i 1)))))))
 
+  ;; Slot = declaration index (design §6 task 5). `machine-fields` is the
+  ;; declaration list in declaration order, so the slot is the position and this
+  ;; is a numbering, not a choice.
+  (define (field-table machine)
+    (let loop ((fs (machine-fields machine)) (slot 0) (out '()))
+      (if (null? fs) (reverse out)
+          (loop (cdr fs) (+ slot 1)
+                (cons (list (uint-field-name (car fs))
+                            (uint-field-width (car fs))
+                            (uint-field-initial (car fs))
+                            slot)
+                      out)))))
+
   (define (normalize-machine machine)
     (let-values (((entry states debug-map) (lower-machine machine)))
-      (make-normal-machine entry states (fnv1a-64 (encode-normal entry states))
-                           debug-map))))
+      (let ((fields (field-table machine)))
+        (make-normal-machine entry states
+                             (fnv1a-64 (encode-normal entry states fields))
+                             debug-map fields)))))

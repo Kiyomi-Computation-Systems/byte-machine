@@ -764,8 +764,15 @@ cmake_minimum_required(VERSION 3.26)
 # the reasons are recorded at the mutations' own site. No pass is added -- the
 # checks join the verifier's existing lane -- so passes stay at 48 and mutations
 # become 255 + 3 = 258.
+#
+# Slice ①b task 5: the normal-ir pass gains FIVE, one per remaining decision in
+# the field record -- name, width, initial, record order, and the slot number the
+# table carries. A sixth, the field count, is not new: it is ①a's reserved-count
+# pin RE-ANCHORED, killed by construction when the literal zero became the real
+# count. No pass is added, so passes stay at 48 and mutations become
+# 258 + 5 = 263.
 set(EXPECTED_PASSES 48)
-set(EXPECTED_MUTATIONS 258)
+set(EXPECTED_MUTATIONS 263)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -5057,6 +5064,14 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # group was committed) is also 462 pairs and also zero. Nothing inherited,
 # nothing introduced.
 #
+# RE-MEASURED 2026-09-02, Slice ①b task 5, for the same reason and by the same
+# method: SIX cases joined normal-ir-tests.sps (the field table group) and five
+# mutations joined this pass, and a check widens every existing pin exactly as a
+# mutation does. 30 pins, 870 ordered pairs, ZERO collisions, and all 30 pins
+# still catch their own mutant. Control at 51fd5f3, this slice's baseline: 25
+# pins, 600 pairs, also zero. Nothing inherited, nothing introduced -- this pass
+# has now been collision-free across three separate audits.
+#
 # The new group is not inert under this pass's own mutants -- four of the 22
 # redden it, measured on the same captures: "normal-ir: the trie does not merge
 # alternatives sharing a byte" (state count 39 rather than 11 -- NOT the count
@@ -5219,16 +5234,86 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
-  LABEL "normal-ir: the reserved field count is not written"
-  # Reserved empty by decision 0019 item 3(a) and read by nothing until Slice
-  # ①b. `encode-normal` is not exported and nothing in the tree decodes the byte
-  # stream, so the only observable of a reserved slot is the fingerprint it
-  # moves -- which is exactly why the slot is written NOW rather than in ①b.
-  FIND [[       (put-u32be p (vector-length states))
-       (put-u16be p 0)]]
-  REPLACE [[       (put-u32be p (vector-length states))]]
+  LABEL "normal-ir: the field count is written zero instead of the real count"
+  # RE-ANCHORED, Slice ①b task 5. This pin was "the reserved field count is not
+  # written" and FOUND `(put-u16be p 0)` -- ①a's literal zero. Task 5 replaces
+  # that literal with the real count, which takes the old FIND to ZERO sites: a
+  # pin killed BY CONSTRUCTION, not by an edit that could have been avoided, so
+  # it is re-anchored in the same commit that kills it rather than deleted.
+  #
+  # The decision it names is unchanged -- the count byte must carry the table's
+  # length -- but its witness had to change with it. It is pinned on the
+  # two-field GOLDEN and could not be pinned on any of the inequality cases: with
+  # the per-field records still written, zeroing the count leaves every
+  # differing-field pair still unequal, so not one of them reddens. That is the
+  # reason the slice measures a golden of its own instead of resting on the
+  # "differ in fingerprint" family.
+  FIND [[       (put-u16be p (length fields))]]
+  REPLACE [[       (put-u16be p 0)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the IR fingerprint is the measured golden value: fingerprint -- expected 14095574568398596535, got 1041389063826219287")
+  EXPECT_OUTPUT_MATCHES
+    "the IR fingerprint of a two-field machine is the measured golden value: fingerprint -- expected 5570336114768739383, got 14125028976508365705")
+
+# Slice ①b task 5 adds FIVE more to this pass, one per remaining decision in the
+# field record: its three components, the order the records are written in, and
+# the slot number the table itself carries. Each is pinned on a DISTINCT golden
+# value, all measured.
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a field's name is dropped from the encoding"
+  FIND [[                   (put-symbol p (car f))
+]]
+  REPLACE [[                   ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the IR fingerprint of a two-field machine is the measured golden value: fingerprint -- expected 5570336114768739383, got 10230586532598973635")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a field's width is dropped from the encoding"
+  FIND [[                   (put-u8 p (cadr f))
+]]
+  REPLACE [[                   ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the IR fingerprint of a two-field machine is the measured golden value: fingerprint -- expected 5570336114768739383, got 8284907101070913187")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a field's initial value is dropped from the encoding"
+  FIND [[                   (put-u64be p (caddr f)))]]
+  REPLACE [[                   )]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the IR fingerprint of a two-field machine is the measured golden value: fingerprint -- expected 5570336114768739383, got 11089340831069462813")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: field records are written in reverse slot order"
+  # Slot IS the record's position -- the slot number is deliberately not written
+  # -- so record order is the whole of the slot assignment as far as the stream
+  # is concerned, and a reversal is a different machine wearing the same bytes
+  # everywhere else.
+  FIND [[                 fields)]]
+  REPLACE [[                 (reverse fields))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the IR fingerprint of a two-field machine is the measured golden value: fingerprint -- expected 5570336114768739383, got 3973801163924336519")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: every field is assigned slot zero"
+  # The table's own slot number, which is what every consumer downstream indexes
+  # by. Not witnessed by any fingerprint: the slot is not encoded, by design, so
+  # this mutation moves no golden and the table assertion is its only witness --
+  # the reason that assertion states each entry WHOLE, (name width initial slot),
+  # rather than checking the length and the names.
+  FIND [[                            slot)]]
+  REPLACE [[                            0)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "slots are declaration indices, and the table carries name, width and initial: second -- expected \\(limit 16 65535 1\\), got \\(limit 16 65535 0\\)")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
