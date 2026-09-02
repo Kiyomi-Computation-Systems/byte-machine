@@ -12,7 +12,7 @@
 (library (byte-machine compile)
   (export compile-machine compilation-ok? compilation-diagnostics
           render-machine emit-machine
-          reserved-member-2)          ; test-support: the drift guard (§3.4) reads it
+          reserved-member-2 reserved-member-3) ; test-support: the drift guards read them
   (import (rnrs)
           (byte-machine verify)
           (only (byte-machine private ir) machine-name machine-errors
@@ -151,7 +151,11 @@
   ;; encoding gains no tag, the format version byte stays 1, and the need-input
   ;; resume point below gives cross-feed resumability with no new mechanism. No
   ;; new emitted local means reserved-member-3 (decision 0012 item 4) is
-  ;; unchanged -- checked, not assumed, since it has no automated drift guard.
+  ;; unchanged. That was true through Milestone 3 and is not true here: Slice ①a
+  ;; adds `fieldv`, `errs` and `pk`, and the gap the second half of this sentence
+  ;; named -- "no automated drift guard" -- is closed by
+  ;; member3-drift-tests.sps, which walks the emitted datum for every symbol
+  ;; outside a quote form and asserts the remainder is a subset of this list.
   ;; `names` maps a state id to its public source-node name (§17:963's debug
   ;; map, normalizer output) and `index-of` a resolved error code to its
   ;; declaration's position in the errs table. Neither is recoverable from a

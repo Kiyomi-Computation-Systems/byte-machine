@@ -1346,3 +1346,26 @@ byte_machine_add_scheme_lane(
           "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/runtime.sls"
           "${CMAKE_SOURCE_DIR}/test/common/reserved-drift-tests.sps"
   TIMEOUT 120)
+
+# --- Milestone 4 Slice ①a task 4.7-2: the member-3 drift guard ---------------
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.member3-drift.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/member3-drift-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_COMPILE}
+          "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/runtime.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/pause-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/member3-drift-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.member3-drift.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/member3-drift-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_COMPILE}
+          "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/runtime.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/pause-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/member3-drift-tests.sps"
+  TIMEOUT 120)

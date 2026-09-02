@@ -731,8 +731,8 @@ cmake_minimum_required(VERSION 3.26)
 # reexec-targets)" -- for the one decision in reexec-targets' sequence arm that
 # had no mutation, the `eq? ... 'reexecute` test itself. No pass is added, so
 # passes stay at 46 and mutations become 235 + 1 = 236.
-set(EXPECTED_PASSES 46)
-set(EXPECTED_MUTATIONS 241)
+set(EXPECTED_PASSES 47)
+set(EXPECTED_MUTATIONS 242)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -6761,6 +6761,35 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the emitted bytes equal the committed sequence golden: golden")
+
+# Milestone 4 Slice ①a task 6 (§4.7 item 2): reserved-member-3's drift guard.
+# Its own PASS, because a mutation is witnessed only by tests that run in the
+# lane its SPEC names -- appended to the preceding pass it ran under a verify
+# command driving a different program and reported UNCAUGHT, which is exactly
+# what that rule predicts.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/member3-drift-tests.sps")
+
+# compile.sls stated this gap in its own words for three milestones -- "checked,
+# not assumed, since it has no automated drift guard" -- and this slice adds
+# three entries to the list, so the gap is demonstrated rather than theoretical.
+# The mutation is a deletion, which is the drift the guard exists to catch.
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.member3-drift.chez.source
+  LABEL "compile: an emitted local is missing from reserved-member-3"
+  FIND [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs pk))]]
+  REPLACE [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(pk\\)")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

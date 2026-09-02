@@ -1508,6 +1508,18 @@ collection's `length` where you iterate it.
 
 - [ ] **Step 7: Gate.**
 
+**Executed 2026-09-02. Three things measured rather than assumed.** (1) `(rnrs)` does **not**
+bind `library`, `import` or `export` — they survive the first subtraction, exactly as the
+step warned not to assume — so the library-header vocabulary and the derived library name are
+subtracted **by name** with the reason stated. (2) The lane must import `(byte-machine
+runtime)` **statically** even though nothing in it calls the library: the AOT lane compiles
+only the static import closure, so a library reached solely through `(environment '(byte-machine
+runtime))` is never compiled and `environment` raises "library not found" under AOT only —
+the same surprise `reserved-drift-tests.sps:9-21` records, reproduced here. (3) The mutation
+needs its **own pass** with its own verify command; appended to the preceding pass it ran
+against a different program and reported **UNCAUGHT**, which is what AGENTS.md's
+"a mutation's witnessing test lives in its own SPEC lane's program" predicts.
+
 The new lane is green in both modes. `reserved-member-3` holds **15** symbols (**D1**):
 the twelve at `compile.sls:53` plus `fieldv`, `errs` and `pk`. Deleting **each** of those
 three, one at a time, reddens the lane with that symbol named in the failure — three
