@@ -70,6 +70,24 @@
       (assertion-violation 'render-machine "invalid-output-binding" binding)))
 
   ;; --- canonical source writer ---
+  ;; §20:1039's explicit escaping, for the one class of author-controlled text the
+  ;; emitter writes into generated source: an error declaration's static reason,
+  ;; carried by decision 0022 item 7's per-library `errs` table. `pass-names-valid`
+  ;; refuses any reason outside printable ASCII plus LF (§10.1:480), so exactly
+  ;; three characters can reach here needing an escape and the set is closed
+  ;; rather than defensive. Unused until the `errs` table lands with the
+  ;; parser-error record; that is its first and only caller.
+  (define (escape-string s)
+    (let loop ((i 0) (acc '()))
+      (if (>= i (string-length s))
+          (list->string (reverse acc))
+          (let ((c (string-ref s i)))
+            (loop (+ i 1)
+                  (cond ((char=? c #\") (cons #\" (cons #\\ acc)))
+                        ((char=? c #\\) (cons #\\ (cons #\\ acc)))
+                        ((char=? c #\newline) (cons #\n (cons #\\ acc)))
+                        (else (cons c acc))))))))
+
   ;; Each transition/fallback lowers to a loop tail: advance bumps pos and off,
   ;; reexecute keeps both. Rendered as one string with explicit, counted parens.
   (define (loop-tail target mode)

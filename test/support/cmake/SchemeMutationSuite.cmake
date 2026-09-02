@@ -732,7 +732,7 @@ cmake_minimum_required(VERSION 3.26)
 # had no mutation, the `eq? ... 'reexecute` test itself. No pass is added, so
 # passes stay at 46 and mutations become 235 + 1 = 236.
 set(EXPECTED_PASSES 46)
-set(EXPECTED_MUTATIONS 236)
+set(EXPECTED_MUTATIONS 238)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3488,6 +3488,32 @@ byte_machine_mutation(
   LABEL "verify: the error-code grammar check is suppressed"
   FIND [[(valid-name? (error-declaration-code e))]]
   REPLACE [[#t]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "an uppercase error code is invalid-name: invalid-name")
+
+# Milestone 4 Slice ①a task 1 adds the reason-repertoire decision (§16.2:886,
+# §10.1:480). Two mutations, one per direction, because the repertoire can be
+# wrong permissively (accept a control character, which is what ships an
+# unparseable generated library) or restrictively (reject a legal reason, which
+# fails every shipped fixture). Both are caught by a failed COMPARISON rather
+# than by a raise: the permissive one lands on a count check that reads 0 where
+# the case expects 1, and the restrictive one on the clean machine's own
+# diagnostic-count assertion. The pins name a case tail plus a check label, so
+# each resolves to one (case, check) pair -- neither fragment appears in the
+# banner, the FAIL-CONTEXT line or the summary line.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the reason repertoire accepts every character"
+  FIND [[(or (and (char>=? c #\space) (char<=? c #\~)) (char=? c #\newline)))]]
+  REPLACE [[#t)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a reason outside printable ASCII is rejected: one finding")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the reason repertoire rejects every reason"
+  FIND [[          (and (reason-char? (string-ref s i)) (loop (+ i 1))))))]]
+  REPLACE [[          (and #f (loop (+ i 1))))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a reason may carry quote backslash and newline: no diagnostics")
 
 # Milestone 2 Slice ②b-1's Task 1 (decision 0011) adds three more decisions to
 # this pass: the §16.2 EOF-execution checks. Each FIND is a verbatim, unique

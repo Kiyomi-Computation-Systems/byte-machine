@@ -20,6 +20,14 @@
 (define (machine* name nodes eof-name)
   (make-machine name 'start '() '() '() errs nodes eof-name #f))
 (define (machine nodes) (machine* 'one-byte nodes 'default-eof))
+;; Slice ①a task 1: a one-byte machine carrying a caller-supplied error-declaration
+;; list, so a reason can be varied without touching the shipped `errs`.
+(define (machine-errs* ds nodes . eof-name)
+  (make-machine 'one-byte 'start '() '() '() ds nodes
+                (if (null? eof-name) 'default-eof (car eof-name)) #f))
+(define (machine-with-reason r)
+  (machine-errs* (list (make-error-declaration 'default-eof 'eof r #f) rej-decl)
+                 (one-byte-nodes (make-edge 'reject 'reexecute))))
 
 (define (codes m) (map diagnostic-code (verification-diagnostics (verify-machine m))))
 (define (has-code? m code) (and (memq code (codes m)) #t))
@@ -106,6 +114,43 @@
                               (one-byte-nodes (make-edge 'reject 'reexecute))
                               'default-eof #f)
                 'duplicate-error-declaration))))
+    ;; Milestone 4 Slice ①a task 1: §16.2:886 puts "reasons" in one portability
+    ;; bullet with names and codes, and §10.1:480 restricts them to printable
+    ;; ASCII plus LF -- a DIFFERENT repertoire from valid-name?'s [a-z][a-z0-9-]*,
+    ;; and over a string rather than a symbol, so the reason clause is its own
+    ;; predicate reusing the invalid-name CODE (decision 0022's Consequences).
+    ;; The gap was inert until the emitter began writing a reason into generated
+    ;; source; these three cases are what make it live.
+    (harness-case "a reason outside printable ASCII is rejected"
+      (lambda ()
+        (let ((ds 'seed))
+          (set! ds (codes (machine-with-reason (string #\a #\tab #\b))))
+          (check-equal "one finding" (length ds) 1)
+          (check-equal "invalid-name" (car ds) 'invalid-name))))
+    (harness-case "a reason may carry quote backslash and newline"
+      (lambda ()
+        (let ((ds 'seed))
+          ;; The three characters the emitter must escape (§20:1039). All are
+          ;; inside §10.1:480's repertoire, so the VERIFIER must accept them --
+          ;; escaping is the writer's job, not a rejection.
+          (set! ds (codes (machine-with-reason (string #\a #\" #\\ #\newline #\b))))
+          (check-equal "no diagnostics" (length ds) 0))))
+    (harness-case "one declaration bad in every field still yields a single finding"
+      (lambda ()
+        ;; The reason clause extends the EXISTING machine-errors arm rather than
+        ;; adding a fourth, so a declaration whose name, code and reason are all
+        ;; nonportable reports once, not three times.
+        (let ((ds 'seed))
+          ;; eof-name follows the declaration's name, so the ONLY thing wrong
+          ;; here is the declaration itself -- an unresolvable eof target would
+          ;; add an invalid-eof-target finding and mask what this case measures.
+          (set! ds (codes (machine-errs*
+                           (list (make-error-declaration 'Default-Eof 'Eof (string #\tab) #f)
+                                 rej-decl)
+                           (one-byte-nodes (make-edge 'reject 'reexecute))
+                           'Default-Eof)))
+          (check-equal "one finding" (length ds) 1)
+          (check-equal "invalid-name" (car ds) 'invalid-name))))
     (harness-case "a non-machine handed to verify-machine is invalid-shape"
       (lambda ()
         (check "invalid-shape" (has-code? 'not-a-machine 'invalid-shape))))

@@ -48,6 +48,22 @@
              (or (>= i (string-length s))
                  (and (name-char? (string-ref s i)) (loop (+ i 1)))))
            (not (memq sym reserved-member-1)))))
+  ;; §10.1:480 restricts an error declaration's static reason to printable ASCII
+  ;; plus LF. That is a DIFFERENT repertoire from valid-name?'s, over a string
+  ;; rather than a symbol, so this cannot reuse that predicate -- it reuses the
+  ;; invalid-name CODE, which §16.2:886 licenses by putting reasons in one
+  ;; portability bullet with names and codes, so Milestone 4's two-new-codes
+  ;; budget holds. The check was inert until Slice ①a, because the emitter had
+  ;; never written a user-controlled string; now a nonportable reason is an
+  ;; unparseable generated library, not a cosmetic defect. An EMPTY reason is
+  ;; accepted: :480 says nothing about length, "" renders as a legal string
+  ;; literal, and make-error-declaration already refuses a non-string.
+  (define (reason-char? c)
+    (or (and (char>=? c #\space) (char<=? c #\~)) (char=? c #\newline)))
+  (define (valid-reason? s)
+    (let loop ((i 0))
+      (or (>= i (string-length s))
+          (and (reason-char? (string-ref s i)) (loop (+ i 1))))))
 
   ;; --- helpers ---
   (define (lookup nodes name)
@@ -470,10 +486,11 @@
      (filter values
              (map (lambda (e)
                     (if (and (valid-name? (error-declaration-name e))
-                             (valid-name? (error-declaration-code e)))
+                             (valid-name? (error-declaration-code e))
+                             (valid-reason? (error-declaration-reason e)))
                         #f
                         (make-diagnostic 'invalid-name (error-declaration-name e)
-                                         "error name or code is not portable")))
+                                         "error name, code or reason is not portable")))
                   (machine-errors m)))))
 
   (define (verify-machine machine)

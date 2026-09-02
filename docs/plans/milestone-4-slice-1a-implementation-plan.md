@@ -596,11 +596,19 @@ error naming a temp file.
 
 - [ ] **Step 1: Write the failing tests first (§22.1).**
 
-Add to `test/common/verify-tests.sps` three cases, and create
-`test/support/harness/byte-machine/test/reason-machine.sls` exporting two machines: one
-whose `default-eof` declaration's reason contains TAB (`#\tab`, 0x09), and one whose reason
-contains `"`, `\` and LF. Build both through `(byte-machine graph)` only, on the shape of
-`pause-machine.sls:11-28`.
+Add three cases to `test/common/verify-tests.sps`: one whose `default-eof` declaration's
+reason contains TAB (`#\tab`, 0x09), one whose reason contains `"`, `\` and LF, and one
+whose declaration is nonportable in **every** field, guarding the single-finding rule.
+
+**Amended 2026-09-01, executing this task: no fixture library is created here.** This step
+originally also created `test/support/harness/byte-machine/test/reason-machine.sls`.
+`verify-tests.sps` builds every machine **inline** through `(byte-machine graph)` — it has
+`errs`, `machine*` and `one-byte-nodes` helpers at `:10-21` and constructs its broken
+variants in place — so a fixture library would add a lane-manifest edit and a
+content-fingerprint change for nothing. The escaping fixture is still needed, but its
+consumer is **Task 5**, which is the first task that renders a reason into an emitted
+library and `load`s it; it is created there, where it has something to prove. Two helpers
+were added to `verify-tests.sps` instead, `machine-errs*` and `machine-with-reason`.
 
 Expected before the implementation: the TAB case fails with `0` diagnostics where `1` is
 expected.
@@ -692,17 +700,23 @@ with exit 3.
 ```bash
 make build && ctest --preset release --output-on-failure
 ```
-Expected: `100% tests passed, 0 tests failed out of 88` — 86 plus the source+AOT pair this
-task registers. If the task registers no new lane, the literal is **86**. Write the number
-down before running, then compare; "86 plus whatever" is not a check.
+Expected: `100% tests passed, 0 tests failed out of 86`. This task registers **no** new
+lane — its three cases join an existing program — so the literal is 86, not 88. `pr` reports
+86 too, and `no-scheme` reports 8.
 
 ```bash
 ctest --preset release -R 'scheme-mutation' -V 2>&1 | grep -E "suite complete|UNCAUGHT|FATAL"
 ```
-Expected: one line, `byte-machine-spec: scheme mutation suite complete (46 passes, 237
-mutations)` — 236 plus this task's one new mutation — and **no** `UNCAUGHT` and **no**
-`FATAL` line. Again: state the number first, then measure. If the measured total differs
-from the stated one, that is the finding, not a number to copy in.
+Stated before running: 237, being 236 plus one new mutation. **Measured: 238**, and the
+difference is the finding this gate exists to surface. The repertoire decision has two
+directions and each ships a different defect — permissive accepts a control character and
+yields an unparseable generated library, restrictive rejects a legal reason and fails every
+shipped fixture — so it takes two mutations, not one, and AGENTS.md's "try the opposite
+constant first" is what makes that visible. Both are caught by a failed **comparison**
+rather than by a raise. `EXPECTED_MUTATIONS` is at the measured 238.
+
+Expected: one line, `byte-machine-spec: scheme mutation suite complete (46 passes, 238
+mutations)`, and **no** `UNCAUGHT` and **no** `FATAL` line.
 
 Three behavioural expectations, each a literal:
 1. Every shipped fixture still verifies with **exactly 0** diagnostics.
