@@ -1,6 +1,6 @@
 # Byte Machine Implementation Plan
 
-Status: milestones 0, 1, 2, and 3 are closed — 0 on 2026-08-22 ([the spike](./milestone-0-portability-spike.md), [the close-out](./milestone-0-close-out.md), [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md)), 1 on 2026-08-23 ([milestone-1-design.md](./milestone-1-design.md)), 2 on 2026-08-29 ([milestone-2-design.md](./milestone-2-design.md)), and 3 on 2026-08-30 ([milestone-3-design.md](./milestone-3-design.md)); each carries a dated close note under its own §25 subsection below, and each of those cites where its exit criteria are dispositioned. Milestone 3 was delivered as a Gate 0 plus three slices: Slice ① (byte classes) closed 2026-08-29, Slice ② (sequence dispatch and prefix lowering) closed 2026-08-30, and Slice ③ (multiple alternatives, ambiguity, and cycle analysis) closed 2026-08-30 with the milestone. Milestone 4 (fields, actions, and branches) has not started. Decisions amended by 0005 (Chez-only) via [chez-only-simplification.md](./chez-only-simplification.md) §2, and by 0006 (inline libraries)
+Status: milestones 0, 1, 2, and 3 are closed — 0 on 2026-08-22 ([the spike](./milestone-0-portability-spike.md), [the close-out](./milestone-0-close-out.md), [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md)), 1 on 2026-08-23 ([milestone-1-design.md](./milestone-1-design.md)), 2 on 2026-08-29 ([milestone-2-design.md](./milestone-2-design.md)), and 3 on 2026-08-30 ([milestone-3-design.md](./milestone-3-design.md)); each carries a dated close note under its own §25 subsection below, and each of those cites where its exit criteria are dispositioned. Milestone 3 was delivered as a Gate 0 plus three slices: Slice ① (byte classes) closed 2026-08-29, Slice ② (sequence dispatch and prefix lowering) closed 2026-08-30, and Slice ③ (multiple alternatives, ambiguity, and cycle analysis) closed 2026-08-30 with the milestone. Milestone 4 (fields, actions, and branches) is in progress: Gate 0 discharged 2026-08-31 (decisions 0018-0022) and Slice ①a — the unversioned generated-ABI constructor, normalized encoding format 2, and the `parser-error` family — landed 2026-09-02; Slices ①b, ② and ③ remain. Decisions amended by 0005 (Chez-only) via [chez-only-simplification.md](./chez-only-simplification.md) §2, and by 0006 (inline libraries)
 
 Date: 2026-08-15
 
@@ -1568,6 +1568,16 @@ Exit criteria:
 - boundary, overflow, and underflow tests for every width;
 - failed operations leave prior values unchanged;
 - interpreter/generated fields and traces match.
+  <!-- 2026-09-02 (Milestone 4 Slice ①a): NOT a rewording of this criterion, which
+  stands as written. §18:974-985 makes the trace hook interpreter-only and
+  opt-in, so generated code has no trace surface at any milestone and a literal
+  cross-lane trace comparison is unspecifiable; the criterion is discharged
+  through §22.4:1262-1272's comparison list, of which :1271 is the error bullet.
+  Slice ①a discharges that error clause -- error domain, code, public
+  source-node name, absolute position and position kind, compared across
+  executors in test/common/position-kind-tests.sps and in the sixteen
+  differential lanes through (byte-machine test error-projection). The `fields`
+  clause (§22.4:1267) is Slices ①b, ② and ③. -->
 
 ### Milestone 5: Callbacks, poisoning, and spans
 

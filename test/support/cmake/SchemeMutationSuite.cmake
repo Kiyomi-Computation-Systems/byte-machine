@@ -3540,7 +3540,13 @@ byte_machine_mutation(
   FIND [[(or (and (char>=? c #\space) (char<=? c #\~)) (char=? c #\newline)))]]
   REPLACE [[#t)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "a reason outside printable ASCII is rejected: one finding")
+  # Anchored on the DETAIL, not just the (case, check) pair: the whole-pass
+  # audit found the bare pair matched by two siblings, because any mutation
+  # that suppresses the reason clause reaches this same check. The two
+  # directions differ in what the count becomes -- 0 when the repertoire
+  # accepts everything, 2 when it rejects everything -- so the detail is what
+  # separates them.
+  EXPECT_OUTPUT_MATCHES "a reason outside printable ASCII is rejected: one finding -- expected 1, got 0")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -3548,7 +3554,7 @@ byte_machine_mutation(
   FIND [[          (and (reason-char? (string-ref s i)) (loop (+ i 1))))))]]
   REPLACE [[          (and #f (loop (+ i 1))))))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "a reason may carry quote backslash and newline: no diagnostics")
+  EXPECT_OUTPUT_MATCHES "a reason may carry quote backslash and newline: no diagnostics -- expected 0, got 2")
 
 # Milestone 2 Slice ②b-1's Task 1 (decision 0011) adds three more decisions to
 # this pass: the §16.2 EOF-execution checks. Each FIND is a verbatim, unique
@@ -4038,9 +4044,30 @@ byte_machine_mutation(
   # separated it from "verify: a byte edge into a finish terminal is
   # accepted" but not from this mutation, confirmed genuinely subsumed by
   # exhaustion at this size. See arm 6's own pin below for the measurement.
+  #
+  # Re-anchored 2026-09-02, Milestone 4 Slice ①a task 8's whole-pass sweep. The
+  # note above records this pin as "checked against every other declared pin's
+  # captured output, both directions" -- at 34 mutations. A pin is only ever
+  # verified against the mutants that existed when it was measured, and Slice
+  # ①a's "the reason repertoire rejects every reason" now reproduces that count
+  # coincidentally: rejecting every reason adds one invalid-name diagnostic per
+  # declaration, and the well-formed sequence fixture declares two, so it lands
+  # on the identical `expected 0, got 2`. Two mutants, one count, no
+  # discrimination.
+  #
+  # Re-anchored onto this mutant's ONE record that no other Pass 33 mutant
+  # produces, computed as a set difference against all 43 others rather than
+  # against a suspected sibling: the first attempt moved it to the case-target
+  # check, which is unique against the reason mutation but collides with
+  # "a missing transition target is not reported" -- the very residue the note
+  # above records this pin being moved away from. Measured at 44 mutations,
+  # 1892 ordered pairs.
+  #
+  # A count is a weaker anchor than a named check for exactly the reason this
+  # sweep found: another mutant can reach the same number by another route.
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "a well-formed sequence machine verifies with no diagnostics: diagnostic count -- expected 0, got 2")
+    "a node reached only through the sequence eof-target is reachable: no unreachable-node -- expected 0, got 2")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source

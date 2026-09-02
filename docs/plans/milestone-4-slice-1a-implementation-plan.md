@@ -1651,6 +1651,31 @@ not by line number, and not in the git-ignored ledger.
 - [ ] **Step 3: The Pass 33 whole-pass audit, in both directions, against a merge-base
   control.**
 
+**Executed 2026-09-02. Measured, both directions, 44 pins / 1892 ordered pairs.** Each pin's
+mutation was staged into a scratch tree, its verify output captured, and every pin's regex
+re-judged against every other mutant's captured output. **Merge base: 4 collisions. HEAD
+before the fix: 7.** The control is what made the three new ones attributable — all three
+were this branch's doing, and all three are fixed:
+
+- Task 1's two pins were **under-anchored**: both resolved to a `(case, check)` pair that
+  other mutants also reach. Re-anchored onto the pair **plus its detail** — `expected 1, got
+  0` against `expected 0, got 2` — which is what separates the two directions of one
+  decision.
+- `verify: a sequence node's case and mismatch targets are not out-targets` is an **incumbent
+  whose pin this branch widened**, and its own note records it as verified "both directions"
+  — *at 34 mutations*. Its pin was a **count** (`expected 0, got 2`), and Task 1's
+  reject-every-reason mutant reaches the same number by another route, since the well-formed
+  sequence fixture declares two error declarations. Re-anchored onto the one record no other
+  Pass 33 mutant produces, computed as a **set difference against all 43 others** — the first
+  attempt moved it onto a record unique against the *suspected* sibling only and collided with
+  the residue the note records it being moved away from originally.
+
+HEAD now carries exactly the merge base's four collisions, same labels, same pairs: inherited
+debt, recorded in the tree beside those pins already. **A count is a weaker anchor than a
+named check**, because another mutant can arrive at the same number by another route — that
+is the reusable finding, and it is why "verified both directions" carries a mutation count in
+this suite's notes.
+
 Task 1 joined a **check** and a **case** to that pass's lane; adding a check widens every
 existing pin exactly as adding a mutation does. Re-judge each pin through
 `byte_machine_mutation_verdict` against every *other* mutation's captured output — static
