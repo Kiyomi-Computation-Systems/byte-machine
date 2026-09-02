@@ -4,6 +4,15 @@ Date: 2026-08-31
 Status: accepted
 Milestone: 4, Gate 0 (milestone-4-design.md §4.5)
 
+> **Amendments** — later notes at the foot of this file reach back into the text
+> above them. Nothing above a note is rewritten.
+>
+> - **2026-09-02 (Milestone 4 Slice ①a)** — **open question against item 7**: the
+>   emitted table is per *declaration* as item 7 says, but the encoding carries
+>   only *reached* declarations, so two machines the IR fingerprint calls
+>   identical emit different bytes. Measured, not fixed; the note names the
+>   impact and two candidate resolutions.
+
 ## Context
 
 Decided against the shipped tree at `a942327`, the commit Milestone 3 closed at.
@@ -240,7 +249,8 @@ overflow rider to a table that already works.
    same rule from independent code is the strongest available evidence the
    lowering is 1:1.
 7. **The static payload lives in one immutable per-library table keyed by error
-   *declaration*, not per site.** Generated code defines `(define errs (quote
+   *declaration*, not per site.** *(An open question was raised against this item
+   on 2026-09-02 — see the note at the foot.)* Generated code defines `(define errs (quote
    #(#(<code> <reason>) …)))`, one entry per error declaration — §19.1:996's
    "immutable field/callback/debug metadata" literally — and each site builds
    its record from a table index plus its own two literals (public source-node
@@ -358,3 +368,80 @@ overflow rider to a table that already works.
   they are Milestone 4's later slices and Milestone 5's caller. And nothing here
   upgrades §9.4:438's ABI-mismatch condition, which decision 0010 item 5 still
   leaves as an `assertion-violation`.
+
+---
+
+## 2026-09-02 (Milestone 4 Slice ①a) — item 7 versus the encoding: an open question
+
+Raised by Slice ①a's whole-branch review, measured against the tree at that
+slice's tip. **Not resolved here**: resolving it changes what item 7 says, and
+that is a decision, not a fix.
+
+### What was measured
+
+`encode-normal` writes a declaration's static reason at exactly two sites — an
+error state's, and a dispatch state's `(default . code)` eof routing — so a
+declaration that no error node names and that is not the machine's default-eof
+error never reaches the encoding, and therefore never reaches the IR
+fingerprint. The emitted `errs` table, built per item 7 from
+`machine-errors` in full, carries it anyway.
+
+Two machines differing only in such a declaration's reason therefore hash the
+same and emit different bytes:
+
+```
+(same-fingerprint    #t)
+(same-emitted-bytes  #f)
+```
+
+### Why it matters
+
+It contradicts [decision 0019](./0019-encoding-format-2-pre-provisioned.md)
+item 2's own argument, in that record's words: "two machines differing only in a
+reason must differ in fingerprint, or the fingerprint stops identifying what was
+emitted." §20:1043 makes the fingerprint the object the determinism checks
+compare, so a fingerprint that does not distinguish two different emitted
+libraries is weaker than both records assume.
+
+**Bounded, and not urgent.** The determinism property §20:1031 actually states —
+same verified machine, options, binding and generator version produce
+byte-identical source — is unaffected; two machines differing in a declaration
+are different machines. Nothing in the tree can reach it: every fixture uses
+declarations that are all reached, and `machine-gen.sls` fixes two declarations
+with distinct codes, so the property lane cannot generate one either. What is
+lost is the stronger claim both records lean on — that the fingerprint
+identifies the emitted output.
+
+### Two candidate resolutions
+
+1. **Narrow the table to reached declarations** (emitter-only). Build `errs`
+   from the declarations the normalized states actually resolve, preserving
+   declaration order. Implemented and measured during Slice ①a: it closes the
+   gap exactly — `same-fingerprint` and `same-emitted-bytes` then agree — and it
+   moves **no** IR fingerprint, because the encoding is untouched. It was
+   reverted rather than shipped for two reasons: it changes item 7's rule from
+   *per declaration* to *per reached declaration*, and it drops a row from
+   `test/fixtures/generated-pause.golden.sls`, whose `default-eof` declaration is
+   genuinely unreached (every dispatch state there routes EOF to a node). A
+   golden moving is what [0019](./0019-encoding-format-2-pre-provisioned.md)
+   point 5 tells a later slice to treat as a STOP condition, so this resolution
+   is cheapest **before** Slice ①b and expensive after.
+
+2. **Widen the encoding to every declaration.** Keeps item 7 exactly as written
+   and makes the fingerprint cover what the table carries. It re-baselines all
+   four IR fingerprints and all three goldens a second time, which is precisely
+   the double payment the ①a/①b split exists to avoid — so it is the more
+   faithful reading of item 7 and the more expensive one, and after ①a's merge
+   it collides with 0019 point 5 outright.
+
+A third option — leave it, and narrow the *claims* in 0019 item 2 and this
+record instead — is available and is the only one that ships no code. It should
+be chosen deliberately if it is chosen, not by default: the claim it narrows is
+load-bearing for §20:1043.
+
+### Where the evidence is
+
+Slice ①a's plan
+([milestone-4-slice-1a-implementation-plan.md](../plans/milestone-4-slice-1a-implementation-plan.md)),
+under the whole-branch review section, carries the reproduction and the reverted
+patch's measurement.

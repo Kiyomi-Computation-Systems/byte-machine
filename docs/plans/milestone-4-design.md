@@ -2,9 +2,9 @@
 
 Status: **IN PROGRESS.** Gate 0 discharged 2026-08-31 (PR
 [#37](https://github.com/Kiyomi-Computation-Systems/byte-machine/pull/37), commit
-`f215af7`); Slice ①a planned 2026-09-01 —
-`docs/plans/milestone-4-slice-1a-implementation-plan.md`, which lands with the
-slice itself — not yet merged; ①b, ② and ③ not begun. Authored
+`f215af7`); Slice ①a landed 2026-09-02
+([milestone-4-slice-1a-implementation-plan.md](./milestone-4-slice-1a-implementation-plan.md));
+①b, ② and ③ not begun. Authored
 2026-08-31, the day Milestone 3 closed (Slice ③ merged as PR
 [#35](https://github.com/Kiyomi-Computation-Systems/byte-machine/pull/35),
 commit `2351b58`; the standards follow-up as PR
@@ -22,6 +22,13 @@ task inside Slice ② rather than a slice of its own.
 > false it is corrected in place and marked at the site, because a false
 > instruction is a landmine rather than evidence (AGENTS.md).
 >
+> - **2026-09-02 (Slice ①a whole-branch review)** — **open question against
+>   §5's error-table design**: the emitted `errs` table is per *declaration*
+>   while the encoding carries only *reached* declarations, so two machines the
+>   IR fingerprint calls identical emit different bytes. Measured, not fixed;
+>   the impact and two candidate resolutions are recorded on [decision
+>   0022](../decisions/0022-structured-parser-error-record.md)'s foot, since
+>   resolving it changes that record's item 7. **Cheapest before Slice ①b.**
 > - **2026-09-01 (Slice ①a planning)** — **amends §5 and §6**: ten findings from
 >   writing Slice ①a's plan against the tree at `c3ceec2`, including a three-way
 >   contradiction about `reserved-member-3`, a pin whose stated cause of death is
@@ -2451,9 +2458,9 @@ rows, and M4 introduces no new status.
 ## 2026-09-01 (Slice ①a planning) — ten findings from planning §5 against the tree
 
 Measured at `c3ceec2` while writing
-`docs/plans/milestone-4-slice-1a-implementation-plan.md` — which lands with Slice
-①a, not with this note — whose §0 and §0b carry each item in the form a task can
-execute. This note is the
+[milestone-4-slice-1a-implementation-plan.md](./milestone-4-slice-1a-implementation-plan.md),
+whose §0 and §0b carry each item in the form a task can execute, and whose task
+sections record what executing them then measured differently. This note is the
 record; the plan is the work order. Items A and G additionally corrected a *live*
 work order in place above, marked at the site, because a false instruction is a
 landmine and what it used to say is in git — every other item below is annotated

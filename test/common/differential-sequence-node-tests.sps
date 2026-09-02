@@ -13,12 +13,27 @@
 (import (rnrs) (rnrs eval)
         (only (chezscheme) load)
         (byte-machine test harness)
+        (byte-machine test error-projection)
         (byte-machine test sequence-node-machine)
         (byte-machine test prng)
         (byte-machine verify)
         (byte-machine interpret)
         (byte-machine runtime)
         (byte-machine compile))
+
+;; Slice ①a task 5: the error slot now holds a parser-error, and the tuple
+;; carries its §22.4:1271 projection. A rejected byte at offset k reports the
+;; machine domain, the resolved code and reason, the public source-node name of
+;; the error node, that same absolute offset, and `byte` -- the reexecute edge's
+;; kind, since a mismatch does not consume the offending byte.
+;; The advance-mode machine consumes the offending byte, so its error node is
+;; reached by an ADVANCE edge and reports `boundary` after the committed byte --
+;; the same node, a different arriving transition, a different position kind.
+;; That contrast is the clearest in-tree evidence that the kind is a property of
+;; the transition rather than of the state (decision 0022).
+(define (reject-at k) (list 'machine 'unexpected-byte "unexpected byte" 'reject k 'byte))
+(define (advance-reject-at k)
+  (list 'machine 'unexpected-byte "unexpected byte" 'reject k 'boundary))
 
 (harness-begin "differential.sequence-node")
 
@@ -53,7 +68,7 @@
 (define (rfields r)
   (list (parser-result-status r) (parser-result-next r)
         (parser-result-consumed r) (parser-result-stream-offset r)
-        (parser-result-error r)))
+        (project-error (parser-result-error r))))
 (define (u8 b) (make-bytevector 1 b))
 (define (u8v . bs) (u8-list->bytevector bs))
 (define (head-n l k) (if (= k 0) '() (cons (car l) (head-n (cdr l) (- k 1)))))
@@ -97,7 +112,7 @@
           (for-each
            (lambda (k)
              (set! positions (+ positions 1))
-             (let ((expect (list 'error 0 0 k 'unexpected-byte)))
+             (let ((expect (list 'error 0 0 k (reject-at k))))
                (unless (equal? (drive cm-ref (head-n seq-bytes k) 200) expect)
                  (when (eq? bad 'none) (set! bad (cons 'ref k))))
                (unless (equal? (drive cm-gen (head-n seq-bytes k) 200) expect)
@@ -292,12 +307,12 @@
   (lambda ()
     (harness-case "reexecute keeps next and consumed at zero"
       (lambda ()
-        (check-equal "k=0" (drive cm-gen '() 200) '(error 0 0 0 unexpected-byte))
-        (check-equal "k=3" (drive cm-gen '(1 2 3) 200) '(error 0 0 3 unexpected-byte))))
+        (check-equal "k=0" (drive cm-gen '() 200) (list 'error 0 0 0 (reject-at 0)))
+        (check-equal "k=3" (drive cm-gen '(1 2 3) 200) (list 'error 0 0 3 (reject-at 3)))))
     (harness-case "advance consumes the offending byte and shifts the offset"
       (lambda ()
-        (check-equal "k=0" (drive ad-gen '() 200) '(error 1 1 1 unexpected-byte))
-        (check-equal "k=3" (drive ad-gen '(1 2 3) 200) '(error 1 1 4 unexpected-byte))))
+        (check-equal "k=0" (drive ad-gen '() 200) (list 'error 1 1 1 (advance-reject-at 1)))
+        (check-equal "k=3" (drive ad-gen '(1 2 3) 200) (list 'error 1 1 4 (advance-reject-at 4)))))
     (harness-case "both modes accept the sequence identically"
       (lambda ()
         ;; advseq's accept path had no absolute (literal-tuple) assertion

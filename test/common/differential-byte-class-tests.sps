@@ -10,6 +10,7 @@
 (import (rnrs) (rnrs eval)
         (only (chezscheme) load)
         (byte-machine test harness)
+        (byte-machine test error-projection)
         (byte-machine test class-machine)
         (byte-machine verify)
         (byte-machine interpret)
@@ -47,7 +48,7 @@
 (define (rfields cm b)
   (let ((r (parser-feed! (make-parser cm '() #f) (make-bytevector 1 b) 0 1)))
     (list (parser-result-status r) (parser-result-next r) (parser-result-consumed r)
-          (parser-result-stream-offset r) (parser-result-error r))))
+          (parser-result-stream-offset r) (project-error (parser-result-error r)))))
 
 ;; The group below drives its per-fixture cases (and every generated-machine
 ;; emission) from a for-each over (class-machines): if a future edit dropped a

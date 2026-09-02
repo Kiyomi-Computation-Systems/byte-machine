@@ -27,6 +27,29 @@
 (define (normalize m) (normalize-machine (verification-machine (verify-machine m))))
 (define n1 (normalize one-byte))
 
+;; Slice ①a task 4 helpers. `one-byte/reason` varies the reason of the
+;; default-eof declaration, which IS referenced (it is the machine's
+;; default-eof error); `one-byte/spare-reason` varies a third declaration that
+;; no node names, so nothing resolves it and it never reaches the encoder.
+(define (one-byte-parts r spare)
+  (make-machine 'one-byte 'start '() '() '()
+                (append (list (make-error-declaration 'default-eof 'eof r #f)
+                              (make-error-declaration 'rejected 'unexpected-byte
+                                                      "unexpected byte" #f))
+                        (if spare
+                            (list (make-error-declaration 'spare 'spare-code spare #f))
+                            '()))
+                (list (make-byte-dispatch-node
+                       'start
+                       (list (make-byte-case (make-exact-byte-matcher 0)
+                                             (make-edge 'stop 'advance) #f))
+                       (make-edge 'reject 'reexecute) #f #f)
+                      (make-stop-node 'stop #f)
+                      (make-error-node 'reject 'rejected #f))
+                'default-eof #f))
+(define (one-byte/reason r) (one-byte-parts r #f))
+(define (one-byte/spare-reason r) (one-byte-parts "unexpected end of input" r))
+
 (harness-group "the one-byte machine"
   (lambda ()
     (harness-case "entry is the first node's id"
@@ -59,23 +82,48 @@
       (lambda ()
         (check-equal "code" (normal-error-code (vector-ref (normal-machine-states n1) 2))
                      'unexpected-byte)))
-    ;; Golden value: measured against this exact encoding (format tag 1; entry and
-    ;; state-count as u32be; per dispatch state u16be transition count then each
-    ;; (u8 byte, u32be target, u8 mode) ascending by byte, then u32be fallback
-    ;; target + u8 mode, then eof routing (tag 0 + u32be node id, or tag 1 +
-    ;; u16be code-length + UTF-8 default-eof code bytes); stop = one tag byte;
-    ;; error = tag byte + u16be code-length + UTF-8 code bytes; finish = one tag
-    ;; byte) run through FNV-1a. A change to any FNV constant, the XOR/multiply,
+    ;; Golden value: measured against this exact encoding (FORMAT TAG 2 since
+    ;; Milestone 4 Slice ①a; entry and state-count as u32be; then a u16be
+    ;; reserved field count, zero until Slice ①b; per dispatch state u16be
+    ;; transition count then each (u8 byte, u32be target, u8 mode) ascending by
+    ;; byte, then u32be fallback target + u8 mode, then eof routing (tag 0 +
+    ;; u32be node id, or tag 1 + u16be code-length + UTF-8 default-eof code bytes
+    ;; + u16be reason-length + UTF-8 reason bytes); stop = one tag byte; error =
+    ;; tag byte + u16be code-length + UTF-8 code bytes + u16be reason-length +
+    ;; UTF-8 reason bytes; finish = one tag byte) run through FNV-1a. A change to any FNV constant, the XOR/multiply,
     ;; or the field layout (eof routing included) moves this number.
     (harness-case "the IR fingerprint is the measured golden value"
       (lambda ()
         (check-equal "fingerprint" (normal-machine-fingerprint n1)
-                     4236938459847922092)))
+                     14095574568398596535)))
     (harness-case "normalization is deterministic"
       (lambda ()
         (check-equal "same fingerprint twice"
                      (normal-machine-fingerprint (normalize one-byte))
-                     (normal-machine-fingerprint n1))))))
+                     (normal-machine-fingerprint n1))))
+    ;; Milestone 4 Slice ①a task 4 (decision 0019 item 2). The reason must enter
+    ;; the ENCODING, not merely be readable from the source machine: decision
+    ;; 0009 point 2 computes the fingerprint over the canonical normalized IR and
+    ;; §20:1043 makes that the object the determinism checks compare, so two
+    ;; machines differing only in a reason must differ in fingerprint or the
+    ;; fingerprint stops identifying what was emitted.
+    (harness-case "two machines differing only in a reason differ in fingerprint"
+      (lambda ()
+        (check "different"
+               (not (= (normal-machine-fingerprint (normalize (one-byte/reason "first")))
+                       (normal-machine-fingerprint (normalize (one-byte/reason "second"))))))))
+    (harness-case "an unreferenced declaration's reason does not reach the encoding"
+      (lambda ()
+        ;; The gate above only holds because the varied declaration is REACHED --
+        ;; errcode resolves a name from the machine's default-eof error and from
+        ;; each error node's target, and nothing else walks machine-errors. A
+        ;; declaration no node names and that is not the default-eof error never
+        ;; reaches the encoder, so this pair must be EQUAL. Stated as its own case
+        ;; because a reader who varies an unreferenced reason and sees no
+        ;; fingerprint move would otherwise read it as the slice failing.
+        (check-equal "equal"
+                     (normal-machine-fingerprint (normalize (one-byte/spare-reason "first")))
+                     (normal-machine-fingerprint (normalize (one-byte/spare-reason "second"))))))))
 
 ;; Entry is the second node; the dispatch node lists byte 5 before byte 2.
 (define two
@@ -119,7 +167,7 @@
     (harness-case "the IR fingerprint of the node-routing machine is the measured golden value"
       (lambda ()
         (check-equal "fingerprint" (normal-machine-fingerprint n-eof)
-                     9098559711816935340)))))
+                     13828870821654800916)))))
 
 ;; The pause tag (4) plus its u32be continuation id (D5) is not exercised by
 ;; the one-byte or node-routing goldens above -- neither fixture has a pause
@@ -144,7 +192,7 @@
     (harness-case "the pause encoding is pinned by a fingerprint golden"
       (lambda ()
         (check-equal "pause fingerprint" (normal-machine-fingerprint n-pause)
-                     15725897457025557005)))))
+                     17903327606435836645)))))
 
 ;; Milestone 3 Slice ① Task 4 (decision 0014): a byte set, range or complement
 ;; lowers to ONE normalized transition per byte. Normalized IR gains no grouped

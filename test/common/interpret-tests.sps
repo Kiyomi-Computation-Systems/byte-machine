@@ -12,6 +12,15 @@
 
 (harness-begin "unit.interpret")
 
+;; Slice ①a task 5: the error slot holds a parser-error record, and is #f on
+;; every non-error result. These are single-executor lanes, so they compare the
+;; CODE rather than the §22.4:1271 projection the differential lanes use --
+;; but they must stay #f-tolerant, because the same accessor is read on results
+;; that carry no error at all.
+(define (error-code-of r)
+  (let ((e (parser-result-error r)))
+    (and (parser-error? e) (parser-error-code e))))
+
 (define eof-decl (make-error-declaration 'default-eof 'eof "unexpected end of input" #f))
 (define rej-decl (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))
 (define one-byte
@@ -53,7 +62,7 @@
           (parser-feed! p (make-bytevector 1 1) 0 1)              ; at s1, offset 1
           (let ((r (parser-finish! p)))
             (check-equal "error" (parser-result-status r) 'error)
-            (check-equal "truncation code" (parser-result-error r) 'truncated-input)
+            (check-equal "truncation code" (error-code-of r) 'truncated-input)
             (check-equal "eof at offset 1" (parser-result-stream-offset r) 1)))))
     (harness-case "feeding both bytes stops; finishing a stopped parser stays stopped (§12.2)"
       (lambda ()
@@ -84,7 +93,7 @@
                   '() #f)))
           (let ((r (parser-finish! p)))
             (check-equal "default-eof error" (parser-result-status r) 'error)
-            (check-equal "default-eof code" (parser-result-error r) 'eof)))))))
+            (check-equal "default-eof code" (error-code-of r) 'eof)))))))
 
 (harness-group "all 256 byte values"
   (lambda ()
@@ -101,7 +110,7 @@
               (let ((r (run b)))
                 (when (or (not (eq? (parser-result-status r) 'error))
                           (not (= (parser-result-stream-offset r) 0))
-                          (not (eq? (parser-result-error r) 'unexpected-byte)))
+                          (not (eq? (error-code-of r) 'unexpected-byte)))
                   (set! bad b)))
               (loop (+ b 1))))
           (check-equal "no byte in 1..255 misbehaved" bad 'none))))))
@@ -128,7 +137,7 @@
                 (let ((x (parser-feed! p (make-bytevector 1 (car l)) 0 1)))
                   (list (parser-result-status x) (parser-result-next x)
                         (parser-result-consumed x) (parser-result-stream-offset x)
-                        (parser-result-error x))))))))
+                        (error-code-of x))))))))
 (define (interp m) (make-interpreted-machine (verify-machine m)))
 
 (harness-group "sequence prefix tracking through the interpreter"
@@ -281,6 +290,6 @@
           (let ((r (parser-finish! p)))
             (check-equal "status" (parser-result-status r) 'error)
             (check-equal "the sequence node's own eof-target code, not default-eof"
-                         (parser-result-error r) 'unexpected-byte)))))))
+                         (error-code-of r) 'unexpected-byte)))))))
 
 (harness-finish)

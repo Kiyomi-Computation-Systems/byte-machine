@@ -13,6 +13,15 @@
 
 (harness-begin "unit.eof-interpret")
 
+;; Slice ①a task 5: the error slot holds a parser-error record, and is #f on
+;; every non-error result. These are single-executor lanes, so they compare the
+;; CODE rather than the §22.4:1271 projection the differential lanes use --
+;; but they must stay #f-tolerant, because the same accessor is read on results
+;; that carry no error at all.
+(define (error-code-of r)
+  (let ((e (parser-result-error r)))
+    (and (parser-error? e) (parser-error-code e))))
+
 ;; A fresh parser over a freshly-verified eof-machine. Task 1's §16.2 checks
 ;; (entry eof-target -> finish is legal; s1 eof-target -> error is legal) must
 ;; hold for this exact machine, or verify-machine below raises and every case
@@ -39,6 +48,9 @@
           (check-equal "next is the entry offset" (parser-result-next r) 0)
           (check-equal "consumed is zero" (parser-result-consumed r) 0)
           (check-equal "stream-offset is zero" (parser-result-stream-offset r) 0)
+          ;; The SLOT, not the code projection: error-code-of maps every
+          ;; non-record to #f, so asserting it here would pass for any wrong
+          ;; value in the slot, not only for the absence of an error.
           (check-equal "no error" (parser-result-error r) #f))))
     (harness-case "every byte b != 1 fed at s0 errors at offset 0 with unexpected-byte"
       (lambda ()
@@ -49,7 +61,7 @@
                 (let ((r (feed1 (fresh) b)))
                   (when (or (not (eq? (parser-result-status r) 'error))
                             (not (= (parser-result-stream-offset r) 0))
-                            (not (eq? (parser-result-error r) 'unexpected-byte)))
+                            (not (eq? (error-code-of r) 'unexpected-byte)))
                     (set! bad b))))
               (loop (+ b 1))))
           (check-equal "no byte in 0..255 (excl. 1) misbehaved" bad 'none))))
@@ -65,7 +77,7 @@
           (feed1 p 1)
           (let ((r (parser-finish! p)))
             (check-equal "status" (parser-result-status r) 'error)
-            (check-equal "error code" (parser-result-error r) 'truncated-input)
+            (check-equal "error code" (error-code-of r) 'truncated-input)
             (check-equal "next is the s1 offset" (parser-result-next r) 1)
             (check-equal "consumed is zero" (parser-result-consumed r) 0)
             (check-equal "stream-offset" (parser-result-stream-offset r) 1)))))
@@ -87,7 +99,7 @@
                   (let ((r (feed1 p b)))
                     (when (or (not (eq? (parser-result-status r) 'error))
                               (not (= (parser-result-stream-offset r) 1))
-                              (not (eq? (parser-result-error r) 'unexpected-byte)))
+                              (not (eq? (error-code-of r) 'unexpected-byte)))
                       (set! bad b)))))
               (loop (+ b 1))))
           (check-equal "no byte in 0..255 (excl. 2) misbehaved" bad 'none))))))

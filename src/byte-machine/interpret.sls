@@ -102,11 +102,41 @@
                            (let ((e (byte-case-edge (car cs))))
                              (cons (edge-target e) (edge-mode e))))
                           (else (loop (cdr cs)))))))))
-      (define (error-value name)
-        (error-declaration-code
-         (lookup-error errors (error-node-error-name (lookup nodes name)))))
-      (define (default-eof-value)
-        (error-declaration-code (lookup-error errors (machine-default-eof-error m))))
+      ;; §12.7:777 makes source-node name, domain, code, offset and position
+      ;; kind semantic and required to match across executors, and excludes the
+      ;; internal state id. This lane answers with the node's DECLARATION INDEX
+      ;; -- its position in machine-nodes, the same mapping lower-machine builds
+      ;; as name->id -- which is this executor's own deterministic choice, not a
+      ;; requirement that it equal the generated lane's.
+      (define (declaration-index name)
+        (let walk ((ns nodes) (i 0))
+          (cond ((null? ns)
+                 ;; LOUD, not 0. Zero is the entry state's own id, so falling
+                 ;; back to it reports a plausible, wrong state id rather than a
+                 ;; defect -- and §12.7:777 makes the id a value both lanes must
+                 ;; report. Unreachable through the public API: every name handed
+                 ;; here came from a node the verifier already resolved.
+                 (byte-machine-contract-violation 'interpret 'internal name))
+                ((eq? (node-name (car ns)) name) i)
+                (else (walk (cdr ns) (+ i 1))))))
+      ;; Both producers hand the runtime the record's inputs rather than a bare
+      ;; code, so the two executors build the SAME record from the same parts.
+      ;; The runtime supplies the offset and the position kind, which only the
+      ;; loop knows.
+      (define (error-parts name)
+        (let ((d (lookup-error errors (error-node-error-name (lookup nodes name)))))
+          (list (error-declaration-code d) (error-declaration-reason d)
+                name (declaration-index name))))
+      ;; A default-EOF error has no error node, so its node-name is the DISPATCH
+      ;; node's -- the one whose EOF-target chain was exhausted, which is where
+      ;; truncation was detected. `node` must be unwrapped first: for a lowered
+      ;; sequence prefix state it is the compound (node-name . consumed-bytes)
+      ;; pair, and that is the common case rather than the exception.
+      (define (default-eof-parts node)
+        (let ((nm (if (pair? node) (car node) node))
+              (d (lookup-error errors (machine-default-eof-error m))))
+          (list (error-declaration-code d) (error-declaration-reason d)
+                nm (declaration-index nm))))
       ;; Every lowered prefix state inherits the source node's EOF edge
       ;; (§12.4:727), so a compound current answers with its own node's.
       (define (eof-target-of cur)
@@ -120,8 +150,8 @@
            ((entry) (machine-entry m))
            ((kind) (kind (car args)))
            ((dispatch) (dispatch (car args) (cadr args)))
-           ((error-value) (error-value (car args)))
+           ((error-value) (error-parts (car args)))
            ((eof-target) (eof-target-of (car args)))
            ((pause-target) (pause-node-continuation (lookup nodes (car args))))
-           ((default-eof-value) (default-eof-value))
+           ((default-eof-value) (default-eof-parts (car args)))
            (else (byte-machine-contract-violation 'interpret 'internal msg))))))))

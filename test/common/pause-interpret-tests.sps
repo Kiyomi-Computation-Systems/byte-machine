@@ -10,6 +10,15 @@
 
 (harness-begin "unit.pause-interpret")
 
+;; Slice ①a task 5: the error slot holds a parser-error record, and is #f on
+;; every non-error result. These are single-executor lanes, so they compare the
+;; CODE rather than the §22.4:1271 projection the differential lanes use --
+;; but they must stay #f-tolerant, because the same accessor is read on results
+;; that carry no error at all.
+(define (error-code-of r)
+  (let ((e (parser-result-error r)))
+    (and (parser-error? e) (parser-error-code e))))
+
 (define (fresh-parser)
   (make-parser (make-interpreted-machine (verify-machine (make-pause-machine))) '() #f))
 
@@ -50,7 +59,7 @@
           (parser-resume! p)
           (let ((r (parser-finish! p)))                ; s1's eof-target -> trunc
             (check-equal "error" (parser-result-status r) 'error)
-            (check-equal "code" (parser-result-error r) 'truncated-input)
+            (check-equal "code" (error-code-of r) 'truncated-input)
             (check-equal "offset" (parser-result-stream-offset r) 1)))))))
 
 (harness-group "all-256 first bytes"
@@ -65,7 +74,7 @@
                   (check-equal "paused" (parser-result-status r) 'paused)
                   (begin
                     (check-equal "error" (parser-result-status r) 'error)
-                    (check-equal "code" (parser-result-error r) 'unexpected-byte)
+                    (check-equal "code" (error-code-of r) 'unexpected-byte)
                     (check-equal "offset" (parser-result-stream-offset r) 0))))
             (loop (+ b 1))))))))
 

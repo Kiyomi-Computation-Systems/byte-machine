@@ -10,7 +10,8 @@
 ;;; disagreement here is a real lowering defect in the pause encoding /
 ;;; pause-target arm.
 (import (rnrs) (rnrs eval) (only (chezscheme) load)
-        (byte-machine test harness) (byte-machine test pause-machine)
+        (byte-machine test harness)
+        (byte-machine test error-projection) (byte-machine test pause-machine)
         (byte-machine verify) (byte-machine interpret)
         (byte-machine runtime) (byte-machine compile))
 (harness-begin "differential.pause")
@@ -30,7 +31,8 @@
 ;; following operation's result can show.
 (define (rfields r p)
   (list (parser-result-status r) (parser-result-next r) (parser-result-consumed r)
-        (parser-result-stream-offset r) (parser-result-error r) (parser-lifecycle p)))
+        (parser-result-stream-offset r) (project-error (parser-result-error r))
+        (parser-lifecycle p)))
 
 (define (fresh-ref) (make-parser cm-ref '() #f))
 (define (fresh-gen) (make-parser cm-gen '() #f))
@@ -109,7 +111,7 @@
           (parser-resume! pg)
           (let ((rr (parser-finish! pr)) (rg (parser-finish! pg)))
             (check-equal "fields agree" (rfields rg pg) (rfields rr pr))
-            (check-equal "error code" (parser-result-error rr) 'truncated-input)
+            (check-equal "error code" (parser-error-code (parser-result-error rr)) 'truncated-input)
             (check-equal "offset" (parser-result-stream-offset rr) 1)))))))
 
 (harness-finish)

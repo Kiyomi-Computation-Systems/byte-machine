@@ -6,7 +6,11 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FORTY-SIX PASSES, BECAUSE FORTY-SIX DIFFERENT WITNESSES ARE NEEDED
+# FORTY-EIGHT PASSES, BECAUSE FORTY-EIGHT DIFFERENT WITNESSES ARE NEEDED
+# (46 through Milestone 3; Milestone 4 Slice ①a adds the member-3 drift
+# guard and the position-kind lane. The count in prose and the count the
+# constants enforce are kept in step deliberately -- a banner left at the
+# old number is the one surface no test can check.)
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -148,7 +152,7 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "FORTY-SIX PASSES..." above. Declared here, rather than only in prose,
+# See "FORTY-EIGHT PASSES..." above. Declared here, rather than only in prose,
 # so the count enforced at the bottom of this file is the same text a reader
 # checks by eye at the top -- one number to keep in sync, not two that can
 # quietly disagree. 25 passes / 60 mutations before the aot task; pass 26 adds
@@ -731,8 +735,8 @@ cmake_minimum_required(VERSION 3.26)
 # reexec-targets)" -- for the one decision in reexec-targets' sequence arm that
 # had no mutation, the `eq? ... 'reexecute` test itself. No pass is added, so
 # passes stay at 46 and mutations become 235 + 1 = 236.
-set(EXPECTED_PASSES 46)
-set(EXPECTED_MUTATIONS 236)
+set(EXPECTED_PASSES 48)
+set(EXPECTED_MUTATIONS 249)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -2487,8 +2491,14 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: advance does not consume the byte"
-  FIND [[(loop (+ pos 1))]]
-  REPLACE [[(loop pos)]]
+  # Re-anchored in Slice ①a task 5: the interpreter's feed loop gained the
+  # position-kind variable, so both tails carry it. FIND and REPLACE move in
+  # LOCKSTEP -- this is a swap pair with the reexecute tail, and updating only
+  # the FIND would leave the mutant replacing a two-argument tail with a
+  # one-argument one, failing as an arity error rather than as the
+  # consumed-count defect the pin names.
+  FIND [[(loop (+ pos 1) 'boundary)]]
+  REPLACE [[(loop pos 'byte)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "one-byte parser lifecycle\\.the accepted byte stops after consuming one byte: consumed")
 
@@ -2516,42 +2526,31 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
-  LABEL "runtime: a v1 machine is driven down the op path"
-  # Re-anchored for Milestone 2 Slice ②b-2: parser-feed!'s binary `if` became a
-  # three-way `case` (op / v2 / else=v1) when the /v2 variant landed, so the old
-  # `(if #t ...)` anchor no longer exists. The same decision -- a v1 machine must
-  # NOT be driven through parser-feed-op! -- is now witnessed by redirecting the
-  # v1 (else) arm to the op driver; `parser-feed-v1!` occurs only here as a call
-  # (its definition reads `(define (parser-feed-v1! ...`), so this is unique. The
-  # effect on the suite is identical to the former mutation: v1 stubs raise an
-  # arity error inside parser-feed-op!'s `(op 'kind node)`, which the harness
-  # records as a "case raised" failure in every /v1 case -> exit 1.
-  #
-  # The pin was "status" until the signature audit measured this mutant: not one
-  # of its seven FAIL lines contains the word, because every /v1 case dies on
-  # the raise rather than on a status comparison. "status" was satisfied only by
-  # the summary line's own `status=1`, which prints on any failing run -- a bare
-  # nonzero exit in disguise. It now names one raised /v1 case. The colon binds
-  # it to the /v1 group's shorter case name: the one-byte group's case reads "an
-  # empty slice needs input and reports no result yet", so it cannot match.
-  FIND [[(else (parser-feed-v1! parser bv start end))]]
-  REPLACE [[(else (parser-feed-op! parser bv start end))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "an empty slice needs input: case raised")
-
-byte_machine_mutation(
-  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a mismatched generated-runtime ABI version is accepted"
-  FIND [[(unless (and (integer? abi-version) (= abi-version current-abi-version))]]
-  REPLACE [[(unless #t]]
+  # Re-anchored for Milestone 4 Slice ①a task 3. This FIND was the /v1
+  # constructor's guard until decision 0018 retired the versioned NAME and kept
+  # the version CHECK; the same decision now lives in the ONE unversioned
+  # constructor, whose first action it is. The witness is unchanged -- the live
+  # guard still refuses a mismatched number -- so this is
+  # MutationRunner.cmake's "update the mutation rather than deleting it" case,
+  # never an EXPECT_SURVIVES.
+  FIND [[    (unless (and (integer? abi-version) (= abi-version current-abi-version))
+      (assertion-violation 'byte-machine-make-compiled-machine]]
+  REPLACE [[    (unless #t
+      (assertion-violation 'byte-machine-make-compiled-machine]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "a mismatched ABI version is refused: refused")
 
-byte_machine_mutation(
-  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
-  LABEL "runtime: the v1 result status is hard-wired to stopped"
-  FIND [[(status (feed-outcome-status o))]]
-  REPLACE [[(status 'stopped)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "a rejected byte errors at position 0 with the code: status")
-
+# (removed 2026-09-02, Milestone 4 Slice ①a) "runtime: a v1 machine is driven
+# down the op path" and "runtime: the v1 result status is hard-wired to
+# stopped": both witnessed the 'v1 feed-only executor path, which decision 0018
+# made unconstructable and this slice deleted -- make-parser's 'v1 arm,
+# parser-feed!'s v1 else, parser-feed-v1! and parser-finish!'s raising v1 arm are
+# all gone. Their REPLACEs change nothing in the surviving tree and no input can
+# reach what they mutated, so they were deleted WITH the code rather than left to
+# report UNCAUGHT. Recorded here because the obligation is to say so beside the
+# pass: decision 0018's Consequences names both LABELs and delegates the
+# disposition to the slice that lands it.
+#
 # (removed 2026-08-28, Slice ②a) "a v1 terminal result is not made sticky": the
 # sticky cache was deleted; a repeat feed re-runs the executor, which is idempotent
 # for stop/error, so setting-vs-not-setting a cache is now unobservable in M2's
@@ -2586,6 +2585,13 @@ byte_machine_mutation(
   # parser 'error))` two-line pairing with the finished arm no longer occurs.
   # Still anchored on the same error-arm-then-finished-arm adjacency that makes
   # it unique to parser-feed! (parser-finish-v2! orders its arms differently).
+  #
+  # 2026-09-02: an earlier version of this note justified the detail anchor by
+  # reference to "runtime: the v1 result status is hard-wired to stopped", which
+  # Milestone 4 Slice ①a deleted with the 'v1 executor path. The uniqueness
+  # argument above stands on its own and does not depend on that sibling; the
+  # reference is removed rather than left pointing at a mutation no maintainer
+  # can find.
   FIND [[((error) (parser-set-lifecycle! parser 'error)
                     (parser-set-stored-error! parser (parser-result-error r)))
            ((finished) (parser-set-lifecycle! parser 'finished))]]
@@ -2648,10 +2654,14 @@ byte_machine_mutation(
   # `(make-parser-result 'error off 0 off (op 'default-eof-value))` this FIND
   # anchored. Same routing decision, same reason; the store itself is a
   # separate decision, tested below.
-  FIND [[(let ((e (op 'default-eof-value)))
+  # Re-anchored again in Slice ①a task 5: default-eof-value gained the exhausted
+  # dispatch node (decision 0022 item 9 -- a default-EOF error has no error node,
+  # so its node-name is the dispatch node's), and the record is built here from
+  # the parts it returns.
+  FIND [[(let ((e (parts->parser-error (op 'default-eof-value node) off 'eof)))
                           (parser-set-stored-error! parser e)
                           (make-parser-result 'error off 0 off e))))))]]
-  REPLACE [[(let ((e (op 'default-eof-value)))
+  REPLACE [[(let ((e (parts->parser-error (op 'default-eof-value node) off 'eof)))
                           (parser-set-stored-error! parser e)
                           (make-parser-result 'stopped off 0 off e))))))]]
   EXPECT_STATUS 1
@@ -2666,10 +2676,10 @@ byte_machine_mutation(
   # Signature review: bare "stored error value" is a substring of a DIFFERENT
   # check's own label, "feed-stored error value" (the feed-side store's
   # witness below) -- pinned to this case's own name instead.
-  FIND [[(let ((e (op 'default-eof-value)))
+  FIND [[(let ((e (parts->parser-error (op 'default-eof-value node) off 'eof)))
                           (parser-set-stored-error! parser e)
                           (make-parser-result 'error off 0 off e))))))]]
-  REPLACE [[(let ((e (op 'default-eof-value)))
+  REPLACE [[(let ((e (parts->parser-error (op 'default-eof-value node) off 'eof)))
                           (make-parser-result 'error off 0 off e))))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "default-EOF truncation: stored error value")
 
@@ -2711,20 +2721,35 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a /v2 finish does not drive exec with finish? true"
-  FIND [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t)))]]
-  REPLACE [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #f)))]]
+  # Re-anchored in Slice ①a task 3: emitted `exec` gained its reserved seventh
+  # parameter, so both call sites gained an argument.
+  FIND [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t empty-fields)))]]
+  REPLACE [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #f empty-fields)))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish with no input routes to the default-eof error: default-eof code")
 
-# Second: the /v2 constructor's ABI-version guard. It checks the literal 2 (the
+# Second: the /v2 TOMBSTONE. Milestone 4 Slice ①a task 3 rewrote both retired
+# constructors to refuse EVERY version rather than the one they are named for,
+# because the moment current-abi-version moved to 3 the old literal-2 guard
+# would have accepted exactly the stale files it was added to refuse -- a hole,
+# not a tombstone. What this mutation now witnesses is that the tombstone still
+# raises. (The comment this replaces was already false at HEAD before the slice:
+# it said "the emitter still emits /v1, so current-abi-version stays 1".)
+# The superseded text read: the /v2 constructor's ABI-version guard checks the literal 2 (the
 # emitter still emits /v1, so current-abi-version stays 1), textually distinct
 # from the /v1 guard's `(= abi-version current-abi-version)` above. Accepting any
 # version lets the /v2 refusal test call it with abi 1 without raising.
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
-  LABEL "runtime: a mismatched /v2 ABI version is accepted"
-  FIND [[(unless (and (integer? abi-version) (= abi-version 2))]]
-  REPLACE [[(unless #t]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "a mismatched /v2 ABI version is refused: refused")
+  LABEL "runtime: the /v2 tombstone accepts a version"
+  # Three textually distinct guard forms is a hard constraint, not style: every
+  # mutation runs at the default SITES of 1, asserted exactly, so writing any two
+  # of the live guard and the two tombstones alike takes one FIND from one site
+  # to two and fails the suite at declaration.
+  FIND [[    (assertion-violation 'byte-machine-make-compiled-machine/v2
+                         "retired generated-runtime ABI (superseded by the unversioned constructor)"]]
+  REPLACE [[    (list 'accepted
+                         "retired generated-runtime ABI (superseded by the unversioned constructor)"]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "the retired constructors refuse every version: none accepted")
 
 # Milestone 2 Slice ③'s Task 2 (pause/resume + the full §12.2 operation
 # matrix, D1-D3) adds the rest of this pass: parser-resume! (its two acks and
@@ -2926,10 +2951,17 @@ byte_machine_mutation(
   # before this task (nothing drove an eof-target chain into a NAMED error
   # node); the new pause-op stub's s1 -> 'trunc closes that gap and witnesses
   # both this store and the arm's routing together.
-  FIND [[(let ((e (op 'error-value node)))
+  # Re-anchored in Slice ①a task 5: the arm builds the record from the parts the
+  # executor returns plus the loop's own offset and position kind.
+  FIND [[(let ((e (parts->parser-error (op 'error-value node) off pk)))
              (parser-set-stored-error! parser e)
              (make-parser-result 'error off 0 off e)))]]
-  REPLACE [[(let ((e (op 'error-value node)))
+  # The REPLACE drops ONLY the store. An earlier re-anchor updated the FIND to
+  # the post-slice text but left the REPLACE at the pre-slice one, so the mutant
+  # made two changes at once -- dropping the store AND reverting `e` to the raw
+  # parts list -- and the pinned line could have come from either. One mutation,
+  # one decision.
+  REPLACE [[(let ((e (parts->parser-error (op 'error-value node) off pk)))
              (make-parser-result 'error off 0 off e)))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish repeats the finish-stored error")
 
@@ -3018,7 +3050,7 @@ byte_machine_mutation(
   FIND [[((finished) (make-parser-result 'finished start 0 (parser-offset parser) #f))]]
   REPLACE [[ ]]
   EXPECT_SURVIVES
-    "whole-arm deletion (as opposed to the field-value mutation above, which IS caught) falls through to parser-feed!'s shared `else` branch; for the 'op variant, parser-feed-op! run fresh from a `current` still parked on the same finish node reaches that loop's own `(finish)` case before advancing `pos`, producing the byte-identical result tuple this arm short-circuits to. The other two variants do not witness it either, for an EMPIRICAL reason rather than a structural one: parser-feed!'s inner case records lifecycle 'finished from ANY variant whose executor returns 'finished, so v1 is not barred from the sticky finished row (parser-finish!'s raising v1 else arm closes only the finish! route) -- but this file's only v1 executor, stub-feed, has no state that returns 'finished, and its /v2 stub-exec has none either, so no v1 or /v2 fixture here ever parks a parser at lifecycle 'finished. Measured directly: this mutant passes the whole SPEC-lane suite unchanged (cases=35 failed-cases=0)")
+    "whole-arm deletion (as opposed to the field-value mutation above, which IS caught) falls through to parser-feed!'s shared `else` branch; for the 'op variant, parser-feed-op! run fresh from a `current` still parked on the same finish node reaches that loop's own `(finish)` case before advancing `pos`, producing the byte-identical result tuple this arm short-circuits to. The generated variant does not witness it either, for an EMPIRICAL reason rather than a structural one: parser-feed!'s inner case records lifecycle 'finished from ANY variant whose executor returns 'finished, but this file's stub-exec has no state that returns 'finished, so no generated fixture here ever parks a parser at lifecycle 'finished. RE-MEASURED 2026-09-02 after Milestone 4 Slice ①a deleted the 'v1 executor path entirely: the original reason turned on v1 and its stub-feed, neither of which exists now -- make-parser raises on an unknown variant, parser-feed-v1! is gone, and parser-finish!'s else arm no longer names v1 at all. The survivor's SUBSTANCE is unchanged and was re-measured on the post-slice tree: this mutant still passes the whole SPEC-lane suite unchanged")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -3134,6 +3166,58 @@ byte_machine_mutation(
        (byte-machine-contract-violation 'parser-feed! 'lifecycle-violation]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "feed on finish-ready -- expected a raise, but the thunk returned")
+
+# Milestone 4 Slice ①a task 2: the parser-error record's two construction
+# decisions (decision 0022 items 1 and 2). Nothing outside runtime-tests.sps
+# builds one until task 5, so these are witnessed by that file's own cases --
+# which is the point: the shape is pinned BEFORE anything depends on it.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the ABI version check does not come first"
+  # Decision 0018 item 1: the check precedes every other guard, so a mismatch is
+  # reported before any part of the payload is interpreted -- which is what makes
+  # the payload safe to grow. Witnessable only by a predicate that names WHICH
+  # guard fired: every guard here raises assertion-violation with the same `who`,
+  # so the case's original bare assertion-violation? predicate passed whichever
+  # one fired and could not observe the ordering it is named for. The irritant is
+  # the only thing that differs between them.
+  FIND [[    (unless (and (integer? abi-version) (= abi-version current-abi-version))
+      (assertion-violation 'byte-machine-make-compiled-machine
+                           "generated-runtime ABI mismatch" abi-version))
+    (unless (procedure? exec)
+      (assertion-violation 'byte-machine-make-compiled-machine "exec must be a procedure" exec))]]
+  REPLACE [[    (unless (procedure? exec)
+      (assertion-violation 'byte-machine-make-compiled-machine "exec must be a procedure" exec))
+    (unless (and (integer? abi-version) (= abi-version current-abi-version))
+      (assertion-violation 'byte-machine-make-compiled-machine
+                           "generated-runtime ABI mismatch" abi-version))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the VERSION is named, not the payload")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a machine error is constructed in the callback domain"
+  # §9.3:398's domain is `machine | callback`, and `callback` has exactly one
+  # producer in the whole plan -- §13:808's callback failure, Milestone 5. A
+  # constructor that hard-wires the wrong member of a two-member enumeration is
+  # invisible to every M4 test that does not read the slot, which is why the
+  # accessor case reads it rather than assuming it.
+  FIND [[    (vector parser-error-tag 'machine (vector-ref entry 0) (vector-ref entry 1) #f]]
+  REPLACE [[    (vector parser-error-tag 'callback (vector-ref entry 0) (vector-ref entry 1) #f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "domain and detail are fixed by the constructor: domain")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the errs entry is unpacked reason-first"
+  # The entry packs (code . reason) positionally and both are read from the same
+  # two-element vector, so transposing them type-checks and survives anything
+  # that reads only one of the pair. Caught by a failed comparison on the code,
+  # not by a raise.
+  FIND [[    (vector parser-error-tag 'machine (vector-ref entry 0) (vector-ref entry 1) #f]]
+  REPLACE [[    (vector parser-error-tag 'machine (vector-ref entry 1) (vector-ref entry 0) #f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the five call-site members read back: code")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -3488,6 +3572,38 @@ byte_machine_mutation(
   LABEL "verify: the error-code grammar check is suppressed"
   FIND [[(valid-name? (error-declaration-code e))]]
   REPLACE [[#t]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "an uppercase error code is invalid-name: invalid-name")
+
+# Milestone 4 Slice ①a task 1 adds the reason-repertoire decision (§16.2:886,
+# §10.1:480). Two mutations, one per direction, because the repertoire can be
+# wrong permissively (accept a control character, which is what ships an
+# unparseable generated library) or restrictively (reject a legal reason, which
+# fails every shipped fixture). Both are caught by a failed COMPARISON rather
+# than by a raise: the permissive one lands on a count check that reads 0 where
+# the case expects 1, and the restrictive one on the clean machine's own
+# diagnostic-count assertion. The pins name a case tail plus a check label, so
+# each resolves to one (case, check) pair -- neither fragment appears in the
+# banner, the FAIL-CONTEXT line or the summary line.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the reason repertoire accepts every character"
+  FIND [[(or (and (char>=? c #\space) (char<=? c #\~)) (char=? c #\newline)))]]
+  REPLACE [[#t)]]
+  EXPECT_STATUS 1
+  # Anchored on the DETAIL, not just the (case, check) pair: the whole-pass
+  # audit found the bare pair matched by two siblings, because any mutation
+  # that suppresses the reason clause reaches this same check. The two
+  # directions differ in what the count becomes -- 0 when the repertoire
+  # accepts everything, 2 when it rejects everything -- so the detail is what
+  # separates them.
+  EXPECT_OUTPUT_MATCHES "a reason outside printable ASCII is rejected: one finding -- expected 1, got 0")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the reason repertoire rejects every reason"
+  FIND [[          (and (reason-char? (string-ref s i)) (loop (+ i 1))))))]]
+  REPLACE [[          (and #f (loop (+ i 1))))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a reason may carry quote backslash and newline: no diagnostics -- expected 0, got 2")
 
 # Milestone 2 Slice ②b-1's Task 1 (decision 0011) adds three more decisions to
 # this pass: the §16.2 EOF-execution checks. Each FIND is a verbatim, unique
@@ -3977,9 +4093,30 @@ byte_machine_mutation(
   # separated it from "verify: a byte edge into a finish terminal is
   # accepted" but not from this mutation, confirmed genuinely subsumed by
   # exhaustion at this size. See arm 6's own pin below for the measurement.
+  #
+  # Re-anchored 2026-09-02, Milestone 4 Slice ①a task 8's whole-pass sweep. The
+  # note above records this pin as "checked against every other declared pin's
+  # captured output, both directions" -- at 34 mutations. A pin is only ever
+  # verified against the mutants that existed when it was measured, and Slice
+  # ①a's "the reason repertoire rejects every reason" now reproduces that count
+  # coincidentally: rejecting every reason adds one invalid-name diagnostic per
+  # declaration, and the well-formed sequence fixture declares two, so it lands
+  # on the identical `expected 0, got 2`. Two mutants, one count, no
+  # discrimination.
+  #
+  # Re-anchored onto this mutant's ONE record that no other Pass 33 mutant
+  # produces, computed as a set difference against all 43 others rather than
+  # against a suspected sibling: the first attempt moved it to the case-target
+  # check, which is unique against the reason mutation but collides with
+  # "a missing transition target is not reported" -- the very residue the note
+  # above records this pin being moved away from. Measured at 44 mutations,
+  # 1892 ordered pairs.
+  #
+  # A count is a weaker anchor than a named check for exactly the reason this
+  # sweep found: another mutant can reach the same number by another route.
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "a well-formed sequence machine verifies with no diagnostics: diagnostic count -- expected 0, got 2")
+    "a node reached only through the sequence eof-target is reachable: no unreachable-node -- expected 0, got 2")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -4770,21 +4907,21 @@ byte_machine_mutation(
   LABEL "normal-ir: the FNV offset basis is changed"
   FIND [[(define fnv-offset 14695981039346656037)]]
   REPLACE [[(define fnv-offset 14695981039346656038)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 4236938459847922092, got 12950784969855027655")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 14095574568398596535, got 2974960947541485368")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: the FNV prime is changed"
   FIND [[(define fnv-prime  1099511628211)]]
   REPLACE [[(define fnv-prime  1099511628212)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 4236938459847922092, got 4383449027582801924")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 14095574568398596535, got 16123314695484888068")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: the byte is never mixed into the hash"
   FIND [[(* (bitwise-xor h (bytevector-u8-ref bv i)) fnv-prime)]]
   REPLACE [[(* h fnv-prime)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 4236938459847922092, got 11573569732163983077")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 14095574568398596535, got 1284000904169526997")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
@@ -4876,6 +5013,57 @@ byte_machine_mutation(
   REPLACE [[(error-declaration-name (car es)) (loop (cdr es))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "code -- expected unexpected-byte, got rejected")
 
+# Milestone 4 Slice ①a task 4 (decision 0019). Three decisions the encoding
+# gained here, none of which had a witness before: the format version byte, the
+# reserved field count, and the declaration's static reason.
+#
+# The version byte could not be pinned on its own text. `(put-u8 p 2)` occurs
+# TWICE after the bump -- the version byte and the error-state tag -- and
+# `(put-u8 p 1)` occurred three times before it, so a bare literal FIND reports
+# SITES 2 or 3 and fails at declaration. Each FIND below carries enough
+# surrounding text to be unique in the file.
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the format version byte names the wrong format"
+  # The obvious mutant -- put the byte back to 1 -- was measured and REJECTED: it
+  # produces the identical one-byte digest as the shipped "FNV offset basis is
+  # changed" mutation (2974960947541485368, confirmed by a control run of each).
+  # The two are arithmetically equivalent at FNV-1a's first mix step, since
+  # flipping the basis's low bit and flipping the first hashed byte's low bit
+  # reach the same state, so neither pin could discriminate the other's mutant.
+  # Version 3 has never been emitted and collides with nothing.
+  FIND [[       (put-u8 p 2)
+       (put-u32be p entry)]]
+  REPLACE [[       (put-u8 p 3)
+       (put-u32be p entry)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the IR fingerprint is the measured golden value: fingerprint -- expected 14095574568398596535, got 14172632155698282590")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the reserved field count is not written"
+  # Reserved empty by decision 0019 item 3(a) and read by nothing until Slice
+  # ①b. `encode-normal` is not exported and nothing in the tree decodes the byte
+  # stream, so the only observable of a reserved slot is the fingerprint it
+  # moves -- which is exactly why the slot is written NOW rather than in ①b.
+  FIND [[       (put-u32be p (vector-length states))
+       (put-u16be p 0)]]
+  REPLACE [[       (put-u32be p (vector-length states))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the IR fingerprint is the measured golden value: fingerprint -- expected 14095574568398596535, got 1041389063826219287")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: an error state's reason is dropped from the encoding"
+  # decision 0019 item 2: the reason must enter the ENCODING, not merely be
+  # readable from the source machine, or two machines differing only in a reason
+  # share a fingerprint and the fingerprint stops identifying what was emitted.
+  FIND [[               ((error) (put-u8 p 2) (put-symbol p (normal-error-code s))
+                        (put-reason p (normal-error-reason s)))]]
+  REPLACE [[               ((error) (put-u8 p 2) (put-symbol p (normal-error-code s)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the IR fingerprint is the measured golden value: fingerprint -- expected 14095574568398596535, got 3064965786472452921")
+
 # Milestone 2 Slice ②b-2 (Task 2): the dispatch eof routing is now part of the
 # canonical encoding, so a dispatch state's resolved eof (the one-byte machine
 # routes to the default-eof error, code 'eof) is mixed into the fingerprint.
@@ -4884,9 +5072,15 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: a dispatch's default-eof routing is not encoded into the fingerprint"
-  FIND [[(begin (put-u8 p 1) (put-symbol p (cdr eof)))]]
-  REPLACE [[(begin (put-u8 p 1))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 4236938459847922092, got 11399399754445376357")
+  # Re-anchored in Milestone 4 Slice ①a task 4: the arm gained the declaration's
+  # static reason (decision 0019 item 2), so the old FIND occurs zero times. The
+  # decision this witnesses is unchanged -- the default-eof CODE must reach the
+  # encoding -- so the REPLACE drops put-symbol and keeps the rest.
+  FIND [[(begin (put-u8 p 1) (put-symbol p (cdr eof))
+                             (put-reason p (normal-error-reason s)))]]
+  REPLACE [[(begin (put-u8 p 1)
+                             (put-reason p (normal-error-reason s)))]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 14095574568398596535, got 11628869637435983804")
 
 # Milestone 2 whole-branch review (item d): the NODE-eof encode arm -- tag 0 +
 # u32be routed node id -- had no witnessing mutation and no golden, because no
@@ -4904,7 +5098,7 @@ byte_machine_mutation(
   LABEL "normal-ir: a dispatch's node-eof routing target is not encoded into the fingerprint"
   FIND [[(begin (put-u8 p 0) (put-u32be p (cdr eof)))]]
   REPLACE [[(begin (put-u8 p 0))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 9098559711816935340, got 5670164119345830887")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 13828870821654800916, got 15387434986975117383")
 
 # Milestone 2 Slice ③'s Task 4 (the pause node in the normalizer) adds three
 # more mutations to this pass rather than opening a new one. normal-ir-
@@ -4939,8 +5133,8 @@ byte_machine_mutation(
 # question the pin answers. The pair-wise matrix measured this label's FAIL
 # line in the output of SEVEN other mutants of this same pass: every
 # fingerprint-affecting mutation in the lane (FNV offset, FNV prime, byte
-# mixing and error-code resolution -- the four that pin "4236938459847922092"
-# -- node-eof routing, which pins "9098559711816935340", the pause lower arm,
+# mixing and error-code resolution -- the four that pin "14095574568398596535"
+# -- node-eof routing, which pins "13828870821654800916", the pause lower arm,
 # and the tag-value mutation below) moves the pause golden too, because the
 # pause machine is hashed by the same algorithm. So the bare label said only
 # "some fingerprint moved". What separates the siblings is the got value, which is
@@ -4948,14 +5142,14 @@ byte_machine_mutation(
 # That is the same convention as the five above, applied where it is now
 # measured to be necessary, and the re-baseline cost is real but bounded: a
 # future IR-encoding move already re-baselines the pause golden itself
-# (15725897457025557005, in normal-ir-tests.sps), and these two move with it.
+# (17903327606435836645, in normal-ir-tests.sps), and these two move with it.
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: the pause encode arm hashes tag and continuation"
   FIND [[((pause) (put-u8 p 4) (put-u32be p (normal-pause-target s)))]]
   REPLACE [[((pause) (put-u8 p 4))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "pause fingerprint -- expected 15725897457025557005, got 6626362746927380524")
+  EXPECT_OUTPUT_MATCHES "pause fingerprint -- expected 17903327606435836645, got 355204278510953480")
 
 # A third mutation targets the pause TAG VALUE alone (4 -> 3, colliding with
 # finish's own tag byte) rather than the whole payload mutation 2 above
@@ -4977,7 +5171,7 @@ byte_machine_mutation(
   FIND [[(put-u8 p 4)]]
   REPLACE [[(put-u8 p 3)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "pause fingerprint -- expected 15725897457025557005, got 5068390459764251309")
+  EXPECT_OUTPUT_MATCHES "pause fingerprint -- expected 17903327606435836645, got 15135366215981961045")
 
 # Milestone 3 Slice ② Task 2 (decisions 0015, 0016): the sequence prefix trie
 # and its two-phase state-id allocation. Each mutation witnesses one decision
@@ -5235,22 +5429,28 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: an advance transition is lowered as a reexecute"
-  FIND [[(string-append "(loop (+ pos 1) " (number->string target) " (+ off 1))")]]
-  REPLACE [[(string-append "(loop pos " (number->string target) " off)")]]
+  FIND [[(string-append "(loop (+ pos 1) " (number->string target) " (+ off 1) (quote boundary))")]]
+  REPLACE [[(string-append "(loop pos " (number->string target) " off (quote byte))")]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "advance arm")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: the reexecute fallback is lowered as an advance"
-  FIND [[(string-append "(loop pos " (number->string target) " off)")]]
-  REPLACE [[(string-append "(loop (+ pos 1) " (number->string target) " (+ off 1))")]]
+  FIND [[(string-append "(loop pos " (number->string target) " off (quote byte))")]]
+  REPLACE [[(string-append "(loop (+ pos 1) " (number->string target) " (+ off 1) (quote boundary))")]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "the accepted byte advances and the fallback reexecutes: fallback")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: the error arm omits the resolved code"
-  FIND [[(symbol->string (normal-error-code s)) ") " id " off))\n")]]
-  REPLACE [["internal" ") " id " off))\n")]]
+  # Re-anchored in Slice ①a task 5: the arm renders a parser-error record, so
+  # the resolved code now reaches it through the errs-table INDEX rather than as
+  # a rendered symbol. Dropping the index to a constant 0 makes every error
+  # report the first declaration's code -- the same decision, the same failed
+  # comparison in the same case.
+  FIND [[(number->string (index-of (normal-error-code s)
+                                                  (normal-error-reason s))) ") (quote "]]
+  REPLACE [["0" ") (quote "]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "error arm")
 
 # Milestone 2 Slice ②b-2 (Task 2): the emitter renders the /v2 unified `exec`
@@ -5268,8 +5468,13 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: the exhausted-dispatch eof branch drops the resolved default-eof code"
-  FIND [[(symbol->string (cdr eof)) ") " id " off)")]]
-  REPLACE [["internal" ") " id " off)")]]
+  # Re-anchored in Slice ①a task 5: the default-eof arm renders a parser-error
+  # record, so the resolved code reaches it through the errs-table index.
+  # NOT "0": the default-eof declaration IS index 0 in every shipped fixture, so
+  # that REPLACE is a no-op and the mutation shipped UNCAUGHT on its first run.
+  # Index 1 is the `rejected` declaration, so the arm reports the wrong code.
+  FIND [[(number->string (index-of (cdr eof) reason)) ") (quote " (symbol->string name)]]
+  REPLACE [["1" ") (quote " (symbol->string name)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "eof routes to the default-eof error")
 
 byte_machine_mutation(
@@ -5359,8 +5564,14 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
   LABEL "compile: the final newline is emitted as CRLF"
-  FIND [[" exec)))\n"))))]]
-  REPLACE [[" exec)))\r\n"))))]]
+  # Re-anchored in Slice ①a task 3. The pin's FIND is compile.sls's render TAIL,
+  # which the metadata PAYLOAD's placement rewrote -- not the constructor rename
+  # one line above it, which is what the design's own die-list attributed the
+  # death to (§5, the "Five compile.sls emitter-text pins" bullet -- cited by
+  # content because a line number into that file is stale the moment anything
+  # is inserted above it, which this branch's own merge demonstrated).
+  FIND [[" exec (quote #(#())))))\n"))))]]
+  REPLACE [[" exec (quote #(#())))))\r\n"))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "no carriage return byte appears and the last byte is LF: carriage return present")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
@@ -6545,7 +6756,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # a size check would not notice either. Diffed against the committed golden, the
 # whole difference is the branch state's two arms swapping ((48) before (49)
 # becomes (49) before (48)) and the v2 fingerprint moving
-# 12299125921751534854 -> 14649231454401036534.
+# 16999772257989587335 -> 14649231454401036534.
 #
 # Three neighbouring edits were measured on the same stage and NOT declared
 # here, recorded so the next reader does not re-derive them:
@@ -6633,9 +6844,160 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
+# Milestone 4 Slice ①a task 6 (§4.7 item 2): reserved-member-3's drift guard.
+# Its own PASS, because a mutation is witnessed only by tests that run in the
+# lane its SPEC names -- appended to the preceding pass it ran under a verify
+# command driving a different program and reported UNCAUGHT, which is exactly
+# what that rule predicts.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/member3-drift-tests.sps")
+
+# compile.sls stated this gap in its own words for three milestones -- "checked,
+# not assumed, since it has no automated drift guard" -- and this slice adds
+# three entries to the list, so the gap is demonstrated rather than theoretical.
+# The mutation is a deletion, which is the drift the guard exists to catch.
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.member3-drift.chez.source
+  LABEL "compile: an emitted local is missing from reserved-member-3"
+  FIND [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs pk))]]
+  REPLACE [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(pk\\)")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# Milestone 4 Slice ①a task 7: the position kind is a property of the ARRIVING
+# transition (decision 0022 item 5), asserted BY VALUE in both executors.
+#
+# What the by-value assertion adds, stated honestly. Each mutation below breaks
+# exactly ONE lane, so the cross-lane comparison would also catch it -- the
+# earlier claim here, that these are defects "the differential alone cannot
+# see", was false of its own next sentence. What the by-value check adds for
+# these three is that the failure NAMES the wrong kind instead of reporting a
+# bare disagreement between two tuples.
+#
+# The case the by-value assertion uniquely covers -- both lanes agreeing on a
+# WRONG kind, which AGENTS.md's "agreement must stay observable" rule is about --
+# has no mutation here and cannot have one: a mutation edits a single FILE, and
+# making both lanes agree wrongly takes a coordinated edit to compile.sls and
+# runtime.sls at once. The by-value assertions in position-kind-tests.sps are
+# the only guard against it, which is why they assert the kind against §12.7's
+# table rather than only against each other.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/position-kind-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "compile: an emitted reexecute jump carries the advance position kind"
+  FIND [[(string-append "(loop pos " (number->string target) " off (quote byte))")]]
+  REPLACE [[(string-append "(loop pos " (number->string target) " off (quote boundary))")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "reexecute mismatch reports byte at the offending byte: kind -- expected byte, got boundary")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "runtime: the interpreter's advance jump carries the reexecute position kind"
+  FIND [[(loop (+ pos 1) 'boundary))
+                       (loop pos 'byte)))))]]
+  REPLACE [[(loop (+ pos 1) 'byte))
+                       (loop pos 'byte)))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "an advance-mode mismatch reports boundary after the committed byte: kind -- expected boundary, got byte")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "compile: the default-EOF arm reports a byte position rather than eof"
+  # §12.7:771 fixes `eof` for truncated input during finish!, and this arm is a
+  # terminal construction reached by no jump, so it takes a per-site literal
+  # rather than the loop variable. That literal had no mutation: the pass covered
+  # `byte` in the generated lane and `boundary` in the interpreter, leaving the
+  # third of the three kinds the lane is named for unwitnessed in both.
+  FIND [[") " id " off (quote eof)) " id " off)")))]]
+  REPLACE [[") " id " off (quote byte)) " id " off)")))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "both lanes report eof at the terminal, not at a hop: generated -- expected eof, got byte")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "compile: a reason is written into generated source unescaped"
+  # §20:1039's explicit escaping. valid-reason? deliberately ADMITS the three
+  # characters that need it -- they are inside §10.1:480's printable-ASCII-plus-LF
+  # repertoire -- so escape-string is the only thing between an author-supplied
+  # reason and a generated library that either does not parse or parses WRONG.
+  #
+  # Measured, not assumed: with only the quote clause removed the file still
+  # READS -- the string terminates early and the reason arrives as "a " instead
+  # of the declared text -- so the witnessing check is the ROUND TRIP, not the
+  # load. Removing the whole escaper does produce the reader error decision
+  # 0022's Consequences predicts, but that is a DIFFERENT mutant; pinning this
+  # one to it was a false supporting reason, caught by re-measuring the mutant
+  # the suite actually applies. The round trip is the stronger assertion anyway:
+  # escaping to the empty string would also load.
+  #
+  # Shipped with no witness at all until the whole-branch review: every reason in
+  # the test tree was plain lowercase ASCII plus space, so nothing distinguished
+  # this function from the identity.
+  FIND [[                  (cond ((char=? c #\") (cons #\" (cons #\\ acc)))]]
+  REPLACE [[                  (cond ((char=? c #\nul) (cons c acc))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the emitted library loads and reports the reason unchanged: generated round-trips the reason")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "compile: an error declaration is resolved by code alone"
+  # The whole-branch review's Critical. Two declarations may share a CODE --
+  # pass-names rejects duplicate declaration NAMES and nothing rejects duplicate
+  # codes -- and the normalizer has collapsed the node's declaration name to its
+  # resolved code by the time the emitter sees it, so keying on the code alone
+  # returns the FIRST declaration carrying it. The generated lane then reports a
+  # different declaration's reason than the interpreter, on a machine the
+  # verifier accepts with zero diagnostics. Invisible to every pre-existing lane
+  # (each fixture uses distinct codes) and to the property lane (machine-gen.sls
+  # fixes two declarations with distinct codes), which is why it needed its own
+  # fixture rather than a wider sweep of the existing ones.
+  FIND [[((and (eq? (error-declaration-code (car ds)) code)
+                                     (string=? (error-declaration-reason (car ds)) reason))]]
+  REPLACE [[((eq? (error-declaration-code (car ds)) code)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "both lanes report the reason of the declaration the node names: generated")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "runtime: the finish loop initializes the position kind to eof"
+  # Decision 0022 item 5's headline: the initialization is `boundary`
+  # UNCONDITIONALLY, in a feed call and a finish call alike, with no finish? key.
+  # Initializing this loop to `eof` is the shape Gate 0 shipped and caught one
+  # review later -- it made both lanes agree at the default-EOF arm and made that
+  # arm's own literal observationally identical to the inherited variable.
+  FIND [[(let loop ((node (parser-current parser)) (pk 'boundary))]]
+  REPLACE [[(let loop ((node (parser-current parser)) (pk 'eof))]]
+  EXPECT_STATUS 1
+  # Witnessed by the PARKED case, not by the truncation one: every other route
+  # into a finish-time error either hops (setting `eof` on the way) or lands on
+  # the default-EOF terminal, which takes its own per-site constant. Only an
+  # error state a prior feed parked on is reached by NO jump, so only it can
+  # observe what the loop was initialized to.
+  EXPECT_OUTPUT_MATCHES "both lanes report boundary, not eof: interpreter -- expected boundary, got eof")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FORTY-SIX PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FORTY-EIGHT PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

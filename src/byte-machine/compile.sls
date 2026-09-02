@@ -5,15 +5,18 @@
 ;;; emit-machine writes those bytes to the supplied binary port only. The
 ;;; generated library imports only (rnrs) and (byte-machine runtime), owns the
 ;;; derived library name (generated <machine-name>), and defines the single
-;;; caller-named compiled-machine binding via the v2 ABI (one unified `exec`
-;;; closure carrying a finish? EOF flag). Pure but for emit-machine's port write.
+;;; caller-named compiled-machine binding through the one unversioned
+;;; byte-machine-make-compiled-machine (decision 0018), whose first action is the
+;;; ABI version check and whose trailing quoted vector is the growable payload.
+;;; Pure but for emit-machine's port write.
 (library (byte-machine compile)
   (export compile-machine compilation-ok? compilation-diagnostics
           render-machine emit-machine
-          reserved-member-2)          ; test-support: the drift guard (§3.4) reads it
+          reserved-member-2 reserved-member-3) ; test-support: the drift guards read them
   (import (rnrs)
           (byte-machine verify)
-          (only (byte-machine private ir) machine-name)
+          (only (byte-machine private ir) machine-name machine-errors
+                error-declaration-code error-declaration-reason)
           (byte-machine private normal-ir))
 
   (define c-tag (vector 'byte-machine-compilation))
@@ -49,8 +52,20 @@
       parser-lifecycle parser-reset!
       parser-result? parser-result-status parser-result-next
       parser-result-consumed parser-result-stream-offset parser-result-error
+      byte-machine-make-parser-error/v1 parser-error?
+      parser-error-domain parser-error-code parser-error-reason
+      parser-error-detail parser-error-node-name parser-error-state-id
+      parser-error-offset parser-error-position-kind
+      byte-machine-make-compiled-machine
       callback-continue callback-pause))
-  (define reserved-member-3 '(exec loop pos st off b bv start end state offset finish?))
+  ;; Every identifier the emitted body binds, so a caller-chosen output binding
+  ;; cannot collide with one. `fieldv` is emitted `exec`'s seventh parameter,
+  ;; reserved empty here and filled in Slice ② (decision 0019 item 3(c)); it is
+  ;; deliberately not spelled `fields`, which `(rnrs)` binds as
+  ;; define-record-type's auxiliary keyword and which the drift guard's own
+  ;; `(rnrs)` subtraction would therefore swallow.
+  (define reserved-member-3
+    '(exec loop pos st off b bv start end state offset finish? fieldv errs pk))
   (define (lower-alpha? c) (and (char>=? c #\a) (char<=? c #\z)))
   (define (name-char? c)
     (or (lower-alpha? c) (and (char>=? c #\0) (char<=? c #\9)) (char=? c #\-)))
@@ -70,12 +85,36 @@
       (assertion-violation 'render-machine "invalid-output-binding" binding)))
 
   ;; --- canonical source writer ---
+  ;; §20:1039's explicit escaping, for the one class of author-controlled text the
+  ;; emitter writes into generated source: an error declaration's static reason,
+  ;; carried by decision 0022 item 7's per-library `errs` table. `pass-names-valid`
+  ;; refuses any reason outside printable ASCII plus LF (§10.1:480), so exactly
+  ;; three characters can reach here needing an escape and the set is closed
+  ;; rather than defensive. Its one caller is the `errs` table below.
+  (define (escape-string s)
+    (let loop ((i 0) (acc '()))
+      (if (>= i (string-length s))
+          (list->string (reverse acc))
+          (let ((c (string-ref s i)))
+            (loop (+ i 1)
+                  (cond ((char=? c #\") (cons #\" (cons #\\ acc)))
+                        ((char=? c #\\) (cons #\\ (cons #\\ acc)))
+                        ((char=? c #\newline) (cons #\n (cons #\\ acc)))
+                        (else (cons c acc))))))))
+
   ;; Each transition/fallback lowers to a loop tail: advance bumps pos and off,
   ;; reexecute keeps both. Rendered as one string with explicit, counted parens.
+  ;;
+  ;; The fourth argument is the POSITION KIND (decision 0022 item 5). It is a
+  ;; property of the transition that ARRIVED, not of the error state: one error
+  ;; node reached by a reexecute edge reports `byte` and the same node reached by
+  ;; an advance edge reports `boundary`, and the emitted arm is keyed on state id
+  ;; alone, so it cannot be a per-site literal there. Each jump therefore carries
+  ;; its own kind forward.
   (define (loop-tail target mode)
     (if (eq? mode 'advance)
-        (string-append "(loop (+ pos 1) " (number->string target) " (+ off 1))")
-        (string-append "(loop pos " (number->string target) " off)")))
+        (string-append "(loop (+ pos 1) " (number->string target) " (+ off 1) (quote boundary))")
+        (string-append "(loop pos " (number->string target) " off (quote byte))")))
 
   (define (render-transition-arm tr)
     ;; tr = (byte target mode) -> "((<byte>) <loop-tail>)"
@@ -92,27 +131,64 @@
 
   ;; An exhausted dispatch (finish? #t) routes eof: to a named node's loop
   ;; (continue the eof-target chain) or to the machine default-eof error.
-  (define (render-eof-branch eof id)
+  ;; The node case is the EOF-chain hop and carries `eof` forward. The default
+  ;; case is a terminal construction reached by no jump at all, so it takes a
+  ;; per-site (quote eof) literal rather than the loop variable -- §12.7:771
+  ;; fixes `eof` whether or not a prior hop ran. Its node-name is the DISPATCH
+  ;; node's, which is where truncation was detected: a default-EOF error has no
+  ;; error node of its own (decision 0022 item 9).
+  (define (render-eof-branch eof id name reason index-of)
     (if (eq? (car eof) 'node)
-        (string-append "(loop pos " (number->string (cdr eof)) " off)")
-        (string-append "(byte-machine-make-feed-outcome/v1 (quote error) pos (quote "
-                       (symbol->string (cdr eof)) ") " id " off)")))
+        (string-append "(loop pos " (number->string (cdr eof)) " off (quote eof))")
+        (string-append "(byte-machine-make-feed-outcome/v1 (quote error) pos "
+                       "(byte-machine-make-parser-error/v1 (vector-ref errs "
+                       (number->string (index-of (cdr eof) reason)) ") (quote " (symbol->string name)
+                       ") " id " off (quote eof)) " id " off)")))
 
   ;; Milestone 3 Slice ② changed nothing here either, and that is decision 0015
   ;; point 1 rather than an oversight: a lowered sequence-prefix state IS an
   ;; ordinary normalized dispatch state, so it renders through this same arm, the
-  ;; encoding gains no tag, the format version byte stays 1, and the need-input
+  ;; encoding gains no tag, and the need-input
   ;; resume point below gives cross-feed resumability with no new mechanism. No
   ;; new emitted local means reserved-member-3 (decision 0012 item 4) is
-  ;; unchanged -- checked, not assumed, since it has no automated drift guard.
-  (define (render-state-arm s)
-    (let ((id (number->string (normal-state-id s))))
+  ;; unchanged. That was true through Milestone 3 and is not true here: Slice ①a
+  ;; adds `fieldv`, `errs` and `pk`, and the gap the second half of this sentence
+  ;; named -- "no automated drift guard" -- is closed by
+  ;; member3-drift-tests.sps, which walks the emitted datum for every symbol
+  ;; outside a quote form and asserts the remainder is a subset of this list.
+  ;; `names` maps a state id to its public source-node name (§17:963's debug
+  ;; map, normalizer output) and `index-of` a (code, reason) pair to that
+  ;; declaration's position in the errs table. The name is not recoverable from a
+  ;; normalized state at all, and the declaration is not recoverable from its
+  ;; code alone -- codes need not be unique -- so both are threaded in from
+  ;; render-machine rather than derived here.
+  (define (render-state-arm s names index-of)
+    (let ((id (number->string (normal-state-id s)))
+          ;; Total by construction: the debug map and the internal state list
+          ;; are built from the same prefix-block id alists, so every id in
+          ;; `states` has an entry. Loud rather than trusting that, because a
+          ;; missing key would otherwise surface as `(cdr #f)` deep inside a
+          ;; string-append with nothing naming the state.
+          (nm (lambda (i)
+                (let ((hit (assv i names)))
+                  (unless hit
+                    (assertion-violation 'render-machine
+                                         "no source name for normalized state" i))
+                  (symbol->string (cdr hit))))))
       (case (normal-state-kind s)
         ((stop)
          (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote stopped) pos #f " id " off))\n"))
         ((error)
-         (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote error) pos (quote "
-                        (symbol->string (normal-error-code s)) ") " id " off))\n"))
+         ;; The record's five call-site arguments: the errs entry (code and
+         ;; reason together), the public source-node name, the state id, the
+         ;; absolute offset, and the loop's position-kind variable. Reading `pk`
+         ;; rather than a literal is what lets one error node report `byte` when
+         ;; a reexecute edge arrives and `boundary` when an advance edge does.
+         (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote error) pos "
+                        "(byte-machine-make-parser-error/v1 (vector-ref errs "
+                        (number->string (index-of (normal-error-code s)
+                                                  (normal-error-reason s))) ") (quote "
+                        (nm (normal-state-id s)) ") " id " off pk) " id " off))\n"))
         ((finish)
          (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote finished) pos #f " id " off))\n"))
         ((pause)
@@ -124,7 +200,9 @@
             "      ((" id ")\n"
             "       (if (>= pos end)\n"
             "           (if finish?\n"
-            "               " (render-eof-branch (normal-dispatch-eof s) id) "\n"
+            "               " (render-eof-branch (normal-dispatch-eof s) id
+                                                   (string->symbol (nm (normal-state-id s)))
+                                                   (normal-error-reason s) index-of) "\n"
             "               (byte-machine-make-feed-outcome/v1 (quote need-input) pos #f " id " off))\n"
             "           (let ((b (bytevector-u8-ref bv pos)))\n"
             "             (case b\n"
@@ -147,22 +225,76 @@
            (states (normal-machine-states normal))
            (entry (normal-machine-entry normal))
            (fp (normal-machine-fingerprint normal))
+           (names (normal-machine-debug-map normal))
+           ;; One entry per error DECLARATION, in declaration order -- the order
+           ;; errcode already walks. Per-SITE literals would repeat each reason
+           ;; once per error site, and the default-eof arm alone renders at every
+           ;; dispatch state: the http-version machine has nine error sites over
+           ;; two declarations. This is §19.1:996's "immutable field/callback/debug
+           ;; metadata", carried as one quoted vector.
+           (decls (machine-errors (compilation-machine compilation)))
+           ;; Keyed on code AND reason, not on code alone. Two declarations may
+           ;; share a code -- pass-names rejects duplicate declaration NAMES and
+           ;; nothing rejects duplicate codes, and §16.2's required-check list
+           ;; does not ask for uniqueness -- and the normalizer has already
+           ;; collapsed the node's declaration name to its resolved code by the
+           ;; time the emitter sees it. Keying on the code alone therefore
+           ;; returned the FIRST declaration carrying it, so a generated parser
+           ;; reported a different declaration's reason than the interpreter,
+           ;; on a machine the verifier accepts with zero diagnostics. The
+           ;; normalized state has carried the right reason in its own slot
+           ;; since format 2, which is what makes this recoverable without a new
+           ;; slot: (code, reason) selects the entry the SITE produced, and when
+           ;; two declarations agree on both, their errs entries are identical
+           ;; and either index yields the same record -- so this is total.
+           (index-of (lambda (code reason)
+                       (let walk ((ds decls) (i 0))
+                         (cond ((null? ds)
+                                ;; Unreachable: every code/reason pair the
+                                ;; emitter asks about was resolved FROM this
+                                ;; same list by the normalizer. Loud rather than
+                                ;; a silent fallback to 0, which is what the
+                                ;; first version of this walk would have done.
+                                (assertion-violation
+                                 'render-machine "no error declaration for code"
+                                 code reason))
+                               ((and (eq? (error-declaration-code (car ds)) code)
+                                     (string=? (error-declaration-reason (car ds)) reason))
+                                i)
+                               (else (walk (cdr ds) (+ i 1)))))))
+           (errs (let join ((ds decls) (acc ""))
+                   (if (null? ds) acc
+                       (join (cdr ds)
+                             (string-append acc (if (string=? acc "") "" " ")
+                                            "#(" (symbol->string (error-declaration-code (car ds)))
+                                            " \"" (escape-string (error-declaration-reason (car ds)))
+                                            "\")")))))
            (bstr (symbol->string binding)))
       (string->utf8
        (string-append
         "(library (generated " mname ")\n"
         "  (export " bstr ")\n"
         "  (import (rnrs) (byte-machine runtime))\n"
-        "  (define (exec state offset bv start end finish?)\n"
-        "    (let loop ((pos start) (st state) (off offset))\n"
+        "  (define errs (quote #(" errs ")))\n"
+        "  (define (exec state offset bv start end finish? fieldv)\n"
+        ;; The kind is initialized `boundary` UNCONDITIONALLY, with no finish?
+        ;; key: nothing has been consumed since either kind of call began, so an
+        ;; error state reached with no jump taken reports a boundary at the
+        ;; current stream offset regardless of which call observes it. Keying
+        ;; this on finish? made both lanes report `eof` at the default-EOF arm
+        ;; and made that arm's own literal observationally identical to the
+        ;; inherited variable -- agreement bought by making the difference
+        ;; unobservable, which is the repair AGENTS.md warns disarms its own test.
+        "    (let loop ((pos start) (st state) (off offset) (pk (quote boundary)))\n"
         "      (case st\n"
         (let loop ((i 0) (acc ""))
           (if (>= i (vector-length states)) acc
-              (loop (+ i 1) (string-append acc (render-state-arm (vector-ref states i))))))
+              (loop (+ i 1) (string-append acc (render-state-arm (vector-ref states i)
+                                                                 names index-of)))))
         "      (else (assertion-violation (quote exec) \"unknown state\" st)))))\n"
         "  (define " bstr "\n"
-        "    (byte-machine-make-compiled-machine/v2 2 " (number->string fp) " "
-        (number->string entry) " exec)))\n"))))
+        "    (byte-machine-make-compiled-machine 3 " (number->string fp) " "
+        (number->string entry) " exec (quote #(#())))))\n"))))
 
   (define (emit-machine compilation binding port)
     (let ((bytes (render-machine compilation binding)))

@@ -10,8 +10,9 @@ Milestones 0 through 3 (portability spike, minimal executable machine,
 incremental execution and lifecycle, byte classes and sequences) have closed.
 Milestone 3 closed **2026-08-30** with Slice ③ (multiple alternatives,
 ambiguity, and cycle analysis), after Slices ① (byte classes) and ② (sequence
-dispatch and prefix lowering); Milestone 4 (fields, actions, and branches) has
-not started. See
+dispatch and prefix lowering); Milestone 4 (fields, actions, and branches) is in
+progress — its Gate 0 discharged **2026-08-31** (decisions 0018–0022) and Slice
+①a landed **2026-09-02**, with Slices ①b, ② and ③ remaining. See
 [the implementation plan](docs/plans/byte-machine-implementation-plan.md) §25
 for overall scope; the entries below record what each milestone actually
 delivered. No versioned release exists yet.
@@ -910,6 +911,37 @@ delivered. No versioned release exists yet.
   default-EOF truncation" case. See
   [milestone-2-design.md](docs/plans/milestone-2-design.md) §5's 2026-08-29
   note (D1).
+
+
+- **The generated-code ABI is one unversioned constructor, and its version is
+  now 3.** `byte-machine-make-compiled-machine` replaces the `/vN` family; its
+  first action is the `(= abi-version current-abi-version)` check, so a mismatch
+  is reported before any part of the payload is interpreted, and the payload is
+  one growable quoted vector rather than a rest-arg, which keeps growth and the
+  version check coupled. `/v1` and `/v2` remain exported as tombstones that
+  refuse **every** version — a tombstone that still accepts a number is a hole,
+  and after the bump `/v2`'s old literal-2 guard would have accepted exactly the
+  stale files it was added to refuse. Generation is deterministic and the three
+  committed goldens are regenerated from the emitter. See
+  [decision 0018](docs/decisions/0018-unversioned-generated-abi-constructor.md);
+  this satisfies §9.5:444's three requirements for a pre-1.0 ABI change.
+- **The canonical normalized encoding is format 2**, carrying the static reason
+  of every error declaration the graph **reaches** — an error node's, and the
+  machine default-eof error's — and reserving a field-table count of zero. Two
+  machines differing only in a reached declaration's reason therefore differ in
+  IR fingerprint, without which the fingerprint would stop identifying what was
+  emitted. All four pinned fingerprints moved once, here. See
+  [decision 0019](docs/decisions/0019-encoding-format-2-pre-provisioned.md).
+- **A parser error is a structured record, not a bare code symbol.**
+  `parser-result-error` now yields a `parser-error` carrying domain, code,
+  reason, detail, public source-node name, state ID, absolute offset and
+  position kind (§9.3:397-405). Both executors build it from the same inputs,
+  and the differential compares five of those members plus `reason`. The
+  **state ID is deliberately excluded** from that comparison and is the one
+  member the two lanes may differ on: §12.7:777 licenses it, since an
+  independently interpreted machine need not number states as the generated one
+  does. Both still report one. See
+  [decision 0022](docs/decisions/0022-structured-parser-error-record.md).
 
 ### Removed
 

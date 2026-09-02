@@ -160,21 +160,42 @@
         (check "library form" (has? "(library (generated one-byte)"))
         (check "export" (has? "(export one-byte-parser)"))
         (check "import" (has? "(import (rnrs) (byte-machine runtime))"))))
-    (harness-case "it constructs the compiled machine through the v2 ABI with the fingerprint"
+    (harness-case "it constructs the compiled machine through one unversioned call"
       (lambda ()
-        (check "v2 call" (has? "(byte-machine-make-compiled-machine/v2 2 4236938459847922092 0 exec)"))))
+        ;; Decision 0018: the versioned NAME is retired, the version NUMBER
+        ;; survives and moves to 3, and the trailing quoted vector is the
+        ;; growable payload whose member 0 is the empty field-initials vector.
+        ;; It renders as #(#()) rather than #() because an empty vector has no
+        ;; member 0 -- ①b would have to add one, moving every golden in the
+        ;; slice whose headline invariant is that none moves.
+        (check "unversioned call"
+               (has? "(byte-machine-make-compiled-machine 3 14095574568398596535 0 exec (quote #(#())))"))
+        (check "no versioned name survives"
+               (not (has? "byte-machine-make-compiled-machine/v")))))
+    (harness-case "exec carries the reserved seventh parameter"
+      (lambda ()
+        ;; Reserved empty by decision 0019 item 3(c) and filled in Slice ②. The
+        ;; parameter lands NOW so that ②'s field store changes no emitted text
+        ;; for a zero-field machine.
+        (check "seventh parameter"
+               (has? "(define (exec state offset bv start end finish? fieldv)"))))
     (harness-case "the accepted byte advances and the fallback reexecutes"
       (lambda ()
-        (check "advance arm" (has? "((0) (loop (+ pos 1) 1 (+ off 1)))"))
-        (check "fallback"    (has? "(else (loop pos 2 off))"))))
+        (check "advance arm" (has? "((0) (loop (+ pos 1) 1 (+ off 1) (quote boundary)))"))
+        (check "fallback"    (has? "(else (loop pos 2 off (quote byte)))"))))
     (harness-case "the error state emits the resolved code"
       (lambda ()
-        (check "error arm" (has? "(byte-machine-make-feed-outcome/v1 (quote error) pos (quote unexpected-byte) 2 off)"))))
+        (check "error arm"
+               (has? "(byte-machine-make-feed-outcome/v1 (quote error) pos (byte-machine-make-parser-error/v1 (vector-ref errs 1) (quote reject) 2 off pk) 2 off)"))
+        ;; The errs table is per DECLARATION, not per site: the default-eof arm
+        ;; alone renders at every dispatch state.
+        (check "errs table"
+               (has? "(define errs (quote #(#(eof \"unexpected end of input\") #(unexpected-byte \"unexpected byte\"))))"))))
     (harness-case "an exhausted dispatch branches on finish? and routes eof to the default error"
       (lambda ()
         (check "finish eof guard" (has? "(if finish?"))
         (check "eof routes to the default-eof error"
-               (has? "(byte-machine-make-feed-outcome/v1 (quote error) pos (quote eof) 0 off)"))))
+               (has? "(byte-machine-make-feed-outcome/v1 (quote error) pos (byte-machine-make-parser-error/v1 (vector-ref errs 0) (quote start) 0 off (quote eof)) 0 off)"))))
     (harness-case "a finish node renders the finished terminal arm"
       (lambda ()
         (check "finish machine compiles" (compilation-ok? eof-ok))
@@ -209,7 +230,7 @@
       (lambda ()
         (let-values (((port get) (open-bytevector-output-port)))
           (let ((meta (emit-machine ok 'one-byte-parser port)))
-            (check-equal "fingerprint" (vector-ref meta 1) 4236938459847922092)
+            (check-equal "fingerprint" (vector-ref meta 1) 14095574568398596535)
             (check-equal "byte count matches render"
                          (vector-ref meta 2) (bytevector-length (render-machine ok 'one-byte-parser)))
             (check-equal "bytes written match render"
