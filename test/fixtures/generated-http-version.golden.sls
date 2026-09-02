@@ -1,7 +1,7 @@
 (library (generated http-version)
   (export http-version-parser)
   (import (rnrs) (byte-machine runtime))
-  (define (exec state offset bv start end finish?)
+  (define (exec state offset bv start end finish? fieldv)
     (let loop ((pos start) (st state) (off offset))
       (case st
       ((0)
@@ -82,4 +82,4 @@
                (else (loop pos 3 off))))))
       (else (assertion-violation (quote exec) "unknown state" st)))))
   (define http-version-parser
-    (byte-machine-make-compiled-machine/v2 2 12299125921751534854 0 exec)))
+    (byte-machine-make-compiled-machine 3 12299125921751534854 0 exec (quote #(#())))))

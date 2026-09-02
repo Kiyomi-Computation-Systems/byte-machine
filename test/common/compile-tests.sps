@@ -160,9 +160,25 @@
         (check "library form" (has? "(library (generated one-byte)"))
         (check "export" (has? "(export one-byte-parser)"))
         (check "import" (has? "(import (rnrs) (byte-machine runtime))"))))
-    (harness-case "it constructs the compiled machine through the v2 ABI with the fingerprint"
+    (harness-case "it constructs the compiled machine through one unversioned call"
       (lambda ()
-        (check "v2 call" (has? "(byte-machine-make-compiled-machine/v2 2 4236938459847922092 0 exec)"))))
+        ;; Decision 0018: the versioned NAME is retired, the version NUMBER
+        ;; survives and moves to 3, and the trailing quoted vector is the
+        ;; growable payload whose member 0 is the empty field-initials vector.
+        ;; It renders as #(#()) rather than #() because an empty vector has no
+        ;; member 0 -- ①b would have to add one, moving every golden in the
+        ;; slice whose headline invariant is that none moves.
+        (check "unversioned call"
+               (has? "(byte-machine-make-compiled-machine 3 4236938459847922092 0 exec (quote #(#())))"))
+        (check "no versioned name survives"
+               (not (has? "byte-machine-make-compiled-machine/v")))))
+    (harness-case "exec carries the reserved seventh parameter"
+      (lambda ()
+        ;; Reserved empty by decision 0019 item 3(c) and filled in Slice ②. The
+        ;; parameter lands NOW so that ②'s field store changes no emitted text
+        ;; for a zero-field machine.
+        (check "seventh parameter"
+               (has? "(define (exec state offset bv start end finish? fieldv)"))))
     (harness-case "the accepted byte advances and the fallback reexecutes"
       (lambda ()
         (check "advance arm" (has? "((0) (loop (+ pos 1) 1 (+ off 1)))"))

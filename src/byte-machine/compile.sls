@@ -5,8 +5,10 @@
 ;;; emit-machine writes those bytes to the supplied binary port only. The
 ;;; generated library imports only (rnrs) and (byte-machine runtime), owns the
 ;;; derived library name (generated <machine-name>), and defines the single
-;;; caller-named compiled-machine binding via the v2 ABI (one unified `exec`
-;;; closure carrying a finish? EOF flag). Pure but for emit-machine's port write.
+;;; caller-named compiled-machine binding through the one unversioned
+;;; byte-machine-make-compiled-machine (decision 0018), whose first action is the
+;;; ABI version check and whose trailing quoted vector is the growable payload.
+;;; Pure but for emit-machine's port write.
 (library (byte-machine compile)
   (export compile-machine compilation-ok? compilation-diagnostics
           render-machine emit-machine
@@ -53,8 +55,16 @@
       parser-error-domain parser-error-code parser-error-reason
       parser-error-detail parser-error-node-name parser-error-state-id
       parser-error-offset parser-error-position-kind
+      byte-machine-make-compiled-machine
       callback-continue callback-pause))
-  (define reserved-member-3 '(exec loop pos st off b bv start end state offset finish?))
+  ;; Every identifier the emitted body binds, so a caller-chosen output binding
+  ;; cannot collide with one. `fieldv` is emitted `exec`'s seventh parameter,
+  ;; reserved empty here and filled in Slice ② (decision 0019 item 3(c)); it is
+  ;; deliberately not spelled `fields`, which `(rnrs)` binds as
+  ;; define-record-type's auxiliary keyword and which the drift guard's own
+  ;; `(rnrs)` subtraction would therefore swallow.
+  (define reserved-member-3
+    '(exec loop pos st off b bv start end state offset finish? fieldv))
   (define (lower-alpha? c) (and (char>=? c #\a) (char<=? c #\z)))
   (define (name-char? c)
     (or (lower-alpha? c) (and (char>=? c #\0) (char<=? c #\9)) (char=? c #\-)))
@@ -175,7 +185,7 @@
         "(library (generated " mname ")\n"
         "  (export " bstr ")\n"
         "  (import (rnrs) (byte-machine runtime))\n"
-        "  (define (exec state offset bv start end finish?)\n"
+        "  (define (exec state offset bv start end finish? fieldv)\n"
         "    (let loop ((pos start) (st state) (off offset))\n"
         "      (case st\n"
         (let loop ((i 0) (acc ""))
@@ -183,8 +193,8 @@
               (loop (+ i 1) (string-append acc (render-state-arm (vector-ref states i))))))
         "      (else (assertion-violation (quote exec) \"unknown state\" st)))))\n"
         "  (define " bstr "\n"
-        "    (byte-machine-make-compiled-machine/v2 2 " (number->string fp) " "
-        (number->string entry) " exec)))\n"))))
+        "    (byte-machine-make-compiled-machine 3 " (number->string fp) " "
+        (number->string entry) " exec (quote #(#())))))\n"))))
 
   (define (emit-machine compilation binding port)
     (let ((bytes (render-machine compilation binding)))

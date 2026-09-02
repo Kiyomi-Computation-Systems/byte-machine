@@ -1,7 +1,7 @@
 (library (generated pausem)
   (export pausem)
   (import (rnrs) (byte-machine runtime))
-  (define (exec state offset bv start end finish?)
+  (define (exec state offset bv start end finish? fieldv)
     (let loop ((pos start) (st state) (off offset))
       (case st
       ((0)
@@ -30,4 +30,4 @@
       ((7) (byte-machine-make-feed-outcome/v1 (quote error) pos (quote unexpected-byte) 7 off))
       (else (assertion-violation (quote exec) "unknown state" st)))))
   (define pausem
-    (byte-machine-make-compiled-machine/v2 2 15725897457025557005 0 exec)))
+    (byte-machine-make-compiled-machine 3 15725897457025557005 0 exec (quote #(#())))))

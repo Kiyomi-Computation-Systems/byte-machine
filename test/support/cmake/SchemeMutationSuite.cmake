@@ -732,7 +732,7 @@ cmake_minimum_required(VERSION 3.26)
 # had no mutation, the `eq? ... 'reexecute` test itself. No pass is added, so
 # passes stay at 46 and mutations become 235 + 1 = 236.
 set(EXPECTED_PASSES 46)
-set(EXPECTED_MUTATIONS 240)
+set(EXPECTED_MUTATIONS 238)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -2516,41 +2516,19 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
-  LABEL "runtime: a v1 machine is driven down the op path"
-  # Re-anchored for Milestone 2 Slice ②b-2: parser-feed!'s binary `if` became a
-  # three-way `case` (op / v2 / else=v1) when the /v2 variant landed, so the old
-  # `(if #t ...)` anchor no longer exists. The same decision -- a v1 machine must
-  # NOT be driven through parser-feed-op! -- is now witnessed by redirecting the
-  # v1 (else) arm to the op driver; `parser-feed-v1!` occurs only here as a call
-  # (its definition reads `(define (parser-feed-v1! ...`), so this is unique. The
-  # effect on the suite is identical to the former mutation: v1 stubs raise an
-  # arity error inside parser-feed-op!'s `(op 'kind node)`, which the harness
-  # records as a "case raised" failure in every /v1 case -> exit 1.
-  #
-  # The pin was "status" until the signature audit measured this mutant: not one
-  # of its seven FAIL lines contains the word, because every /v1 case dies on
-  # the raise rather than on a status comparison. "status" was satisfied only by
-  # the summary line's own `status=1`, which prints on any failing run -- a bare
-  # nonzero exit in disguise. It now names one raised /v1 case. The colon binds
-  # it to the /v1 group's shorter case name: the one-byte group's case reads "an
-  # empty slice needs input and reports no result yet", so it cannot match.
-  FIND [[(else (parser-feed-v1! parser bv start end))]]
-  REPLACE [[(else (parser-feed-op! parser bv start end))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "an empty slice needs input: case raised")
-
-byte_machine_mutation(
-  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a mismatched generated-runtime ABI version is accepted"
-  FIND [[(unless (and (integer? abi-version) (= abi-version current-abi-version))]]
-  REPLACE [[(unless #t]]
+  # Re-anchored for Milestone 4 Slice ①a task 3. This FIND was the /v1
+  # constructor's guard until decision 0018 retired the versioned NAME and kept
+  # the version CHECK; the same decision now lives in the ONE unversioned
+  # constructor, whose first action it is. The witness is unchanged -- the live
+  # guard still refuses a mismatched number -- so this is
+  # MutationRunner.cmake's "update the mutation rather than deleting it" case,
+  # never an EXPECT_SURVIVES.
+  FIND [[    (unless (and (integer? abi-version) (= abi-version current-abi-version))
+      (assertion-violation 'byte-machine-make-compiled-machine]]
+  REPLACE [[    (unless #t
+      (assertion-violation 'byte-machine-make-compiled-machine]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "a mismatched ABI version is refused: refused")
-
-byte_machine_mutation(
-  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
-  LABEL "runtime: the v1 result status is hard-wired to stopped"
-  FIND [[(status (feed-outcome-status o))]]
-  REPLACE [[(status 'stopped)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "a rejected byte errors at position 0 with the code: status")
 
 # (removed 2026-08-28, Slice ②a) "a v1 terminal result is not made sticky": the
 # sticky cache was deleted; a repeat feed re-runs the executor, which is idempotent
@@ -2711,20 +2689,36 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a /v2 finish does not drive exec with finish? true"
-  FIND [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t)))]]
-  REPLACE [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #f)))]]
+  # Re-anchored in Slice ①a task 3: emitted `exec` gained its reserved seventh
+  # parameter, so both call sites gained an argument.
+  FIND [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t empty-fields)))]]
+  REPLACE [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #f empty-fields)))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish with no input routes to the default-eof error: default-eof code")
 
-# Second: the /v2 constructor's ABI-version guard. It checks the literal 2 (the
+# Second: the /v2 TOMBSTONE. Milestone 4 Slice ①a task 3 rewrote both retired
+# constructors to refuse EVERY version rather than the one they are named for,
+# because the moment current-abi-version moved to 3 the old literal-2 guard
+# would have accepted exactly the stale files it was added to refuse -- a hole,
+# not a tombstone. What this mutation now witnesses is that the tombstone still
+# raises. (The comment this replaces was already false at HEAD before the slice:
+# it said "the emitter still emits /v1, so current-abi-version stays 1".)
+# The superseded text read: the /v2 constructor's ABI-version guard checks the literal 2 (the
 # emitter still emits /v1, so current-abi-version stays 1), textually distinct
 # from the /v1 guard's `(= abi-version current-abi-version)` above. Accepting any
 # version lets the /v2 refusal test call it with abi 1 without raising.
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
-  LABEL "runtime: a mismatched /v2 ABI version is accepted"
-  FIND [[(unless (and (integer? abi-version) (= abi-version 2))]]
-  REPLACE [[(unless #t]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "a mismatched /v2 ABI version is refused: refused")
+  LABEL "runtime: the /v2 tombstone accepts a version"
+  # Three textually distinct guard forms is a hard constraint, not style: every
+  # mutation runs at the default SITES of 1, asserted exactly, so writing any two
+  # of the live guard and the two tombstones alike takes one FIND from one site
+  # to two and fails the suite at declaration.
+  FIND [[  (define (byte-machine-make-compiled-machine/v2 abi-version . ignored)
+    (assertion-violation 'byte-machine-make-compiled-machine/v2]]
+  REPLACE [[  (define (byte-machine-make-compiled-machine/v2 abi-version . ignored)
+    (list 'accepted
+          'byte-machine-make-compiled-machine/v2]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "the retired constructors refuse every version: none accepted")
 
 # Milestone 2 Slice ③'s Task 2 (pause/resume + the full §12.2 operation
 # matrix, D1-D3) adds the rest of this pass: parser-resume! (its two acks and
@@ -5414,8 +5408,11 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
   LABEL "compile: the final newline is emitted as CRLF"
-  FIND [[" exec)))\n"))))]]
-  REPLACE [[" exec)))\r\n"))))]]
+  # Re-anchored in Slice ①a task 3. The pin's FIND is compile.sls's render TAIL,
+  # which the metadata PAYLOAD's placement rewrote -- not the constructor rename
+  # one line above it, which is what design:834-836 attributed the death to.
+  FIND [[" exec (quote #(#())))))\n"))))]]
+  REPLACE [[" exec (quote #(#())))))\r\n"))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "no carriage return byte appears and the last byte is LF: carriage return present")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")

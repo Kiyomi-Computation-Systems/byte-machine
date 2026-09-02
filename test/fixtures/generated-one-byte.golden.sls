@@ -1,7 +1,7 @@
 (library (generated one-byte)
   (export one-byte-parser)
   (import (rnrs) (byte-machine runtime))
-  (define (exec state offset bv start end finish?)
+  (define (exec state offset bv start end finish? fieldv)
     (let loop ((pos start) (st state) (off offset))
       (case st
       ((0)
@@ -17,4 +17,4 @@
       ((2) (byte-machine-make-feed-outcome/v1 (quote error) pos (quote unexpected-byte) 2 off))
       (else (assertion-violation (quote exec) "unknown state" st)))))
   (define one-byte-parser
-    (byte-machine-make-compiled-machine/v2 2 4236938459847922092 0 exec)))
+    (byte-machine-make-compiled-machine 3 4236938459847922092 0 exec (quote #(#())))))

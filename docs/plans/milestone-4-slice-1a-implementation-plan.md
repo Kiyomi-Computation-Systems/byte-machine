@@ -874,6 +874,18 @@ what decision 0018 item 4 requires, and it is a separate site from the executor 
 Whichever disposition is taken, it is recorded in the tree, not in the ledger, and both
 LABELs are named in Task 8's sweep.
 
+**Executed 2026-09-02: the path was deleted, and deleting it cost coverage the plan did not
+predict.** Both mutations went with the code they witnessed, as decision 0018's argument
+requires. But two *other* shipped pins — `runtime: an accepting feed does not record the
+stopped lifecycle` and `runtime: a rejecting feed does not record the error lifecycle` —
+had their only witness in the deleted `/v1` group's `parser-lifecycle tracks ready ->
+terminal` case, and the suite caught it as **wrong-reason**, not as a pass: each mutant
+still exited nonzero, and only the `EXPECT_OUTPUT_MATCHES` signature revealed that it was
+now failing somewhere else. A bare nonzero-exit catch would have shipped this. The case was
+restored against the `/v2` stub, which encodes the same one-byte machine. **Before deleting
+a test group, ask which pins name a decision it is the only witness for** — the mirror of
+AGENTS.md's rule about deleting a mutation.
+
 - [ ] **Step 4: `current-abi-version` 2 → 3, and the emitter's literal, in ONE commit.**
 
 `compile.sls` does not import the runtime (`compile.sls:14-17`), so the emitted

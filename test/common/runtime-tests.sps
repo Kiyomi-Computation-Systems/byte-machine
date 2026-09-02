@@ -176,93 +176,6 @@
             (check-equal "consumed" (parser-result-consumed r) 0)
             (check-equal "stream offset" (parser-result-stream-offset r) 1)))))))
 
-;; The direct-executor ABI. A hand-built feed encodes the one-byte machine over
-;; numeric states (0 dispatch, 1 stop, 2 error), so the v1 (feed-only) path is
-;; witnessed independently of the emitter. It declares abi 2 -- the current ABI
-;; version -- because /v1's guard checks (= abi current-abi-version): after the
-;; Slice ②b-2 bump, abi 1 is a stale-file mismatch (witnessed by the dedicated
-;; refusal case below), so exercising the v1 code path needs the matching 2.
-(define (stub-feed state offset bv start end)
-  (let loop ((pos start) (st state) (off offset))
-    (case st
-      ((1) (byte-machine-make-feed-outcome/v1 'stopped pos #f 1 off))
-      ((2) (byte-machine-make-feed-outcome/v1 'error pos 'unexpected-byte 2 off))
-      (else
-       (if (>= pos end)
-           (byte-machine-make-feed-outcome/v1 'need-input pos #f 0 off)
-           (let ((b (bytevector-u8-ref bv pos)))
-             (if (= b 0) (loop (+ pos 1) 1 (+ off 1)) (loop pos 2 off))))))))
-(define (v1-machine) (byte-machine-make-compiled-machine/v1 2 42 0 stub-feed))
-(define (v1-feed-byte b)
-  (parser-feed! (make-parser (v1-machine) '() #f) (make-bytevector 1 b) 0 1))
-
-(harness-group "generated-code ABI (/v1)"
-  (lambda ()
-    (harness-case "the accepted byte stops after consuming one byte"
-      (lambda ()
-        (let ((r (v1-feed-byte 0)))
-          (check-equal "status" (parser-result-status r) 'stopped)
-          (check-equal "consumed" (parser-result-consumed r) 1)
-          (check-equal "stream offset" (parser-result-stream-offset r) 1))))
-    (harness-case "a rejected byte errors at position 0 with the code"
-      (lambda ()
-        (let ((r (v1-feed-byte 65)))
-          (check-equal "status" (parser-result-status r) 'error)
-          (check-equal "stream offset" (parser-result-stream-offset r) 0)
-          (check-equal "error value" (parser-result-error r) 'unexpected-byte))))
-    (harness-case "an empty slice needs input"
-      (lambda ()
-        (let* ((p (make-parser (v1-machine) '() #f))
-               (got 'not-yet))
-          (set! got (parser-result-status (parser-feed! p (make-bytevector 0) 0 0)))
-          (check-equal "status" got 'need-input))))
-    (harness-case "a repeat feed on a terminal parser reports a fresh empty result (§12.2)"
-      (lambda ()
-        (let* ((p (make-parser (v1-machine) '() #f))
-               (r1 (parser-feed! p (make-bytevector 1 0) 0 1))
-               (r2 (parser-feed! p (make-bytevector 1 0) 0 1)))
-          (check-equal "first stopped" (parser-result-status r1) 'stopped)
-          (check-equal "second still stopped" (parser-result-status r2) 'stopped)
-          (check-equal "second next is the new slice start" (parser-result-next r2) 0)
-          (check-equal "second consumed is zero" (parser-result-consumed r2) 0)
-          (check-equal "second stream offset unchanged"
-                       (parser-result-stream-offset r2) (parser-result-stream-offset r1)))))
-    (harness-case "parser-lifecycle tracks ready -> terminal"
-      (lambda ()
-        (let ((p (make-parser (v1-machine) '() #f)))
-          (check-equal "starts ready" (parser-lifecycle p) 'ready)
-          (parser-feed! p (make-bytevector 1 0) 0 1)
-          (check-equal "stopped after accept" (parser-lifecycle p) 'stopped)
-          (let ((q (make-parser (v1-machine) '() #f)))
-            (parser-feed! q (make-bytevector 1 65) 0 1)
-            (check-equal "error after reject" (parser-lifecycle q) 'error)))))
-    ;; A stale v1 file declares abi 1; after the ②b-2 bump current-abi-version is
-    ;; 2, so /v1 with abi 1 is refused as a clean version mismatch (1 =/= 2).
-    (harness-case "a mismatched ABI version is refused"
-      (lambda ()
-        (check-raises "refused"
-                      (lambda (e) #t)
-                      (lambda () (byte-machine-make-compiled-machine/v1 1 42 0 stub-feed)))))
-    ;; D7: v1 can never pause, so parser-finish!'s v1 else arm (runtime.sls,
-    ;; "v1 has no finish path") is reachable only from a still-`ready` v1
-    ;; parser -- a fresh one, or one fed only empty/need-input slices (the
-    ;; "an empty slice needs input" case above is exactly that: it returns
-    ;; 'need-input and lifecycle stays 'ready).
-    (harness-case "finish on a still-ready v1 parser raises: v1 has no finish path"
-      (lambda ()
-        (check-raises "v1 has no finish path"
-                      assertion-violation?
-                      (lambda () (parser-finish! (make-parser (v1-machine) '() #f))))))
-    ;; Once fed to a terminal row, D1's sticky short-circuit checks lifecycle
-    ;; before variant -- parser-finish! never reaches the v1 else arm above,
-    ;; so a v1 parser already stopped/errored returns the ordinary sticky
-    ;; tuple instead of raising, unlike before this task.
-    (harness-case "finish on a terminal v1 parser returns the sticky tuple instead"
-      (lambda ()
-        (let ((p (make-parser (v1-machine) '() #f)))
-          (parser-feed! p (make-bytevector 1 0) 0 1)             ; -> stopped
-          (check-equal "sticky status" (parser-result-status (parser-finish! p)) 'stopped))))))
-
 ;; The unified-executor ABI (/v2, Slice ②b-2). One `exec` closure carries the
 ;; whole dispatch loop and a `finish?` flag: feed calls it with #f over the real
 ;; slice, parser-finish! with #t over the empty slice. This stub encodes the
@@ -273,7 +186,7 @@
 ;; (stop) -- mirroring D5's unconditional generated pause arm and letting
 ;; v2-pause-machine below witness parser-finish-v2!'s own paused arm, which no
 ;; other /v2 fixture reaches.
-(define (stub-exec state offset bv start end finish?)
+(define (stub-exec state offset bv start end finish? fieldv)
   (let loop ((pos start) (st state) (off offset))
     (case st
       ((1) (byte-machine-make-feed-outcome/v1 'stopped pos #f 1 off))
@@ -286,8 +199,80 @@
                (byte-machine-make-feed-outcome/v1 'need-input pos #f 0 off))
            (let ((b (bytevector-u8-ref bv pos)))
              (if (= b 0) (loop (+ pos 1) 1 (+ off 1)) (loop pos 2 off))))))))
-(define (v2-machine) (byte-machine-make-compiled-machine/v2 2 99 0 stub-exec))
-(define (v2-pause-machine) (byte-machine-make-compiled-machine/v2 2 99 3 stub-exec))
+(define (v2-machine)
+  (byte-machine-make-compiled-machine 3 99 0 stub-exec (vector (vector))))
+(define (v2-pause-machine)
+  (byte-machine-make-compiled-machine 3 99 3 stub-exec (vector (vector))))
+
+;; Milestone 4 Slice ①a task 3 retired the whole 'v1 feed-only executor path.
+;; Once /v1 refuses every version nothing can construct one, so make-parser's
+;; 'v1 arm, parser-feed!'s v1 else, parser-feed-v1! and parser-finish!'s "v1 has
+;; no finish path" arm lost their only witness -- and an arm no public API can
+;; reach cannot be witnessed at all, so it would ship dead owing an
+;; EXPECT_SURVIVES (decision 0018's Consequences delegates this disposition to
+;; the slice that lands it). The stub feed and its eight cases went with the
+;; code; the two mutations that witnessed them were deleted from the suite in
+;; the same commit rather than left to report UNCAUGHT. What replaces them is
+;; the tombstone contract below, which is the only thing /v1 and /v2 still owe.
+(harness-group "the retired constructors are tombstones"
+  (lambda ()
+    ;; Both refuse EVERY version, not the one they are named for. Refusing only
+    ;; the mismatched number is what made /v2 a hole the moment the constant
+    ;; moved to 3: its old guard checked the literal 2, so it would have accepted
+    ;; exactly the stale files it was added to refuse, and a stale object then
+    ;; loads and runs with nothing raising until an accessor meets a bare symbol
+    ;; an arbitrary distance away.
+    (harness-case "the retired constructors refuse every version"
+      (lambda ()
+        (let ((seen 'none) (n 0))
+          (for-each
+           (lambda (v)
+             (set! n (+ n 1))
+             (unless (and (guard (e (#t #t))
+                            (byte-machine-make-compiled-machine/v1 v 42 0 stub-exec)
+                            #f)
+                          (guard (e (#t #t))
+                            (byte-machine-make-compiled-machine/v2 v 99 0 stub-exec)
+                            #f))
+               (set! seen v)))
+           '(0 1 2 3 4))
+          ;; A sentinel over the loop itself: five versions were actually driven,
+          ;; counted from the loop rather than from the list this case wrote.
+          (check-equal "versions driven" n 5)
+          (check-equal "none accepted" seen 'none))))
+    (harness-case "the retired constructors raise assertion-violation"
+      (lambda ()
+        (check-raises "v1" assertion-violation?
+                      (lambda () (byte-machine-make-compiled-machine/v1 3 42 0 stub-exec)))
+        (check-raises "v2" assertion-violation?
+                      (lambda () (byte-machine-make-compiled-machine/v2 3 99 0 stub-exec)))))))
+
+(harness-group "the unversioned constructor checks the version first"
+  (lambda ()
+    (harness-case "the superseded version is refused and the current one accepted"
+      (lambda ()
+        (check-raises "abi 2 refused" assertion-violation?
+                      (lambda () (byte-machine-make-compiled-machine
+                                  2 99 0 stub-exec (vector (vector)))))
+        (check "abi 3 accepted"
+               (compiled-machine? (byte-machine-make-compiled-machine
+                                   3 99 0 stub-exec (vector (vector)))))))
+    (harness-case "the version check precedes every other guard"
+      (lambda ()
+        ;; Decision 0018 item 1: the check is FIRST, so a mismatch is reported
+        ;; before any part of the payload is interpreted -- which is what makes
+        ;; the payload safe to grow. Handed a wrong version AND a payload that
+        ;; would fail the later guards, it must still be the version that is
+        ;; named, or a stale file reports whichever slot happened to be read.
+        (check-raises "version, not the payload" assertion-violation?
+                      (lambda () (byte-machine-make-compiled-machine 2 99 0 'not-a-procedure #f)))
+        (check-raises "a non-vector payload is refused at the current version"
+                      assertion-violation?
+                      (lambda () (byte-machine-make-compiled-machine 3 99 0 stub-exec #f)))
+        (check-raises "an empty payload has no member 0" assertion-violation?
+                      (lambda () (byte-machine-make-compiled-machine
+                                  3 99 0 stub-exec (vector))))))))
+
 
 (harness-group "generated-code ABI (/v2): feed and finish"
   (lambda ()
@@ -300,10 +285,26 @@
         (let ((r (parser-finish! (make-parser (v2-machine) '() #f))))
           (check-equal "error" (parser-result-status r) 'error)
           (check-equal "default-eof code" (parser-result-error r) 'eof))))
-    (harness-case "a mismatched /v2 ABI version is refused"
+    ;; Restored in Slice ①a task 3 when the retired /v1 group was deleted: no
+    ;; other surviving case asserts the lifecycle a FEED records, and two shipped
+    ;; mutations name exactly that decision. The stub encodes the same one-byte
+    ;; machine, so the coverage is the same and only the executor variant moved.
+    (harness-case "parser-lifecycle tracks ready -> terminal"
       (lambda ()
+        (let ((p (make-parser (v2-machine) '() #f)))
+          (check-equal "starts ready" (parser-lifecycle p) 'ready)
+          (parser-feed! p (make-bytevector 1 0) 0 1)
+          (check-equal "stopped after accept" (parser-lifecycle p) 'stopped)
+          (let ((q (make-parser (v2-machine) '() #f)))
+            (parser-feed! q (make-bytevector 1 65) 0 1)
+            (check-equal "error after reject" (parser-lifecycle q) 'error)))))
+    (harness-case "a mismatched ABI version is refused"
+      (lambda ()
+        ;; The live guard, distinct from the tombstone cases above: this one
+        ;; refuses a number, they refuse every number.
         (check-raises "refused" (lambda (e) #t)
-                      (lambda () (byte-machine-make-compiled-machine/v2 1 99 0 stub-exec)))))
+                      (lambda () (byte-machine-make-compiled-machine
+                                  1 99 0 stub-exec (vector (vector)))))))
     (harness-case "a /v2 finish error is stored and repeated on the next call"
       (lambda ()
         ;; Witnesses parser-finish-v2!'s own store -- a separate site from the
@@ -347,7 +348,7 @@
     ;; differ -- which would witness the wrong decision. Hence error-then-accept.)
     (harness-case "reset returns to ready and re-parses from the entry state"
       (lambda ()
-        (let ((p (make-parser (v1-machine) '() #f)))
+        (let ((p (make-parser (v2-machine) '() #f)))
           (parser-feed! p (make-bytevector 1 65) 0 1)         ; -> error, parked at the error node
           (check-equal "error before reset" (parser-lifecycle p) 'error)
           (parser-reset! p)
@@ -357,7 +358,7 @@
                        'stopped))))
     (harness-case "reset zeroes the stream offset"
       (lambda ()
-        (let ((p (make-parser (v1-machine) '() #f)))
+        (let ((p (make-parser (v2-machine) '() #f)))
           (parser-feed! p (make-bytevector 1 0) 0 1)          ; advance -> offset 1, stopped
           (parser-reset! p)
           (check-equal "offset zeroed then advanced by one"
@@ -518,12 +519,13 @@
         ;; `paused`), so resume! on a v1 parser is always refused -- the
         ;; guard is variant-agnostic (it reads only lifecycle). This witnesses
         ;; it through 'ready, the state right after construction; v1 can also
-        ;; reach 'stopped and 'error (the "generated-code ABI (/v1)" cases
-        ;; above show both), and resume! is refused from those too, by the
-        ;; same variant-agnostic guard the error/finished cases just above
-        ;; already exercise -- v1 adds no row the guard treats differently.
-        (check-raises "resume on a v1 parser" (lifecycle-violation? 'parser-resume! 'ready 'resume)
-          (lambda () (parser-resume! (make-parser (v1-machine) '() #f))))))
+        ;; reach 'stopped and 'error, and resume! is refused from those too, by
+        ;; the same variant-agnostic guard the error/finished cases just above
+        ;; already exercise -- the generated variant adds no row the guard
+        ;; treats differently. (Was written against the retired /v1 variant.)
+        (check-raises "resume on a generated parser"
+          (lifecycle-violation? 'parser-resume! 'ready 'resume)
+          (lambda () (parser-resume! (make-parser (v2-machine) '() #f))))))
     (harness-case "sticky rows short-circuit: stopped feed/finish return the tuple"
       (lambda ()
         (let ((p (make-parser (make-compiled-machine one-byte-op) '() #f)))
