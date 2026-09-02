@@ -735,8 +735,37 @@ cmake_minimum_required(VERSION 3.26)
 # reexec-targets)" -- for the one decision in reexec-targets' sequence arm that
 # had no mutation, the `eq? ... 'reexecute` test itself. No pass is added, so
 # passes stay at 46 and mutations become 235 + 1 = 236.
+#
+# *** The three entries below close a GAP in this narrative, not a new bump. ***
+# The running total above stops at 46/236 -- correct at c3ceec2, the merge base
+# -- while the constants had already been carried to 48/255 by work that bumped
+# them without appending here. This block is the count's only prose record, so a
+# gap in it makes every earlier entry unfalsifiable: a reader cannot tell a
+# missing line from a miscount. The two intervening steps were RECONSTRUCTED
+# from the constants at each commit and from a per-SPEC block census of the two
+# trees, not from a contemporaneous record, and are marked as such.
+#
+# Slice ①a (reconstructed, c3ceec2 -> 51fd5f3): 46/236 -> 48/250. Two passes
+# join -- the position-kind differential and the member-3 drift check, both new
+# lanes -- and fourteen mutations: +6 position-kind, +3 normal-ir (the encoding
+# format's three reserved slots), +2 verify (the reason repertoire), +1 runtime,
+# +1 determinism, +1 member-3 drift. See that slice's own plan for each.
+#
+# Slice ①b tasks 1 to 3 (from this branch): 250 -> 255. Task 1 adds three to the
+# ir pass for the uint field descriptor and the machine guard that makes it
+# load-bearing; task 2 adds none, the facade being two export lists with no
+# decision of its own; task 3 adds two, one to Pass 33 for pass-schema's
+# unsupported-IR-version arm and one to the ir pass for the supported constant.
+#
+# Slice ①b task 4: Pass 33 gains THREE for pass-fields, the declaration half of
+# §16.3:924 item 6 -- one permissive per check, plus the restrictive direction on
+# the portable-name check, which is what makes that pass's clean-premise case
+# load-bearing. Two more were classified SUBSUMED and deliberately not written;
+# the reasons are recorded at the mutations' own site. No pass is added -- the
+# checks join the verifier's existing lane -- so passes stay at 48 and mutations
+# become 255 + 3 = 258.
 set(EXPECTED_PASSES 48)
-set(EXPECTED_MUTATIONS 255)
+set(EXPECTED_MUTATIONS 258)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3268,7 +3297,8 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 #     graph is not symmetric under the two ways the pair enumeration can be
 #     truncated -- the mutually-colliding triple made both truncations report 2.
 #
-# (3) SUBSUMED, four pairs. Recorded at each pin below, named by the LABEL of
+# (3) SUBSUMED, four pairs -- *** FIVE. See the 2026-09-02 correction below the
+# list. *** Recorded at each pin below, named by the LABEL of
 # the mutation that subsumes it, because AGENTS.md requires the residue to live
 # in the tree beside the pin. All four are a decision killed again by a switch
 # above it, so the narrow mutant's whole FAIL-record set is a subset of the
@@ -3279,6 +3309,33 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 #   < "an EOF-reachable stop terminal is accepted".
 # Proved by exhaustion, not by argument: no FAIL record any of the three emits
 # is absent from the subsuming mutant's output.
+#
+# CORRECTED 2026-09-02 by Slice ①b task 4's sweep. There is a FIFTH pair, and
+# the count above and everywhere it is repeated -- including Slice ①a's own plan
+# ("Merge base: 4 collisions ... HEAD now carries exactly the merge base's four
+# collisions") -- is one short:
+#
+#   "a sequence case's byte edge into a finish terminal is not flagged (arm 6,
+#   :908)" < "a sequence node's case and mismatch targets are not out-targets
+#   (arm 1, node-out-targets)".
+#
+# Arm 6 emits exactly two FAIL records and arm 1 emits both of them, plus seven
+# more; arm 6's pin is the shared count record, so it passes when judging arm
+# 1's mutant. Measured at three revisions -- c3ceec2 (42 pins / 1722 pairs),
+# 2302ffd (44 / 1892) and this branch's HEAD (49 / 2352) -- and the residue is
+# the SAME FIVE labels and pairs at all three, so this is inherited debt that
+# predates Milestone 4 rather than anything a recent slice introduced. It was
+# missed, not created.
+#
+# Its bucket is stated on the SUBSET TEST ALONE, which AGENTS.md is explicit is
+# not sufficient: "only what survives an actual separating attempt may be called
+# subsumed, and the attempt must be recorded with its measurement." That attempt
+# has NOT been made for this pair. Making it is a sequence-dispatch question --
+# whether a fixture exists in which arm 6 loses a :908 diagnostic that arm 1
+# keeps, given that arm 1 also removes the reachability the :908 gate depends on
+# -- and it belongs to whoever owns those pins, not to this slice's field work.
+# Recorded here, unresolved and labelled unresolved, rather than left to be
+# rediscovered by the next sweep.
 #
 # AMENDED, whole-branch review fix wave (2026-08-30), to the taxonomy commit
 # 49c8cc4 wrote into AGENTS.md after this paragraph was measured. What this
@@ -3570,8 +3627,28 @@ byte_machine_mutation(
   # verifier decision. Every shipped fixture becomes unsupported at once.
   FIND [[  (define supported-ir-version 1)]]
   REPLACE [[  (define supported-ir-version 2)]]
+  # RE-ANCHORED by task 4's Pass 33 sweep, which is what found it. This pin was
+  # written as a bare CHECK NAME carrying no value -- "...: no diagnostics", with
+  # neither the expected count nor the got -- so it matched ANY mutant that
+  # reddened that case at all, and two others do: "verify: a case is compared
+  # against itself" (got 1) and "verify: the reason repertoire rejects every
+  # reason" (got 2). The ①a audit's finding was that a COUNT is a weaker anchor
+  # than a named check; this is the degenerate case of it, an anchor with no
+  # value at all, and it is weaker still.
+  #
+  # It is re-anchored off its own on-point case, because that case expects ZERO
+  # diagnostics and so has no code to compare -- every mutant that reddens it
+  # produces the same shape of record, and the only thing separating them is a
+  # count that two of them share. The record below was computed as a SET
+  # DIFFERENCE against all 48 other Pass 33 mutants: `got invalid-shape` where
+  # another code was expected is produced by this mutation alone, because it is
+  # the only one that makes pass-schema fire on a WELL-FORMED machine, which
+  # short-circuits verify-machine before any later pass runs. That is exactly
+  # what this mutation does, so the record names the decision even though the
+  # case it appears in belongs to another.
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "a machine at the supported IR version is not reported: no diagnostics")
+  EXPECT_OUTPUT_MATCHES
+    "two fields sharing a name is invalid-field-declaration: invalid-field-declaration -- expected invalid-field-declaration, got invalid-shape")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -4640,6 +4717,63 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "every pair is enumerated once, across a nested family and a disjoint one: ambiguity count -- expected 4, got 9")
+
+# Slice ①b Task 4 adds THREE mutations to Pass 33 for pass-fields, the
+# declaration half of §16.3:924 item 6. Two permissive, one per check, and one
+# restrictive on the portable-name check -- the direction that makes the pass's
+# clean-premise case load-bearing rather than decorative.
+#
+# TWO further mutations were considered and are NOT written, both because they
+# are SUBSUMED rather than unwitnessable -- the classification the whole-pass
+# audit's residue rules ask for, recorded here so a later reader does not
+# re-derive it:
+#
+#   * Dropping `(pass-fields machine)` from verify-machine's append. Its record
+#     set is exactly the UNION of the two permissive mutants' below, so it owns
+#     no record of its own; the join is covered by both of them together.
+#   * The duplicate check made restrictive (`(memq fname fseen)` -> `#t`). Its
+#     record set is a strict SUPERSET of the restrictive portable mutant's -- it
+#     reports every field twice and reddens twenty-odd records across five
+#     unrelated groups -- so it is the noisier of two mutants that pin the same
+#     clean-premise decision. The narrow one is the one written.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: two fields may share a name"
+  # The defect the pass exists to close, and the one measured to verify CLEAN
+  # before this slice: slot = declaration index, so two `count` fields take two
+  # slots and parser-field-ref answers with whichever the name map finds first,
+  # orphaning the other slot and its initial.
+  FIND [[(memq fname fseen)]]
+  REPLACE [[#f]]
+  # Named apart from pass-names' node-duplicate loop, which is the same shape:
+  # cloning its `(memq nm seen)` gave this file ONE find at TWO sites, measured,
+  # and silently mutated the node check as well.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "two fields sharing a name is invalid-field-declaration: one finding -- expected 1, got 0")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a field name is not checked against the portable grammar"
+  FIND [[(valid-name? (uint-field-name f))]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a nonportable field name is invalid-field-declaration: one finding -- expected 1, got 0")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: every field name is reported as nonportable"
+  # The restrictive direction. Only field-carrying machines move, and this file
+  # has exactly three, so the mutant emits two records rather than flooding the
+  # lane. Pinned on the CLEAN one: without it a permissive-only pin set would
+  # accept a pass that rejects everything.
+  FIND [[(valid-name? (uint-field-name f))]]
+  REPLACE [[#f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "distinct portable field names verify clean: no diagnostics -- expected 0, got 3")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

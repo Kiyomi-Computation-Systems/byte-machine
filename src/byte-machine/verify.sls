@@ -169,6 +169,50 @@
                          '()))
                    nodes)))))
 
+  ;; PASS 6a (DECLARATION HALF ONLY): field declarations — §16.3:924 item 6,
+  ;; carrying exactly the checks decision 0020 assigns to the verifier. A field's
+  ;; WIDTH and its INITIAL's range are constructor contracts, rejected at
+  ;; `make-uint-field` and unrepresentable thereafter (0020's one-rejection-site
+  ;; rule), so an arm here for either would be unreachable code that no test
+  ;; could redden. What is left is RELATIONAL and therefore cannot live in a
+  ;; constructor that sees one field at a time: two fields sharing a name, and a
+  ;; name outside §10.1:480's portable repertoire.
+  ;;
+  ;; Both report `invalid-field-declaration` (§4.6's two-code budget for this
+  ;; milestone; the second, `invalid-field-operand`, is Slice ②'s) with the
+  ;; offending FIELD name in the diagnostic's `node` slot — the slot is the
+  ;; identifying name of whatever the diagnostic is about, which for a field
+  ;; diagnostic is the field.
+  ;;
+  ;; This is a pass of its own rather than two more arms on `pass-names` and
+  ;; `pass-names-valid`, so that those two keep the pin-visible shape they were
+  ;; measured with, and so Slice ② has one place to add the operand half.
+  ;; `valid-name?` is reused exactly as `pass-names-valid` uses it: fields sit in
+  ;; the same generated namespace as nodes and errors and get the same grammar,
+  ;; not a parallel one that could drift.
+  (define (pass-fields m)
+    (let ((fs (machine-fields m)))
+      (append
+       ;; The loop variables are named apart from `pass-names`' node-duplicate
+       ;; loop on purpose: the two walks are the same shape, and cloning its
+       ;; identifiers would give this file two textually identical `(memq nm
+       ;; seen)` lines, which is one FIND that this suite's mutations resolve to
+       ;; TWO sites -- measured, and it silently mutates the node check too.
+       (let scan ((rest fs) (fseen '()) (out '()))
+         (if (null? rest) (reverse out)
+             (let ((fname (uint-field-name (car rest))))
+               (scan (cdr rest) (cons fname fseen)
+                     (if (memq fname fseen)
+                         (cons (make-diagnostic 'invalid-field-declaration fname
+                                                "duplicate field name") out)
+                         out)))))
+       (filter values
+               (map (lambda (f)
+                      (if (valid-name? (uint-field-name f)) #f
+                          (make-diagnostic 'invalid-field-declaration (uint-field-name f)
+                                           "field name is not portable")))
+                    fs)))))
+
   ;; PASS 3: overlap within a dispatch node, over canonical matcher byte sets
   ;; (§16.2:893, §16.3:921). Two cases overlap when their canonical sets share
   ;; any byte; an exact-byte matcher is the one-element case of the same rule.
@@ -506,6 +550,7 @@
     (let ((ds (append (pass-schema machine)
                       (if (machine? machine)
                           (append (pass-names machine)
+                                  (pass-fields machine)
                                   (pass-overlap machine)
                                   (pass-sequence-ambiguity machine)
                                   (pass-reachability machine)

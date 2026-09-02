@@ -372,20 +372,64 @@ exist and its prescribed `EXPECT_SURVIVES` must not be written.**
 
 Design §6 task 4; §16.3:924 item 6; decision 0020's verifier half.
 
-- [ ] **Step 1: Failing tests first.** Two `u8 count` declarations verify clean today —
+- [x] **Step 1: Failing tests first.** Two `u8 count` declarations verify clean today —
   measured — and that is the defect this pass closes (**D4**).
 
-- [ ] **Step 2:** A **new** pass (**D2**), carrying duplicate field names and portable field
+- [x] **Step 2:** A **new** pass (**D2**), carrying duplicate field names and portable field
   names per §10.1:480, reusing `valid-name?`. Both diagnostics carry
   `invalid-field-declaration`, with the field name in the diagnostic's `node` slot.
 
-- [ ] **Step 3: Do NOT re-check widths or initial ranges here.** They are closed at
+- [x] **Step 3: Do NOT re-check widths or initial ranges here.** They are closed at
   construction, so a machine whose field failed construction never exists and the arm would be
   dead code whose permissive mutation survives — decision 0020's one-rejection-site rule.
 
-- [ ] **Step 4:** Join the pass to `verify-machine`'s `append`, and re-sweep Pass 33 in both
+- [x] **Step 4:** Join the pass to `verify-machine`'s `append`, and re-sweep Pass 33 in both
   directions: adding a *check* widens every existing pin's collision set exactly as adding a
   mutation does. 44 pins, 1892 ordered pairs, against a control on the branch point.
+
+  **Executed 2026-09-02.** Control at the branch point `2302ffd`: **44 pins, 1892 ordered
+  pairs, 5 collisions** — the plan's predicted numbers exactly. HEAD: **49 pins, 2352 pairs**,
+  8 collisions before the fixes, **5 after** — the control's five, same labels, same pairs.
+  Three were this branch's and all three are closed:
+
+  - `verify: every field name is reported as nonportable` (task 4's restrictive mutant) was
+    **subsumed**, not merely loose: *both* of its records were also emitted by `verify: the
+    reason repertoire rejects every reason`, because the field fixtures carry `errs` — two
+    declarations, two reasons — so a two-field clean machine reddens 0-versus-2 by either
+    route. Separated **by construction**, the way the residue rules ask: a third field makes
+    the restrictive mutant report 3 where the reason mutant reports 2. Fixture change, not a
+    pin edit.
+  - `ir: the supported IR version is not the one machines are stamped with` (task 3) was
+    **under-anchored** in the degenerate way — its pin was a bare *check name carrying no
+    value*, `"...: no diagnostics"`, so it matched any mutant that reddened that case at all,
+    and two did. Its own case expects **zero** diagnostics and therefore has no code to
+    compare, so it was re-anchored off that case entirely, onto a record computed as a set
+    difference against all 48 others. ①a's finding was that a count is a weaker anchor than a
+    named check; a check with no value is weaker still, and that is the reusable form of it.
+  - The third was the first two counted twice over.
+
+- [x] **Step 5 (not in the plan; found by step 4's control): the residue is FIVE pairs, not
+  four.** Slice ①a's audit recorded four subsumed pairs and `SchemeMutationSuite.cmake`'s
+  residue block lists four. There is a fifth: `verify: a sequence case's byte edge into a
+  finish terminal is not flagged (arm 6, :908)` emits exactly two FAIL records and `verify: a
+  sequence node's case and mismatch targets are not out-targets (arm 1, node-out-targets)`
+  emits both of them plus seven more, and arm 6's pin is the shared count. Measured at
+  **three** revisions — `c3ceec2` (42 pins / 1722 pairs), `2302ffd` (44 / 1892) and HEAD (49 /
+  2352) — and the residue is the same five labels and pairs at every one, so it is inherited
+  debt that predates Milestone 4: **missed, not created**. It is recorded in the tree beside
+  the residue block, and recorded there as **unresolved**: its bucket rests on the subset test
+  alone, and AGENTS.md is explicit that the subset test is not sufficient to say "subsumed" —
+  the separating attempt has not been made, and it is a sequence-dispatch question rather than
+  this slice's.
+
+  Two harness bugs were found and fixed inside the sweep itself before any of the above was
+  believed, both of which manufacture false findings: CMake **unescapes a quoted argument**
+  before compiling the regex, so judging the raw file text compiles `\\(` where the suite
+  compiles `\(` and four pins appear not to match their own mutants; and CMake's regex `.`
+  matches a newline, so a pin spanning two records with `.*` appears not to match its own
+  mutant unless the judge is `DOTALL` **and** runs against the whole output rather than
+  record by record. A sweep that reports a pin failing to match *its own* mutant is reporting
+  a bug in the sweep, not in the pin — the suite itself was green throughout.
 
 ---
 

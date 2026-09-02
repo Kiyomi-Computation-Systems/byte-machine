@@ -20,6 +20,10 @@
 (define (machine* name nodes eof-name)
   (make-machine name 'start '() '() '() errs nodes eof-name #f))
 (define (machine nodes) (machine* 'one-byte nodes 'default-eof))
+;; Slice ①b task 4: a one-byte machine carrying a caller-supplied field list.
+(define (machine-with-fields fs)
+  (make-machine 'one-byte 'start fs '() '() errs
+                (one-byte-nodes (make-edge 'reject 'reexecute)) 'default-eof #f))
 ;; Slice ①a task 1: a one-byte machine carrying a caller-supplied error-declaration
 ;; list, so a reason can be varied without touching the shipped `errs`.
 (define (machine-errs* ds nodes . eof-name)
@@ -151,6 +155,52 @@
                            'Default-Eof)))
           (check-equal "one finding" (length ds) 1)
           (check-equal "invalid-name" (car ds) 'invalid-name))))
+    ;; Milestone 4 Slice ①b task 4: pass-fields, declaration half (§16.3:924
+    ;; item 6). It carries the RELATIONAL checks decision 0020 assigns to the
+    ;; verifier -- duplicate field names and portable field names -- and nothing
+    ;; else. Widths and initial ranges are closed at construction, so a machine
+    ;; whose field failed them never exists and a verifier arm for either would
+    ;; be dead code (0020's one-rejection-site rule).
+    (harness-case "two fields sharing a name is invalid-field-declaration"
+      (lambda ()
+        ;; This is the defect the pass exists to close, and it verifies CLEAN
+        ;; without the pass: slot = declaration index, so two `count` fields take
+        ;; slots 0 and 1, after which parser-field-ref resolves the name through
+        ;; one map, answers with whichever it finds first, and orphans the other
+        ;; slot and its initial.
+        (let ((ds 'seed))
+          (set! ds (codes (machine-with-fields
+                           (list (make-uint-field 'count 8 0 #f)
+                                 (make-uint-field 'count 16 3 #f)))))
+          (check-equal "one finding" (length ds) 1)
+          (check-equal "invalid-field-declaration" (car ds) 'invalid-field-declaration))))
+    (harness-case "a nonportable field name is invalid-field-declaration"
+      (lambda ()
+        (let ((ds 'seed))
+          (set! ds (codes (machine-with-fields (list (make-uint-field 'Count 8 0 #f)))))
+          (check-equal "one finding" (length ds) 1)
+          (check-equal "invalid-field-declaration" (car ds) 'invalid-field-declaration))))
+    (harness-case "distinct portable field names verify clean"
+      (lambda ()
+        ;; The premise for both cases above: without it they could pass because
+        ;; ANY field machine reddens.
+        ;;
+        ;; THREE fields, not two, and the count is load-bearing. The restrictive
+        ;; mutant of the portable check reports one diagnostic per field here,
+        ;; and this machine carries `errs` -- two declarations, two reasons -- so
+        ;; at two fields the mutant's whole record set was a SUBSET of the
+        ;; "reason repertoire rejects every reason" mutant's, which reddens the
+        ;; same case with the same 0-versus-2. Not a loose pin but a subsumed
+        ;; one: no record separated them, in either direction. A third field
+        ;; separates the two by construction (3 against 2) and is the smallest
+        ;; change that does. Measured, in both directions, by Task 4's Pass 33
+        ;; sweep.
+        (let ((ds 'seed))
+          (set! ds (codes (machine-with-fields
+                           (list (make-uint-field 'count 8 0 #f)
+                                 (make-uint-field 'limit 16 3 #f)
+                                 (make-uint-field 'seen 32 0 #f)))))
+          (check-equal "no diagnostics" (length ds) 0))))
     ;; Milestone 4 Slice ①b task 3: §16.2:884's unsupported-IR-version half,
     ;; listed since Milestone 1 and unimplemented until now.
     ;;
