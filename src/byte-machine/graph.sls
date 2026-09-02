@@ -8,8 +8,15 @@
 ;;; grammar author can test what they built. `matcher-bytes` -- the internal
 ;;; canonicalization spine the verifier, normalizer and interpreter share -- is
 ;;; deliberately NOT re-exported: §9.1's construction list does not contain it.
+;;;
+;;; Milestone 4 Slice ①b adds `make-uint-field` (§9.1:283) with its predicate and
+;;; one accessor per §10.2:488-491 part, on the same precedent. Machine
+;;; ACCESSORS stay private: §9.1 fixes a construction surface, and reading a
+;;; built machine back is not part of it.
 (library (byte-machine graph)
-  (export make-machine make-byte-dispatch-node make-byte-case
+  (export make-uint-field uint-field? uint-field-name uint-field-width
+          uint-field-initial uint-field-source-label
+          make-machine make-byte-dispatch-node make-byte-case
           make-exact-byte-matcher make-edge make-stop-node make-finish-node
           make-pause-node make-error-node make-error-declaration
           make-byte-set-matcher make-byte-range-matcher
@@ -24,6 +31,8 @@
           sequence-dispatch-node-eof-target
           sequence-case? sequence-case-bytes sequence-case-target)
   (import (only (byte-machine private ir)
+                make-uint-field uint-field? uint-field-name uint-field-width
+                uint-field-initial uint-field-source-label
                 make-machine make-byte-dispatch-node make-byte-case
                 make-exact-byte-matcher make-edge make-stop-node make-finish-node
                 make-pause-node make-error-node make-error-declaration

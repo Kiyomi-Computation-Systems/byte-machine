@@ -333,6 +333,17 @@ Design §6 task 2. **Files:** `src/byte-machine/graph.sls`, `test/common/graph-t
 - [ ] **Step 3: Gate.** `byte-machine.unit.graph.chez.{source,aot}` builds a field-declaring
   machine importing nothing but `(byte-machine graph)`.
 
+**Executed 2026-09-02: this task declares NO mutation, and the reason is recorded beside the
+pass rather than left as an omission.** A mutation dropping a name from one list was written
+and measured: under the suite's launcher it exits **255 with no harness output at all**,
+because a missing export is an expand-time failure — the library never loads, no case runs,
+and there is nothing to match. That is the bare nonzero-exit catch AGENTS.md forbids, wearing
+no signature. What guards the decision is stronger than a mutation anyway: a half-edited
+façade makes `(byte-machine graph)` unloadable, so every lane importing it fails at once, at
+build time, and no input reaches a half-edited façade and survives. (Run *outside* the
+launcher the same mutant surfaces as a case raise with status 1, because the reference is
+inside a lambda — pinning that would have recorded a signature this suite never produces.)
+
 **This is not a PR boundary (H9).** At this point the feature does nothing.
 
 ---

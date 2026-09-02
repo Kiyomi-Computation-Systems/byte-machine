@@ -6150,6 +6150,26 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
+# Milestone 4 Slice ①b task 2 declares NO mutation, deliberately, and this note
+# is the record of why rather than an omission.
+#
+# The decision is that graph.sls's export list and its mirrored `only` import
+# list move together. A mutation dropping a name from one of them was written
+# and MEASURED: under this suite's launcher it exits 255 with no harness output
+# at all, because a missing export is an expand-time failure -- the library never
+# loads, so no case runs and there is nothing to match. That is the bare
+# nonzero-exit catch AGENTS.md forbids, wearing no signature.
+#
+# What actually guards the decision is stronger than a mutation: an identifier
+# in one list and not the other makes (byte-machine graph) unloadable, so EVERY
+# lane importing it fails at once, loudly, at build time. There is no input that
+# reaches a half-edited façade and survives.
+#
+# (Measured aside: run OUTSIDE the launcher the same mutant surfaces as a
+# harness case raise with status 1, because the reference is inside a lambda.
+# Pinning that would have recorded a signature this suite never produces.)
+
+
 # --- Pass 43: class membership and recursive canonicalization (M3 Slice ①
 # Task 5) --------------------------------------------------------------------
 #

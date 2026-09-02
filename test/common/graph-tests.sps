@@ -95,4 +95,28 @@
           (check-equal "bytes" (sequence-case-bytes c) '(1 2))
           (check-equal "target" (sequence-case-target c) 'stop))))))
 
+;; Milestone 4 Slice ①b task 2: the field descriptor reaches grammar authors
+;; through the façade. Predicates and accessors come through on M3 Slice ①'s
+;; matcher precedent -- an author needs to test what they just built -- while
+;; machine ACCESSORS stay private, per §9.1's construction-only surface.
+(harness-group "uint fields through the façade"
+  (lambda ()
+    (harness-case "a field-declaring machine is built from (byte-machine graph) alone"
+      (lambda ()
+        ;; This program imports nothing but the façade, so if any of these names
+        ;; is missing from EITHER the export list or the mirrored `only` import
+        ;; list, this file fails at load rather than here. Editing one list and
+        ;; not the other leaves the constructor unreachable -- silently at read
+        ;; time and loudly at first use.
+        (let* ((f (make-uint-field 'count 16 7 #f))
+               (m (make-machine 'fielded 'stop (list f) '() '()
+                                (list (make-error-declaration 'e 'c "r" #f))
+                                (list (make-stop-node 'stop #f)) 'e #f)))
+          (check "the descriptor is a field" (uint-field? f))
+          (check-equal "name" (uint-field-name f) 'count)
+          (check-equal "width" (uint-field-width f) 16)
+          (check-equal "initial" (uint-field-initial f) 7)
+          (check-equal "label" (uint-field-source-label f) #f)
+          (check "the machine was built" (machine? m)))))))
+
 (harness-finish)
