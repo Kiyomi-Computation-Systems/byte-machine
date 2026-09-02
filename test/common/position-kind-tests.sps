@@ -174,11 +174,20 @@
                   (list (make-byte-dispatch-node
                          'start
                          (list (make-byte-case (make-exact-byte-matcher 0)
-                                               (make-edge 'stop 'advance) #f))
+                                               (make-edge 'stop 'advance) #f)
+                               (make-byte-case (make-exact-byte-matcher 1)
+                                               (make-edge 'other 'reexecute) #f))
                          (make-edge 'reject 'reexecute) #f #f)
                         (make-stop-node 'stop #f)
-                        ;; Names the SECOND of the two same-code declarations.
-                        (make-error-node 'reject 'second-decl #f))
+                        ;; BOTH same-code declarations are named, by different
+                        ;; nodes. Naming only one lets the emitted table's
+                        ;; reached-declaration filter drop the other, which
+                        ;; masks the defect: the lookup then has a single
+                        ;; candidate and code-alone and (code, reason) agree.
+                        ;; Two reached declarations sharing a code is the shape
+                        ;; that actually separates them.
+                        (make-error-node 'reject 'second-decl #f)
+                        (make-error-node 'other 'first-decl #f))
                   'default-eof #f)))
 
 ;; Whole-branch review, 2026-09-02: the writer half of Task 1 shipped with NO

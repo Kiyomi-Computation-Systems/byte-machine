@@ -736,7 +736,7 @@ cmake_minimum_required(VERSION 3.26)
 # had no mutation, the `eq? ... 'reexecute` test itself. No pass is added, so
 # passes stay at 46 and mutations become 235 + 1 = 236.
 set(EXPECTED_PASSES 48)
-set(EXPECTED_MUTATIONS 249)
+set(EXPECTED_MUTATIONS 250)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -5591,6 +5591,24 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   # and inherited unmodified through execute_process -- see "WHAT THIS SUITE
   # NEEDS FROM ITS ENVIRONMENT" above)
   )
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.determinism.one-byte.chez.source
+  LABEL "compile: the errs table carries declarations the graph never reaches"
+  # Resolving decision 0022 item 7's open question. The encoding carries a
+  # reason only where one is resolved, so a declaration nothing names never
+  # reaches the IR fingerprint; emitting it anyway made two machines the
+  # fingerprint calls identical emit different bytes. Witnessed by the
+  # determinism lane's own equal-fingerprints-equal-bytes case, which is where
+  # the property belongs: §20:1043 makes the fingerprint what the determinism
+  # checks compare.
+  FIND [[                              (if (member (cons (error-declaration-code (car ds))
+                                                (error-declaration-reason (car ds)))
+                                          reached)
+                                  (cons (car ds) acc) acc)))))]]
+  REPLACE [[                              (cons (car ds) acc)))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "equal fingerprints emit equal bytes: and so do the emitted bytes")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.determinism.one-byte.chez.source

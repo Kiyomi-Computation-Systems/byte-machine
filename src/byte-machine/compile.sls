@@ -232,7 +232,36 @@
            ;; dispatch state: the http-version machine has nine error sites over
            ;; two declarations. This is §19.1:996's "immutable field/callback/debug
            ;; metadata", carried as one quoted vector.
-           (decls (machine-errors (compilation-machine compilation)))
+           ;; Only the declarations the NORMALIZED graph reaches. The encoding
+           ;; writes a reason at exactly two sites -- an error state's, and a
+           ;; dispatch state's default-eof routing -- so a declaration no node
+           ;; names and that is not the machine default-eof never reaches the IR
+           ;; fingerprint. Emitting it anyway made two machines the fingerprint
+           ;; calls identical emit DIFFERENT bytes, which is the converse of the
+           ;; property decision 0019 item 2 states and the one nothing asserted.
+           ;; Narrowing here rather than widening the encoding is what keeps
+           ;; every shipped fingerprint where Slice ①a measured it, which
+           ;; decision 0019 point 5 requires of every later slice.
+           (reached (let walk ((i 0) (acc '()))
+                      (if (>= i (vector-length states)) (reverse acc)
+                          (let* ((st (vector-ref states i))
+                                 (r (normal-error-reason st))
+                                 (c (cond ((eq? (normal-state-kind st) 'error)
+                                           (normal-error-code st))
+                                          ((and (eq? (normal-state-kind st) 'dispatch)
+                                                (eq? (car (normal-dispatch-eof st)) 'default))
+                                           (cdr (normal-dispatch-eof st)))
+                                          (else #f))))
+                            (walk (+ i 1)
+                                  (if (and c (not (member (cons c r) acc)))
+                                      (cons (cons c r) acc) acc))))))
+           (decls (let keep ((ds (machine-errors (compilation-machine compilation))) (acc '()))
+                    (if (null? ds) (reverse acc)
+                        (keep (cdr ds)
+                              (if (member (cons (error-declaration-code (car ds))
+                                                (error-declaration-reason (car ds)))
+                                          reached)
+                                  (cons (car ds) acc) acc)))))
            ;; Keyed on code AND reason, not on code alone. Two declarations may
            ;; share a code -- pass-names rejects duplicate declaration NAMES and
            ;; nothing rejects duplicate codes, and §16.2's required-check list
