@@ -732,7 +732,7 @@ cmake_minimum_required(VERSION 3.26)
 # had no mutation, the `eq? ... 'reexecute` test itself. No pass is added, so
 # passes stay at 46 and mutations become 235 + 1 = 236.
 set(EXPECTED_PASSES 48)
-set(EXPECTED_MUTATIONS 245)
+set(EXPECTED_MUTATIONS 246)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -5399,7 +5399,8 @@ byte_machine_mutation(
   # a rendered symbol. Dropping the index to a constant 0 makes every error
   # report the first declaration's code -- the same decision, the same failed
   # comparison in the same case.
-  FIND [[(number->string (index-of (normal-error-code s))) ") (quote "]]
+  FIND [[(number->string (index-of (normal-error-code s)
+                                                  (normal-error-reason s))) ") (quote "]]
   REPLACE [["0" ") (quote "]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "error arm")
 
@@ -5423,7 +5424,7 @@ byte_machine_mutation(
   # NOT "0": the default-eof declaration IS index 0 in every shipped fixture, so
   # that REPLACE is a no-op and the mutation shipped UNCAUGHT on its first run.
   # Index 1 is the `rejected` declaration, so the arm reports the wrong code.
-  FIND [[(number->string (index-of (cdr eof))) ") (quote " (symbol->string name)]]
+  FIND [[(number->string (index-of (cdr eof) reason)) ") (quote " (symbol->string name)]]
   REPLACE [["1" ") (quote " (symbol->string name)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "eof routes to the default-eof error")
 
@@ -6855,6 +6856,25 @@ byte_machine_mutation(
                        (loop pos 'byte)))))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "an advance-mode mismatch reports boundary after the committed byte: kind -- expected boundary, got byte")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "compile: an error declaration is resolved by code alone"
+  # The whole-branch review's Critical. Two declarations may share a CODE --
+  # pass-names rejects duplicate declaration NAMES and nothing rejects duplicate
+  # codes -- and the normalizer has collapsed the node's declaration name to its
+  # resolved code by the time the emitter sees it, so keying on the code alone
+  # returns the FIRST declaration carrying it. The generated lane then reports a
+  # different declaration's reason than the interpreter, on a machine the
+  # verifier accepts with zero diagnostics. Invisible to every pre-existing lane
+  # (each fixture uses distinct codes) and to the property lane (machine-gen.sls
+  # fixes two declarations with distinct codes), which is why it needed its own
+  # fixture rather than a wider sweep of the existing ones.
+  FIND [[((and (eq? (error-declaration-code (car ds)) code)
+                                     (string=? (error-declaration-reason (car ds)) reason))]]
+  REPLACE [[((eq? (error-declaration-code (car ds)) code)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "both lanes report the reason of the declaration the node names: generated")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.position-kind.chez.source

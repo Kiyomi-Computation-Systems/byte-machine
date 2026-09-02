@@ -155,6 +155,51 @@
           (check-equal "generated" (parser-error-position-kind ge) 'boundary)
           (check-equal "the lanes agree" (project-error ie) (project-error ge)))))))
 
+;; Whole-branch review, 2026-09-02: two declarations may share a CODE. Nothing
+;; rejects that -- pass-names checks duplicate declaration NAMES only, and
+;; §16.2's required-check list does not ask for code uniqueness -- and the two
+;; executors resolved the declaration by DIFFERENT keys: the interpreter by
+;; name, the emitter by resolved code, first match. So the generated lane
+;; reported a different declaration's REASON, which is one of the six members
+;; the projection compares. Reachable through the public (byte-machine graph)
+;; builder on a machine the verifier accepts with zero diagnostics; invisible to
+;; every existing lane because each fixture uses distinct codes, and to the
+;; property lane because machine-gen.sls fixes two declarations with distinct
+;; codes.
+(define dup-code
+  (let ((errs (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
+                    (make-error-declaration 'first-decl 'unexpected-byte "REASON-A" #f)
+                    (make-error-declaration 'second-decl 'unexpected-byte "REASON-B" #f))))
+    (make-machine 'dup-code 'start '() '() '() errs
+                  (list (make-byte-dispatch-node
+                         'start
+                         (list (make-byte-case (make-exact-byte-matcher 0)
+                                               (make-edge 'stop 'advance) #f))
+                         (make-edge 'reject 'reexecute) #f #f)
+                        (make-stop-node 'stop #f)
+                        ;; Names the SECOND of the two same-code declarations.
+                        (make-error-node 'reject 'second-decl #f))
+                  'default-eof #f)))
+
+(harness-group "an error declaration is resolved by declaration, not by code"
+  (lambda ()
+    (harness-case "the verifier accepts two declarations sharing a code"
+      (lambda ()
+        ;; Stated as its own check so the test does not silently start passing
+        ;; because the machine became unbuildable. If a later slice decides codes
+        ;; must be unique, THIS is the case that should fail first and say so.
+        (let ((v (verify-machine dup-code)))
+          (check "accepted" (verification-ok? v))
+          (check-equal "no diagnostics" (length (verification-diagnostics v)) 0))))
+    (harness-case "both lanes report the reason of the declaration the node names"
+      (lambda ()
+        (let ((ie (feed-then-error (interpreted dup-code) '(65)))
+              (ge (feed-then-error
+                   (generated dup-code 'dup-parser 'dup-code "pk-dup.sls") '(65))))
+          (check-equal "interpreter" (parser-error-reason ie) "REASON-B")
+          (check-equal "generated" (parser-error-reason ge) "REASON-B")
+          (check-equal "the lanes agree" (project-error ie) (project-error ge)))))))
+
 (harness-group "the state id is reported by both lanes and excluded from the comparison"
   (lambda ()
     (harness-case "both report one, and the projection omits it"

@@ -137,12 +137,12 @@
   ;; fixes `eof` whether or not a prior hop ran. Its node-name is the DISPATCH
   ;; node's, which is where truncation was detected: a default-EOF error has no
   ;; error node of its own (decision 0022 item 9).
-  (define (render-eof-branch eof id name index-of)
+  (define (render-eof-branch eof id name reason index-of)
     (if (eq? (car eof) 'node)
         (string-append "(loop pos " (number->string (cdr eof)) " off (quote eof))")
         (string-append "(byte-machine-make-feed-outcome/v1 (quote error) pos "
                        "(byte-machine-make-parser-error/v1 (vector-ref errs "
-                       (number->string (index-of (cdr eof))) ") (quote " (symbol->string name)
+                       (number->string (index-of (cdr eof) reason)) ") (quote " (symbol->string name)
                        ") " id " off (quote eof)) " id " off)")))
 
   ;; Milestone 3 Slice ② changed nothing here either, and that is decision 0015
@@ -157,10 +157,11 @@
   ;; member3-drift-tests.sps, which walks the emitted datum for every symbol
   ;; outside a quote form and asserts the remainder is a subset of this list.
   ;; `names` maps a state id to its public source-node name (§17:963's debug
-  ;; map, normalizer output) and `index-of` a resolved error code to its
-  ;; declaration's position in the errs table. Neither is recoverable from a
-  ;; normalized state, which carries only the resolved code, so both are threaded
-  ;; in from render-machine rather than derived here.
+  ;; map, normalizer output) and `index-of` a (code, reason) pair to that
+  ;; declaration's position in the errs table. The name is not recoverable from a
+  ;; normalized state at all, and the declaration is not recoverable from its
+  ;; code alone -- codes need not be unique -- so both are threaded in from
+  ;; render-machine rather than derived here.
   (define (render-state-arm s names index-of)
     (let ((id (number->string (normal-state-id s)))
           (nm (lambda (i) (symbol->string (cdr (assv i names))))))
@@ -175,7 +176,8 @@
          ;; a reexecute edge arrives and `boundary` when an advance edge does.
          (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote error) pos "
                         "(byte-machine-make-parser-error/v1 (vector-ref errs "
-                        (number->string (index-of (normal-error-code s))) ") (quote "
+                        (number->string (index-of (normal-error-code s)
+                                                  (normal-error-reason s))) ") (quote "
                         (nm (normal-state-id s)) ") " id " off pk) " id " off))\n"))
         ((finish)
          (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote finished) pos #f " id " off))\n"))
@@ -190,7 +192,7 @@
             "           (if finish?\n"
             "               " (render-eof-branch (normal-dispatch-eof s) id
                                                    (string->symbol (nm (normal-state-id s)))
-                                                   index-of) "\n"
+                                                   (normal-error-reason s) index-of) "\n"
             "               (byte-machine-make-feed-outcome/v1 (quote need-input) pos #f " id " off))\n"
             "           (let ((b (bytevector-u8-ref bv pos)))\n"
             "             (case b\n"
@@ -221,10 +223,35 @@
            ;; two declarations. This is §19.1:996's "immutable field/callback/debug
            ;; metadata", carried as one quoted vector.
            (decls (machine-errors (compilation-machine compilation)))
-           (index-of (lambda (code)
+           ;; Keyed on code AND reason, not on code alone. Two declarations may
+           ;; share a code -- pass-names rejects duplicate declaration NAMES and
+           ;; nothing rejects duplicate codes, and §16.2's required-check list
+           ;; does not ask for uniqueness -- and the normalizer has already
+           ;; collapsed the node's declaration name to its resolved code by the
+           ;; time the emitter sees it. Keying on the code alone therefore
+           ;; returned the FIRST declaration carrying it, so a generated parser
+           ;; reported a different declaration's reason than the interpreter,
+           ;; on a machine the verifier accepts with zero diagnostics. The
+           ;; normalized state has carried the right reason in its own slot
+           ;; since format 2, which is what makes this recoverable without a new
+           ;; slot: (code, reason) selects the entry the SITE produced, and when
+           ;; two declarations agree on both, their errs entries are identical
+           ;; and either index yields the same record -- so this is total.
+           (index-of (lambda (code reason)
                        (let walk ((ds decls) (i 0))
-                         (if (eq? (error-declaration-code (car ds)) code)
-                             i (walk (cdr ds) (+ i 1))))))
+                         (cond ((null? ds)
+                                ;; Unreachable: every code/reason pair the
+                                ;; emitter asks about was resolved FROM this
+                                ;; same list by the normalizer. Loud rather than
+                                ;; a silent fallback to 0, which is what the
+                                ;; first version of this walk would have done.
+                                (assertion-violation
+                                 'render-machine "no error declaration for code"
+                                 code reason))
+                               ((and (eq? (error-declaration-code (car ds)) code)
+                                     (string=? (error-declaration-reason (car ds)) reason))
+                                i)
+                               (else (walk (cdr ds) (+ i 1)))))))
            (errs (let join ((ds decls) (acc ""))
                    (if (null? ds) acc
                        (join (cdr ds)

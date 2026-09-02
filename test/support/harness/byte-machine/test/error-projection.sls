@@ -36,9 +36,13 @@
 
   ;; What project-error yields, named so a test can assert the width rather than
   ;; counting a literal list. Six, not five: §22.4:1271's five plus `reason`,
-  ;; which §12.7:777 neither requires to match nor licenses to differ -- both
-  ;; lanes build it from the same declaration, so it is compared here and the
-  ;; reading is recorded rather than left as an orphan.
+  ;; which §12.7:777 neither requires to match nor licenses to differ. It is
+  ;; compared here rather than left as an orphan, and comparing it earned its
+  ;; keep: the two lanes resolved the declaration by different keys -- the
+  ;; interpreter by name, the emitter by resolved code -- and `reason` is the
+  ;; only member that divergence moved, so this is the projection member that
+  ;; caught it. Do not narrow this list on the argument that both lanes "build
+  ;; it from the same declaration"; that was the assumption the defect broke.
   (define projected-members 6)
 
   ;; The deliberately excluded member. Exposed so a lane can assert that both

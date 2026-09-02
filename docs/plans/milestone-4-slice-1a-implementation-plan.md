@@ -1807,6 +1807,58 @@ In the tree, at close-out, each as a literal:
 
 ---
 
+## Whole-branch review — 2026-09-02
+
+Ten reviewers over the **seams between the tasks**, each finding then independently refuted.
+This is the review the project's own record says is the one that matters: "every task passing
+tells you nothing about the seams; the whole-branch review is what finds an invariant with no
+owner." It found one, and the eight per-task gates could not have.
+
+**Critical — the two executors resolved an error declaration by DIFFERENT keys.** The
+interpreter resolves by declaration **name** (`lookup-error` on `error-node-error-name`); the
+emitter's `index-of` resolved by the **resolved code**, first match. Nothing rejects two
+declarations sharing a code — `pass-names` checks duplicate *names* only, and §16.2's
+required-check list does not ask for uniqueness — and the normalizer has already collapsed the
+node's declaration name to its code by the time the emitter sees it. So a generated parser
+reported a **different declaration's `reason`** than the interpreter, on a machine the verifier
+accepts with zero diagnostics, reachable through the public `(byte-machine graph)` builder.
+
+Reproduced end to end before fixing:
+
+```
+(verifier-accepts #t diagnostics ())
+(interpreter (machine unexpected-byte REASON-B reject 0 byte))
+(generated   (machine unexpected-byte REASON-A reject 0 byte))
+(LANES-AGREE #f)
+```
+
+**Why nothing was red.** Every fixture in `test/` uses distinct codes, and `machine-gen.sls`
+fixes two declarations with distinct codes, so the property lane cannot generate one either.
+This is the shape the suite's own comment had already named once in this slice — "the
+default-eof declaration IS index 0 in every shipped fixture, so that REPLACE is a no-op" — and
+the same blind spot hid a real defect rather than a dead mutation.
+
+**Fixed** by keying `index-of` on **(code, reason)** rather than on code alone. The normalized
+state has carried the right reason in its own slot since format 2, which is what makes this
+recoverable without a new slot or a widened eof pair; when two declarations agree on both, their
+`errs` entries are identical and either index yields the same record, so the walk is total. Its
+`null?` case is a loud `assertion-violation` rather than a silent fall-back to 0. A fixture with
+two declarations sharing a code now drives both lanes in
+`position-kind-tests.sps`, and a mutation reverting to code-only lookup is caught by it.
+
+**Not taken:** a duplicate-error-code diagnostic in `pass-names`. Neither §10.5 nor §16.2
+requires codes to be unique, so that is a spec change and needs its own record — not something
+to smuggle in as a fix.
+
+**Two stated reasons corrected, both false while their conclusions were right** — the project's
+named defect class. `compile.sls`'s comment said a normalized state "carries only the resolved
+code" (slot 7 has carried the reason since Task 4), and `error-projection.sls` justified
+comparing `reason` because "both lanes build it from the same declaration" — which is exactly
+the assumption the defect broke. Comparing `reason` is what *caught* it, and that is now what
+the comment says.
+
+**Also reported: 73 Important and 62 Minor findings, not yet triaged.**
+
 ## Self-Review (run after all eight tasks)
 
 - [ ] **Every citation in this plan re-read against HEAD.** This plan's own line numbers were
