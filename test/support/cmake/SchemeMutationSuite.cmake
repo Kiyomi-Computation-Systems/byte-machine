@@ -731,8 +731,8 @@ cmake_minimum_required(VERSION 3.26)
 # reexec-targets)" -- for the one decision in reexec-targets' sequence arm that
 # had no mutation, the `eq? ... 'reexecute` test itself. No pass is added, so
 # passes stay at 46 and mutations become 235 + 1 = 236.
-set(EXPECTED_PASSES 47)
-set(EXPECTED_MUTATIONS 242)
+set(EXPECTED_PASSES 48)
+set(EXPECTED_MUTATIONS 245)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -6762,6 +6762,8 @@ byte_machine_mutation(
   EXPECT_OUTPUT_MATCHES
     "the emitted bytes equal the committed sequence golden: golden")
 
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Milestone 4 Slice ①a task 6 (§4.7 item 2): reserved-member-3's drift guard.
 # Its own PASS, because a mutation is witnessed only by tests that run in the
 # lane its SPEC names -- appended to the preceding pass it ran under a verify
@@ -6790,6 +6792,60 @@ byte_machine_mutation(
   EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(pk\\)")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# Milestone 4 Slice ①a task 7: the position kind is a property of the ARRIVING
+# transition (decision 0022 item 5), asserted BY VALUE in both executors.
+#
+# These are the mutations AGENTS.md's "agreement must stay observable" rule is
+# about. Making the two lanes AGREE on a wrong kind is a defect the differential
+# alone cannot see -- both tuples still match -- so what catches it is this
+# lane's by-value assertion. Each breaks exactly one lane, and the by-value
+# check names the wrong kind rather than reporting a bare disagreement.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/position-kind-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "compile: an emitted reexecute jump carries the advance position kind"
+  FIND [[(string-append "(loop pos " (number->string target) " off (quote byte))")]]
+  REPLACE [[(string-append "(loop pos " (number->string target) " off (quote boundary))")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "reexecute mismatch reports byte at the offending byte: kind -- expected byte, got boundary")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "runtime: the interpreter's advance jump carries the reexecute position kind"
+  FIND [[(loop (+ pos 1) 'boundary))
+                       (loop pos 'byte)))))]]
+  REPLACE [[(loop (+ pos 1) 'byte))
+                       (loop pos 'byte)))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "an advance-mode mismatch reports boundary after the committed byte: kind -- expected boundary, got byte")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "runtime: the finish loop initializes the position kind to eof"
+  # Decision 0022 item 5's headline: the initialization is `boundary`
+  # UNCONDITIONALLY, in a feed call and a finish call alike, with no finish? key.
+  # Initializing this loop to `eof` is the shape Gate 0 shipped and caught one
+  # review later -- it made both lanes agree at the default-EOF arm and made that
+  # arm's own literal observationally identical to the inherited variable.
+  FIND [[(let loop ((node (parser-current parser)) (pk 'boundary))]]
+  REPLACE [[(let loop ((node (parser-current parser)) (pk 'eof))]]
+  EXPECT_STATUS 1
+  # Witnessed by the PARKED case, not by the truncation one: every other route
+  # into a finish-time error either hops (setting `eof` on the way) or lands on
+  # the default-EOF terminal, which takes its own per-site constant. Only an
+  # error state a prior feed parked on is reached by NO jump, so only it can
+  # observe what the loop was initialized to.
+  EXPECT_OUTPUT_MATCHES "both lanes report boundary, not eof: interpreter -- expected boundary, got eof")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

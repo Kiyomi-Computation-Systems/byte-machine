@@ -1597,6 +1597,23 @@ not ship as orphans that a later slice re-derives.
   registrations — twelve drives across the pair; the in-program sentinel reporting **6**; and
   one check that fails when the exclusion is widened. Full `release` preset green.
 
+**Executed 2026-09-02. The finish loop's initialization needed a case this task did not
+plan.** A mutation setting `parser-finish-op!`'s `pk` initializer to `eof` was **UNCAUGHT**
+against the truncation case, because every route into a finish-time error either hops —
+setting `eof` on the way — or lands on the default-EOF terminal, which takes its own per-site
+constant. Only an error state a prior feed **parked** on is reached by no jump at all, so only
+it can observe what the loop was initialized to. The lane gained that case: a pause whose
+continuation is an error node, driven feed → resume → `finish!`. This is the shape decision
+0022 item 5 spends three paragraphs on, and without it the unconditional-`boundary` rule —
+the correction Gate 0's review made as its Critical — is unwitnessed.
+
+**And a bookkeeping trap worth naming.** Adding a pass means adding its
+`byte_machine_mutation_run` too, and a `run` that looks redundant may be the previous pass's.
+Removing one as a "duplicate" orphaned a whole shipped pass: its mutations were silently
+discarded by the next `reset`, every individual lane stayed green, and the only thing that
+noticed was `EXPECTED_PASSES`/`EXPECTED_MUTATIONS` — which is exactly what that check's own
+comment says it is for.
+
 ---
 
 ## Task 8: The pin sweep, the Pass 33 whole-pass audit, the status surfaces, and the CHANGELOG
