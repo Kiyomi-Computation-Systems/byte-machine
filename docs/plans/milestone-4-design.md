@@ -22,6 +22,15 @@ task inside Slice ② rather than a slice of its own.
 > false it is corrected in place and marked at the site, because a false
 > instruction is a landmine rather than evidence (AGENTS.md).
 >
+> - **2026-09-02 (Slice ①b planning)** — **amends §6 task 3**: its stated trap —
+>   "no external test can reach the new arm … a test cannot forge a `machine?`
+>   object" — is false, measured. Descriptors are bare R6RS vectors, so
+>   `(vector-ref m 0)` steals the tag and a forged machine with a wrong IR
+>   version verifies clean; `(vector-set! m 1 42)` on a real one does too. The
+>   check is witnessable in **both** directions and the prescribed
+>   `EXPECT_SURVIVES` must not be written. §6's exit-evidence count of "two
+>   `EXPECT_SURVIVES` additions" drops to one. Every other number in §6's exit
+>   evidence is pre-①a; Slice ①b's plan §0b re-derives them.
 > - **2026-09-02 (before Slice ①b)** — **§5's error table is per *reached*
 >   declaration**: the emitted `errs` table carried every declaration while the
 >   encoding carries only reached ones, so two machines the IR fingerprint called
@@ -1016,7 +1025,10 @@ Tasks, in an order where each step's gate is what makes the next one safe:
    `byte-machine.unit.graph.chez.{source,aot}` builds a field-declaring machine
    importing nothing but `(byte-machine graph)`.**
 3. **`pass-schema`'s unsupported-IR-version check (§16.2:884, §4.7 item 3) — and
-   the observability trap it hides.** `machine-ir-version` is stamped as the
+   the observability trap it hides.** *(**Amended 2026-09-02** — the trap does
+   not exist and the `EXPECT_SURVIVES` this item prescribes must not be written.
+   See the Amendments block above and Slice ①b's plan §0 D1, which carries the
+   measurement.)* `machine-ir-version` is stamped as the
    constant `1` (pre-slice, `ir.sls:351`, into machine slot 1 at `:365`) with
    **no accessor anywhere**: `rg -n 'machine-ir-version|ir-version' --glob
    '!docs/**'` returns exactly those two lines. `pass-schema` (pre-slice,
