@@ -3,8 +3,9 @@
 ;;; compile (parent §7.2). Two executor variants share this one parser API and
 ;;; the one parser-result contract: the reference interpreter builds an `op`
 ;;; message closure over the source IR; generated code (Phase 3, decision 0010)
-;;; is a direct resumable executor constructed through
-;;; byte-machine-make-compiled-machine/v1. The two are deliberately different
+;;; is a direct resumable executor constructed through the one unversioned
+;;; byte-machine-make-compiled-machine (decision 0018; /v1 and /v2 survive only
+;;; as tombstones that refuse every version). The two are deliberately different
 ;;; implementations, which is what lets the interpreter≡generated differential
 ;;; catch lowering defects (parent §18, §22.4).
 (library (byte-machine runtime)
@@ -290,9 +291,10 @@
   ;; default-eof-error); execution continues to a finish node (-> finished), a
   ;; pause node (-> paused, §12.1), an error node (-> error), or a stop node
   ;; reached this way is verifier-rejected so it never occurs. No slice, so
-  ;; next/consumed mirror the stream offset / 0. The generated /v2 finish path
-  ;; runs the same `exec` with finish? #t (Slice ②b-2); v1 never supported
-  ;; finish, so its else arm stays an assertion violation.
+  ;; next/consumed mirror the stream offset / 0. The generated finish path runs
+  ;; the same `exec` with finish? #t; the else arm is unreachable through the
+  ;; public API now that only 'op and 'v2 can be constructed, and stays an
+  ;; assertion violation for that reason rather than for v1's.
   (define (parser-finish! parser)
     ;; Sticky arms deliberately not shared with parser-feed!'s -- see the
     ;; comment there.

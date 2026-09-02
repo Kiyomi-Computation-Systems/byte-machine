@@ -31,11 +31,12 @@ delivered. No versioned release exists yet.
   committed goldens are regenerated from the emitter. See
   [decision 0018](docs/decisions/0018-unversioned-generated-abi-constructor.md);
   this satisfies §9.5:444's three requirements for a pre-1.0 ABI change.
-- **The canonical normalized encoding is format 2**, carrying each error
-  declaration's static reason and reserving a field-table count of zero, so two
-  machines differing only in a reason differ in IR fingerprint — without which
-  the fingerprint stops identifying what was emitted. All four pinned
-  fingerprints moved once, here. See
+- **The canonical normalized encoding is format 2**, carrying the static reason
+  of every error declaration the graph **reaches** — an error node's, and the
+  machine default-eof error's — and reserving a field-table count of zero. Two
+  machines differing only in a reached declaration's reason therefore differ in
+  IR fingerprint, without which the fingerprint would stop identifying what was
+  emitted. All four pinned fingerprints moved once, here. See
   [decision 0019](docs/decisions/0019-encoding-format-2-pre-provisioned.md).
 - **A parser error is a structured record, not a bare code symbol.**
   `parser-result-error` now yields a `parser-error` carrying domain, code,

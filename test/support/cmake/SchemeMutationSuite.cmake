@@ -732,7 +732,7 @@ cmake_minimum_required(VERSION 3.26)
 # had no mutation, the `eq? ... 'reexecute` test itself. No pass is added, so
 # passes stay at 46 and mutations become 235 + 1 = 236.
 set(EXPECTED_PASSES 48)
-set(EXPECTED_MUTATIONS 246)
+set(EXPECTED_MUTATIONS 249)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -2536,6 +2536,17 @@ byte_machine_mutation(
       (assertion-violation 'byte-machine-make-compiled-machine]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "a mismatched ABI version is refused: refused")
 
+# (removed 2026-09-02, Milestone 4 Slice ①a) "runtime: a v1 machine is driven
+# down the op path" and "runtime: the v1 result status is hard-wired to
+# stopped": both witnessed the 'v1 feed-only executor path, which decision 0018
+# made unconstructable and this slice deleted -- make-parser's 'v1 arm,
+# parser-feed!'s v1 else, parser-feed-v1! and parser-finish!'s raising v1 arm are
+# all gone. Their REPLACEs change nothing in the surviving tree and no input can
+# reach what they mutated, so they were deleted WITH the code rather than left to
+# report UNCAUGHT. Recorded here because the obligation is to say so beside the
+# pass: decision 0018's Consequences names both LABELs and delegates the
+# disposition to the slice that lands it.
+#
 # (removed 2026-08-28, Slice ②a) "a v1 terminal result is not made sticky": the
 # sticky cache was deleted; a repeat feed re-runs the executor, which is idempotent
 # for stop/error, so setting-vs-not-setting a cache is now unobservable in M2's
@@ -2935,7 +2946,12 @@ byte_machine_mutation(
   FIND [[(let ((e (parts->parser-error (op 'error-value node) off pk)))
              (parser-set-stored-error! parser e)
              (make-parser-result 'error off 0 off e)))]]
-  REPLACE [[(let ((e (op 'error-value node)))
+  # The REPLACE drops ONLY the store. An earlier re-anchor updated the FIND to
+  # the post-slice text but left the REPLACE at the pre-slice one, so the mutant
+  # made two changes at once -- dropping the store AND reverting `e` to the raw
+  # parts list -- and the pinned line could have come from either. One mutation,
+  # one decision.
+  REPLACE [[(let ((e (parts->parser-error (op 'error-value node) off pk)))
              (make-parser-result 'error off 0 off e)))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish repeats the finish-stored error")
 
@@ -3024,7 +3040,7 @@ byte_machine_mutation(
   FIND [[((finished) (make-parser-result 'finished start 0 (parser-offset parser) #f))]]
   REPLACE [[ ]]
   EXPECT_SURVIVES
-    "whole-arm deletion (as opposed to the field-value mutation above, which IS caught) falls through to parser-feed!'s shared `else` branch; for the 'op variant, parser-feed-op! run fresh from a `current` still parked on the same finish node reaches that loop's own `(finish)` case before advancing `pos`, producing the byte-identical result tuple this arm short-circuits to. The other two variants do not witness it either, for an EMPIRICAL reason rather than a structural one: parser-feed!'s inner case records lifecycle 'finished from ANY variant whose executor returns 'finished, so v1 is not barred from the sticky finished row (parser-finish!'s raising v1 else arm closes only the finish! route) -- but this file's only v1 executor, stub-feed, has no state that returns 'finished, and its /v2 stub-exec has none either, so no v1 or /v2 fixture here ever parks a parser at lifecycle 'finished. Measured directly: this mutant passes the whole SPEC-lane suite unchanged (cases=35 failed-cases=0)")
+    "whole-arm deletion (as opposed to the field-value mutation above, which IS caught) falls through to parser-feed!'s shared `else` branch; for the 'op variant, parser-feed-op! run fresh from a `current` still parked on the same finish node reaches that loop's own `(finish)` case before advancing `pos`, producing the byte-identical result tuple this arm short-circuits to. The generated variant does not witness it either, for an EMPIRICAL reason rather than a structural one: parser-feed!'s inner case records lifecycle 'finished from ANY variant whose executor returns 'finished, but this file's stub-exec has no state that returns 'finished, so no generated fixture here ever parks a parser at lifecycle 'finished. RE-MEASURED 2026-09-02 after Milestone 4 Slice ①a deleted the 'v1 executor path entirely: the original reason turned on v1 and its stub-feed, neither of which exists now -- make-parser raises on an unknown variant, parser-feed-v1! is gone, and parser-finish!'s else arm no longer names v1 at all. The survivor's SUBSTANCE is unchanged and was re-measured on the post-slice tree: this mutant still passes the whole SPEC-lane suite unchanged")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -3145,6 +3161,29 @@ byte_machine_mutation(
 # decisions (decision 0022 items 1 and 2). Nothing outside runtime-tests.sps
 # builds one until task 5, so these are witnessed by that file's own cases --
 # which is the point: the shape is pinned BEFORE anything depends on it.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the ABI version check does not come first"
+  # Decision 0018 item 1: the check precedes every other guard, so a mismatch is
+  # reported before any part of the payload is interpreted -- which is what makes
+  # the payload safe to grow. Witnessable only by a predicate that names WHICH
+  # guard fired: every guard here raises assertion-violation with the same `who`,
+  # so the case's original bare assertion-violation? predicate passed whichever
+  # one fired and could not observe the ordering it is named for. The irritant is
+  # the only thing that differs between them.
+  FIND [[    (unless (and (integer? abi-version) (= abi-version current-abi-version))
+      (assertion-violation 'byte-machine-make-compiled-machine
+                           "generated-runtime ABI mismatch" abi-version))
+    (unless (procedure? exec)
+      (assertion-violation 'byte-machine-make-compiled-machine "exec must be a procedure" exec))]]
+  REPLACE [[    (unless (procedure? exec)
+      (assertion-violation 'byte-machine-make-compiled-machine "exec must be a procedure" exec))
+    (unless (and (integer? abi-version) (= abi-version current-abi-version))
+      (assertion-violation 'byte-machine-make-compiled-machine
+                           "generated-runtime ABI mismatch" abi-version))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the VERSION is named, not the payload")
+
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a machine error is constructed in the callback domain"
@@ -6824,11 +6863,20 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # Milestone 4 Slice ①a task 7: the position kind is a property of the ARRIVING
 # transition (decision 0022 item 5), asserted BY VALUE in both executors.
 #
-# These are the mutations AGENTS.md's "agreement must stay observable" rule is
-# about. Making the two lanes AGREE on a wrong kind is a defect the differential
-# alone cannot see -- both tuples still match -- so what catches it is this
-# lane's by-value assertion. Each breaks exactly one lane, and the by-value
-# check names the wrong kind rather than reporting a bare disagreement.
+# What the by-value assertion adds, stated honestly. Each mutation below breaks
+# exactly ONE lane, so the cross-lane comparison would also catch it -- the
+# earlier claim here, that these are defects "the differential alone cannot
+# see", was false of its own next sentence. What the by-value check adds for
+# these three is that the failure NAMES the wrong kind instead of reporting a
+# bare disagreement between two tuples.
+#
+# The case the by-value assertion uniquely covers -- both lanes agreeing on a
+# WRONG kind, which AGENTS.md's "agreement must stay observable" rule is about --
+# has no mutation here and cannot have one: a mutation edits a single FILE, and
+# making both lanes agree wrongly takes a coordinated edit to compile.sls and
+# runtime.sls at once. The by-value assertions in position-kind-tests.sps are
+# the only guard against it, which is why they assert the kind against §12.7's
+# table rather than only against each other.
 byte_machine_mutation_reset()
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
@@ -6856,6 +6904,44 @@ byte_machine_mutation(
                        (loop pos 'byte)))))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "an advance-mode mismatch reports boundary after the committed byte: kind -- expected boundary, got byte")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "compile: the default-EOF arm reports a byte position rather than eof"
+  # §12.7:771 fixes `eof` for truncated input during finish!, and this arm is a
+  # terminal construction reached by no jump, so it takes a per-site literal
+  # rather than the loop variable. That literal had no mutation: the pass covered
+  # `byte` in the generated lane and `boundary` in the interpreter, leaving the
+  # third of the three kinds the lane is named for unwitnessed in both.
+  FIND [[") " id " off (quote eof)) " id " off)")))]]
+  REPLACE [[") " id " off (quote byte)) " id " off)")))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "both lanes report eof at the terminal, not at a hop: generated -- expected eof, got byte")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "compile: a reason is written into generated source unescaped"
+  # §20:1039's explicit escaping. valid-reason? deliberately ADMITS the three
+  # characters that need it -- they are inside §10.1:480's printable-ASCII-plus-LF
+  # repertoire -- so escape-string is the only thing between an author-supplied
+  # reason and a generated library that either does not parse or parses WRONG.
+  #
+  # Measured, not assumed: with only the quote clause removed the file still
+  # READS -- the string terminates early and the reason arrives as "a " instead
+  # of the declared text -- so the witnessing check is the ROUND TRIP, not the
+  # load. Removing the whole escaper does produce the reader error decision
+  # 0022's Consequences predicts, but that is a DIFFERENT mutant; pinning this
+  # one to it was a false supporting reason, caught by re-measuring the mutant
+  # the suite actually applies. The round trip is the stronger assertion anyway:
+  # escaping to the empty string would also load.
+  #
+  # Shipped with no witness at all until the whole-branch review: every reason in
+  # the test tree was plain lowercase ASCII plus space, so nothing distinguished
+  # this function from the identity.
+  FIND [[                  (cond ((char=? c #\") (cons #\" (cons #\\ acc)))]]
+  REPLACE [[                  (cond ((char=? c #\nul) (cons c acc))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the emitted library loads and reports the reason unchanged: generated round-trips the reason")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.position-kind.chez.source

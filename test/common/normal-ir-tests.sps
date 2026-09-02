@@ -82,13 +82,15 @@
       (lambda ()
         (check-equal "code" (normal-error-code (vector-ref (normal-machine-states n1) 2))
                      'unexpected-byte)))
-    ;; Golden value: measured against this exact encoding (format tag 1; entry and
-    ;; state-count as u32be; per dispatch state u16be transition count then each
-    ;; (u8 byte, u32be target, u8 mode) ascending by byte, then u32be fallback
-    ;; target + u8 mode, then eof routing (tag 0 + u32be node id, or tag 1 +
-    ;; u16be code-length + UTF-8 default-eof code bytes); stop = one tag byte;
-    ;; error = tag byte + u16be code-length + UTF-8 code bytes; finish = one tag
-    ;; byte) run through FNV-1a. A change to any FNV constant, the XOR/multiply,
+    ;; Golden value: measured against this exact encoding (FORMAT TAG 2 since
+    ;; Milestone 4 Slice ①a; entry and state-count as u32be; then a u16be
+    ;; reserved field count, zero until Slice ①b; per dispatch state u16be
+    ;; transition count then each (u8 byte, u32be target, u8 mode) ascending by
+    ;; byte, then u32be fallback target + u8 mode, then eof routing (tag 0 +
+    ;; u32be node id, or tag 1 + u16be code-length + UTF-8 default-eof code bytes
+    ;; + u16be reason-length + UTF-8 reason bytes); stop = one tag byte; error =
+    ;; tag byte + u16be code-length + UTF-8 code bytes + u16be reason-length +
+    ;; UTF-8 reason bytes; finish = one tag byte) run through FNV-1a. A change to any FNV constant, the XOR/multiply,
     ;; or the field layout (eof routing included) moves this number.
     (harness-case "the IR fingerprint is the measured golden value"
       (lambda ()

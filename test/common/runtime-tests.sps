@@ -9,6 +9,17 @@
 
 (harness-begin "unit.runtime")
 
+;; Slice ①a whole-branch review: a predicate that names WHICH guard fired.
+;; assertion-violation? alone cannot -- every guard in the constructor raises the
+;; same condition type with the same `who` -- so a case asserting an ORDERING
+;; needs the irritant, which is the only thing that differs between them.
+(define (irritant-is v)
+  (lambda (e)
+    (and (assertion-violation? e)
+         (irritants-condition? e)
+         (let walk ((xs (condition-irritants e)))
+           (and (pair? xs) (or (equal? (car xs) v) (walk (cdr xs))))))))
+
 ;; Slice ①a task 5: the error slot holds a parser-error record and is #f on
 ;; every non-error result. These cases assert the CODE; the record's own shape
 ;; is pinned by the dedicated parser-error group below.
@@ -288,12 +299,20 @@
         ;; the payload safe to grow. Handed a wrong version AND a payload that
         ;; would fail the later guards, it must still be the version that is
         ;; named, or a stale file reports whichever slot happened to be read.
-        (check-raises "version, not the payload" assertion-violation?
+        ;; Discriminated by the IRRITANT, not by the condition type. All three
+        ;; guards raise assertion-violation with the same `who`, so a bare
+        ;; assertion-violation? predicate passes whichever one fired and this
+        ;; case could not observe the ordering it is named for -- it would stay
+        ;; green with the version check moved last, which is the single thing
+        ;; decision 0018 item 1 exists to fix.
+        (check-raises "the VERSION is named, not the payload"
+                      (irritant-is 2)
                       (lambda () (byte-machine-make-compiled-machine 2 99 0 'not-a-procedure #f)))
         (check-raises "a non-vector payload is refused at the current version"
-                      assertion-violation?
+                      (irritant-is #f)
                       (lambda () (byte-machine-make-compiled-machine 3 99 0 stub-exec #f)))
-        (check-raises "an empty payload has no member 0" assertion-violation?
+        (check-raises "an empty payload has no member 0"
+                      (irritant-is (vector))
                       (lambda () (byte-machine-make-compiled-machine
                                   3 99 0 stub-exec (vector))))))))
 

@@ -1857,7 +1857,76 @@ comparing `reason` because "both lanes build it from the same declaration" — w
 the assumption the defect broke. Comparing `reason` is what *caught* it, and that is now what
 the comment says.
 
-**Also reported: 73 Important and 62 Minor findings, not yet triaged.**
+### The Important findings, triaged 2026-09-02
+
+Seventy-three reports collapsing to about eighteen distinct issues. Nine were real and are
+fixed; the rest were duplicates, or refuted on inspection.
+
+**Two were defects in this branch's own review artifacts, which is worth noting because both
+were found by re-measuring rather than by reading.**
+
+- The `escape-string` mutation's stated reason was **false**. It claimed the mutant "dies at
+  `(load)` as a Chez reader error". Measured: with only the quote clause removed the file
+  still *reads* — the string terminates early and the reason arrives as `"a "`. The reader
+  error belongs to a *different* mutant (the whole escaper removed), which is what I had
+  actually measured. Re-pinned to the round trip, which is the stronger assertion anyway:
+  escaping to the empty string would also load.
+- The position-kind pass's header claimed its mutations demonstrate what "the differential
+  alone cannot see", and its own next sentence conceded "each breaks exactly one lane" — which
+  the differential *does* see. Corrected. The case the by-value assertion uniquely covers,
+  both lanes agreeing on a *wrong* kind, **cannot have a mutation at all**: a mutation edits
+  one file, and that defect takes a coordinated edit to two.
+
+**Fixed:**
+
+1. **`escape-string` shipped with no witness of any kind.** Task 1's amendment deferred the
+   fixture to Task 5; Task 5 recorded no amendment and never created it — a deferral that
+   closed nothing. Every reason in the tree was plain lowercase ASCII plus space, so nothing
+   distinguished the function from the identity. Now driven end to end by a fixture whose
+   reason carries `"`, `\` and LF, asserting the **round trip**, with a mutation.
+2. **The "version check precedes every other guard" case asserted nothing.** All three guards
+   raise `assertion-violation` with the same `who`, so the bare predicate passed whichever
+   fired — the case would have stayed green with the check moved last, the single thing
+   decision 0018 item 1 exists to fix. Now discriminated on the **irritant**, with a mutation
+   that transposes the guards, and a control confirming it fails.
+3. **A mutation whose FIND was re-anchored but whose REPLACE was left at pre-slice text**, so
+   the mutant made two changes at once and the pinned line could have come from either.
+4. **The `eof` kind had no mutation in either lane**, and the case I thought covered it drives
+   the eof-target *hop*, not the default-EOF *terminal* — different sites, different
+   mechanisms. Both are now driven and the terminal's literal is pinned.
+5. **The `parser-reset!` survivor's stated reason described deleted code.** Its whole argument
+   turned on `'v1` and `stub-feed`, neither of which exists. Re-measured on the post-slice tree
+   and rewritten; the survivor's substance is unchanged.
+6. **The two deleted `v1` mutations left no record.** Added beside the pass in the file's own
+   convention, naming both LABELs.
+7. **Four live comments falsified by this branch**, corrected in place: `compile.sls`'s "the
+   format version byte stays 1", `normal-ir-tests.sps`'s format-1 layout description sitting
+   directly above a golden Task 4 re-measured, and two in `runtime.sls` naming `/v1` as the
+   live constructor.
+8. **The `§25:1570` note shifted every line below it by ten**, silently invalidating dozens of
+   `§section:line` citations across the design and the decision records — `§25:1572`, which
+   decision 0022 cites for "callbacks are Milestone 5", landed inside my own comment. Moved to
+   an **appended** dated-dispositions section, which shifts nothing. *Any* insertion into that
+   file breaks its navigation; append.
+9. **The CHANGELOG claimed the encoding carries "each error declaration's static reason".** It
+   carries only the reasons the graph **reaches**. Corrected to say so.
+
+**Recorded, not fixed — a call for the owner.** The emitted `errs` table is built from *every*
+declaration while the encoding carries only *reached* ones, so two machines the fingerprint
+calls identical emit different bytes:
+
+```
+(same-fingerprint #t)
+(same-emitted-bytes #f)
+```
+
+That contradicts decision 0019 item 2's own argument ("two machines differing only in a reason
+must differ in fingerprint, or the fingerprint stops identifying what was emitted"). The
+emitter-side fix — build the table from reached declarations — was implemented, measured to
+close the gap exactly, and then **reverted**: it changes what decision 0022 item 7 says ("one
+entry per error **declaration**") and moves the committed pause golden, whose `default-eof`
+declaration is genuinely unreached. Diverging from a record needs a record. **62 Minor findings
+remain untriaged.**
 
 ## Self-Review (run after all eight tasks)
 

@@ -181,6 +181,77 @@
                         (make-error-node 'reject 'second-decl #f))
                   'default-eof #f)))
 
+;; Whole-branch review, 2026-09-02: the writer half of Task 1 shipped with NO
+;; witness. valid-reason? got three verify cases and two mutations; escape-string
+;; got neither, and every reason in the whole test tree is plain lowercase ASCII
+;; plus space, so nothing distinguished it from the identity function. Task 1's
+;; own amendment deferred this fixture to Task 5, and Task 5 recorded no
+;; amendment and never created it -- a deferral that closed nothing.
+;;
+;; valid-reason? deliberately ADMITS the three characters that need escaping
+;; (they are inside §10.1:480's printable-ASCII-plus-LF repertoire), so
+;; escape-string is the only thing between an author-supplied reason and a
+;; generated library that does not parse.
+(define quoted-reason
+  (string-append "a " (string #\") "q" (string #\") " b "
+                 (string #\\) " c" (string #\newline) "d"))
+
+(define escaping
+  (let ((errs (list (make-error-declaration 'default-eof 'eof quoted-reason #f)
+                    (make-error-declaration 'rejected 'unexpected-byte quoted-reason #f))))
+    (make-machine 'escaping 'start '() '() '() errs
+                  (list (make-byte-dispatch-node
+                         'start
+                         (list (make-byte-case (make-exact-byte-matcher 0)
+                                               (make-edge 'stop 'advance) #f))
+                         (make-edge 'reject 'reexecute) #f #f)
+                        (make-stop-node 'stop #f)
+                        (make-error-node 'reject 'rejected #f))
+                  'default-eof #f)))
+
+(harness-group "a reason carrying quote backslash and newline survives emission"
+  (lambda ()
+    (harness-case "the verifier accepts it"
+      (lambda ()
+        ;; §10.1:480 admits all three, so a rejection here would be the
+        ;; verifier's defect, not the writer's.
+        (let ((v (verify-machine escaping)))
+          (check "accepted" (verification-ok? v))
+          (check-equal "no diagnostics" (length (verification-diagnostics v)) 0))))
+    (harness-case "the emitted library loads and reports the reason unchanged"
+      (lambda ()
+        ;; The load is the real assertion: an unescaped quote or backslash makes
+        ;; the generated file a Chez READER error, which is what this whole
+        ;; mechanism exists to prevent. Comparing the reason back proves the
+        ;; escaping is lossless rather than merely parseable -- escaping to the
+        ;; empty string would also load.
+        (let ((ie (feed-then-error (interpreted escaping) '(65)))
+              (ge (feed-then-error
+                   (generated escaping 'escaping-parser 'escaping "pk-esc.sls") '(65))))
+          (check-equal "generated round-trips the reason"
+                       (parser-error-reason ge) quoted-reason)
+          (check-equal "interpreter agrees" (parser-error-reason ie) quoted-reason)
+          (check-equal "the lanes agree" (project-error ie) (project-error ge)))))))
+
+;; The eof-target CHAIN and the default-EOF TERMINAL are different sites with
+;; different mechanisms: the chain hop carries the loop variable forward, while
+;; the terminal is reached by no jump and takes a per-site literal. The `eof`
+;; case above drives the hop (eof-machine routes s1 -> trunc); this one drives
+;; the terminal, which nothing else in the tree reaches with an assertion on the
+;; kind. `escaping` declares eof-target #f, so an exhausted dispatch routes to
+;; the machine default-eof error.
+(harness-group "the default-EOF terminal reports eof"
+  (lambda ()
+    (harness-case "both lanes report eof at the terminal, not at a hop"
+      (lambda ()
+        (let ((ie (finish-error (interpreted escaping) '()))
+              (ge (finish-error
+                   (generated escaping 'escaping-parser 'escaping "pk-esc2.sls") '())))
+          (check-equal "interpreter" (parser-error-position-kind ie) 'eof)
+          (check-equal "generated" (parser-error-position-kind ge) 'eof)
+          (check-equal "the lanes agree" (project-error ie) (project-error ge)))))))
+
+
 (harness-group "an error declaration is resolved by declaration, not by code"
   (lambda ()
     (harness-case "the verifier accepts two declarations sharing a code"

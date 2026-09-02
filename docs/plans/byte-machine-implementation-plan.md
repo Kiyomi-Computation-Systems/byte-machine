@@ -1568,16 +1568,6 @@ Exit criteria:
 - boundary, overflow, and underflow tests for every width;
 - failed operations leave prior values unchanged;
 - interpreter/generated fields and traces match.
-  <!-- 2026-09-02 (Milestone 4 Slice ①a): NOT a rewording of this criterion, which
-  stands as written. §18:974-985 makes the trace hook interpreter-only and
-  opt-in, so generated code has no trace surface at any milestone and a literal
-  cross-lane trace comparison is unspecifiable; the criterion is discharged
-  through §22.4:1262-1272's comparison list, of which :1271 is the error bullet.
-  Slice ①a discharges that error clause -- error domain, code, public
-  source-node name, absolute position and position kind, compared across
-  executors in test/common/position-kind-tests.sps and in the sixteen
-  differential lanes through (byte-machine test error-projection). The `fields`
-  clause (§22.4:1267) is Slices ①b, ② and ③. -->
 
 ### Milestone 5: Callbacks, poisoning, and spans
 
@@ -1806,3 +1796,30 @@ Before implementing a milestone, a later session should:
 10. Add the appropriate `CHANGELOG.md` entry for a release.
 
 The plan favors a small, explicit machine whose correctness is easy to inspect. Generality and specialization are earned by the real HTTP parser and measured performance, not anticipated in advance.
+
+---
+
+## Dated dispositions (appended; this section never shifts a line above it)
+
+Every citation in this repository navigates by `§section:line`, and the design
+document and the Milestone 4 decision records carry dozens of them into the
+sections above. An insertion anywhere in the body silently re-numbers all of
+them — measured: a ten-line note inserted at §25:1570 moved `§25:1572`
+(cited by decision 0022 for "callbacks are Milestone 5") and `§29:1754` (cited
+by the Milestone 4 design for deferred field types) onto unrelated text.
+**Dispositions are therefore appended here, never inlined.**
+
+### §25:1570 — "interpreter/generated fields and traces match"
+
+**2026-09-02, Milestone 4 Slice ①a.** The criterion is **not reworded**; it
+stands exactly as written above. §18:974-985 makes the trace hook
+interpreter-only and opt-in, so generated code has no trace surface at any
+milestone and a literal cross-lane trace comparison is unspecifiable. The
+criterion is discharged through §22.4:1262-1272's comparison list, of which
+:1271 is the error bullet.
+
+Slice ①a discharges **:1271's error clause** — error domain, code, public
+source-node name, absolute position and position kind, compared across
+executors in `test/common/position-kind-tests.sps` and in the sixteen
+differential lanes through `(byte-machine test error-projection)`. The
+`fields` clause (§22.4:1267) is Slices ①b, ② and ③.
