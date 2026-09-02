@@ -604,4 +604,43 @@
           (parser-reset! p)
           (check-equal "from finished" (parser-lifecycle p) 'ready))))))
 
+;; Milestone 4 Slice ①a task 2: the §9.3:397-405 parser-error family, shipped
+;; whole and inert. Nothing constructs one outside this file until task 5 wires
+;; both executors; these cases exist so the record's shape is pinned before
+;; anything depends on it. milestone-2-design.md:343-344 is why the family lands
+;; at once rather than a member at a time.
+(harness-group "the parser-error record"
+  (lambda ()
+    ;; Decision 0022 item 1: the reserved constructor takes FIVE arguments, not
+    ;; eight -- an errs-table entry packing code and reason, the public source
+    ;; node name, the state id, the absolute offset, and the position kind.
+    (define (err) (byte-machine-make-parser-error/v1
+                   (vector 'unexpected-byte "unexpected byte") 'reject 2 7 'byte))
+    (harness-case "the predicate accepts it and rejects everything else"
+      (lambda ()
+        (check "record" (parser-error? (err)))
+        (check "not a symbol" (not (parser-error? 'unexpected-byte)))
+        ;; A parser-result must not answer the parser-error predicate: the two
+        ;; tags sit side by side and both are vectors.
+        (check "not a parser-result"
+               (not (parser-error?
+                     (parser-feed! (make-parser (make-compiled-machine one-byte-op) '() #f)
+                                   (make-bytevector 1 7) 0 1))))))
+    (harness-case "the five call-site members read back"
+      (lambda ()
+        (check-equal "code" (parser-error-code (err)) 'unexpected-byte)
+        (check-equal "reason" (parser-error-reason (err)) "unexpected byte")
+        (check-equal "node-name" (parser-error-node-name (err)) 'reject)
+        (check-equal "state-id" (parser-error-state-id (err)) 2)
+        (check-equal "offset" (parser-error-offset (err)) 7)
+        (check-equal "position-kind" (parser-error-position-kind (err)) 'byte)))
+    (harness-case "domain and detail are fixed by the constructor"
+      (lambda ()
+        ;; Decision 0022 item 2: domain and detail are NOT call-site arguments.
+        ;; #f is not a placeholder -- §9.3:401 annotates detail "#f for machine
+        ;; errors" -- and `callback` has no producer until Milestone 5, which is
+        ;; the ordinary condition of a closed enumeration mid-plan.
+        (check-equal "domain" (parser-error-domain (err)) 'machine)
+        (check-equal "detail" (parser-error-detail (err)) #f)))))
+
 (harness-finish)

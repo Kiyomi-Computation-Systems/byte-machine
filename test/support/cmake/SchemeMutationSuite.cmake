@@ -732,7 +732,7 @@ cmake_minimum_required(VERSION 3.26)
 # had no mutation, the `eq? ... 'reexecute` test itself. No pass is added, so
 # passes stay at 46 and mutations become 235 + 1 = 236.
 set(EXPECTED_PASSES 46)
-set(EXPECTED_MUTATIONS 238)
+set(EXPECTED_MUTATIONS 240)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3134,6 +3134,35 @@ byte_machine_mutation(
        (byte-machine-contract-violation 'parser-feed! 'lifecycle-violation]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "feed on finish-ready -- expected a raise, but the thunk returned")
+
+# Milestone 4 Slice ①a task 2: the parser-error record's two construction
+# decisions (decision 0022 items 1 and 2). Nothing outside runtime-tests.sps
+# builds one until task 5, so these are witnessed by that file's own cases --
+# which is the point: the shape is pinned BEFORE anything depends on it.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a machine error is constructed in the callback domain"
+  # §9.3:398's domain is `machine | callback`, and `callback` has exactly one
+  # producer in the whole plan -- §13:808's callback failure, Milestone 5. A
+  # constructor that hard-wires the wrong member of a two-member enumeration is
+  # invisible to every M4 test that does not read the slot, which is why the
+  # accessor case reads it rather than assuming it.
+  FIND [[    (vector parser-error-tag 'machine (vector-ref entry 0) (vector-ref entry 1) #f]]
+  REPLACE [[    (vector parser-error-tag 'callback (vector-ref entry 0) (vector-ref entry 1) #f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "domain and detail are fixed by the constructor: domain")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: the errs entry is unpacked reason-first"
+  # The entry packs (code . reason) positionally and both are read from the same
+  # two-element vector, so transposing them type-checks and survives anything
+  # that reads only one of the pair. Caught by a failed comparison on the code,
+  # not by a raise.
+  FIND [[    (vector parser-error-tag 'machine (vector-ref entry 0) (vector-ref entry 1) #f]]
+  REPLACE [[    (vector parser-error-tag 'machine (vector-ref entry 1) (vector-ref entry 0) #f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the five call-site members read back: code")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

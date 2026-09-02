@@ -15,6 +15,10 @@
           parser-feed! parser-finish! parser-resume! parser-lifecycle parser-reset!
           parser-result? parser-result-status parser-result-next
           parser-result-consumed parser-result-stream-offset parser-result-error
+          byte-machine-make-parser-error/v1 parser-error?
+          parser-error-domain parser-error-code parser-error-reason
+          parser-error-detail parser-error-node-name parser-error-state-id
+          parser-error-offset parser-error-position-kind
           callback-continue callback-pause)
   (import (rnrs)
           (byte-machine private conditions))
@@ -93,6 +97,35 @@
   (define (parser-result-consumed r) (vector-ref r 3))
   (define (parser-result-stream-offset r) (vector-ref r 4))
   (define (parser-result-error r) (vector-ref r 5))
+
+  ;; --- parser error (§9.3:397-405; decision 0022) ---
+  ;; Eight members in §9.3:398-405's order, opaque per §9.3:425. The whole family
+  ;; ships at once: milestone-2-design.md:343-344 forbids populating one field of
+  ;; an otherwise-deferred accessor family, which is why this is not two members
+  ;; now and six later. Nothing constructs one until both executors do, in the
+  ;; same commit -- the lanes compare by value, so a split leaves the differential
+  ;; red in between.
+  (define parser-error-tag (tag 'byte-machine-parser-error))
+  ;; The reserved constructor generated code calls takes FIVE arguments, not
+  ;; eight (decision 0022 item 1): an errs-table entry packing this
+  ;; declaration's code and reason, the public source-node name, the state id,
+  ;; the absolute offset, and the position kind. `domain` and `detail` are fixed
+  ;; here rather than passed, so no emitted site ever writes them -- `machine`
+  ;; because §12.7 calls these machine errors, and #f because §9.3:401 annotates
+  ;; detail "#f for machine errors". Their other enumerated values have exactly
+  ;; one producer in the plan, §13:808's callback failure, which is Milestone 5.
+  (define (byte-machine-make-parser-error/v1 entry node-name state-id offset position-kind)
+    (vector parser-error-tag 'machine (vector-ref entry 0) (vector-ref entry 1) #f
+            node-name state-id offset position-kind))
+  (define (parser-error? x) (tagged? parser-error-tag x))
+  (define (parser-error-domain e) (vector-ref e 1))
+  (define (parser-error-code e) (vector-ref e 2))
+  (define (parser-error-reason e) (vector-ref e 3))
+  (define (parser-error-detail e) (vector-ref e 4))
+  (define (parser-error-node-name e) (vector-ref e 5))
+  (define (parser-error-state-id e) (vector-ref e 6))
+  (define (parser-error-offset e) (vector-ref e 7))
+  (define (parser-error-position-kind e) (vector-ref e 8))
 
   ;; --- parser (mutable state behind procedures) ---
   ;; (vector tag variant executor entry current offset lifecycle stored-error)

@@ -49,6 +49,10 @@
       parser-lifecycle parser-reset!
       parser-result? parser-result-status parser-result-next
       parser-result-consumed parser-result-stream-offset parser-result-error
+      byte-machine-make-parser-error/v1 parser-error?
+      parser-error-domain parser-error-code parser-error-reason
+      parser-error-detail parser-error-node-name parser-error-state-id
+      parser-error-offset parser-error-position-kind
       callback-continue callback-pause))
   (define reserved-member-3 '(exec loop pos st off b bv start end state offset finish?))
   (define (lower-alpha? c) (and (char>=? c #\a) (char<=? c #\z)))
