@@ -34,6 +34,11 @@
                  (one-byte-nodes (make-edge 'reject 'reexecute))))
 
 (define (codes m) (map diagnostic-code (verification-diagnostics (verify-machine m))))
+;; Slice ①b: the `node` slot of each diagnostic, so a decision that says WHICH
+;; name a diagnostic carries can be asserted rather than described. `codes`
+;; alone is blind to it, which is how both field diagnostics shipped with their
+;; "carries the offending field name" decision unwitnessed.
+(define (nodes-of m) (map diagnostic-node (verification-diagnostics (verify-machine m))))
 (define (has-code? m code) (and (memq code (codes m)) #t))
 
 (harness-group "the valid one-byte machine"
@@ -174,12 +179,28 @@
                                  (make-uint-field 'count 16 3 #f)))))
           (check-equal "one finding" (length ds) 1)
           (check-equal "invalid-field-declaration" (car ds) 'invalid-field-declaration))))
+    (harness-case "the duplicate diagnostic names the offending FIELD"
+      (lambda ()
+        ;; §0 D2 and verify.sls's own comment make this a decision -- the field
+        ;; name goes in the diagnostic's existing `node` slot, following
+        ;; duplicate-error-declaration and missing-target, which already put
+        ;; non-node symbols there. Asserted here because `codes` cannot see it.
+        (let ((ns 'seed))
+          (set! ns (nodes-of (machine-with-fields
+                              (list (make-uint-field 'count 8 0 #f)
+                                    (make-uint-field 'count 16 3 #f)))))
+          (check-equal "the field name" ns '(count)))))
     (harness-case "a nonportable field name is invalid-field-declaration"
       (lambda ()
         (let ((ds 'seed))
           (set! ds (codes (machine-with-fields (list (make-uint-field 'Count 8 0 #f)))))
           (check-equal "one finding" (length ds) 1)
           (check-equal "invalid-field-declaration" (car ds) 'invalid-field-declaration))))
+    (harness-case "the nonportable diagnostic names the offending FIELD"
+      (lambda ()
+        (let ((ns 'seed))
+          (set! ns (nodes-of (machine-with-fields (list (make-uint-field 'Count 8 0 #f)))))
+          (check-equal "the field name" ns '(Count)))))
     (harness-case "distinct portable field names verify clean"
       (lambda ()
         ;; The premise for both cases above: without it they could pass because

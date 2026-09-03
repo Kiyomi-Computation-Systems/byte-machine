@@ -949,7 +949,13 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-one-byte-tests.sps"
   TIMEOUT 120)
 
-# Milestone 4 Slice ①b task 7: parser-field-ref across both executors. It emits
+# Milestone 4 Slice ①b task 7: parser-field-ref across both executors. Named
+# `differential`, not `unit`: the design's exit evidence asks for
+# `byte-machine.differential.field.chez.{source,aot}` and the label vocabulary
+# reserves `differential` for exactly this shape -- a lane that runs the
+# interpreter and the emitted library over the same fixture and compares. It
+# shipped as `unit.field-access` and was renamed by the whole-branch review. It
+# emits
 # and runtime-loads a generated library, so it needs BYTE_MACHINE_CORE_EMIT and
 # the same TIMEOUT as the differential lanes -- and it imports (byte-machine
 # private conditions) to name the contract-violation code, which is already in
@@ -957,7 +963,7 @@ byte_machine_add_scheme_lane(
 # SOURCES: a library reached only through `environment` must be statically
 # imported or the AOT lane alone fails.
 byte_machine_add_scheme_lane(
-  NAME byte-machine.unit.field-access.chez.source
+  NAME byte-machine.differential.field.chez.source
   BACKEND chez
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/field-access-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
@@ -966,7 +972,7 @@ byte_machine_add_scheme_lane(
   TIMEOUT 120)
 
 byte_machine_add_scheme_lane(
-  NAME byte-machine.unit.field-access.chez.aot
+  NAME byte-machine.differential.field.chez.aot
   BACKEND chez
   PROGRAM "${CMAKE_SOURCE_DIR}/test/common/field-access-tests.sps"
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}

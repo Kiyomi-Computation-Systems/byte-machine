@@ -1676,6 +1676,16 @@ were this branch's doing, and all three are fixed:
   attempt moved it onto a record unique against the *suspected* sibling only and collided with
   the residue the note records it being moved away from originally.
 
+*(Annotated 2026-09-03 by Slice ①b's whole-branch review: this count is **five**, not four.
+Re-measured at `c3ceec2`, at `2302ffd` and at ①b's HEAD with the suite's own judgment semantics
+— each pin's regex compiled the way CMake compiles it, matched against whole captured output,
+not record by record — and the answer is the same five at all three, the five
+`SchemeMutationSuite.cmake` itself names at `:3418` and `:3432`. The fifth is `arm 6 (:908) <
+arm 1 (node-out-targets)`, which that file has enumerated and carried a measured separating
+attempt for since Slice ②. Nothing in the tree changed; the number in this plan was wrong when
+written. ①b's first attempt at this correction went the other way and claimed the SUITE was
+short — retracted at that file's own residue block.)*
+
 HEAD now carries exactly the merge base's four collisions, same labels, same pairs: inherited
 debt, recorded in the tree beside those pins already. **A count is a weaker anchor than a
 named check**, because another mutant can arrive at the same number by another route — that

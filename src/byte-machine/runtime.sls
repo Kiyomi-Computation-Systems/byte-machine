@@ -445,19 +445,6 @@
       (else (byte-machine-contract-violation 'parser-resume! 'lifecycle-violation
                                              (list (parser-lifecycle parser) 'resume)))))
 
-  ;; Full reset (§12.5), M2 subset: entry state, offset 0, lifecycle ready, and
-  ;; the stored error cleared. `current := entry` is also what clears the pause
-  ;; continuation under this representation -- D3 parks it on `current` with no
-  ;; separate saved-continuation field, so restoring `current` restores both.
-  ;; FIELD state exists as of Milestone 4 Slice ①b and is restored here, to the
-  ;; DECLARED initials rather than to zero: §12.5:738 returns the parser to its
-  ;; just-constructed state, and a just-constructed parser holds the declared
-  ;; initials. Zeroing would silently make `u8 count = 3` mean 3 before the first
-  ;; reset and 0 after it. Span and poisoned/busy state still do not exist (②/③
-  ;; and M5). Returns unspecified.
-  ;;
-  ;; It writes slot 8 and never slot 9: the declarations belong to the compiled
-  ;; machine and outlive every reset.
   ;; §9.3:410. READ-ONLY, with no mutating sibling, and that is a design
   ;; decision rather than an omission: §13:801 -- "Machine-field access from a
   ;; callback is read-only. Allowing callbacks to mutate fields would bypass the
@@ -482,6 +469,19 @@
                (vector-ref (parser-field-values parser) i))
               (else (loop (+ i 1)))))))
 
+  ;; Full reset (§12.5), M2 subset: entry state, offset 0, lifecycle ready, and
+  ;; the stored error cleared. `current := entry` is also what clears the pause
+  ;; continuation under this representation -- D3 parks it on `current` with no
+  ;; separate saved-continuation field, so restoring `current` restores both.
+  ;; FIELD state exists as of Milestone 4 Slice ①b and is restored here, to the
+  ;; DECLARED initials rather than to zero: §12.5:738 returns the parser to its
+  ;; just-constructed state, and a just-constructed parser holds the declared
+  ;; initials. Zeroing would silently make `u8 count = 3` mean 3 before the first
+  ;; reset and 0 after it. Span and poisoned/busy state still do not exist (②/③
+  ;; and M5). Returns unspecified.
+  ;;
+  ;; It writes slot 8 and never slot 9: the declarations belong to the compiled
+  ;; machine and outlive every reset.
   (define (parser-reset! parser)
     (parser-set-current! parser (parser-entry parser))
     (parser-set-offset! parser 0)

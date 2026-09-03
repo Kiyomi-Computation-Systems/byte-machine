@@ -41,15 +41,29 @@
   ;; §17:963's state-ID-to-source-name map, total over internal prefix states.
   ;; It is what makes parser-error-node-name answerable in the generated lane,
   ;; where the emitter needs each state's public name as an emission-time
-  ;; literal. It cannot perturb the fingerprint: encode-normal is called as
-  ;; (encode-normal entry states) and never sees names.
+  ;; literal. It cannot perturb the fingerprint: the debug map is not among
+  ;; encode-normal's arguments, so nothing it holds can reach the encoding.
+  ;;
+  ;; It used to say "encode-normal is called as (encode-normal entry states) and
+  ;; never sees names", which stopped being true in Slice ①b: the call takes a
+  ;; third argument now, and the field table it carries DOES contain names, which
+  ;; are encoded on purpose -- a field name is observable to a generated parser
+  ;; through parser-field-ref, so two machines differing only in one must differ
+  ;; in fingerprint. Node names remain absent; that is the narrower claim, and it
+  ;; is the one that was load-bearing here all along.
   (define (normal-machine-debug-map m) (vector-ref m 4))
   ;; §17:962's field slot assignment, appended for the same reason the debug map
   ;; is: normal-machine-fingerprint is slot 3 and the emitter reads it by index.
   ;; A list of (name width initial slot), slot ascending from 0 and equal to the
-  ;; list position -- redundant by construction, and carried anyway because every
-  ;; consumer downstream indexes BY SLOT and reading it from a position would
-  ;; make each of them re-derive the invariant instead of asserting it.
+  ;; list position -- redundant by construction. NO consumer in this slice reads
+  ;; the slot element: the encoder writes the records in order and omits it, the
+  ;; emitter renders (name . initial) pairs, and parser-field-ref resolves a name
+  ;; against the pair vector by position. It is carried because Slice ②'s field
+  ;; operands reference a field BY SLOT and will read it, and because a table
+  ;; that states its own slot can be asserted whole in a test -- which is what
+  ;; witnesses the numbering, since no fingerprint can (the slot is not encoded).
+  ;; An earlier version of this comment claimed "every consumer downstream indexes
+  ;; BY SLOT"; none does yet.
   (define (normal-machine-fields m) (vector-ref m 5))
 
   (define ns-tag (vector 'byte-machine-normal-state))

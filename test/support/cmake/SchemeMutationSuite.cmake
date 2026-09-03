@@ -736,58 +736,79 @@ cmake_minimum_required(VERSION 3.26)
 # had no mutation, the `eq? ... 'reexecute` test itself. No pass is added, so
 # passes stay at 46 and mutations become 235 + 1 = 236.
 #
-# *** The three entries below close a GAP in this narrative, not a new bump. ***
-# The running total above stops at 46/236 -- correct at c3ceec2, the merge base
-# -- while the constants had already been carried to 48/255 by work that bumped
-# them without appending here. This block is the count's only prose record, so a
-# gap in it makes every earlier entry unfalsifiable: a reader cannot tell a
-# missing line from a miscount. The two intervening steps were RECONSTRUCTED
-# from the constants at each commit and from a per-SPEC block census of the two
-# trees, not from a contemporaneous record, and are marked as such.
+# *** The entries below close a GAP in this narrative, not a new bump. The first
+# version of this block was written from a guess and got four things wrong; it is
+# replaced, not appended to, and the corrections are named so the method is
+# visible. Every number here is measured, by
+#   git cat-file -p <rev>:test/support/cmake/SchemeMutationSuite.cmake | grep EXPECTED_
+# and by a per-SPEC census of the mutation blocks at each end. ***
 #
-# Slice ①a (reconstructed, c3ceec2 -> 51fd5f3): 46/236 -> 48/250. Two passes
+# The running total above stops at 46/236, which is correct at `c3ceec2`. That is
+# NOT the merge base -- three commits sit between it and `main` -- and the
+# constants at the merge base stand at 48/**249**, not the 48/255 the first
+# version claimed. 255 is reached by this branch's own task 3, which the block
+# then went on to record separately: it was double-counted.
+#
+# Slice ①a (`c3ceec2` -> `d89899b`, its merge): 46/236 -> 48/**249**. Two passes
 # join -- the position-kind differential and the member-3 drift check, both new
-# lanes -- and fourteen mutations: +6 position-kind, +3 normal-ir (the encoding
+# lanes -- and THIRTEEN mutations: +6 position-kind, +3 normal-ir (the encoding
 # format's three reserved slots), +2 verify (the reason repertoire), +1 runtime,
-# +1 determinism, +1 member-3 drift. See that slice's own plan for each.
+# +1 member-3 drift. The first version said fourteen and included a determinism
+# mutation; that one is not ①a's, see the next paragraph.
 #
-# Slice ①b tasks 1 to 3 (from this branch): 250 -> 255. Task 1 adds three to the
-# ir pass for the uint field descriptor and the machine guard that makes it
-# load-bearing; task 2 adds none, the facade being two export lists with no
-# decision of its own; task 3 adds two, one to Pass 33 for pass-schema's
-# unsupported-IR-version arm and one to the ir pass for the supported constant.
+# `51fd5f3` (this branch's FIRST commit, and not ①b's work): 249 -> 250. It
+# resolves decision 0022's item 7 open question and adds one determinism mutation,
+# "compile: the errs table carries declarations the graph never reaches". A
+# per-SPEC census places it exactly: `byte-machine.determinism.one-byte` goes
+# 1 -> 2 between the merge base and here.
 #
-# Slice ①b task 4: Pass 33 gains THREE for pass-fields, the declaration half of
-# §16.3:924 item 6 -- one permissive per check, plus the restrictive direction on
-# the portable-name check, which is what makes that pass's clean-premise case
-# load-bearing. Two more were classified SUBSUMED and deliberately not written;
-# the reasons are recorded at the mutations' own site. No pass is added -- the
-# checks join the verifier's existing lane -- so passes stay at 48 and mutations
-# become 255 + 3 = 258. *** AMENDED by the whole-branch review: TWO more join
-# Pass 33 -- the pass-fields join and the duplicate check's restrictive
-# direction, both wrongly declined as subsumed above -- so this task's
-# contribution is FIVE, and mutations become 255 + 5 = 260. Every later total in
-# this block is restated from 260. ***
+# Slice ①b tasks 1 to 3: 250 -> 255. Task 1 adds three to the ir pass for the
+# uint field descriptor and the machine guard that makes it load-bearing; task 2
+# adds none, the facade being two export lists with no decision of its own; task 3
+# adds two, BOTH to Pass 33. The first version put one of them "in the ir pass":
+# that mutation's FILE is `ir.sls` but its SPEC is
+# `byte-machine.verify.rejections.chez.source`, and it is the SPEC that decides
+# which pass witnesses a mutation. FILE and pass are not the same axis.
 #
-# Slice ①b task 5: the normal-ir pass gains FIVE, one per remaining decision in
-# the field record -- name, width, initial, record order, and the slot number the
-# table carries. A sixth, the field count, is not new: it is ①a's reserved-count
-# pin RE-ANCHORED, killed by construction when the literal zero became the real
-# count. No pass is added, so passes stay at 48 and mutations become
-# 260 + 5 = 265.
+# Slice ①b task 4: 255 -> 260. FIVE join Pass 33 for pass-fields, the declaration
+# half of §16.3:924 item 6 -- one permissive per check, the restrictive direction
+# on the portable-name check, the pass-fields join, and the restrictive direction
+# on the duplicate check. The last two were first declined as SUBSUMED and the
+# whole-branch review found that declination unsound; the reasoning and the
+# retraction are at the mutations' own site. No pass is added.
 #
-# Slice ①b tasks 6 and 7: ONE joins the compile pass (member 0 rendered empty
-# regardless of the declarations -- the zero-field rendering was already pinned,
-# the non-empty one was not), and a NEW pass 49 carries seven for
-# parser-field-ref, the only lane in which the field declarations are observable
-# at all. Six are pinned and one carries an EXPECT_SURVIVES with its measurement
-# and its reopening condition, taking the Scheme suite's declared survivors from
-# nine to TEN. Three further mutations were measured and deliberately not
-# written, each because its record set is identical -- not a subset, the same
-# set -- to one that is; the reasons are at pass 49's own head.
-# Passes become 48 + 1 = 49; mutations become 265 + 1 + 7 = 273.
+# Slice ①b task 5: 260 -> 265. The normal-ir pass gains five, one per remaining
+# decision in the field record -- name, width, initial, record order, and the slot
+# number the table carries. A sixth, the field count, is not new: it is ①a's
+# reserved-count pin RE-ANCHORED, killed by construction when the literal zero
+# became the real count.
+#
+# Slice ①b tasks 6 and 7: 265 -> 273, and passes 48 -> 49. One joins the compile
+# pass (member 0 rendered empty regardless of the declarations); a NEW pass --
+# headed **Pass 50**, because header numbers run ahead of the run count and 49 was
+# taken -- carries seven for parser-field-ref, the only lane in which the field
+# declarations are observable at all. Six are pinned; one carries an
+# EXPECT_SURVIVES with its measurement and its reopening condition, taking the
+# suite's declared survivors from nine to TEN. Three further mutations were
+# measured and deliberately not written, each because its record set is identical
+# -- not a subset, the same set -- to one that is.
+#
+# Slice ①b's Critical fix wave: 271 -> 273. Two join Pass 33, both recovered from
+# task 4's unsound subsumption call.
+#
+# Slice ①b's Important fix wave: 273 -> 275. Two more join Pass 33, for the field
+# name each diagnostic carries in its `node` slot -- a decision stated in §0 D2
+# and in verify.sls's own comment, and asserted nowhere until the whole-branch
+# review found verify-tests.sps reading every diagnostic through a `codes` helper
+# that is blind to that slot.
+#
+# Whole-branch total for this branch: the merge base's 249 to 275, **+26**, which
+# a per-SPEC census independently confirms (240 -> 266 mutation BLOCKS; the two
+# counts differ because a one-line block is lexed but not counted the same way,
+# and it is the DELTA that has to agree).
+
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 273)
+set(EXPECTED_MUTATIONS 275)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3319,8 +3340,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 #     graph is not symmetric under the two ways the pair enumeration can be
 #     truncated -- the mutually-colliding triple made both truncations report 2.
 #
-# (3) SUBSUMED, four pairs -- *** FIVE. See the 2026-09-02 correction below the
-# list. *** Recorded at each pin below, named by the LABEL of
+# (3) SUBSUMED, four pairs. Recorded at each pin below, named by the LABEL of
 # the mutation that subsumes it, because AGENTS.md requires the residue to live
 # in the tree beside the pin. All four are a decision killed again by a switch
 # above it, so the narrow mutant's whole FAIL-record set is a subset of the
@@ -3332,32 +3352,37 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # Proved by exhaustion, not by argument: no FAIL record any of the three emits
 # is absent from the subsuming mutant's output.
 #
-# CORRECTED 2026-09-02 by Slice ①b task 4's sweep. There is a FIFTH pair, and
-# the count above and everywhere it is repeated -- including Slice ①a's own plan
-# ("Merge base: 4 collisions ... HEAD now carries exactly the merge base's four
-# collisions") -- is one short:
+# *** RETRACTED 2026-09-03, by Slice ①b's whole-branch review. *** A note here
+# claimed this file's residue count was "one short", that a FIFTH pair
+# (arm 6 :908 < arm 1 node-out-targets) had been "missed, not created", and that
+# "the separating attempt has NOT been made" for it. All three were false about
+# the file they were written into:
 #
-#   "a sequence case's byte edge into a finish terminal is not flagged (arm 6,
-#   :908)" < "a sequence node's case and mismatch targets are not out-targets
-#   (arm 1, node-out-targets)".
+#   * `:3418` already reads "the four subsumed pairs listed above, plus arm 6 <
+#     arm 1", and `:3432` lists all five by name. The "four pairs" heading above
+#     counts the SUBSUMED bucket at that audit moment; arm 6 < arm 1 is
+#     reconciled six lines later. Nothing was short.
+#   * `:3415-3416` records that arm 6 "is matched by arm 1, which Slice ②
+#     MEASURED and recorded as genuinely subsumed at arm 6's own pin" -- the
+#     attempt exists, at the pin, with its measurement, exactly where AGENTS.md
+#     asks for it.
 #
-# Arm 6 emits exactly two FAIL records and arm 1 emits both of them, plus seven
-# more; arm 6's pin is the shared count record, so it passes when judging arm
-# 1's mutant. Measured at three revisions -- c3ceec2 (42 pins / 1722 pairs),
-# 2302ffd (44 / 1892) and this branch's HEAD (49 / 2352) -- and the residue is
-# the SAME FIVE labels and pairs at all three, so this is inherited debt that
-# predates Milestone 4 rather than anything a recent slice introduced. It was
-# missed, not created.
+# Slice ①b's own sweep did measure five pairs at c3ceec2, 2302ffd and its HEAD,
+# which is right and agrees with this file. What it then did was compare that
+# five against the "four pairs" heading alone, without reading the six lines
+# under it or arm 6's pin, and write the difference up as a discovery. The
+# retraction is kept rather than deleted because the failure is the instructive
+# part: a count read out of one heading, checked against nothing else in the
+# same block, produced a confident correction to a record that was already
+# right.
 #
-# Its bucket is stated on the SUBSET TEST ALONE, which AGENTS.md is explicit is
-# not sufficient: "only what survives an actual separating attempt may be called
-# subsumed, and the attempt must be recorded with its measurement." That attempt
-# has NOT been made for this pair. Making it is a sequence-dispatch question --
-# whether a fixture exists in which arm 6 loses a :908 diagnostic that arm 1
-# keeps, given that arm 1 also removes the reachability the :908 gate depends on
-# -- and it belongs to whoever owns those pins, not to this slice's field work.
-# Recorded here, unresolved and labelled unresolved, rather than left to be
-# rediscovered by the next sweep.
+# ONE thing in that note survives and is not about this file. Slice ①a's PLAN
+# (docs/plans/milestone-4-slice-1a-implementation-plan.md) records "Merge base:
+# 4 collisions" and "HEAD now carries exactly the merge base's four collisions".
+# Measured at c3ceec2 with this suite's own judgment semantics -- the pin regex
+# compiled the way CMake compiles it, matched against whole captured output --
+# that number is FIVE, the same five this file names. That plan is annotated at
+# its own site.
 #
 # AMENDED, whole-branch review fix wave (2026-08-30), to the taxonomy commit
 # 49c8cc4 wrote into AGENTS.md after this paragraph was measured. What this
@@ -3664,17 +3689,26 @@ byte_machine_mutation(
   # count that two of them share. The record below was computed as a SET
   # DIFFERENCE against all 48 other Pass 33 mutants: `got invalid-shape` where
   # another code was expected is produced by this mutation alone, because it is
-  # the only one that makes pass-schema fire on a WELL-FORMED machine, which
-  # short-circuits verify-machine before any later pass runs. That is exactly
-  # what this mutation does, so the record names the decision even though the
-  # case it appears in belongs to another.
+  # the only one that makes pass-schema fire on a WELL-FORMED machine.
+  #
+  # The uniqueness is EMPIRICAL, from that set difference, and the first version
+  # of this note gave it a false MECHANISM: it said pass-schema's firing
+  # "short-circuits verify-machine before any later pass runs". It does not.
+  # verify-machine appends pass-schema's diagnostics to the other nine passes and
+  # gates those only on `(machine? machine)`, which a version-mismatched machine
+  # still satisfies -- every later pass runs and its diagnostics follow. What
+  # makes the record unique is narrower: pass-schema is FIRST in that append, so
+  # its diagnostic is the one `codes` reports at the head, and no other mutant in
+  # this pass makes a well-formed machine emit `invalid-shape` at all. Recorded
+  # because a stated mechanism that does not exist is the harder kind of false
+  # record -- the pin it justifies is correct, so nothing fails to warn you.
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "two fields sharing a name is invalid-field-declaration: invalid-field-declaration -- expected invalid-field-declaration, got invalid-shape")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: the schema guard accepts a non-machine"
+  LABEL "verify: the schema guard reports a non-machine under the wrong code"
   # Re-anchored in Milestone 4 Slice ①b task 3: pass-schema became a cond when
   # §16.2:884's unsupported-IR-version half landed beside the shape half. The pin
   # was also RE-ANCHORED ON ITS SIGNATURE, not only its FIND: bare "invalid-shape"
@@ -4771,6 +4805,30 @@ byte_machine_mutation(
 # fixture goes stale when the fixture changes, and nothing in this suite checks
 # prose. Both pins below are CONJUNCTIONS, because each mutant's individual
 # records are shared with a sibling and only the pair is unique.
+
+# The whole-branch review found BOTH field diagnostics' "carries the offending
+# field name" decision (§0 D2, and verify.sls's own comment) stated everywhere
+# and asserted nowhere: verify-tests.sps read diagnostics through a `codes`
+# helper that maps diagnostic-code, which is blind to the `node` slot. A
+# `nodes-of` helper and two cases were added; these are their mutations.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the duplicate-field diagnostic does not name the field"
+  FIND [[(make-diagnostic 'invalid-field-declaration fname]]
+  REPLACE [[(make-diagnostic 'invalid-field-declaration #f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the duplicate diagnostic names the offending FIELD: the field name -- expected \\(count\\), got \\(#f\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the nonportable-field diagnostic does not name the field"
+  FIND [[(make-diagnostic 'invalid-field-declaration (uint-field-name f)]]
+  REPLACE [[(make-diagnostic 'invalid-field-declaration #f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the nonportable diagnostic names the offending FIELD: the field name -- expected \\(Count\\), got \\(#f\\)")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -7467,8 +7525,10 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # guard, and BYTE_MACHINE_TEST_TMPDIR inherited from this suite's own test
 # environment.
 #
-# THREE further mutations were measured and are NOT written, each because its
-# record set is IDENTICAL to one that is -- not a subset, the same set:
+# TWO further mutations were measured and are NOT written, each because its
+# record set is IDENTICAL to one that is -- not a subset, the same set. (This
+# said THREE and listed two bullets; the count was of bullets that never
+# existed.)
 #   * make-parser's op arm discarding what it asked for, versus interpret.sls
 #     answering with nothing. One decision seen from the asker's side and the
 #     answerer's; the parser ends up with an empty table either way.
@@ -7489,39 +7549,42 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--program" "${STAGE_DIR}/test/common/field-access-tests.sps")
 
 byte_machine_mutation(
-  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.field-access.chez.source
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
   LABEL "runtime: the v2 arm ignores the ABI payload's field member"
   FIND [[            (vector-ref metadata 0)))]]
   REPLACE [[            (vector)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "parser-field-ref \\(generated\\).a fresh parser reads the declared initials: case raised")
+    "parser-field-ref \\(generated\\).a fresh parser reads the declared initial at every width: case raised")
 
 byte_machine_mutation(
-  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.field-access.chez.source
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
   LABEL "interpret: the field-initials message answers with no declarations"
   FIND [[                               (machine-fields m))))]]
   REPLACE [[                               '())))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "parser-field-ref \\(interpreter\\).a fresh parser reads the declared initials: case raised")
+    "parser-field-ref \\(interpreter\\).a fresh parser reads the declared initial at every width: case raised")
 
 byte_machine_mutation(
-  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.field-access.chez.source
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
   LABEL "compile: an emitted field declaration carries initial zero"
   # Pinned in THIS lane rather than the compile lane, where its record is
   # indistinguishable from the member-0 mutation's: compile-tests asserts the
   # rendered member by one substring, so every deviation reddens the same check.
-  # Here it is separated by the disagreement record -- the interpreter answers 7
-  # and the generated lane 0 -- which no other mutation in this pass produces.
+  # Re-anchored after the whole-branch review rebuilt this lane's fixture: the
+  # cross-executor DISAGREEMENT records it used to sit on are now shared with the
+  # runtime's own zero-initials mutation, and what separates it is the emitted
+  # table's ORDER assertion -- this mutation is the only one in the pass that
+  # changes the rendered text of member 0.
   FIND [[ " . " (number->string (caddr (car fs))) ")")]]
   REPLACE [[ " . " (number->string 0) ")")]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "every declared name reads the same through both: count -- expected 0, got 7")
+    "the emitted field table is in declaration order: member 0 lists all four in order -- expected a true value")
 
 byte_machine_mutation(
-  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.field-access.chez.source
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
   LABEL "runtime: a fresh parser's field values are zero instead of the declared initials"
   # §12.5:738's just-constructed state. Distinct from the emitter mutation above,
   # which moves only the GENERATED half: this one moves both, so its record is
@@ -7530,10 +7593,10 @@ byte_machine_mutation(
   REPLACE [[            (begin (vector-set! v i 0)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "parser-field-ref \\(interpreter\\).a fresh parser reads the declared initials: count -- expected 7, got 0")
+    "parser-field-ref \\(interpreter\\).a fresh parser reads the declared initial at every width: count -- expected 7, got 0")
 
 byte_machine_mutation(
-  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.field-access.chez.source
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
   LABEL "runtime: parser-field-ref answers an undeclared name instead of refusing"
   # §13:801 makes an undeclared name a CALLER mistake, not a machine outcome, so
   # it must reach a contract violation and never a parser-error.
@@ -7546,18 +7609,21 @@ byte_machine_mutation(
     "an undeclared field name is accessor-misuse: code -- expected accessor-misuse, got no-raise")
 
 byte_machine_mutation(
-  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.field-access.chez.source
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
   LABEL "runtime: parser-field-ref always reads slot zero"
-  # The reason the lane's fixture declares three fields with three DIFFERENT
-  # initials: with equal initials, or with one field, this mutation is invisible.
+  # The reason the lane's fixture declares FOUR fields with four DIFFERENT
+  # non-zero initials: with equal initials, with a zero among them, or with one
+  # field, this mutation is invisible. The first version of the fixture had three
+  # fields and a zero, which the whole-branch review flagged against the design's
+  # own stated mitigation (milestone-4-design.md:1208-1218).
   FIND [[               (vector-ref (parser-field-values parser) i))]]
   REPLACE [[               (vector-ref (parser-field-values parser) 0))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "a fresh parser reads the declared initials: limit -- expected 65535, got 7")
+    "a fresh parser reads the declared initial at every width: limit -- expected 65535, got 7")
 
 byte_machine_mutation(
-  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.field-access.chez.source
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
   LABEL "runtime: parser-reset! does not restore the field values"
   FIND [[    (vector-set! parser 8 (initial-values (parser-field-decls parser)))))]]
   REPLACE [[    ))]]

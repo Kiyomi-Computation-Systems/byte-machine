@@ -4,6 +4,15 @@ Date: 2026-08-31
 Status: accepted
 Milestone: 4, Gate 0 (milestone-4-design.md §4.3)
 
+> **Amendments** — later notes at the foot of this file reach back into the text
+> above them. Nothing above a note is rewritten.
+>
+> - **2026-09-02 (Milestone 4, Slice ①b)** — **amends item 6**: `machine-tag` is
+>   NOT unforgeable, `pass-schema`'s IR-version check is NOT unreachable, and the
+>   `EXPECT_SURVIVES` this item instructs Slice ①b to declare is **not declared**.
+>   Both premises were measured false and the check is pinned in both directions.
+>   See the foot of this file.
+
 ## Context
 
 Measured against the tree at `a942327`, the commit Milestone 3 closed on. The
@@ -269,3 +278,41 @@ files.
   §25:1569 remains true by construction rather than by rollback. And nothing
   here revisits decision 0017 — its four points stand exactly as written; this
   record establishes only that its *argument* is unavailable where §16.2 speaks.
+
+---
+
+## 2026-09-02 (Slice ①b) — item 6's unreachability premise is false, and no `EXPECT_SURVIVES` is declared
+
+Item 6 says `pass-schema`'s §16.2:884 IR-version check "pays for its
+unreachability with an `EXPECT_SURVIVES` Slice ①b is to declare", resting on two
+premises: that `make-machine` stamps `machine-ir-version` as a constant, and that
+`machine-tag` is unforgeable (`ir.sls:41-43`).
+
+**The second premise is false, and the first does not imply the conclusion.**
+Measured before Slice ①b's task 3 ran: IR descriptors are bare R6RS vectors with
+no opacity, so `(vector-ref good 0)` copies the tag using an `(rnrs)` primitive
+and no private import, and the forged object satisfies `machine?`. A test can
+therefore build a machine at an unsupported version and reach the new arm. That
+the stamp is a constant makes the version un-*varyable through the constructor*;
+it does not make the arm unreachable, which is a different claim.
+
+**So Slice ①b declares no `EXPECT_SURVIVES` for this check.** It ships two
+ordinary pins instead, one per direction — permissive (accept any version),
+caught by the forged-machine case; restrictive (mutate the supported constant so
+every machine becomes unsupported), caught by every verify lane. Both measured.
+
+The forged-machine device is test-only and labelled as one at its site, and its
+**premise is asserted alongside** — that the tag was copied and the version is
+not the supported one — so that if the representation ever gains real opacity the
+case fails loudly instead of passing vacuously on some other `invalid-shape`.
+
+**The design's parallel instruction is amended too**, at `milestone-4-design.md`
+§6 task 3 and its Amendments block: the trap that item prescribes an
+`EXPECT_SURVIVES` for does not exist. The rest of item 6 stands — the check is
+still the sole rejection site for §16.2:884, and it still closes a
+listed-and-unimplemented gap rather than re-closing one.
+
+*AGENTS.md reserves `EXPECT_SURVIVES` for the genuinely unwitnessable with a
+written reason, and "this cannot be tested" is a claim to demonstrate rather than
+assume. Here the demonstration went the other way, which is the only reason this
+note exists.*

@@ -279,8 +279,15 @@ one PR.
 **`compile.sls`'s `reserved-member-3` gains nothing** (§0), and emitted `exec`'s `fieldv` stays
 empty — that is Slice ②'s.
 
-**Created:** a field fixture under `test/support/harness/byte-machine/test/`, a unit program
-for the descriptor and the accessor, and their lane pairs.
+**Created:** a program for the descriptor and the accessor, and its lane pair.
+
+*(Corrected 2026-09-02 by the whole-branch review: this said a **field fixture under
+`test/support/harness/byte-machine/test/`** would be created, and none was. The fixture is
+built inline in `test/common/field-access-tests.sps`, the way the determinism lanes build
+theirs, because it is used by one program; a harness library is for a fixture two lanes share.
+Also "a unit program … and their lane pairs" — singular, and it is a **differential** pair,
+`byte-machine.differential.field.chez.{source,aot}`, which is what the design's own exit
+evidence names.)*
 
 ---
 
@@ -408,8 +415,17 @@ Design §6 task 4; §16.3:924 item 6; decision 0020's verifier half.
     named check; a check with no value is weaker still, and that is the reusable form of it.
   - The third was the first two counted twice over.
 
-- [x] **Step 5 (not in the plan; found by step 4's control): the residue is FIVE pairs, not
-  four.** Slice ①a's audit recorded four subsumed pairs and `SchemeMutationSuite.cmake`'s
+- [x] **Step 5 — RETRACTED 2026-09-03 by the whole-branch review. The claim below is wrong
+  about `SchemeMutationSuite.cmake`, and the retraction is recorded at that file's residue
+  block.** That file already enumerates five pairs (`:3418`, `:3432`) and already carries a
+  measured separating attempt for `arm 6 < arm 1` at arm 6's own pin (`:3415-3416`). The five
+  measured here are right and agree with it; what was wrong was comparing them against the
+  "four pairs" heading alone, without reading the six lines beneath it. What *does* survive is
+  narrower and is not about that file: **Slice ①a's plan** records four where five is correct,
+  and is annotated at its own site. Struck text follows.
+
+  ~~Step 5 (not in the plan; found by step 4's control): the residue is FIVE pairs, not
+  four.~~ Slice ①a's audit recorded four subsumed pairs and `SchemeMutationSuite.cmake`'s
   residue block lists four. There is a fifth: `verify: a sequence case's byte edge into a
   finish terminal is not flagged (arm 6, :908)` emits exactly two FAIL records and `verify: a
   sequence node's case and mismatch targets are not out-targets (arm 1, node-out-targets)`
@@ -528,6 +544,17 @@ Design §6 task 7; §9.3:410; §13:801.
 
   1. `rg -c 'machine-fields' src/ test/` returns more than the two occurrences it returns
      today, with at least one inside the normalizer (**H6** — this gate survives §6 intact).
+
+     *(Corrected 2026-09-02 by the whole-branch review: the executed record read this gate as
+     satisfied by "five sites in `normal-ir.sls`", which counts `normal-machine-fields` — a
+     different identifier the substring search also matches. **`\b` does not separate them
+     either**: `-` is a non-word character, so `\bmachine-fields\b` still matches inside
+     `normal-machine-fields`, and the second measurement was wrong the same way as the first.
+     The search that answers the gate is*
+     `rg -c --pcre2 '(?<![\w-])machine-fields(?![\w-])' src/ test/`*, and it reports **11
+     occurrences across 8 files** against **2 in one file** (`ir.sls`) at `51fd5f3` — including
+     3 in `normal-ir.sls`, which is the normalizer hit the gate asks for. The gate holds; both
+     numbers first quoted for it did not.)*
   2. All four fingerprints and all three committed goldens **byte-identical to `51fd5f3`**.
      Diff against that SHA, not against `main` (Global Constraints).
   3. `reserved-member-3` **unchanged**; `reserved-member-2` grows by exactly one.
@@ -593,8 +620,12 @@ case the one living in the file whose new code it names.
 
 **Gate (step 4), each measured:**
 
-1. `machine-fields` reaches **five sites in `normal-ir.sls`** and eight files overall, against
-   two before the slice. ✔
+1. `machine-fields`, counted with a boundary that actually excludes `normal-machine-fields`
+   (`rg -c --pcre2 '(?<![\w-])machine-fields(?![\w-])'`), reaches **11 occurrences across 8
+   files**, 3 of them in the normalizer, against **2 in one file** at `51fd5f3`. ✔ *(Corrected
+   twice, 2026-09-02: first written as "five sites in `normal-ir.sls`", which counted
+   `normal-machine-fields`; then re-measured with `\b`, which does not exclude it either,
+   because `-` is a non-word character.)*
 2. Three committed goldens and all four pinned IR fingerprints **byte-identical to `51fd5f3`**
    — `git diff --stat 51fd5f3..HEAD -- test/fixtures/` is empty. ✔
 3. `reserved-member-3` unchanged; `reserved-member-2` **31 → 32**, exactly one. ✔
@@ -666,6 +697,72 @@ the invariant wins.
 
 Totals after the three fixes: `release` 92/92, scheme mutation **49 passes / 273 mutations**,
 no golden moved against `51fd5f3`.
+
+---
+
+### Whole-branch review — the Importants and Minors, 2026-09-02
+
+Fifteen distinct Importants and ten Minors, after deduping the 58 confirmed findings (the
+same issue was found by up to ten dimensions independently).
+
+**The one that mattered most was a correction to a correction.** ①b's task-4 record claimed
+`SchemeMutationSuite.cmake`'s residue count was "one short" and that no separating attempt
+existed for `arm 6 < arm 1`. Both false about that file: it already enumerates five pairs at
+`:3418` and `:3432`, and `:3415-3416` records Slice ②'s *measured* attempt at arm 6's own pin.
+The five measured were right; comparing them against the "four pairs" heading **without reading
+the six lines beneath it** is what produced a confident correction to a record that was already
+correct. Retracted at that file's residue block, struck in this plan. What survives is
+narrower and elsewhere: **Slice ①a's plan** records four where five is right, annotated at its
+own site.
+
+**The design's u64/bignum row had been dropped without record.** `milestone-4-design.md`
+:1208-1218 requires a distinct non-zero initial per width and a u64 initial at or above `2^60`
+— the bignum boundary on this host, where `(greatest-fixnum)` is `2^60 − 1` — because below it
+all four widths exercise the fixnum path only and §15:856's "must not rely on host fixnum
+width" is untested. The fixture shipped as three fields, one of them zero, no u64. It is now
+four widths with distinct non-zero initials, `total u64 = 2^60`, a loop over all four carrying
+a sentinel that reads the **observed** count, and a case asserting the u64 value is above
+`(greatest-fixnum)` so a host with a wider fixnum fails loudly rather than quietly ceasing to
+test what the case exists for.
+
+**The zero-field control was one interpreted machine shared by both groups**, so the case
+inside `parser-field-ref (generated)` ran the interpreter and the v2 arm's empty-member-0 path
+was executed nowhere in the tree. Each lane has its own now — which needed a second machine
+NAME, since the emitted library is named after the machine and two `field-access` fixtures
+would emit two `(generated field-access)` libraries into one process.
+
+**Name-keyed cross-executor reads are blind to slot ORDER.** Each lane resolves a name against
+its own vector, so two differently-ordered vectors both answer correctly for every name. The
+two orders come from different sources — `interpret.sls` from `machine-fields`, `compile.sls`
+from `normal-machine-fields` — so their agreement was a claim, not a construction. Two cases
+now check it: the emitted member 0's text, and the normalizer's own order.
+
+**Both field diagnostics' "carries the offending field name" decision was asserted nowhere.**
+`verify-tests.sps` read every diagnostic through a `codes` helper that maps `diagnostic-code`
+and is blind to the `node` slot. A `nodes-of` helper, two cases, two mutations.
+
+**The suite's bookkeeping narrative was wrong in four ways**, all measured and all now
+rewritten from `git cat-file` plus a per-SPEC census: it named `c3ceec2` as the merge base
+(three commits early), carried the merge-base constant as 48/255 where it is 48/**249** (255 is
+this branch's own task 3, double-counted), credited ①a with a determinism mutation that is
+`51fd5f3`'s, and filed a task-3 mutation "in the ir pass" when its FILE is `ir.sls` but its
+**SPEC** is the verify lane — and it is the SPEC that decides which pass witnesses a mutation.
+
+**Also fixed:** the new pass was numbered 49 where 49 was taken (header numbers run ahead of
+the run count) → **Pass 50**; the `FORTY-EIGHT PASSES` banner → forty-nine; Pass 35's note said
+six cases joined where eight did; the supported-IR-version pin justified itself with a
+short-circuit `verify-machine` does not have (the uniqueness is empirical, from the set
+difference — pass-schema is merely *first* in the append); decision **0020 item 6**'s two
+premises, measured false, now carry an amendment and a foot note; the lane moved from `unit` to
+**`differential`**, which is what the design's exit evidence names; `parser-reset!`'s doc block
+had come to sit on `parser-field-ref`; `normal-ir.sls`'s "encode-normal … never sees names" and
+"every consumer indexes BY SLOT" were both false; a §13:801 citation was carrying a claim that
+line does not make; and gate 1's count was corrected **twice** — `\b` does not exclude
+`normal-machine-fields` either, because `-` is a non-word character.
+
+Totals after both waves: `release` **92/92**, `no-scheme` **8/8**, scheme mutation **49 passes /
+275 mutations**, CMake **1/72**, ten declared `EXPECT_SURVIVES`, no golden moved against
+`51fd5f3`.
 
 ---
 

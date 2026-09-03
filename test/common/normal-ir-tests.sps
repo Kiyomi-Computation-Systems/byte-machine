@@ -159,10 +159,14 @@
     ;; merely carried. Decision 0009 point 2 computes the fingerprint over the
     ;; canonical normalized IR and §20:1043 makes that the object the determinism
     ;; checks compare, so any part of a declaration the generated parser can
-    ;; observe -- and all three of these are observable, the name through
-    ;; parser-field-ref, the width through the value's range, the initial through
-    ;; a read before any write -- must move the fingerprint or the fingerprint
-    ;; stops identifying what was emitted. One case per component, because a
+    ;; observe must move the fingerprint, or the fingerprint stops identifying
+    ;; what was emitted. The NAME is observable now, through parser-field-ref;
+    ;; the INITIAL is, through a read before any write. The WIDTH is not yet --
+    ;; nothing in this slice writes a field, so no value can exceed its declared
+    ;; range and the width has no runtime effect. It is encoded anyway because
+    ;; Slice ②'s field writes make it observable, and a width that entered the
+    ;; encoding later would move every field-declaring fingerprint at that point.
+    ;; (This comment claimed all three were observable today; two are.) One case per component, because a
     ;; single "two different field lists differ" case passes with two of the
     ;; three unencoded.
     (harness-case "two machines differing only in a field NAME differ in fingerprint"
