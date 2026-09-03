@@ -22,6 +22,43 @@ task inside Slice ② rather than a slice of its own.
 > false it is corrected in place and marked at the site, because a false
 > instruction is a landmine rather than evidence (AGENTS.md).
 >
+> - **2026-09-03 (Slice ② and ③ planning)** — **amends §7 and §8**, which had
+>   never been amended and whose every `file:line` §7 itself declares "measured on
+>   `main` at `a942327` and drifts through Slices ①a and ①b". Both have landed, so
+>   every citation in both sections was re-measured; 44 distinct findings, 16 of
+>   them blocking. The corrections a reader must not miss, each marked at its own
+>   site below:
+>   - **§7 Task 1's eof-classification algorithm is superseded by §4.4 and
+>     [decision 0021](../decisions/0021-eof-classification-multi-successor.md).**
+>     Task 1 opens "§4.4 leaves two choices open that the implementer must not
+>     improvise" — §4.4 does not leave them open, it settles them, 900 lines
+>     earlier and in the same Gate 0 commit. 0021 item 2 names per-path `seen` as
+>     a **rejected** algorithm and item 3 forbids `'unknown` re-entering the
+>     lattice. The binding instruction is §4.4/0021: **one DFS, a path stack for
+>     cycles plus a global completed-set for verdict reuse, `'unknown` deleted.**
+>   - **§7's "its own field storage" for the interpreter is unbuildable.** The
+>     `op` closure is built once per compiled machine and has no parser in scope;
+>     `runtime.sls` records that prohibition verbatim because Slice ①b hit it. The
+>     single store is parser slot **8**, shared by both lanes (§7:1536's "slot 9"
+>     is the immutable declarations).
+>   - **§7 Task 3's census row 14 must not be written as prescribed.** Copied
+>     "same shape" from the pause block it would turn
+>     `dispatch --advance--> field-action --next--> stop` into a false
+>     `eof-reachable-stop`. A pause is an EOF *start* because `parser-feed-op!`
+>     commits `current` past it; a zero-width node never becomes `current`.
+>   - **§7's "carry it in the existing seven-slot state vector rather than
+>     widening it" rests on a count that is wrong.** The vector is **eight** slots
+>     — Slice ①a appended `reason` — leaving five free. ②'s two kinds need exactly
+>     five and ③'s accumulate needs eight, so **② widens**, paying the
+>     six-literal edit once while it is already editing those literals.
+>   - **§7's exit evidence names a `pass-field-operands` that must not be
+>     created**: Slice ①b built `pass-fields` as ②'s home for the operand half and
+>     says so in the tree.
+>   - The emitted field-store parameter is **`fieldv`**, not `fs`; §7's and §8's
+>     code samples would emit an unbound identifier. Every suite total in both
+>     sections is the `a942327` column, and every `AGENTS.md:<line>` citation is
+>     stale by a mechanical offset that lands on a plausible neighbouring rule.
+>   Slice ②'s plan §0b carries all 44 with their measurements.
 > - **2026-09-02 (Slice ①b planning)** — **amends §6 task 3**: its stated trap —
 >   "no external test can reach the new arm … a test cannot forge a `machine?`
 >   object" — is false, measured. Descriptors are bare R6RS vectors, so
@@ -1389,10 +1426,32 @@ plausible value — the defect §4.7 item 4 closes in Slice ③.
    — and `seen` is one flat list threaded down that one path. §10.6:582 requires
    a field branch to have "an explicit target for every possible result", so a
    two-target zero-width node has no representation in that shape. The walk must
-   answer over a *set* of successors, and §4.4 leaves two choices open that the
-   implementer must not improvise. Both are made here, for the successor set as
-   a whole, since field action is multi-successor too (`next` plus `error`):
-   - **`seen` is per-path** — exponential in the number of branch nodes on a
+   answer over a *set* of successors.
+
+   > ***CORRECTED IN PLACE 2026-09-03 (Slice ② planning). The two bullets below
+   > are SUPERSEDED and must not be implemented.*** They open "§4.4 leaves two
+   > choices open that the implementer must not improvise" — §4.4 does not leave
+   > them open. It settles them, 900 lines above and in this same Gate 0 commit:
+   > *"The walk is one DFS carrying two structures, and that settles the join. A
+   > path stack detects cycles … while a global visited set stops a diamond being
+   > re-explored … with `unknown` eliminated by the rewrite rather than joined."*
+   > [Decision 0021](../decisions/0021-eof-classification-multi-successor.md)
+   > item 2 names per-path `seen` as one of two **rejected** algorithms — "one
+   > structure doing both jobs … 2^k paths for k branch nodes" — and item 3 says
+   > `'unknown` "leaves the answer set rather than becoming its least element …
+   > a residual arm may not reintroduce one".
+   >
+   > **Build §4.4/0021:** one DFS, a **path stack** for cycle detection plus a
+   > **global completed-set** whose verdicts are reused, and **`'unknown`
+   > deleted** — every `ir.sls`-constructible §10.6 kind gets its own arm. 0021
+   > item 1 pins only `cycle > eof-reachable-stop`; the rest of the order is the
+   > slice's call, and `'unknown` may not appear in it at all.
+   >
+   > The bullets are kept rather than cut because the *reasoning* in them about
+   > `cycle` beating `eof-reachable-stop` is still the reasoning 0021 item 1
+   > records, and because a deleted instruction cannot be recognised as one a
+   > reader may have already acted on.
+   - ~~**`seen` is per-path**~~ *(superseded — see the note above)* — exponential in the number of branch nodes on a
      chain (2^k paths), where one shared `seen` tolerating re-visits is linear
      but reports `'cycle` for a diamond that merely re-converges, a false
      rejection. Take per-path and record the cost as accepted: EOF chains are
@@ -1458,7 +1517,7 @@ plausible value — the defect §4.7 item 4 closes in Slice ③.
    | 11 — §16.2:908 source filter at :400 | **Not extended.** §4.6's pause-precedent resolution: the new checks are byte-reachability-gated, not added to the unconditional `(or (byte-dispatch-node? n) (sequence-dispatch-node? n))` filter. |
    | 12 — §16.2:909 source filter at :414 | **Not extended**, same resolution. |
    | 13 — D4(b) byte-reachability gate at :436-445 | **Extended**, as a sibling block beside the pause block, not by widening `(pause-node? n)`. Both kinds are zero-width like pause, and decision 0011's reasoning applies verbatim. |
-   | 14 — D4(d) byte-reachability gate at :446-457 | **Extended**, same shape: a new byte-reachability-gated block beside the pause one. |
+   | 14 — D4(d) byte-reachability gate at :446-457 | ***CORRECTED IN PLACE 2026-09-03: do NOT write this "same shape". A byte-reachability-gated sibling block turns `dispatch --advance--> field-action --next--> stop` into a false `eof-reachable-stop` — a machine clean today — and adds a second diagnostic to this task's own one-diagnostic gate. The pause gate exists because a pause IS an EOF start (`parser-feed-op!`'s pause arm commits `current` PAST it, so a later finish begins at the continuation); a zero-width node never becomes `current`, since the dispatch arm returns `need-input` without moving it. Row 10's `eof-terminal` extension plus the shipped pause block already cover every real EOF start. Either drop this row and record "entry is a zero-width node" as the one stated, witnessed gap, or gate the new block on `(eq? (node-name n) (machine-entry m))` — never on byte-reachability. Whichever is chosen owes a fixture proving `dispatch --advance--> field-action --next--> stop` still verifies clean.*** |
 
    Census site 5, `pass-names`' `error-node?` filter (:141), needs no arm —
    neither kind names an error *declaration*; its `error` slot is a node name,
@@ -1491,7 +1550,13 @@ plausible value — the defect §4.7 item 4 closes in Slice ③.
    its `(else (assertion-violation ...))`, and `encode-normal`'s `case` gains
    two before its own. §4.6 settles that the lowering is 1:1 and allocates no
    internal states; what this task owes on top is the payload's home. **Carry it
-   in the existing seven-slot state vector rather than widening it**:
+   in the existing seven-slot state vector rather than widening it**
+   *(**CORRECTED IN PLACE 2026-09-03, Slice ② planning: the vector is EIGHT
+   slots — Slice ①a appended `reason` at slot 7 — leaving FIVE free. ②'s two
+   kinds need exactly five each, with zero spare, and ③'s accumulate needs
+   eight. Since whoever widens pays the same six-literal edit once, and ② is
+   already editing those six literals, **② widens** and ③ inherits the room.
+   This ruling was made against a seven-slot premise that is now wrong.*)*:
    normal-ir.sls:35-40 records that slots are per-kind and unused ones `#f`, and
    slot 6 already means two things (a dispatch state's EOF routing, a pause
    state's continuation id). Widening the vector edits **six** shipped state
@@ -1533,7 +1598,9 @@ plausible value — the defect §4.7 item 4 closes in Slice ③.
    **`fs` is the emitted field-store parameter, and ①a already reserved it** (③
    reuses it verbatim). Three slices own three pieces of one thing: ①a emits the
    parameter and passes an empty vector (§4.2, §5 task 3), ①b owns the storage
-   it will carry (parser slot 9), and this slice is the first to pass a
+   it will carry (parser slot **8** — *corrected in place 2026-09-03: this read
+   "slot 9", which is the IMMUTABLE `(name . initial)` declarations; slot 8 is
+   the mutable values Slice ①b shipped*), and this slice is the first to pass a
    populated vector and read it. The only new emitted local here is the
    arithmetic temporary `v`, which joins `reserved-member-3` (pre-slice,
    compile.sls:53) **in the same commit**, decision 0012 item 4. **Hazard, and a
@@ -1556,8 +1623,40 @@ plausible value — the defect §4.7 item 4 closes in Slice ③.
    blind the differential to exactly the class of defect this milestone
    introduces. The interpreter gains two `kind` answers (pre-slice,
    interpret.sls:80-90), the arithmetic and predicate evaluation behind new `op`
-   messages (pre-slice, the op-message `case`, :119-127), and its own field
-   storage. **This reaches `runtime.sls`, not only `interpret.sls`**:
+   messages (pre-slice, the op-message `case`, :119-127), and ~~its own field
+   storage~~ *(superseded — see the note below)*. **This reaches `runtime.sls`,
+   not only `interpret.sls`**:
+
+   > ***CORRECTED IN PLACE 2026-09-03 (Slice ② planning): the interpreter cannot
+   > have "its own field storage", and must not be given any.*** The `op` closure
+   > is built ONCE per compiled machine by `make-interpreted-machine` and has no
+   > parser in scope; `runtime.sls` states the prohibition verbatim, because
+   > Slice ①b hit it — "that closure is built once per compiled machine and every
+   > parser from it copies the same reference into slot 2 … so closure-held
+   > storage would let one parser's writes be read by another", and the tree
+   > already builds many parsers per compiled machine inside per-byte loops.
+   >
+   > There is ONE store, parser **slot 8**, shared by both lanes. The only shape
+   > the tree supports is an op MESSAGE that RECEIVES the parser's field vector
+   > and commits into it: `parser-feed-op!` and `parser-finish-op!` both have
+   > `parser` in scope, so they pass `(parser-field-values parser)` in. The op
+   > performs the bound check **and** the commit; the runtime only routes the
+   > returned target. If the op instead returned a value for the runtime to
+   > store, Slice ③'s accumulate would force the runtime to decide
+   > overflow-versus-digit, which puts §15:858-870's inequality in `runtime.sls`
+   > where the generated library can reach it — collapsing the differential.
+   >
+   > Both lanes reach the declared WIDTH independently and must keep doing so:
+   > the interpreter through `(machine-fields m)` → `uint-field-width`, the
+   > emitter through `(normal-machine-fields normal)`. §7's "do not route the
+   > arithmetic through a `(byte-machine runtime)` helper shared with the
+   > interpreter" holds, and needs stating over THREE channels, not one:
+   > `(byte-machine runtime)`, and `(byte-machine private ir)`'s `only` list in
+   > `compile.sls`. Adding a max-computing helper to that `only` list is the
+   > quiet way to collapse the differential.
+   >
+   > If the plan exports `parser-field-values`, that export MUST join
+   > `reserved-member-2` in the same commit or the reserved-drift lanes redden.
    `parser-feed-op!`'s `case (op 'kind node)` (pre-slice, runtime.sls:175-201)
    and `parser-finish-op!`'s (:284-311) both end in an assertion violation on an
    unknown kind, so each needs a zero-width arm that steps without consuming a
@@ -1683,7 +1782,12 @@ well as the incumbent against the new text — with a control on the merge base.
 `make-field-branch-node` exported from both of `graph.sls`'s lists; the **nine**
 `verify.sls` census sites carrying an arm or an in-place note for each new kind,
 with a harness group in `verify-tests.sps` whose header states that census and
-one case per row; `pass-field-operands` in `verify-machine`'s pass list, and
+one case per row; the operand half **inside `pass-fields`** *(corrected in place
+2026-09-03: this read `pass-field-operands` in `verify-machine`'s pass list.
+Slice ①b built `pass-fields` explicitly as ②'s home for the operand half and
+records that in the tree; creating a second pass would contradict the tree and
+leave ③ two candidate homes for the accumulate share)*, already in
+`verify-machine`'s pass list since ①b, and
 `invalid-field-operand` reachable by arity, undeclared reference, operand range,
 mask range and `low > high`; normalized kinds at encode tags 5 and 6, with a
 normal-ir test pinning the tag bytes; two new `render-state-arm` arms and
@@ -2448,7 +2552,7 @@ fail silently, seven fail loudly.** All twelve of `verify.sls`'s fail silently.
 | 11 | `verify.sls:398-410` §16.2:908 filter | `(or byte-dispatch-node? sequence-dispatch-node?)` | **SILENT** (`'()`). **Deliberately not extended** (§4.6's pause-precedent resolution): the new zero-width kinds go through sites 13/14 instead, and integer-accumulate is input-reading and joins this filter. Record the decision in place, as `pass-overlap` does. |
 | 12 | `verify.sls:412-427` §16.2:909 filter | `(or byte-dispatch-node? sequence-dispatch-node?)` | **SILENT** (`'()`). Same split, same reason (§4.6). |
 | 13 | `verify.sls:436-445` D4(b) byte-reachability gate | `pause-node?` + `memq` | **SILENT** (`'()`). **② extends it** — the pause precedent, decision 0011. |
-| 14 | `verify.sls:446-457` D4(d) byte-reachability gate | `pause-node?` + `memq` | **SILENT** (`'()`). **② extends it.** Same check as 13, second occurrence, counted separately because it is a separate edit. |
+| 14 | `verify.sls:446-457` D4(d) byte-reachability gate | `pause-node?` + `memq` | **SILENT** (`'()`). ***CORRECTED 2026-09-03: NOT "same check as 13". Extending this one as prescribed falsely rejects an ordinary machine — see §7 Task 3's row 14 for the measurement and the two admissible shapes.*** |
 | 15 | `normal-ir.sls:166-174` `prefix-blocks` | `sequence-dispatch-node?` | **SILENT** (skips). **Correct for M4 and must stay** — §4.6's 1:1 lowering allocates no internal states for the new kinds. Flagged so nobody "fixes" it. |
 | 16 | `normal-ir.sls:206-239` `declared`'s lowering `cond` | six kind predicates | LOUD — `else` assertion-violation at `:239`. |
 | 17 | `normal-ir.sls:260-281` `encode-normal` | `case` on `normal-state-kind` | LOUD — `else` assertion-violation at `:280-281`. Tags 5, 6, 7 land here. |

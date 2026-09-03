@@ -979,7 +979,7 @@ delivered. No versioned release exists yet.
   [decision 0020](docs/decisions/0020-field-shape-is-a-constructor-contract.md).
 
   Measured at the slice's close: `release` 92/92, `pr` 92/92, `no-scheme` 8/8,
-  the Scheme mutation suite **49 passes / 271 mutations**, the CMake mutation
+  the Scheme mutation suite **49 passes / 275 mutations**, the CMake mutation
   suite unchanged at 1 pass / 72 mutations. Declared `EXPECT_SURVIVES` goes from
   nine to **ten**: `parser-reset!`'s field restore has no witness in this slice,
   because `parser-field-ref` is read-only and nothing writes a field, so slot 8
