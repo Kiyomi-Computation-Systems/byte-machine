@@ -22,6 +22,36 @@ task inside Slice ② rather than a slice of its own.
 > false it is corrected in place and marked at the site, because a false
 > instruction is a landmine rather than evidence (AGENTS.md).
 >
+> - **2026-09-03 (Slice ③ planning)** — **amends §8**, re-measured against the
+>   merged tree at `14c4f30`: 63 findings, nine blocking. §8 was written at
+>   `a942327`, before ①a, ①b and ② existed, and Slice ② alone changed six of the
+>   seven files ③ touches. The corrections a reader must not miss, each marked at
+>   its own site:
+>   - **§8 Task 3's `reexec-targets` instruction is FALSE and ships a hang.**
+>     `overflow-error` is not "terminal-directed" — this document says so itself
+>     sixteen lines lower — so a self-targeting overflow edge is a zero-progress
+>     cycle that verifies clean and hangs in both lanes. The arm needs **two**
+>     disjuncts, and the overflow self-cycle needs its own fixture.
+>   - **The diagnostic's `node` slot carries the NODE name, not the field's.**
+>     §8 prescribes the field; Slice ② shipped and documented the opposite, with
+>     the reason at `verify.sls` — "an operand fault is a property of the site
+>     that wrote it, and the field it names may not exist". Following §8 would
+>     split the convention inside one diagnostic code.
+>   - **The accumulate field-reference check gets a SIBLING ARM in `pass-fields`,
+>     not a `field-operand-schemas` row.** That table is keyed on a selector and
+>     an arity; an accumulate node has `field` and `base` and neither.
+>   - **§8 orders both a fourth golden and an empty fixtures diff.** ③ adds the
+>     golden; the gate is reworded to "the three existing goldens byte-identical,
+>     new files added", and the new lane owes its own
+>     `BYTE_MACHINE_*_GOLDEN_FILE` or a mutation pass's BASELINE reddens and
+>     reads as a mutation defect.
+>   - Every count in §8 is the `a942327` column: the suite is **49 passes / 323
+>     mutations**, the verifier census is **fifteen** kind-dispatching sites not
+>     twelve, the report guard already has **five** disjuncts not three, there are
+>     **six** pinned IR fingerprints not three, and the lane count is **94**.
+>   - **Slice ② never added the position-kind row its own comment claimed**, so ③
+>     inherits a task there, not a precedent. Corrected at that file.
+>   Slice ③'s plan §0b carries all 63 with their measurements.
 > - **2026-09-03 (Slice ② and ③ planning)** — **amends §7 and §8**, which had
 >   never been amended and whose every `file:line` §7 itself declares "measured on
 >   `main` at `a942327` and drifts through Slices ①a and ①b". Both have landed, so
@@ -1931,11 +1961,38 @@ comment and in the all-byte test's group header, in the constructor's commit.
      handler, which reads as a user grammar error.
    - `node-eof-target` (`:82-85`): a new arm, which then feeds
      `all-out-targets`, `pass-eof` and `pass-eof-execution` for free.
-   - `reexec-targets` (`:263-322`): the byte-dispatch arm's structure but
-     testing only the fallback, as the sequence arm does — the digit edge always
-     advances (§10.6:566, "an explicit advance edge") and the overflow edge is
-     non-consuming but terminal-directed, so only `nondigit-edge` can be
-     `reexecute`.
+   - `reexec-targets`: ***CORRECTED IN PLACE 2026-09-03 (Slice ③ planning). The
+     instruction below is FALSE and, followed, ships a machine class that
+     verifies clean and then hangs in both lanes.*** It read: "the byte-dispatch
+     arm's structure but testing only the fallback, as the sequence arm does —
+     the digit edge always advances (§10.6:566) and the overflow edge is
+     non-consuming but **terminal-directed**, so only `nondigit-edge` can be
+     `reexecute`."
+
+     **`overflow-error` is not terminal-directed, and this document says so
+     itself sixteen lines below**, declining to extend `pass-names`' `error-node?`
+     filter "since `overflow-error` names a target *node*". It is a bare symbol:
+     §9.1:302-304 declares it a plain parameter, §9.1:322 limits constructors to
+     local shape, decision 0020 item 1 lists it among the symbols, and §16.2:904
+     asks only for "incompatible field or unsupported base". Nothing makes it a
+     terminal.
+
+     So an `overflow-error` naming its own accumulate node is a **zero-progress
+     cycle**: §12.7:772 makes the overflow non-consuming, §15:870 leaves the
+     field unchanged, and the walk re-reads the same byte forever. Neither
+     runtime loop guards against it. **The arm needs TWO disjuncts** — the
+     `nondigit-edge` target when its mode is `reexecute`, *plus* the
+     `overflow-error` target unconditionally (there is no mode on it to test);
+     `digit-target` stays out, since it always advances. Slice ②'s shipped
+     `zero-width-successors` is the precedent: it returns `(list next error)`
+     whenever the error slot is a symbol.
+
+     Measured: cutting Slice ②'s field-action arm back to one disjunct makes a
+     self-targeting error edge verify with **zero diagnostics**. The adjacent
+     report-guard bullet inherits the same blind spot — it justifies itself by
+     the nondigit self-cycle alone, so a pin written for it passes against a walk
+     missing the overflow disjunct. **The overflow self-cycle needs its own
+     fixture.**
    - `pass-zero-progress`'s **report** guard (`:333`): gains a disjunct, or an
      accumulate node whose `nondigit-edge` reexecutes into itself is a
      zero-progress cycle with no local guard in either lane — the shape M3
