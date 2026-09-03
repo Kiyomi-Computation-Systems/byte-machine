@@ -57,6 +57,7 @@
       parser-error-detail parser-error-node-name parser-error-state-id
       parser-error-offset parser-error-position-kind
       byte-machine-make-compiled-machine
+      parser-field-ref
       callback-continue callback-pause))
   ;; Every identifier the emitted body binds, so a caller-chosen output binding
   ;; cannot collide with one. `fieldv` is emitted `exec`'s seventh parameter,
@@ -232,7 +233,67 @@
            ;; dispatch state: the http-version machine has nine error sites over
            ;; two declarations. This is §19.1:996's "immutable field/callback/debug
            ;; metadata", carried as one quoted vector.
-           (decls (machine-errors (compilation-machine compilation)))
+           ;; Only the declarations the NORMALIZED graph reaches. The encoding
+           ;; writes a reason at exactly two sites -- an error state's, and a
+           ;; dispatch state's default-eof routing -- so a declaration no node
+           ;; names and that is not the machine default-eof never reaches the IR
+           ;; fingerprint. Emitting it anyway made two machines the fingerprint
+           ;; calls identical emit DIFFERENT bytes, which is the converse of the
+           ;; property decision 0019 item 2 states and the one nothing asserted.
+           ;; Narrowing here rather than widening the encoding is what keeps
+           ;; every shipped fingerprint where Slice ①a measured it, which
+           ;; decision 0019 point 5 requires of every later slice.
+           (reached (let walk ((i 0) (acc '()))
+                      (if (>= i (vector-length states)) (reverse acc)
+                          (let* ((st (vector-ref states i))
+                                 (r (normal-error-reason st))
+                                 (c (cond ((eq? (normal-state-kind st) 'error)
+                                           (normal-error-code st))
+                                          ((and (eq? (normal-state-kind st) 'dispatch)
+                                                (eq? (car (normal-dispatch-eof st)) 'default))
+                                           (cdr (normal-dispatch-eof st)))
+                                          (else #f))))
+                            (walk (+ i 1)
+                                  (if (and c (not (member (cons c r) acc)))
+                                      (cons (cons c r) acc) acc))))))
+           ;; ONE entry per reached (code . reason) PAIR, not one per declaration
+           ;; whose pair is reached. The filter cannot test declaration identity:
+           ;; the normalizer resolved each site's declaration NAME to its code and
+           ;; reason (normal-ir.sls's errcode/errreason) before the emitter sees
+           ;; it, so `reached` is a set of pairs and membership is all there is to
+           ;; test. Two declarations may agree on both -- nothing rejects
+           ;; duplicate codes or duplicate reasons, and §16.2's required-check
+           ;; list does not ask for uniqueness -- so an UNREACHED declaration
+           ;; duplicating a reached one passed the membership test and was
+           ;; emitted, giving two machines with the same IR fingerprint different
+           ;; emitted bytes.
+           ;;
+           ;; That is the same defect commit 51fd5f3 was written to close, and
+           ;; that commit did not close it: its filter fixed the case where the
+           ;; unreached declaration's pair is ABSENT from `reached` and left the
+           ;; case where it is present under another declaration's name.
+           ;; determinism-one-byte-tests.sps now carries both constructions.
+           ;;
+           ;; Dropping the later duplicate rather than keeping it is what leaves
+           ;; every shipped golden where it is: a machine with no duplicate pair
+           ;; emits exactly what it emitted before, and the surviving entry keeps
+           ;; its declaration-order POSITION, so no index moves either. The two
+           ;; entries would have been textually identical in any case -- an errs
+           ;; entry is (code, reason) and nothing else -- so no site loses a
+           ;; reason it could have rendered, which is what makes the drop safe
+           ;; rather than merely convenient.
+           (decls (let keep ((ds (machine-errors (compilation-machine compilation))) (acc '()))
+                    (if (null? ds) (reverse acc)
+                        (let ((pair (cons (error-declaration-code (car ds))
+                                          (error-declaration-reason (car ds)))))
+                          (keep (cdr ds)
+                                (if (and (member pair reached)
+                                         (not (member pair
+                                                      (map (lambda (d)
+                                                             (cons (error-declaration-code d)
+                                                                   (error-declaration-reason d)))
+                                                           acc))))
+                                    (cons (car ds) acc) acc))))))
            ;; Keyed on code AND reason, not on code alone. Two declarations may
            ;; share a code -- pass-names rejects duplicate declaration NAMES and
            ;; nothing rejects duplicate codes, and §16.2's required-check list
@@ -269,6 +330,27 @@
                                             "#(" (symbol->string (error-declaration-code (car ds)))
                                             " \"" (escape-string (error-declaration-reason (car ds)))
                                             "\")")))))
+           ;; Decision 0019 item 3(b)'s member 0, filled by Slice ①b. It renders
+           ;; the field DECLARATIONS as (name . initial) pairs in slot order,
+           ;; not bare initials: the parser needs the initials AND the
+           ;; name-to-slot resolution parser-field-ref answers by, the slot is
+           ;; the pair's position, so one member determines both and a second
+           ;; member would be a second ABI growth for data the first already
+           ;; carries. With no fields this is the empty string, so the member
+           ;; renders `#()` and the payload `#(#())` -- byte-identical to ①a,
+           ;; which is decision 0019 item 5 and the reason no golden moves.
+           ;;
+           ;; Rendered from the NORMALIZED table rather than from machine-fields,
+           ;; so the emitted slot order is the same object the IR fingerprint was
+           ;; computed over. Reading the source machine again would let the two
+           ;; disagree with nothing to notice.
+           (fields (let loop ((fs (normal-machine-fields normal)) (acc ""))
+                     (if (null? fs) acc
+                         (loop (cdr fs)
+                               (string-append
+                                acc (if (string=? acc "") "" " ")
+                                "(" (symbol->string (car (car fs)))
+                                " . " (number->string (caddr (car fs))) ")")))))
            (bstr (symbol->string binding)))
       (string->utf8
        (string-append
@@ -294,7 +376,7 @@
         "      (else (assertion-violation (quote exec) \"unknown state\" st)))))\n"
         "  (define " bstr "\n"
         "    (byte-machine-make-compiled-machine 3 " (number->string fp) " "
-        (number->string entry) " exec (quote #(#())))))\n"))))
+        (number->string entry) " exec (quote #(#(" fields "))))))\n"))))
 
   (define (emit-machine compilation binding port)
     (let ((bytes (render-machine compilation binding)))

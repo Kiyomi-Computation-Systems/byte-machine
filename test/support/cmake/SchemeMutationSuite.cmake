@@ -735,8 +735,80 @@ cmake_minimum_required(VERSION 3.26)
 # reexec-targets)" -- for the one decision in reexec-targets' sequence arm that
 # had no mutation, the `eq? ... 'reexecute` test itself. No pass is added, so
 # passes stay at 46 and mutations become 235 + 1 = 236.
-set(EXPECTED_PASSES 48)
-set(EXPECTED_MUTATIONS 249)
+#
+# *** The entries below close a GAP in this narrative, not a new bump. The first
+# version of this block was written from a guess and got four things wrong; it is
+# replaced, not appended to, and the corrections are named so the method is
+# visible. Every number here is measured, by
+#   git cat-file -p <rev>:test/support/cmake/SchemeMutationSuite.cmake | grep EXPECTED_
+# and by a per-SPEC census of the mutation blocks at each end. ***
+#
+# The running total above stops at 46/236, which is correct at `c3ceec2`. That is
+# NOT the merge base -- three commits sit between it and `main` -- and the
+# constants at the merge base stand at 48/**249**, not the 48/255 the first
+# version claimed. 255 is reached by this branch's own task 3, which the block
+# then went on to record separately: it was double-counted.
+#
+# Slice ①a (`c3ceec2` -> `d89899b`, its merge): 46/236 -> 48/**249**. Two passes
+# join -- the position-kind differential and the member-3 drift check, both new
+# lanes -- and THIRTEEN mutations: +6 position-kind, +3 normal-ir (the encoding
+# format's three reserved slots), +2 verify (the reason repertoire), +1 runtime,
+# +1 member-3 drift. The first version said fourteen and included a determinism
+# mutation; that one is not ①a's, see the next paragraph.
+#
+# `51fd5f3` (this branch's FIRST commit, and not ①b's work): 249 -> 250. It
+# resolves decision 0022's item 7 open question and adds one determinism mutation,
+# "compile: the errs table carries declarations the graph never reaches". A
+# per-SPEC census places it exactly: `byte-machine.determinism.one-byte` goes
+# 1 -> 2 between the merge base and here.
+#
+# Slice ①b tasks 1 to 3: 250 -> 255. Task 1 adds three to the ir pass for the
+# uint field descriptor and the machine guard that makes it load-bearing; task 2
+# adds none, the facade being two export lists with no decision of its own; task 3
+# adds two, BOTH to Pass 33. The first version put one of them "in the ir pass":
+# that mutation's FILE is `ir.sls` but its SPEC is
+# `byte-machine.verify.rejections.chez.source`, and it is the SPEC that decides
+# which pass witnesses a mutation. FILE and pass are not the same axis.
+#
+# Slice ①b task 4: 255 -> 260. FIVE join Pass 33 for pass-fields, the declaration
+# half of §16.3:924 item 6 -- one permissive per check, the restrictive direction
+# on the portable-name check, the pass-fields join, and the restrictive direction
+# on the duplicate check. The last two were first declined as SUBSUMED and the
+# whole-branch review found that declination unsound; the reasoning and the
+# retraction are at the mutations' own site. No pass is added.
+#
+# Slice ①b task 5: 260 -> 265. The normal-ir pass gains five, one per remaining
+# decision in the field record -- name, width, initial, record order, and the slot
+# number the table carries. A sixth, the field count, is not new: it is ①a's
+# reserved-count pin RE-ANCHORED, killed by construction when the literal zero
+# became the real count.
+#
+# Slice ①b tasks 6 and 7: 265 -> 273, and passes 48 -> 49. One joins the compile
+# pass (member 0 rendered empty regardless of the declarations); a NEW pass --
+# headed **Pass 50**, because header numbers run ahead of the run count and 49 was
+# taken -- carries seven for parser-field-ref, the only lane in which the field
+# declarations are observable at all. Six are pinned; one carries an
+# EXPECT_SURVIVES with its measurement and its reopening condition, taking the
+# suite's declared survivors from nine to TEN. Three further mutations were
+# measured and deliberately not written, each because its record set is identical
+# -- not a subset, the same set -- to one that is.
+#
+# Slice ①b's Critical fix wave: 271 -> 273. Two join Pass 33, both recovered from
+# task 4's unsound subsumption call.
+#
+# Slice ①b's Important fix wave: 273 -> 275. Two more join Pass 33, for the field
+# name each diagnostic carries in its `node` slot -- a decision stated in §0 D2
+# and in verify.sls's own comment, and asserted nowhere until the whole-branch
+# review found verify-tests.sps reading every diagnostic through a `codes` helper
+# that is blind to that slot.
+#
+# Whole-branch total for this branch: the merge base's 249 to 275, **+26**, which
+# a per-SPEC census independently confirms (240 -> 266 mutation BLOCKS; the two
+# counts differ because a one-line block is lexed but not counted the same way,
+# and it is the DELTA that has to agree).
+
+set(EXPECTED_PASSES 49)
+set(EXPECTED_MUTATIONS 275)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3280,6 +3352,38 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # Proved by exhaustion, not by argument: no FAIL record any of the three emits
 # is absent from the subsuming mutant's output.
 #
+# *** RETRACTED 2026-09-03, by Slice ①b's whole-branch review. *** A note here
+# claimed this file's residue count was "one short", that a FIFTH pair
+# (arm 6 :908 < arm 1 node-out-targets) had been "missed, not created", and that
+# "the separating attempt has NOT been made" for it. All three were false about
+# the file they were written into:
+#
+#   * `:3418` already reads "the four subsumed pairs listed above, plus arm 6 <
+#     arm 1", and `:3432` lists all five by name. The "four pairs" heading above
+#     counts the SUBSUMED bucket at that audit moment; arm 6 < arm 1 is
+#     reconciled six lines later. Nothing was short.
+#   * `:3415-3416` records that arm 6 "is matched by arm 1, which Slice ②
+#     MEASURED and recorded as genuinely subsumed at arm 6's own pin" -- the
+#     attempt exists, at the pin, with its measurement, exactly where AGENTS.md
+#     asks for it.
+#
+# Slice ①b's own sweep did measure five pairs at c3ceec2, 2302ffd and its HEAD,
+# which is right and agrees with this file. What it then did was compare that
+# five against the "four pairs" heading alone, without reading the six lines
+# under it or arm 6's pin, and write the difference up as a discovery. The
+# retraction is kept rather than deleted because the failure is the instructive
+# part: a count read out of one heading, checked against nothing else in the
+# same block, produced a confident correction to a record that was already
+# right.
+#
+# ONE thing in that note survives and is not about this file. Slice ①a's PLAN
+# (docs/plans/milestone-4-slice-1a-implementation-plan.md) records "Merge base:
+# 4 collisions" and "HEAD now carries exactly the merge base's four collisions".
+# Measured at c3ceec2 with this suite's own judgment semantics -- the pin regex
+# compiled the way CMake compiles it, matched against whole captured output --
+# that number is FIVE, the same five this file names. That plan is annotated at
+# its own site.
+#
 # AMENDED, whole-branch review fix wave (2026-08-30), to the taxonomy commit
 # 49c8cc4 wrote into AGENTS.md after this paragraph was measured. What this
 # paragraph called "genuinely unfixable by any pin" is not a property any
@@ -3542,12 +3646,85 @@ byte_machine_mutation(
 # (distinct from the machine-name site above). Each has its own rejection case
 # in verify-tests.sps; the project's own SITES-2 split precedent (harness-group
 # vs with-cleanup) requires each site of a multi-site decision to be witnessed.
+# Milestone 4 Slice ①b task 3: §16.2:884's unsupported-IR-version half, listed
+# since Milestone 1 and unimplemented until this slice.
+#
+# BOTH directions are declared and BOTH are caught. The design (§6 task 3) said
+# the permissive direction was unwitnessable -- "a test cannot forge a machine?
+# object" -- and told the implementer to declare it EXPECT_SURVIVES. Measured
+# false: descriptors are bare R6RS vectors, so a test copies the tag with
+# (vector-ref m 0), an (rnrs) primitive needing no private import, and builds a
+# machine carrying any version it likes. AGENTS.md reserves EXPECT_SURVIVES for
+# the genuinely unwitnessable, and "this cannot be tested" is a claim to
+# demonstrate; here the demonstration goes the other way.
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: the schema guard accepts a non-machine"
-  FIND [[(if (machine? m) '() (list (make-diagnostic 'invalid-shape #f "not a machine")))]]
-  REPLACE [[(if #t '() (list (make-diagnostic 'invalid-shape #f "not a machine")))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid-shape")
+  LABEL "verify: an unsupported IR version is accepted"
+  FIND [[          ((not (= (machine-ir-version-of m) supported-ir-version))]]
+  REPLACE [[          ((and #f (not (= (machine-ir-version-of m) supported-ir-version)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a machine carrying an unsupported IR version is invalid-shape: unsupported version is reported")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "ir: the supported IR version is not the one machines are stamped with"
+  # The restrictive direction, and the reason supported-ir-version is a second
+  # constant rather than a reuse of the stamp: forcing the STAMP changes what is
+  # built, forcing THIS changes what is accepted, and only the second is a
+  # verifier decision. Every shipped fixture becomes unsupported at once.
+  FIND [[  (define supported-ir-version 1)]]
+  REPLACE [[  (define supported-ir-version 2)]]
+  # RE-ANCHORED by task 4's Pass 33 sweep, which is what found it. This pin was
+  # written as a bare CHECK NAME carrying no value -- "...: no diagnostics", with
+  # neither the expected count nor the got -- so it matched ANY mutant that
+  # reddened that case at all, and two others do: "verify: a case is compared
+  # against itself" (got 1) and "verify: the reason repertoire rejects every
+  # reason" (got 2). The ①a audit's finding was that a COUNT is a weaker anchor
+  # than a named check; this is the degenerate case of it, an anchor with no
+  # value at all, and it is weaker still.
+  #
+  # It is re-anchored off its own on-point case, because that case expects ZERO
+  # diagnostics and so has no code to compare -- every mutant that reddens it
+  # produces the same shape of record, and the only thing separating them is a
+  # count that two of them share. The record below was computed as a SET
+  # DIFFERENCE against all 48 other Pass 33 mutants: `got invalid-shape` where
+  # another code was expected is produced by this mutation alone, because it is
+  # the only one that makes pass-schema fire on a WELL-FORMED machine.
+  #
+  # The uniqueness is EMPIRICAL, from that set difference, and the first version
+  # of this note gave it a false MECHANISM: it said pass-schema's firing
+  # "short-circuits verify-machine before any later pass runs". It does not.
+  # verify-machine appends pass-schema's diagnostics to the other nine passes and
+  # gates those only on `(machine? machine)`, which a version-mismatched machine
+  # still satisfies -- every later pass runs and its diagnostics follow. What
+  # makes the record unique is narrower: pass-schema is FIRST in that append, so
+  # its diagnostic is the one `codes` reports at the head, and no other mutant in
+  # this pass makes a well-formed machine emit `invalid-shape` at all. Recorded
+  # because a stated mechanism that does not exist is the harder kind of false
+  # record -- the pin it justifies is correct, so nothing fails to warn you.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "two fields sharing a name is invalid-field-declaration: invalid-field-declaration -- expected invalid-field-declaration, got invalid-shape")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the schema guard reports a non-machine under the wrong code"
+  # Re-anchored in Milestone 4 Slice ①b task 3: pass-schema became a cond when
+  # §16.2:884's unsupported-IR-version half landed beside the shape half. The pin
+  # was also RE-ANCHORED ON ITS SIGNATURE, not only its FIND: bare "invalid-shape"
+  # is now emitted by two arms of the same pass, so it no longer resolves to one
+  # (case, check) pair. It names its own case now.
+  # Mutates the CODE the arm reports, not the guard that reaches it. Suppressing
+  # the guard was tried first and rejected on measurement: with pass-schema now a
+  # cond, skipping the shape arm lets the version arm call an accessor on a
+  # non-vector, so the mutant dies by a RAISE rather than by the failed
+  # comparison this pin names -- AGENTS.md's "try the opposite constant first".
+  # The FIND carries the message string because 'invalid-shape alone now occurs
+  # twice in this pass.
+  FIND [[           (list (make-diagnostic 'invalid-shape #f "not a machine")))]]
+  REPLACE [[           (list (make-diagnostic 'invalid-name #f "not a machine")))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a non-machine handed to verify-machine is invalid-shape: invalid-shape")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -4597,6 +4774,147 @@ byte_machine_mutation(
   EXPECT_OUTPUT_MATCHES
     "every pair is enumerated once, across a nested family and a disjoint one: ambiguity count -- expected 4, got 9")
 
+# Slice ①b Task 4 adds THREE mutations to Pass 33 for pass-fields, the
+# declaration half of §16.3:924 item 6. Two permissive, one per check, and one
+# restrictive on the portable-name check -- the direction that makes the pass's
+# clean-premise case load-bearing rather than decorative.
+#
+# *** CORRECTED by this slice's whole-branch review. Two mutations were declined
+# here as "SUBSUMED"; NEITHER is subsumed, and the stated measurement for one of
+# them was false. Both are written below. The original text and what was wrong
+# with it, because the error is more instructive than the fix: ***
+#
+#   * "Dropping `(pass-fields machine)` from verify-machine's append. Its record
+#     set is exactly the UNION of the two permissive mutants' below, so it owns
+#     no record of its own." The premise is right and the CONCLUSION does not
+#     follow. AGENTS.md's relation is "is my whole record set inside ONE
+#     sibling's?" -- a union is contained in NEITHER of the two sets it unions,
+#     so this is separable, and the tree already ships the remedy as the :909
+#     conjunction pin. A mutation whose records are each shared with a DIFFERENT
+#     sibling is the exact case AGENTS.md calls out as wrongly documented before.
+#   * "The duplicate check made restrictive ... reports every field twice and
+#     reddens twenty-odd records across five unrelated groups." FALSE as
+#     measured: three records, all in ONE group. That description was true of an
+#     earlier TWO-field clean fixture; a third field was added to that fixture
+#     later in the same task, to separate a different pin, and this paragraph was
+#     never re-measured against it. Neither set contains the other -- this mutant
+#     emits `nonportable ... got 2`, which the restrictive-portable mutant does
+#     not, and that one emits `two fields ... got 3`, which this one does not.
+#
+# The reusable lesson is not about fields. A measurement written against a
+# fixture goes stale when the fixture changes, and nothing in this suite checks
+# prose. Both pins below are CONJUNCTIONS, because each mutant's individual
+# records are shared with a sibling and only the pair is unique.
+
+# The whole-branch review found BOTH field diagnostics' "carries the offending
+# field name" decision (§0 D2, and verify.sls's own comment) stated everywhere
+# and asserted nowhere: verify-tests.sps read diagnostics through a `codes`
+# helper that maps diagnostic-code, which is blind to the `node` slot. A
+# `nodes-of` helper and two cases were added; these are their mutations.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the duplicate-field diagnostic does not name the field"
+  FIND [[(make-diagnostic 'invalid-field-declaration fname]]
+  REPLACE [[(make-diagnostic 'invalid-field-declaration #f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the duplicate diagnostic names the offending FIELD: the field name -- expected \\(count\\), got \\(#f\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the nonportable-field diagnostic does not name the field"
+  FIND [[(make-diagnostic 'invalid-field-declaration (uint-field-name f)]]
+  REPLACE [[(make-diagnostic 'invalid-field-declaration #f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the nonportable diagnostic names the offending FIELD: the field name -- expected \\(Count\\), got \\(#f\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: pass-fields is never run"
+  # The JOIN, which shipped with no mutation at all until the whole-branch review
+  # found the declination above unsound. Its two records are each shared with one
+  # of the two permissive mutants, and with a different one each -- so the
+  # conjunction is what identifies it, and neither half alone would.
+  # `'()` rather than deleting the line: the runner requires a non-empty REPLACE,
+  # and an empty append arm drops the pass while keeping the form well-shaped, so
+  # the mutant dies at the checks rather than at expand time.
+  FIND [[                                  (pass-fields machine)]]
+  REPLACE [[                                  '()]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "two fields sharing a name is invalid-field-declaration: one finding -- expected 1, got 0.*a nonportable field name is invalid-field-declaration: one finding -- expected 1, got 0")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: every pair of fields is reported as sharing a name"
+  # The duplicate check's restrictive direction, which is what makes the
+  # clean-premise case load-bearing for THAT check -- exactly the argument this
+  # block already made for the portable check, and then declined to apply here on
+  # a measurement that was stale.
+  FIND [[(memq fname fseen)]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "two fields sharing a name is invalid-field-declaration: one finding -- expected 1, got 2.*distinct portable field names verify clean: no diagnostics -- expected 0, got 3")
+
+# *** Both permissive arm mutations below are SUBSUMED BY the join mutation
+# above, BY CONSTRUCTION, and are kept anyway. *** Measured in the re-sweep: each
+# arm's whole record set is a strict subset of the join's, because the join drops
+# both checks and each arm drops one, so the join is strictly more permissive on
+# every machine and no fixture can redden an arm while leaving the join green.
+# That is the one kind of subsumption this project treats as closed rather than
+# as an under-specified lane -- there is nothing to separate, not merely nothing
+# found. They are kept because they name DISTINCT decisions: that the duplicate
+# check fires, that the portable check fires, and that the pass is wired in at
+# all. The cost is attribution, not detection: delete the join and all three
+# report caught, two of them under an arm's label.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: two fields may share a name"
+  # The defect the pass exists to close, and the one measured to verify CLEAN
+  # before this slice: slot = declaration index, so two `count` fields take two
+  # slots and parser-field-ref answers with whichever the name map finds first,
+  # orphaning the other slot and its initial.
+  FIND [[(memq fname fseen)]]
+  REPLACE [[#f]]
+  # Named apart from pass-names' node-duplicate loop, which is the same shape:
+  # cloning its `(memq nm seen)` gave this file ONE find at TWO sites, measured,
+  # and silently mutated the node check as well.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "two fields sharing a name is invalid-field-declaration: one finding -- expected 1, got 0")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a field name is not checked against the portable grammar"
+  FIND [[(valid-name? (uint-field-name f))]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a nonportable field name is invalid-field-declaration: one finding -- expected 1, got 0")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: every field name is reported as nonportable"
+  # The restrictive direction. Only field-carrying machines move, and this file
+  # has exactly three, so the mutant emits two records rather than flooding the
+  # lane. Pinned on the CLEAN one: without it a permissive-only pin set would
+  # accept a pass that rejects everything.
+  FIND [[(valid-name? (uint-field-name f))]]
+  REPLACE [[#f]]
+  EXPECT_STATUS 1
+  # A CONJUNCTION, re-anchored by the whole-branch review's re-sweep. The clean
+  # record alone is shared with the duplicate check's restrictive mutant (written
+  # above, after that declination was found unsound), which reddens the same case
+  # with the same 0-versus-3. Neither mutant's set contains the other's, so the
+  # pair separates them where neither record does: this mutant reports one
+  # diagnostic per field and the two-field case reaches 3, which the other never
+  # does.
+  EXPECT_OUTPUT_MATCHES
+    "two fields sharing a name is invalid-field-declaration: one finding -- expected 1, got 3.*distinct portable field names verify clean: no diagnostics -- expected 0, got 3")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 34: the reference interpreter (Milestone 1 Phase 2) ----------------
@@ -4879,6 +5197,14 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # group was committed) is also 462 pairs and also zero. Nothing inherited,
 # nothing introduced.
 #
+# RE-MEASURED 2026-09-02, Slice ①b task 5, for the same reason and by the same
+# method: SIX cases joined normal-ir-tests.sps (the field table group) and five
+# mutations joined this pass, and a check widens every existing pin exactly as a
+# mutation does. 30 pins, 870 ordered pairs, ZERO collisions, and all 30 pins
+# still catch their own mutant. Control at 51fd5f3, this slice's baseline: 25
+# pins, 600 pairs, also zero. Nothing inherited, nothing introduced -- this pass
+# has now been collision-free across three separate audits.
+#
 # The new group is not inert under this pass's own mutants -- four of the 22
 # redden it, measured on the same captures: "normal-ir: the trie does not merge
 # alternatives sharing a byte" (state count 39 rather than 11 -- NOT the count
@@ -5041,16 +5367,86 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
-  LABEL "normal-ir: the reserved field count is not written"
-  # Reserved empty by decision 0019 item 3(a) and read by nothing until Slice
-  # ①b. `encode-normal` is not exported and nothing in the tree decodes the byte
-  # stream, so the only observable of a reserved slot is the fingerprint it
-  # moves -- which is exactly why the slot is written NOW rather than in ①b.
-  FIND [[       (put-u32be p (vector-length states))
-       (put-u16be p 0)]]
-  REPLACE [[       (put-u32be p (vector-length states))]]
+  LABEL "normal-ir: the field count is written zero instead of the real count"
+  # RE-ANCHORED, Slice ①b task 5. This pin was "the reserved field count is not
+  # written" and FOUND `(put-u16be p 0)` -- ①a's literal zero. Task 5 replaces
+  # that literal with the real count, which takes the old FIND to ZERO sites: a
+  # pin killed BY CONSTRUCTION, not by an edit that could have been avoided, so
+  # it is re-anchored in the same commit that kills it rather than deleted.
+  #
+  # The decision it names is unchanged -- the count byte must carry the table's
+  # length -- but its witness had to change with it. It is pinned on the
+  # two-field GOLDEN and could not be pinned on any of the inequality cases: with
+  # the per-field records still written, zeroing the count leaves every
+  # differing-field pair still unequal, so not one of them reddens. That is the
+  # reason the slice measures a golden of its own instead of resting on the
+  # "differ in fingerprint" family.
+  FIND [[       (put-u16be p (length fields))]]
+  REPLACE [[       (put-u16be p 0)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the IR fingerprint is the measured golden value: fingerprint -- expected 14095574568398596535, got 1041389063826219287")
+  EXPECT_OUTPUT_MATCHES
+    "the IR fingerprint of a two-field machine is the measured golden value: fingerprint -- expected 5570336114768739383, got 14125028976508365705")
+
+# Slice ①b task 5 adds FIVE more to this pass, one per remaining decision in the
+# field record: its three components, the order the records are written in, and
+# the slot number the table itself carries. Each is pinned on a DISTINCT golden
+# value, all measured.
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a field's name is dropped from the encoding"
+  FIND [[                   (put-symbol p (car f))
+]]
+  REPLACE [[                   ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the IR fingerprint of a two-field machine is the measured golden value: fingerprint -- expected 5570336114768739383, got 10230586532598973635")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a field's width is dropped from the encoding"
+  FIND [[                   (put-u8 p (cadr f))
+]]
+  REPLACE [[                   ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the IR fingerprint of a two-field machine is the measured golden value: fingerprint -- expected 5570336114768739383, got 8284907101070913187")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a field's initial value is dropped from the encoding"
+  FIND [[                   (put-u64be p (caddr f)))]]
+  REPLACE [[                   )]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the IR fingerprint of a two-field machine is the measured golden value: fingerprint -- expected 5570336114768739383, got 11089340831069462813")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: field records are written in reverse slot order"
+  # Slot IS the record's position -- the slot number is deliberately not written
+  # -- so record order is the whole of the slot assignment as far as the stream
+  # is concerned, and a reversal is a different machine wearing the same bytes
+  # everywhere else.
+  FIND [[                 fields)]]
+  REPLACE [[                 (reverse fields))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the IR fingerprint of a two-field machine is the measured golden value: fingerprint -- expected 5570336114768739383, got 3973801163924336519")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: every field is assigned slot zero"
+  # The table's own slot number, which is what every consumer downstream indexes
+  # by. Not witnessed by any fingerprint: the slot is not encoded, by design, so
+  # this mutation moves no golden and the table assertion is its only witness --
+  # the reason that assertion states each entry WHOLE, (name width initial slot),
+  # rather than checking the length and the names.
+  FIND [[                            slot)]]
+  REPLACE [[                            0)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "slots are declaration indices, and the table carries name, width and initial: second -- expected \\(limit 16 65535 1\\), got \\(limit 16 65535 0\\)")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
@@ -5521,6 +5917,20 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "pause arm p1 -- expected \"paused 2\", got \"paused 1\"")
 
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: member 0 is emitted empty regardless of the declarations"
+  # Slice ①b task 6 fills decision 0019 item 3(b). The zero-field rendering is
+  # already pinned by the case one above this one -- `(quote #(#()))`, unchanged
+  # since ①a -- so what needed a mutation is the NON-empty rendering, which no
+  # existing check could have noticed.
+  FIND [[           (fields (let loop ((fs (normal-machine-fields normal)) (acc "")]]
+  REPLACE [[           (fields (let loop ((fs '()) (acc "")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a field-declaring machine renders its declarations in member 0: pairs in slot order -- expected a true value")
+
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 37: D7 identifier repertoire + LF (Slice B) -------------------------
@@ -5570,8 +5980,15 @@ byte_machine_mutation(
   # death to (§5, the "Five compile.sls emitter-text pins" bullet -- cited by
   # content because a line number into that file is stale the moment anything
   # is inserted above it, which this branch's own merge demonstrated).
-  FIND [[" exec (quote #(#())))))\n"))))]]
-  REPLACE [[" exec (quote #(#())))))\r\n"))))]]
+  # RE-ANCHORED AGAIN, Slice ①b task 6, and for the same reason as last time: the
+  # FIND is the render tail, and this slice fills decision 0019 item 3(b)'s
+  # member 0, so the literal payload `#(#())` became an interpolation. That is
+  # the second consecutive slice to move this pin without touching the decision
+  # it names -- the tail is where every payload change lands, and any pin
+  # anchored there will keep moving. Its REPLACE and its expectation are
+  # unchanged; only the text it sits on moved.
+  FIND [[" exec (quote #(#(" fields "))))))\n"))))]]
+  REPLACE [[" exec (quote #(#(" fields "))))))\r\n"))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "no carriage return byte appears and the last byte is LF: carriage return present")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
@@ -5591,6 +6008,54 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   # and inherited unmodified through execute_process -- see "WHAT THIS SUITE
   # NEEDS FROM ITS ENVIRONMENT" above)
   )
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.determinism.one-byte.chez.source
+  LABEL "compile: the errs table carries declarations the graph never reaches"
+  # Resolving decision 0022 item 7's open question. The encoding carries a
+  # reason only where one is resolved, so a declaration nothing names never
+  # reaches the IR fingerprint; emitting it anyway made two machines the
+  # fingerprint calls identical emit different bytes. Witnessed by the
+  # determinism lane's own equal-fingerprints-equal-bytes case, which is where
+  # the property belongs: §20:1043 makes the fingerprint what the determinism
+  # checks compare.
+  #
+  # RE-ANCHORED by Slice ①b's whole-branch review, which found the fix this pin
+  # names was INCOMPLETE. The filter tests a (code . reason) PAIR, because the
+  # normalizer resolved each site's declaration name to its code and reason
+  # before the emitter sees it -- so an UNREACHED declaration duplicating a
+  # reached one passed the membership test and was emitted, and two machines with
+  # equal IR fingerprints still emitted different bytes. The filter now also
+  # drops a pair it has already emitted.
+  #
+  # *** The dedup half is SUBSUMED by this mutation and is not written
+  # separately. Measured, with the separating attempt recorded, which is what
+  # AGENTS.md requires before the word is used. *** Suppressing only the dedup
+  # (`(and (member pair reached) (not (member pair …)))` -> `(member pair
+  # reached)`) fails exactly two cases, and this mutation fails both of them plus
+  # "equal fingerprints emit equal bytes", so the narrow set is a strict subset
+  # of this one's. THREE separating constructions were tried and all three fail:
+  #   * A machine with an unreached DISTINCT pair separates them in behaviour but
+  #     not in records -- the dedup mutant is CORRECT there, so it reddens
+  #     nothing a pin could name.
+  #   * A machine whose every declaration is reached with two sharing a pair
+  #     makes the two mutants emit IDENTICAL text.
+  #   * Both together: this mutation emits one more entry than the dedup mutant,
+  #     but every record the dedup mutant produces, this one produces too.
+  # The dedup is strictly less permissive than this mutation on every machine, so
+  # no fixture can redden it while leaving this one green. The BEHAVIOUR is
+  # witnessed -- determinism-one-byte-tests.sps's two new cases fail against the
+  # dedup mutant, measured -- it is the separate PIN that no fixture supports.
+  FIND [[                                (if (and (member pair reached)
+                                         (not (member pair
+                                                      (map (lambda (d)
+                                                             (cons (error-declaration-code d)
+                                                                   (error-declaration-reason d)))
+                                                           acc))))
+                                    (cons (car ds) acc) acc))))))]]
+  REPLACE [[                                (cons (car ds) acc))))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "equal fingerprints emit equal bytes: and so do the emitted bytes")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.determinism.one-byte.chez.source
@@ -6076,6 +6541,39 @@ byte_machine_mutation(
   EXPECT_OUTPUT_MATCHES
     "a bare target handed in as the mismatch edge is rejected: not an edge")
 
+# Milestone 4 Slice ①b task 1: the uint field descriptor. Three decisions --
+# the closed width set, the initial's range, and the machine guard that makes
+# the descriptor load-bearing at all.
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: the uint field width set is not closed"
+  FIND [[    (unless (memq width '(8 16 32 64))]]
+  REPLACE [[    (unless #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the width set is closed at 8, 16, 32 and 64: refused")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: a uint field initial is not range-checked against its width"
+  # Comparison-caught on the upper bound, which is what §25:1568's
+  # declaration-time share turns on: 2^w is accepted where it must be refused.
+  FIND [[                 (<= 0 initial (- (expt 2 width) 1)))]]
+  REPLACE [[                 (<= 0 initial (expt 2 width)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the initial is an exact integer inside the declared width: over the top")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: make-machine accepts fields that are not field descriptors"
+  # Without this guard the collection loop checks only list?, so any proper list
+  # passes -- measured before the guard landed, a machine could carry
+  # (junk 42 "string") as its fields and nothing read it. This is the mutation
+  # that says the descriptor is load-bearing rather than decorative.
+  FIND [[    (unless (for-all uint-field? fields)]]
+  REPLACE [[    (unless #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "and refuses a list of anything else: junk fields")
+
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
   LABEL "ir: make-sequence-dispatch-node accepts a malformed eof-target"
@@ -6098,6 +6596,26 @@ byte_machine_mutation(
     "a non-symbol, non-#f eof-target is rejected: bad eof-target")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# Milestone 4 Slice ①b task 2 declares NO mutation, deliberately, and this note
+# is the record of why rather than an omission.
+#
+# The decision is that graph.sls's export list and its mirrored `only` import
+# list move together. A mutation dropping a name from one of them was written
+# and MEASURED: under this suite's launcher it exits 255 with no harness output
+# at all, because a missing export is an expand-time failure -- the library never
+# loads, so no case runs and there is nothing to match. That is the bare
+# nonzero-exit catch AGENTS.md forbids, wearing no signature.
+#
+# What actually guards the decision is stronger than a mutation: an identifier
+# in one list and not the other makes (byte-machine graph) unloadable, so EVERY
+# lane importing it fails at once, loudly, at build time. There is no input that
+# reaches a half-edited façade and survives.
+#
+# (Measured aside: run OUTSIDE the launcher the same mutant surfaces as a
+# harness case raise with status 1, because the reference is inside a lambda.
+# Pinning that would have recorded a signature this suite never produces.)
+
 
 # --- Pass 43: class membership and recursive canonicalization (M3 Slice ①
 # Task 5) --------------------------------------------------------------------
@@ -6992,6 +7510,125 @@ byte_machine_mutation(
   # error state a prior feed parked on is reached by NO jump, so only it can
   # observe what the loop was initialized to.
   EXPECT_OUTPUT_MATCHES "both lanes report boundary, not eof: interpreter -- expected boundary, got eof")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 49: parser-field-ref, across BOTH executors (Slice ①b tasks 6+7) ----
+#
+# field-access-tests.sps is the only lane in which the field declarations are
+# observable at all, and it drives both executors, which reach them by different
+# routes: the interpreter asks its op closure a 'field-initials message, the
+# generated lane reads member 0 of the ABI payload it was emitted with. Nothing
+# is shared between those two paths, so this pass carries a mutation for each
+# side separately. It emits and runtime-loads a generated library, so the verify
+# command is the differential shape -- both library roots, the shared object
+# guard, and BYTE_MACHINE_TEST_TMPDIR inherited from this suite's own test
+# environment.
+#
+# TWO further mutations were measured and are NOT written, each because its
+# record set is IDENTICAL to one that is -- not a subset, the same set. (This
+# said THREE and listed two bullets; the count was of bullets that never
+# existed.)
+#   * make-parser's op arm discarding what it asked for, versus interpret.sls
+#     answering with nothing. One decision seen from the asker's side and the
+#     answerer's; the parser ends up with an empty table either way.
+#   * The emitter rendering a wrong field NAME, versus the v2 arm ignoring
+#     member 0 entirely. A name the parser cannot match is a table it cannot
+#     use, and both produce the same four raised cases.
+# In each case the written mutation is the one that lives in the file whose new
+# code it names.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/field-access-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "runtime: the v2 arm ignores the ABI payload's field member"
+  FIND [[            (vector-ref metadata 0)))]]
+  REPLACE [[            (vector)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "parser-field-ref \\(generated\\).a fresh parser reads the declared initial at every width: case raised")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: the field-initials message answers with no declarations"
+  FIND [[                               (machine-fields m))))]]
+  REPLACE [[                               '())))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "parser-field-ref \\(interpreter\\).a fresh parser reads the declared initial at every width: case raised")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: an emitted field declaration carries initial zero"
+  # Pinned in THIS lane rather than the compile lane, where its record is
+  # indistinguishable from the member-0 mutation's: compile-tests asserts the
+  # rendered member by one substring, so every deviation reddens the same check.
+  # Re-anchored after the whole-branch review rebuilt this lane's fixture: the
+  # cross-executor DISAGREEMENT records it used to sit on are now shared with the
+  # runtime's own zero-initials mutation, and what separates it is the emitted
+  # table's ORDER assertion -- this mutation is the only one in the pass that
+  # changes the rendered text of member 0.
+  FIND [[ " . " (number->string (caddr (car fs))) ")")]]
+  REPLACE [[ " . " (number->string 0) ")")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the emitted field table is in declaration order: member 0 lists all four in order -- expected a true value")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "runtime: a fresh parser's field values are zero instead of the declared initials"
+  # §12.5:738's just-constructed state. Distinct from the emitter mutation above,
+  # which moves only the GENERATED half: this one moves both, so its record is
+  # the interpreter's, which that one never produces.
+  FIND [[            (begin (vector-set! v i (cdr (vector-ref decls i)))]]
+  REPLACE [[            (begin (vector-set! v i 0)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "parser-field-ref \\(interpreter\\).a fresh parser reads the declared initial at every width: count -- expected 7, got 0")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "runtime: parser-field-ref answers an undeclared name instead of refusing"
+  # §13:801 makes an undeclared name a CALLER mistake, not a machine outcome, so
+  # it must reach a contract violation and never a parser-error.
+  FIND [[        (cond ((>= i n)
+               (byte-machine-contract-violation 'parser-field-ref 'accessor-misuse
+                                                field-name))]]
+  REPLACE [[        (cond ((>= i n) 0)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an undeclared field name is accessor-misuse: code -- expected accessor-misuse, got no-raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "runtime: parser-field-ref always reads slot zero"
+  # The reason the lane's fixture declares FOUR fields with four DIFFERENT
+  # non-zero initials: with equal initials, with a zero among them, or with one
+  # field, this mutation is invisible. The first version of the fixture had three
+  # fields and a zero, which the whole-branch review flagged against the design's
+  # own stated mitigation (milestone-4-design.md:1208-1218).
+  FIND [[               (vector-ref (parser-field-values parser) i))]]
+  REPLACE [[               (vector-ref (parser-field-values parser) 0))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a fresh parser reads the declared initial at every width: limit -- expected 65535, got 7")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "runtime: parser-reset! does not restore the field values"
+  FIND [[    (vector-set! parser 8 (initial-values (parser-field-decls parser)))))]]
+  REPLACE [[    ))]]
+  EXPECT_SURVIVES
+    "measured, not assumed: this mutant passes the whole field-access lane unchanged. parser-field-ref is READ-ONLY by §13:801 and Slice ①b ships no writer at all, so slot 8 is constant for a parser's entire lifetime and restoring a constant is a no-op no caller can observe. The lane's reset case is not vacuous -- it fails against the initials mutation above, which is what proves reset reads the DECLARED values rather than zeros -- but it cannot separate a reset that restores from one that does not, because both leave the same numbers in place. The line is written NOW rather than deferred to Slice ② because ② adds the writer, and a ② that adds a field write without also adding the restore leaks one parse's field values into the next; the restore arriving first makes that a defect ② has to introduce rather than one it has to remember. Reopening condition: the same commit that gives fields a writer must delete this EXPECT_SURVIVES and pin the mutation, and the isolation case field-access-tests.sps declines for the same reason belongs there too.")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

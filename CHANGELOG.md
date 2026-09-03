@@ -12,7 +12,8 @@ Milestone 3 closed **2026-08-30** with Slice ③ (multiple alternatives,
 ambiguity, and cycle analysis), after Slices ① (byte classes) and ② (sequence
 dispatch and prefix lowering); Milestone 4 (fields, actions, and branches) is in
 progress — its Gate 0 discharged **2026-08-31** (decisions 0018–0022) and Slice
-①a landed **2026-09-02**, with Slices ①b, ② and ③ remaining. See
+①a landed **2026-09-02** and Slice ①b (fields: declaration, slots, and
+`parser-field-ref`) **2026-09-02**, with Slices ② and ③ remaining. See
 [the implementation plan](docs/plans/byte-machine-implementation-plan.md) §25
 for overall scope; the entries below record what each milestone actually
 delivered. No versioned release exists yet.
@@ -942,6 +943,51 @@ delivered. No versioned release exists yet.
   independently interpreted machine need not number states as the generated one
   does. Both still report one. See
   [decision 0022](docs/decisions/0022-structured-parser-error-record.md).
+- **Machines declare unsigned integer fields, and parsers read them.**
+  `make-uint-field` (§9.1:283) takes a name, a width of 8/16/32/64, an initial
+  value and a source label, and refuses everything else **at construction**:
+  §25:1568's declaration-time bounds are discharged by a contract violation, not
+  by a verifier diagnostic, so a machine whose field is out of range never
+  exists. The verifier carries only what a constructor seeing one field at a time
+  cannot — duplicate field names and names outside §10.1:480's portable
+  repertoire, both reported as `invalid-field-declaration` (§16.3:924 item 6).
+  Slot index is declaration index (§17:962), the normalized IR carries a field
+  table, and `parser-field-ref` reads a declared field through either executor
+  (§9.3:410). It is **read-only and has no mutating sibling**, which is §13:801's
+  decision rather than an omission: a callback that could write a field would
+  bypass the closed IR and invalidate interpreter/generated equivalence. An
+  undeclared name raises a contract violation under a new `accessor-misuse`
+  code — a caller mistake is not a machine outcome and must not arrive as a
+  `parser-error`. `pass-schema` also gained §16.2:884's unsupported-IR-version
+  check, listed since Milestone 1 and unimplemented because the stamped version
+  had no accessor.
+
+  **Decision 0019's reservation held.** ①a wrote an empty field-table count and
+  an empty ABI payload member so that filling them here would move nothing for a
+  machine that declares no fields, and nothing moved: the three committed
+  goldens and all four pinned IR fingerprints are byte-identical to **`51fd5f3`**,
+  asserted by `git diff --stat 51fd5f3..HEAD -- test/fixtures/` and by a case
+  pinning a zero-field fingerprint at ①a's own measured value. The baseline is
+  `51fd5f3` and **not** ①a's merge: that commit, the first on this branch,
+  resolved [decision 0022](docs/decisions/0022-structured-parser-error-record.md)'s
+  item 7 and moved `generated-pause.golden.sls`, whose `errs` vector had carried
+  a declaration the graph never reaches. Decision 0019 point 5 makes an ①a-merge
+  golden move a STOP condition; that point is amended at its own foot rather than
+  here, because that is where a later slice arrives. Field-declaring machines
+  get one new fingerprint of their own. See
+  [decision 0019](docs/decisions/0019-encoding-format-2-pre-provisioned.md) and
+  [decision 0020](docs/decisions/0020-field-shape-is-a-constructor-contract.md).
+
+  Measured at the slice's close: `release` 92/92, `pr` 92/92, `no-scheme` 8/8,
+  the Scheme mutation suite **49 passes / 271 mutations**, the CMake mutation
+  suite unchanged at 1 pass / 72 mutations. Declared `EXPECT_SURVIVES` goes from
+  nine to **ten**: `parser-reset!`'s field restore has no witness in this slice,
+  because `parser-field-ref` is read-only and nothing writes a field, so slot 8
+  is constant for a parser's lifetime and restoring a constant is a no-op no
+  caller can observe. It ships now rather than with Slice ②'s writer so that a ②
+  which adds a write without adding the restore has to *introduce* the leak
+  rather than merely forget to prevent it; the survivor's own note carries the
+  measurement and the condition for closing it.
 
 ### Removed
 

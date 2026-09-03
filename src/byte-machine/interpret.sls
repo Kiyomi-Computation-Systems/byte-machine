@@ -148,6 +148,14 @@
        (lambda (msg . args)
          (case msg
            ((entry) (machine-entry m))
+           ;; Slice ①b task 6. The interpreter answers from the verified source
+           ;; machine; the generated lane reads the same shape out of the ABI
+           ;; payload's member 0. Pairs, in declaration order, which IS slot
+           ;; order (§17:962, design §6 task 5).
+           ((field-initials)
+            (list->vector (map (lambda (f) (cons (uint-field-name f)
+                                                 (uint-field-initial f)))
+                               (machine-fields m))))
            ((kind) (kind (car args)))
            ((dispatch) (dispatch (car args) (cadr args)))
            ((error-value) (error-parts (car args)))

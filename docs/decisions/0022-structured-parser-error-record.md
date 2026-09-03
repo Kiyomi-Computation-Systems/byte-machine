@@ -7,11 +7,11 @@ Milestone: 4, Gate 0 (milestone-4-design.md §4.5)
 > **Amendments** — later notes at the foot of this file reach back into the text
 > above them. Nothing above a note is rewritten.
 >
-> - **2026-09-02 (Milestone 4 Slice ①a)** — **open question against item 7**: the
->   emitted table is per *declaration* as item 7 says, but the encoding carries
->   only *reached* declarations, so two machines the IR fingerprint calls
->   identical emit different bytes. Measured, not fixed; the note names the
->   impact and two candidate resolutions.
+> - **2026-09-02 (Milestone 4, before Slice ①b)** — **amends item 7**: the table
+>   is one entry per error declaration the graph **reaches**, not per declaration
+>   declared. Raised as an open question by Slice ①a's whole-branch review and
+>   resolved before ①b, because 0019 point 5 makes the golden it moves a STOP
+>   condition for every later slice.
 
 ## Context
 
@@ -249,8 +249,8 @@ overflow rider to a table that already works.
    same rule from independent code is the strongest available evidence the
    lowering is 1:1.
 7. **The static payload lives in one immutable per-library table keyed by error
-   *declaration*, not per site.** *(An open question was raised against this item
-   on 2026-09-02 — see the note at the foot.)* Generated code defines `(define errs (quote
+   *declaration*, not per site.** *(**Amended 2026-09-02** — the table holds one
+   entry per **reached** declaration. See the note at the foot.)* Generated code defines `(define errs (quote
    #(#(<code> <reason>) …)))`, one entry per error declaration — §19.1:996's
    "immutable field/callback/debug metadata" literally — and each site builds
    its record from a table index plus its own two literals (public source-node
@@ -371,11 +371,19 @@ overflow rider to a table that already works.
 
 ---
 
-## 2026-09-02 (Milestone 4 Slice ①a) — item 7 versus the encoding: an open question
+## 2026-09-02 (Milestone 4) — item 7 amended: the table is per *reached* declaration
 
-Raised by Slice ①a's whole-branch review, measured against the tree at that
-slice's tip. **Not resolved here**: resolving it changes what item 7 says, and
-that is a decision, not a fix.
+Raised by Slice ①a's whole-branch review as an open question, and **resolved
+before Slice ①b** — deliberately, on timing: the fix moves a committed golden,
+and from Slice ①a's merge [0019](./0019-encoding-format-2-pre-provisioned.md)
+point 5 tells a later slice to treat a moving golden as a STOP condition. Cheap
+now, expensive after ①b.
+
+**Item 7 is amended to read: one entry per error declaration the graph
+REACHES.** Everything else in item 7 stands — the table is still per
+declaration rather than per site, still ordered as `machine-errors` declares
+them, and a site's index is still that declaration's position in the *emitted*
+table.
 
 ### What was measured
 
@@ -412,36 +420,45 @@ with distinct codes, so the property lane cannot generate one either. What is
 lost is the stronger claim both records lean on — that the fingerprint
 identifies the emitted output.
 
-### Two candidate resolutions
+### What was taken, and what was not
 
-1. **Narrow the table to reached declarations** (emitter-only). Build `errs`
-   from the declarations the normalized states actually resolve, preserving
-   declaration order. Implemented and measured during Slice ①a: it closes the
-   gap exactly — `same-fingerprint` and `same-emitted-bytes` then agree — and it
-   moves **no** IR fingerprint, because the encoding is untouched. It was
-   reverted rather than shipped for two reasons: it changes item 7's rule from
-   *per declaration* to *per reached declaration*, and it drops a row from
-   `test/fixtures/generated-pause.golden.sls`, whose `default-eof` declaration is
-   genuinely unreached (every dispatch state there routes EOF to a node). A
-   golden moving is what [0019](./0019-encoding-format-2-pre-provisioned.md)
-   point 5 tells a later slice to treat as a STOP condition, so this resolution
-   is cheapest **before** Slice ①b and expensive after.
+**Taken: narrow the table to reached declarations.** Emitter-only. `errs` is
+built from the declarations the normalized states actually resolve, in
+declaration order. Measured: `same-fingerprint` and `same-emitted-bytes` now
+agree, and **no IR fingerprint moves**, because the encoding is untouched. One
+golden moves — `test/fixtures/generated-pause.golden.sls` loses a row, its
+`default-eof` declaration being genuinely unreached, since every dispatch state
+there routes EOF to a node.
 
-2. **Widen the encoding to every declaration.** Keeps item 7 exactly as written
-   and makes the fingerprint cover what the table carries. It re-baselines all
-   four IR fingerprints and all three goldens a second time, which is precisely
-   the double payment the ①a/①b split exists to avoid — so it is the more
-   faithful reading of item 7 and the more expensive one, and after ①a's merge
-   it collides with 0019 point 5 outright.
+**Rejected: widen the encoding to every declaration.** It keeps item 7's
+original wording and makes the fingerprint cover the whole table, but it
+re-baselines all four IR fingerprints and all three goldens a *second* time —
+the double payment the ①a/①b split exists to avoid — and after ①a's merge it
+collides with 0019 point 5 outright.
 
-A third option — leave it, and narrow the *claims* in 0019 item 2 and this
-record instead — is available and is the only one that ships no code. It should
-be chosen deliberately if it is chosen, not by default: the claim it narrows is
-load-bearing for §20:1043.
+**Rejected: narrow the claims instead and ship no code.** Available, and the
+cheapest by a wide margin, but the claim it would narrow is load-bearing for
+§20:1043: the fingerprint is what the determinism checks compare, and a
+fingerprint that does not distinguish two different emitted libraries is worth
+less than both records assume. Declining to fix a real inconsistency because
+nothing currently reaches it is how a guard that does not guard ships.
+
+### What now holds, and what witnesses it
+
+`determinism-one-byte-tests.sps` asserts the converse property directly — two
+machines whose fingerprints agree emit identical bytes — with the *premise*
+asserted alongside it, so the implication cannot pass vacuously if the
+fingerprints ever stop agreeing. A mutation restoring the unfiltered table is
+caught by that case.
+
+One consequence for a later slice: **the duplicate-code fixture must have BOTH
+same-code declarations reached.** Naming only one lets this filter drop the
+other, leaving the lookup a single candidate — at which point resolving by code
+and resolving by (code, reason) agree and the duplicate-code mutation goes
+UNCAUGHT. Measured while landing this change.
 
 ### Where the evidence is
 
 Slice ①a's plan
 ([milestone-4-slice-1a-implementation-plan.md](../plans/milestone-4-slice-1a-implementation-plan.md)),
-under the whole-branch review section, carries the reproduction and the reverted
-patch's measurement.
+under the whole-branch review section, carries the original reproduction.

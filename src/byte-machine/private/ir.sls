@@ -26,6 +26,9 @@
           make-finish-node finish-node? finish-node-name
           make-pause-node pause-node? pause-node-name pause-node-continuation
           make-error-node error-node? error-node-name error-node-error-name
+          machine-ir-version-of supported-ir-version
+          make-uint-field uint-field? uint-field-name uint-field-width
+          uint-field-initial uint-field-source-label
           make-error-declaration error-declaration? error-declaration-name
           error-declaration-code error-declaration-reason
           make-sequence-dispatch-node sequence-dispatch-node?
@@ -346,9 +349,48 @@
           ((pause-node? x) (pause-node-name x))
           (else (byte-machine-contract-violation 'node-name 'invalid-argument 'node))))
 
+  ;; --- uint field descriptor (§9.1:283, §10.2:488-491) ---
+  ;; The four parts §10.2 names: a symbolic name, an unsigned width of 8, 16, 32
+  ;; or 64 bits, an initial exact-integer value within that width, and an
+  ;; optional diagnostic label.
+  ;;
+  ;; Every check here is decision 0020's CONSTRUCTOR half -- closed-set
+  ;; membership and the local shape of the one value being built -- on the
+  ;; make-edge precedent above, which memq-checks `mode` at construction even
+  ;; though §16.2:896 assigns advancement modes to the verifier. A contract
+  ;; violation is not a diagnostic (§4.6), so none of these carries a code, and
+  ;; NO verifier pass re-checks them: a machine whose field failed construction
+  ;; never exists, so the arm would be unreachable through any public API and
+  ;; its permissive mutation would survive while the suite reported it caught.
+  ;;
+  ;; There is exactly one field TYPE in v0.1; §29:1754 defers additional ones.
+  (define uint-field-tag (tag 'byte-machine-uint-field))
+  (define (make-uint-field name width initial source-label)
+    (require-symbol 'make-uint-field 'name name)
+    (unless (memq width '(8 16 32 64))
+      (byte-machine-contract-violation 'make-uint-field 'invalid-argument 'width))
+    ;; `exact-integer?` is not R6RS; the pair below is what (rnrs) gives, and
+    ;; the range is inclusive at both ends per §10.2:490. The u64 upper bound is
+    ;; a bignum on every supported runtime -- (greatest-fixnum) is 2^60-1 -- so
+    ;; this comparison must not be narrowed to fixnum arithmetic.
+    (unless (and (integer? initial) (exact? initial)
+                 (<= 0 initial (- (expt 2 width) 1)))
+      (byte-machine-contract-violation 'make-uint-field 'invalid-argument 'initial))
+    (vector uint-field-tag name width initial source-label))
+  (define (uint-field? x) (tagged? uint-field-tag x))
+  (define (uint-field-name f) (vector-ref f 1))
+  (define (uint-field-width f) (vector-ref f 2))
+  (define (uint-field-initial f) (vector-ref f 3))
+  (define (uint-field-source-label f) (vector-ref f 4))
+
   ;; --- machine (default-eof-error is a declared error NAME) ---
   (define machine-tag (tag 'byte-machine-machine))
   (define machine-ir-version 1)     ; stamped; v0.1 callers do not override (§9.1)
+  ;; The version pass-schema accepts. Named separately from the stamp so the two
+  ;; can be told apart by a mutation: forcing the stamp changes what is built,
+  ;; forcing this changes what is accepted, and only the second is a verifier
+  ;; decision.
+  (define supported-ir-version 1)
   (define (make-machine name entry fields callbacks spans errors nodes
                         default-eof-error source-label)
     (require-symbol 'make-machine 'name name)
@@ -362,9 +404,19 @@
       (byte-machine-contract-violation 'make-machine 'invalid-argument 'nodes))
     (unless (for-all error-declaration? errors)
       (byte-machine-contract-violation 'make-machine 'invalid-argument 'errors))
+    ;; What makes the descriptor load-bearing. Before this guard the collection
+    ;; loop above checked only `list?`, so any proper list passed as `fields` --
+    ;; measured, a machine could carry (junk 42 "string") and nothing read it.
+    (unless (for-all uint-field? fields)
+      (byte-machine-contract-violation 'make-machine 'invalid-argument 'fields))
     (vector machine-tag machine-ir-version name entry fields callbacks spans
             errors nodes default-eof-error source-label))
   (define (machine? x) (tagged? machine-tag x))
+  ;; Slot 1, stamped as the constant above and never taken from an argument.
+  ;; It had no accessor until Milestone 4 Slice ①b, which is why §16.2:884's
+  ;; unsupported-IR-version half was listed and unimplemented: pass-schema could
+  ;; not read what it was meant to check.
+  (define (machine-ir-version-of m) (vector-ref m 1))
   (define (machine-name m) (vector-ref m 2))
   (define (machine-entry m) (vector-ref m 3))
   (define (machine-fields m) (vector-ref m 4))

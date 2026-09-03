@@ -125,6 +125,105 @@
                      (normal-machine-fingerprint (normalize (one-byte/spare-reason "first")))
                      (normal-machine-fingerprint (normalize (one-byte/spare-reason "second"))))))))
 
+;; Milestone 4 Slice ①b task 5: slot assignment and the field table (§17:962,
+;; "assign field, callback, and span slots"; decision 0019 item 3(a)).
+;;
+;; SLOT = DECLARATION INDEX. Decision 0016 point 1's two-phase append applied to
+;; fields, of which fields have only the first phase: nothing synthesizes a
+;; field, so there is no internal-state append to follow the declared ones, and
+;; §10.1:482 already makes declaration order the source of stable IDs.
+(define (one-byte/fields fs)
+  (make-machine 'one-byte 'start fs '() '() (list eof-decl rej-decl)
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 0) (make-edge 'stop 'advance) #f))
+            (make-edge 'reject 'reexecute) #f #f)
+          (make-stop-node 'stop #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+
+(harness-group "the field table (§17:962)"
+  (lambda ()
+    (harness-case "slots are declaration indices, and the table carries name, width and initial"
+      (lambda ()
+        (let ((t (normal-machine-fields
+                  (normalize (one-byte/fields
+                              (list (make-uint-field 'count 8 0 #f)
+                                    (make-uint-field 'limit 16 65535 #f)))))))
+          (check-equal "two entries" (length t) 2)
+          (check-equal "first" (car t) '(count 8 0 0))
+          (check-equal "second" (cadr t) '(limit 16 65535 1)))))
+    (harness-case "a zero-field machine has an empty table"
+      (lambda ()
+        (check-equal "empty" (normal-machine-fields n1) '())))
+    ;; The three cases below are the reason the table is ENCODED rather than
+    ;; merely carried. Decision 0009 point 2 computes the fingerprint over the
+    ;; canonical normalized IR and §20:1043 makes that the object the determinism
+    ;; checks compare, so any part of a declaration the generated parser can
+    ;; observe must move the fingerprint, or the fingerprint stops identifying
+    ;; what was emitted. The NAME is observable now, through parser-field-ref;
+    ;; the INITIAL is, through a read before any write. The WIDTH is not yet --
+    ;; nothing in this slice writes a field, so no value can exceed its declared
+    ;; range and the width has no runtime effect. It is encoded anyway because
+    ;; Slice ②'s field writes make it observable, and a width that entered the
+    ;; encoding later would move every field-declaring fingerprint at that point.
+    ;; (This comment claimed all three were observable today; two are.) One case per component, because a
+    ;; single "two different field lists differ" case passes with two of the
+    ;; three unencoded.
+    (harness-case "two machines differing only in a field NAME differ in fingerprint"
+      (lambda ()
+        (check "different"
+               (not (= (normal-machine-fingerprint
+                        (normalize (one-byte/fields (list (make-uint-field 'count 8 0 #f)))))
+                       (normal-machine-fingerprint
+                        (normalize (one-byte/fields (list (make-uint-field 'total 8 0 #f))))))))))
+    (harness-case "two machines differing only in a field WIDTH differ in fingerprint"
+      (lambda ()
+        (check "different"
+               (not (= (normal-machine-fingerprint
+                        (normalize (one-byte/fields (list (make-uint-field 'count 8 0 #f)))))
+                       (normal-machine-fingerprint
+                        (normalize (one-byte/fields (list (make-uint-field 'count 16 0 #f))))))))))
+    (harness-case "two machines differing only in a field INITIAL differ in fingerprint"
+      (lambda ()
+        (check "different"
+               (not (= (normal-machine-fingerprint
+                        (normalize (one-byte/fields (list (make-uint-field 'count 8 0 #f)))))
+                       (normal-machine-fingerprint
+                        (normalize (one-byte/fields (list (make-uint-field 'count 8 1 #f))))))))))
+    ;; Declaration ORDER is the slot assignment, so it must be encoded too: the
+    ;; same two fields swapped are a different machine, and without this case a
+    ;; per-field encoding that summed or sorted would pass every case above.
+    (harness-case "the same two fields in the other order differ in fingerprint"
+      (lambda ()
+        (check "different"
+               (not (= (normal-machine-fingerprint
+                        (normalize (one-byte/fields (list (make-uint-field 'count 8 0 #f)
+                                                          (make-uint-field 'limit 8 0 #f)))))
+                       (normal-machine-fingerprint
+                        (normalize (one-byte/fields (list (make-uint-field 'limit 8 0 #f)
+                                                          (make-uint-field 'count 8 0 #f))))))))))
+    ;; Decision 0019 item 5, asserted rather than assumed: ①a reserved the count
+    ;; slot so that a zero-field machine encodes IDENTICALLY once ①b fills it.
+    ;; The golden case above is that assertion for the one-byte machine; this one
+    ;; states it as the invariant it is, at the value ①a measured.
+    ;; The slice's own field-declaring golden (design §6 task 5). The inequality
+    ;; cases above cannot replace it: dropping the COUNT while still writing the
+    ;; records leaves every one of those pairs unequal, so the count byte has no
+    ;; witness among them. Only an exact value pins the whole record layout --
+    ;; the count, the name/width/initial order within a record, and the record
+    ;; order between them.
+    (harness-case "the IR fingerprint of a two-field machine is the measured golden value"
+      (lambda ()
+        (check-equal "fingerprint"
+                     (normal-machine-fingerprint
+                      (normalize (one-byte/fields (list (make-uint-field 'count 8 0 #f)
+                                                        (make-uint-field 'limit 16 65535 #f)))))
+                     5570336114768739383)))
+    (harness-case "filling the reservation does not move a zero-field fingerprint"
+      (lambda ()
+        (check-equal "unmoved" (normal-machine-fingerprint (normalize (one-byte/fields '())))
+                     14095574568398596535)))))
+
 ;; Entry is the second node; the dispatch node lists byte 5 before byte 2.
 (define two
   (make-machine 'two 'go '() '() '() (list eof-decl rej-decl)

@@ -332,4 +332,92 @@
           (check "node?" (node? n))
           (check-equal "node-name" (node-name n) 'seq))))))
 
+;; Milestone 4 Slice ①b task 1: the uint field descriptor (§9.1:283, §10.2:488-491).
+;; Validation is decision 0020's CONSTRUCTOR half -- closed-set membership and
+;; the local shape of the one value being built -- so these are contract
+;; violations, never diagnostics: a machine whose field failed construction
+;; never exists, and re-checking any of them in the verifier would ship an arm
+;; no public API can reach (0020's one-rejection-site rule).
+(harness-group "uint field descriptors"
+  (lambda ()
+    (harness-case "a field carries its four parts"
+      (lambda ()
+        (let ((f (make-uint-field 'count 16 7 'the-label)))
+          (check "predicate" (uint-field? f))
+          (check-equal "name" (uint-field-name f) 'count)
+          (check-equal "width" (uint-field-width f) 16)
+          (check-equal "initial" (uint-field-initial f) 7)
+          (check-equal "label" (uint-field-source-label f) 'the-label))))
+    (harness-case "the predicate refuses everything else"
+      (lambda ()
+        (check "not a symbol" (not (uint-field? 'count)))
+        (check "not a vector" (not (uint-field? (vector 'count 8 0 #f))))
+        (check "not an error declaration"
+               (not (uint-field? (make-error-declaration 'e 'c "r" #f))))))
+    (harness-case "the width set is closed at 8, 16, 32 and 64"
+      (lambda ()
+        ;; Sentinel over OBSERVED constructions, not over the list this case
+        ;; wrote: a loop that never ran would otherwise pass vacuously.
+        (let ((built 0))
+          (for-each (lambda (w)
+                      (set! built (+ built 1))
+                      (check-equal (string-append "width " (number->string w))
+                                   (uint-field-width (make-uint-field 'f w 0 #f)) w))
+                    '(8 16 32 64))
+          (check-equal "four widths built" built 4))
+        (for-each (lambda (w)
+                    (check-raises "refused" (contract-violation? 'make-uint-field 'width)
+                                  (lambda () (make-uint-field 'f w 0 #f))))
+                  '(0 1 7 9 24 63 65 128))))
+    (harness-case "the initial is an exact integer inside the declared width"
+      (lambda ()
+        ;; §25:1568's DECLARATION-time share, at every width: 0 and 2^w-1
+        ;; accepted, 2^w rejected. The u64 row runs at 2^64-1, which is above
+        ;; (greatest-fixnum) = 2^60-1 on the only supported runtime -- a matrix
+        ;; that stops at u32 says nothing about bignums.
+        (let ((checked 0))
+          (for-each
+           (lambda (w)
+             (set! checked (+ checked 1))
+             (let ((top (- (expt 2 w) 1)))
+               (check-equal (string-append "zero at " (number->string w))
+                            (uint-field-initial (make-uint-field 'f w 0 #f)) 0)
+               (check-equal (string-append "max at " (number->string w))
+                            (uint-field-initial (make-uint-field 'f w top #f)) top)
+               (check-raises "over the top"
+                             (contract-violation? 'make-uint-field 'initial)
+                             (lambda () (make-uint-field 'f w (+ top 1) #f)))
+               (check-raises "negative"
+                             (contract-violation? 'make-uint-field 'initial)
+                             (lambda () (make-uint-field 'f w -1 #f)))))
+           '(8 16 32 64))
+          (check-equal "four widths checked" checked 4))
+        (check-raises "inexact" (contract-violation? 'make-uint-field 'initial)
+                      (lambda () (make-uint-field 'f 8 1.0 #f)))
+        (check-raises "not a number" (contract-violation? 'make-uint-field 'initial)
+                      (lambda () (make-uint-field 'f 8 'seven #f)))))
+    (harness-case "the name must be a symbol"
+      (lambda ()
+        (check-raises "string" (contract-violation? 'make-uint-field 'name)
+                      (lambda () (make-uint-field "count" 8 0 #f)))))))
+
+(harness-group "the machine guard over fields"
+  (lambda ()
+    (harness-case "a machine accepts a list of field descriptors"
+      (lambda ()
+        (let ((m (make-machine 'm 'stop (list (make-uint-field 'count 8 0 #f))
+                               '() '() (list (make-error-declaration 'e 'c "r" #f))
+                               (list (make-stop-node 'stop #f)) 'e #f)))
+          (check-equal "one field" (length (machine-fields m)) 1))))
+    (harness-case "and refuses a list of anything else"
+      (lambda ()
+        ;; This guard is what makes the descriptor load-bearing. Before it,
+        ;; make-machine checked only list? over the collections, so a machine
+        ;; could carry (junk 42 "string") as its fields and nothing noticed.
+        (check-raises "junk fields" (contract-violation? 'make-machine 'fields)
+                      (lambda ()
+                        (make-machine 'm 'stop (list 'junk 42) '() '()
+                                      (list (make-error-declaration 'e 'c "r" #f))
+                                      (list (make-stop-node 'stop #f)) 'e #f)))))))
+
 (harness-finish)

@@ -20,6 +20,10 @@
 (define (machine* name nodes eof-name)
   (make-machine name 'start '() '() '() errs nodes eof-name #f))
 (define (machine nodes) (machine* 'one-byte nodes 'default-eof))
+;; Slice ①b task 4: a one-byte machine carrying a caller-supplied field list.
+(define (machine-with-fields fs)
+  (make-machine 'one-byte 'start fs '() '() errs
+                (one-byte-nodes (make-edge 'reject 'reexecute)) 'default-eof #f))
 ;; Slice ①a task 1: a one-byte machine carrying a caller-supplied error-declaration
 ;; list, so a reason can be varied without touching the shipped `errs`.
 (define (machine-errs* ds nodes . eof-name)
@@ -30,6 +34,11 @@
                  (one-byte-nodes (make-edge 'reject 'reexecute))))
 
 (define (codes m) (map diagnostic-code (verification-diagnostics (verify-machine m))))
+;; Slice ①b: the `node` slot of each diagnostic, so a decision that says WHICH
+;; name a diagnostic carries can be asserted rather than described. `codes`
+;; alone is blind to it, which is how both field diagnostics shipped with their
+;; "carries the offending field name" decision unwitnessed.
+(define (nodes-of m) (map diagnostic-node (verification-diagnostics (verify-machine m))))
 (define (has-code? m code) (and (memq code (codes m)) #t))
 
 (harness-group "the valid one-byte machine"
@@ -151,6 +160,109 @@
                            'Default-Eof)))
           (check-equal "one finding" (length ds) 1)
           (check-equal "invalid-name" (car ds) 'invalid-name))))
+    ;; Milestone 4 Slice ①b task 4: pass-fields, declaration half (§16.3:924
+    ;; item 6). It carries the RELATIONAL checks decision 0020 assigns to the
+    ;; verifier -- duplicate field names and portable field names -- and nothing
+    ;; else. Widths and initial ranges are closed at construction, so a machine
+    ;; whose field failed them never exists and a verifier arm for either would
+    ;; be dead code (0020's one-rejection-site rule).
+    (harness-case "two fields sharing a name is invalid-field-declaration"
+      (lambda ()
+        ;; This is the defect the pass exists to close, and it verifies CLEAN
+        ;; without the pass: slot = declaration index, so two `count` fields take
+        ;; slots 0 and 1, after which parser-field-ref resolves the name through
+        ;; one map, answers with whichever it finds first, and orphans the other
+        ;; slot and its initial.
+        (let ((ds 'seed))
+          (set! ds (codes (machine-with-fields
+                           (list (make-uint-field 'count 8 0 #f)
+                                 (make-uint-field 'count 16 3 #f)))))
+          (check-equal "one finding" (length ds) 1)
+          (check-equal "invalid-field-declaration" (car ds) 'invalid-field-declaration))))
+    (harness-case "the duplicate diagnostic names the offending FIELD"
+      (lambda ()
+        ;; §0 D2 and verify.sls's own comment make this a decision -- the field
+        ;; name goes in the diagnostic's existing `node` slot, following
+        ;; duplicate-error-declaration and missing-target, which already put
+        ;; non-node symbols there. Asserted here because `codes` cannot see it.
+        (let ((ns 'seed))
+          (set! ns (nodes-of (machine-with-fields
+                              (list (make-uint-field 'count 8 0 #f)
+                                    (make-uint-field 'count 16 3 #f)))))
+          (check-equal "the field name" ns '(count)))))
+    (harness-case "a nonportable field name is invalid-field-declaration"
+      (lambda ()
+        (let ((ds 'seed))
+          (set! ds (codes (machine-with-fields (list (make-uint-field 'Count 8 0 #f)))))
+          (check-equal "one finding" (length ds) 1)
+          (check-equal "invalid-field-declaration" (car ds) 'invalid-field-declaration))))
+    (harness-case "the nonportable diagnostic names the offending FIELD"
+      (lambda ()
+        (let ((ns 'seed))
+          (set! ns (nodes-of (machine-with-fields (list (make-uint-field 'Count 8 0 #f)))))
+          (check-equal "the field name" ns '(Count)))))
+    (harness-case "distinct portable field names verify clean"
+      (lambda ()
+        ;; The premise for both cases above: without it they could pass because
+        ;; ANY field machine reddens.
+        ;;
+        ;; THREE fields, not two, and the count is load-bearing. The restrictive
+        ;; mutant of the portable check reports one diagnostic per field here,
+        ;; and this machine carries `errs` -- two declarations, two reasons -- so
+        ;; at two fields the mutant's whole record set was a SUBSET of the
+        ;; "reason repertoire rejects every reason" mutant's, which reddens the
+        ;; same case with the same 0-versus-2. Not a loose pin but a subsumed
+        ;; one: no record separated them, in either direction. A third field
+        ;; separates the two by construction (3 against 2) and is the smallest
+        ;; change that does. Measured, in both directions, by Task 4's Pass 33
+        ;; sweep.
+        (let ((ds 'seed))
+          (set! ds (codes (machine-with-fields
+                           (list (make-uint-field 'count 8 0 #f)
+                                 (make-uint-field 'limit 16 3 #f)
+                                 (make-uint-field 'seen 32 0 #f)))))
+          (check-equal "no diagnostics" (length ds) 0))))
+    ;; Milestone 4 Slice ①b task 3: §16.2:884's unsupported-IR-version half,
+    ;; listed since Milestone 1 and unimplemented until now.
+    ;;
+    ;; The design (§6 task 3) said no external test could reach this arm --
+    ;; "machine-tag is a freshly allocated, unexported vector compared with eq?,
+    ;; so a test cannot forge a machine? object" -- and on that ground told the
+    ;; implementer to declare the permissive direction EXPECT_SURVIVES. That was
+    ;; measured false before this slice began. Descriptors are bare R6RS vectors
+    ;; with no opacity, so (vector-ref m 0) yields the tag using an (rnrs)
+    ;; primitive and no private import.
+    ;;
+    ;; This is a TEST-ONLY device. It reaches through the representation on
+    ;; purpose, because make-machine stamps the version as a constant and §9.1's
+    ;; fixed arity gives the public API no way to produce a wrong one -- so this
+    ;; is the only thing that can witness the check. Confined to these two cases.
+    (harness-case "a machine carrying an unsupported IR version is invalid-shape"
+      (lambda ()
+        (let* ((good (machine (one-byte-nodes (make-edge 'reject 'reexecute))))
+               (forged (vector (vector-ref good 0) 99
+                               (vector-ref good 2) (vector-ref good 3)
+                               (vector-ref good 4) (vector-ref good 5)
+                               (vector-ref good 6) (vector-ref good 7)
+                               (vector-ref good 8) (vector-ref good 9)
+                               (vector-ref good 10))))
+          ;; The premise, asserted: if the representation ever changes so that
+          ;; the tag cannot be copied or the version leaves slot 1, the case
+          ;; below would pass vacuously -- reporting invalid-shape for "not a
+          ;; machine" rather than for the version -- instead of telling anyone
+          ;; the device broke. (machine? itself is private and does not come
+          ;; through the façade, so the premise is asserted structurally.)
+          (check "the tag was copied" (eq? (vector-ref forged 0) (vector-ref good 0)))
+          (check-equal "and the version is not the supported one"
+                       (vector-ref forged 1) 99)
+          (check "unsupported version is reported" (has-code? forged 'invalid-shape)))))
+    (harness-case "a machine at the supported IR version is not reported"
+      (lambda ()
+        ;; The other direction, and the one that fails if the supported constant
+        ;; is mutated: every shipped fixture becomes unsupported at once.
+        (let ((ds 'seed))
+          (set! ds (codes (machine (one-byte-nodes (make-edge 'reject 'reexecute)))))
+          (check-equal "no diagnostics" (length ds) 0))))
     (harness-case "a non-machine handed to verify-machine is invalid-shape"
       (lambda ()
         (check "invalid-shape" (has-code? 'not-a-machine 'invalid-shape))))

@@ -22,13 +22,23 @@ task inside Slice ② rather than a slice of its own.
 > false it is corrected in place and marked at the site, because a false
 > instruction is a landmine rather than evidence (AGENTS.md).
 >
-> - **2026-09-02 (Slice ①a whole-branch review)** — **open question against
->   §5's error-table design**: the emitted `errs` table is per *declaration*
->   while the encoding carries only *reached* declarations, so two machines the
->   IR fingerprint calls identical emit different bytes. Measured, not fixed;
->   the impact and two candidate resolutions are recorded on [decision
->   0022](../decisions/0022-structured-parser-error-record.md)'s foot, since
->   resolving it changes that record's item 7. **Cheapest before Slice ①b.**
+> - **2026-09-02 (Slice ①b planning)** — **amends §6 task 3**: its stated trap —
+>   "no external test can reach the new arm … a test cannot forge a `machine?`
+>   object" — is false, measured. Descriptors are bare R6RS vectors, so
+>   `(vector-ref m 0)` steals the tag and a forged machine with a wrong IR
+>   version verifies clean; `(vector-set! m 1 42)` on a real one does too. The
+>   check is witnessable in **both** directions and the prescribed
+>   `EXPECT_SURVIVES` must not be written. §6's exit-evidence count of "two
+>   `EXPECT_SURVIVES` additions" drops to one. Every other number in §6's exit
+>   evidence is pre-①a; Slice ①b's plan §0b re-derives them.
+> - **2026-09-02 (before Slice ①b)** — **§5's error table is per *reached*
+>   declaration**: the emitted `errs` table carried every declaration while the
+>   encoding carries only reached ones, so two machines the IR fingerprint called
+>   identical emitted different bytes. Raised by Slice ①a's whole-branch review
+>   and resolved before ①b on timing, since 0019 point 5 makes the golden it
+>   moves a STOP condition for later slices. [Decision
+>   0022](../decisions/0022-structured-parser-error-record.md) item 7 is amended
+>   and carries the measurement.
 > - **2026-09-01 (Slice ①a planning)** — **amends §5 and §6**: ten findings from
 >   writing Slice ①a's plan against the tree at `c3ceec2`, including a three-way
 >   contradiction about `reserved-member-3`, a pin whose stated cause of death is
@@ -1015,7 +1025,10 @@ Tasks, in an order where each step's gate is what makes the next one safe:
    `byte-machine.unit.graph.chez.{source,aot}` builds a field-declaring machine
    importing nothing but `(byte-machine graph)`.**
 3. **`pass-schema`'s unsupported-IR-version check (§16.2:884, §4.7 item 3) — and
-   the observability trap it hides.** `machine-ir-version` is stamped as the
+   the observability trap it hides.** *(**Amended 2026-09-02** — the trap does
+   not exist and the `EXPECT_SURVIVES` this item prescribes must not be written.
+   See the Amendments block above and Slice ①b's plan §0 D1, which carries the
+   measurement.)* `machine-ir-version` is stamped as the
    constant `1` (pre-slice, `ir.sls:351`, into machine slot 1 at `:365`) with
    **no accessor anywhere**: `rg -n 'machine-ir-version|ir-version' --glob
    '!docs/**'` returns exactly those two lines. `pass-schema` (pre-slice,
@@ -1095,8 +1108,11 @@ Tasks, in an order where each step's gate is what makes the next one safe:
    `normal-ir.sls`'s export list grows; `compile.sls`'s `(byte-machine private
    normal-ir)` import (pre-slice, `compile.sls:17`) is unqualified and needs no
    edit. **Gate: the five fingerprint literal sites and three goldens named
-   above are byte-identical to ①a's merged tree** — proved by `git diff --stat
-   <①a merge commit>..HEAD -- test/fixtures/` showing only *added* files, not by
+   above are byte-identical to `51fd5f3`** *(amended 2026-09-02 — Slice ①b: the
+   baseline was written as ①a's merged tree and is now `51fd5f3`, because commit
+   `51fd5f3` licensed a move of `generated-pause.golden.sls`; see decision 0019's
+   foot)* — proved by `git diff --stat 51fd5f3..HEAD -- test/fixtures/`
+   showing only *added* files, not by
    `git status`, which is blind to a golden re-baselined inside a branch commit
    (milestone-3-design.md:450-454). One new fingerprint is measured and recorded
    for this slice's own field-declaring fixture.
@@ -2121,9 +2137,12 @@ Scheme mutation suite green at its new `EXPECTED_PASSES`/`EXPECTED_MUTATIONS`
 by `git diff <base>..HEAD -- test/support/cmake/SchemeMutationSuite.cmake | grep
 -E '^[+-].*EXPECT_SURVIVES'` returning empty; and the three
 `normal-ir-tests.sps` IR fingerprints and all three committed goldens
-byte-identical **since Slice ①a's re-baseline** (`git diff --stat <①a>..HEAD --
+byte-identical **since `51fd5f3`** (`git diff --stat 51fd5f3..HEAD --
 test/fixtures/`, empty) — not since `main`, which ①a's format-version bump 1→2
-moved by design.
+moved by design. *(Amended 2026-09-02 — Slice ①b: this read "since Slice ①a's
+re-baseline"; commit `51fd5f3` licensed a move of `generated-pause.golden.sls`
+after that point, so an ①a-anchored diff reports a false positive. See decision
+0019's foot.)*
 
 ## Exit (full Milestone 4)
 
