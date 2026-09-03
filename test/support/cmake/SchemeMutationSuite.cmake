@@ -837,6 +837,10 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Whole-branch review: the verify pass gains THREE for the kind filters Slice
+# ③ did not widen -- two Criticals and one Important. Mutations become
+# 358 + 3 = 361.
+#
 # Slice ③ task 10: the member3-drift pass gains ONE -- the accumulate arm's
 # digit local, which the list reserved and nothing exercised. Mutations become
 # 357 + 1 = 358.
@@ -961,7 +965,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 50)
-set(EXPECTED_MUTATIONS 358)
+set(EXPECTED_MUTATIONS 361)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -4761,14 +4765,13 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a sequence case's byte edge into a finish terminal is not flagged (arm 6, :908)"
-  FIND [[       ;; :908 — a byte edge (case or fallback) into a finish terminal.
-       (apply append
-              (map (lambda (n)
-                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n))]]
-  REPLACE [[       ;; :908 — a byte edge (case or fallback) into a finish terminal.
-       (apply append
-              (map (lambda (n)
-                     (if (byte-dispatch-node? n)]]
+  FIND [[              (map (lambda (n)
+                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n)
+                             (integer-accumulate-node? n))
+                         (filter values]]
+  REPLACE [[              (map (lambda (n)
+                     (if (byte-dispatch-node? n)
+                         (filter values]]
   # Comparison-caught: with the filter narrowed back to byte-dispatch-only, a
   # sequence case whose target is a finish terminal is never inspected here,
   # so non-eof-into-finish never fires.
@@ -4835,17 +4838,12 @@ byte_machine_mutation(
   # check is unchanged, but the inner accessor-selecting `if` now reads
   # node-eof-target (see arm 2 above) instead of re-checking
   # byte-dispatch-node? a second time.
-  FIND [[       ;; :909 + the EOF-cycle check — walk each dispatch node's eof-target chain.
-       (apply append
-              (map (lambda (n)
-                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n))
+  FIND [[                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n)
+                             (integer-accumulate-node? n))
                          (let ((t (node-eof-target n)))
                            (if (symbol? t)
                                (case (eof-terminal m t)]]
-  REPLACE [[       ;; :909 + the EOF-cycle check — walk each dispatch node's eof-target chain.
-       (apply append
-              (map (lambda (n)
-                     (if (byte-dispatch-node? n)
+  REPLACE [[                     (if (byte-dispatch-node? n)
                          (let ((t (node-eof-target n)))
                            (if (symbol? t)
                                (case (eof-terminal m t)]]
@@ -5511,6 +5509,58 @@ byte_machine_mutation(
   # does.
   EXPECT_OUTPUT_MATCHES
     "two fields sharing a name is invalid-field-declaration: one finding -- expected 1, got 3.*distinct portable field names verify clean: no diagnostics -- expected 0, got 3")
+
+# --- Whole-branch review, 2026-09-03: the three kind filters Slice ③ did not
+# widen. Each is a hand-enumerated list of node kinds that `node-eof-target` and
+# `node-out-targets` were taught about and these were not, and each was written
+# with an EXPLICIT `else` or an implicit '() so that a missing kind is silent --
+# which is why nothing failed for a whole slice.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: eof-terminal's classify loses its accumulate arm and raises out of verification"
+  # The worst FAILURE MODE of the three, though not the worst consequence: this
+  # one raises, so a legal machine gets no verdict at all rather than a wrong
+  # one, and compile-machine raises with it. Caught by a case that asserts
+  # verify-machine RETURNS -- an ok?/diagnostics assertion cannot see a raise.
+  FIND [[                ((integer-accumulate-node? n)
+                 (dispatch-arm (integer-accumulate-node-eof-target n) path))
+                (else (assertion-violation 'eof-terminal]]
+  REPLACE [[                (else (assertion-violation 'eof-terminal]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "an EOF chain may reach an accumulate node at all: case raised")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the :909 EOF-chain walk stops admitting accumulate nodes"
+  # The worst CONSEQUENCE. parser-finish-op! records in its own comment that it
+  # carries no local cycle guard because it relies on these two checks, so
+  # without this filter arm a machine whose accumulate node names itself as its
+  # eof-target verifies with zero diagnostics and then loops forever in BOTH
+  # executors -- and one whose EOF chain reaches a stop terminal is accepted
+  # although eof-reachable-stop exists to reject exactly that.
+  FIND [[                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n)
+                             (integer-accumulate-node? n))
+                         (let ((t (node-eof-target n)))]]
+  REPLACE [[                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n))
+                         (let ((t (node-eof-target n)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an accumulate whose own EOF target is itself is an EOF zero-progress cycle: eof-zero-progress-cycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the :908 byte-edge-into-finish check stops admitting accumulate nodes"
+  # node-out-targets already yielded the accumulate node's three byte
+  # out-targets -- digit, non-digit and overflow -- and this filter simply never
+  # asked for them, so all three could target a finish terminal unchallenged.
+  FIND [[                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n)
+                             (integer-accumulate-node? n))
+                         (filter values]]
+  REPLACE [[                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n))
+                         (filter values]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "an accumulate BYTE edge into a finish terminal is rejected: non-eof-into-finish")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

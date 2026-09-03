@@ -711,6 +711,16 @@
                  (dispatch-arm (sequence-dispatch-node-eof-target n) path))
                 ((or (pause-node? n) (field-action-node? n) (field-branch-node? n))
                  (join-over (eof-successors n) path))
+                ;; *** Slice ③, added by the whole-branch review. *** An
+                ;; integer-accumulate node is a legal EOF target -- this slice
+                ;; taught `node-eof-target` to read one -- and it carries its own
+                ;; eof-target, so it classifies exactly as a dispatch does: hop,
+                ;; and let the walk decide. Without this arm every EOF chain that
+                ;; reached one fell into the `else` below and `verify-machine`
+                ;; RAISED instead of returning a verification result, on machines
+                ;; both executors already ran correctly.
+                ((integer-accumulate-node? n)
+                 (dispatch-arm (integer-accumulate-node-eof-target n) path))
                 (else (assertion-violation 'eof-terminal
                                            "no EOF classification for node kind" name)))))
       (walk start '())))
@@ -726,9 +736,15 @@
     (let ((nodes (machine-nodes m)))
       (append
        ;; :908 — a byte edge (case or fallback) into a finish terminal.
+       ;; Slice ③ adds `integer-accumulate-node?`: `node-out-targets` already
+       ;; yields its three BYTE out-targets (digit, non-digit, overflow), but
+       ;; this filter did not admit the kind, so none of the three was ever
+       ;; checked and an accumulate node whose digit target was a finish terminal
+       ;; verified with zero diagnostics. Found by the whole-branch review.
        (apply append
               (map (lambda (n)
-                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n))
+                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n)
+                             (integer-accumulate-node? n))
                          (filter values
                                  (map (lambda (t)
                                         (let ((tn (lookup nodes t)))
@@ -739,10 +755,19 @@
                                       (node-out-targets n)))
                          '()))
                    nodes))
-       ;; :909 + the EOF-cycle check — walk each dispatch node's eof-target chain.
+       ;; :909 + the EOF-cycle check — walk each INPUT-READING node's eof-target
+       ;; chain. Slice ③ adds `integer-accumulate-node?` here too, and this is the
+       ;; arm whose absence was worst: `parser-finish-op!` says in its own words
+       ;; that it carries no local cycle guard because it relies on these two
+       ;; checks, so an accumulate node whose eof-target was itself verified with
+       ;; zero diagnostics and then looped FOREVER in both executors, and one
+       ;; whose EOF chain reached a stop terminal was accepted although
+       ;; `eof-reachable-stop` exists to reject exactly that. Found by the
+       ;; whole-branch review; both shapes are now fixtures.
        (apply append
               (map (lambda (n)
-                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n))
+                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n)
+                             (integer-accumulate-node? n))
                          (let ((t (node-eof-target n)))
                            (if (symbol? t)
                                (case (eof-terminal m t)

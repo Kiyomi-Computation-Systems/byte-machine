@@ -1553,4 +1553,80 @@
                           'acc))))
           (check "no operand fault" (not (memq 'invalid-field-operand cs))))))))
 
+;; *** Whole-branch review, 2026-09-03: THREE kind filters Slice ③ did not widen.
+;; *** The slice taught `node-eof-target` and `node-out-targets` about the
+;; accumulate kind and stopped there. `eof-terminal`'s `classify` and both of
+;; `pass-eof-execution`'s filters still enumerated their kinds by hand, so an
+;; accumulate node was invisible to all three -- and every fixture above misses
+;; it by construction, because each declares `eof-target #f` and makes `acc` the
+;; entry, so no EOF chain in this file ever walks into one.
+;;
+;; This is the milestone's own lesson arriving a third time: a sweep re-judges
+;; the pins that exist and cannot notice a decision no pin names. The group below
+;; is one case per filter, and each is a machine both executors already ran
+;; correctly while the verifier either raised or waved it through.
+(define (acc-eof-machine acc-eof digit-target extra-nodes)
+  ;; The entry dispatch declares NO eof-target, so the accumulate node's own is
+  ;; the only one in the machine -- which is what makes these cases about the
+  ;; accumulate arm rather than about the dispatch arm beside it.
+  (acc-machine
+   (append
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 35)
+                                  (make-edge 'acc 'advance) #f))
+            (make-edge 'over 'reexecute) #f #f)
+          (make-integer-accumulate-node 'acc 'count 10 digit-target
+                                        (make-edge 'stop 'advance)
+                                        'over acc-eof #f)
+          (make-stop-node 'stop #f)
+          (make-error-node 'over 'rejected #f))
+    extra-nodes)
+   'start))
+
+(harness-group "the three kind filters an accumulate node was invisible to (Slice ③)"
+  (lambda ()
+    (harness-case "an EOF chain may reach an accumulate node at all"
+      (lambda ()
+        ;; The `classify` arm. Before it, this RAISED out of verification --
+        ;; `verify-machine` never returned, so the machine had no verdict rather
+        ;; than a bad one, and `compile-machine` raised with it. Asserted as a
+        ;; clean verdict because the machine IS legal: both lanes already ran it.
+        (let* ((m (acc-machine
+                   (list (make-byte-dispatch-node 'start
+                           (list (make-byte-case (make-exact-byte-matcher 35)
+                                                 (make-edge 'acc 'advance) #f))
+                           (make-edge 'over 'reexecute) 'acc #f)
+                         (make-integer-accumulate-node 'acc 'count 10 'acc
+                                                       (make-edge 'stop 'advance)
+                                                       'over 'fin #f)
+                         (make-finish-node 'fin #f)
+                         (make-stop-node 'stop #f)
+                         (make-error-node 'over 'rejected #f))
+                   'start))
+               (v (verify-machine m)))
+          (check "returns a verdict rather than raising" (verification-ok? v))
+          (check-equal "with no diagnostics" (length (verification-diagnostics v)) 0))))
+    (harness-case "an accumulate whose own EOF target is itself is an EOF zero-progress cycle"
+      (lambda ()
+        ;; §16.2:909. This is the worst of the three: `parser-finish-op!` says in
+        ;; its own comment that it carries no local cycle guard because it relies
+        ;; on this check, so before the fix this machine verified with ZERO
+        ;; diagnostics and then looped forever in BOTH executors.
+        (let ((cs (codes (acc-eof-machine 'acc 'acc '()))))
+          (check "eof-zero-progress-cycle" (memq 'eof-zero-progress-cycle cs)))))
+    (harness-case "an accumulate whose own EOF chain reaches a stop terminal is rejected"
+      (lambda ()
+        ;; The other half of the same filter, and a different verdict: the walk
+        ;; must classify the chain, not merely detect that it cycles.
+        (let ((cs (codes (acc-eof-machine 'stop 'acc '()))))
+          (check "eof-reachable-stop" (memq 'eof-reachable-stop cs)))))
+    (harness-case "an accumulate BYTE edge into a finish terminal is rejected"
+      (lambda ()
+        ;; §16.2:908, and the third filter. `node-out-targets` already yielded
+        ;; the accumulate node's three byte out-targets; nothing looked at them.
+        ;; The digit target is used here because it is the arm a digit takes on
+        ;; every accepted byte -- the least exotic of the three.
+        (let ((cs (codes (acc-eof-machine #f 'fin (list (make-finish-node 'fin #f))))))
+          (check "non-eof-into-finish" (memq 'non-eof-into-finish cs)))))))
+
 (harness-finish)
