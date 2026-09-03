@@ -580,7 +580,10 @@ byte_machine_add_scheme_lane(
 # mechanism, for the same reason, as BYTE_MACHINE_FINGERPRINT_SAMPLE. Pass 49
 # (Slice ③, the sequence golden) adds the third variable for the same reason;
 # without it that pass's BASELINE fails, and a failing baseline reads as a
-# mutation defect rather than as the missing environment it is.
+# mutation defect rather than as the missing environment it is. Milestone 4
+# Slice ③'s accumulate golden adds the fourth, before its pass exists rather
+# than after: the failure mode is a red BASELINE that names neither the variable
+# nor the lane, and it is the same failure every time.
 if(BYTE_MACHINE_CHEZ_EXECUTABLE)
   byte_machine_add_test(
     NAME byte-machine.harness.scheme-mutation.cmake.direct
@@ -592,7 +595,8 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
     ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source"
                 "BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin"
                 "BYTE_MACHINE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-one-byte.golden.sls"
-                "BYTE_MACHINE_HTTP_VERSION_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-http-version.golden.sls")
+                "BYTE_MACHINE_HTTP_VERSION_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-http-version.golden.sls"
+                "BYTE_MACHINE_ACCUMULATE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-accumulate.golden.sls")
 endif()
 
 # --- Provenance ------------------------------------------------------------
@@ -1323,6 +1327,37 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/determinism-pause-tests.sps"
   TIMEOUT 120
   ENVIRONMENT "BYTE_MACHINE_PAUSE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-pause.golden.sls")
+
+# --- Milestone 4 Slice ③: determinism against a committed golden (accumulate) -
+# The FOURTH golden, and the reason §8's "an empty test/fixtures diff" was
+# reworded rather than obeyed: an integer-accumulate node renders an arm no
+# existing golden contains -- three disjoint digit ranges, a checked multiply-add
+# and two distinct EOF routes -- so a determinism claim that excluded it would be
+# a claim about the other three machines. Like the pause and sequence lanes this
+# program imports its machine from a harness library, so both lanes list
+# accumulate-machine.sls in SOURCES: the aot lane resolves libraries only through
+# objects compiled from its own SOURCES.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.determinism.accumulate.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/determinism-accumulate-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/accumulate-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/determinism-accumulate-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_ACCUMULATE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-accumulate.golden.sls")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.determinism.accumulate.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/determinism-accumulate-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/accumulate-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/determinism-accumulate-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_ACCUMULATE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-accumulate.golden.sls")
 
 # --- Milestone 3 Slice ③: determinism against a committed golden (sequence) ---
 # The third golden. Unlike the one-byte and pause goldens, this machine has a

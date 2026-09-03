@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FORTY-NINE PASSES, BECAUSE FORTY-NINE DIFFERENT WITNESSES ARE NEEDED
+# FIFTY PASSES, BECAUSE FIFTY DIFFERENT WITNESSES ARE NEEDED
 # (46 through Milestone 3; Milestone 4 Slice ①a adds the member-3 drift
 # guard and the position-kind lane, and Slice ①b the field-access lane -- since
 # renamed byte-machine.differential.field, the only lane in which the field
@@ -161,7 +161,7 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "FORTY-EIGHT PASSES..." above. Declared here, rather than only in prose,
+# See "FIFTY PASSES..." above. Declared here, rather than only in prose,
 # so the count enforced at the bottom of this file is the same text a reader
 # checks by eye at the top -- one number to keep in sync, not two that can
 # quietly disagree. 25 passes / 60 mutations before the aot task; pass 26 adds
@@ -837,6 +837,10 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Slice ③ task 9: a NEW pass (50) for the accumulate determinism lane and its
+# fourth golden, carrying ONE mutation no behavioural lane can catch.
+# Passes become 49 + 1 = 50; mutations 356 + 1 = 357.
+#
 # Slice ③ task 8: the property pass gains TWO for the accumulate draw, and the
 # differential.field pass ONE for the emitter defect that draw uncovered.
 # Mutations become 353 + 3 = 356.
@@ -952,8 +956,8 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 356)
+set(EXPECTED_PASSES 50)
+set(EXPECTED_MUTATIONS 357)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -9111,9 +9115,44 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
+# --- Slice ③ task 9: the accumulate determinism lane (pass 50) ---------------
+#
+# A pass of its own because the verify command is a different program, and the
+# ONE mutation in it is one no behavioural lane can catch: it reorders the two
+# uppercase/lowercase arms of the emitted base 16 digit `cond`. The ranges are
+# disjoint, so every input decodes to the same digit and every differential,
+# property and position-kind lane passes -- the emitted BYTES change, and the
+# committed golden is the only thing that looks at those.
+#
+# That is the whole argument for a fourth golden, made falsifiable. §8 asked for
+# this lane and for an empty test/fixtures diff in the same breath; this mutation
+# is why the lane won.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/determinism-accumulate-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.determinism.accumulate.chez.source
+  LABEL "compile: the emitted base 16 digit cond tries uppercase before lowercase"
+  FIND [[                            " ((and (>= b 97) (<= b 102)) (+ 10 (- b 97)))"
+                            " ((and (>= b 65) (<= b 70)) (+ 10 (- b 65)))"]]
+  REPLACE [[                            " ((and (>= b 65) (<= b 70)) (+ 10 (- b 65)))"
+                            " ((and (>= b 97) (<= b 102)) (+ 10 (- b 97)))"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the emitted bytes equal the committed golden: golden")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FORTY-EIGHT PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FIFTY PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

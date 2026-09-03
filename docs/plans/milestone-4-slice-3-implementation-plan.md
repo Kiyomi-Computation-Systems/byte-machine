@@ -333,8 +333,27 @@ directions, then the gate.
   Three mutations: the pinned edge's mode, the field initial (25 is the only workable value), and
   the emitter fix. `release` 92/92, 49 passes / 356 mutations.
 
-- [ ] **Task 9 — The determinism lane and the fourth golden (D4).** Its own
-  `BYTE_MACHINE_*_GOLDEN_FILE` in the mutation-suite registration.
+- [x] **Task 9 — The determinism lane and the fourth golden (D4).**
+
+  `determinism.accumulate` in both lanes, over a new `(byte-machine test accumulate-machine)` —
+  **base 16**, so the golden carries the emitter's three-range digit arm rather than base 10's
+  one-range fast path, and **both EOF routes**, because the defect Task 8 found lived exactly in
+  the difference between them.
+
+  **§8's "empty `test/fixtures` diff" loses.** The argument is made falsifiable rather than
+  asserted: pass 50's one mutation reorders the emitted uppercase and lowercase hex arms. The
+  ranges are disjoint, so every input decodes identically and every behavioural lane passes — the
+  bytes change, and the committed golden is the only thing that reads them.
+
+  D4's env-var warning is discharged **before** the pass existed, not after:
+  `BYTE_MACHINE_ACCUMULATE_GOLDEN_FILE` is in the mutation-suite registration, since the failure
+  mode is a red BASELINE that names neither the variable nor the lane.
+
+  *A new pass goes after the previous pass's `_run`, not before it* — `_reset()` placed first
+  discards the previous pass's accumulated mutations, and the totals check reports it as 33
+  missing declarations. Fixed; the totals check is what caught it.
+
+  `release` 94/94 (two new lanes), 50 passes / 357 mutations.
 
 - [ ] **Task 10 — Sweeps, the `differential.field` debt (H10), status surfaces, CHANGELOG, and
   the full-milestone Exit section (H13).** Milestone 4 closes here.
