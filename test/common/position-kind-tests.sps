@@ -10,9 +10,22 @@
 ;;;
 ;;; Milestone 4 splits the remaining rows between slices, and each is a ROW in
 ;;; this shipped table rather than a new mechanism: Slice ② owns `boundary`
-;;; after a zero-width hop (added, and pinned in both lanes), and Slice ③ owns
-;;; `byte` for the input-reading accumulate kind. §12.7:777 makes position kind
-;;; differential-compared, so a ③ that adds its row must add it for BOTH lanes.
+;;; after a zero-width hop, and Slice ③ owns `byte` for the input-reading
+;;; accumulate kind. §12.7:777 makes position kind differential-compared, so a
+;;; slice adding its row must add it for BOTH lanes.
+;;;
+;;; *** CORRECTED 2026-09-03. This paragraph said Slice ②'s row was "(added, and
+;;; pinned in both lanes)". IT WAS NOT. *** Slice ② changed only this comment --
+;;; `git diff f3b5558..14c4f30 -- test/common/position-kind-tests.sps` is six
+;;; lines and none of them is code. The `cases` table below still holds its
+;;; original three rows and the sentinels still read 3 and 6. ②'s only
+;;; position-kind assertion anywhere is in field-access-tests.sps, and it asserts
+;;; `eof` rather than `boundary` and drives the INTERPRETER ONLY.
+;;;
+;;; So Slice ③ is the first Milestone 4 slice to touch this table, and it has no
+;;; precedent here to copy -- it inherits a task, not a pattern. Left as a
+;;; correction rather than silently rewritten, because the false claim would
+;;; otherwise have been read as evidence that the work was done.
 ;;;   §12.7:771  `eof`       truncated input during finish!
 ;;;
 ;;; Two rows of that table are NOT producible here and this lane does not
