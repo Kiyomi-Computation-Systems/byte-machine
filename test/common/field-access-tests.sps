@@ -467,4 +467,108 @@
                        (parser-field-ref (make-parser ref '() #f) 'hi)
                        18446744073709551615))))))
 
+
+;; *** COVERAGE GAP found by Slice ②'s whole-branch review, and closed here. ***
+;;
+;; The design says the seven operations and seven predicates are written TWICE on
+;; purpose (§18:970-972) and that the interpreter≡generated differential is what
+;; catches a divergence -- "the single class of defect this milestone
+;; introduces". But a differential only compares what a fixture EXERCISES, and
+;; before this group six of the fourteen appeared in no fixture at all:
+;; `clear-mask`, `equal`, `nonzero`, `mask-any`, `mask-all` and `mask-none`.
+;;
+;; Measured, not inferred: inverting the EMITTER's `mask-none` alone -- so that
+;; the two lanes compute opposite answers -- left every one of the 92 lanes at
+;; status 0. Two independent implementations, silently disagreeing.
+;;
+;; One byte per operation and one per predicate, all fourteen, driven through
+;; BOTH executors. The values are chosen so that no operation overflows: this
+;; group is about AGREEMENT, and the bound checks are the matrix group's job.
+(define cov-initial 12)
+(define (cov-marker nm k) (make-field-action-node nm 'set-mask (list 'seen k) 'start #f #f))
+(define cov-machine
+  (make-machine 'cov 'start
+    (list (make-uint-field 'f 8 cov-initial #f) (make-uint-field 'seen 8 0 #f))
+    '() '() (list eof-decl rej-decl)
+    (append
+     (list (make-byte-dispatch-node 'start
+             (map (lambda (i n)
+                    (make-byte-case (make-exact-byte-matcher i) (make-edge n 'advance) #f))
+                  '(0 1 2 3 4 5 6 7 8 9 10 11 12 13)
+                  '(o-store o-clear o-inc o-dec o-add o-set o-clr
+                    p-eq p-zero p-nz p-rng p-many p-mall p-mnone))
+             (make-edge 'reject 'reexecute) #f #f)
+           ;; The seven operations. store/clear/set-mask/clear-mask cannot fail,
+           ;; so the constructor forbids an error target on them; the other three
+           ;; require one.
+           (make-field-action-node 'o-store 'store '(f 200) 'start #f #f)
+           (make-field-action-node 'o-clear 'clear '(f) 'start #f #f)
+           (make-field-action-node 'o-inc 'increment '(f) 'start 'over #f)
+           (make-field-action-node 'o-dec 'decrement '(f) 'start 'over #f)
+           (make-field-action-node 'o-add 'add '(f 5) 'start 'over #f)
+           (make-field-action-node 'o-set 'set-mask '(f 129) 'start #f #f)
+           (make-field-action-node 'o-clr 'clear-mask '(f 8) 'start #f #f)
+           ;; The seven predicates, each routing to a shared pair of markers so
+           ;; the ARM TAKEN is observable as a value: true writes 1, false 2.
+           ;; *** The operands are chosen so each predicate is distinguishable
+           ;; from its SIBLINGS, not merely exercised. *** Measured: with
+           ;; `equal 12` on f=12 the answer is true, and an implementation that
+           ;; computed `nonzero` instead would also answer true -- the case would
+           ;; pass on the wrong predicate. `equal 99` is false where `nonzero` is
+           ;; true, so the two are separated. Same reasoning for `mask-all 14`
+           ;; below, which an implementation computing `mask-any` gets wrong;
+           ;; `mask-all 12` on f=12 does not separate them, and that mutation
+           ;; SURVIVED until this operand changed.
+           (make-field-branch-node 'p-eq 'equal '(f 99) 'yes 'no #f)
+           (make-field-branch-node 'p-zero 'zero '(f) 'yes 'no #f)
+           (make-field-branch-node 'p-nz 'nonzero '(f) 'yes 'no #f)
+           (make-field-branch-node 'p-rng 'range '(f 10 20) 'yes 'no #f)
+           (make-field-branch-node 'p-many 'mask-any '(f 4) 'yes 'no #f)
+           (make-field-branch-node 'p-mall 'mask-all '(f 14) 'yes 'no #f)
+           (make-field-branch-node 'p-mnone 'mask-none '(f 3) 'yes 'no #f)
+           (cov-marker 'yes 1)
+           (cov-marker 'no 2)
+           (make-error-node 'over 'rejected #f)
+           (make-error-node 'reject 'rejected #f)))
+    'default-eof #f))
+(define cov-ref (make-interpreted-machine (verify-machine cov-machine)))
+(define cov-gen (emit-and-load cov-machine 'cov 'cov-parser
+                               (string-append tmpdir "/generated-cov.sls")))
+
+(harness-group "all seven operations and all seven predicates, both lanes"
+  (lambda ()
+    (harness-case "every operation computes the same value in both lanes"
+      (lambda ()
+        ;; The expected values are stated, not merely compared across lanes: two
+        ;; lanes that are wrong in the SAME way would agree, and agreement bought
+        ;; that way is what this project has recorded as disarming its own test.
+        (let ((seen 0))
+          (for-each
+           (lambda (row)
+             (set! seen (+ seen 1))
+             (let* ((b (car row)) (want (cadr row)) (nm (caddr row))
+                    (a (feed-bytes cov-ref (list b))) (g (feed-bytes cov-gen (list b))))
+               (check-equal (string-append "interp " nm) (parser-field-ref a 'f) want)
+               (check-equal (string-append "gen " nm) (parser-field-ref g 'f) want)))
+           ;; f starts at 12.
+           '((0 200 "store") (1 0 "clear") (2 13 "increment") (3 11 "decrement")
+             (4 17 "add") (5 141 "set-mask") (6 4 "clear-mask")))
+          (check-equal "all seven operations" seen 7))))
+    (harness-case "every predicate takes the same arm in both lanes"
+      (lambda ()
+        ;; `seen` is 1 when the true arm ran and 2 when the false arm did, so an
+        ;; inverted predicate in EITHER lane is a different number here.
+        (let ((seen 0))
+          (for-each
+           (lambda (row)
+             (set! seen (+ seen 1))
+             (let* ((b (car row)) (want (cadr row)) (nm (caddr row))
+                    (a (feed-bytes cov-ref (list b))) (g (feed-bytes cov-gen (list b))))
+               (check-equal (string-append "interp " nm) (parser-field-ref a 'seen) want)
+               (check-equal (string-append "gen " nm) (parser-field-ref g 'seen) want)))
+           ;; f = 12 = #b1100.
+           '((7 2 "equal 99") (8 2 "zero") (9 1 "nonzero") (10 1 "range 10-20")
+             (11 1 "mask-any 4") (12 2 "mask-all 14") (13 1 "mask-none 3")))
+          (check-equal "all seven predicates" seen 7))))))
+
 (harness-finish)

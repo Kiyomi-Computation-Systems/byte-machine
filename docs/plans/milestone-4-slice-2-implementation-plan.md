@@ -453,6 +453,40 @@ stale brief. What ③ needs settled *now*, because ② will otherwise foreclose 
 
 ---
 
+### Whole-branch review — one Critical, found and fixed 2026-09-03
+
+**The multi-agent review could not run: all eight dimension agents died on API 529/500, twice,
+with `subagent_tokens: 0`** — rejected at launch. The empty `confirmed: []` it returned is *not*
+"no findings"; the journal held zero result lines. Reported as a non-run rather than a clean
+bill, and the highest-value dimension was then run by hand.
+
+**CRITICAL — six of the fourteen operations and predicates appeared in NO fixture at all**, so
+their two independent implementations were never compared: `clear-mask`, `equal`, `nonzero`,
+`mask-any`, `mask-all`, `mask-none`. The design says writing them twice is *"the single class of
+defect this milestone introduces"* and that the interpreter≡generated differential is what
+catches it — but a differential only compares what a fixture **exercises**.
+
+Measured, not inferred: **inverting the emitter's `mask-none` alone left all 92 lanes at status
+0.** Two independent implementations, silently disagreeing.
+
+Closed by a coverage group driving all fourteen through both lanes, one byte each, asserting
+**expected values** rather than only cross-lane agreement — two lanes wrong the same way would
+agree, and this project has recorded that shape of agreement as disarming its own test.
+
+**Two operands had to be chosen to separate a predicate from its siblings, not merely to
+exercise it.** With `mask-all 12` on `f=12`, an implementation computing `mask-any` answers
+correctly and the mutation **survived**; the operand is 14, where 12 has some mask bits but not
+all. Same for `equal 12` versus `nonzero` — now `equal 99`. All six previously-unexercised
+members are now caught in both lanes, verified one mutation at a time.
+
+Two mutations pin the group; the other twelve possible ones are not written because their
+records differ only in which row of the same loop reddens, so they would all resolve to the
+same two (case, check) pairs.
+
+`release` 92/92, 49 passes / 322 mutations, no golden moved.
+
+---
+
 ## Self-Review (run after all ten tasks)
 
 Whole-branch review before the closing ritual, on the pattern ①a and ①b used: dimensions in

@@ -18,6 +18,10 @@
 # banner as corrected to FORTY-NINE and it was not: the edit was in a batch that
 # aborted on an earlier assertion, and nothing failed, because nothing can. The
 # claim sat in a merged commit message for a slice and a half. Corrected here by
+# Slice ②'s whole-branch review: the differential.field pass gains TWO for the
+# operation/predicate coverage group -- see that group's own header. Passes stay
+# at 49 and mutations become 320 + 2 = 322.
+#
 # Slice ② task 10, which found it by running the check the commit claimed to
 # have run.)
 #
@@ -895,7 +899,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 320)
+set(EXPECTED_MUTATIONS 322)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -8430,6 +8434,45 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the operation matrix over every width \\(§25:1568, §25:1569\\)\\.overflow, underflow and success agree across widths and lanes: lifecycle u8 \\[2\\] -- expected ready, got error")
+
+# *** Slice ②'s whole-branch review found that SIX of the fourteen operations
+# and predicates appeared in no fixture at all -- clear-mask, equal, nonzero,
+# mask-any, mask-all and mask-none -- so their two independent implementations
+# were never compared. The design says writing them twice is "the single class
+# of defect this milestone introduces" and the differential is what catches it;
+# a differential only compares what a fixture EXERCISES. Measured: inverting the
+# EMITTER's mask-none alone left all 92 lanes at status 0. ***
+#
+# The coverage group closes it, and TWO mutations pin the group itself -- one per
+# lane, on a member that had no fixture before it. The other four are covered by
+# the same two checks and are not written separately: their record sets differ
+# only in which row of the same loop reddens, so a mutation per member would add
+# twelve pins that all resolve to the same two (case, check) pairs.
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted mask-none predicate is inverted"
+  # Previously unexercised in BOTH lanes. This is the exact mutation whose
+  # survival was the review's evidence: before the coverage group, it passed
+  # every lane in the tree.
+  FIND [[      ((mask-none) (string-append "(= 0 (bitwise-and v " (num a) "))"))]]
+  REPLACE [[      ((mask-none) (string-append "(not (= 0 (bitwise-and v " (num a) ")))"))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "every predicate takes the same arm in both lanes: gen mask-none 3 -- expected 1, got 2")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: mask-all is computed as mask-any"
+  # The INTERPRETER's half, and the reason the operands are chosen to separate
+  # each predicate from its siblings rather than merely to exercise it: with
+  # `mask-all 12` on f=12 this mutation answers correctly and SURVIVED. The
+  # operand is 14, where 12 has some of the mask bits but not all.
+  FIND [[                      ((mask-all) (= a (bitwise-and v a)))]]
+  REPLACE [[                      ((mask-all) (not (= 0 (bitwise-and v a))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "every predicate takes the same arm in both lanes: interp mask-all 14 -- expected 2, got 1")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
