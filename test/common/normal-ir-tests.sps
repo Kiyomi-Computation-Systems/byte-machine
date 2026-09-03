@@ -6,6 +6,7 @@
         (byte-machine test harness)
         (byte-machine test eof-machine)
         (byte-machine test pause-machine)
+        (byte-machine test sequence-node-machine)
         (byte-machine graph)
         (byte-machine verify)
         (byte-machine private normal-ir))
@@ -648,5 +649,45 @@
         ;; every shipped kind and none of them is written. Asserted at ①a's own
         ;; measured value rather than left to the goldens to notice.
         (check-equal "unmoved" (normal-machine-fingerprint n1) 14095574568398596535)))))
+
+
+;; *** Whole-branch review of Slice ②: every normalized state must be the LENGTH
+;; THIS FILE'S LAYOUT DECLARES, and one kind was not. ***
+;;
+;; Slice ② widened the vector from eight slots to eleven and missed `seq-state`,
+;; which builds every sequence-dispatch node's state. Sequence states carry kind
+;; `dispatch`, and the only readers of slots 8-10 are kind-guarded, so nothing
+;; reached one and all 92 lanes stayed green -- while four of the six states in
+;; the sequence-node fixture were three slots short of the declared layout.
+;;
+;; This case is TOTAL over the state kinds a fixture can produce, deliberately:
+;; a case naming one kind would have passed the whole time. It is the check that
+;; makes "the vector was widened" a fact rather than a claim, and the reason a
+;; later slice adding a kind cannot repeat the miss.
+(define (state-lengths m)
+  (let* ((ss (normal-machine-states (normalize m))))
+    (let loop ((i 0) (acc '()))
+      (if (>= i (vector-length ss)) (reverse acc)
+          (loop (+ i 1) (cons (vector-length (vector-ref ss i)) acc))))))
+
+(harness-group "every normalized state has the declared layout length"
+  (lambda ()
+    (harness-case "across every fixture and every state kind"
+      (lambda ()
+        ;; A sentinel over the OBSERVED count of states inspected, not over the
+        ;; number of fixtures: a fixture that lowered to zero states would
+        ;; otherwise contribute nothing and pass.
+        (let ((seen 0) (bad '()))
+          (for-each
+           (lambda (m)
+             (for-each (lambda (len)
+                         (set! seen (+ seen 1))
+                         (unless (= len 11) (set! bad (cons len bad))))
+                       (state-lengths m)))
+           (list one-byte two (make-eof-machine) (make-pause-machine)
+                 (make-sequence-node-machine)
+                 (action-machine '(count 7)) (branch-machine '(count 2 9))))
+          (check-equal "no state is the wrong length" bad '())
+          (check "every fixture contributed states" (> seen 20)))))))
 
 (harness-finish)

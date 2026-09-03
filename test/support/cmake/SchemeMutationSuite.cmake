@@ -18,6 +18,12 @@
 # banner as corrected to FORTY-NINE and it was not: the edit was in a batch that
 # aborted on an earlier assertion, and nothing failed, because nothing can. The
 # claim sat in a merged commit message for a slice and a half. Corrected here by
+# Slice ②'s whole-branch review, second finding: the normal-ir pass gains ONE for
+# the sequence-dispatch state's layout length -- see that mutation's own note.
+# There are EIGHT `(vector ns-tag ...)` literals in this normalizer, not the six
+# task 5 recorded, and the eighth is the one it missed. Mutations become 322 + 1
+# = 323.
+#
 # Slice ②'s whole-branch review: the differential.field pass gains TWO for the
 # operation/predicate coverage group -- see that group's own header. Passes stay
 # at 49 and mutations become 320 + 2 = 322.
@@ -899,7 +905,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 322)
+set(EXPECTED_MUTATIONS 323)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -5809,6 +5815,26 @@ byte_machine_mutation(
 # on a DISTINCT measured golden value, which is this file's shipped discipline
 # for a new encode arm: an inequality pair cannot see a dropped count or a
 # transposed pair, only a wrong value can.
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a sequence-dispatch state is not widened to the declared layout"
+  # *** The defect Slice ②'s whole-branch review found. *** The vector went from
+  # eight slots to eleven and `seq-state` -- which builds EVERY sequence-dispatch
+  # node's state -- was missed. The miss was invisible: sequence states carry
+  # kind `dispatch`, the only readers of slots 8-10 are kind-guarded, and all 92
+  # lanes stayed green while four of six states in the sequence-node fixture were
+  # three slots short of the layout this file declares.
+  #
+  # Its witness is deliberately TOTAL over the state kinds a fixture can produce.
+  # A case naming one kind would have passed throughout, which is why the miss
+  # survived task 5's own six mutations and its whole-pass sweep.
+  FIND [[                        (seq-eof-of n) (eof-reason-of (seq-eof-of n))
+                        #f #f #f))))]]
+  REPLACE [[                        (seq-eof-of n) (eof-reason-of (seq-eof-of n))))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "every normalized state has the declared layout length.across every fixture and every state kind: no state is the wrong length -- expected \\(\\), got \\(8 8 8 8\\)")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source

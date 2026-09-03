@@ -306,9 +306,18 @@
            (seq-state
             (lambda (n t ids id)
               (let ((mm (sequence-dispatch-node-mismatch n)))
+                ;; The three Slice ② slots, #f like every other kind that does
+                ;; not use them. MISSED when the vector was widened, and the
+                ;; miss was invisible: sequence states carry kind `dispatch`, so
+                ;; the only readers of slots 8-10 -- all kind-guarded -- never
+                ;; reach one, and every lane stayed green. What it left behind is
+                ;; a state SHORTER than the layout this file declares, so any
+                ;; totalising read over states raises on exactly these, and
+                ;; Slice ③'s accumulate is the next thing likely to add one.
                 (vector ns-tag 'dispatch id (trie-transitions t ids)
                         (cons (id-of (edge-target mm)) (edge-mode mm)) #f
-                        (seq-eof-of n) (eof-reason-of (seq-eof-of n))))))
+                        (seq-eof-of n) (eof-reason-of (seq-eof-of n))
+                        #f #f #f))))
            (declared
             (let loop ((ns nodes) (i 0) (acc '()))
               (if (null? ns) (reverse acc)

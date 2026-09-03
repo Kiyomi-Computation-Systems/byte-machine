@@ -487,6 +487,36 @@ same two (case, check) pairs.
 
 ---
 
+### Whole-branch review, second finding — the widening was incomplete
+
+**The multi-agent review failed three times**, all agents rejected at launch on API 529/500
+with `subagent_tokens: 0`; chunking to three concurrent agents did not help. Seven dimensions
+were then run by hand. `seams` found this.
+
+**IMPORTANT — `seq-state` was never widened.** Task 5 took the normalized state vector from
+eight slots to eleven and missed the literal that builds **every sequence-dispatch node's
+state**. Measured: four of the six states in the sequence-node fixture were three slots short
+of the layout this file declares.
+
+**Why it was invisible.** Sequence states carry kind `dispatch`, and the only readers of slots
+8–10 are kind-guarded, so nothing ever reached one — all 92 lanes stayed green through Task 5's
+six mutations *and* its 36-pin whole-pass sweep. What it left behind is a state shorter than the
+declared layout, so any totalising read over states raises on exactly these, and ③'s accumulate
+is the next thing likely to add one.
+
+**Two counts in Task 5's record were wrong.** There are **eight** `(vector ns-tag …)` literals
+in the normalizer, not the six the plan and commit both state — and the eighth is the one that
+was missed. The claim "six state literals move in this commit" was true of the six it edited
+and false as a census.
+
+The witness is deliberately **total over the state kinds a fixture can produce**: a case naming
+one kind would have passed throughout, which is exactly how the miss survived. Pinned.
+
+`release` 92/92, 49 passes / 323 mutations, no golden moved — the three slots are `#f` and are
+not encoded.
+
+---
+
 ## Self-Review (run after all ten tasks)
 
 Whole-branch review before the closing ritual, on the pattern ①a and ①b used: dimensions in
