@@ -9,6 +9,7 @@
 ;;; half untested and a generated-only lane the reverse.
 (import (rnrs) (rnrs eval)
         (only (chezscheme) load greatest-fixnum)
+        (rnrs bytevectors)
         (byte-machine test harness)
         (byte-machine private conditions)
         (byte-machine graph)
@@ -83,6 +84,113 @@
 
 (define cm-ref (make-interpreted-machine (verify-machine m)))
 (define cm-gen (emit-and-load m 'field-access 'field-access-parser genfile))
+
+;; --- Slice ② task 6+7: a machine that WRITES fields ---
+;; Byte 0 increments `count` and stops; byte 1 runs `count` up against its u8
+;; ceiling through a branch. This is the first fixture in the tree whose fields
+;; a parse actually changes, which is what makes the two obligations Slice ①b
+;; deferred witnessable at last.
+(define wm
+  (make-machine 'writer 'start
+    (list (make-uint-field 'count 8 254 #f) (make-uint-field 'seen 16 0 #f))
+    '() '() (list eof-decl rej-decl)
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 0) (make-edge 'bump 'advance) #f)
+                  (make-byte-case (make-exact-byte-matcher 1) (make-edge 'big 'advance) #f))
+            (make-edge 'reject 'reexecute) #f #f)
+          ;; increment can fail, so it carries an error target -- the constructor
+          ;; makes that mandatory.
+          (make-field-action-node 'bump 'increment '(count) 'note 'over #f)
+          (make-field-action-node 'note 'add '(seen 1) 'start 'over #f)
+          ;; Overflows from BELOW the ceiling: 254 + 10 = 264 > 255. Without this
+          ;; the only overflow in the fixture starts AT 255, where "leaves the
+          ;; prior value unchanged" and "clamps to the maximum" coincide -- and a
+          ;; mutant that clamps survives. Measured: it did.
+          (make-field-action-node 'big 'add '(count 10) 'start 'over #f)
+          (make-error-node 'over 'rejected #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+(define wm-ref (make-interpreted-machine (verify-machine wm)))
+
+(define (feed-bytes cm bs)
+  (let ((p (make-parser cm '() #f)))
+    (parser-feed! p (u8-list->bytevector bs) 0 (length bs))
+    p))
+
+(harness-group "fields a parse actually writes (Slice ②)"
+  (lambda ()
+    (harness-case "an increment commits into the parser's own storage"
+      (lambda ()
+        (let ((p (feed-bytes wm-ref '(0))))
+          (check-equal "count" (parser-field-ref p 'count) 255)
+          (check-equal "seen" (parser-field-ref p 'seen) 1))))
+    (harness-case "a failed operation leaves the prior value unchanged (§25:1569)"
+      (lambda ()
+        ;; 254 -> 255 on the first byte; the second increment overflows a u8 and
+        ;; must route to the error target WITHOUT writing. §10.6:568 and
+        ;; §15:870: overflow leaves the prior value alone.
+        (let ((p (feed-bytes wm-ref '(0 0))))
+          (check-equal "count held at its maximum" (parser-field-ref p 'count) 255)
+          (check-equal "lifecycle" (parser-lifecycle p) 'error))))
+    (harness-case "an overflow from BELOW the ceiling does not clamp"
+      (lambda ()
+        ;; §10.6:568 and §15:870 say the prior value is unchanged -- not
+        ;; saturated. 254 + 10 overflows a u8, and `count` must still read 254.
+        (let ((p (feed-bytes wm-ref '(1))))
+          (check-equal "unchanged, not clamped" (parser-field-ref p 'count) 254)
+          (check-equal "lifecycle" (parser-lifecycle p) 'error))))
+    (harness-case "the failure routes to the declared error target"
+      (lambda ()
+        (let* ((p (feed-bytes wm-ref '(0 0)))
+               (r (parser-feed! p (make-bytevector 0) 0 0)))
+          (check-equal "status" (parser-result-status r) 'error))))
+    (harness-case "a failure after a zero-width hop on an EOF chain reports eof, not boundary"
+      (lambda ()
+        ;; *** H7: the design never poses this, and §12.7:777 makes position kind
+        ;; differential-compared, so the two lanes disagreeing is a lane failure
+        ;; rather than a cosmetic one. *** The ruling: a zero-width step does not
+        ;; move the parser in the input, so `pk` is carried THROUGH. On an EOF
+        ;; chain it is already 'eof by the time the hop happens, and a failure
+        ;; reached one hop later is still at end of input -- resetting it to
+        ;; 'boundary would claim the parser is between bytes when there are none.
+        (let* ((m (make-machine 'eofw 'start (list (make-uint-field 'count 8 255 #f))
+                    '() '() (list eof-decl rej-decl)
+                    (list (make-byte-dispatch-node 'start
+                            (list (make-byte-case (make-exact-byte-matcher 0)
+                                                  (make-edge 'start 'advance) #f))
+                            (make-edge 'reject 'reexecute) 'bump #f)
+                          ;; `next` must NOT return to the chain: routed back to
+                          ;; `start` this is an EOF cycle, and the verifier
+                          ;; rejects it -- which is task 2 and task 3 working.
+                          (make-field-action-node 'bump 'increment '(count) 'done 'over #f)
+                          (make-finish-node 'done #f)
+                          (make-error-node 'over 'rejected #f)
+                          (make-error-node 'reject 'rejected #f))
+                    'default-eof #f))
+               (p (make-parser (make-interpreted-machine (verify-machine m)) '() #f))
+               (r (parser-finish! p)))
+          (check-equal "status" (parser-result-status r) 'error)
+          (check-equal "position kind"
+                       (parser-error-position-kind (parser-result-error r)) 'eof))))
+    ;; *** Slice ①b's DEFERRED isolation case, now writable. *** ①b declined it
+    ;; with a written reason -- parser-field-ref was read-only and nothing wrote
+    ;; a field, so two parsers sharing one vector and two holding their own were
+    ;; observationally identical. A writer exists now, so the case can fail.
+    (harness-case "two parsers from one compiled machine do not share field storage"
+      (lambda ()
+        (let ((a (feed-bytes wm-ref '(0))) (b (make-parser wm-ref '() #f)))
+          (check-equal "the one that fed" (parser-field-ref a 'count) 255)
+          (check-equal "the one that did not" (parser-field-ref b 'count) 254))))
+    ;; *** Slice ①b's parser-reset! EXPECT_SURVIVES, now closable. *** Its own
+    ;; reason names this exact condition: the restore becomes witnessable the
+    ;; moment a writer exists, and the mutation must be re-pinned in that commit.
+    (harness-case "parser-reset! restores a field a parse has CHANGED"
+      (lambda ()
+        (let ((p (feed-bytes wm-ref '(0))))
+          (check-equal "changed by the parse" (parser-field-ref p 'count) 255)
+          (parser-reset! p)
+          (check-equal "restored to the declared initial" (parser-field-ref p 'count) 254)
+          (check-equal "and the other field too" (parser-field-ref p 'seen) 0))))))
 
 ;; The zero-field control exists PER LANE. It was one interpreted machine shared
 ;; by both groups, so the case inside "parser-field-ref (generated)" ran the

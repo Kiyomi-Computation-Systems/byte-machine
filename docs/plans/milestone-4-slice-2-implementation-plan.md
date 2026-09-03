@@ -316,14 +316,36 @@ in both directions, then the gate. Tasks 1-3 are strictly ordered; 4-9 depend on
   each measured — the file's own discipline is that a new encode arm owes its own exact-value
   golden. Tag-collision mutation mirroring the shipped one.
 
-- [ ] **Task 6 — The op-message contract and the interpreter's arms (D2, H1).** The message
+- [x] **Tasks 6 and 7, in ONE commit — the op contract, the interpreter's arithmetic, the
+  runtime's zero-width arms, the first field WRITE, and ①b's two debts (D2, H6, H7, H8).**
+  Merged for the same reason ①b merged its 6 and 7: the op protocol has no observable until
+  the runtime drives it, so a task-6-only test could not fail.
+
+  `(op 'field-step node field-vector)` — **the op does the bound check and the commit; the
+  runtime only routes the target it answers.** D2's shape, and the one ③ reuses.
+
+  **Both of ①b's deferred obligations are discharged here, on ①b's own stated condition.**
+  The `parser-reset!` `EXPECT_SURVIVES` is deleted and re-declared as a pin, and the isolation
+  case ①b declined is written — a parse now changes a field, so both can fail. **Survivors back
+  to 10.**
+
+  **H7 answered and pinned: `pk` is carried through a zero-width hop, not reset.** A zero-width
+  step does not move the parser in the input, so a failure one hop later reports the kind it
+  would have reported without it; on an EOF chain that is `eof`, and resetting to `boundary`
+  would claim the parser is between bytes when there are none. §12.7:777 makes this
+  differential-compared, so it needed a ruling and a fixture, and the design poses neither.
+
+  *Two mutants survived their first fixture and drove new ones.* An overflow that **clamps to
+  the maximum** was invisible because the only overflow in the fixture started **at** the
+  ceiling, where "unchanged" and "clamped" coincide — an `add` overflowing from below it
+  separates them. And the finish-side `pk` had no witness until an EOF chain ran through a
+  field action that then failed. *The verifier also rejected my first EOF fixture as a cycle,
+  which is Tasks 2 and 3 doing their job.*
+
+  `release` 92/92, 49 passes / 311 mutations, **ten** `EXPECT_SURVIVES`, no golden moved. The message
   shape ③ will reuse: `(op '<kind> node <field-vector> …)`, op does check-and-commit. New
   `kind` answers. Enumerate every hand-written op-closure stub in the tree first — ①b's
   `'field-initials` broke all six in `runtime-tests.sps`, and the protocol has no default arm.
-
-- [ ] **Task 7 — The runtime: zero-width arms, the first field WRITE, and ①b's two debts
-  (H6, H7, H8).** Both op loops, two arguments per arm. **Closes the tenth `EXPECT_SURVIVES`
-  and adds the isolation case in this commit.** Decide and pin the `pk` question.
 
 - [ ] **Task 8 — The emitter (H2, H3, H5, D6).** `render-state-arm`'s fan-out; the width-bound
   argument threaded in one edit; `fieldv` wired from the reserved seventh parameter — and

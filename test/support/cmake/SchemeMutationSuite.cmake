@@ -796,6 +796,13 @@ cmake_minimum_required(VERSION 3.26)
 # Slice ①b's Critical fix wave: 271 -> 273. Two join Pass 33, both recovered from
 # task 4's unsound subsumption call.
 #
+# Slice ② tasks 6 and 7: the field-access (now differential.field) pass gains
+# FIVE -- three for the interpreter's checked arithmetic and two for the runtime's
+# zero-width arms -- and Slice ①b's `parser-reset!` EXPECT_SURVIVES is CLOSED and
+# re-declared as a pin, which is the reopening condition it wrote for itself.
+# Declared survivors go back to TEN. Passes stay at 49 and mutations become
+# 306 + 5 = 311.
+#
 # Slice ② task 5: the normal-ir pass gains SIX for the two zero-width kinds'
 # encoding -- the tag, the selector, the operand count, the operand kind tag, the
 # error-target presence tag, and the branch's false target. Each on its own
@@ -842,7 +849,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 306)
+set(EXPECTED_MUTATIONS 311)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -8170,10 +8177,89 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
   LABEL "runtime: parser-reset! does not restore the field values"
+  # *** CLOSED by Slice ② task 6+7, which is exactly the reopening condition the
+  # EXPECT_SURVIVES this replaces wrote for itself: "the same commit that gives
+  # fields a writer must delete this EXPECT_SURVIVES and pin the mutation, and
+  # the isolation case field-access-tests.sps declines for the same reason
+  # belongs there too." Both are done in that commit. ***
+  #
+  # Slice ①b could not witness this because parser-field-ref was read-only and
+  # nothing wrote a field, so slot 8 was constant for a parser's lifetime and
+  # restoring a constant is a no-op. A parse now changes it, and the difference
+  # between a reset that restores and one that does not is two numbers. The
+  # suite's declared survivors go back to TEN.
   FIND [[    (vector-set! parser 8 (initial-values (parser-field-decls parser)))))]]
   REPLACE [[    ))]]
-  EXPECT_SURVIVES
-    "measured, not assumed: this mutant passes the whole field-access lane unchanged. parser-field-ref is READ-ONLY by §13:801 and Slice ①b ships no writer at all, so slot 8 is constant for a parser's entire lifetime and restoring a constant is a no-op no caller can observe. The lane's reset case is not vacuous -- it fails against the initials mutation above, which is what proves reset reads the DECLARED values rather than zeros -- but it cannot separate a reset that restores from one that does not, because both leave the same numbers in place. The line is written NOW rather than deferred to Slice ② because ② adds the writer, and a ② that adds a field write without also adding the restore leaks one parse's field values into the next; the restore arriving first makes that a defect ② has to introduce rather than one it has to remember. Reopening condition: the same commit that gives fields a writer must delete this EXPECT_SURVIVES and pin the mutation, and the isolation case field-access-tests.sps declines for the same reason belongs there too.")
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "parser-reset! restores a field a parse has CHANGED: restored to the declared initial -- expected 254, got 255")
+
+# Slice ② tasks 6 and 7 add FIVE to this pass -- the first fixture in the tree
+# whose fields a parse actually changes, which is what makes them witnessable.
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: an overflowing field operation writes anyway"
+  # §25:1569 and §10.6:568: a failed operation leaves the prior value UNCHANGED,
+  # not saturated. This SURVIVED against the first fixture, whose only overflow
+  # started AT the ceiling -- where "unchanged" and "clamped to the maximum"
+  # coincide. An `add` that overflows from BELOW it separates them.
+  FIND [[              (field-action-node-error n))))]]
+  REPLACE [[              (begin (vector-set! fv slot m*) (field-action-node-error n)))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an overflow from BELOW the ceiling does not clamp: unchanged, not clamped -- expected 254, got 255")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: the field bound is never checked"
+  # The other direction: with no check the value simply exceeds its declared
+  # width and the error target is never reached.
+  FIND [[          (if (<= 0 r m*)]]
+  REPLACE [[          (if #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a failed operation leaves the prior value unchanged \\(§25:1569\\): count held at its maximum -- expected 255, got 256")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: increment does not increment"
+  # One arm of the operation table, standing for all seven: the arithmetic is
+  # written TWICE on purpose (§18:970-972) and this is the interpreter's copy.
+  FIND [[                    ((increment) (+ v 1))]]
+  REPLACE [[                    ((increment) v)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an increment commits into the parser's own storage: count -- expected 255, got 254")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "runtime: a zero-width step consumes a byte"
+  # Zero-width means zero-width: the loop must re-enter at the SAME pos. A
+  # zero-width node that advanced would silently eat the byte the next dispatch
+  # was going to read.
+  FIND [[               (parser-set-current! parser t)
+               (loop pos pk)))]]
+  REPLACE [[               (parser-set-current! parser t)
+               (loop (+ pos 1) pk)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the failure routes to the declared error target: status -- expected error, got need-input")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "runtime: a zero-width step resets the position kind"
+  # §12.7:777 makes position kind differential-compared, so the two lanes must
+  # agree. A zero-width step does not move the parser in the input, so the kind
+  # is carried THROUGH -- a failure reached after one reports what it would have
+  # reported without it.
+  FIND [[             (parser-set-current! parser t)
+             (loop t pk)))]]
+  REPLACE [[             (parser-set-current! parser t)
+             (loop t 'boundary)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a failure after a zero-width hop on an EOF chain reports eof, not boundary: position kind -- expected eof, got boundary")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
