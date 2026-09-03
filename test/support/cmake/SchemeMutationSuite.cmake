@@ -837,6 +837,9 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Slice ③ task 6: the differential.field pass gains TWO for the digit-range
+# bounds, one per lane. Mutations become 350 + 2 = 352.
+#
 # Slice ③ task 5: the differential.field pass gains ONE for the accumulate
 # arm's end-of-slice guard. The rest of the task is tests for INHERITED
 # behaviour -- see that mutation's own note. Mutations become 349 + 1 = 350.
@@ -941,7 +944,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 350)
+set(EXPECTED_MUTATIONS 352)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -8975,6 +8978,41 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "split-point fragmentation \\(Slice ③\\).a number split across a feed boundary accumulates whole: interpreter")
+
+# Slice ③ task 6 adds TWO -- one per lane, because the task's claim is about
+# both lanes agreeing and a mutation to only one of them is what that claim is
+# for. Each is an off-by-one at a digit-range BOUND, the defect the shipped
+# handful-of-digits fixtures structurally cannot see: they name `a`, `F` and `!`,
+# so the bytes that move when a bound slips by one are exactly the bytes they
+# never feed. Both are caught by task 6's group ALONE -- measured.
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: the base 16 lowercase digit range stops one short of f"
+  # 102 is `f`. No shipped fixture feeds it -- the base 16 lane's case uses `a`
+  # and `F` -- so this survives every other accumulate test in the tree. Caught
+  # twice over here: the all-256 comparison reports the divergent byte, and the
+  # partition SIZE drops 22 -> 21, which is the assertion cross-lane agreement
+  # cannot make (two lanes wrong together still agree).
+  FIND [[((and (>= byte 97) (<= byte 102)) (+ 10 (- byte 97)))]]
+  REPLACE [[((and (>= byte 97) (<= byte 101)) (+ 10 (- byte 97)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "base 16 partitions every byte identically in both lanes: no divergence -- expected none, got \\(102")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted base 10 digit range admits the colon"
+  # 58 is `:`, the byte immediately above `9`, and it decodes to 10 -- a digit
+  # worth exactly the base. The emitter is the mutated side here and the
+  # interpreter is untouched, so this is caught by the CROSS-LANE half of the
+  # partition rather than by any absolute count: the generated machine accepts a
+  # byte the interpreter rejects.
+  FIND [["(and (>= b 48) (<= b 57) (- b 48))"]]
+  REPLACE [["(and (>= b 48) (<= b 58) (- b 48))"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "base 10 partitions every byte identically in both lanes: no divergence -- expected none, got \\(58")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

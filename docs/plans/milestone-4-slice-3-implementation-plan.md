@@ -262,7 +262,20 @@ directions, then the gate.
 
   `release` 92/92, 49 passes / 350 mutations, no golden moved.
 
-- [ ] **Task 6 — Bases 10 and 16, all-256 partitions (H5).** The digit arm's shape is a decision.
+- [x] **Task 6 — Bases 10 and 16, all-256 partitions (H5).** The digit arm's shape is a decision.
+
+  Every byte 0-255 is fed to both bases in **both lanes**, and the two lanes must agree byte by
+  byte. Three assertions, because cross-lane agreement alone is not enough: the **partition size**
+  (10 and 22) is the check two lanes wrong *together* would still pass, and the **six ASCII
+  neighbours** of the three digit ranges — `/` `:` `@` `G` backtick `g` — are the bytes an
+  off-by-one moves. Sentinels read observed counts.
+
+  **Two mutations, one per lane**, because the claim is about the lanes agreeing. The interpreter's
+  base-16 lowercase bound stops one short of `f`; the emitter's base-10 bound admits `:` as a digit
+  worth exactly the base. Both were measured caught **by this group alone** — no shipped fixture
+  feeds either byte, so the bounds were unwitnessed before this task.
+
+  `release` 92/92, 49 passes / 352 mutations, no golden moved.
   Both lanes, every byte.
 
 - [ ] **Task 7 — The `byte` position row (H9).** New fixture, new row, two sentinel bumps, two

@@ -738,4 +738,73 @@
           (check-equal "position kind"
                        (parser-error-position-kind (parser-result-error r)) 'byte))))))
 
+
+;; Milestone 4 Slice ③ task 6: bases 10 and 16 over ALL 256 byte values, both
+;; lanes. The partition is the point -- every byte is either a digit for that
+;; base or it is not, and the two lanes must agree on which, byte by byte, with
+;; no byte untested. A fixture naming a handful of digits and a handful of
+;; delimiters cannot see a boundary error at `/`, `:`, `@`, `G` or `g`, which are
+;; the four ASCII neighbours of the three digit ranges.
+(define (byte-answer cm b)
+  ;; Feed exactly one byte and report (field . lifecycle): a digit accumulates
+  ;; and leaves the parser ready, a non-digit takes the fallback to `done`.
+  (let ((p (make-parser cm '() #f)))
+    (parser-feed! p (make-bytevector 1 b) 0 1)
+    (cons (parser-field-ref p 'n) (parser-lifecycle p))))
+
+(harness-group "all 256 bytes, both bases, both lanes (Slice ③)"
+  (lambda ()
+    (harness-case "base 10 partitions every byte identically in both lanes"
+      (lambda ()
+        ;; A sentinel over the OBSERVED count of bytes compared, and a single
+        ;; first-divergence report rather than 256 failures -- the shipped
+        ;; all-256 lanes' own idiom.
+        (let ((seen 0) (bad 'none))
+          (let loop ((b 0))
+            (when (< b 256)
+              (set! seen (+ seen 1))
+              (let ((a (byte-answer (car acc10) b)) (g (byte-answer (cdr acc10) b)))
+                (when (and (eq? bad 'none) (not (equal? a g))) (set! bad (list b a g))))
+              (loop (+ b 1))))
+          (check-equal "every byte compared" seen 256)
+          (check-equal "no divergence" bad 'none))))
+    (harness-case "base 16 partitions every byte identically in both lanes"
+      (lambda ()
+        (let ((seen 0) (bad 'none))
+          (let loop ((b 0))
+            (when (< b 256)
+              (set! seen (+ seen 1))
+              (let ((a (byte-answer (car acc16) b)) (g (byte-answer (cdr acc16) b)))
+                (when (and (eq? bad 'none) (not (equal? a g))) (set! bad (list b a g))))
+              (loop (+ b 1))))
+          (check-equal "every byte compared" seen 256)
+          (check-equal "no divergence" bad 'none))))
+    (harness-case "base 10 accepts exactly ten bytes, base 16 exactly twenty-two"
+      (lambda ()
+        ;; The partition's SIZE, which cross-lane agreement cannot see: two lanes
+        ;; that both accepted no bytes at all would agree perfectly.
+        (let ((n10 0) (n16 0))
+          (let loop ((b 0))
+            (when (< b 256)
+              (when (eq? (cdr (byte-answer (car acc10) b)) 'ready) (set! n10 (+ n10 1)))
+              (when (eq? (cdr (byte-answer (car acc16) b)) 'ready) (set! n16 (+ n16 1)))
+              (loop (+ b 1))))
+          (check-equal "base 10" n10 10)
+          (check-equal "base 16" n16 22))))
+    (harness-case "the four ASCII neighbours of the digit ranges are not digits"
+      (lambda ()
+        ;; `/` and `:` bracket 0-9; `@` and `G` bracket A-F; backtick and `g`
+        ;; bracket a-f. An off-by-one in any range bound moves exactly one of
+        ;; these, and the all-256 comparison above cannot see it because BOTH
+        ;; lanes would move together if the emitter and interpreter shared the
+        ;; error -- which they would, being written from the same reading.
+        (let ((seen 0))
+          (for-each (lambda (spec)
+                      (set! seen (+ seen 1))
+                      (check-equal (car spec)
+                                   (cdr (byte-answer (car acc16) (cadr spec)))
+                                   'stopped))
+                    '(("slash" 47) ("colon" 58) ("at" 64) ("G" 71) ("backtick" 96) ("g" 103)))
+          (check-equal "all six neighbours" seen 6))))))
+
 (harness-finish)
