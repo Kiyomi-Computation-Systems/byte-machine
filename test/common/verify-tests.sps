@@ -1339,4 +1339,108 @@
           (check "no eof cycle" (not (memq 'eof-zero-progress-cycle cs)))
           (check "no non-eof-into-finish" (not (memq 'non-eof-into-finish cs))))))))
 
+
+;; Milestone 4 Slice ② task 4: pass-fields' OPERAND half (§16.3:924 item 6,
+;; decision 0020 item 3). Everything here needs a SECOND object -- the field
+;; declaration -- which is exactly why none of it is a constructor contract, and
+;; why the constructor accepts every one of these nodes.
+(define (operand-machine node)
+  (make-machine 'm 'act (list (make-uint-field 'count 8 0 #f)) '() '()
+                (list eof-decl rej-decl)
+                (list node (make-stop-node 'next #f) (make-error-node 'oops 'rejected #f))
+                'default-eof #f))
+(define (operand-codes node)
+  (filter (lambda (c) (eq? c 'invalid-field-operand)) (codes (operand-machine node))))
+
+(harness-group "field operands (§16.3:924 item 6, operand half)"
+  (lambda ()
+    (harness-case "a well-formed operand list is clean"
+      (lambda ()
+        ;; The premise for every case below: without it they could all pass
+        ;; because ANY field node reports an operand fault.
+        (check-equal "none" (length (operand-codes
+                                     (make-field-action-node 'act 'store '(count 255) 'next #f #f)))
+                     0)))
+    (harness-case "wrong arity is invalid-field-operand"
+      (lambda ()
+        ;; The check the CONSTRUCTOR deliberately does not make -- 0020 item 2:
+        ;; nothing can be read out of `arguments` before arity is known.
+        (check-equal "too few" (length (operand-codes
+                                        (make-field-action-node 'act 'store '(count) 'next #f #f)))
+                     1)
+        (check-equal "too many" (length (operand-codes
+                                         (make-field-action-node 'act 'clear '(count 1) 'next #f #f)))
+                     1)))
+    (harness-case "an undeclared field is invalid-field-operand"
+      (lambda ()
+        (check-equal "one" (length (operand-codes
+                                    (make-field-action-node 'act 'clear '(nosuch) 'next #f #f)))
+                     1)))
+    (harness-case "a constant above the field's declared width is invalid-field-operand"
+      (lambda ()
+        ;; 255 is the u8 maximum and is accepted by the premise case above; 256
+        ;; is the first value that is not, so this pins the BOUNDARY and not
+        ;; merely that some large number is refused.
+        (check-equal "256" (length (operand-codes
+                                    (make-field-action-node 'act 'store '(count 256) 'next #f #f)))
+                     1)))
+    (harness-case "a mask above the declared width is invalid-field-operand"
+      (lambda ()
+        (check-equal "one" (length (operand-codes
+                                    (make-field-action-node 'act 'set-mask '(count 256) 'next #f #f)))
+                     1)))
+    (harness-case "the width checked is the REFERENCED field's, not some other field's"
+      (lambda ()
+        ;; Two fields of different widths: 256 is legal for `wide` and not for
+        ;; `count`. A check that used the first declaration, or any fixed width,
+        ;; passes the cases above and fails here.
+        (let* ((m (make-machine 'm 'act
+                                (list (make-uint-field 'count 8 0 #f)
+                                      (make-uint-field 'wide 16 0 #f))
+                                '() '() (list eof-decl rej-decl)
+                                (list (make-field-action-node 'act 'store '(wide 256) 'next #f #f)
+                                      (make-stop-node 'next #f))
+                                'default-eof #f))
+               (cs (filter (lambda (c) (eq? c 'invalid-field-operand)) (codes m))))
+          (check-equal "legal for the wide field" (length cs) 0))))
+    (harness-case "low > high for range is invalid-field-operand"
+      (lambda ()
+        ;; Decision 0020 item 2 names this as the consequence that will look
+        ;; wrong to a reader of 0017. The constructor accepts it -- asserted in
+        ;; ir-tests.sps -- and the verifier is where it is caught.
+        (check-equal "one" (length (operand-codes
+                                    (make-field-branch-node 'act 'range '(count 9 2) 'next 'next #f)))
+                     1)))
+    (harness-case "low = high for range is legal"
+      (lambda ()
+        ;; The boundary: the check is `low > high`, not `low >= high`.
+        (check-equal "none" (length (operand-codes
+                                     (make-field-branch-node 'act 'range '(count 5 5) 'next 'next #f)))
+                     0)))
+    (harness-case "an out-of-width range operand does not also report low > high"
+      (lambda ()
+        ;; A range whose operands are out of width would compare garbage; the
+        ;; low/high check is guarded on both being in range, so this reports the
+        ;; width fault once per bad operand and nothing else.
+        (check-equal "two width faults only"
+                     (length (operand-codes
+                              (make-field-branch-node 'act 'range '(count 300 299) 'next 'next #f)))
+                     2)))
+    (harness-case "every predicate's arity is enforced"
+      (lambda ()
+        ;; A loop with a sentinel over the observed count: the schema table is a
+        ;; closed enumeration, and naming three rows does not assert fourteen.
+        (let ((seen 0))
+          (for-each (lambda (row)
+                      (set! seen (+ seen 1))
+                      (check-equal (symbol->string (car row))
+                                   (length (operand-codes
+                                            (make-field-branch-node 'act (car row) (cadr row)
+                                                                    'next 'next #f)))
+                                   1))
+                    '((equal (count)) (zero (count 1)) (nonzero (count 1))
+                      (range (count 1)) (mask-any (count)) (mask-all (count))
+                      (mask-none (count))))
+          (check-equal "all seven predicates" seen 7))))))
+
 (harness-finish)

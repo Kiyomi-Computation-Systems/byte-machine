@@ -261,7 +261,33 @@ in both directions, then the gate. Tasks 1-3 are strictly ordered; 4-9 depend on
   permanently. **Row 14 is dropped** with its gap recorded and witnessed. Fixture proving
   `dispatch --advance--> field-action --next--> stop` verifies clean.
 
-- [ ] **Task 4 — `pass-fields`' operand half (D4).** Arity against the operation or predicate,
+- [x] **Task 4 — `pass-fields`' operand half (D4).**
+  Arity, the declared-field reference, `constant`/`mask` within the **referenced** field's
+  width, and `low <= high` — all of it relational, which is precisely why none of it is a
+  constructor contract. One code, `invalid-field-operand`, spending §4.6's remaining budget;
+  ③'s accumulate share reuses it with no new code. Inside `pass-fields`, per D4.
+
+  Eight mutations, ten cases. Two boundaries are pinned rather than assumed: **255 is legal for
+  a u8 and 256 is the first value that is not**, and the range test is `low > high`, not
+  `low >= high`. The width fixture declares **two** fields of different widths, so a check that
+  used the first declaration — or any fixed width — passes every other case and fails that one.
+
+  **Pass 33 whole-pass sweep, both directions: 70 pins, 4830 ordered pairs, 25 collisions,
+  every one a by-construction nesting and none unclassified.** The nestings run in chains —
+  `pass-fields never run` ⊃ `the operand half never run` ⊃ each individual check — and three
+  pins were tightened to conjunctions after the first sweep showed they owned no record:
+  extracting `zero-width-successors` in Task 3 made one arm feed three consumers, so each of
+  its records is shared with a mutant of one consumer and only the *pair* is its own.
+
+  *Two tooling findings. `EXPECT_OUTPUT_MATCHES` followed by a comment line before its string
+  is valid CMake but invisible to a by-block parser, so three pins silently went unjudged by
+  the sweep while the suite stayed green — comments now sit above the keyword. And the arity
+  mutation's own signature is a `caddr` raise, which is the decision's stated reason made
+  visible: 0020 item 2 puts arity in the verifier because nothing can be read out of
+  `arguments` before arity is known, and unguarded, the range check reads a third element that
+  is not there.*
+
+  `release` 92/92, 49 passes / 300 mutations, no golden moved. Arity against the operation or predicate,
   `field` naming a declared field, `constant` and `mask` within the referenced field's declared
   width, `low <= high` for `range`. One new code, `invalid-field-operand`. Whole-pass sweep of
   Pass 33 in both directions afterwards, against a control on the branch point.

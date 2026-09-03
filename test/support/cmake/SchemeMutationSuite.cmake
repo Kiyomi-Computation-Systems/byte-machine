@@ -796,6 +796,11 @@ cmake_minimum_required(VERSION 3.26)
 # Slice ①b's Critical fix wave: 271 -> 273. Two join Pass 33, both recovered from
 # task 4's unsound subsumption call.
 #
+# Slice ② task 4: Pass 33 gains EIGHT for pass-fields' operand half -- arity,
+# the declared-field reference, the per-field width lookup, the width bound and
+# its off-by-one, both directions of `low <= high`, and the join. Passes stay at
+# 49 and mutations become 292 + 8 = 300.
+#
 # Slice ② task 3: Pass 33 gains FIVE for the zero-width census -- out-targets,
 # the zero-progress walk and its REPORT set (the pair the M3 precedent warns
 # about, separable only after a fixture was added for it), and both directions of
@@ -829,7 +834,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 292)
+set(EXPECTED_MUTATIONS 300)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -4942,8 +4947,14 @@ byte_machine_mutation(
   REPLACE [[                 (list (field-action-node-next n))
                  (list (field-action-node-next n)))))]]
   EXPECT_STATUS 1
+  # A CONJUNCTION, tightened by task 4's whole-pass sweep. Extracting
+  # `zero-width-successors` made this arm feed THREE consumers, so each of its
+  # records is shared with a mutant of one consumer: the EOF record with
+  # "sibling EOF answers take the first arm", the reachability record with "a
+  # zero-width node's targets are not out-targets". Only the pair is this
+  # mutation's own.
   EXPECT_OUTPUT_MATCHES
-    "a field action's error target is walked too: reachable stop -- expected a true value")
+    "a field action's error target is walked too: reachable stop -- expected a true value.*a zero-width node's targets are out-targets, so they are reachable: nothing unreachable")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -4984,8 +4995,11 @@ byte_machine_mutation(
 ]]
   REPLACE [[          ]]
   EXPECT_STATUS 1
+  # A CONJUNCTION, for the mirror of the reason above: the reachability record
+  # is shared with the helper-arm mutation and the :908 record with ":908 never
+  # fires", and only the pair belongs to this arm alone.
   EXPECT_OUTPUT_MATCHES
-    "a zero-width node's targets are out-targets, so they are reachable: nothing unreachable")
+    "a zero-width node's targets are out-targets, so they are reachable: nothing unreachable.*a byte-reachable zero-width node into a finish is non-eof-into-finish: non-eof-into-finish")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -5048,6 +5062,116 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "an EOF-only-reachable zero-width node may continue into a finish: no non-eof-into-finish")
+
+# Slice ② task 4 adds EIGHT for pass-fields' operand half. Three by-construction
+# subsumptions are recorded at their own sites: each is a NARROWER edit of a
+# check a broader mutation already removes, and each is kept because it names its
+# own decision.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: field operand arity is not checked"
+  # The check the constructor deliberately does not make -- 0020 item 2: nothing
+  # can be read out of `arguments` before arity is known, which is the same
+  # sentence that put this here rather than there.
+  FIND [[       ((not (= (length args) (cadr row)))]]
+  REPLACE [[       ((and #f (not (= (length args) (cadr row))))]]
+  EXPECT_STATUS 1
+  # Pinned on the RAISE, which is this mutant's own record lane-wide and is
+  # also the decision's own stated reason: 0020 item 2 puts arity here rather
+  # than in the constructor because "nothing can be read out of `arguments`
+  # before arity is known", and unguarded, the range check reads a third
+  # element that is not there. The union mutants above produce every other
+  # record this one does, but not this: with the pass gone, the range check is
+  # never reached at all.
+  EXPECT_OUTPUT_MATCHES
+    "every predicate's arity is enforced: case raised -- Exception in caddr")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an operand naming no declared field is accepted"
+  # SUBSUMED BY "the operand width is read from the first declared field"
+  # below, by construction: that mutant looks up a field that always exists, so
+  # it never reports an undeclared one either, and it additionally answers the
+  # wrong width. Kept because the two name different decisions.
+  FIND [[           ((not width)]]
+  REPLACE [[           ((and #f (not width))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an undeclared field is invalid-field-operand: one -- expected 1, got 0")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the operand width is read from the first declared field"
+  # The reason the width lookup is keyed on the operand: with one field declared
+  # this is invisible, so the fixture declares TWO of different widths and asserts
+  # that a value legal for the WIDE one is accepted.
+  FIND [[(field-width-of fs (car args))]]
+  REPLACE [[(field-width-of fs (uint-field-name (car fs)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the width checked is the REFERENCED field's, not some other field's: legal for the wide field")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: operand range against the declared width is not checked"
+  # Pinned on the range fixture's TWO-fault count, which is the record the
+  # off-by-one mutation below cannot produce.
+  FIND [[                            (if (operand-in-width? v width) #f]]
+  REPLACE [[                            (if #t #f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an out-of-width range operand does not also report low > high: two width faults only -- expected 2, got 0")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the operand width bound is off by one"
+  # SUBSUMED BY the mutation above, by construction -- accepting 2^w accepts
+  # everything that accepting anything accepts, minus nothing this lane can see.
+  # The boundary is what it names: 255 is legal for a u8 and 256 is the first
+  # value that is not, so the premise case and this one together pin the edge
+  # rather than "some large number is refused".
+  FIND [[    (and (integer? v) (exact? v) (<= 0 v (- (expt 2 width) 1))))]]
+  REPLACE [[    (and (integer? v) (exact? v) (<= 0 v (expt 2 width))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a constant above the field's declared width is invalid-field-operand: 256 -- expected 1, got 0")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: low > high for a range predicate is accepted"
+  # Decision 0020 item 2's "consequence that will look wrong to a reader of
+  # 0017": the constructor accepts this and the verifier is where it is caught.
+  FIND [[                      (> (cadr args) (caddr args)))]]
+  REPLACE [[                      #f)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "low > high for range is invalid-field-operand: one -- expected 1, got 0")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a range's low may not equal its high"
+  # The RESTRICTIVE direction, and the boundary the check actually names: the
+  # test is `low > high`, not `low >= high`. Without this a `range` over a single
+  # value would be rejected and nothing would notice.
+  FIND [[                      (> (cadr args) (caddr args)))]]
+  REPLACE [[                      (>= (cadr args) (caddr args)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "low = high for range is legal: none -- expected 0, got 1")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the operand half is never run"
+  # The UNION mutant -- dropping the join removes every check above at once, so
+  # its record set contains each of theirs and is inside none of them. Separated
+  # by a CONJUNCTION: one arity record and one low/high record, which no
+  # single-check mutant produces together.
+  FIND [[       (pass-field-operands m fs))))]]
+  REPLACE [[       '())))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "wrong arity is invalid-field-operand: too few -- expected 1, got 0.*low > high for range is invalid-field-operand: one -- expected 1, got 0")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -6904,9 +7028,9 @@ byte_machine_mutation(
   FIND [[        (field-action-node? x) (field-branch-node? x)))]]
   REPLACE [[        (field-branch-node? x)))]]
   EXPECT_STATUS 1
+  # `?` is a regex metacharacter -- unescaped, `node? --` matches "nod --",
+  # which no output contains, and the runner reports a wrong-reason catch.
   EXPECT_OUTPUT_MATCHES
-    # `?` is a regex metacharacter -- unescaped, `node? --` matches "nod --",
-    # which no output contains, and the runner reports a wrong-reason catch.
     "field-action nodes.it is a node and answers node-name: node\\? -- expected a true value")
 
 byte_machine_mutation(

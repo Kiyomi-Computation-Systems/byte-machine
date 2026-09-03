@@ -239,7 +239,98 @@
                       (if (valid-name? (uint-field-name f)) #f
                           (make-diagnostic 'invalid-field-declaration (uint-field-name f)
                                            "field name is not portable")))
-                    fs)))))
+                    fs))
+       (pass-field-operands m fs))))
+
+  ;; --- the OPERAND half (Milestone 4 Slice ②; §16.3:924 item 6, decision 0020
+  ;; item 3). Everything here needs a SECOND object -- the field declaration --
+  ;; to evaluate at all, which is precisely why none of it is a constructor
+  ;; contract. The constructor closed what one node can answer: the operation and
+  ;; predicate sets, and `arguments` being a proper list. Everything below is
+  ;; relational.
+  ;;
+  ;; It lives INSIDE pass-fields rather than in a pass of its own. Slice ①b built
+  ;; this pass for it and records that in the tree; a sibling pass would duplicate
+  ;; an indentation-anchored line that `verify: pass-fields is never run` pins at
+  ;; SITES=1, and would leave Slice ③'s accumulate share two candidate homes.
+  ;;
+  ;; ONE code, `invalid-field-operand`, which spends §4.6's two-new-codes budget
+  ;; for this milestone. Slice ③'s accumulate share reuses it with no new code.
+  (define field-operand-schemas
+    ;; (name arity . operand-kinds-after-the-field), tabulated from §9.1:328-334
+    ;; and :336-346. Position 0 is the `field` in every one of the fourteen, which
+    ;; is why it is not repeated per row.
+    '((store 2 constant) (clear 1) (increment 1) (decrement 1) (add 2 constant)
+      (set-mask 2 mask) (clear-mask 2 mask)
+      (equal 2 constant) (zero 1) (nonzero 1) (range 3 low high)
+      (mask-any 2 mask) (mask-all 2 mask) (mask-none 2 mask)))
+
+  (define (field-width-of fs name)
+    (let loop ((fs fs))
+      (cond ((null? fs) #f)
+            ((eq? (uint-field-name (car fs)) name) (uint-field-width (car fs)))
+            (else (loop (cdr fs))))))
+
+  (define (operand-in-width? v width)
+    (and (integer? v) (exact? v) (<= 0 v (- (expt 2 width) 1))))
+
+  ;; One node's operands. Reported under the node's OWN name, not the field's:
+  ;; an operand fault is a property of the site that wrote it, and the field it
+  ;; names may not exist.
+  (define (field-operand-diagnostics fs name selector args)
+    (let ((row (assq selector field-operand-schemas)))
+      (cond
+       ;; Unreachable through the public API -- the constructor closed both
+       ;; enumerations -- and answered rather than raised, because a verifier
+       ;; that raises cannot accumulate.
+       ((not row)
+        (list (make-diagnostic 'invalid-field-operand name "unknown operation or predicate")))
+       ((not (= (length args) (cadr row)))
+        ;; §9.1:348's "exact arity ... it rejects extra arguments". Reported
+        ;; alone: nothing can be read out of `arguments` before arity is known,
+        ;; which is the same sentence that put this check here rather than in the
+        ;; constructor.
+        (list (make-diagnostic 'invalid-field-operand name "wrong number of operands")))
+       (else
+        (let ((width (field-width-of fs (car args))))
+          (cond
+           ((not width)
+            (list (make-diagnostic 'invalid-field-operand name
+                                   "operand names no declared field")))
+           (else
+            (append
+             (filter values
+                     (map (lambda (v)
+                            (if (operand-in-width? v width) #f
+                                (make-diagnostic 'invalid-field-operand name
+                                                 "operand is outside the field's declared width")))
+                          (cdr args)))
+             ;; `low <= high` for `range` -- decision 0020 item 2 names this as
+             ;; the consequence that looks wrong to a reader of 0017, which
+             ;; rejects `low > high` inside make-byte-range-matcher. There they
+             ;; are named parameters; here they are list positions the
+             ;; constructor may not read before arity is known.
+             (if (and (eq? selector 'range)
+                      (operand-in-width? (cadr args) width)
+                      (operand-in-width? (caddr args) width)
+                      (> (cadr args) (caddr args)))
+                 (list (make-diagnostic 'invalid-field-operand name
+                                        "range low exceeds high"))
+                 '())))))))))
+
+  (define (pass-field-operands m fs)
+    (apply append
+           (map (lambda (n)
+                  (cond ((field-action-node? n)
+                         (field-operand-diagnostics fs (node-name n)
+                                                    (field-action-node-operation n)
+                                                    (field-action-node-arguments n)))
+                        ((field-branch-node? n)
+                         (field-operand-diagnostics fs (node-name n)
+                                                    (field-branch-node-predicate n)
+                                                    (field-branch-node-arguments n)))
+                        (else '())))
+                (machine-nodes m))))
 
   ;; PASS 3: overlap within a dispatch node, over canonical matcher byte sets
   ;; (§16.2:893, §16.3:921). Two cases overlap when their canonical sets share
