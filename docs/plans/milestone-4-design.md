@@ -2368,9 +2368,11 @@ naming the slice, the file and the case in the tree.
   underflow at `decrement` from 0 and overflow at `increment`/`add` from each
   width's maximum. ③'s accumulate part: the same file's "the u64 path crosses
   the bignum boundary in both lanes" and "the boundary digit is accepted, one
-  below the overflow" cases, plus the u16 ceiling in
-  `determinism-accumulate-tests.sps`. The u64 row does run at 2^64−1, above
-  `(greatest-fixnum)`.
+  below the overflow" cases, and — added by the whole-branch review, which
+  found the original citation was to a lane that runs only the GENERATED
+  library — the u16 base-16 ceiling in that same file's "the overflow bound
+  divides by the node's OWN base" case, asserted in **both** lanes. The u64 row
+  does run at 2^64−1, above `(greatest-fixnum)`.
 - **:1569 — failed operations leave prior values unchanged.** *Discharged in
   halves, by construction rather than by rollback, as allocated.* ②'s half:
   `field-access-tests.sps`, "a failed operation leaves the prior value
@@ -2420,17 +2422,40 @@ shipped, and each is a property of what exists rather than a gap in M4:
 discovered later, because it is a property of the sweep method and not of any
 one pin:
 
-4. **Six pins in the `differential.field` pass own no uniquely attributing
-   record, and cannot be given one by anchoring.** Measured at close: 31 pins,
-   930 ordered pairs, six collisions under a value-sensitive record key (twelve
-   under a stricter value-insensitive one). Every one is a mutation that DELETES
-   a check subsuming one that ALTERS it, or a mutation broad enough to break a
-   fixture's whole premise — the accessor's slot resolution, a declaration's
-   initial — subsuming every narrow pin beneath it. In each case the mutation
-   *is* the decision, so narrowing it would be pinning a different decision.
+4. **Three pins in the `differential.field` pass own no uniquely attributing
+   record, and cannot be given one by anchoring.** Re-measured at close (see the
+   correction below): **39 pins, 1482 ordered pairs, three collisions** under a
+   value-sensitive record key, nineteen under a stricter value-insensitive one.
+   All three are a mutation that DELETES a check subsuming one that ALTERS it —
+   "the bound check is absent" contains "the upper bound is off by one" and "the
+   lower bound is not checked" by construction. In each case the mutation *is*
+   the decision, so narrowing it would be pinning a different decision.
    **None involves a pin Slice ③ added.** Slice ②'s recorded debt — pins nesting
    in neither direction because a differential lane's checks are symmetric — is
    closed by the per-lane expected values named in :1570's disposition above.
+
+   *Corrected 2026-09-03, whole-branch review. This entry first read "31 pins,
+   930 ordered pairs, six collisions"; the pass held 32 pins and one was never
+   judged.* The sweep tool classified a mutation as a declared survivor by
+   testing whether the string `EXPECT_SURVIVES` appeared anywhere in its block —
+   and two blocks discuss the keyword in their comments. So the census under-
+   counted, which is this milestone's own "a claim of done outruns the doing"
+   arriving inside the tool that was supposed to be checking for it. The tool
+   now matches the directive at line start, and the numbers above are from the
+   corrected run on the closed branch, which also carries the seven pins the
+   review's four-operand finding added.
+
+   **The whole corrected census**, both keys, for every pass Slice ③ touched:
+
+   | pass | pins | ordered pairs | value-insensitive | value-sensitive |
+   | --- | --- | --- | --- | --- |
+   | property | 6 | 30 | 0 | 0 |
+   | position-kind | 7 | 42 | 0 | 0 |
+   | member3-drift | 2 | 2 | 2 | 0 |
+   | determinism.accumulate | 1 | 0 | — | — |
+   | differential.field | 39 | 1482 | 19 | **3** |
+   | verify.rejections | 79 | 6162 | 76 | 35 |
+   | normal-ir | 43 | 1806 | 169 | 0 |
 
 ## 9. Explicitly out of Milestone 4
 

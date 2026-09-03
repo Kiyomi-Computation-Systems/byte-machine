@@ -773,8 +773,10 @@
 ;; lanes. The partition is the point -- every byte is either a digit for that
 ;; base or it is not, and the two lanes must agree on which, byte by byte, with
 ;; no byte untested. A fixture naming a handful of digits and a handful of
-;; delimiters cannot see a boundary error at `/`, `:`, `@`, `G` or `g`, which are
-;; the four ASCII neighbours of the three digit ranges.
+;; delimiters cannot see a boundary error at `/`, `:`, `@`, `G`, backtick or `g`
+;; -- the SIX ASCII neighbours of the three digit ranges, two per range. (This
+;; sentence said "four" and listed five until the whole-branch review counted
+;; them against the case below, which has always driven six.)
 (define (byte-answer cm b)
   ;; Feed exactly one byte and report (field . lifecycle): a digit accumulates
   ;; and leaves the parser ready, a non-digit takes the fallback to `done`.
@@ -1025,9 +1027,10 @@
         (emit-and-load two-field-acc 'twofield 'twofield-parser
                        (string-append tmpdir "/generated-twofield.sls"))))
 
-(define (tf-run cm str)
+(define (tf-run-on cm str)
   (let ((p (make-parser cm '() #f)))
     (cons (parser-feed! p (str->bytes str) 0 (string-length str)) p)))
+(define tf-run tf-run-on)
 
 (harness-group "the accumulate node's four unreached operands (Slice ③, review)"
   (lambda ()
@@ -1114,5 +1117,62 @@
           (check-equal "the lanes agree on the error"
                        (parser-error-reason (parser-result-error rg))
                        (parser-error-reason (parser-result-error ra))))))))
+
+;; The same two claims again on a machine with NO zero-width node, because the
+;; whole-pass sweep showed the fixture above cannot attribute them. Its evidence
+;; for the digit-target hop is a count `bump` writes, and its evidence for the
+;; reexecute mode is a consumed count `bump` also affects -- so every pin that
+;; breaks a zero-width action or an increment breaks those cases too, and the
+;; three new pins nested inside three older ones that have nothing to do with
+;; accumulation. Here the digit target is a STOP node and the delimiter path
+;; carries no action at all, so the only machinery either case can blame is the
+;; accumulate arm itself.
+(define lone-acc
+  (make-machine 'lone 'start (list (make-uint-field 'n 16 0 #f)) '() '() drift-errs
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 35)
+                                  (make-edge 'acc 'advance) #f))
+            (make-edge 'over 'reexecute) #f #f)
+          ;; digit-target is `halt`, so ONE digit is taken and the machine stops.
+          ;; A lane that self-looped instead would ask for more input.
+          (make-integer-accumulate-node 'acc 'n 16 'halt
+                                        (make-edge 'tail 'reexecute)
+                                        'over #f #f)
+          (make-stop-node 'halt #f)
+          (make-byte-dispatch-node 'tail
+            (list (make-byte-case (make-exact-byte-matcher 120)
+                                  (make-edge 'sawx 'advance) #f))
+            (make-edge 'over 'reexecute) #f #f)
+          (make-stop-node 'sawx #f)
+          (make-error-node 'over 'rejected #f))
+    'default-eof #f))
+
+(define lone-pair
+  (cons (make-interpreted-machine (verify-machine lone-acc))
+        (emit-and-load lone-acc 'lone 'lone-parser
+                       (string-append tmpdir "/generated-lone.sls"))))
+
+(harness-group "the same two operands, on a machine with no zero-width node"
+  (lambda ()
+    (harness-case "the machine verifies clean"
+      (lambda ()
+        (let ((v (verify-machine lone-acc)))
+          (check "accepted" (verification-ok? v))
+          (check-equal "no diagnostics" (length (verification-diagnostics v)) 0))))
+    (harness-case "one digit is taken and the DECLARED digit-target stops the parse"
+      (lambda ()
+        ;; A self-loop would leave the parser asking for input instead.
+        (let ((ra (car (tf-run-on (car lone-pair) "#1")))
+              (rg (car (tf-run-on (cdr lone-pair) "#1"))))
+          (check-equal "interpreter stopped" (parser-result-status ra) 'stopped)
+          (check-equal "generated stopped" (parser-result-status rg) 'stopped))))
+    (harness-case "the delimiter is re-read with no action anywhere in the path"
+      (lambda ()
+        (let* ((ra (car (tf-run-on (car lone-pair) "#x")))
+               (rg (car (tf-run-on (cdr lone-pair) "#x"))))
+          (check-equal "interpreter consumed both" (parser-result-consumed ra) 2)
+          (check-equal "generated consumed both" (parser-result-consumed rg) 2)
+          (check-equal "interpreter stopped at sawx" (parser-result-status ra) 'stopped)
+          (check-equal "generated stopped at sawx" (parser-result-status rg) 'stopped))))))
 
 (harness-finish)

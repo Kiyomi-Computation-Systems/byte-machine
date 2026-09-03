@@ -97,7 +97,8 @@ inbound edge must be pinned `reexecute` (state the zero-progress argument: the a
 itself advances on the digit edge, so no cycle forms), or the draw exercises only the EOF path.
 Two further traps: *"a declared u8 field so overflow is reachable inside 256 draws"* is
 satisfiable at exactly one initial; **any new draw in `gen-machine` re-rolls the seeded sequence
-and invalidates the two shipped goldens**; and the property lane's oracle compares no field value
+and invalidates the two shipped goldens**  *(annotated 2026-09-03: there were THREE committed
+goldens, not two — and the claim is false either way; see Task 8)*; and the property lane's oracle compares no field value
 today, so an accumulate draw would compare nothing.
 
 **H5 — The base-16 digit arm cannot be one `case` group with one `d`.** §8's own example
@@ -124,9 +125,11 @@ direction; closing it needs per-lane assertions against expected values. ③ add
 lane and will hit it.
 
 **H11 — Every count in §8 is the `a942327` column.** Measured at `14c4f30`: suite **49 passes /
-323 mutations** (declared at `:915-916`), **ten** `EXPECT_SURVIVES`, **94** lanes, **72**
-`verify.sls` pins, **six** pinned IR fingerprints at eight assertion sites — not three, and at
-none of the cited lines. Restate every one from measurement.
+323 mutations** (declared at `:915-916`), **ten** `EXPECT_SURVIVES`, ~~**94** lanes~~ **92**
+lanes *(corrected 2026-09-03 by the whole-branch review — every other figure in this hazard
+checks out; this one did not, and a hazard about miscounted counts is the worst place to keep a
+miscount)*, **72** `verify.sls` pins, **six** pinned IR fingerprints at eight assertion sites —
+not three, and at none of the cited lines. Restate every one from measurement.
 
 **H12 — `eof-terminal`'s residual `else` is now LOUD.** §8's "verifies clean and crashes later"
 reasoning is stale: it raises out of verification. The failure mode ③ must design against
@@ -326,8 +329,9 @@ directions, then the gate.
   the field values, `gen-machine` returns the names (graph exports no `machine-fields`). Three
   anti-vacuity counters, one per arm that can go missing.
 
-  **H4's golden claim was false.** The two shipped goldens are of fixed fixture machines, not
-  PRNG-drawn ones; nothing moved. What *did* move is the seeded sequence: pause 7→4 and finish
+  **H4's golden claim was false.** The shipped goldens — **three**, not the two H4 and this
+  record both said until the whole-branch review counted them — are of fixed fixture machines,
+  not PRNG-drawn ones; nothing moved. What *did* move is the seeded sequence: pause 7→4 and finish
   14→8, both re-measured and recorded in the lane.
 
   Three mutations: the pinned edge's mode, the field initial (25 is the only workable value), and
@@ -365,9 +369,20 @@ directions, then the gate.
   | --- | --- | --- | --- |
   | property | 6 | 30 | 3 → **0** / **0** |
   | position-kind | 7 | 42 | **0** / **0** |
+  | member3-drift | 2 | 2 | 2 / **0** |
   | determinism.accumulate | 1 | 0 | — |
-  | differential.field | 31 | 930 | 17 → 12 / 6 |
+  | differential.field | 39 | 1482 | 19 / **3** |
+  | verify.rejections | 79 | 6162 | 76 / 35 |
   | normal-ir | 43 | 1806 | 169 / **0** |
+
+  *Re-measured 2026-09-03 after the whole-branch review. This table first read "31 pins, 930
+  pairs, 17 → 12 / 6" for `differential.field`; the pass held 32 pins and one was never judged,*
+  because the sweep tool tested for the string `EXPECT_SURVIVES` anywhere in a mutation's block
+  and two blocks discuss the keyword in their comments. The tool now matches the directive at
+  line start. The `differential.field` row also carries the review's seven new pins, and its
+  value-sensitive collisions fell 6 → **3** once a second fixture with **no zero-width node** was
+  added: the first one's evidence for two of the new claims ran through a field action, so those
+  pins nested inside older pins that break any action and have nothing to do with accumulation.
 
   **The property pass's three closed**, cause first: every anti-vacuity counter required the two
   lanes to *agree*, so any divergence zeroed all of them and each draw's own pin owned no record.

@@ -8647,6 +8647,17 @@ byte_machine_mutation(
 # by nothing else in the tree. Measured: the whole release selection under this
 # mutant fails exactly the two position-kind lanes (plus the mutation suite's own
 # baseline, which any dirty tree fails), and differential.field passes.
+#
+# *** ANNOTATED 2026-09-03, whole-branch review: that measurement was true when
+# it was taken and the sentence above is now STALE. *** Re-measured on the closed
+# branch, this mutant fails SIX behavioural lanes: both position-kind lanes, both
+# determinism.accumulate lanes (Task 9's golden reads the emitted bytes, and this
+# mutation changes them) and both property.differential lanes (Task 8's draw puts
+# an accumulate node in front of the oracle). The claim that survives re-measuring
+# is the one this pin is actually for: differential.field still passes, so the
+# OFFSET is still a thing only the position-kind row asserts. Left in place rather
+# than reworded, because a measured claim that later became false is a record of
+# how a lane's reach grows, and rewriting it would erase that.
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.position-kind.chez.source
@@ -9240,7 +9251,7 @@ byte_machine_mutation(
   FIND [[                              (loop (+ pos 1) " (num digit) " (+ off 1) (quote boundary)))]]
   REPLACE [[                              (loop (+ pos 1) " id " (+ off 1) (quote boundary)))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the digit edge goes to the DECLARED target, not back to the node: generated one digit, one hop")
+  EXPECT_OUTPUT_MATCHES "one digit is taken and the DECLARED digit-target stops the parse: generated stopped")
 
 byte_machine_mutation(
   FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
@@ -9254,7 +9265,7 @@ byte_machine_mutation(
   REPLACE [[            (let ((e (integer-accumulate-node-nondigit-edge n)))
               (cons (edge-target e) 'advance)))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the non-digit edge REEXECUTES, so the delimiter is read again: interpreter stopped at sawx")
+  EXPECT_OUTPUT_MATCHES "the delimiter is re-read with no action anywhere in the path: interpreter stopped at sawx")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
@@ -9265,7 +9276,7 @@ byte_machine_mutation(
   FIND [[                 " (if (eq? (cdr nd) 'advance)]]
   REPLACE [[                 " (if (eq? (car nd) (car nd))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the non-digit edge REEXECUTES, so the delimiter is read again: generated stopped at sawx")
+  EXPECT_OUTPUT_MATCHES "the delimiter is re-read with no action anywhere in the path: generated stopped at sawx")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
