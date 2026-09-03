@@ -1061,9 +1061,21 @@ delivered. No versioned release exists yet.
   rendering raised on a machine the verifier had just accepted. Fixed, and pinned
   on a fixed fixture rather than on the seeded lane that found it.
 
+  The verifier's kind filters were the slice's own blind spot, found by the
+  whole-branch review and fixed before close: `eof-terminal`'s classifier and
+  both of `pass-eof-execution`'s filters still enumerated node kinds by hand, so
+  an accumulate node was invisible to all three. An EOF chain reaching one made
+  `verify-machine` **raise** instead of returning; an accumulate naming itself as
+  its own eof-target verified clean and then **looped forever in both
+  executors**; and an accumulate byte edge into a finish terminal was accepted.
+  All three are fixtures and mutations now. Four of the node's operands were
+  likewise unwitnessed — every accumulate machine in the tree declared one field,
+  named itself as its digit-target, advanced past its delimiter, and overflowed
+  only in base 10 — and two fixtures now separate them.
+
   Measured at the slice's close: `release` **94/94** — two new determinism lanes
   — `pr` 94/94, `harness` 34/34, `no-scheme` 8/8; the Scheme mutation suite
-  **50 passes / 358 mutations**, the CMake suite unchanged at 1 pass / 72;
+  **50 passes / 368 mutations**, the CMake suite unchanged at 1 pass / 72;
   **twelve** declared `EXPECT_SURVIVES`, two added and both halves of one ruling:
   on a host with unbounded integers a compute-then-check mutant of the overflow
   test passes every lane, in either the interpreter or the emitter, and each
