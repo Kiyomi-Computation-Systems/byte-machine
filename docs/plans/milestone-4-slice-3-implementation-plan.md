@@ -146,10 +146,27 @@ and `cur` joining `reserved-member-3` is **not enough** — the fixture carries 
 Each task is one commit: failing tests first, the implementation, mutations measured in both
 directions, then the gate.
 
-- [ ] **Task 1 — The accumulate node: constructor, façade, and the op-step return shape (D5, H3).**
-  Seven parameters plus the label. Constructor closes what one node can answer — `base` ∈ {10,16}
-  (§16.2:904's base half), the symbols, the edge shape. The field reference is the verifier's.
-  **Decide and state the op-step return shape here**, once, before any consumer exists.
+- [x] **Task 1 — The accumulate node: constructor and façade (H3).**
+  Seven parameters plus the label. **The boundary here is 0017's, not 0020's** — 0020 keeps the
+  constructor out of `arguments` because that is a *list* whose length it may not assume, and
+  this kind has no `arguments`: its operands are named parameters, exactly 0017 point 1's
+  situation. So `base` ∈ {10,16} is closed here (§16.2:904's base half) and the **field
+  reference** is the verifier's, asserted in both directions — a case proving an undeclared name
+  still *builds*, and a restrictive mutation that closes it here.
+
+  `overflow-error` is a **mandatory symbol**, unlike a field action's `error`: accumulation can
+  always overflow, so there is nothing for the can-it-fail rule to decide. `nondigit-edge` is an
+  **edge**, not a bare target, because §10.6:567's mode is the whole point.
+
+  Seven mutations; `node?`'s pin re-anchored. **H3 followed:** the façade exports the
+  constructor only, matching ②. *The 10-space export line is a substring of the 16-space import
+  line, so both had to be anchored by neighbour — the fifth time this slice-family has hit a
+  SITES trap.*
+
+  **The op-step return shape is deferred to Task 4**, where the first consumer exists; deciding
+  it here would be a decision with nothing to check it.
+
+  `release` 92/92, 49 passes / 330 mutations, no golden moved.
 
 - [ ] **Task 2 — The verifier census (D1, D3, H1, H7, H8).** Fifteen sites re-measured; the
   accumulate kind joins as **input-reading**. `reexec-targets` takes **two disjuncts** and the

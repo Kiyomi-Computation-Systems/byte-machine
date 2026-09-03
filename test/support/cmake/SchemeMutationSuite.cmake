@@ -837,6 +837,11 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Slice ③ task 1: the ir pass gains SEVEN for the integer-accumulate node --
+# the base set, the nondigit edge's shape, the mandatory overflow target, the
+# eof-target's shape, both census sites, and the constructor/verifier boundary in
+# the restrictive direction. Mutations become 323 + 7 = 330.
+#
 # Slice ②'s whole-branch review, second finding: the normal-ir pass gains ONE for
 # the sequence-dispatch state's layout length -- see that mutation's own note.
 # There are EIGHT `(vector ns-tag ...)` literals in this normalizer, not the six
@@ -913,7 +918,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 323)
+set(EXPECTED_MUTATIONS 330)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -7144,6 +7149,103 @@ byte_machine_mutation(
 # louder witness than a pin, and pinning it would cost a whole new pass (there is
 # no graph-tests verify command in this suite) for two decisions already fatal.
 
+# Slice ③ task 1 adds SEVEN for the integer-accumulate node -- the milestone's
+# last kind, and its only INPUT-READING one.
+#
+# The constructor/verifier boundary here is 0017's, not 0020's: 0020 item 2
+# keeps the constructor out of `arguments` because that is a LIST whose length it
+# may not assume, and this kind has no `arguments` -- its operands are NAMED
+# PARAMETERS, the situation 0017 point 1 addresses. So `base` is closed here and
+# gets a mutation; the FIELD REFERENCE is the verifier's and gets one too, in the
+# restrictive direction, because closing it here would be the boundary error.
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: the accumulate base set admits an unsupported base"
+  # §16.2:904's base half, discharged at construction rather than as a
+  # diagnostic: a base is evaluable from the one node being built, so a verifier
+  # arm would be dead code whose permissive mutation survives (0020's
+  # one-rejection-site rule).
+  FIND [[  (define accumulate-bases '(10 16))]]
+  REPLACE [[  (define accumulate-bases '(10 16 8))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer-accumulate nodes.both bases are accepted and nothing else is: base 8 -- expected a raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: an accumulate node's nondigit fallback need not be an edge"
+  # It is an EDGE, not a bare target, because §10.6:567's non-digit "takes an
+  # explicit fallback edge, normally reexecuting the delimiter" -- the MODE is
+  # the whole point and a bare symbol cannot carry one.
+  FIND [[    (unless (edge? nondigit-edge)
+]]
+  REPLACE [[    (unless #t
+]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer-accumulate nodes.the nondigit edge must be an edge: a bare symbol -- expected a raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: an accumulate node's overflow-error may be absent"
+  # Never #f, unlike a field action's `error`: accumulation can ALWAYS overflow,
+  # so there is nothing for the can-it-fail rule to decide and §10.6:568's
+  # "explicit error edge" is unconditional.
+  FIND [[    (require-symbol 'make-integer-accumulate-node 'overflow-error overflow-error)
+]]
+  REPLACE [[    ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer-accumulate nodes.the overflow-error is a mandatory symbol: absent -- expected a raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: an accumulate node's eof-target is unchecked"
+  # Symbol or #f, the byte-dispatch convention (§9.1:318), where #f means the
+  # machine default-eof error.
+  FIND [[    (unless (or (eq? eof-target #f) (symbol? eof-target))
+]]
+  REPLACE [[    (unless #t
+]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer-accumulate nodes.the eof-target is a symbol or #f: a number -- expected a raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node? does not admit an integer-accumulate node"
+  # The two census sites every new kind must join. One mutation per site, so a
+  # half-taught pair cannot pass.
+  FIND [[        (integer-accumulate-node? x)))]]
+  REPLACE [[        ))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer-accumulate nodes.it is a node and answers node-name: node\\? -- expected a true value")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node-name does not answer for an integer-accumulate node"
+  FIND [[          ((integer-accumulate-node? x) (integer-accumulate-node-name x))
+]]
+  REPLACE [[          ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer-accumulate nodes.it is a node and answers node-name: case raised")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: the constructor closes the field REFERENCE, which is the verifier's"
+  # The RESTRICTIVE direction, and the boundary itself. Closing the field
+  # reference here would need the declaration list, which one node cannot see --
+  # this mutant fakes it with a fixed set, and the case that catches it is the
+  # one asserting an undeclared name still BUILDS.
+  FIND [[    (require-symbol 'make-integer-accumulate-node 'field field)]]
+  REPLACE [[    (unless (memq field '(count)) (byte-machine-contract-violation 'make-integer-accumulate-node 'invalid-argument 'field))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer-accumulate nodes.the field reference is NOT checked here: case raised")
+
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
   LABEL "ir: the field operation set admits a name outside the closed enumeration"
@@ -7217,8 +7319,13 @@ byte_machine_mutation(
   # `node?` and `node-name` are the two census sites EVERY new kind must join,
   # and missing either is silent at construction and loud much later. One
   # mutation per site, per kind, so a half-taught pair cannot pass.
-  FIND [[        (field-action-node? x) (field-branch-node? x)))]]
-  REPLACE [[        (field-branch-node? x)))]]
+  # Re-anchored by Slice ③ task 1: `node?` gained the integer-accumulate kind and
+  # the disjunction reflowed onto three lines. The decision and the pin are
+  # unchanged -- this still drops the field-action disjunct.
+  FIND [[        (field-action-node? x) (field-branch-node? x)
+        (integer-accumulate-node? x)))]]
+  REPLACE [[        (field-branch-node? x)
+        (integer-accumulate-node? x)))]]
   EXPECT_STATUS 1
   # `?` is a regex metacharacter -- unescaped, `node? --` matches "nod --",
   # which no output contains, and the runner reports a wrong-reason catch.

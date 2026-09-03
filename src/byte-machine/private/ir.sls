@@ -44,6 +44,12 @@
           field-branch-node-arguments field-branch-node-true-target
           field-branch-node-false-target field-branch-node-source-label
           field-operations field-predicates
+          make-integer-accumulate-node integer-accumulate-node?
+          integer-accumulate-node-name integer-accumulate-node-field
+          integer-accumulate-node-base integer-accumulate-node-digit-target
+          integer-accumulate-node-nondigit-edge integer-accumulate-node-overflow-error
+          integer-accumulate-node-eof-target integer-accumulate-node-source-label
+          accumulate-bases
           node? node-name
           make-verification-result verification-result? verification-result-ok?
           verification-result-diagnostics verification-result-machine)
@@ -355,6 +361,56 @@
   (define (field-branch-node-false-target n) (vector-ref n 5))
   (define (field-branch-node-source-label n) (vector-ref n 6))
 
+  ;; --- integer accumulate (Milestone 4 Slice ③; §9.1:301-306, §10.6:566-571,
+  ;; §11.4:652). The milestone's last node kind, and the only INPUT-READING one:
+  ;; it consumes a byte and makes progress, which is what separates it from
+  ;; Slice ②'s two zero-width kinds at every verifier site. It must NOT join
+  ;; `zero-width-successors`.
+  ;;
+  ;; *** The constructor/verifier boundary here is 0017's, not 0020's. *** 0020
+  ;; item 2 keeps the constructor out of `arguments` because that is a LIST whose
+  ;; length it may not assume. This kind has no `arguments`: its operands are
+  ;; NAMED PARAMETERS, which is precisely the situation 0017 point 1 addresses
+  ;; when it rejects `low > high` inside `make-byte-range-matcher`. So `base` is
+  ;; closed here -- the base half of §16.2:904 -- and only the FIELD REFERENCE,
+  ;; which needs the declaration list to evaluate, is the verifier's.
+  (define accumulate-bases '(10 16))
+  (define integer-accumulate-node-tag (tag 'byte-machine-integer-accumulate-node))
+  (define (make-integer-accumulate-node name field base digit-target nondigit-edge
+                                        overflow-error eof-target source-label)
+    (require-symbol 'make-integer-accumulate-node 'name name)
+    (require-symbol 'make-integer-accumulate-node 'field field)
+    (unless (memv base accumulate-bases)
+      (byte-machine-contract-violation 'make-integer-accumulate-node 'invalid-argument 'base))
+    (require-symbol 'make-integer-accumulate-node 'digit-target digit-target)
+    ;; An EDGE, not a bare target: §10.6:567's non-digit "takes an explicit
+    ;; fallback edge, normally reexecuting the delimiter", so the MODE is the
+    ;; whole point and a bare symbol could not carry one.
+    (unless (edge? nondigit-edge)
+      (byte-machine-contract-violation 'make-integer-accumulate-node
+                                       'invalid-argument 'nondigit-edge))
+    ;; Never #f, unlike a field action's `error`: §10.6:568 says overflow "takes
+    ;; an explicit error edge", and accumulation can ALWAYS overflow -- there is
+    ;; no base or width at which it cannot, so there is nothing for the
+    ;; can-it-fail rule to decide.
+    (require-symbol 'make-integer-accumulate-node 'overflow-error overflow-error)
+    ;; #f means the machine default-eof error, the byte-dispatch convention
+    ;; (§9.1:318).
+    (unless (or (eq? eof-target #f) (symbol? eof-target))
+      (byte-machine-contract-violation 'make-integer-accumulate-node
+                                       'invalid-argument 'eof-target))
+    (vector integer-accumulate-node-tag name field base digit-target nondigit-edge
+            overflow-error eof-target source-label))
+  (define (integer-accumulate-node? x) (tagged? integer-accumulate-node-tag x))
+  (define (integer-accumulate-node-name n) (vector-ref n 1))
+  (define (integer-accumulate-node-field n) (vector-ref n 2))
+  (define (integer-accumulate-node-base n) (vector-ref n 3))
+  (define (integer-accumulate-node-digit-target n) (vector-ref n 4))
+  (define (integer-accumulate-node-nondigit-edge n) (vector-ref n 5))
+  (define (integer-accumulate-node-overflow-error n) (vector-ref n 6))
+  (define (integer-accumulate-node-eof-target n) (vector-ref n 7))
+  (define (integer-accumulate-node-source-label n) (vector-ref n 8))
+
   ;; --- error node (references a declaration by NAME) ---
   (define error-node-tag (tag 'byte-machine-error-node))
   (define (make-error-node name error-declaration source-label)
@@ -428,7 +484,8 @@
   (define (node? x)
     (or (byte-dispatch-node? x) (sequence-dispatch-node? x) (stop-node? x)
         (error-node? x) (finish-node? x) (pause-node? x)
-        (field-action-node? x) (field-branch-node? x)))
+        (field-action-node? x) (field-branch-node? x)
+        (integer-accumulate-node? x)))
   (define (node-name x)
     (cond ((byte-dispatch-node? x) (byte-dispatch-node-name x))
           ((sequence-dispatch-node? x) (sequence-dispatch-node-name x))
@@ -438,6 +495,7 @@
           ((pause-node? x) (pause-node-name x))
           ((field-action-node? x) (field-action-node-name x))
           ((field-branch-node? x) (field-branch-node-name x))
+          ((integer-accumulate-node? x) (integer-accumulate-node-name x))
           (else (byte-machine-contract-violation 'node-name 'invalid-argument 'node))))
 
   ;; --- uint field descriptor (§9.1:283, §10.2:488-491) ---
