@@ -116,6 +116,9 @@
   ;; 3(c). It is dead weight in this slice and in ①b, and it is the whole reason
   ;; Slice ②'s field store moves no golden: adding the parameter LATER would
   ;; change the emitted text of every machine, including the zero-field ones.
+  ;; Retained for the mutation that pins the seventh parameter's presence; no
+  ;; call site passes it since Slice ② gave the generated lane the parser's own
+  ;; vector. Deleting it would take that pin with it.
   (define empty-fields (vector))
 
   ;; --- feed outcome (the runtime<-generated seam; accessors private) ---
@@ -345,7 +348,14 @@
   ;; The generated /v2 path: exec owns the dispatch loop; finish? = #f for feed.
   (define (parser-feed-v2! parser bv start end)
     (let* ((exec (parser-executor parser))
-           (o (exec (parser-current parser) (parser-offset parser) bv start end #f empty-fields)))
+           ;; The PARSER's own field vector, not the shared sentinel. Slice ①a
+           ;; reserved this parameter and both call sites passed `empty-fields`
+           ;; through ①a and ①b, which was correct while nothing read it; Slice
+           ;; ② emits arms that write through it, and a shared empty vector
+           ;; would make every generated field machine index out of bounds --
+           ;; measured, before this line changed.
+           (o (exec (parser-current parser) (parser-offset parser) bv start end #f
+                    (parser-field-values parser))))
       (parser-set-current! parser (feed-outcome-next-state o))
       (parser-set-offset! parser (feed-outcome-offset o))
       (make-parser-result (feed-outcome-status o) (feed-outcome-next o)
@@ -391,7 +401,8 @@
   ;; (no slice, so next/consumed mirror the stream offset / 0).
   (define (parser-finish-v2! parser)
     (let* ((exec (parser-executor parser))
-           (o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t empty-fields)))
+           (o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t
+                    (parser-field-values parser))))
       (parser-set-current! parser (feed-outcome-next-state o))
       (parser-set-offset! parser (feed-outcome-offset o))
       (case (feed-outcome-status o)

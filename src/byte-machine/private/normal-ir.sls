@@ -11,7 +11,8 @@
           normal-state-kind normal-state-id
           normal-dispatch-transitions normal-dispatch-fallback
           normal-error-code normal-error-reason normal-dispatch-eof normal-pause-target
-          normal-machine-debug-map normal-machine-fields)
+          normal-machine-debug-map normal-machine-fields
+          normal-field-selector normal-field-arguments normal-field-targets)
   (import (rnrs)
           (only (byte-machine private ir)
                 machine-nodes machine-entry machine-errors machine-default-eof-error

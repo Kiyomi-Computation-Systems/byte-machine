@@ -347,7 +347,33 @@ in both directions, then the gate. Tasks 1-3 are strictly ordered; 4-9 depend on
   `kind` answers. Enumerate every hand-written op-closure stub in the tree first — ①b's
   `'field-initials` broke all six in `runtime-tests.sps`, and the protocol has no default arm.
 
-- [ ] **Task 8 — The emitter (H2, H3, H5, D6).** `render-state-arm`'s fan-out; the width-bound
+- [x] **Task 8 — The emitter (H1, H2, H3, H5, D6).**
+  `render-state-arm` could not see the declarations at all (H3), so the normalized field table
+  is threaded in. Both arms emit `fieldv`, and `v`/`r` join `reserved-member-3` — which
+  re-anchored its pin (H2).
+
+  **H1 was the blocker: both v2 `exec` call sites still passed the shared `empty-fields`
+  sentinel.** ①a reserved that parameter and ①a and ①b both passed the sentinel, correctly,
+  while nothing read it. The moment the emitter writes through it, every generated field
+  machine indexes out of bounds — measured, before the line changed.
+
+  **H5 confirmed and closed: the member-3 drift guard rendered the pause machine, which
+  declares no fields**, so `v` and `r` would have been reservations nothing exercises. Its
+  fixture now carries a *fallible* action (binding both locals) and a branch.
+
+  **A safe operation emits no bound check.** The constructor proved it cannot fail, so a check
+  would be a branch no input can take and a mutation of it would survive.
+
+  Six mutations. **One is measured and deliberately not written:** swapping the branch arms
+  produces a record set *identical* to inverting the predicate — on a two-armed branch those
+  are the same function, so no fixture separates them by behaviour.
+
+  *Two fixtures were extended after mutants survived them: the writer machine had no field
+  **branch** at all, so both branch-arm mutations survived the whole lane; and its only
+  overflow started at the ceiling. My own `:908` check then rejected the first drift fixture
+  for byte-reaching a finish — Task 3 working on a machine I wrote by hand.*
+
+  `release` 92/92, 49 passes / 317 mutations, no golden moved. `render-state-arm`'s fan-out; the width-bound
   argument threaded in one edit; `fieldv` wired from the reserved seventh parameter — and
   **verify that the reservation actually covers ②'s emission**, since the frozen-goldens
   constraint rests on it. `reserved-member-3` and its drift guard's fixture.

@@ -35,7 +35,32 @@
 ;; dispatch, stop, error, finish and pause -- so every arm of render-state-arm
 ;; contributes its locals to the walk.
 (define binding 'pausem)
-(define rendered (utf8->string (render-machine (compile-machine (make-pause-machine) '())
+;; *** The fixture is the pause machine PLUS two field nodes, added by Slice ②.
+;; *** The pause machine alone declares no fields, so the emitted body binds
+;; neither `v` nor `r` and both would sit in reserved-member-3 as reservations
+;; nothing exercises -- the guard would stop guarding the thing ② added to it.
+;; The two field arms are what put those locals in the rendered text.
+;;
+;; Slice ③ extends this same fixture rather than building another: whatever
+;; locals the accumulate arm binds must appear here or they are unwitnessed too.
+(define (make-field-drift-machine)
+  (make-machine 'pausem 'start (list (make-uint-field 'count 8 0 #f)) '() '()
+    (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
+          (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 0) (make-edge 'bump 'advance) #f))
+            (make-edge 'reject 'reexecute) #f #f)
+          ;; A FALLIBLE action, so the emitted arm binds `r` as well as `v`; a
+          ;; safe one emits no bound check and would leave `r` unwitnessed.
+          (make-field-action-node 'bump 'increment '(count) 'test 'reject #f)
+          ;; A STOP, not a finish: Slice ②'s own :908 check rejects a
+          ;; byte-reachable zero-width node targeting a finish terminal, which
+          ;; this fixture ran into on its first draft.
+          (make-field-branch-node 'test 'zero '(count) 'done 'start #f)
+          (make-stop-node 'done #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+(define rendered (utf8->string (render-machine (compile-machine (make-field-drift-machine) '())
                                                binding)))
 ;; R6RS has no with-input-from-string; open-string-input-port is the portable
 ;; form and is what the shipped determinism programs use.

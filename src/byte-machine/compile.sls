@@ -66,7 +66,8 @@
   ;; define-record-type's auxiliary keyword and which the drift guard's own
   ;; `(rnrs)` subtraction would therefore swallow.
   (define reserved-member-3
-    '(exec loop pos st off b bv start end state offset finish? fieldv errs pk))
+    '(exec loop pos st off b bv start end state offset finish? fieldv errs pk
+      v r))
   (define (lower-alpha? c) (and (char>=? c #\a) (char<=? c #\z)))
   (define (name-char? c)
     (or (lower-alpha? c) (and (char>=? c #\0) (char<=? c #\9)) (char=? c #\-)))
@@ -163,7 +164,52 @@
   ;; normalized state at all, and the declaration is not recoverable from its
   ;; code alone -- codes need not be unique -- so both are threaded in from
   ;; render-machine rather than derived here.
-  (define (render-state-arm s names index-of)
+  ;; --- Slice ②'s two emitted arms ---
+  ;; The arithmetic is written TWICE on purpose (§18:970-972, decision 0015
+  ;; point 3): this is the emitter's copy and it shares no helper with
+  ;; interpret.sls. Widths come from the NORMALIZED table here and from
+  ;; `machine-fields` there, so a lowering bug in overflow checking stays visible
+  ;; to the differential -- the single class of defect this milestone introduces.
+  ;;
+  ;; `render-state-arm` could not see the declarations at all, so `fields` is
+  ;; threaded in: the normalized (name width initial slot) table.
+  (define (field-slot-width fields name)
+    (let loop ((fs fields))
+      (cond ((null? fs)
+             ;; Unreachable: pass 6a rejects an operand naming no declared field
+             ;; before the emitter runs. Loud rather than a silent slot 0.
+             (assertion-violation 'render-machine "no declared field for operand" name))
+            ((eq? (car (car fs)) name) (cons (cadddr (car fs)) (cadr (car fs))))
+            (else (loop (cdr fs))))))
+  (define (num n) (number->string n))
+  ;; A jump that consumes nothing: same `pos`, same `off`, same `pk`. The
+  ;; position kind is carried THROUGH for the reason runtime.sls records at its
+  ;; own zero-width arms -- a zero-width step does not move the parser in the
+  ;; input, and §12.7:777 makes the two lanes' answers comparable.
+  (define (zero-width-jump target)
+    (string-append "(loop pos " (num target) " off pk)"))
+  (define (render-operation op k)
+    (case op
+      ((store) (num k))
+      ((clear) "0")
+      ((increment) "(+ v 1)")
+      ((decrement) "(- v 1)")
+      ((add) (string-append "(+ v " (num k) ")"))
+      ((set-mask) (string-append "(bitwise-ior v " (num k) ")"))
+      ((clear-mask) (string-append "(bitwise-and v (bitwise-not " (num k) "))"))
+      (else (assertion-violation 'render-machine "unknown field operation" op))))
+  (define (render-predicate pred a b)
+    (case pred
+      ((equal) (string-append "(= v " (num a) ")"))
+      ((zero) "(= v 0)")
+      ((nonzero) "(not (= v 0))")
+      ((range) (string-append "(and (<= " (num a) " v) (<= v " (num b) "))"))
+      ((mask-any) (string-append "(not (= 0 (bitwise-and v " (num a) ")))"))
+      ((mask-all) (string-append "(= " (num a) " (bitwise-and v " (num a) "))"))
+      ((mask-none) (string-append "(= 0 (bitwise-and v " (num a) "))"))
+      (else (assertion-violation 'render-machine "unknown field predicate" pred))))
+
+  (define (render-state-arm s names index-of fields)
     (let ((id (number->string (normal-state-id s)))
           ;; Total by construction: the debug map and the internal state list
           ;; are built from the same prefix-block id alists, so every id in
@@ -195,6 +241,44 @@
         ((pause)
          (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
                         (number->string (normal-pause-target s)) " off))\n"))
+        ((field-action)
+         (let* ((args (normal-field-arguments s))
+                (sw (field-slot-width fields (car args)))
+                (slot (car sw)) (width (cdr sw))
+                (k (and (pair? (cdr args)) (cadr args)))
+                (tg (normal-field-targets s))
+                (expr (render-operation (normal-field-selector s) k)))
+           (if (cdr tg)
+               ;; A fallible operation. The bound check is emitted, and on
+               ;; failure NOTHING is written -- §25:1569 and §10.6:568: a failed
+               ;; operation leaves the prior value unchanged, not saturated.
+               (string-append
+                "      ((" id ")\n"
+                "       (let* ((v (vector-ref fieldv " (num slot) ")) (r " expr "))\n"
+                "         (if (and (>= r 0) (<= r " (num (- (expt 2 width) 1)) "))\n"
+                "             (begin (vector-set! fieldv " (num slot) " r) "
+                (zero-width-jump (car tg)) ")\n"
+                "             " (zero-width-jump (cdr tg)) ")))\n")
+               ;; An operation the constructor proved cannot fail, so no check is
+               ;; emitted. Emitting one anyway would be a branch no input can
+               ;; take, and a mutation of it would survive.
+               (string-append
+                "      ((" id ")\n"
+                "       (let ((v (vector-ref fieldv " (num slot) ")))\n"
+                "         (vector-set! fieldv " (num slot) " " expr ")\n"
+                "         " (zero-width-jump (car tg)) "))\n"))))
+        ((field-branch)
+         (let* ((args (normal-field-arguments s))
+                (sw (field-slot-width fields (car args)))
+                (a (and (pair? (cdr args)) (cadr args)))
+                (b (and (pair? (cdr args)) (pair? (cddr args)) (caddr args)))
+                (tg (normal-field-targets s)))
+           (string-append
+            "      ((" id ")\n"
+            "       (let ((v (vector-ref fieldv " (num (car sw)) ")))\n"
+            "         (if " (render-predicate (normal-field-selector s) a b) "\n"
+            "             " (zero-width-jump (car tg)) "\n"
+            "             " (zero-width-jump (cdr tg)) ")))\n")))
         ((dispatch)
          (let ((fb (normal-dispatch-fallback s)))
            (string-append
@@ -372,7 +456,8 @@
         (let loop ((i 0) (acc ""))
           (if (>= i (vector-length states)) acc
               (loop (+ i 1) (string-append acc (render-state-arm (vector-ref states i)
-                                                                 names index-of)))))
+                                                                 names index-of
+                                                                 (normal-machine-fields normal))))))
         "      (else (assertion-violation (quote exec) \"unknown state\" st)))))\n"
         "  (define " bstr "\n"
         "    (byte-machine-make-compiled-machine 3 " (number->string fp) " "

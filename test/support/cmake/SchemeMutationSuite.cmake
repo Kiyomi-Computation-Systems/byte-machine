@@ -796,6 +796,14 @@ cmake_minimum_required(VERSION 3.26)
 # Slice ①b's Critical fix wave: 271 -> 273. Two join Pass 33, both recovered from
 # task 4's unsound subsumption call.
 #
+# Slice ② task 8: the differential.field pass gains SIX for the EMITTER's field
+# arms -- the bound check and its boundary, the no-write-on-failure rule, one
+# operation, the zero-width jump, and the branch predicate. `v` and `r` join
+# reserved-member-3, and its drift guard's fixture gains field nodes, which it
+# needed: the pause machine it rendered declares none, so both locals would have
+# been reservations nothing exercises. Passes stay at 49 and mutations become
+# 311 + 6 = 317.
+#
 # Slice ② tasks 6 and 7: the field-access (now differential.field) pass gains
 # FIVE -- three for the interpreter's checked arithmetic and two for the runtime's
 # zero-width arms -- and Slice ①b's `parser-reset!` EXPECT_SURVIVES is CLOSED and
@@ -849,7 +857,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 311)
+set(EXPECTED_MUTATIONS 317)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -2836,8 +2844,13 @@ byte_machine_mutation(
   LABEL "runtime: a /v2 finish does not drive exec with finish? true"
   # Re-anchored in Slice ①a task 3: emitted `exec` gained its reserved seventh
   # parameter, so both call sites gained an argument.
-  FIND [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t empty-fields)))]]
-  REPLACE [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #f empty-fields)))]]
+  # Re-anchored by Slice ② task 8: the seventh argument stopped being the shared
+  # `empty-fields` sentinel and became the parser's own vector, which is what
+  # the reservation was FOR. The `finish?` flag this pin names is unchanged.
+  FIND [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t
+                    (parser-field-values parser))))]]
+  REPLACE [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #f
+                    (parser-field-values parser))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish with no input routes to the default-eof error: default-eof code")
 
 # Second: the /v2 TOMBSTONE. Milestone 4 Slice ①a task 3 rewrote both retired
@@ -7936,8 +7949,13 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.member3-drift.chez.source
   LABEL "compile: an emitted local is missing from reserved-member-3"
-  FIND [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs pk))]]
-  REPLACE [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs))]]
+  # Re-anchored by Slice ② task 8: the list gained `v` and `r`, the two locals
+  # the emitted field arms bind, and reflowed onto two lines. Dropping `pk` is
+  # still the edit -- the same decision, the same expectation.
+  FIND [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs pk
+      v r))]]
+  REPLACE [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs
+      v r))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(pk\\)")
 
@@ -8260,6 +8278,81 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "a failure after a zero-width hop on an EOF chain reports eof, not boundary: position kind -- expected eof, got boundary")
+
+# Slice ② task 8 adds SIX for the EMITTER's field arms. Everything they pin is a
+# SECOND implementation of what the interpreter's mutations already pin -- the
+# arithmetic is written twice on purpose (§18:970-972), and these are the copy
+# the differential exists to compare.
+#
+# One mutation is measured and NOT written: swapping the branch arms produces a
+# record set IDENTICAL to "the emitted zero predicate is inverted" below -- not a
+# subset, the same set. On a two-armed branch, swapping the arms and negating the
+# predicate are the same function, so no fixture can separate them by behaviour;
+# only reading the source tells them apart.
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted bound check is absent"
+  # §25:1568's operation share, emitter side.
+  FIND [[         (if (and (>= r 0) (<= r "]]
+  REPLACE [[         (if (or #t (>= r 0) (<= r "]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the generated lane leaves a failed operation's value unchanged: both unchanged -- expected 254, got 264")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted upper bound is off by one"
+  # The boundary rather than the check: a u8 accepts 255 and rejects 256.
+  FIND [[(num (- (expt 2 width) 1))]]
+  REPLACE [[(num (expt 2 width))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "both lanes agree over every input the fixture can take: count 0 -- expected 255, got 256")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: an emitted overflow writes the value anyway"
+  # §25:1569 and §10.6:568, emitter side: a failed operation leaves the prior
+  # value UNCHANGED, not saturated. The fixture's `add` overflows from BELOW the
+  # ceiling, which is what makes unchanged and clamped distinguishable at all.
+  FIND [[                "             " (zero-width-jump (cdr tg)) ")))\n")]]
+  REPLACE [[                "             (begin (vector-set! fieldv " (num slot) " r) " (zero-width-jump (cdr tg)) "))))\n")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "both lanes agree over every input the fixture can take: count 1 -- expected 254, got 264")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: an emitted increment does not increment"
+  # One arm of the emitter's operation table, and the counterpart of the
+  # interpreter mutation of the same name -- two implementations, two pins.
+  FIND [[      ((increment) "(+ v 1)")]]
+  REPLACE [[      ((increment) "v")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the generated lane writes, checks and routes identically: count -- expected 255, got 254")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: an emitted zero-width step consumes a byte"
+  # Zero-width means zero-width in the generated lane too: the emitted jump
+  # keeps pos, off and pk. Advancing would eat the byte the next dispatch reads.
+  FIND [[(string-append "(loop pos " (num target) " off pk)"))]]
+  REPLACE [[(string-append "(loop (+ pos 1) " (num target) " off pk)"))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "both lanes agree over every input the fixture can take: lifecycle 0 -- expected error, got ready")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted zero predicate is inverted"
+  # The branch arm. See this block's header for the mutation it stands in for.
+  FIND [[      ((zero) "(= v 0)")]]
+  REPLACE [[      ((zero) "(not (= v 0))")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the generated lane writes, checks and routes identically: seen -- expected 1, got 101")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

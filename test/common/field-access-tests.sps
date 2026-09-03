@@ -101,7 +101,11 @@
           ;; increment can fail, so it carries an error target -- the constructor
           ;; makes that mandatory.
           (make-field-action-node 'bump 'increment '(count) 'note 'over #f)
-          (make-field-action-node 'note 'add '(seen 1) 'start 'over #f)
+          (make-field-action-node 'note 'add '(seen 1) 'chk 'over #f)
+          ;; A field BRANCH, so the emitted branch arm is exercised too. Without
+          ;; one, mutations of that arm survive the whole lane -- measured.
+          (make-field-branch-node 'chk 'zero '(count) 'odd 'start #f)
+          (make-field-action-node 'odd 'add '(seen 100) 'start 'over #f)
           ;; Overflows from BELOW the ceiling: 254 + 10 = 264 > 255. Without this
           ;; the only overflow in the fixture starts AT 255, where "leaves the
           ;; prior value unchanged" and "clamps to the maximum" coincide -- and a
@@ -111,6 +115,8 @@
           (make-error-node 'reject 'rejected #f))
     'default-eof #f))
 (define wm-ref (make-interpreted-machine (verify-machine wm)))
+(define wm-gen
+  (emit-and-load wm 'writer 'writer-parser (string-append tmpdir "/generated-writer.sls")))
 
 (define (feed-bytes cm bs)
   (let ((p (make-parser cm '() #f)))
@@ -184,6 +190,41 @@
     ;; *** Slice ①b's parser-reset! EXPECT_SURVIVES, now closable. *** Its own
     ;; reason names this exact condition: the restore becomes witnessable the
     ;; moment a writer exists, and the mutation must be re-pinned in that commit.
+    ;; *** The GENERATED lane runs the same schedule. *** Everything above drives
+    ;; the interpreter; these drive the emitted library, and the last case
+    ;; compares them. Without this the emitter's arms -- a separate
+    ;; implementation of the same arithmetic, written twice on purpose -- would
+    ;; be entirely unexercised.
+    (harness-case "the generated lane writes, checks and routes identically"
+      (lambda ()
+        (let ((a (feed-bytes wm-ref '(0))) (b (feed-bytes wm-gen '(0))))
+          (check-equal "count" (parser-field-ref b 'count) (parser-field-ref a 'count))
+          (check-equal "seen" (parser-field-ref b 'seen) (parser-field-ref a 'seen))
+          (check-equal "and the value itself" (parser-field-ref b 'count) 255))))
+    (harness-case "the generated lane leaves a failed operation's value unchanged"
+      (lambda ()
+        (let ((a (feed-bytes wm-ref '(1))) (b (feed-bytes wm-gen '(1))))
+          (check-equal "both unchanged" (parser-field-ref b 'count) (parser-field-ref a 'count))
+          (check-equal "and not clamped" (parser-field-ref b 'count) 254)
+          (check-equal "lifecycle" (parser-lifecycle b) 'error))))
+    (harness-case "both lanes agree over every input the fixture can take"
+      (lambda ()
+        ;; A loop with a sentinel reading the OBSERVED count: the two lanes must
+        ;; agree on the field values AND the status for each byte, not merely on
+        ;; the one byte a hand-written case happens to name.
+        (let ((seen 0))
+          (for-each
+           (lambda (bs)
+             (set! seen (+ seen 1))
+             (let ((a (feed-bytes wm-ref bs)) (b (feed-bytes wm-gen bs)))
+               (check-equal (string-append "count " (number->string (car bs)))
+                            (parser-field-ref b 'count) (parser-field-ref a 'count))
+               (check-equal (string-append "seen " (number->string (car bs)))
+                            (parser-field-ref b 'seen) (parser-field-ref a 'seen))
+               (check-equal (string-append "lifecycle " (number->string (car bs)))
+                            (parser-lifecycle b) (parser-lifecycle a))))
+           '((0) (1) (2) (0 0) (0 1) (1 0)))
+          (check-equal "every schedule compared" seen 6))))
     (harness-case "parser-reset! restores a field a parse has CHANGED"
       (lambda ()
         (let ((p (feed-bytes wm-ref '(0))))
