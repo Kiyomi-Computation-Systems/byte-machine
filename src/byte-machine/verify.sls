@@ -422,36 +422,107 @@
                                                   "eof-target names no node")))))
                    nodes)))))
 
-  ;; Walk the eof-target chain from `start`, classifying its terminal.
+  ;; Classify the EOF continuation of `start` (§16.2:909). Rewritten in
+  ;; Milestone 4 Slice ② to answer over a SET of successors, because a field
+  ;; branch has two targets and a field action has `next` plus `error`.
+  ;;
+  ;; *** The algorithm is §4.4's and decision 0021's, NOT design §7 Task 1's. ***
+  ;; §7 opens "§4.4 leaves two choices open that the implementer must not
+  ;; improvise" and then makes both the other way; §4.4 settles them 900 lines
+  ;; earlier in the same commit, and 0021 item 2 names §7's per-path `seen` as a
+  ;; REJECTED algorithm -- "one structure doing both jobs and pays 2^k paths for
+  ;; k branch nodes". §7's bullets are struck in the design and the correction is
+  ;; marked at the site.
+  ;;
+  ;; TWO structures, each doing one job:
+  ;;   `path` is the current DFS stack -- re-entering it is a cycle, and this is
+  ;;          per-path because a cycle is a property of the path.
+  ;;   `done` is a GLOBAL completed-set -- a node whose verdict is settled is not
+  ;;          re-explored, so a diamond whose arms re-converge costs one visit
+  ;;          rather than two, and 2^k paths never arise.
+  ;; A verdict memoized in `done` may have been reached while other nodes were on
+  ;; the path, which is sound here because the only path-dependent answer is
+  ;; `cycle`, and `cycle` means "a cycle is reachable from here" -- true from
+  ;; every path that reaches this node, not just the one that found it.
+  ;;
+  ;; `'unknown` is DELETED, not ranked least (0021 item 3: it "leaves the answer
+  ;; set rather than becoming its least element ... a residual arm may not
+  ;; reintroduce one"). Every kind `ir.sls` can construct has its own arm, so the
+  ;; residual `else` is unreachable and raises, matching the loud-else convention
+  ;; in normal-ir.sls, compile.sls and runtime.sls.
+  (define eof-verdict-ranking
+    '(finish unresolved error default-error eof-reachable-stop cycle))
+  (define (eof-verdict-rank v)
+    (let loop ((vs eof-verdict-ranking) (i 0))
+      (cond ((null? vs) (assertion-violation 'eof-terminal "unranked verdict" v))
+            ((eq? (car vs) v) i)
+            (else (loop (cdr vs) (+ i 1))))))
+  ;; Sibling answers join by max. 0021 item 1 pins only `cycle >
+  ;; eof-reachable-stop` -- a cycle is the non-termination neither runtime loop
+  ;; guards against, so it must survive a join -- and leaves the rest unfixed;
+  ;; the order above is this slice's call within that constraint.
+  (define (eof-verdict-join a b)
+    (if (>= (eof-verdict-rank a) (eof-verdict-rank b)) a b))
+
+  ;; The nodes an EOF walk continues to. Empty at a terminal; one for a pause or
+  ;; a dispatch with a symbolic eof-target; TWO for the zero-width field kinds,
+  ;; which is the whole reason this walk became multi-successor. A field action's
+  ;; `error` is a successor exactly when it has one -- the constructor makes that
+  ;; `#f` precisely when the operation cannot fail.
+  (define (eof-successors n)
+    (cond ((pause-node? n) (list (pause-node-continuation n)))
+          ((field-action-node? n)
+           (let ((e (field-action-node-error n)))
+             (if (symbol? e)
+                 (list (field-action-node-next n) e)
+                 (list (field-action-node-next n)))))
+          ((field-branch-node? n)
+           (list (field-branch-node-true-target n)
+                 (field-branch-node-false-target n)))
+          (else '())))
+
   (define (eof-terminal m start)
-    (let ((nodes (machine-nodes m)))
-      (let loop ((name start) (seen '()))
-        (if (memq name seen) 'cycle
-            (let ((n (lookup nodes name)))
-              (cond ((not n) 'unresolved)             ; pass-eof reports missing target
-                    ((finish-node? n) 'finish)
-                    ((error-node? n) 'error)
-                    ((stop-node? n) 'eof-reachable-stop)
-                    ((pause-node? n) (loop (pause-node-continuation n) (cons name seen)))
-                    ;; Fix wave 1 (Important 3): kept as two separate arms rather
-                    ;; than routed through node-eof-target above. Every other arm
-                    ;; in this cond is one node predicate per arm, so this is the
-                    ;; only place a reader scanning "what does eof-terminal do for
-                    ;; a sequence node" finds its own clause; merging it with the
-                    ;; byte-dispatch arm via `(or (byte-dispatch-node? n)
-                    ;; (sequence-dispatch-node? n))` would be the only merged arm
-                    ;; in an otherwise exhaustive per-kind case analysis, and
-                    ;; would obscure that this walk's per-kind decision (loop
-                    ;; through the eof-target, or answer 'default-error) is made
-                    ;; independently for each kind even though the two bodies
-                    ;; happen to coincide today.
-                    ((byte-dispatch-node? n)
-                     (let ((t (byte-dispatch-node-eof-target n)))
-                       (if (symbol? t) (loop t (cons name seen)) 'default-error)))
-                    ((sequence-dispatch-node? n)
-                     (let ((t (sequence-dispatch-node-eof-target n)))
-                       (if (symbol? t) (loop t (cons name seen)) 'default-error)))
-                    (else 'unknown)))))))
+    (let ((nodes (machine-nodes m)) (done '()))
+      (define (walk name path)
+        (cond ((memq name path) 'cycle)
+              ((assq name done) => cdr)
+              (else
+               (let ((v (classify name (cons name path))))
+                 (set! done (cons (cons name v) done))
+                 v))))
+      (define (dispatch-arm t path)
+        (if (symbol? t) (walk t path) 'default-error))
+      (define (join-over names path)
+        (let loop ((ns names) (acc #f))
+          (if (null? ns)
+              ;; A zero-width node with no successors cannot occur -- both kinds
+              ;; have mandatory targets -- so this is the same unreachable shape
+              ;; as the else below, answered rather than raised because an empty
+              ;; join has an obvious identity and a missing kind does not.
+              (or acc 'unresolved)
+              (loop (cdr ns)
+                    (let ((v (walk (car ns) path)))
+                      (if acc (eof-verdict-join acc v) v))))))
+      (define (classify name path)
+        (let ((n (lookup nodes name)))
+          (cond ((not n) 'unresolved)             ; pass-eof reports missing target
+                ((finish-node? n) 'finish)
+                ((error-node? n) 'error)
+                ((stop-node? n) 'eof-reachable-stop)
+                ;; Kept as two arms rather than routed through node-eof-target:
+                ;; every other arm here is one predicate per kind, and merging
+                ;; these two would be the only merged arm in an otherwise
+                ;; exhaustive per-kind analysis -- obscuring that the decision is
+                ;; made independently per kind even though the bodies coincide.
+                ((byte-dispatch-node? n)
+                 (dispatch-arm (byte-dispatch-node-eof-target n) path))
+                ((sequence-dispatch-node? n)
+                 (dispatch-arm (sequence-dispatch-node-eof-target n) path))
+                ((or (pause-node? n) (field-action-node? n) (field-branch-node? n))
+                 (join-over (eof-successors n) path))
+                (else (assertion-violation 'eof-terminal
+                                           "no EOF classification for node kind" name)))))
+      (walk start '())))
 
   ;; Byte-flow reachability (feed can arrive): entry DFS over node-out-targets
   ;; -- dispatch case/fallback edges plus reached-pause continuations --

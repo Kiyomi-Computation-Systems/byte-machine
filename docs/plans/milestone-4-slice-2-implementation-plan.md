@@ -204,8 +204,33 @@ in both directions, then the gate. Tasks 1-3 are strictly ordered; 4-9 depend on
   *Trap worth carrying: `?` is a regex metacharacter, so a pin naming `node?` matched `nod `
   and the runner reported a wrong-reason catch.*
 
-- [ ] **Task 2 — `eof-terminal`, the multi-successor rewrite (D1).** *(was Task 1)* Now that
-  `field-branch` exists, the rewrite's own properties are witnessable. One DFS, path stack plus global
+- [x] **Task 2 — `eof-terminal`, the multi-successor rewrite (D1).** *(was Task 1)* Now that
+  `field-branch` exists, the rewrite's own properties are witnessable — six new cases, none of
+  which could have been written a commit earlier.
+
+  Two structures, each doing one job: `path` is the DFS stack (a cycle is a property of the
+  path), `done` is the global completed-set. `'unknown` is **deleted** — every constructible
+  kind has an arm and the residual `else` raises. Behaviour-preserving for every shipped kind:
+  all 92 lanes passed before a single test was added.
+
+  **A mirrored-arm case was added to make two mutants separable.** A mutant that walks only the
+  true arm answers one arm order correctly and the other wrongly, so the pair separates "the
+  join uses the wrong order" from "the second arm is never walked"; with one order only, the
+  rank mutation's records were a strict subset.
+
+  **The completed-set is an `EXPECT_SURVIVES`, measured.** Its job is complexity, not
+  correctness: the path stack alone answers every verdict correctly, because the only
+  path-dependent answer is `cycle` and a re-visit re-derives the same verdict. A timing witness
+  — a ~25-diamond chain making the mutant take 2^25 walks — was **considered and declined**,
+  because a catch that depends on host speed is not a catch this suite can state. Survivors go
+  to **11**; Task 7 takes them back to 10 by closing ①b's.
+
+  Three shipped pins re-anchored in the same commit: `seen` became the path stack, the pause
+  arm moved into `eof-successors`, and arm 5's anchor ended on the `(else 'unknown)` that 0021
+  item 3 deletes — the replacement keeps that mutation *comparison*-caught rather than letting
+  it die by the new raising `else`.
+
+  `release` 92/92, 49 passes / 287 mutations, no golden moved. One DFS, path stack plus global
   completed-set, `'unknown` deleted with an arm per constructible kind. Pin
   `cycle > eof-reachable-stop`. Re-measure the four `eof-terminal` pins and both callers.
   **Gate:** a diamond that re-converges is not `'cycle`; a genuine cycle still is; no

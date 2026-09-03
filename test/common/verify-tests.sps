@@ -1119,4 +1119,91 @@
                      (ambiguity-count (machine (one-byte-nodes (make-edge 'reject 'reexecute))))
                      0)))))
 
+
+;; Milestone 4 Slice ② task 2: the eof-terminal rewrite (§4.4, decision 0021).
+;;
+;; *** These cases could not have been written before task 1. *** Every kind
+;; shipped before this slice is SINGLE-successor, so none can witness a join, a
+;; re-converging diamond, or the completed-set. That is why tasks 1 and 2 are
+;; swapped relative to the plan, which ordered the rewrite first "so its own
+;; tests are written against shipped kinds".
+;;
+;; Each machine routes its entry dispatch's eof-target into a field branch, so
+;; the :909 walk reaches the multi-successor node. The field kinds are not yet
+;; taught to the other passes (that is task 3), so these machines carry unrelated
+;; diagnostics too -- every assertion is therefore about the PRESENCE or ABSENCE
+;; of one code, never about a total count.
+(define (eof-into fa-nodes)
+  (make-machine 'm 'start '() '() '() (list eof-decl rej-decl)
+    (append (list (make-byte-dispatch-node 'start
+                    (list (make-byte-case (make-exact-byte-matcher 0)
+                                          (make-edge 'stop 'advance) #f))
+                    (make-edge 'reject 'reexecute) 'br #f)
+                  (make-stop-node 'stop #f)
+                  (make-error-node 'reject 'rejected #f))
+            fa-nodes)
+    'default-eof #f))
+
+(harness-group "the EOF walk over multi-successor zero-width nodes (§4.4, 0021)"
+  (lambda ()
+    (harness-case "both arms reaching a finish is not a cycle and not a stop"
+      (lambda ()
+        (let ((cs (codes (eof-into (list (make-field-branch-node 'br 'zero '(count) 'f1 'f2 #f)
+                                         (make-finish-node 'f1 #f)
+                                         (make-finish-node 'f2 #f))))))
+          (check "no cycle" (not (memq 'eof-zero-progress-cycle cs)))
+          (check "no reachable stop" (not (memq 'eof-reachable-stop cs))))))
+    (harness-case "a DIAMOND that re-converges is not a cycle"
+      (lambda ()
+        ;; The defect the rejected algorithm has: one shared `seen` that
+        ;; tolerates re-visits reports 'cycle for a diamond that merely
+        ;; re-converges. Both arms reach the SAME finish node here, so the walk
+        ;; meets `f1` twice.
+        (let ((cs (codes (eof-into (list (make-field-branch-node 'br 'zero '(count) 'a 'b #f)
+                                         (make-field-action-node 'a 'clear '(count) 'f1 #f #f)
+                                         (make-field-action-node 'b 'clear '(count) 'f1 #f #f)
+                                         (make-finish-node 'f1 #f))))))
+          (check "no cycle" (not (memq 'eof-zero-progress-cycle cs))))))
+    (harness-case "one arm cycling is a cycle even though the other finishes"
+      (lambda ()
+        ;; The join has to be `max`, not "first answer" and not "all arms agree":
+        ;; a branch one of whose arms genuinely cycles cannot report nothing.
+        (let ((cs (codes (eof-into (list (make-field-branch-node 'br 'zero '(count) 'f1 'loop #f)
+                                         (make-finish-node 'f1 #f)
+                                         (make-field-action-node 'loop 'clear '(count) 'br #f #f))))))
+          (check "cycle" (memq 'eof-zero-progress-cycle cs)))))
+    (harness-case "cycle outranks eof-reachable-stop when the arms differ"
+      (lambda ()
+        ;; The ONE relation decision 0021 item 1 pins in the source, and the only
+        ;; place two verdicts can now meet.
+        (let ((cs (codes (eof-into (list (make-field-branch-node 'br 'zero '(count) 'stop 'loop #f)
+                                         (make-field-action-node 'loop 'clear '(count) 'br #f #f))))))
+          (check "cycle" (memq 'eof-zero-progress-cycle cs))
+          (check "and not the stop" (not (memq 'eof-reachable-stop cs))))))
+    (harness-case "cycle outranks eof-reachable-stop in the OTHER arm order too"
+      (lambda ()
+        ;; The mirror of the case above, and not redundant with it: a mutant that
+        ;; walks only the TRUE arm answers correctly here (the cycle IS the true
+        ;; arm) and wrongly there, so this pair is what separates "the join uses
+        ;; the wrong order" from "the second arm is never walked at all". Without
+        ;; it those two mutants are indistinguishable.
+        (let ((cs (codes (eof-into (list (make-field-branch-node 'br 'zero '(count) 'loop 'stop #f)
+                                         (make-field-action-node 'loop 'clear '(count) 'br #f #f))))))
+          (check "cycle" (memq 'eof-zero-progress-cycle cs))
+          (check "and not the stop" (not (memq 'eof-reachable-stop cs))))))
+    (harness-case "an arm reaching a stop is eof-reachable-stop when no arm cycles"
+      (lambda ()
+        ;; The premise for the case above: without it, "not the stop" would pass
+        ;; because this walk never reports a stop through a branch at all.
+        (let ((cs (codes (eof-into (list (make-field-branch-node 'br 'zero '(count) 'stop 'f1 #f)
+                                         (make-finish-node 'f1 #f))))))
+          (check "reachable stop" (memq 'eof-reachable-stop cs)))))
+    (harness-case "a field action's error target is walked too"
+      (lambda ()
+        ;; `next` PLUS `error` -- a field action is multi-successor as well, and
+        ;; a walk that followed only `next` would miss a stop behind a failure.
+        (let ((cs (codes (eof-into (list (make-field-action-node 'br 'increment '(count) 'f1 'stop #f)
+                                         (make-finish-node 'f1 #f))))))
+          (check "reachable stop" (memq 'eof-reachable-stop cs)))))))
+
 (harness-finish)

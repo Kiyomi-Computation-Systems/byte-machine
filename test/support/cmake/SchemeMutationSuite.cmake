@@ -796,6 +796,14 @@ cmake_minimum_required(VERSION 3.26)
 # Slice ①b's Critical fix wave: 271 -> 273. Two join Pass 33, both recovered from
 # task 4's unsound subsumption call.
 #
+# Slice ② task 2: Pass 33 gains FIVE for the multi-successor eof-terminal
+# rewrite -- four pinned and one EXPECT_SURVIVES for the completed-set, whose job
+# is complexity rather than correctness. Three shipped eof-terminal pins were
+# RE-ANCHORED in the same commit (the `seen` list became the DFS path stack, the
+# pause arm moved into `eof-successors`, and the arm-5 anchor ended on the
+# `(else 'unknown)` decision 0021 item 3 deletes). Passes stay at 49 and
+# mutations become 282 + 5 = 287.
+#
 # Slice ② task 1: the ir pass gains SEVEN for the two zero-width node kinds --
 # the two closed sets, the proper-list check, both directions of the error-slot
 # rule, and one per census site (`node?`, `node-name`). No pass is added and
@@ -814,7 +822,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 282)
+set(EXPECTED_MUTATIONS 287)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3831,8 +3839,12 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: an eof-target cycle is classified as a finish terminal"
-  FIND [[(if (memq name seen) 'cycle]]
-  REPLACE [[(if (memq name seen) 'finish]]
+  # RE-ANCHORED by Slice ② task 2's multi-successor rewrite. `seen` became the
+  # DFS `path` stack (decision 0021 item 2's two structures), so the shipped FIND
+  # went to zero sites. The decision is unchanged -- re-entering the current path
+  # is a cycle -- and so is its signature.
+  FIND [[        (cond ((memq name path) 'cycle)]]
+  REPLACE [[        (cond ((memq name path) 'finish)]]
   # Task 3 whole-pass audit: bare "eof-zero-progress-cycle" is a diagnostic
   # CODE and was measured matching "eof-terminal chains through a pause
   # continuation" and "a pause's byte-reachability gate is not checked
@@ -3919,8 +3931,12 @@ byte_machine_mutation(
   # stops at the pause, so neither is found), 1 for losing stop
   # classification, 1 for losing cycle classification. Measured: "got 0" on
   # that check is this mutation's alone among the 27.
-  FIND [[((pause-node? n) (loop (pause-node-continuation n) (cons name seen)))]]
-  REPLACE [[((pause-node? n) 'finish)]]
+  # RE-ANCHORED by Slice ② task 2: the pause arm moved out of eof-terminal's
+  # own cond into `eof-successors`, which is where every multi-successor kind's
+  # continuation set is now computed. A pause contributes exactly one successor,
+  # which is what this mutation removes.
+  FIND [[    (cond ((pause-node? n) (list (pause-node-continuation n)))]]
+  REPLACE [[    (cond ((pause-node? n) '())]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "both EOF terminals reported -- expected 2, got 0")
 
@@ -4476,11 +4492,15 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: eof-terminal does not classify a sequence node reached mid-chain (arm 5)"
-  FIND [[((sequence-dispatch-node? n)
-                     (let ((t (sequence-dispatch-node-eof-target n)))
-                       (if (symbol? t) (loop t (cons name seen)) 'default-error)))
-                    (else 'unknown)))))))]]
-  REPLACE [[(else 'unknown)))))))]]
+  # RE-ANCHORED by Slice ② task 2. The old FIND ended on `(else 'unknown)))))))`
+  # -- the arm boundary -- and decision 0021 item 3 DELETED that residual, so the
+  # anchor is gone with it. The replacement keeps the mutation
+  # COMPARISON-caught, which the note below depends on: dropping the arm
+  # entirely would now reach the raising `else` and kill the mutant by
+  # assertion-violation instead of by the wrong classification this pin names.
+  FIND [[                ((sequence-dispatch-node? n)
+                 (dispatch-arm (sequence-dispatch-node-eof-target n) path))]]
+  REPLACE [[                ((sequence-dispatch-node? n) 'default-error)]]
   # Comparison-caught: with the arm removed, eof-terminal falls to its
   # `(else 'unknown)` the moment the walk reaches a sequence node, so a cycle
   # that must pass back OUT through that node's own eof-target is never
@@ -4835,6 +4855,73 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the nonportable diagnostic names the offending FIELD: the field name -- expected \\(Count\\), got \\(#f\\)")
+
+# Slice ② task 2 adds FOUR pinned and ONE survivor for the multi-successor
+# eof-terminal rewrite (§4.4, decision 0021). Every one of them needs a kind with
+# more than one successor, which is why tasks 1 and 2 are swapped relative to the
+# plan: written against shipped kinds, all five would have been unwitnessable.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: sibling EOF answers take the first arm instead of the max"
+  # *** This is the UNION mutant: taking the first arm means neither a branch's
+  # false target nor an action's error target is walked, so its record set is
+  # exactly the union of the two arm mutations below and is contained in
+  # NEITHER. *** AGENTS.md's relation is "inside ONE sibling's", so it is
+  # separable, and the conjunction is what separates it -- one record from each
+  # arm, which no single-arm mutant can produce together.
+  FIND [[                      (if acc (eof-verdict-join acc v) v))))))]]
+  REPLACE [[                      (if acc acc v))))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "one arm cycling is a cycle even though the other finishes: cycle -- expected a true value.*a field action's error target is walked too: reachable stop -- expected a true value")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a field branch's false target is not an EOF successor"
+  # SUBSUMED BY the union mutant above, by construction -- taking the first arm
+  # does everything this does and more. Kept because it names its own decision.
+  FIND [[           (list (field-branch-node-true-target n)
+                 (field-branch-node-false-target n)))]]
+  REPLACE [[           (list (field-branch-node-true-target n)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "one arm cycling is a cycle even though the other finishes: cycle -- expected a true value")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a field action's error target is not an EOF successor"
+  # The other half of the union, and the reason a field ACTION is multi-successor
+  # too: a walk following only `next` misses a stop sitting behind a failure.
+  FIND [[                 (list (field-action-node-next n) e)]]
+  REPLACE [[                 (list (field-action-node-next n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a field action's error target is walked too: reachable stop -- expected a true value")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: cycle no longer outranks eof-reachable-stop in the join"
+  # The ONE relation decision 0021 item 1 pins in the source: a cycle is the
+  # non-termination neither runtime loop guards against, so it must survive a
+  # join. Pinned on the MIRRORED arm order, which is the record that separates it
+  # from "the false target is not walked" -- a mutant that walks only the true
+  # arm answers this fixture correctly and the other one wrongly.
+  FIND [[    '(finish unresolved error default-error eof-reachable-stop cycle))]]
+  REPLACE [[    '(finish unresolved error default-error cycle eof-reachable-stop))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "cycle outranks eof-reachable-stop in the OTHER arm order too: cycle -- expected a true value")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the EOF walk keeps no completed-set"
+  FIND [[              ((assq name done) => cdr)
+]]
+  REPLACE [[              ]]
+  EXPECT_SURVIVES
+    "measured, not assumed: this mutant passes the whole verify lane unchanged. The completed-set is decision 0021 item 2's SECOND structure and its job is complexity, not correctness -- the path stack alone already answers every verdict correctly, because the only path-dependent answer is `cycle` and a re-visit off the current path re-derives the same verdict rather than a different one. What the set buys is that a diamond costs one visit instead of two, and a chain of k diamonds costs k instead of 2^k, which is exactly the defect 0021 item 2 names in the algorithm it rejects. No assertion over verdicts can see a difference, because there is none. A TIMING witness was considered and declined: a chain of ~25 branch nodes makes the mutant take 2^25 walks and blow the lane's TIMEOUT, but a catch that depends on how fast the host is is not a catch this suite can state, and the project has recorded before that a nonzero exit is not proof. Reopening condition: if a later slice gives the walk a verdict that DOES depend on which path reached a node, the memo stops being sound and this mutation stops being a survivor -- it becomes a bug detector, and must be re-measured then rather than inherited."
+  )
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
