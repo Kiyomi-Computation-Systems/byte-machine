@@ -669,4 +669,73 @@
           (check-equal "generated" (parser-field-ref g 'n) 1152921504606846976)
           (check "above greatest-fixnum" (> (parser-field-ref a 'n) (greatest-fixnum))))))))
 
+
+;; Milestone 4 Slice ③ task 5: need-input resumption and split-point fragmentation.
+;;
+;; *** The finding this task exists to record: an accumulate node needs NO state
+;; of its own across a feed boundary. *** The recon asked where the
+;; partially-consumed-digits state would live, since it is "not obviously a
+;; field". It is: the accumulated value IS the field, which is parser slot 8 and
+;; already survives a feed, and `current` stays parked on the accumulate node
+;; because the arm returns `need-input` without moving it -- exactly what the
+;; dispatch arm does. The split-point behaviour is INHERITED, not invented, and
+;; these cases are what makes that a fact rather than an assumption.
+(define (feed-split cm str at)
+  ;; Feed `str` in two slices, split after `at` bytes.
+  (let ((p (make-parser cm '() #f)) (bs (str->bytes str)))
+    (parser-feed! p bs 0 at)
+    (parser-feed! p bs at (bytevector-length bs))
+    p))
+
+(harness-group "split-point fragmentation (Slice ③)"
+  (lambda ()
+    (harness-case "a number split across a feed boundary accumulates whole"
+      (lambda ()
+        (let ((a (feed-split (car acc10) "12345x" 2))
+              (g (feed-split (cdr acc10) "12345x" 2)))
+          (check-equal "interpreter" (parser-field-ref a 'n) 12345)
+          (check-equal "generated" (parser-field-ref g 'n) 12345))))
+    (harness-case "every split point of the same input gives the same answer"
+      (lambda ()
+        ;; EVERY split, not one: the shipped split-point idiom elsewhere in the
+        ;; tree is hardcoded for a four-byte input, and a single split cannot see
+        ;; a defect that only appears when the boundary lands on the first or
+        ;; last byte. A sentinel reads the OBSERVED count of splits.
+        (let* ((str "12345x") (n (string-length str)) (seen 0))
+          (let loop ((at 0))
+            (when (<= at n)
+              (set! seen (+ seen 1))
+              (let ((a (feed-split (car acc10) str at))
+                    (g (feed-split (cdr acc10) str at)))
+                (check-equal (string-append "interpreter split " (number->string at))
+                             (parser-field-ref a 'n) 12345)
+                (check-equal (string-append "generated split " (number->string at))
+                             (parser-field-ref g 'n) 12345))
+              (loop (+ at 1))))
+          (check-equal "every split point was tried" seen 7))))
+    (harness-case "an empty slice mid-number yields need-input and changes nothing"
+      (lambda ()
+        ;; The degenerate boundary: a feed with no bytes must not advance, must
+        ;; not lose the partial value, and must leave the parser resumable.
+        (let* ((p (make-parser (car acc10) '() #f))
+               (bs (str->bytes "12345x")))
+          (parser-feed! p bs 0 3)
+          (let ((mid (parser-field-ref p 'n))
+                (r (parser-feed! p (make-bytevector 0) 0 0)))
+            (check-equal "partial value" mid 123)
+            (check-equal "need-input" (parser-result-status r) 'need-input)
+            (check-equal "unchanged by the empty slice" (parser-field-ref p 'n) 123)
+            (parser-feed! p bs 3 6)
+            (check-equal "resumes and completes" (parser-field-ref p 'n) 12345)))))
+    (harness-case "an overflow split across a boundary still reports at the offending byte"
+      (lambda ()
+        ;; The interaction the two features have with each other: a
+        ;; non-consuming overflow whose digit arrives in the SECOND slice must
+        ;; still report `byte`, not `boundary`.
+        (let* ((a (feed-split (car acc8bit) "999" 2))
+               (r (parser-feed! a (make-bytevector 0) 0 0)))
+          (check-equal "held at 99" (parser-field-ref a 'n) 99)
+          (check-equal "position kind"
+                       (parser-error-position-kind (parser-result-error r)) 'byte))))))
+
 (harness-finish)

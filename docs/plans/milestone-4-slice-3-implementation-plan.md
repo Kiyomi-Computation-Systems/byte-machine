@@ -242,9 +242,25 @@ directions, then the gate.
 
   `release` 92/92, 49 passes / 349 mutations, no golden moved.
 
-- [ ] **Task 5 — need-input resumption and split-point fragmentation.** The state an accumulate
-  node must carry across a feed boundary, which is not obviously a field. The shipped split-point
-  idiom is hardcoded for a 4-byte input.
+- [x] **Task 5 — need-input resumption and split-point fragmentation.**
+  **The finding: an accumulate node needs no state of its own across a feed boundary.** The
+  recon asked where the partially-consumed-digits state would live "since it is not obviously a
+  field" — it *is* one. The accumulated value is the field, parser slot 8, which already survives
+  a feed; and `current` stays parked because the arm returns `need-input` without moving it,
+  exactly as the dispatch arm does. The behaviour is **inherited, not invented**, and these cases
+  are what make that a fact rather than an assumption.
+
+  **Every split point, not one** — the shipped idiom elsewhere is hardcoded for a four-byte
+  input, and a single split cannot see a defect that only appears at the first or last byte. A
+  sentinel reads the observed count. Plus the degenerate empty slice, and the interaction case: a
+  non-consuming overflow whose digit arrives in the *second* slice must still report `byte`.
+
+  **One mutation** — the arm's own end-of-slice guard, caught by the split cases alone. Two
+  candidates were measured and **not** written: resetting `current` on need-input *survives*
+  (the fixture's entry reexecutes back into the node, so the routing masks it), and reading the
+  previous byte is caught by Task 4's cases rather than these.
+
+  `release` 92/92, 49 passes / 350 mutations, no golden moved.
 
 - [ ] **Task 6 — Bases 10 and 16, all-256 partitions (H5).** The digit arm's shape is a decision.
   Both lanes, every byte.

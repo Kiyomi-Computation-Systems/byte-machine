@@ -837,6 +837,10 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Slice ③ task 5: the differential.field pass gains ONE for the accumulate
+# arm's end-of-slice guard. The rest of the task is tests for INHERITED
+# behaviour -- see that mutation's own note. Mutations become 349 + 1 = 350.
+#
 # Slice ③ task 4: the differential.field pass gains FIVE pinned and TWO
 # EXPECT_SURVIVES for the checked multiply-add. The survivors are the pre-check
 # form itself, in both lanes, and their reason is §15:856: the form is mandated
@@ -937,7 +941,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 349)
+set(EXPECTED_MUTATIONS 350)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -8940,6 +8944,37 @@ byte_machine_mutation(
   EXPECT_SURVIVES
     "measured, not assumed: this mutant passes the whole lane unchanged, in both lanes, and it always will on this host. §15:864-868 specifies the check as `current <= floor((maximum - digit) / base)`, BEFORE the multiply-add; this mutant computes `current * base + digit` first and tests the product. Under Chez the product is an exact integer of unbounded size, so the two forms agree on every input and no fixture can separate them -- including the u64 case, where the accumulated value is already a bignum and the product simply becomes a larger one. The pre-check is written anyway because §15:856 mandates it: \"must not rely on host fixnum width or silent wrapping\". The form is for a host that WRAPS, where computing the product first would silently produce a small wrong number and the check would pass. This project does not run on such a host, so the requirement is unwitnessable here by construction -- a property of the host, not a gap in the lane. Reopening condition: a backend whose integers wrap, or any change that makes the accumulation use fixnum-specialised arithmetic, makes this mutant a bug detector and it must be re-measured and pinned then. The emitter's copy of the same decision; the two are one ruling and both are recorded so neither can be quietly changed alone."
   )
+
+# Slice ③ task 5 adds ONE. Its content is otherwise TESTS for behaviour the
+# accumulate arm INHERITS rather than implements, and that is the task's finding:
+# an accumulate node needs no state of its own across a feed boundary. The
+# partially-accumulated value IS the field -- parser slot 8, which already
+# survives a feed -- and `current` stays parked on the node because the arm
+# returns need-input without moving it, exactly as the dispatch arm does. The
+# recon asked where that state would live "since it is not obviously a field";
+# it is one.
+#
+# Two candidate mutations were measured and are NOT written, because neither is
+# this task's: resetting `current` on need-input SURVIVES (the fixture's entry
+# reexecutes back into the accumulate node, so the routing masks it), and reading
+# the previous byte is caught by task 4's cases rather than by these.
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "runtime: an exhausted accumulate slice reports stopped instead of need-input"
+  # The accumulate arm's own end-of-slice decision, and the only one this task
+  # owns. Caught by the split cases alone -- a single-feed fixture never reaches
+  # the guard, which is why fragmentation needed cases of its own rather than
+  # being assumed to follow from the dispatch arm's pin.
+  FIND [[            ((accumulate)
+             (if (>= pos end)
+                 (make-parser-result 'need-input pos]]
+  REPLACE [[            ((accumulate)
+             (if (>= pos end)
+                 (make-parser-result 'stopped pos]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "split-point fragmentation \\(Slice ③\\).a number split across a feed boundary accumulates whole: interpreter")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
