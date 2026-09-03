@@ -837,6 +837,10 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Slice ③ task 10: the member3-drift pass gains ONE -- the accumulate arm's
+# digit local, which the list reserved and nothing exercised. Mutations become
+# 357 + 1 = 358.
+#
 # Slice ③ task 9: a NEW pass (50) for the accumulate determinism lane and its
 # fourth golden, carrying ONE mutation no behavioural lane can catch.
 # Passes become 49 + 1 = 50; mutations 356 + 1 = 357.
@@ -957,7 +961,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 50)
-set(EXPECTED_MUTATIONS 357)
+set(EXPECTED_MUTATIONS 358)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -8436,6 +8440,19 @@ byte_machine_mutation(
       v r d))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(pk\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.member3-drift.chez.source
+  LABEL "compile: reserved-member-3 loses the accumulate arm's digit local"
+  # Slice ③ adds `d` to the list and an accumulate node to this fixture, so the
+  # entry is EXERCISED rather than merely declared -- the gap ② closed for `v`
+  # and `r`, reopened by ③'s own addition. Dropping it is what the guard is for:
+  # the emitted body binds a local the list does not reserve, and a caller may
+  # legitimately bind the same name.
+  FIND [[      v r d))]]
+  REPLACE [[      v r))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(d\\)")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

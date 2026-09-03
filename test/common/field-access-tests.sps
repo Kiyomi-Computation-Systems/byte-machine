@@ -212,23 +212,53 @@
         ;; A loop with a sentinel reading the OBSERVED count: the two lanes must
         ;; agree on the field values AND the status for each byte, not merely on
         ;; the one byte a hand-written case happens to name.
+        ;;
+        ;; *** Slice ③: each lane is also asserted against an EXPECTED value, not
+        ;; only against the other lane. *** Agreement is symmetric, so breaking
+        ;; either implementation of the same decision produces the SAME record --
+        ;; which is why Slice ②'s whole-pass sweep found the emitter's
+        ;; zero-width-consumes-a-byte pin nesting inside the interpreter's, with
+        ;; no record of its own, and recorded per-lane expected values as the
+        ;; fix it was owed. This is that fix. The table is MEASURED from the
+        ;; green tree, not asserted from the design: `count` is a u8 declared at
+        ;; 254, byte 0 increments it to 255 and byte 1 runs it up against the
+        ;; ceiling until the failure branch fires.
         (let ((seen 0))
           (for-each
-           (lambda (bs)
+           (lambda (row)
              (set! seen (+ seen 1))
              ;; The check label names the WHOLE schedule, not just its first
              ;; byte. With `(0)` and `(0 0)` both labelled "0", two different
              ;; mutants produced byte-identical FAIL records and no pin could
              ;; tell them apart -- measured by this task's own sweep.
-             (let ((a (feed-bytes wm-ref bs)) (b (feed-bytes wm-gen bs))
-                   (nm (apply string-append (map number->string bs))))
+             (let* ((bs (car row)) (want-count (cadr row))
+                    (want-seen (caddr row)) (want-life (cadddr row))
+                    (a (feed-bytes wm-ref bs)) (b (feed-bytes wm-gen bs))
+                    (nm (apply string-append (map number->string bs))))
                (check-equal (string-append "count [" nm "]")
                             (parser-field-ref b 'count) (parser-field-ref a 'count))
                (check-equal (string-append "seen [" nm "]")
                             (parser-field-ref b 'seen) (parser-field-ref a 'seen))
                (check-equal (string-append "lifecycle [" nm "]")
-                            (parser-lifecycle b) (parser-lifecycle a))))
-           '((0) (1) (2) (0 0) (0 1) (1 0)))
+                            (parser-lifecycle b) (parser-lifecycle a))
+               (check-equal (string-append "interpreter count [" nm "]")
+                            (parser-field-ref a 'count) want-count)
+               (check-equal (string-append "generated count [" nm "]")
+                            (parser-field-ref b 'count) want-count)
+               (check-equal (string-append "interpreter seen [" nm "]")
+                            (parser-field-ref a 'seen) want-seen)
+               (check-equal (string-append "generated seen [" nm "]")
+                            (parser-field-ref b 'seen) want-seen)
+               (check-equal (string-append "interpreter lifecycle [" nm "]")
+                            (parser-lifecycle a) want-life)
+               (check-equal (string-append "generated lifecycle [" nm "]")
+                            (parser-lifecycle b) want-life)))
+           '(((0)   255 1 ready)
+             ((1)   254 0 error)
+             ((2)   254 0 error)
+             ((0 0) 255 1 error)
+             ((0 1) 255 1 error)
+             ((1 0) 254 0 error)))
           (check-equal "every schedule compared" seen 6))))
     (harness-case "parser-reset! restores a field a parse has CHANGED"
       (lambda ()
@@ -782,28 +812,57 @@
     (harness-case "base 10 accepts exactly ten bytes, base 16 exactly twenty-two"
       (lambda ()
         ;; The partition's SIZE, which cross-lane agreement cannot see: two lanes
-        ;; that both accepted no bytes at all would agree perfectly.
-        (let ((n10 0) (n16 0))
+        ;; that both accepted no bytes at all would agree perfectly. Counted
+        ;; PER LANE rather than once, because an emitter-only range error leaves
+        ;; the interpreter's count right -- so a single count would attribute
+        ;; every partition defect to the interpreter.
+        (let ((n10 0) (n16 0) (g10 0) (g16 0))
           (let loop ((b 0))
             (when (< b 256)
               (when (eq? (cdr (byte-answer (car acc10) b)) 'ready) (set! n10 (+ n10 1)))
               (when (eq? (cdr (byte-answer (car acc16) b)) 'ready) (set! n16 (+ n16 1)))
+              (when (eq? (cdr (byte-answer (cdr acc10) b)) 'ready) (set! g10 (+ g10 1)))
+              (when (eq? (cdr (byte-answer (cdr acc16) b)) 'ready) (set! g16 (+ g16 1)))
               (loop (+ b 1))))
-          (check-equal "base 10" n10 10)
-          (check-equal "base 16" n16 22))))
-    (harness-case "the four ASCII neighbours of the digit ranges are not digits"
+          (check-equal "interpreter base 10" n10 10)
+          (check-equal "interpreter base 16" n16 22)
+          (check-equal "generated base 10" g10 10)
+          (check-equal "generated base 16" g16 22))))
+    (harness-case "every digit range endpoint decodes to its own value, in both lanes"
+      (lambda ()
+        ;; The six ENDPOINTS of the three ASCII ranges, asserted as decoded
+        ;; VALUES rather than as a lifecycle. That is what separates an off-by-one
+        ;; at a bound from every other way the arm can break: a mutation that
+        ;; stops the whole node from running leaves these unread, while a
+        ;; mutation that moves one bound by one changes exactly one of these
+        ;; numbers. The whole-pass sweep is what showed the difference matters --
+        ;; asserted as lifecycles, the `f` bound's pin owned no record of its own.
+        (let ((seen 0))
+          (for-each
+           (lambda (spec)
+             (set! seen (+ seen 1))
+             (let ((b (cadr spec)) (want (caddr spec)))
+               (check-equal (string-append "interpreter " (car spec))
+                            (car (byte-answer (car acc16) b)) want)
+               (check-equal (string-append "generated " (car spec))
+                            (car (byte-answer (cdr acc16) b)) want)))
+           '(("zero" 48 0) ("nine" 57 9) ("A" 65 10) ("F" 70 15)
+             ("a" 97 10) ("f" 102 15)))
+          (check-equal "all six endpoints" seen 6))))
+    (harness-case "the six ASCII neighbours of the digit ranges are not digits"
       (lambda ()
         ;; `/` and `:` bracket 0-9; `@` and `G` bracket A-F; backtick and `g`
-        ;; bracket a-f. An off-by-one in any range bound moves exactly one of
-        ;; these, and the all-256 comparison above cannot see it because BOTH
-        ;; lanes would move together if the emitter and interpreter shared the
-        ;; error -- which they would, being written from the same reading.
+        ;; bracket a-f. An off-by-one that widens a range moves exactly one of
+        ;; these, and the all-256 comparison cannot see it when both lanes move
+        ;; together -- which they would, being written from the same reading.
+        ;; Asserted as a VALUE too: a non-digit leaves the field at its initial.
         (let ((seen 0))
           (for-each (lambda (spec)
                       (set! seen (+ seen 1))
-                      (check-equal (car spec)
-                                   (cdr (byte-answer (car acc16) (cadr spec)))
-                                   'stopped))
+                      (check-equal (string-append "interpreter " (car spec))
+                                   (byte-answer (car acc16) (cadr spec)) '(0 . stopped))
+                      (check-equal (string-append "generated " (car spec))
+                                   (byte-answer (cdr acc16) (cadr spec)) '(0 . stopped)))
                     '(("slash" 47) ("colon" 58) ("at" 64) ("G" 71) ("backtick" 96) ("g" 103)))
           (check-equal "all six neighbours" seen 6))))))
 

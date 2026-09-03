@@ -78,16 +78,23 @@
 ;; pause was observed.
 (define (feed-loop! pr pg bv start end fnames)
   (let ((rr (parser-feed! pr bv start end)) (rg (parser-feed! pg bv start end)))
-    (cond
-      ((not (equal? (rfields rr pr fnames) (rfields rg pg fnames)))
-       (values (list 'feed start) #f))
-      ((and (eq? (parser-result-status rr) 'paused) (eq? (parser-result-status rg) 'paused))
-       (let ((acks (resume-pair! pr pg)))
-         (if (not (equal? (car acks) (cadr acks)))
-             (values (list 'feed-ack start) #t)
-             (let-values (((bad _paused?) (feed-loop! pr pg bv (parser-result-next rr) end fnames)))
-               (values bad #t)))))
-      (else (values 'none #f)))))
+    ;; Read BEFORE the disagreement check, and reported separately: the mutual
+    ;; `paused?` below is the one the pause protocol is about, but it is zeroed by
+    ;; any mutation that makes the lanes diverge at all, which the whole-pass
+    ;; sweep showed leaves the pause DRAW's own pin with no record of its own.
+    ;; This half says the interpreter paused, whatever the other lane did.
+    (let ((ref-paused? (eq? (parser-result-status rr) 'paused)))
+      (cond
+        ((not (equal? (rfields rr pr fnames) (rfields rg pg fnames)))
+         (values (list 'feed start) #f ref-paused?))
+        ((and (eq? (parser-result-status rr) 'paused) (eq? (parser-result-status rg) 'paused))
+         (let ((acks (resume-pair! pr pg)))
+           (if (not (equal? (car acks) (cadr acks)))
+               (values (list 'feed-ack start) #t #t)
+               (let-values (((bad _paused? _ref?)
+                             (feed-loop! pr pg bv (parser-result-next rr) end fnames)))
+                 (values bad #t #t)))))
+        (else (values 'none #f ref-paused?))))))
 
 ;; parser-finish! both sides, honouring the same pause protocol as
 ;; feed-loop! -- a finish pause (D4(d)'s idle-completion route) resumes to
@@ -105,15 +112,17 @@
 ;; below).
 (define (finish-loop! pr pg fnames)
   (let ((rr (parser-finish! pr)) (rg (parser-finish! pg)))
-    (cond
-      ((not (equal? (rfields rr pr fnames) (rfields rg pg fnames))) (values (list 'finish) #f #f))
-      ((and (eq? (parser-result-status rr) 'paused) (eq? (parser-result-status rg) 'paused))
-       (let ((acks (resume-pair! pr pg)))
-         (if (not (equal? (car acks) (cadr acks)))
-             (values (list 'finish-ack) #t #f)
-             (let-values (((bad _paused? finished?) (finish-loop! pr pg fnames)))
-               (values bad #t finished?)))))
-      (else (values 'none #f (eq? (parser-result-status rr) 'finished))))))
+    (let ((ref-paused? (eq? (parser-result-status rr) 'paused)))
+      (cond
+        ((not (equal? (rfields rr pr fnames) (rfields rg pg fnames)))
+         (values (list 'finish) #f #f ref-paused?))
+        ((and (eq? (parser-result-status rr) 'paused) (eq? (parser-result-status rg) 'paused))
+         (let ((acks (resume-pair! pr pg)))
+           (if (not (equal? (car acks) (cadr acks)))
+               (values (list 'finish-ack) #t #f #t)
+               (let-values (((bad _paused? finished? _ref?) (finish-loop! pr pg fnames)))
+                 (values bad #t finished? #t)))))
+        (else (values 'none #f (eq? (parser-result-status rr) 'finished) ref-paused?))))))
 
 ;; One byte's trial: a fresh parser pair, fed the single byte and driven
 ;; through feed-loop!'s pause protocol, then -- only when both sides are
@@ -135,37 +144,51 @@
 ;; A parser already in `error` answers a zero-length feed with its stored result
 ;; (the sticky rows in runtime.sls), which is how the reason is recovered here
 ;; without threading results back out of the loops.
+;;
+;; Each returns a PAIR: (agreed? . interpreter-only?). The agreed half is the one
+;; that matters for the property -- a flag one lane raised alone is a
+;; disagreement `bad` has already recorded, and must not also count as a witness.
+;; The interpreter-only half exists for ATTRIBUTION, and the whole-pass sweep is
+;; what showed it was needed: with only the agreed half, every one of these
+;; counters is zeroed by ANY mutation that makes the two lanes diverge, so the
+;; sweep found the accumulate pins nesting inside the byte-test inversion -- they
+;; produced no record it did not also produce. The interpreter-only counters
+;; separate "the arm never ran" from "the lanes disagreed about it", and the
+;; second is not this draw's business.
 (define (accumulated? pr pg fnames)
   ;; 25 is the accumulate draw's initial (machine-gen.sls). A value other than it
   ;; means the digit arm ran its multiply-add and committed.
-  (and (pair? fnames)
-       (let ((a (parser-field-ref pr (car fnames))) (g (parser-field-ref pg (car fnames))))
-         (and (equal? a g) (not (= a 25))))))
+  (if (null? fnames)
+      '(#f . #f)
+      (let ((a (parser-field-ref pr (car fnames))) (g (parser-field-ref pg (car fnames))))
+        (cons (and (equal? a g) (not (= a 25))) (not (= a 25))))))
+
+(define (overflow-reason? p)
+  (and (eq? (parser-lifecycle p) 'error)
+       (let ((e (parser-result-error (parser-feed! p (make-bytevector 0) 0 0))))
+         ;; The overflow declaration's own reason. It exists precisely so this is
+         ;; distinguishable from the fallback `rejected` terminal, which every
+         ;; machine reaches on most of its 256 bytes.
+         (and e (string=? (parser-error-reason e) "field overflow")))))
 
 (define (overflowed? pr pg fnames)
-  (and (pair? fnames)
-       (eq? (parser-lifecycle pr) 'error) (eq? (parser-lifecycle pg) 'error)
-       (let ((ea (parser-result-error (parser-feed! pr (make-bytevector 0) 0 0)))
-             (eg (parser-result-error (parser-feed! pg (make-bytevector 0) 0 0))))
-         (and ea eg
-              ;; The overflow declaration's own reason. It exists precisely so
-              ;; this is distinguishable from the fallback `rejected` terminal,
-              ;; which every machine reaches on most of its 256 bytes.
-              (string=? (parser-error-reason ea) "field overflow")
-              (string=? (parser-error-reason eg) "field overflow")))))
+  (if (null? fnames)
+      '(#f . #f)
+      (let ((r (overflow-reason? pr)))
+        (cons (and r (overflow-reason? pg)) r))))
 
 (define (byte-trial cm-ref cm-gen b fnames)
   (let ((pr (make-parser cm-ref '() #f)) (pg (make-parser cm-gen '() #f)))
-    (let-values (((bad paused? finished?)
-                  (let-values (((bad paused?) (feed-loop! pr pg (make-bytevector 1 b) 0 1 fnames)))
+    (let-values (((bad paused? finished? ref-paused?)
+                  (let-values (((bad paused? rp) (feed-loop! pr pg (make-bytevector 1 b) 0 1 fnames)))
                     (cond
-                      ((not (eq? bad 'none)) (values (cons b bad) paused? #f))
+                      ((not (eq? bad 'none)) (values (cons b bad) paused? #f rp))
                       ((and (eq? (parser-lifecycle pr) 'ready) (eq? (parser-lifecycle pg) 'ready))
-                       (let-values (((fbad fpaused? fin?) (finish-loop! pr pg fnames)))
+                       (let-values (((fbad fpaused? fin? frp) (finish-loop! pr pg fnames)))
                          (values (if (eq? fbad 'none) fbad (cons b fbad))
-                                 (or paused? fpaused?) fin?)))
-                      (else (values bad paused? #f))))))
-      (values bad paused? finished?
+                                 (or paused? fpaused?) fin? (or rp frp))))
+                      (else (values bad paused? #f rp))))))
+      (values (cons paused? ref-paused?) bad finished?
               (accumulated? pr pg fnames)
               (overflowed? pr pg fnames)))))
 
@@ -210,7 +233,8 @@
         ;; present as the eof draw's own mutation losing its witness -- for a
         ;; reason nobody would find without this sentence.
         (let loop ((i 0) (s (make-prng seed)) (paused-count 0) (finished-count 0)
-                   (field-count 0) (acc-count 0) (over-count 0))
+                   (field-count 0) (acc-count 0) (over-count 0)
+                   (acc-ref-count 0) (over-ref-count 0) (paused-ref-count 0))
           (if (< i machine-count)
               (let-values (((m fnames s2) (gen-machine s)))
                 (let ((v (verify-machine m)))
@@ -219,30 +243,35 @@
                   (if (verification-ok? v)
                       (let ((cm-ref (make-interpreted-machine v))
                             (cm-gen (emit-and-load m i)))
-                        (let bl ((b 0) (bad 'none) (paused? #f) (finished? #f)
-                                 (acc? #f) (over? #f))
+                        (let bl ((b 0) (bad 'none) (paused? '(#f . #f)) (finished? #f)
+                                 (acc? '(#f . #f)) (over? '(#f . #f)))
                           (if (< b 256)
-                              (let-values (((b-bad b-paused? b-finished? b-acc? b-over?)
+                              (let-values (((b-paused b-bad b-finished? b-acc b-over)
                                             (byte-trial cm-ref cm-gen b fnames)))
                                 (bl (+ b 1)
                                     (if (eq? bad 'none) b-bad bad)
-                                    (or paused? b-paused?)
+                                    (cons (or (car paused?) (car b-paused))
+                                          (or (cdr paused?) (cdr b-paused)))
                                     (or finished? b-finished?)
-                                    (or acc? b-acc?)
-                                    (or over? b-over?)))
+                                    (cons (or (car acc?) (car b-acc)) (or (cdr acc?) (cdr b-acc)))
+                                    (cons (or (car over?) (car b-over)) (or (cdr over?) (cdr b-over)))))
                               (begin
                                 (check-equal
                                  (string-append "machine " (number->string i)
                                                 " (seed " (number->string seed) ") byte agreement")
                                  bad 'none)
                                 (loop (+ i 1) s2
-                                      (if paused? (+ paused-count 1) paused-count)
+                                      (if (car paused?) (+ paused-count 1) paused-count)
                                       (if finished? (+ finished-count 1) finished-count)
                                       (if (pair? fnames) (+ field-count 1) field-count)
-                                      (if acc? (+ acc-count 1) acc-count)
-                                      (if over? (+ over-count 1) over-count))))))
+                                      (if (car acc?) (+ acc-count 1) acc-count)
+                                      (if (car over?) (+ over-count 1) over-count)
+                                      (if (cdr acc?) (+ acc-ref-count 1) acc-ref-count)
+                                      (if (cdr over?) (+ over-ref-count 1) over-ref-count)
+                                      (if (cdr paused?) (+ paused-ref-count 1) paused-ref-count))))))
                       (loop (+ i 1) s2 paused-count finished-count
-                            field-count acc-count over-count))))
+                            field-count acc-count over-count
+                            acc-ref-count over-ref-count paused-ref-count))))
               (begin
                 (check (string-append "at least one of the " (number->string machine-count)
                                       " generated machines' 256-byte trial observes a pause")
@@ -265,6 +294,22 @@
                 ;; overflow a u8 in a single byte, digits 0-5 do not. A change to
                 ;; either constant can zero this without zeroing the one above.
                 (check "at least one generated machine's trial overflows the field"
-                       (>= over-count 1)))))))))
+                       (>= over-count 1))
+                ;; The interpreter-only halves. They are what attributes a dead
+                ;; arm to the DRAW rather than to a divergence between the lanes:
+                ;; a mutation that breaks the emitter zeroes the two above and
+                ;; leaves these standing, and a mutation that makes the arm
+                ;; unreachable fails these too. Without them the sweep found both
+                ;; accumulate pins nesting inside the byte-test inversion.
+                (check "the interpreter alone commits a digit"
+                       (>= acc-ref-count 1))
+                (check "the interpreter alone overflows the field"
+                       (>= over-ref-count 1))
+                ;; The same separation for the PAUSE draw, whose pin the sweep
+                ;; found nesting for exactly the same reason -- it predates
+                ;; Slice ③ and is closed here because the fix is the one already
+                ;; being written two lines up, not because ③ introduced it.
+                (check "the interpreter alone observes a pause"
+                       (>= paused-ref-count 1)))))))))
 
 (harness-finish)
