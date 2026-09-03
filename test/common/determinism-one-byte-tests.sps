@@ -8,6 +8,7 @@
         (only (chezscheme) load)
         (byte-machine test harness)
         (byte-machine graph)
+        (byte-machine verify)
         (byte-machine private normal-ir)
         (byte-machine compile)
         (byte-machine runtime))
@@ -79,8 +80,63 @@
           (make-error-node 'reject 'rejected #f))
     'default-eof #f))
 
+;; Whole-branch review of Slice ①b, CRITICAL. The `spare` declaration above
+;; carries a DISTINCT code and distinct reasons, so the reached-declaration
+;; filter drops it from both machines and the case above passes. The filter does
+;; not test declaration identity -- the normalizer has already discarded the
+;; declaration NAME, so it tests whether the declaration's (code . reason) pair
+;; appears among the reached ones -- and an unreached declaration that DUPLICATES
+;; a reached pair therefore passes the filter and is emitted. Nothing rejects
+;; duplicate codes or duplicate reasons; both machines below verify clean.
+;;
+;; This is the same defect commit 51fd5f3 was written to close, reached by a
+;; second construction that commit's own regression case cannot see. The
+;; difference is a declaration COUNT, not a reason string, so the two machines
+;; here differ only in whether the third declaration exists at all.
+(define (one-byte/dup extra)
+  (make-machine 'one-byte 'start '() '() '()
+    (append (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
+                  (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))
+            (if extra
+                ;; Named by no node, so unreached -- but its code AND reason both
+                ;; duplicate `rejected`'s, which IS reached.
+                (list (make-error-declaration 'spare 'unexpected-byte "unexpected byte" #f))
+                '()))
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 0)
+                                  (make-edge 'stop 'advance) #f))
+            (make-edge 'reject 'reexecute) #f #f)
+          (make-stop-node 'stop #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+
 (harness-group "the IR fingerprint identifies the emitted output"
   (lambda ()
+    (harness-case "an unreached declaration duplicating a reached pair is not emitted"
+      (lambda ()
+        (let ((a (one-byte/dup #t)) (b (one-byte/dup #f)))
+          ;; Both premises asserted: without them the byte check could pass
+          ;; because one machine failed to verify, or because the fingerprints
+          ;; had stopped agreeing for an unrelated reason.
+          (check "a verifies" (verification-ok? (verify-machine a)))
+          (check "b verifies" (verification-ok? (verify-machine b)))
+          (check-equal "the fingerprints agree"
+                       (normal-machine-fingerprint (normalize-machine a))
+                       (normal-machine-fingerprint (normalize-machine b)))
+          (check "and so do the emitted bytes"
+                 (equal? (render-machine (compile-machine a '()) 'one-byte-parser)
+                         (render-machine (compile-machine b '()) 'one-byte-parser))))))
+    (harness-case "the emitted errs table carries no duplicate entry"
+      (lambda ()
+        ;; Stated separately from the byte comparison because the two machines
+        ;; could be made equal by emitting the duplicate in BOTH -- agreement
+        ;; bought by making the difference unobservable, which is the repair this
+        ;; project has recorded as disarming its own test.
+        (check "one entry per reached pair"
+               (harness-string-contains?
+                (utf8->string (render-machine (compile-machine (one-byte/dup #t) '())
+                                              'one-byte-parser))
+                "(define errs (quote #(#(eof \"unexpected end of input\") #(unexpected-byte \"unexpected byte\"))))"))))
     (harness-case "equal fingerprints emit equal bytes"
       (lambda ()
         (let* ((a (one-byte/spare "SPARE-A"))

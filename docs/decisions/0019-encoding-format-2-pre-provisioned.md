@@ -4,6 +4,15 @@ Date: 2026-08-31
 Status: accepted
 Milestone: 4, Gate 0 (milestone-4-design.md §4.2)
 
+> **Amendments** — later notes at the foot of this file reach back into the text
+> above them. Nothing above a note is rewritten.
+>
+> - **2026-09-02 (Milestone 4, Slice ①b)** — **amends point 5**: one of the three
+>   committed goldens, `generated-pause.golden.sls`, MOVED, and the move is
+>   licensed. Point 5 as written makes that a STOP condition; read as written it
+>   now produces a false positive for every later slice. The baseline for the
+>   remaining slices is **`51fd5f3`**, not ①a's merge. See the foot of this file.
+
 ## Context
 
 Measured against the shipped tree at commit `a942327`, the commit Milestone 3
@@ -225,3 +234,47 @@ Note also that no record owns that byte: normal-ir.sls:250 credits the layout to
   record settles only that the `reason` is *encoded* — its portability check in
   `pass-names-valid` and the writer's escaping of `"`, `\` and LF are Slice ①a's
   own tasks under §10.1:480 and §20:1039, not consequences of the format.
+
+---
+
+## 2026-09-02 (Slice ①b) — point 5's baseline moves from ①a's merge to `51fd5f3`
+
+Point 5 says "From ①a's merge, the three committed goldens under `test/fixtures/`
+are byte-identical for the rest of Milestone 4." **That sentence is false**, and
+was false before Slice ①b's first task ran.
+
+Commit `51fd5f3` — the first commit on the ①b branch, and not part of ①b's own
+work — resolved [decision 0022](0022-structured-parser-error-record.md)'s item 7
+open question, raised by Slice ①a's whole-branch review. Narrowing the emitted
+`errs` table to the declarations the graph **reaches** changed
+`generated-pause.golden.sls`: its `errs` vector loses the unreached `eof` entry
+and the two error arms re-index from 2 and 1 to 1 and 0.
+
+**The move is licensed, and this is the record that has to say so**, because
+point 5 is where a later slice arrives. The alternative was to leave a machine
+whose emitted bytes disagree with its IR fingerprint — the exact property
+point 2 of this record exists to guarantee — so honouring point 5 literally
+would have preserved a golden that was *wrong*. A golden is evidence, not an
+authority; when it disagrees with an invariant this record states, the invariant
+wins and the golden moves. Point 5's reasoning is untouched for its actual
+target: a golden moving because a **slot was added late** is still a STOP, and
+still repaired by the slot rather than the baseline.
+
+**What later slices should use.** The baseline for Slices ② and ③ is `51fd5f3`,
+not ①a's merge:
+
+```
+git diff --stat 51fd5f3..HEAD -- test/fixtures/
+```
+
+Empty output is the gate. At Slice ①b's close this is empty, and the four pinned
+IR fingerprint values are the ones ①a measured — ①b moved neither, which is what
+point 3's reservation was for.
+
+**Also amended by this note, at their own sites:** `milestone-4-design.md` states
+the ①a-merge gate in four places, and Slice ③'s exit evidence is anchored the
+same way; `CHANGELOG.md` asserted the goldens were byte-identical to ①a's merged
+tree. All are corrected to `51fd5f3`. Slice ①b's whole-branch review found this
+record unamended while the licence lived only in 0022's amendment, the design's
+preamble and ①b's plan — none of which a reader arriving at point 5 by citation
+reaches.

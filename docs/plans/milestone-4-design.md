@@ -1108,8 +1108,11 @@ Tasks, in an order where each step's gate is what makes the next one safe:
    `normal-ir.sls`'s export list grows; `compile.sls`'s `(byte-machine private
    normal-ir)` import (pre-slice, `compile.sls:17`) is unqualified and needs no
    edit. **Gate: the five fingerprint literal sites and three goldens named
-   above are byte-identical to ①a's merged tree** — proved by `git diff --stat
-   <①a merge commit>..HEAD -- test/fixtures/` showing only *added* files, not by
+   above are byte-identical to `51fd5f3`** *(amended 2026-09-02 — Slice ①b: the
+   baseline was written as ①a's merged tree and is now `51fd5f3`, because commit
+   `51fd5f3` licensed a move of `generated-pause.golden.sls`; see decision 0019's
+   foot)* — proved by `git diff --stat 51fd5f3..HEAD -- test/fixtures/`
+   showing only *added* files, not by
    `git status`, which is blind to a golden re-baselined inside a branch commit
    (milestone-3-design.md:450-454). One new fingerprint is measured and recorded
    for this slice's own field-declaring fixture.
@@ -2134,9 +2137,12 @@ Scheme mutation suite green at its new `EXPECTED_PASSES`/`EXPECTED_MUTATIONS`
 by `git diff <base>..HEAD -- test/support/cmake/SchemeMutationSuite.cmake | grep
 -E '^[+-].*EXPECT_SURVIVES'` returning empty; and the three
 `normal-ir-tests.sps` IR fingerprints and all three committed goldens
-byte-identical **since Slice ①a's re-baseline** (`git diff --stat <①a>..HEAD --
+byte-identical **since `51fd5f3`** (`git diff --stat 51fd5f3..HEAD --
 test/fixtures/`, empty) — not since `main`, which ①a's format-version bump 1→2
-moved by design.
+moved by design. *(Amended 2026-09-02 — Slice ①b: this read "since Slice ①a's
+re-baseline"; commit `51fd5f3` licensed a move of `generated-pause.golden.sls`
+after that point, so an ①a-anchored diff reports a false positive. See decision
+0019's foot.)*
 
 ## Exit (full Milestone 4)
 

@@ -965,9 +965,15 @@ delivered. No versioned release exists yet.
   **Decision 0019's reservation held.** ①a wrote an empty field-table count and
   an empty ABI payload member so that filling them here would move nothing for a
   machine that declares no fields, and nothing moved: the three committed
-  goldens and all four pinned IR fingerprints are byte-identical to ①a's merged
-  tree, asserted by `git diff --stat` against that commit and by a case pinning
-  a zero-field fingerprint at ①a's own measured value. Field-declaring machines
+  goldens and all four pinned IR fingerprints are byte-identical to **`51fd5f3`**,
+  asserted by `git diff --stat 51fd5f3..HEAD -- test/fixtures/` and by a case
+  pinning a zero-field fingerprint at ①a's own measured value. The baseline is
+  `51fd5f3` and **not** ①a's merge: that commit, the first on this branch,
+  resolved [decision 0022](docs/decisions/0022-structured-parser-error-record.md)'s
+  item 7 and moved `generated-pause.golden.sls`, whose `errs` vector had carried
+  a declaration the graph never reaches. Decision 0019 point 5 makes an ①a-merge
+  golden move a STOP condition; that point is amended at its own foot rather than
+  here, because that is where a later slice arrives. Field-declaring machines
   get one new fingerprint of their own. See
   [decision 0019](docs/decisions/0019-encoding-format-2-pre-provisioned.md) and
   [decision 0020](docs/decisions/0020-field-shape-is-a-constructor-contract.md).

@@ -256,13 +256,44 @@
                             (walk (+ i 1)
                                   (if (and c (not (member (cons c r) acc)))
                                       (cons (cons c r) acc) acc))))))
+           ;; ONE entry per reached (code . reason) PAIR, not one per declaration
+           ;; whose pair is reached. The filter cannot test declaration identity:
+           ;; the normalizer resolved each site's declaration NAME to its code and
+           ;; reason (normal-ir.sls's errcode/errreason) before the emitter sees
+           ;; it, so `reached` is a set of pairs and membership is all there is to
+           ;; test. Two declarations may agree on both -- nothing rejects
+           ;; duplicate codes or duplicate reasons, and §16.2's required-check
+           ;; list does not ask for uniqueness -- so an UNREACHED declaration
+           ;; duplicating a reached one passed the membership test and was
+           ;; emitted, giving two machines with the same IR fingerprint different
+           ;; emitted bytes.
+           ;;
+           ;; That is the same defect commit 51fd5f3 was written to close, and
+           ;; that commit did not close it: its filter fixed the case where the
+           ;; unreached declaration's pair is ABSENT from `reached` and left the
+           ;; case where it is present under another declaration's name.
+           ;; determinism-one-byte-tests.sps now carries both constructions.
+           ;;
+           ;; Dropping the later duplicate rather than keeping it is what leaves
+           ;; every shipped golden where it is: a machine with no duplicate pair
+           ;; emits exactly what it emitted before, and the surviving entry keeps
+           ;; its declaration-order POSITION, so no index moves either. The two
+           ;; entries would have been textually identical in any case -- an errs
+           ;; entry is (code, reason) and nothing else -- so no site loses a
+           ;; reason it could have rendered, which is what makes the drop safe
+           ;; rather than merely convenient.
            (decls (let keep ((ds (machine-errors (compilation-machine compilation))) (acc '()))
                     (if (null? ds) (reverse acc)
-                        (keep (cdr ds)
-                              (if (member (cons (error-declaration-code (car ds))
-                                                (error-declaration-reason (car ds)))
-                                          reached)
-                                  (cons (car ds) acc) acc)))))
+                        (let ((pair (cons (error-declaration-code (car ds))
+                                          (error-declaration-reason (car ds)))))
+                          (keep (cdr ds)
+                                (if (and (member pair reached)
+                                         (not (member pair
+                                                      (map (lambda (d)
+                                                             (cons (error-declaration-code d)
+                                                                   (error-declaration-reason d)))
+                                                           acc))))
+                                    (cons (car ds) acc) acc))))))
            ;; Keyed on code AND reason, not on code alone. Two declarations may
            ;; share a code -- pass-names rejects duplicate declaration NAMES and
            ;; nothing rejects duplicate codes, and §16.2's required-check list

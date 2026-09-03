@@ -763,14 +763,18 @@ cmake_minimum_required(VERSION 3.26)
 # load-bearing. Two more were classified SUBSUMED and deliberately not written;
 # the reasons are recorded at the mutations' own site. No pass is added -- the
 # checks join the verifier's existing lane -- so passes stay at 48 and mutations
-# become 255 + 3 = 258.
+# become 255 + 3 = 258. *** AMENDED by the whole-branch review: TWO more join
+# Pass 33 -- the pass-fields join and the duplicate check's restrictive
+# direction, both wrongly declined as subsumed above -- so this task's
+# contribution is FIVE, and mutations become 255 + 5 = 260. Every later total in
+# this block is restated from 260. ***
 #
 # Slice ①b task 5: the normal-ir pass gains FIVE, one per remaining decision in
 # the field record -- name, width, initial, record order, and the slot number the
 # table carries. A sixth, the field count, is not new: it is ①a's reserved-count
 # pin RE-ANCHORED, killed by construction when the literal zero became the real
 # count. No pass is added, so passes stay at 48 and mutations become
-# 258 + 5 = 263.
+# 260 + 5 = 265.
 #
 # Slice ①b tasks 6 and 7: ONE joins the compile pass (member 0 rendered empty
 # regardless of the declarations -- the zero-field rendering was already pinned,
@@ -781,9 +785,9 @@ cmake_minimum_required(VERSION 3.26)
 # nine to TEN. Three further mutations were measured and deliberately not
 # written, each because its record set is identical -- not a subset, the same
 # set -- to one that is; the reasons are at pass 49's own head.
-# Passes become 48 + 1 = 49; mutations become 263 + 1 + 7 = 271.
+# Passes become 48 + 1 = 49; mutations become 265 + 1 + 7 = 273.
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 271)
+set(EXPECTED_MUTATIONS 273)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -4741,20 +4745,73 @@ byte_machine_mutation(
 # restrictive on the portable-name check -- the direction that makes the pass's
 # clean-premise case load-bearing rather than decorative.
 #
-# TWO further mutations were considered and are NOT written, both because they
-# are SUBSUMED rather than unwitnessable -- the classification the whole-pass
-# audit's residue rules ask for, recorded here so a later reader does not
-# re-derive it:
+# *** CORRECTED by this slice's whole-branch review. Two mutations were declined
+# here as "SUBSUMED"; NEITHER is subsumed, and the stated measurement for one of
+# them was false. Both are written below. The original text and what was wrong
+# with it, because the error is more instructive than the fix: ***
 #
-#   * Dropping `(pass-fields machine)` from verify-machine's append. Its record
+#   * "Dropping `(pass-fields machine)` from verify-machine's append. Its record
 #     set is exactly the UNION of the two permissive mutants' below, so it owns
-#     no record of its own; the join is covered by both of them together.
-#   * The duplicate check made restrictive (`(memq fname fseen)` -> `#t`). Its
-#     record set is a strict SUPERSET of the restrictive portable mutant's -- it
-#     reports every field twice and reddens twenty-odd records across five
-#     unrelated groups -- so it is the noisier of two mutants that pin the same
-#     clean-premise decision. The narrow one is the one written.
+#     no record of its own." The premise is right and the CONCLUSION does not
+#     follow. AGENTS.md's relation is "is my whole record set inside ONE
+#     sibling's?" -- a union is contained in NEITHER of the two sets it unions,
+#     so this is separable, and the tree already ships the remedy as the :909
+#     conjunction pin. A mutation whose records are each shared with a DIFFERENT
+#     sibling is the exact case AGENTS.md calls out as wrongly documented before.
+#   * "The duplicate check made restrictive ... reports every field twice and
+#     reddens twenty-odd records across five unrelated groups." FALSE as
+#     measured: three records, all in ONE group. That description was true of an
+#     earlier TWO-field clean fixture; a third field was added to that fixture
+#     later in the same task, to separate a different pin, and this paragraph was
+#     never re-measured against it. Neither set contains the other -- this mutant
+#     emits `nonportable ... got 2`, which the restrictive-portable mutant does
+#     not, and that one emits `two fields ... got 3`, which this one does not.
+#
+# The reusable lesson is not about fields. A measurement written against a
+# fixture goes stale when the fixture changes, and nothing in this suite checks
+# prose. Both pins below are CONJUNCTIONS, because each mutant's individual
+# records are shared with a sibling and only the pair is unique.
 
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: pass-fields is never run"
+  # The JOIN, which shipped with no mutation at all until the whole-branch review
+  # found the declination above unsound. Its two records are each shared with one
+  # of the two permissive mutants, and with a different one each -- so the
+  # conjunction is what identifies it, and neither half alone would.
+  # `'()` rather than deleting the line: the runner requires a non-empty REPLACE,
+  # and an empty append arm drops the pass while keeping the form well-shaped, so
+  # the mutant dies at the checks rather than at expand time.
+  FIND [[                                  (pass-fields machine)]]
+  REPLACE [[                                  '()]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "two fields sharing a name is invalid-field-declaration: one finding -- expected 1, got 0.*a nonportable field name is invalid-field-declaration: one finding -- expected 1, got 0")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: every pair of fields is reported as sharing a name"
+  # The duplicate check's restrictive direction, which is what makes the
+  # clean-premise case load-bearing for THAT check -- exactly the argument this
+  # block already made for the portable check, and then declined to apply here on
+  # a measurement that was stale.
+  FIND [[(memq fname fseen)]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "two fields sharing a name is invalid-field-declaration: one finding -- expected 1, got 2.*distinct portable field names verify clean: no diagnostics -- expected 0, got 3")
+
+# *** Both permissive arm mutations below are SUBSUMED BY the join mutation
+# above, BY CONSTRUCTION, and are kept anyway. *** Measured in the re-sweep: each
+# arm's whole record set is a strict subset of the join's, because the join drops
+# both checks and each arm drops one, so the join is strictly more permissive on
+# every machine and no fixture can redden an arm while leaving the join green.
+# That is the one kind of subsumption this project treats as closed rather than
+# as an under-specified lane -- there is nothing to separate, not merely nothing
+# found. They are kept because they name DISTINCT decisions: that the duplicate
+# check fires, that the portable check fires, and that the pass is wired in at
+# all. The cost is attribution, not detection: delete the join and all three
+# report caught, two of them under an arm's label.
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: two fields may share a name"
@@ -4790,8 +4847,15 @@ byte_machine_mutation(
   FIND [[(valid-name? (uint-field-name f))]]
   REPLACE [[#f]]
   EXPECT_STATUS 1
+  # A CONJUNCTION, re-anchored by the whole-branch review's re-sweep. The clean
+  # record alone is shared with the duplicate check's restrictive mutant (written
+  # above, after that declination was found unsound), which reddens the same case
+  # with the same 0-versus-3. Neither mutant's set contains the other's, so the
+  # pair separates them where neither record does: this mutant reports one
+  # diagnostic per field and the two-field case reaches 3, which the other never
+  # does.
   EXPECT_OUTPUT_MATCHES
-    "distinct portable field names verify clean: no diagnostics -- expected 0, got 3")
+    "two fields sharing a name is invalid-field-declaration: one finding -- expected 1, got 3.*distinct portable field names verify clean: no diagnostics -- expected 0, got 3")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -5897,11 +5961,41 @@ byte_machine_mutation(
   # determinism lane's own equal-fingerprints-equal-bytes case, which is where
   # the property belongs: §20:1043 makes the fingerprint what the determinism
   # checks compare.
-  FIND [[                              (if (member (cons (error-declaration-code (car ds))
-                                                (error-declaration-reason (car ds)))
-                                          reached)
-                                  (cons (car ds) acc) acc)))))]]
-  REPLACE [[                              (cons (car ds) acc)))))]]
+  #
+  # RE-ANCHORED by Slice ①b's whole-branch review, which found the fix this pin
+  # names was INCOMPLETE. The filter tests a (code . reason) PAIR, because the
+  # normalizer resolved each site's declaration name to its code and reason
+  # before the emitter sees it -- so an UNREACHED declaration duplicating a
+  # reached one passed the membership test and was emitted, and two machines with
+  # equal IR fingerprints still emitted different bytes. The filter now also
+  # drops a pair it has already emitted.
+  #
+  # *** The dedup half is SUBSUMED by this mutation and is not written
+  # separately. Measured, with the separating attempt recorded, which is what
+  # AGENTS.md requires before the word is used. *** Suppressing only the dedup
+  # (`(and (member pair reached) (not (member pair …)))` -> `(member pair
+  # reached)`) fails exactly two cases, and this mutation fails both of them plus
+  # "equal fingerprints emit equal bytes", so the narrow set is a strict subset
+  # of this one's. THREE separating constructions were tried and all three fail:
+  #   * A machine with an unreached DISTINCT pair separates them in behaviour but
+  #     not in records -- the dedup mutant is CORRECT there, so it reddens
+  #     nothing a pin could name.
+  #   * A machine whose every declaration is reached with two sharing a pair
+  #     makes the two mutants emit IDENTICAL text.
+  #   * Both together: this mutation emits one more entry than the dedup mutant,
+  #     but every record the dedup mutant produces, this one produces too.
+  # The dedup is strictly less permissive than this mutation on every machine, so
+  # no fixture can redden it while leaving this one green. The BEHAVIOUR is
+  # witnessed -- determinism-one-byte-tests.sps's two new cases fail against the
+  # dedup mutant, measured -- it is the separate PIN that no fixture supports.
+  FIND [[                                (if (and (member pair reached)
+                                         (not (member pair
+                                                      (map (lambda (d)
+                                                             (cons (error-declaration-code d)
+                                                                   (error-declaration-reason d)))
+                                                           acc))))
+                                    (cons (car ds) acc) acc))))))]]
+  REPLACE [[                                (cons (car ds) acc))))))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "equal fingerprints emit equal bytes: and so do the emitted bytes")
 

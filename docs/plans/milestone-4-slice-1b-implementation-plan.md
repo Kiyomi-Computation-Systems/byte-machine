@@ -608,6 +608,67 @@ case the one living in the file whose new code it names.
 
 ---
 
+### Whole-branch review — the three Criticals, fixed 2026-09-02
+
+Eight review dimensions, each finding refuted by three independent verifiers (read-the-code,
+run-it, already-handled), majority-2 to survive. **58 confirmed, 3 refuted**, deduping to
+about 13 distinct defects — the same issue was found by up to ten dimensions independently.
+
+**Critical 1 — `51fd5f3`'s `errs`-table fix did not close the defect it names, and decision
+0022's amendment records it as measured closed.** Reproduced independently: two machines that
+verify clean with **equal IR fingerprints** emitted **different bytes** (1262 vs 1225), the
+larger carrying a duplicate `errs` entry. The filter cannot test declaration identity — the
+normalizer resolves each site's declaration NAME to its code and reason before the emitter sees
+it — so it tests pair membership, and an *unreached* declaration duplicating a *reached* pair
+passed. `51fd5f3` fixed the case where the unreached pair is ABSENT from `reached` and left the
+case where it is present under another declaration's name. Its own regression case cannot see
+it: that case's spare declaration uses a distinct code, so the filter drops it from both
+machines.
+
+Fixed by dropping a pair already emitted, keeping declaration-order position — so no shipped
+golden moves and no `errs` index shifts. Two new cases, both premises asserted; the errs-line
+assertion is stated separately from the byte comparison, because two machines can also be made
+equal by emitting the duplicate in BOTH, which is agreement bought by making the difference
+unobservable.
+
+**Critical 2 — both of task 4's "SUBSUMED" declinations were wrong, and one stated measurement
+was false.** The join's record set is the UNION of the two permissive mutants', and a union is
+inside NEITHER of the sets it unions — AGENTS.md's relation is "inside ONE sibling's", so it was
+separable all along, and the tree already ships the remedy as the `:909` conjunction pin. Worse,
+the second bullet claimed the restrictive duplicate mutant "reddens twenty-odd records across
+five unrelated groups"; measured, it reddens **three records in one group**. That description
+was true of an earlier TWO-field clean fixture — a third field was added later **in the same
+task**, to separate a different pin, and the paragraph was never re-measured.
+
+*The reusable lesson is not about fields: a measurement written against a fixture goes stale
+when the fixture changes, and nothing in this suite checks prose.*
+
+Both mutations are now written, both with conjunction pins. The re-sweep is **51 pins / 2550
+ordered pairs / 7 collisions**: the 5 inherited, plus 2 new ones that are subsumption **by
+construction** — each permissive arm is a strict subset of the join, because the join drops both
+checks and each arm drops one, so the join is strictly more permissive on every machine and no
+fixture can redden an arm while leaving it green. Kept anyway, because they name distinct
+decisions; the cost is attribution, not detection, and it is recorded at the site.
+
+**Critical 3 — decision 0019 point 5 was false and carried no amendment.** Commit `51fd5f3`
+moved `generated-pause.golden.sls`; point 5 makes exactly that a STOP condition for every later
+slice. The licence existed in 0022's amendment, the design's preamble and this plan — none of
+which a reader arriving at point 5 by citation reaches. Concrete cost: a ② or ③ implementer
+diffs against ①a's merge, sees the difference, and either halts or "fixes" the golden.
+
+0019 now carries an Amendments block and a dated foot note moving the baseline to **`51fd5f3`**,
+and the four inheriting sites are corrected at their own sites: two live gates in
+`milestone-4-design.md`, Slice ③'s exit evidence, and the CHANGELOG's byte-identical claim.
+Point 5's reasoning is untouched for its actual target — a golden moving because a *slot was
+added late* is still a STOP, repaired by the slot and not the baseline. What changed is that a
+golden is evidence, not an authority: when it disagrees with an invariant this record states,
+the invariant wins.
+
+Totals after the three fixes: `release` 92/92, scheme mutation **49 passes / 273 mutations**,
+no golden moved against `51fd5f3`.
+
+---
+
 ## Self-Review (run after all seven tasks)
 
 - [ ] **Every citation re-read against HEAD**, and every count carrying the qualifier that
