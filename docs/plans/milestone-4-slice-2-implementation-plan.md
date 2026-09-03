@@ -292,8 +292,27 @@ in both directions, then the gate. Tasks 1-3 are strictly ordered; 4-9 depend on
   width, `low <= high` for `range`. One new code, `invalid-field-operand`. Whole-pass sweep of
   Pass 33 in both directions afterwards, against a control on the branch point.
 
-- [ ] **Task 5 — The normalizer: widen the vector, lower both kinds, encode tags 5 and 6 (D3,
-  H4).** Six state literals move in this commit. Two new fingerprint goldens, one per kind,
+- [x] **Task 5 — The normalizer: widen the vector, lower both kinds, encode tags 5 and 6 (D3,
+  H4).**
+  **D3's cost argument is confirmed, not assumed: widening moved no existing fingerprint.** All
+  92 lanes passed before a single new test was added, because the three new slots are `#f` for
+  every shipped kind and none of them is written. ③ inherits the room.
+
+  Six mutations, each on its **own measured golden**, which is this file's shipped discipline
+  for a new encode arm — an inequality pair cannot see a dropped count or a transposed pair.
+  Two encoding decisions are worth naming: each operand carries a **kind tag**, so a field
+  literally named `7` cannot share bytes with the constant 7; and the error target carries a
+  **presence tag** rather than a sentinel id, so "no error target" and "targets state 0" cannot
+  collide.
+
+  normal-ir whole-pass sweep: **36 pins, 1260 ordered pairs, zero collisions.**
+
+  *Two repeats of traps already met this slice. The two encode arms open with the same two
+  lines, so the selector FIND resolved to two sites — the third SITES-both-directions hit.
+  And a bare-inequality pin collided with every mutation that makes **all** fingerprints equal
+  ("the FNV prime is changed", "the byte is never mixed"); only an exact value is safe.*
+
+  `release` 92/92, 49 passes / 306 mutations, no golden moved. Six state literals move in this commit. Two new fingerprint goldens, one per kind,
   each measured — the file's own discipline is that a new encode arm owes its own exact-value
   golden. Tag-collision mutation mirroring the shipped one.
 

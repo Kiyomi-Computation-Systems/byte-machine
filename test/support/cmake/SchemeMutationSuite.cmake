@@ -796,6 +796,14 @@ cmake_minimum_required(VERSION 3.26)
 # Slice ①b's Critical fix wave: 271 -> 273. Two join Pass 33, both recovered from
 # task 4's unsound subsumption call.
 #
+# Slice ② task 5: the normal-ir pass gains SIX for the two zero-width kinds'
+# encoding -- the tag, the selector, the operand count, the operand kind tag, the
+# error-target presence tag, and the branch's false target. Each on its own
+# measured golden. The state vector was WIDENED in the same commit (design §0
+# D3) and no existing fingerprint moved, because the new slots are #f for every
+# shipped kind and none of them is written. Passes stay at 49 and mutations
+# become 300 + 6 = 306.
+#
 # Slice ② task 4: Pass 33 gains EIGHT for pass-fields' operand half -- arity,
 # the declared-field reference, the per-field width lookup, the width bound and
 # its off-by-one, both directions of `low <= high`, and the join. Passes stay at
@@ -834,7 +842,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 300)
+set(EXPECTED_MUTATIONS 306)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -5734,6 +5742,94 @@ byte_machine_mutation(
 # field record: its three components, the order the records are written in, and
 # the slot number the table itself carries. Each is pinned on a DISTINCT golden
 # value, all measured.
+
+# Slice ② task 5 adds SIX for the two zero-width kinds' encoding. Each is pinned
+# on a DISTINCT measured golden value, which is this file's shipped discipline
+# for a new encode arm: an inequality pair cannot see a dropped count or a
+# transposed pair, only a wrong value can.
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the field-action and field-branch encode tags collide"
+  # Tags 5 and 6. Two machines identical but for the kind must differ.
+  FIND [[                (put-u8 p 5)]]
+  REPLACE [[                (put-u8 p 6)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a field-action machine's IR fingerprint is the measured golden value: fingerprint -- expected 1386504585301950044, got 15366307625511038639")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a field node's selector is dropped from the encoding"
+  # `store` and `add` differ only here, and both are observable to a generated
+  # parser, so two machines the fingerprint calls identical would emit different
+  # behaviour without this.
+  # Anchored on the field-ACTION arm specifically: the two arms open with the
+  # same two lines, so the bare pair resolves to two sites -- the
+  # SITES-fails-both-directions trap again, and the third time this slice has hit
+  # it. The tag byte above is what distinguishes them.
+  FIND [[                (put-u8 p 5)
+                (put-symbol p (normal-field-selector s))
+                (put-operands p (normal-field-arguments s))]]
+  REPLACE [[                (put-u8 p 5)
+                (put-operands p (normal-field-arguments s))]]
+  EXPECT_STATUS 1
+  # Pinned on the GOLDEN, not on the inequality case: a bare "these two differ"
+  # record is also broken by every mutation that makes ALL fingerprints equal --
+  # measured, it collided with both "the FNV prime is changed" and "the byte is
+  # never mixed into the hash". An exact value is the only pin an inequality
+  # cannot be confused with.
+  EXPECT_OUTPUT_MATCHES
+    "a field-action machine's IR fingerprint is the measured golden value: fingerprint -- expected 1386504585301950044, got 7772389593278784940")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a field node's operand count is dropped"
+  # Without the count the operand list has no boundary, so `(count 7)` followed
+  # by the next record is indistinguishable from a three-operand list.
+  FIND [[    (put-u16be p (length args))
+]]
+  REPLACE [[    ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a field-branch machine's IR fingerprint is the measured golden value: fingerprint -- expected 13536979658827033743, got 16908098597654702240")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: an operand's kind is not tagged"
+  # The reason each operand carries a tag byte: without it a field literally
+  # named `7` and the constant 7 could share bytes, and two different machines
+  # would share a fingerprint.
+  FIND [[                (cond ((symbol? a) (put-u8 p 0) (put-symbol p a))]]
+  REPLACE [[                (cond ((symbol? a) (put-symbol p a))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a field-action machine's IR fingerprint is the measured golden value: fingerprint -- expected 1386504585301950044, got 5142341432422259152")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: an absent error target is encoded as state zero"
+  # The reason the error target is written with a PRESENCE TAG rather than a
+  # sentinel id: `clear` cannot fail and carries no target, and state 0 is a
+  # perfectly ordinary state id, so a sentinel would make those two machines
+  # share a fingerprint.
+  FIND [[                  (if e (begin (put-u8 p 1) (put-u32be p e)) (put-u8 p 0))))]]
+  REPLACE [[                  (if e (put-u32be p e) (put-u32be p 0))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a field-action machine's IR fingerprint is the measured golden value: fingerprint -- expected 1386504585301950044, got 6902603388614441453")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a field branch's false target is not encoded"
+  # §9.1:305 requires an explicit target for every possible result; an encoding
+  # carrying only one of them describes a machine that does not exist.
+  FIND [[                (put-u32be p (car (normal-field-targets s)))
+                (put-u32be p (cdr (normal-field-targets s))))]]
+  REPLACE [[                (put-u32be p (car (normal-field-targets s))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a field-branch machine's IR fingerprint is the measured golden value: fingerprint -- expected 13536979658827033743, got 7453673270761194114")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
