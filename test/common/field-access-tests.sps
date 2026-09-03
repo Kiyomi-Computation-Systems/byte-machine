@@ -369,4 +369,94 @@
                                (normalize-machine (verification-machine (verify-machine m)))))
                      '(count limit seen total))))))
 
+
+;; Milestone 4 Slice ② task 9: the OPERATION MATRIX (§25:1568's operation share,
+;; §25:1569 whole). Underflow at `decrement` from 0, overflow at `increment` and
+;; `add` from each width's maximum, at ALL FOUR widths, through BOTH executors.
+;;
+;; One machine per width rather than one per (width, operation): each carries a
+;; field at its maximum and a field at zero, and the byte chooses the operation.
+;; That keeps the emitted-and-loaded library count at four.
+(define (matrix-machine nm width)
+  (let ((mx (- (expt 2 width) 1)))
+    (make-machine nm 'start
+      (list (make-uint-field 'hi width mx #f) (make-uint-field 'lo width 0 #f))
+      '() '() (list eof-decl rej-decl)
+      (list (make-byte-dispatch-node 'start
+              (list (make-byte-case (make-exact-byte-matcher 0) (make-edge 'inc 'advance) #f)
+                    (make-byte-case (make-exact-byte-matcher 1) (make-edge 'plus 'advance) #f)
+                    (make-byte-case (make-exact-byte-matcher 2) (make-edge 'dec 'advance) #f)
+                    (make-byte-case (make-exact-byte-matcher 3) (make-edge 'good 'advance) #f))
+              (make-edge 'reject 'reexecute) #f #f)
+            (make-field-action-node 'inc 'increment '(hi) 'start 'over #f)
+            (make-field-action-node 'plus 'add (list 'hi 1) 'start 'over #f)
+            (make-field-action-node 'dec 'decrement '(lo) 'start 'over #f)
+            (make-field-action-node 'good 'increment '(lo) 'start 'over #f)
+            (make-error-node 'over 'rejected #f)
+            (make-error-node 'reject 'rejected #f))
+      'default-eof #f)))
+
+(define matrix-widths '(8 16 32 64))
+(define matrix-lanes
+  (map (lambda (w)
+         (let* ((nm (string->symbol (string-append "mx" (number->string w))))
+                (m (matrix-machine nm w)))
+           (list w
+                 (make-interpreted-machine (verify-machine m))
+                 (emit-and-load m nm (string->symbol (string-append (symbol->string nm) "-parser"))
+                                (string-append tmpdir "/generated-" (symbol->string nm) ".sls")))))
+       matrix-widths))
+
+(harness-group "the operation matrix over every width (§25:1568, §25:1569)"
+  (lambda ()
+    (harness-case "overflow, underflow and success agree across widths and lanes"
+      (lambda ()
+        ;; A loop with a sentinel reading the OBSERVED count, over widths AND
+        ;; over the schedules within each -- AGENTS.md's rule, and the reason an
+        ;; exhaustive loop that never executes cannot pass here.
+        (let ((widths 0) (checks 0))
+          (for-each
+           (lambda (row)
+             (set! widths (+ widths 1))
+             (let* ((w (car row)) (ref (cadr row)) (gen (caddr row))
+                    (mx (- (expt 2 w) 1))
+                    (tag (lambda (t) (string-append t " u" (number->string w)))))
+               (for-each
+                (lambda (spec)
+                  (set! checks (+ checks 1))
+                  (let* ((bs (car spec)) (fld (cadr spec)) (want (caddr spec)) (life (cadddr spec))
+                         (a (feed-bytes ref bs)) (b (feed-bytes gen bs)))
+                    ;; The value, in BOTH lanes, and the lifecycle -- a failed
+                    ;; operation must both leave the value alone (§25:1569) and
+                    ;; route to its error target.
+                    (check-equal (tag (string-append "interp " (symbol->string fld)))
+                                 (parser-field-ref a fld) want)
+                    (check-equal (tag (string-append "gen " (symbol->string fld)))
+                                 (parser-field-ref b fld) want)
+                    (check-equal (tag "lifecycle") (parser-lifecycle b) (parser-lifecycle a))
+                    (check-equal (tag "expected lifecycle") (parser-lifecycle a) life)))
+                (list
+                 ;; increment at the maximum: overflow, value unchanged.
+                 (list '(0) 'hi mx 'error)
+                 ;; add 1 at the maximum: overflow, value unchanged.
+                 (list '(1) 'hi mx 'error)
+                 ;; decrement at zero: UNDERFLOW, value unchanged.
+                 (list '(2) 'lo 0 'error)
+                 ;; and the success control, without which every row above
+                 ;; passes on a machine that simply never writes.
+                 (list '(3) 'lo 1 'ready)))))
+           matrix-lanes)
+          (check-equal "every width was exercised" widths 4)
+          (check-equal "every schedule was exercised" checks 16))))
+    (harness-case "the u64 maximum is a bignum, so the matrix is not fixnum-only"
+      (lambda ()
+        ;; §15:856's "must not rely on host fixnum width", asserted rather than
+        ;; assumed: without this the u64 row could silently be a fixnum row on a
+        ;; host with a wider fixnum, and would stop testing what it exists for.
+        (check "above greatest-fixnum" (> (- (expt 2 64) 1) (greatest-fixnum)))
+        (let ((ref (cadr (assv 64 matrix-lanes))))
+          (check-equal "and it is the declared initial"
+                       (parser-field-ref (make-parser ref '() #f) 'hi)
+                       18446744073709551615))))))
+
 (harness-finish)

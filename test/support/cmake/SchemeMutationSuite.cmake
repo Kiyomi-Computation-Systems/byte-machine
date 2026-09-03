@@ -796,6 +796,11 @@ cmake_minimum_required(VERSION 3.26)
 # Slice ①b's Critical fix wave: 271 -> 273. Two join Pass 33, both recovered from
 # task 4's unsound subsumption call.
 #
+# Slice ② task 9: the differential.field pass gains THREE for the operation
+# matrix -- both lanes' lower bound, and the decrement itself. Four widths, four
+# schedules each, driven through BOTH executors with sentinels over the widths
+# and over the schedules. Passes stay at 49 and mutations become 317 + 3 = 320.
+#
 # Slice ② task 8: the differential.field pass gains SIX for the EMITTER's field
 # arms -- the bound check and its boundary, the no-write-on-failure rule, one
 # operation, the zero-width jump, and the branch predicate. `v` and `r` join
@@ -857,7 +862,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 317)
+set(EXPECTED_MUTATIONS 320)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -8353,6 +8358,45 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the generated lane writes, checks and routes identically: seen -- expected 1, got 101")
+
+# Slice ② task 9 adds THREE for the operation matrix. The two lower-bound
+# mutations are what the matrix exists for: every earlier fixture in this slice
+# overflows UPWARD, so a check that tested only the upper bound passed all of
+# them. §25:1568 asks for underflow at `decrement` from 0 as well, and it is the
+# only place the lower half of the bound is load-bearing.
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: the field lower bound is not checked"
+  # A decrement at 0 goes to -1 and is accepted. Caught in the INTERPRETER's
+  # half of the comparison, which is what makes it distinct from the emitter's.
+  FIND [[          (if (<= 0 r m*)]]
+  REPLACE [[          (if (<= r m*)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "overflow, underflow and success agree across widths and lanes: interp lo u8 -- expected 0, got -1")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted field lower bound is not checked"
+  # The same decision in the emitter's copy of the arithmetic. Its record names
+  # the GENERATED half, which the interpreter mutation never touches.
+  FIND [[         (if (and (>= r 0) (<= r "]]
+  REPLACE [[         (if (and #t (<= r "]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "overflow, underflow and success agree across widths and lanes: gen lo u8 -- expected 0, got -1")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: decrement does not decrement"
+  # The success control's other side: without a real decrement the underflow
+  # row stops underflowing and the lifecycle flips.
+  FIND [[                    ((decrement) (- v 1))]]
+  REPLACE [[                    ((decrement) v)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "overflow, underflow and success agree across widths and lanes: expected lifecycle u8 -- expected error, got ready")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

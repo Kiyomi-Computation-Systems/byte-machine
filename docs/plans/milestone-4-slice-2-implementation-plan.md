@@ -378,7 +378,22 @@ in both directions, then the gate. Tasks 1-3 are strictly ordered; 4-9 depend on
   **verify that the reservation actually covers ②'s emission**, since the frozen-goldens
   constraint rests on it. `reserved-member-3` and its drift guard's fixture.
 
-- [ ] **Task 9 — The operation and predicate matrix (§25:1568, §25:1569).** Underflow at
+- [x] **Task 9 — The operation and predicate matrix (§25:1568, §25:1569).**
+  Four widths × four schedules, driven through **both** executors, with sentinels over the
+  widths *and* over the schedules within each. One machine per width — a field at its maximum
+  and a field at zero, the byte choosing the operation — which keeps the emitted-and-loaded
+  library count at four.
+
+  **The lower bound is what the matrix exists for.** Every earlier fixture in this slice
+  overflows *upward*, so a check testing only the upper bound passed all of them; `decrement`
+  from 0 is the only place the lower half is load-bearing, and it is mutated in both lanes.
+  The success control matters equally: without it every overflow row passes on a machine that
+  simply never writes.
+
+  The u64 row's maximum is asserted to exceed `(greatest-fixnum)`, so a host with a wider
+  fixnum fails loudly rather than quietly ceasing to test §15:856.
+
+  Three mutations. `release` 92/92, 49 passes / 320 mutations, no golden moved. Underflow at
   `decrement` from 0; overflow at `increment` and `add` from each width's maximum; all four
   widths; failed operations leave prior values unchanged. A loop with a sentinel reading the
   **observed** count, per the rule ①b's field lane already follows.
