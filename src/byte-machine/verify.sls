@@ -255,7 +255,9 @@
   ;; SITES=1, and would leave Slice ③'s accumulate share two candidate homes.
   ;;
   ;; ONE code, `invalid-field-operand`, which spends §4.6's two-new-codes budget
-  ;; for this milestone. Slice ③'s accumulate share reuses it with no new code.
+  ;; for this milestone. *** Slice ③'s accumulate share reuses it with NO NEW
+  ;; CODE and extends THIS pass -- there is deliberately one candidate home, not
+  ;; two, and `field-operand-schemas` below is where its rows go. ***
   (define field-operand-schemas
     ;; (name arity . operand-kinds-after-the-field), tabulated from §9.1:328-334
     ;; and :336-346. Position 0 is the `field` in every one of the fourteen, which
@@ -507,6 +509,13 @@
               ((sequence-dispatch-node? n)
                (if (eq? (edge-mode (sequence-dispatch-node-mismatch n)) 'reexecute)
                    (list (edge-target (sequence-dispatch-node-mismatch n))) '()))
+              ;; *** Slice ③ (integer accumulate) joins THIS arm and the REPORT
+              ;; guard below, and must join both in one commit for the reason
+              ;; recorded there. *** Its kind is input-reading rather than
+              ;; zero-width, so it does NOT belong in `zero-width-successors`
+              ;; -- it consumes a byte and makes progress. Recorded here because
+              ;; a ③ implementer reads this file, not Slice ②'s plan.
+              ;;
               ;; Slice ②'s two kinds are ZERO-WIDTH, exactly like a pause: every
               ;; edge out of them makes no progress, so every one is a
               ;; reexecute-equivalent and all of them join this walk. A

@@ -17,17 +17,7 @@
 # *** Which it demonstrated. *** Slice ①b's Important fix wave RECORDED this
 # banner as corrected to FORTY-NINE and it was not: the edit was in a batch that
 # aborted on an earlier assertion, and nothing failed, because nothing can. The
-# claim sat in a merged commit message for a slice and a half. Corrected here by
-# Slice ②'s whole-branch review, second finding: the normal-ir pass gains ONE for
-# the sequence-dispatch state's layout length -- see that mutation's own note.
-# There are EIGHT `(vector ns-tag ...)` literals in this normalizer, not the six
-# task 5 recorded, and the eighth is the one it missed. Mutations become 322 + 1
-# = 323.
-#
-# Slice ②'s whole-branch review: the differential.field pass gains TWO for the
-# operation/predicate coverage group -- see that group's own header. Passes stay
-# at 49 and mutations become 320 + 2 = 322.
-#
+# claim sat in a merged commit message for a slice and a half. Corrected by
 # Slice ② task 10, which found it by running the check the commit claimed to
 # have run.)
 #
@@ -836,8 +826,26 @@ cmake_minimum_required(VERSION 3.26)
 # own decision produces. What they lack is unique ATTRIBUTION -- break one and
 # more than one pin reports. Closing it needs per-lane assertions against
 # EXPECTED values everywhere the lane currently asserts only that the two lanes
-# agree, which is a fixture redesign rather than a re-anchoring, and it is
-# recorded as owed rather than done.
+# agree, which is a fixture redesign rather than a re-anchoring.
+#
+# *** OWED BY: the next slice that adds a mutation to this pass, which on the
+# current plan is Slice ③ (integer accumulate). *** Named rather than left as
+# "owed", because a deferral with no receiver is how this project once shipped an
+# unwitnessed function. ③ adds per-kind arms to both executors and so hits
+# exactly this: its new pins collide the same way unless the lane's cross-lane
+# checks are split into per-lane assertions first. The coverage group ②'s review
+# added is the shape to copy -- it asserts EXPECTED values per lane, and its two
+# pins do not collide.
+#
+# Slice ②'s whole-branch review, second finding: the normal-ir pass gains ONE for
+# the sequence-dispatch state's layout length -- see that mutation's own note.
+# There are EIGHT `(vector ns-tag ...)` literals in this normalizer, not the six
+# task 5 recorded, and the eighth is the one it missed. Mutations become
+# 322 + 1 = 323.
+#
+# Slice ②'s whole-branch review, first finding: the differential.field pass gains
+# TWO for the operation/predicate coverage group -- see that group's own header.
+# Passes stay at 49 and mutations become 320 + 2 = 322.
 #
 # Slice ② task 9: the differential.field pass gains THREE for the operation
 # matrix -- both lanes' lower bound, and the decrement itself. Four widths, four

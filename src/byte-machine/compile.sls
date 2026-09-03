@@ -113,6 +113,12 @@
   ;; an advance edge reports `boundary`, and the emitted arm is keyed on state id
   ;; alone, so it cannot be a per-site literal there. Each jump therefore carries
   ;; its own kind forward.
+  ;; *** Hazard for Slice ③: this helper's two rendered strings are each pinned
+  ;; at SITES=1 across three shipped mutations. Re-inlining the tail, or
+  ;; changing either string's text, is a CONFIGURE-TIME failure of the mutation
+  ;; suite rather than a test failure -- "pattern occurs 0 times ... expected
+  ;; 1". ③'s overflow tail wants to look like this one; extend it here rather
+  ;; than writing a parallel renderer. ***
   (define (loop-tail target mode)
     (if (eq? mode 'advance)
         (string-append "(loop (+ pos 1) " (number->string target) " (+ off 1) (quote boundary))")
