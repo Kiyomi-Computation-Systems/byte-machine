@@ -278,8 +278,31 @@ directions, then the gate.
   `release` 92/92, 49 passes / 352 mutations, no golden moved.
   Both lanes, every byte.
 
-- [ ] **Task 7 — The `byte` position row (H9).** New fixture, new row, two sentinel bumps, two
-  `SOURCES` edits, both lanes.
+- [x] **Task 7 — The `byte` position row (H9).** New fixture, new row, two sentinel bumps, both
+  lanes.
+
+  §12.7:768's rejected-digit half is now producible, so the row it was owed is added: an
+  accumulate overflow, in both executors, asserted for kind **and offset** and compared as the
+  whole six-member projection. `field-access-tests.sps` already pins the KIND for this shape; the
+  offset is what only this table can say, and the offset is the discriminator — §12.7:773's "does
+  not consume" means 2, where a consuming overflow would report 3.
+
+  Sentinels 3→4 and 6→8. Four rows for three kinds: ③'s row is a **second producer of `byte`** by
+  a different mechanism, and the table indexes producers.
+
+  **No `SOURCES` edits after all.** H9 budgeted two on the assumption of a fixture library; the
+  machine is built inline, as the three machines further down that file already are — a library
+  would have existed for one caller.
+
+  **One mutation:** the emitted overflow advances the absolute offset while keeping `pos`, so the
+  error still says `byte` about the wrong byte. Measured: the whole release selection under it
+  fails exactly the two position-kind lanes, and `differential.field` passes.
+
+  *A mutation's `SPEC` is a label; the program actually run is its pass's verify command.* Written
+  into the field pass with a position-kind SPEC, this mutation ran `field-access-tests.sps` and was
+  reported UNCAUGHT. It belongs to the position-kind pass. Recorded in the suite at that mutation.
+
+  `release` 92/92, 49 passes / 353 mutations, no golden moved.
 
 - [ ] **Task 8 — The property generator's field draw (H4).** Inbound edge pinned `reexecute`; the
   oracle extended to compare a field value; the two shipped goldens **re-measured**, because any

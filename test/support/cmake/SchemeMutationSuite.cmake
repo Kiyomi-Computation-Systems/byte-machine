@@ -837,6 +837,11 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Slice ③ task 7: the position-kind pass gains ONE for that lane's fourth row --
+# the offset the field lane cannot assert. Passes stay at 49; it joins the
+# existing position-kind pass because that is the pass whose verify command runs
+# position-kind-tests.sps. Mutations become 352 + 1 = 353.
+#
 # Slice ③ task 6: the differential.field pass gains TWO for the digit-range
 # bounds, one per lane. Mutations become 350 + 2 = 352.
 #
@@ -944,7 +949,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 352)
+set(EXPECTED_MUTATIONS 353)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -8511,6 +8516,34 @@ byte_machine_mutation(
   # error state a prior feed parked on is reached by NO jump, so only it can
   # observe what the loop was initialized to.
   EXPECT_OUTPUT_MATCHES "both lanes report boundary, not eof: interpreter -- expected boundary, got eof")
+
+# Slice ③ task 7 adds ONE, HERE rather than to the field pass, because a
+# mutation's specification is a LABEL and the program actually run is this pass's
+# verify command -- the two must name the same lane or the mutation runs against
+# the wrong program and reads as uncaught. (It did, first time: appended to the
+# field pass with a position-kind SPEC, it ran field-access-tests.sps and was
+# reported UNCAUGHT.)
+#
+# It belongs to the position-kind lane rather than the field lane because what
+# the new table row asserts and the field lane does not is the OFFSET. field-access-tests.sps already pins the overflow's position KIND in
+# both lanes; a mutation that moves the kind is caught there. This one moves the
+# offset alone -- the kind stays `byte` -- and it is caught by task 7's row and
+# by nothing else in the tree. Measured: the whole release selection under this
+# mutant fails exactly the two position-kind lanes (plus the mutation suite's own
+# baseline, which any dirty tree fails), and differential.field passes.
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "compile: the emitted overflow advances the stream offset past the digit it did not consume"
+  # §12.7:773's "does not consume" made falsifiable. The generated arm keeps
+  # `pos` -- so it does not re-read the byte -- while advancing the ABSOLUTE
+  # offset, which is precisely the inconsistency a kind-only assertion cannot
+  # see: the error still says `byte`, it just says it about the wrong byte.
+  FIND [["                       (loop pos " (num over) " off (quote byte))))))))\n")))]]
+  REPLACE [["                       (loop pos " (num over) " (+ off 1) (quote byte))))))))\n")))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an accumulate overflow reports byte at the unconsumed digit: offset -- expected 2, got 3")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

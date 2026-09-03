@@ -28,10 +28,18 @@
 ;;; otherwise have been read as evidence that the work was done.
 ;;;   §12.7:771  `eof`       truncated input during finish!
 ;;;
-;;; Two rows of that table are NOT producible here and this lane does not
-;;; pretend otherwise: :770's zero-width action is Slice ②, its callback half is
-;;; Milestone 5 and never producible in M4 at all, and :768's rejected-digit
-;;; half needs Slice ③'s accumulate node.
+;;; *** Slice ③, 2026-09-03: :768's rejected-digit half IS now producible and is
+;;; row four below. *** The paragraph under it said it "needs Slice ③'s
+;;; accumulate node"; the node exists, so the row was owed and is added -- for
+;;; both lanes, and with the offset and the whole six-member projection, not the
+;;; kind alone. field-access-tests.sps asserts the KIND for the same shape; what
+;;; it cannot assert is the offset and the cross-lane projection, which is what
+;;; this table is for and why the row belongs here rather than being called
+;;; covered elsewhere.
+;;;
+;;; One row of that table remains NOT producible here and this lane does not
+;;; pretend otherwise: :770's zero-width action is Slice ②, and its callback half
+;;; is Milestone 5 and never producible in Milestone 4 at all.
 (import (rnrs)
         (rnrs eval)
         (only (chezscheme) load)
@@ -64,6 +72,30 @@
 (define ad (make-http-version-advance-machine))
 ;; feed one byte then finish! over exhausted input -> `eof`.
 (define eofm (make-eof-machine))
+;; Slice ③'s row: an accumulate node whose next digit would overflow the field.
+;; §12.7:773 says the offending byte is NOT consumed, which is exactly what makes
+;; the kind `byte` rather than `boundary` -- so this fixture is the table's own
+;; proof of that sentence, and the offset it asserts is the discriminator: a
+;; consuming overflow would report 3.
+;;
+;; Built here rather than pulled from a fixture library because the three
+;; machines further down this file are built here too; a library would exist for
+;; one caller. A u8 field reaches 99 on "99" and the third `9` cannot be taken.
+(define overflow
+  (let ((errs (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
+                    (make-error-declaration 'too-big 'unexpected-byte "field overflow" #f))))
+    (make-machine 'overflow 'start (list (make-uint-field 'n 8 0 #f)) '() '() errs
+                  (list (make-byte-dispatch-node
+                         'start
+                         (list (make-byte-case (make-byte-range-matcher 0 255)
+                                               (make-edge 'acc 'reexecute) #f))
+                         (make-edge 'acc 'reexecute) #f #f)
+                        (make-integer-accumulate-node 'acc 'n 10 'acc
+                                                      (make-edge 'done 'advance)
+                                                      'over #f #f)
+                        (make-stop-node 'done #f)
+                        (make-error-node 'over 'too-big #f))
+                  'default-eof #f)))
 
 (define (feed-then-error cm bytes)
   (let* ((p (make-parser cm '() #f))
@@ -93,7 +125,14 @@
    (list "truncation during finish reports eof"
          (lambda (cm) (finish-error cm '(1))) 'eof 1
          (lambda () (interpreted eofm))
-         (lambda () (generated eofm 'eofm-parser 'eofm "pk-eof.sls")))))
+         (lambda () (generated eofm 'eofm-parser 'eofm "pk-eof.sls")))
+   ;; 57 is `9`. The third one overflows a u8 already holding 99, and because
+   ;; §12.7:773 does not consume it the offset is 2 -- the offending byte itself,
+   ;; not the position after it.
+   (list "an accumulate overflow reports byte at the unconsumed digit"
+         (lambda (cm) (feed-then-error cm '(57 57 57))) 'byte 2
+         (lambda () (interpreted overflow))
+         (lambda () (generated overflow 'overflow-parser 'overflow "pk-over.sls")))))
 
 (harness-group "every position kind, in both executors"
   (lambda ()
@@ -101,7 +140,10 @@
       (lambda ()
         ;; Sentinels read OBSERVED drives, never the driving list's own length:
         ;; the outer count proves every case ran, the inner one that each ran in
-        ;; both executors. Six per process -- three kinds x two executors. The
+        ;; both executors. Eight per process -- four rows x two executors; four
+        ;; rows for three KINDS, because Slice ③'s row is a second producer of
+        ;; `byte` by a different mechanism (an unconsumed digit rather than a
+        ;; reexecute mismatch) and the table indexes producers, not kinds. The
         ;; x2 for source/AOT is discharged by the lane PAIR both passing, which
         ;; CTest reports; no in-process counter can see it, because the two are
         ;; two registrations of this same program under different launchers.
@@ -126,8 +168,8 @@
                (check-equal (string-append name ": the lanes agree on the projection")
                             (project-error ie) (project-error ge))))
            cases)
-          (check-equal "three cases ran" cases-run 3)
-          (check-equal "six drives observed" drives 6))))))
+          (check-equal "four cases ran" cases-run 4)
+          (check-equal "eight drives observed" drives 8))))))
 
 ;; A pause whose CONTINUATION is an error node. Feed to the pause, resume, then
 ;; finish!: the finish loop reaches that error state on its first dispatch, by no
