@@ -837,6 +837,10 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Slice ③ task 8: the property pass gains TWO for the accumulate draw, and the
+# differential.field pass ONE for the emitter defect that draw uncovered.
+# Mutations become 353 + 3 = 356.
+#
 # Slice ③ task 7: the position-kind pass gains ONE for that lane's fourth row --
 # the offset the field lane cannot assert. Passes stay at 49; it joins the
 # existing position-kind pass because that is the pass whose verify command runs
@@ -949,7 +953,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 353)
+set(EXPECTED_MUTATIONS 356)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -6942,6 +6946,43 @@ byte_machine_mutation(
   # this one check.
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "idle-completion finish")
 
+# Slice ③ task 8: the accumulate DRAW. Two mutations, both against the
+# generator rather than the library under test, because what this task added to
+# the property lane is a draw and the thing that can rot is the draw's ability to
+# reach the node's arms at all. A generator that silently stops producing
+# accumulate work would leave every assertion below it passing.
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-gen.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "machine-gen: the pinned accumulate case advances instead of reexecuting"
+  # byte-trial feeds ONE byte to a fresh pair. Advancing consumes it at the
+  # dispatch, so `accp` is entered with the slice already exhausted and answers
+  # need-input; the trial then finishes and takes the node's EOF route. The node
+  # is reached on every trial and its digit arm never runs once -- the exact
+  # shape of vacuity the three counters were added for.
+  FIND [[(make-edge 'accp 'reexecute)]]
+  REPLACE [[(make-edge 'accp 'advance)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "at least one generated machine's trial commits a digit -- expected a true value")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-gen.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "machine-gen: the accumulate field's initial is one below the only workable value"
+  # 25 is the ONLY u8 initial at which a single digit can go either way: at 24
+  # even `9` fits (249), at 26 even `0` does not (260). One below and the
+  # overflow arm becomes unreachable in a one-byte trial while the digit arm
+  # still runs -- so the accumulate draw keeps looking healthy and has lost a
+  # third of its reach. Caught by the overflow counter alone.
+  FIND [[(make-uint-field 'n 8 25 #f)]]
+  REPLACE [[(make-uint-field 'n 8 24 #f)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "at least one generated machine's trial overflows the field -- expected a true value")
+
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 40: member-2 drift guard (Slice B) ---------------------------------
@@ -9046,6 +9087,27 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "base 10 partitions every byte identically in both lanes: no divergence -- expected none, got \\(58")
+
+# Slice ③ task 8's SHIPPED-CODE fix, found by the property generator. The
+# emitter's reached-declaration walk credited only `dispatch` states with the
+# default-EOF route, so a machine whose only default-eof consumer was an
+# accumulate node had that declaration filtered out of the emitted errs table and
+# index-of raised while rendering a machine the verifier had just accepted.
+#
+# Pinned HERE, on a fixed fixture, rather than on the property lane that found
+# it: the generated sequence re-rolls whenever any draw changes, and a defect
+# whose only witness is a seeded draw has a witness that can vanish without
+# anyone editing it. (It fails the property lane too -- measured.)
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: only dispatch states are credited with consuming the default EOF declaration"
+  FIND [[((and (memq (normal-state-kind st)
+                                                      '(dispatch accumulate))]]
+  REPLACE [[((and (memq (normal-state-kind st)
+                                                      '(dispatch))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "no error declaration for code")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

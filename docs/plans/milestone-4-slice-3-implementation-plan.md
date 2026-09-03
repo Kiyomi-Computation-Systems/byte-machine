@@ -304,9 +304,34 @@ directions, then the gate.
 
   `release` 92/92, 49 passes / 353 mutations, no golden moved.
 
-- [ ] **Task 8 — The property generator's field draw (H4).** Inbound edge pinned `reexecute`; the
-  oracle extended to compare a field value; the two shipped goldens **re-measured**, because any
-  new draw re-rolls the seeded sequence.
+- [x] **Task 8 — The property generator's field draw (H4).**
+
+  **It found a shipped emitter defect.** The `reached` walk in `compile.sls` credited only
+  `dispatch` states with the default-EOF route, so a machine whose *only* default-eof consumer was
+  an accumulate node had that declaration filtered out of the emitted `errs` table and `index-of`
+  raised — while rendering a machine the verifier had just accepted with zero diagnostics. Every
+  shipped accumulate fixture misses it: each has an entry dispatch that also defaults its eof
+  route. Fixed, and pinned on a **fixed fixture** (`acc-eof-only`) rather than on the seeded lane,
+  because a witness that only exists at one seed can vanish without anyone editing it.
+
+  Inbound edge pinned `reexecute` — but on the **pinned digit case**, not in `gen-case`. A first
+  version pinned free cases too; that mutant **survived the whole release selection**, so the line
+  is gone rather than documented. With a `reexecute` inbound edge the node only ever sees the byte
+  that routed to it, so a *pinned digit case* (the way `stop` is pinned) is what makes the digit
+  and overflow arms reachable at all — H4 does not name this, and without it the draw would
+  exercise the non-digit arm and nothing else.
+
+  Overflow got its **own declaration and terminal**, so it is distinguishable from the fallback
+  rejection in both the compared projection and the counters. Oracle extended: `rfields` appends
+  the field values, `gen-machine` returns the names (graph exports no `machine-fields`). Three
+  anti-vacuity counters, one per arm that can go missing.
+
+  **H4's golden claim was false.** The two shipped goldens are of fixed fixture machines, not
+  PRNG-drawn ones; nothing moved. What *did* move is the seeded sequence: pause 7→4 and finish
+  14→8, both re-measured and recorded in the lane.
+
+  Three mutations: the pinned edge's mode, the field initial (25 is the only workable value), and
+  the emitter fix. `release` 92/92, 49 passes / 356 mutations.
 
 - [ ] **Task 9 — The determinism lane and the fourth golden (D4).** Its own
   `BYTE_MACHINE_*_GOLDEN_FILE` in the mutation-suite registration.

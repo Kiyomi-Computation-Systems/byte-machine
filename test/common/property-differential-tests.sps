@@ -34,10 +34,20 @@
 ;; observable effect (D3's continuation-parking) only shows up as the NEXT
 ;; operation's behavior, which only lifecycle plus that operation's own
 ;; result can show (mirrors differential-pause-tests.sps's own rfields).
-(define (rfields r p)
-  (list (parser-result-status r) (parser-result-next r) (parser-result-consumed r)
-        (parser-result-stream-offset r) (project-error (parser-result-error r))
-        (parser-lifecycle p)))
+;;
+;; Slice ③ appends the FIELD VALUES. Without them an accumulate draw compares
+;; nothing about what the node computed: every member above is a parser result or
+;; a lifecycle, and two lanes that accumulated to different numbers agree on all
+;; of them. `fnames` comes from gen-machine (which knows, since it declared the
+;; field) rather than from the machine, because (byte-machine graph) exports no
+;; `machine-fields`. It is the empty list for every machine that drew no
+;; accumulate node, and then this is exactly the shipped tuple.
+(define (rfields r p fnames)
+  (append
+   (list (parser-result-status r) (parser-result-next r) (parser-result-consumed r)
+         (parser-result-stream-offset r) (project-error (parser-result-error r))
+         (parser-lifecycle p))
+   (map (lambda (nm) (parser-field-ref p nm)) fnames)))
 
 ;; Emit `m` to a fresh file, load it, and return its compiled-machine. The
 ;; library name is (generated gen) for every machine, so each emission gets its
@@ -66,16 +76,16 @@
 ;; (untagged with the byte number here -- byte-trial adds that, since this
 ;; loop does not know which byte its caller is trying); paused? is #t iff a
 ;; pause was observed.
-(define (feed-loop! pr pg bv start end)
+(define (feed-loop! pr pg bv start end fnames)
   (let ((rr (parser-feed! pr bv start end)) (rg (parser-feed! pg bv start end)))
     (cond
-      ((not (equal? (rfields rr pr) (rfields rg pg)))
+      ((not (equal? (rfields rr pr fnames) (rfields rg pg fnames)))
        (values (list 'feed start) #f))
       ((and (eq? (parser-result-status rr) 'paused) (eq? (parser-result-status rg) 'paused))
        (let ((acks (resume-pair! pr pg)))
          (if (not (equal? (car acks) (cadr acks)))
              (values (list 'feed-ack start) #t)
-             (let-values (((bad _paused?) (feed-loop! pr pg bv (parser-result-next rr) end)))
+             (let-values (((bad _paused?) (feed-loop! pr pg bv (parser-result-next rr) end fnames)))
                (values bad #t)))))
       (else (values 'none #f)))))
 
@@ -93,15 +103,15 @@
 ;; finished? is #t iff both sides agreed on a 'finished status (the eof
 ;; draw's idle-completion route -- see the finished-count anti-vacuity guard
 ;; below).
-(define (finish-loop! pr pg)
+(define (finish-loop! pr pg fnames)
   (let ((rr (parser-finish! pr)) (rg (parser-finish! pg)))
     (cond
-      ((not (equal? (rfields rr pr) (rfields rg pg))) (values (list 'finish) #f #f))
+      ((not (equal? (rfields rr pr fnames) (rfields rg pg fnames))) (values (list 'finish) #f #f))
       ((and (eq? (parser-result-status rr) 'paused) (eq? (parser-result-status rg) 'paused))
        (let ((acks (resume-pair! pr pg)))
          (if (not (equal? (car acks) (cadr acks)))
              (values (list 'finish-ack) #t #f)
-             (let-values (((bad _paused? finished?) (finish-loop! pr pg)))
+             (let-values (((bad _paused? finished?) (finish-loop! pr pg fnames)))
                (values bad #t finished?)))))
       (else (values 'none #f (eq? (parser-result-status rr) 'finished))))))
 
@@ -116,15 +126,48 @@
 ;; <feed-loop!/finish-loop! tag>) -- the byte number wrapped around whatever
 ;; phase tag the sub-loop reported, so a disagreement replays without also
 ;; having to grep for which of the 256 bytes it was.
-(define (byte-trial cm-ref cm-gen b)
+;;
+;; Slice ③ adds two more flags, both read from the parsers AFTER the trial has
+;; settled and both requiring BOTH lanes to show the same thing -- a flag one
+;; lane raised alone is a disagreement `bad` has already recorded, and must not
+;; also count as a witness.
+;;
+;; A parser already in `error` answers a zero-length feed with its stored result
+;; (the sticky rows in runtime.sls), which is how the reason is recovered here
+;; without threading results back out of the loops.
+(define (accumulated? pr pg fnames)
+  ;; 25 is the accumulate draw's initial (machine-gen.sls). A value other than it
+  ;; means the digit arm ran its multiply-add and committed.
+  (and (pair? fnames)
+       (let ((a (parser-field-ref pr (car fnames))) (g (parser-field-ref pg (car fnames))))
+         (and (equal? a g) (not (= a 25))))))
+
+(define (overflowed? pr pg fnames)
+  (and (pair? fnames)
+       (eq? (parser-lifecycle pr) 'error) (eq? (parser-lifecycle pg) 'error)
+       (let ((ea (parser-result-error (parser-feed! pr (make-bytevector 0) 0 0)))
+             (eg (parser-result-error (parser-feed! pg (make-bytevector 0) 0 0))))
+         (and ea eg
+              ;; The overflow declaration's own reason. It exists precisely so
+              ;; this is distinguishable from the fallback `rejected` terminal,
+              ;; which every machine reaches on most of its 256 bytes.
+              (string=? (parser-error-reason ea) "field overflow")
+              (string=? (parser-error-reason eg) "field overflow")))))
+
+(define (byte-trial cm-ref cm-gen b fnames)
   (let ((pr (make-parser cm-ref '() #f)) (pg (make-parser cm-gen '() #f)))
-    (let-values (((bad paused?) (feed-loop! pr pg (make-bytevector 1 b) 0 1)))
-      (cond
-        ((not (eq? bad 'none)) (values (cons b bad) paused? #f))
-        ((and (eq? (parser-lifecycle pr) 'ready) (eq? (parser-lifecycle pg) 'ready))
-         (let-values (((fbad fpaused? finished?) (finish-loop! pr pg)))
-           (values (if (eq? fbad 'none) fbad (cons b fbad)) (or paused? fpaused?) finished?)))
-        (else (values bad paused? #f))))))
+    (let-values (((bad paused? finished?)
+                  (let-values (((bad paused?) (feed-loop! pr pg (make-bytevector 1 b) 0 1 fnames)))
+                    (cond
+                      ((not (eq? bad 'none)) (values (cons b bad) paused? #f))
+                      ((and (eq? (parser-lifecycle pr) 'ready) (eq? (parser-lifecycle pg) 'ready))
+                       (let-values (((fbad fpaused? fin?) (finish-loop! pr pg fnames)))
+                         (values (if (eq? fbad 'none) fbad (cons b fbad))
+                                 (or paused? fpaused?) fin?)))
+                      (else (values bad paused? #f))))))
+      (values bad paused? finished?
+              (accumulated? pr pg fnames)
+              (overflowed? pr pg fnames)))))
 
 (harness-group "the PRNG is reproducible"
   (lambda ()
@@ -152,28 +195,41 @@
         ;; to `done` AND at least one of that machine's 256 bytes to leave
         ;; both parsers ready -- a free byte case targeting `start` or
         ;; `pausep` rather than a terminal. That makes the assertion stronger
-        ;; than it reads, not weaker, and the margin at this seed is
-        ;; comfortable (measured: 14 of the 40 machines finish, 7 pause). But
+        ;; than it reads, not weaker.
+        ;;
+        ;; *** Re-measured for Slice ③ (2026-09-03). *** The accumulate draw
+        ;; takes two numbers from the same stream, so the whole seeded sequence
+        ;; re-rolled and every count below moved: of the 40 machines, 8 finish
+        ;; (was 14) and 4 pause (was 7), while 25 declare a field, 13 commit a
+        ;; digit and 13 overflow. The margins are thinner than they were and are
+        ;; stated so a future draw that thins them further is visible as a
+        ;; change to this number rather than as a mutation quietly losing its
+        ;; witness. But
         ;; a future seed or vocabulary change could zero the byte-case half of
         ;; the conjunction while the eof draw still fires, and that would
         ;; present as the eof draw's own mutation losing its witness -- for a
         ;; reason nobody would find without this sentence.
-        (let loop ((i 0) (s (make-prng seed)) (paused-count 0) (finished-count 0))
+        (let loop ((i 0) (s (make-prng seed)) (paused-count 0) (finished-count 0)
+                   (field-count 0) (acc-count 0) (over-count 0))
           (if (< i machine-count)
-              (let-values (((m s2) (gen-machine s)))
+              (let-values (((m fnames s2) (gen-machine s)))
                 (let ((v (verify-machine m)))
                   (check (string-append "machine " (number->string i) " verifies")
                          (verification-ok? v))
                   (if (verification-ok? v)
                       (let ((cm-ref (make-interpreted-machine v))
                             (cm-gen (emit-and-load m i)))
-                        (let bl ((b 0) (bad 'none) (paused? #f) (finished? #f))
+                        (let bl ((b 0) (bad 'none) (paused? #f) (finished? #f)
+                                 (acc? #f) (over? #f))
                           (if (< b 256)
-                              (let-values (((b-bad b-paused? b-finished?) (byte-trial cm-ref cm-gen b)))
+                              (let-values (((b-bad b-paused? b-finished? b-acc? b-over?)
+                                            (byte-trial cm-ref cm-gen b fnames)))
                                 (bl (+ b 1)
                                     (if (eq? bad 'none) b-bad bad)
                                     (or paused? b-paused?)
-                                    (or finished? b-finished?)))
+                                    (or finished? b-finished?)
+                                    (or acc? b-acc?)
+                                    (or over? b-over?)))
                               (begin
                                 (check-equal
                                  (string-append "machine " (number->string i)
@@ -181,8 +237,12 @@
                                  bad 'none)
                                 (loop (+ i 1) s2
                                       (if paused? (+ paused-count 1) paused-count)
-                                      (if finished? (+ finished-count 1) finished-count))))))
-                      (loop (+ i 1) s2 paused-count finished-count))))
+                                      (if finished? (+ finished-count 1) finished-count)
+                                      (if (pair? fnames) (+ field-count 1) field-count)
+                                      (if acc? (+ acc-count 1) acc-count)
+                                      (if over? (+ over-count 1) over-count))))))
+                      (loop (+ i 1) s2 paused-count finished-count
+                            field-count acc-count over-count))))
               (begin
                 (check (string-append "at least one of the " (number->string machine-count)
                                       " generated machines' 256-byte trial observes a pause")
@@ -190,6 +250,21 @@
                 (check (string-append "at least one of the " (number->string machine-count)
                                       " generated machines' 256-byte trial observes an"
                                       " idle-completion finish")
-                       (>= finished-count 1)))))))))
+                       (>= finished-count 1))
+                ;; Slice ③'s accumulate draw. THREE guards, not one, because the
+                ;; node has three arms and drawing it proves only that it was
+                ;; constructed. The non-digit arm needs no guard of its own: it is
+                ;; what every non-digit byte routed to `accp` takes, and the
+                ;; machines counted below all have such bytes.
+                (check "at least one generated machine declares a field"
+                       (>= field-count 1))
+                (check "at least one generated machine's trial commits a digit"
+                       (>= acc-count 1))
+                ;; The overflow arm is reachable only because the pinned case's
+                ;; digit is drawn from all ten and the initial is 25: digits 6-9
+                ;; overflow a u8 in a single byte, digits 0-5 do not. A change to
+                ;; either constant can zero this without zeroing the one above.
+                (check "at least one generated machine's trial overflows the field"
+                       (>= over-count 1)))))))))
 
 (harness-finish)

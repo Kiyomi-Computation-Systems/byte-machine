@@ -807,4 +807,111 @@
                     '(("slash" 47) ("colon" 58) ("at" 64) ("G" 71) ("backtick" 96) ("g" 103)))
           (check-equal "all six neighbours" seen 6))))))
 
+
+;; Milestone 4 Slice ③ task 8, found by the PROPERTY GENERATOR: the emitter's
+;; reached-declaration walk credited only `dispatch` states with the default-EOF
+;; route, so a machine whose ONLY default-eof consumer is an accumulate node had
+;; that declaration filtered out of the emitted errs table, and index-of then
+;; raised "no error declaration for code" while rendering a machine the verifier
+;; had just accepted with zero diagnostics.
+;;
+;; Every accumulate fixture in this file misses it by construction: each has an
+;; entry dispatch that also defaults its eof route, so the pair was in the
+;; reached set for another state's sake. Separating them takes an entry whose eof
+;; goes somewhere ELSE -- here a finish node -- which is what the generator drew
+;; as soon as the eof draw and the accumulate draw fired together.
+;;
+;; Kept as a fixed fixture rather than left to the property lane: the generated
+;; sequence re-rolls whenever any draw changes, and a defect whose only witness
+;; is a seeded draw has a witness that can vanish without anyone editing it.
+(define acc-eof-only
+  (let ((errs (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
+                    (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))))
+    (make-machine 'acc-eof-only 'start (list (make-uint-field 'n 8 0 #f)) '() '() errs
+                  (list (make-byte-dispatch-node
+                         'start
+                         (list (make-byte-case (make-byte-range-matcher 0 255)
+                                               (make-edge 'acc 'reexecute) #f))
+                         (make-edge 'over 'reexecute)
+                         ;; The entry's own eof goes to a FINISH, so the entry
+                         ;; needs no default-eof declaration. The accumulate node
+                         ;; below declares eof-target #f and is the only state
+                         ;; left that can reach the machine default.
+                         'done #f)
+                        (make-integer-accumulate-node 'acc 'n 10 'acc
+                                                      (make-edge 'stopped 'advance)
+                                                      'over #f #f)
+                        (make-finish-node 'done #f)
+                        (make-stop-node 'stopped #f)
+                        (make-error-node 'over 'rejected #f))
+                  'default-eof #f)))
+
+;; Emitted ONCE and shared by the cases below -- the generated library name is
+;; (generated <machine-name>), so two emissions of the same machine would load
+;; two libraries under one name into the same process -- but LAZILY, inside a
+;; case rather than at top level. The defect this fixture pins makes emission
+;; RAISE, and a raise at top level kills the program before the harness can
+;; record anything: the lane exits 255 with no case named, where the same raise
+;; inside a case is recorded against that case and exits 1. The difference is
+;; what a reader sees when it regresses -- and the mutation suite reads the
+;; status, so 255 is reported as caught for the WRONG REASON.
+(define acc-eof-cache #f)
+(define (acc-eof-pair)
+  (unless acc-eof-cache
+    (set! acc-eof-cache
+          (cons (make-interpreted-machine (verify-machine acc-eof-only))
+                (emit-and-load acc-eof-only 'acc-eof-only 'acc-eof-only-parser
+                               (string-append tmpdir "/generated-acc-eof-only.sls")))))
+  acc-eof-cache)
+
+(harness-group "an accumulate node is a default-EOF consumer (Slice ③)"
+  (lambda ()
+    (harness-case "the verifier accepts a machine whose only default-eof consumer is the accumulate node"
+      (lambda ()
+        ;; Stated first and separately: if a later slice decides this shape is
+        ;; illegal, THIS is the check that should fail and say so, rather than
+        ;; the emission below failing for a reason that reads like an emitter
+        ;; defect.
+        (let ((v (verify-machine acc-eof-only)))
+          (check "accepted" (verification-ok? v))
+          (check-equal "no diagnostics" (length (verification-diagnostics v)) 0))))
+    (harness-case "the accumulate node's own eof route resolves the default declaration"
+      (lambda ()
+        ;; The route that actually asks index-of for the default-eof declaration,
+        ;; and the reason the emission used to RAISE rather than fail a
+        ;; comparison. A digit leaves the parser parked on `acc`, whose eof-target
+        ;; is #f; finishing there takes the machine default.
+        (let* ((pair (acc-eof-pair)) (a (car pair)) (g (cdr pair))
+               (pa (make-parser a '() #f)) (pg (make-parser g '() #f)))
+          (parser-feed! pa (str->bytes "7") 0 1)
+          (parser-feed! pg (str->bytes "7") 0 1)
+          (check-equal "interpreter accumulated" (parser-field-ref pa 'n) 7)
+          (check-equal "generated accumulated" (parser-field-ref pg 'n) 7)
+          (let ((ra (parser-finish! pa)) (rg (parser-finish! pg)))
+            (check-equal "interpreter errors at eof" (parser-result-status ra) 'error)
+            (check-equal "the lanes agree on the status"
+                         (parser-result-status rg) (parser-result-status ra))
+            ;; The reason is the assertion the filter defect was about: the
+            ;; declaration must still be IN the emitted table to be named here.
+            (check-equal "interpreter names the default-eof declaration"
+                         (parser-error-reason (parser-result-error ra))
+                         "unexpected end of input")
+            (check-equal "generated names the same declaration"
+                         (parser-error-reason (parser-result-error rg))
+                         "unexpected end of input")
+            (check-equal "position kind"
+                         (parser-error-position-kind (parser-result-error rg)) 'eof)))))
+    (harness-case "while the entry's own eof route still reaches its finish node"
+      (lambda ()
+        ;; The other half of the separation, and what makes the fixture's shape
+        ;; load-bearing rather than incidental: the entry does NOT default its eof
+        ;; route, which is precisely why the accumulate node was the only consumer
+        ;; of the default declaration and why the filter dropped it.
+        (let* ((pair (acc-eof-pair)) (a (car pair)) (g (cdr pair))
+               (ra (parser-finish! (make-parser a '() #f)))
+               (rg (parser-finish! (make-parser g '() #f))))
+          (check-equal "interpreter finishes" (parser-result-status ra) 'finished)
+          (check-equal "the lanes agree" (parser-result-status rg)
+                       (parser-result-status ra)))))))
+
 (harness-finish)

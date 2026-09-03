@@ -383,7 +383,38 @@
                                  (r (normal-error-reason st))
                                  (c (cond ((eq? (normal-state-kind st) 'error)
                                            (normal-error-code st))
-                                          ((and (eq? (normal-state-kind st) 'dispatch)
+                                          ;; *** Slice ③: `accumulate` belongs
+                                          ;; here too. *** It is the milestone's
+                                          ;; other INPUT-READING kind, it carries
+                                          ;; an eof route in the same slot, and
+                                          ;; render-exhausted-preamble renders
+                                          ;; that route for both kinds through
+                                          ;; the same code -- so an accumulate
+                                          ;; node whose eof-target is #f asks
+                                          ;; index-of for the machine default
+                                          ;; declaration exactly as a dispatch
+                                          ;; does. Testing only for `dispatch`
+                                          ;; left that declaration out of the
+                                          ;; reached set, the filter below
+                                          ;; dropped it from the errs table, and
+                                          ;; index-of then raised "no error
+                                          ;; declaration for code" while
+                                          ;; rendering a machine the verifier had
+                                          ;; just accepted.
+                                          ;;
+                                          ;; Invisible to every shipped
+                                          ;; accumulate fixture: each has an
+                                          ;; entry dispatch that ALSO defaults
+                                          ;; its eof route, so the pair was in
+                                          ;; the set for another state's sake.
+                                          ;; It takes a machine whose only
+                                          ;; default-eof consumer is the
+                                          ;; accumulate node -- which is what the
+                                          ;; property generator drew as soon as
+                                          ;; it could route the entry's eof to a
+                                          ;; finish node instead.
+                                          ((and (memq (normal-state-kind st)
+                                                      '(dispatch accumulate))
                                                 (eq? (car (normal-dispatch-eof st)) 'default))
                                            (cdr (normal-dispatch-eof st)))
                                           (else #f))))
