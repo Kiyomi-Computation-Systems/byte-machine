@@ -166,11 +166,50 @@
   things a walk can reach, asserting the count, so each way of breaking the
   enumeration reports a different number. Only what survives an actual attempt
   may be called subsumed, and it must be recorded with the measurement.
+  A third failure mode, added after Milestone 4 Slice ①b: **a UNION is inside
+  neither set it unions.** Dropping a pass from `verify-machine`'s `append` emits
+  exactly the union of its two arms' records, and that was filed "subsumed, it
+  owns no record of its own" — but the relation is "inside *one* sibling's", and
+  a union is inside neither, so it was separable all along by the same
+  both-records conjunction the `:909` case already ships. The check is
+  mechanical: compute the subset relation in **both** directions against every
+  sibling, and only the direction that actually holds is subsumption. Note the
+  asymmetry it leaves — once the union mutation is written, each ARM becomes a
+  subset of it, which is subsumption **by construction** (the union mutant is
+  strictly more permissive on every machine, so no fixture can redden an arm
+  while leaving it green). That kind is genuinely closed rather than
+  under-specified: there is nothing to separate, not merely nothing found. Keep
+  the arm mutations anyway when they name distinct decisions — the cost is
+  attribution, not detection — and record which kind you have.
   Re-sweep the whole pass after **each** fix, not once at the end: adding a
   *check* widens pins just as adding a mutation does (a new `no unreachable-node`
   check contained a bare pin as a substring and broke a pin sixteen mutations
   above it), and a first attempt can collide with a third mutant — one fix here
   had to be redesigned after its initial shape tied with a sibling.
+* **A measurement written into prose goes stale when its fixture changes, and nothing checks prose.**
+  A number in a comment, a plan or a commit message describes the tree *at the
+  moment it was taken*; change the fixture and the sentence stays. Milestone 4
+  Slice ①b declined a mutation as subsumed because it "reddens twenty-odd records
+  across five unrelated groups" — true of a two-field fixture, and a third field
+  was added **three steps later in the same task**, to separate a different pin,
+  without re-measuring the paragraph. Actual: three records in one group, and the
+  subsumption was false. The same slice shipped an `errs`-table fix whose own
+  regression case could not see the defect it named, and a decision record that
+  called the property "measured closed" while it was still false. Before citing
+  your own earlier number, re-run the measurement; when you change a fixture,
+  grep the file for prose describing it; and **state the command that produced a
+  number beside the number**, so the next reader can re-run it instead of
+  trusting it.
+* **A correction is a record too. Read the whole block and the sites it cites before writing one.**
+  Slice ①b measured five colliding pin pairs, compared that against a heading
+  reading "SUBSUMED, four pairs", and wrote a dated correction saying the file
+  was one short and that no separating attempt existed. Six lines below that
+  heading the file already read "the four subsumed pairs listed above, **plus**
+  arm 6 < arm 1", a later block listed all five by name, and arm 6's own pin
+  carried a *measured* attempt. The heading counted one bucket at one audit
+  moment. What was actually wrong was in a different file — a prior slice's plan.
+  Name precisely which artifact is wrong; they are not interchangeable. Keep the
+  retraction rather than deleting it, because the failure is the instructive part.
 * **`SITES` fails in BOTH directions — new code that DUPLICATES a pinned line breaks it too.**
   The familiar failure is "found 0, expected 1": an edit changed a `FIND`'s text.
   The one that gets missed is **"pattern occurs 2 times ... expected 1"**, when a
