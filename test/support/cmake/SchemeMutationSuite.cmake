@@ -6,11 +6,20 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FORTY-EIGHT PASSES, BECAUSE FORTY-EIGHT DIFFERENT WITNESSES ARE NEEDED
+# FORTY-NINE PASSES, BECAUSE FORTY-NINE DIFFERENT WITNESSES ARE NEEDED
 # (46 through Milestone 3; Milestone 4 Slice ①a adds the member-3 drift
-# guard and the position-kind lane. The count in prose and the count the
+# guard and the position-kind lane, and Slice ①b the field-access lane -- since
+# renamed byte-machine.differential.field, the only lane in which the field
+# declarations are observable at all. The count in prose and the count the
 # constants enforce are kept in step deliberately -- a banner left at the
-# old number is the one surface no test can check.)
+# old number is the one surface no test can check.
+#
+# *** Which it demonstrated. *** Slice ①b's Important fix wave RECORDED this
+# banner as corrected to FORTY-NINE and it was not: the edit was in a batch that
+# aborted on an earlier assertion, and nothing failed, because nothing can. The
+# claim sat in a merged commit message for a slice and a half. Corrected here by
+# Slice ② task 10, which found it by running the check the commit claimed to
+# have run.)
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -795,6 +804,30 @@ cmake_minimum_required(VERSION 3.26)
 #
 # Slice ①b's Critical fix wave: 271 -> 273. Two join Pass 33, both recovered from
 # task 4's unsound subsumption call.
+#
+# *** WHOLE-PASS SWEEP of the differential.field pass, Slice ② task 10: 20 pins,
+# 380 ordered pairs, 14 collisions -- EIGHT by-construction nestings and SIX that
+# are not nested in either direction. The six are recorded here rather than
+# closed, with the attempt. ***
+#
+# What they are: this is a DIFFERENTIAL lane, and most of its checks compare the
+# interpreter to the generated library. That comparison is symmetric, so breaking
+# either implementation of the same decision produces the same disagreement, and
+# a mutation of the interpreter's bound check and one of the emitter's are told
+# apart only by which side of a per-lane check moves.
+#
+# The attempt, measured: the check labels originally named only the first byte of
+# each schedule, so `(0)` and `(0 0)` produced byte-identical FAIL records.
+# Labelling every check with the WHOLE schedule took collisions from 18 to 14 and
+# gave two of the eight pins a lane-unique record. An exhaustive search for a
+# unique ORDERED PAIR of records then found none for the remaining six.
+#
+# What is NOT wrong here: every one of the six is CAUGHT, each by a record its
+# own decision produces. What they lack is unique ATTRIBUTION -- break one and
+# more than one pin reports. Closing it needs per-lane assertions against
+# EXPECTED values everywhere the lane currently asserts only that the two lanes
+# agree, which is a fixture redesign rather than a re-anchoring, and it is
+# recorded as owed rather than done.
 #
 # Slice ② task 9: the differential.field pass gains THREE for the operation
 # matrix -- both lanes' lower bound, and the decrement itself. Four widths, four
@@ -8267,7 +8300,7 @@ byte_machine_mutation(
                (loop (+ pos 1) pk)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "the failure routes to the declared error target: status -- expected error, got need-input")
+    "fields a parse actually writes \\(Slice ②\\)\\.a failed operation leaves the prior value unchanged \\(§25:1569\\): lifecycle -- expected error, got ready")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
@@ -8303,7 +8336,7 @@ byte_machine_mutation(
   REPLACE [[         (if (or #t (>= r 0) (<= r "]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "the generated lane leaves a failed operation's value unchanged: both unchanged -- expected 254, got 264")
+    "fields a parse actually writes \\(Slice ②\\)\\.both lanes agree over every input the fixture can take: count \\[10\\] -- expected 254, got 265")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
@@ -8313,7 +8346,7 @@ byte_machine_mutation(
   REPLACE [[(num (expt 2 width))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "both lanes agree over every input the fixture can take: count 0 -- expected 255, got 256")
+    "fields a parse actually writes \\(Slice ②\\)\\.both lanes agree over every input the fixture can take: count \\[00\\] -- expected 255, got 256")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
@@ -8325,7 +8358,7 @@ byte_machine_mutation(
   REPLACE [[                "             (begin (vector-set! fieldv " (num slot) " r) " (zero-width-jump (cdr tg)) "))))\n")]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "both lanes agree over every input the fixture can take: count 1 -- expected 254, got 264")
+    "fields a parse actually writes \\(Slice ②\\)\\.both lanes agree over every input the fixture can take: count \\[10\\] -- expected 254, got 264")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
@@ -8347,7 +8380,7 @@ byte_machine_mutation(
   REPLACE [[(string-append "(loop (+ pos 1) " (num target) " off pk)"))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "both lanes agree over every input the fixture can take: lifecycle 0 -- expected error, got ready")
+    "fields a parse actually writes \\(Slice ②\\)\\.both lanes agree over every input the fixture can take: lifecycle \\[00\\] -- expected error, got ready")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
@@ -8374,7 +8407,7 @@ byte_machine_mutation(
   REPLACE [[          (if (<= r m*)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "overflow, underflow and success agree across widths and lanes: interp lo u8 -- expected 0, got -1")
+    "the operation matrix over every width \\(§25:1568, §25:1569\\)\\.overflow, underflow and success agree across widths and lanes: interp lo u8 \\[2\\] -- expected 0, got -1")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
@@ -8385,7 +8418,7 @@ byte_machine_mutation(
   REPLACE [[         (if (and #t (<= r "]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "overflow, underflow and success agree across widths and lanes: gen lo u8 -- expected 0, got -1")
+    "the operation matrix over every width \\(§25:1568, §25:1569\\)\\.overflow, underflow and success agree across widths and lanes: gen lo u8 \\[2\\] -- expected 0, got -1")
 
 byte_machine_mutation(
   FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
@@ -8396,7 +8429,7 @@ byte_machine_mutation(
   REPLACE [[                    ((decrement) v)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "overflow, underflow and success agree across widths and lanes: expected lifecycle u8 -- expected error, got ready")
+    "the operation matrix over every width \\(§25:1568, §25:1569\\)\\.overflow, underflow and success agree across widths and lanes: lifecycle u8 \\[2\\] -- expected ready, got error")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

@@ -398,7 +398,31 @@ in both directions, then the gate. Tasks 1-3 are strictly ordered; 4-9 depend on
   widths; failed operations leave prior values unchanged. A loop with a sentinel reading the
   **observed** count, per the rule ①b's field lane already follows.
 
-- [ ] **Task 10 — Lanes, sweeps, status surfaces, CHANGELOG (H9, H10, H11, H14, H15).** New
+- [x] **Task 10 — Sweeps, status surfaces, CHANGELOG (H9, H10, H11, H14, H15).**
+
+  **The `differential.field` whole-pass sweep found a real weakness and it is recorded rather
+  than closed.** 20 pins, 380 ordered pairs, 14 collisions — eight by-construction nestings and
+  **six that nest in neither direction**. The cause is structural: this is a differential lane
+  and most of its checks compare the two executors *to each other*, which is symmetric, so
+  breaking either implementation of the same decision produces the same disagreement. The
+  attempt is measured — labelling every check with the **whole schedule** rather than its first
+  byte took collisions 18 → 14 and gave two pins a lane-unique record; an exhaustive search for
+  a unique ordered *pair* then found none for the remaining six. Every one is still **caught**,
+  each by a record its own decision produces; what they lack is unique *attribution*. Closing
+  it needs per-lane assertions against expected values wherever the lane currently asserts only
+  that the lanes agree — a fixture redesign, recorded as owed.
+
+  **H11 confirmed the hard way.** The `FORTY-EIGHT PASSES` banner was still stale: Slice ①b's
+  Important fix wave *recorded it as corrected* and the edit never applied, because it sat in a
+  batch that aborted on an earlier assertion — and nothing failed, because the banner is the one
+  surface no test can check. The false claim rode a merged commit message for a slice and a
+  half. Found by running the check the commit claimed to have run.
+
+  Exit evidence, each measured: `release` **92/92**, `pr` 92/92, `no-scheme` **8/8**; scheme
+  mutation **49 passes / 320 mutations**; CMake **1 pass / 72**; **ten** `EXPECT_SURVIVES`;
+  `reserved-member-2` **32, unchanged by ②**; goldens and every pinned IR fingerprint
+  **byte-identical to `51fd5f3`** — `git diff 51fd5f3..HEAD -- test/fixtures/` empty and no
+  19-digit literal removed from either pinning file. New
   lane pairs with re-measured names; whole-pass sweeps for every pass that gained a check;
   the banner; the count narrative; the fingerprint/golden gate as a value-level diff.
 

@@ -216,12 +216,17 @@
           (for-each
            (lambda (bs)
              (set! seen (+ seen 1))
-             (let ((a (feed-bytes wm-ref bs)) (b (feed-bytes wm-gen bs)))
-               (check-equal (string-append "count " (number->string (car bs)))
+             ;; The check label names the WHOLE schedule, not just its first
+             ;; byte. With `(0)` and `(0 0)` both labelled "0", two different
+             ;; mutants produced byte-identical FAIL records and no pin could
+             ;; tell them apart -- measured by this task's own sweep.
+             (let ((a (feed-bytes wm-ref bs)) (b (feed-bytes wm-gen bs))
+                   (nm (apply string-append (map number->string bs))))
+               (check-equal (string-append "count [" nm "]")
                             (parser-field-ref b 'count) (parser-field-ref a 'count))
-               (check-equal (string-append "seen " (number->string (car bs)))
+               (check-equal (string-append "seen [" nm "]")
                             (parser-field-ref b 'seen) (parser-field-ref a 'seen))
-               (check-equal (string-append "lifecycle " (number->string (car bs)))
+               (check-equal (string-append "lifecycle [" nm "]")
                             (parser-lifecycle b) (parser-lifecycle a))))
            '((0) (1) (2) (0 0) (0 1) (1 0)))
           (check-equal "every schedule compared" seen 6))))
@@ -420,7 +425,10 @@
              (set! widths (+ widths 1))
              (let* ((w (car row)) (ref (cadr row)) (gen (caddr row))
                     (mx (- (expt 2 w) 1))
-                    (tag (lambda (t) (string-append t " u" (number->string w)))))
+                    (tag (lambda (t sched)
+                           (string-append t " u" (number->string w) " ["
+                                          (apply string-append (map number->string sched))
+                                          "]"))))
                (for-each
                 (lambda (spec)
                   (set! checks (+ checks 1))
@@ -429,12 +437,12 @@
                     ;; The value, in BOTH lanes, and the lifecycle -- a failed
                     ;; operation must both leave the value alone (§25:1569) and
                     ;; route to its error target.
-                    (check-equal (tag (string-append "interp " (symbol->string fld)))
+                    (check-equal (tag (string-append "interp " (symbol->string fld)) bs)
                                  (parser-field-ref a fld) want)
-                    (check-equal (tag (string-append "gen " (symbol->string fld)))
+                    (check-equal (tag (string-append "gen " (symbol->string fld)) bs)
                                  (parser-field-ref b fld) want)
-                    (check-equal (tag "lifecycle") (parser-lifecycle b) (parser-lifecycle a))
-                    (check-equal (tag "expected lifecycle") (parser-lifecycle a) life)))
+                    (check-equal (tag "lifecycle" bs) (parser-lifecycle b) (parser-lifecycle a))
+                    (check-equal (tag "expected lifecycle" bs) (parser-lifecycle a) life)))
                 (list
                  ;; increment at the maximum: overflow, value unchanged.
                  (list '(0) 'hi mx 'error)
