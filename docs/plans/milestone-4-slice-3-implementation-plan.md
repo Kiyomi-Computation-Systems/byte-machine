@@ -168,7 +168,25 @@ directions, then the gate.
 
   `release` 92/92, 49 passes / 330 mutations, no golden moved.
 
-- [ ] **Task 2 — The verifier census (D1, D3, H1, H7, H8).** Fifteen sites re-measured; the
+- [x] **Task 2 — The verifier census (D1, D3, H1, H7).**
+  Five sites: `node-out-targets` (three byte targets), `node-eof-target` (the fourth, so
+  `all-out-targets` adds it for reachability and the `:908` filter does not see it),
+  `reexec-targets` with **two disjuncts**, the REPORT guard's sixth, and `pass-fields`' sibling
+  arm.
+
+  **D1 held, and the two fixtures prove it separately.** Measured: the overflow-disjunct
+  mutation fails *only* the overflow self-cycle case, the nondigit-disjunct mutation *only* the
+  nondigit one. A single fixture would have hidden whichever half it did not exercise — which is
+  exactly what §8's instruction would have shipped, since it names only `nondigit-edge`.
+
+  A third fixture pins the **digit** edge's exclusion (§10.6:566 makes it always advance), so a
+  walk that wrongly added it fails; and a fourth is the clean premise.
+
+  **D3 held:** the field-reference check is a sibling arm reusing `invalid-field-operand`,
+  reported under the **node's** name per ②'s convention.
+
+  Six mutations; **four shipped report-guard pins re-anchored** for the sixth disjunct — the
+  fourth time that guard has moved. `release` 92/92, 49 passes / 336 mutations, no golden moved. Fifteen sites re-measured; the
   accumulate kind joins as **input-reading**. `reexec-targets` takes **two disjuncts** and the
   REPORT guard its sixth, in one commit. `pass-fields` gains its sibling arm.
   **Fixtures: the overflow self-cycle AND the nondigit self-cycle**, since neither distinguishes

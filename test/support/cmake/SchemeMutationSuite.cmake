@@ -837,6 +837,11 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Slice ③ task 2: Pass 33 gains SIX for the input-reading kind's census --
+# both zero-progress disjuncts separately, the digit edge's exclusion, the
+# REPORT set, out-targets, and the field reference. FOUR shipped report-guard
+# pins were re-anchored for the sixth disjunct. Mutations become 330 + 6 = 336.
+#
 # Slice ③ task 1: the ir pass gains SEVEN for the integer-accumulate node --
 # the base set, the nondigit edge's shape, the mandatory overflow target, the
 # eof-target's shape, both census sites, and the constructor/verifier boundary in
@@ -918,7 +923,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 330)
+set(EXPECTED_MUTATIONS 336)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3717,7 +3722,8 @@ byte_machine_mutation(
   # decision has not moved even though its text keeps doing so.
   FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
                                   (sequence-dispatch-node? n)
-                                  (field-action-node? n) (field-branch-node? n))
+                                  (field-action-node? n) (field-branch-node? n)
+                                  (integer-accumulate-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[(if #f]]
   EXPECT_STATUS 1
@@ -4266,11 +4272,13 @@ byte_machine_mutation(
   # nesting it records.
   FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
                                   (sequence-dispatch-node? n)
-                                  (field-action-node? n) (field-branch-node? n))
+                                  (field-action-node? n) (field-branch-node? n)
+                                  (integer-accumulate-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[(if (and (or (byte-dispatch-node? n)
                                   (sequence-dispatch-node? n)
-                                  (field-action-node? n) (field-branch-node? n))
+                                  (field-action-node? n) (field-branch-node? n)
+                                  (integer-accumulate-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "chain of pauses that cycles is a zero-progress EOF cycle: zero-progress-cycle diagnostic")
 
@@ -4586,9 +4594,11 @@ byte_machine_mutation(
   # RE-ANCHORED by Slice ② task 2's census, same reflow as the sibling pin.
   FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
                                   (sequence-dispatch-node? n)
-                                  (field-action-node? n) (field-branch-node? n))]]
+                                  (field-action-node? n) (field-branch-node? n)
+                                  (integer-accumulate-node? n))]]
   REPLACE [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
-                                  (field-action-node? n) (field-branch-node? n))]]
+                                  (field-action-node? n) (field-branch-node? n)
+                                  (integer-accumulate-node? n))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "and the sequence node itself are three zero-progress cycles: zero-progress-cycle count -- expected 3, got 2")
@@ -5073,6 +5083,98 @@ byte_machine_mutation(
 # WALK/REPORT pair the M3 precedent in this file warns about, and they needed a
 # fixture of their own before they were separable at all -- see the middle two.
 
+# Slice ③ task 2 adds SIX for the input-reading kind's census.
+#
+# *** The two zero-progress disjuncts have SEPARATE fixtures, and that is the
+# whole point of design §8's correction. *** §8 said only `nondigit-edge` can be
+# `reexecute` "since the overflow edge is non-consuming but terminal-directed" --
+# it is not, and §8 contradicts itself sixteen lines later. Measured: cutting
+# Slice ②'s field-action arm to one disjunct makes a self-targeting error edge
+# verify with ZERO diagnostics. Each disjunct's mutation fails only its own
+# fixture, which is what a one-fixture task would have hidden.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an accumulate's OVERFLOW edge is invisible to the zero-progress walk"
+  # §12.7:772 makes the overflow non-consuming and §15:870 leaves the field
+  # unchanged, so an overflow-error naming its own node re-reads the same byte
+  # forever -- and neither runtime loop guards against it. This is the arm
+  # design §8's instruction would have omitted.
+  FIND [[                (list (integer-accumulate-node-overflow-error n))))]]
+  REPLACE [[                '()))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the input-reading kind in the verifier census \\(Slice ③\\).an accumulate whose OVERFLOW edge targets itself is a zero-progress cycle: zero-progress-cycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an accumulate's NONDIGIT reexecute edge is invisible to the zero-progress walk"
+  # The disjunct §8 did name. Its own fixture, because the overflow mutation
+  # above passes this one and vice versa.
+  FIND [[                (if (eq? (edge-mode (integer-accumulate-node-nondigit-edge n)) 'reexecute)
+                    (list (edge-target (integer-accumulate-node-nondigit-edge n)))
+                    '())]]
+  REPLACE [[                '()]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the input-reading kind in the verifier census \\(Slice ③\\).an accumulate whose NONDIGIT edge reexecutes into itself is a zero-progress cycle: zero-progress-cycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the accumulate DIGIT edge wrongly joins the zero-progress walk"
+  # The restrictive direction, and the reason the digit edge stays out:
+  # §10.6:566 makes it always advance, so a machine looping on digits makes
+  # progress and must not be reported.
+  FIND [[                (list (integer-accumulate-node-overflow-error n))))]]
+  REPLACE [[                (list (integer-accumulate-node-overflow-error n)
+                      (integer-accumulate-node-digit-target n))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the input-reading kind in the verifier census \\(Slice ③\\).the DIGIT edge self-targeting is not a cycle -- it advances: no cycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the zero-progress REPORT set excludes the accumulate kind"
+  # SUBSUMED BY either walk mutation above, by construction and in the nesting
+  # this file already records for the pause kind -- narrowing the report stops
+  # the accumulate node being flagged, narrowing a walk stops that AND every node
+  # whose cycle runs through one. Kept because shipping one without the other is
+  # the half-fix this pass exists to prevent.
+  FIND [[                                  (integer-accumulate-node? n))
+                              (reaches-self? (node-name n)))]]
+  REPLACE [[                                  )
+                              (reaches-self? (node-name n)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the input-reading kind in the verifier census \\(Slice ③\\).an accumulate whose NONDIGIT edge reexecutes into itself is a zero-progress cycle: zero-progress-cycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an accumulate's byte targets are not out-targets"
+  # Three of its four explicit targets are byte out-targets; the fourth,
+  # eof-target, belongs to node-eof-target so that all-out-targets adds it for
+  # reachability and the :908 filter does not see it.
+  FIND [[          ((integer-accumulate-node? n)
+           (list (integer-accumulate-node-digit-target n)]]
+  REPLACE [[          ((and #f (integer-accumulate-node? n))
+           (list (integer-accumulate-node-digit-target n)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the input-reading kind in the verifier census \\(Slice ③\\).an accumulate's three byte targets are out-targets, so they are reachable: nothing unreachable")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an accumulate's field reference is not checked"
+  # D3's sibling arm. Not a `field-operand-schemas` row: that table is keyed on
+  # a selector and an arity and an accumulate node has neither. Reported under
+  # the NODE's name, matching the operand walk's own convention -- design §8
+  # prescribes the field name, which would put two conventions under one code.
+  FIND [[    (if (field-width-of fs (integer-accumulate-node-field n))]]
+  REPLACE [[    (if #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the input-reading kind in the verifier census \\(Slice ③\\).an accumulate naming no declared field is invalid-field-operand: invalid-field-operand")
+
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a zero-width node's targets are not out-targets"
@@ -5117,9 +5219,11 @@ byte_machine_mutation(
   # there is no record the narrower one owns. Kept because the two are distinct
   # decisions and shipping only one of them is the defect this pass exists to
   # prevent -- a `store`-into-itself machine that verifies clean and then hangs.
-  FIND [[                                  (field-action-node? n) (field-branch-node? n))
+  # Re-anchored by Slice ③ task 2: the guard gained its sixth disjunct.
+  FIND [[                                  (field-action-node? n) (field-branch-node? n)
+                                  (integer-accumulate-node? n))
                               (reaches-self? (node-name n)))]]
-  REPLACE [[                                  )
+  REPLACE [[                                  (integer-accumulate-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
