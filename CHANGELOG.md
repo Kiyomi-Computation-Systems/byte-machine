@@ -12,8 +12,9 @@ Milestone 3 closed **2026-08-30** with Slice ③ (multiple alternatives,
 ambiguity, and cycle analysis), after Slices ① (byte classes) and ② (sequence
 dispatch and prefix lowering); Milestone 4 (fields, actions, and branches) is in
 progress — its Gate 0 discharged **2026-08-31** (decisions 0018–0022) and Slice
-①a landed **2026-09-02** and Slice ①b (fields: declaration, slots, and
-`parser-field-ref`) **2026-09-02**, with Slices ② and ③ remaining. See
+①a landed **2026-09-02**, Slice ①b (fields: declaration, slots, and
+`parser-field-ref`) **2026-09-02**, and Slice ② (field action and field branch)
+**2026-09-03**, with Slice ③ remaining. See
 [the implementation plan](docs/plans/byte-machine-implementation-plan.md) §25
 for overall scope; the entries below record what each milestone actually
 delivered. No versioned release exists yet.
@@ -988,6 +989,37 @@ delivered. No versioned release exists yet.
   which adds a write without adding the restore has to *introduce* the leak
   rather than merely forget to prevent it; the survivor's own note carries the
   measurement and the condition for closing it.
+
+- **Machines act on and branch on their fields.** Two zero-width node kinds
+  (§10.6:550, :575): `make-field-action-node` applies one of seven operations —
+  `store`, `clear`, `increment`, `decrement`, `add`, `set-mask`, `clear-mask` —
+  and `make-field-branch-node` selects between two mandatory targets on one of
+  seven predicates. Both consume no byte. Overflow and underflow are **checked at
+  every width and leave the prior value unchanged** (§25:1568, :1569) — not
+  saturated — and route to a declared error target, which the constructor makes
+  mandatory exactly when the operation can fail and forbids when it cannot.
+  Operand faults are the verifier's under a second code,
+  `invalid-field-operand`, spending Milestone 4's two-new-code budget.
+
+  **The EOF-chain walk was rewritten to answer over a set of successors**, since
+  a field branch has two: one DFS carrying a path stack for cycles and a global
+  completed-set for verdict reuse, with `'unknown` deleted rather than ranked
+  least. That is decision 0021's algorithm; the design's §7 prescribed the one
+  0021 rejects by name, and is corrected in place.
+
+  The arithmetic is **written twice on purpose** — once in the interpreter from
+  the source IR, once in the emitter from the normalized table — so a lowering
+  bug in overflow checking stays visible to the interpreter≡generated
+  differential, which is the single class of defect this milestone introduces.
+
+  Measured at the slice's close: `release` 92/92, `no-scheme` 8/8, the Scheme
+  mutation suite **49 passes / 320 mutations**, the CMake suite unchanged at
+  1 pass / 72, **ten** declared `EXPECT_SURVIVES` — Slice ①b's `parser-reset!`
+  survivor is **closed and re-declared as a pin**, on the reopening condition it
+  wrote for itself, and the per-parser isolation case ①b declined is written.
+  The three committed goldens and every pinned IR fingerprint are byte-identical
+  to `51fd5f3`: the normalized state vector was widened and no existing machine's
+  encoding moved.
 
 ### Removed
 

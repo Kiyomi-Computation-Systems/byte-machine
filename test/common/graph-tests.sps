@@ -119,4 +119,29 @@
           (check-equal "label" (uint-field-source-label f) #f)
           (check "the machine was built" (machine? m)))))))
 
+
+;; Milestone 4 Slice ② task 1: the façade reaches the two zero-width kinds.
+;; Both lists in graph.sls are hand-maintained mirrors and a name missing from
+;; EITHER makes the constructor unreachable to a grammar author, so both are
+;; asserted from outside the library -- which is the only place the mirror is
+;; observable.
+(harness-group "the field node constructors reach grammar authors"
+  (lambda ()
+    ;; The witness is EXPAND TIME, not run time: a name missing from either list
+    ;; is an unbound identifier and this whole program fails to load. `node?` is
+    ;; deliberately not available here -- accessors stay private (§9.1 fixes a
+    ;; CONSTRUCTION surface) -- so the assertion is that a machine carrying both
+    ;; kinds builds, which also proves make-machine's node guard admits them.
+    (harness-case "a machine carrying both field kinds builds through the facade"
+      (lambda ()
+        (let ((m (make-machine
+                  'm 'act (list (make-uint-field 'count 8 0 #f)) '() '()
+                  (list (make-error-declaration 'e 'c "r" #f))
+                  (list (make-field-action-node 'act 'increment '(count) 'br 'e #f)
+                        (make-field-branch-node 'br 'zero '(count) 'stop 'stop #f)
+                        (make-stop-node 'stop #f)
+                        (make-error-node 'e 'e #f))
+                  'e #f)))
+          (check "built" (and m #t)))))))
+
 (harness-finish)

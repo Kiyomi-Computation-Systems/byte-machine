@@ -7,6 +7,12 @@
 ;;;
 ;;;   §12.7:768  `byte`      a reexecute mismatch, AT the offending byte
 ;;;   §12.7:769  `boundary`  an error edge after an advance, AFTER the byte
+;;;
+;;; Milestone 4 splits the remaining rows between slices, and each is a ROW in
+;;; this shipped table rather than a new mechanism: Slice ② owns `boundary`
+;;; after a zero-width hop (added, and pinned in both lanes), and Slice ③ owns
+;;; `byte` for the input-reading accumulate kind. §12.7:777 makes position kind
+;;; differential-compared, so a ③ that adds its row must add it for BOTH lanes.
 ;;;   §12.7:771  `eof`       truncated input during finish!
 ;;;
 ;;; Two rows of that table are NOT producible here and this lane does not

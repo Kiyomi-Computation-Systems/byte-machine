@@ -420,4 +420,131 @@
                                       (list (make-error-declaration 'e 'c "r" #f))
                                       (list (make-stop-node 'stop #f)) 'e #f)))))))
 
+
+;; Milestone 4 Slice ② task 1: the two zero-width node kinds (§9.1:301-306,
+;; §10.6:550 and :575). Decision 0020 fixes the constructor/verifier boundary and
+;; this group asserts the CONSTRUCTOR half only -- everything here is evaluable
+;; from the one node being built.
+;;
+;; *** `arguments` is checked as a proper list AND NO FURTHER. *** 0020 item 2:
+;; "Everything that requires the §9.1:326-346 schema -- which position holds the
+;; field, how many positions there are, what each one means -- is the verifier's,
+;; because §9.1:348 assigns exact arity to it and nothing can be read out of
+;; `arguments` before arity is known." The consequence 0020 itself flags as
+;; looking wrong to a reader of 0017: `low <= high` for `range` is the
+;; VERIFIER's here, though 0017 rejects `low > high` in
+;; `make-byte-range-matcher` -- there they are named parameters, here they are
+;; the second and third elements of a list whose length the constructor may not
+;; assume. So there is deliberately no arity case in this group.
+(harness-group "field-action nodes"
+  (lambda ()
+    (harness-case "a field action carries its six parts"
+      (lambda ()
+        ;; A FALLIBLE operation, so `error` carries a target -- the six parts are
+        ;; read off the shape the error-slot rule below actually permits.
+        (let ((n (make-field-action-node 'bump 'increment '(count) 'next 'oops 'lbl)))
+          (check "predicate" (field-action-node? n))
+          (check-equal "name" (field-action-node-name n) 'bump)
+          (check-equal "operation" (field-action-node-operation n) 'increment)
+          (check-equal "arguments" (field-action-node-arguments n) '(count))
+          (check-equal "next" (field-action-node-next n) 'next)
+          (check-equal "error" (field-action-node-error n) 'oops)
+          (check-equal "label" (field-action-node-source-label n) 'lbl))
+        ;; and the #f half, on an operation that cannot fail.
+        (check-equal "no error target"
+                     (field-action-node-error
+                      (make-field-action-node 'z 'clear '(count) 'next #f #f))
+                     #f)))
+    (harness-case "it is a node and answers node-name"
+      (lambda ()
+        (let ((n (make-field-action-node 'bump 'clear '(count) 'next #f #f)))
+          (check "node?" (node? n))
+          (check-equal "node-name" (node-name n) 'bump))))
+    (harness-case "every one of the seven operations is accepted"
+      (lambda ()
+        ;; A loop with a sentinel reading the OBSERVED count: a closed
+        ;; enumeration asserted by naming three of seven is not asserted.
+        (let ((seen 0))
+          (for-each (lambda (spec)
+                      (set! seen (+ seen 1))
+                      (check-equal (symbol->string (car spec))
+                                   (field-action-node-operation
+                                    (make-field-action-node 'a (car spec) (cadr spec)
+                                                            'next (caddr spec) #f))
+                                   (car spec)))
+                    '((store (count 1) #f) (clear (count) #f)
+                      (increment (count) oops) (decrement (count) oops)
+                      (add (count 1) oops) (set-mask (count 1) #f)
+                      (clear-mask (count 1) #f)))
+          (check-equal "all seven were built" seen 7))))
+    (harness-case "an operation outside the closed set is refused"
+      (lambda ()
+        ;; §9.1:348's "it rejects arbitrary operation names" -- the one clause of
+        ;; that sentence pass 6a does NOT carry (0020 item 4), because a closed
+        ;; set is evaluable from the node alone.
+        (check-raises "not an operation" (contract-violation? 'make-field-action-node 'operation)
+                      (lambda () (make-field-action-node 'a 'multiply '(count 2) 'next #f #f)))))
+    (harness-case "arguments must be a proper list, and nothing more is read"
+      (lambda ()
+        (check-raises "improper" (contract-violation? 'make-field-action-node 'arguments)
+                      (lambda () (make-field-action-node 'a 'store '(count . 1) 'next #f #f)))
+        ;; The other half of 0020 item 2, asserted so a later reader does not
+        ;; "fix" the constructor into reading the schema: a WRONG ARITY builds
+        ;; fine here and is pass 6a's to reject.
+        (check "wrong arity is accepted at construction"
+               (field-action-node? (make-field-action-node 'a 'store '() 'next #f #f)))))
+    (harness-case "the error slot is #f exactly when the operation cannot fail"
+      (lambda ()
+        ;; Design §4.4's error-slot rule. Permitting a target on a safe
+        ;; operation would NOT fail loudly: node-out-targets feeds `error` into
+        ;; the reachability walk unconditionally, so the target is reached and no
+        ;; pass checks whether the operation can fail. The constructor is the
+        ;; only place that can.
+        (check-raises "safe op with a target"
+                      (contract-violation? 'make-field-action-node 'error)
+                      (lambda () (make-field-action-node 'a 'store '(count 1) 'next 'oops #f)))
+        (check-raises "failing op without one"
+                      (contract-violation? 'make-field-action-node 'error)
+                      (lambda () (make-field-action-node 'a 'increment '(count) 'next #f #f)))))))
+
+(harness-group "field-branch nodes"
+  (lambda ()
+    (harness-case "a field branch carries its six parts"
+      (lambda ()
+        (let ((n (make-field-branch-node 'test 'zero '(count) 'yes 'no 'lbl)))
+          (check "predicate" (field-branch-node? n))
+          (check-equal "name" (field-branch-node-name n) 'test)
+          (check-equal "predicate" (field-branch-node-predicate n) 'zero)
+          (check-equal "arguments" (field-branch-node-arguments n) '(count))
+          (check-equal "true-target" (field-branch-node-true-target n) 'yes)
+          (check-equal "false-target" (field-branch-node-false-target n) 'no)
+          (check-equal "label" (field-branch-node-source-label n) 'lbl))))
+    (harness-case "it is a node and answers node-name"
+      (lambda ()
+        (let ((n (make-field-branch-node 'test 'zero '(count) 'yes 'no #f)))
+          (check "node?" (node? n))
+          (check-equal "node-name" (node-name n) 'test))))
+    (harness-case "every one of the seven predicates is accepted"
+      (lambda ()
+        (let ((seen 0))
+          (for-each (lambda (p)
+                      (set! seen (+ seen 1))
+                      (check-equal (symbol->string p)
+                                   (field-branch-node-predicate
+                                    (make-field-branch-node 'a p '(count) 'y 'n #f))
+                                   p))
+                    '(equal zero nonzero range mask-any mask-all mask-none))
+          (check-equal "all seven were built" seen 7))))
+    (harness-case "a predicate outside the closed set is refused"
+      (lambda ()
+        (check-raises "not a predicate" (contract-violation? 'make-field-branch-node 'predicate)
+                      (lambda () (make-field-branch-node 'a 'greater '(count 2) 'y 'n #f)))))
+    (harness-case "low > high builds fine -- it is the verifier's"
+      (lambda ()
+        ;; 0020 item 2 names this exact case as the one that "will look wrong to
+        ;; a reader of 0017". Asserted rather than merely absent, so the boundary
+        ;; is witnessed instead of assumed.
+        (check "accepted at construction"
+               (field-branch-node? (make-field-branch-node 'a 'range '(count 9 2) 'y 'n #f)))))))
+
 (harness-finish)

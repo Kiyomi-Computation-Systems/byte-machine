@@ -6,11 +6,20 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FORTY-EIGHT PASSES, BECAUSE FORTY-EIGHT DIFFERENT WITNESSES ARE NEEDED
+# FORTY-NINE PASSES, BECAUSE FORTY-NINE DIFFERENT WITNESSES ARE NEEDED
 # (46 through Milestone 3; Milestone 4 Slice ①a adds the member-3 drift
-# guard and the position-kind lane. The count in prose and the count the
+# guard and the position-kind lane, and Slice ①b the field-access lane -- since
+# renamed byte-machine.differential.field, the only lane in which the field
+# declarations are observable at all. The count in prose and the count the
 # constants enforce are kept in step deliberately -- a banner left at the
-# old number is the one surface no test can check.)
+# old number is the one surface no test can check.
+#
+# *** Which it demonstrated. *** Slice ①b's Important fix wave RECORDED this
+# banner as corrected to FORTY-NINE and it was not: the edit was in a batch that
+# aborted on an earlier assertion, and nothing failed, because nothing can. The
+# claim sat in a merged commit message for a slice and a half. Corrected by
+# Slice ② task 10, which found it by running the check the commit claimed to
+# have run.)
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -796,6 +805,102 @@ cmake_minimum_required(VERSION 3.26)
 # Slice ①b's Critical fix wave: 271 -> 273. Two join Pass 33, both recovered from
 # task 4's unsound subsumption call.
 #
+# *** WHOLE-PASS SWEEP of the differential.field pass, Slice ② task 10: 20 pins,
+# 380 ordered pairs, 14 collisions -- EIGHT by-construction nestings and SIX that
+# are not nested in either direction. The six are recorded here rather than
+# closed, with the attempt. ***
+#
+# What they are: this is a DIFFERENTIAL lane, and most of its checks compare the
+# interpreter to the generated library. That comparison is symmetric, so breaking
+# either implementation of the same decision produces the same disagreement, and
+# a mutation of the interpreter's bound check and one of the emitter's are told
+# apart only by which side of a per-lane check moves.
+#
+# The attempt, measured: the check labels originally named only the first byte of
+# each schedule, so `(0)` and `(0 0)` produced byte-identical FAIL records.
+# Labelling every check with the WHOLE schedule took collisions from 18 to 14 and
+# gave two of the eight pins a lane-unique record. An exhaustive search for a
+# unique ORDERED PAIR of records then found none for the remaining six.
+#
+# What is NOT wrong here: every one of the six is CAUGHT, each by a record its
+# own decision produces. What they lack is unique ATTRIBUTION -- break one and
+# more than one pin reports. Closing it needs per-lane assertions against
+# EXPECTED values everywhere the lane currently asserts only that the two lanes
+# agree, which is a fixture redesign rather than a re-anchoring.
+#
+# *** OWED BY: the next slice that adds a mutation to this pass, which on the
+# current plan is Slice ③ (integer accumulate). *** Named rather than left as
+# "owed", because a deferral with no receiver is how this project once shipped an
+# unwitnessed function. ③ adds per-kind arms to both executors and so hits
+# exactly this: its new pins collide the same way unless the lane's cross-lane
+# checks are split into per-lane assertions first. The coverage group ②'s review
+# added is the shape to copy -- it asserts EXPECTED values per lane, and its two
+# pins do not collide.
+#
+# Slice ②'s whole-branch review, second finding: the normal-ir pass gains ONE for
+# the sequence-dispatch state's layout length -- see that mutation's own note.
+# There are EIGHT `(vector ns-tag ...)` literals in this normalizer, not the six
+# task 5 recorded, and the eighth is the one it missed. Mutations become
+# 322 + 1 = 323.
+#
+# Slice ②'s whole-branch review, first finding: the differential.field pass gains
+# TWO for the operation/predicate coverage group -- see that group's own header.
+# Passes stay at 49 and mutations become 320 + 2 = 322.
+#
+# Slice ② task 9: the differential.field pass gains THREE for the operation
+# matrix -- both lanes' lower bound, and the decrement itself. Four widths, four
+# schedules each, driven through BOTH executors with sentinels over the widths
+# and over the schedules. Passes stay at 49 and mutations become 317 + 3 = 320.
+#
+# Slice ② task 8: the differential.field pass gains SIX for the EMITTER's field
+# arms -- the bound check and its boundary, the no-write-on-failure rule, one
+# operation, the zero-width jump, and the branch predicate. `v` and `r` join
+# reserved-member-3, and its drift guard's fixture gains field nodes, which it
+# needed: the pause machine it rendered declares none, so both locals would have
+# been reservations nothing exercises. Passes stay at 49 and mutations become
+# 311 + 6 = 317.
+#
+# Slice ② tasks 6 and 7: the field-access (now differential.field) pass gains
+# FIVE -- three for the interpreter's checked arithmetic and two for the runtime's
+# zero-width arms -- and Slice ①b's `parser-reset!` EXPECT_SURVIVES is CLOSED and
+# re-declared as a pin, which is the reopening condition it wrote for itself.
+# Declared survivors go back to TEN. Passes stay at 49 and mutations become
+# 306 + 5 = 311.
+#
+# Slice ② task 5: the normal-ir pass gains SIX for the two zero-width kinds'
+# encoding -- the tag, the selector, the operand count, the operand kind tag, the
+# error-target presence tag, and the branch's false target. Each on its own
+# measured golden. The state vector was WIDENED in the same commit (design §0
+# D3) and no existing fingerprint moved, because the new slots are #f for every
+# shipped kind and none of them is written. Passes stay at 49 and mutations
+# become 300 + 6 = 306.
+#
+# Slice ② task 4: Pass 33 gains EIGHT for pass-fields' operand half -- arity,
+# the declared-field reference, the per-field width lookup, the width bound and
+# its off-by-one, both directions of `low <= high`, and the join. Passes stay at
+# 49 and mutations become 292 + 8 = 300.
+#
+# Slice ② task 3: Pass 33 gains FIVE for the zero-width census -- out-targets,
+# the zero-progress walk and its REPORT set (the pair the M3 precedent warns
+# about, separable only after a fixture was added for it), and both directions of
+# the :908 gate. FIVE shipped pins were re-anchored in the same commit, three of
+# them for the same reflowed report guard. Passes stay at 49 and mutations become
+# 287 + 5 = 292.
+#
+# Slice ② task 2: Pass 33 gains FIVE for the multi-successor eof-terminal
+# rewrite -- four pinned and one EXPECT_SURVIVES for the completed-set, whose job
+# is complexity rather than correctness. Three shipped eof-terminal pins were
+# RE-ANCHORED in the same commit (the `seen` list became the DFS path stack, the
+# pause arm moved into `eof-successors`, and the arm-5 anchor ended on the
+# `(else 'unknown)` decision 0021 item 3 deletes). Passes stay at 49 and
+# mutations become 282 + 5 = 287.
+#
+# Slice ② task 1: the ir pass gains SEVEN for the two zero-width node kinds --
+# the two closed sets, the proper-list check, both directions of the error-slot
+# rule, and one per census site (`node?`, `node-name`). No pass is added and
+# graph.sls gets none, for the reason recorded at those mutations' site.
+# Passes stay at 49 and mutations become 275 + 7 = 282.
+#
 # Slice ①b's Important fix wave: 273 -> 275. Two more join Pass 33, for the field
 # name each diagnostic carries in its `node` slot -- a decision stated in §0 D2
 # and in verify.sls's own comment, and asserted nowhere until the whole-branch
@@ -808,7 +913,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 275)
+set(EXPECTED_MUTATIONS 323)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -2795,8 +2900,13 @@ byte_machine_mutation(
   LABEL "runtime: a /v2 finish does not drive exec with finish? true"
   # Re-anchored in Slice ①a task 3: emitted `exec` gained its reserved seventh
   # parameter, so both call sites gained an argument.
-  FIND [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t empty-fields)))]]
-  REPLACE [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #f empty-fields)))]]
+  # Re-anchored by Slice ② task 8: the seventh argument stopped being the shared
+  # `empty-fields` sentinel and became the parser's own vector, which is what
+  # the reservation was FOR. The `finish?` flag this pin names is unchanged.
+  FIND [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t
+                    (parser-field-values parser))))]]
+  REPLACE [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #f
+                    (parser-field-values parser))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish with no input routes to the default-eof error: default-eof code")
 
 # Second: the /v2 TOMBSTONE. Milestone 4 Slice ①a task 3 rewrote both retired
@@ -3596,7 +3706,13 @@ byte_machine_mutation(
   # FIND re-anchored by Milestone 3 Slice ③ Task 2: PASS 5's report guard gained
   # a `(sequence-dispatch-node? n)` disjunct (§25:1533) and was reflowed onto
   # two lines. The decision, the REPLACE and the pin are unchanged.
-  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n) (sequence-dispatch-node? n))
+  # RE-ANCHORED AGAIN by Slice ② task 2's census: the guard gained the two
+  # zero-width kinds and reflowed onto three lines. Third re-anchor of the same
+  # decision; the REPLACE and the pin are still unchanged, which is what says the
+  # decision has not moved even though its text keeps doing so.
+  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
+                                  (sequence-dispatch-node? n)
+                                  (field-action-node? n) (field-branch-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[(if #f]]
   EXPECT_STATUS 1
@@ -3788,8 +3904,17 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a byte edge into a finish terminal is accepted"
-  FIND [[(if (and tn (finish-node? tn))]]
-  REPLACE [[(if (and tn #f)]]
+  # *** SITES went to 2 when Slice ② task 3 added the zero-width :908 block,
+  # which is the SITES-fails-both-directions trap AGENTS.md names: new code that
+  # DUPLICATES a pinned line breaks the pin as surely as deleting it. Re-anchored
+  # on the surrounding line rather than reworded, so the shipped block keeps the
+  # shape its own comments describe. ***
+  FIND [[                                          (if (and tn (finish-node? tn))
+                                              (make-diagnostic 'non-eof-into-finish (node-name n)
+                                                               "a byte edge targets a finish terminal")]]
+  REPLACE [[                                          (if (and tn #f)
+                                              (make-diagnostic 'non-eof-into-finish (node-name n)
+                                                               "a byte edge targets a finish terminal")]]
   # Task 3 whole-pass audit: bare "non-eof-into-finish" is a diagnostic CODE,
   # and the Slice ③ audit fixed exactly this shape for the pause group below
   # while leaving this group bare -- measured matching "a byte-reachable pause
@@ -3825,8 +3950,12 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: an eof-target cycle is classified as a finish terminal"
-  FIND [[(if (memq name seen) 'cycle]]
-  REPLACE [[(if (memq name seen) 'finish]]
+  # RE-ANCHORED by Slice ② task 2's multi-successor rewrite. `seen` became the
+  # DFS `path` stack (decision 0021 item 2's two structures), so the shipped FIND
+  # went to zero sites. The decision is unchanged -- re-entering the current path
+  # is a cycle -- and so is its signature.
+  FIND [[        (cond ((memq name path) 'cycle)]]
+  REPLACE [[        (cond ((memq name path) 'finish)]]
   # Task 3 whole-pass audit: bare "eof-zero-progress-cycle" is a diagnostic
   # CODE and was measured matching "eof-terminal chains through a pause
   # continuation" and "a pause's byte-reachability gate is not checked
@@ -3913,8 +4042,12 @@ byte_machine_mutation(
   # stops at the pause, so neither is found), 1 for losing stop
   # classification, 1 for losing cycle classification. Measured: "got 0" on
   # that check is this mutation's alone among the 27.
-  FIND [[((pause-node? n) (loop (pause-node-continuation n) (cons name seen)))]]
-  REPLACE [[((pause-node? n) 'finish)]]
+  # RE-ANCHORED by Slice ② task 2: the pause arm moved out of eof-terminal's
+  # own cond into `eof-successors`, which is where every multi-successor kind's
+  # continuation set is now computed. A pause contributes exactly one successor,
+  # which is what this mutation removes.
+  FIND [[    (cond ((pause-node? n) (list (pause-node-continuation n)))]]
+  REPLACE [[    (cond ((pause-node? n) '())]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "both EOF terminals reported -- expected 2, got 0")
 
@@ -4122,9 +4255,17 @@ byte_machine_mutation(
   # fixture rather than a re-anchoring, and the whole-branch review scoped it
   # out of this fix wave deliberately; the pin below is unchanged and still
   # catches its own mutant.
-  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n) (sequence-dispatch-node? n))
+  # Re-anchored AGAIN by Slice ② task 3's census, FIND and REPLACE, same reflow
+  # as the two sibling pins: the guard gained the two zero-width kinds. The edit
+  # this LABEL claims is unchanged -- drop only the pause clause -- and so is the
+  # nesting it records.
+  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
+                                  (sequence-dispatch-node? n)
+                                  (field-action-node? n) (field-branch-node? n))
                               (reaches-self? (node-name n)))]]
-  REPLACE [[(if (and (or (byte-dispatch-node? n) (sequence-dispatch-node? n))
+  REPLACE [[(if (and (or (byte-dispatch-node? n)
+                                  (sequence-dispatch-node? n)
+                                  (field-action-node? n) (field-branch-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "chain of pauses that cycles is a zero-progress EOF cycle: zero-progress-cycle diagnostic")
 
@@ -4230,11 +4371,14 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a sequence node's case and mismatch targets are not out-targets (arm 1, node-out-targets)"
-  FIND [[((sequence-dispatch-node? n)
+  # Re-anchored by Slice ② task 3: the arm no longer abuts `(else '())`, because
+  # the two zero-width kinds' arms were added between them. Anchored on the arm
+  # itself now, which is what the LABEL names, rather than on its neighbour.
+  FIND [[          ((sequence-dispatch-node? n)
            (append (map sequence-case-target (sequence-dispatch-node-cases n))
                    (list (edge-target (sequence-dispatch-node-mismatch n)))))
-          (else '())))]]
-  REPLACE [[(else '())))]]
+]]
+  REPLACE [[          ]]
   # Comparison-caught: with the arm removed, the well-formed fixture's
   # sequence case and mismatch edge targets ('stop and 'reject) are never fed
   # to node-out-targets, so pass-reachability treats both as unreached and the
@@ -4325,11 +4469,13 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a sequence node's reexecute mismatch edge is invisible to the zero-progress walk (arm 3, reexec-targets)"
-  FIND [[((sequence-dispatch-node? n)
+  # Re-anchored by Slice ② task 3: this arm no longer abuts `(else '())`, since
+  # the zero-width kinds' arm was added between them. Anchored on the arm itself.
+  FIND [[              ((sequence-dispatch-node? n)
                (if (eq? (edge-mode (sequence-dispatch-node-mismatch n)) 'reexecute)
                    (list (edge-target (sequence-dispatch-node-mismatch n))) '()))
-              (else '())))]]
-  REPLACE [[(else '())))]]
+]]
+  REPLACE [[              ]]
   # Comparison-caught: with the arm removed, reexec-targets no longer sees
   # through the sequence node, so the dispatch node's own reexecute-only
   # cycle through it goes undetected and zero-progress-cycle never fires.
@@ -4432,8 +4578,12 @@ byte_machine_mutation(
   # this one lands on "got 2" -- three distinct values on one check, all
   # measured, none predicted. Comparison-caught: the count check fails outright
   # rather than depending on where a mutant happens to crash.
-  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n) (sequence-dispatch-node? n))]]
-  REPLACE [[(if (and (or (byte-dispatch-node? n) (pause-node? n))]]
+  # RE-ANCHORED by Slice ② task 2's census, same reflow as the sibling pin.
+  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
+                                  (sequence-dispatch-node? n)
+                                  (field-action-node? n) (field-branch-node? n))]]
+  REPLACE [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
+                                  (field-action-node? n) (field-branch-node? n))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "and the sequence node itself are three zero-progress cycles: zero-progress-cycle count -- expected 3, got 2")
@@ -4470,11 +4620,15 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: eof-terminal does not classify a sequence node reached mid-chain (arm 5)"
-  FIND [[((sequence-dispatch-node? n)
-                     (let ((t (sequence-dispatch-node-eof-target n)))
-                       (if (symbol? t) (loop t (cons name seen)) 'default-error)))
-                    (else 'unknown)))))))]]
-  REPLACE [[(else 'unknown)))))))]]
+  # RE-ANCHORED by Slice ② task 2. The old FIND ended on `(else 'unknown)))))))`
+  # -- the arm boundary -- and decision 0021 item 3 DELETED that residual, so the
+  # anchor is gone with it. The replacement keeps the mutation
+  # COMPARISON-caught, which the note below depends on: dropping the arm
+  # entirely would now reach the raising `else` and kill the mutant by
+  # assertion-violation instead of by the wrong classification this pin names.
+  FIND [[                ((sequence-dispatch-node? n)
+                 (dispatch-arm (sequence-dispatch-node-eof-target n) path))]]
+  REPLACE [[                ((sequence-dispatch-node? n) 'default-error)]]
   # Comparison-caught: with the arm removed, eof-terminal falls to its
   # `(else 'unknown)` the moment the walk reaches a sequence node, so a cycle
   # that must pass back OUT through that node's own eof-target is never
@@ -4829,6 +4983,279 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the nonportable diagnostic names the offending FIELD: the field name -- expected \\(Count\\), got \\(#f\\)")
+
+# Slice ② task 2 adds FOUR pinned and ONE survivor for the multi-successor
+# eof-terminal rewrite (§4.4, decision 0021). Every one of them needs a kind with
+# more than one successor, which is why tasks 1 and 2 are swapped relative to the
+# plan: written against shipped kinds, all five would have been unwitnessable.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: sibling EOF answers take the first arm instead of the max"
+  # *** This is the UNION mutant: taking the first arm means neither a branch's
+  # false target nor an action's error target is walked, so its record set is
+  # exactly the union of the two arm mutations below and is contained in
+  # NEITHER. *** AGENTS.md's relation is "inside ONE sibling's", so it is
+  # separable, and the conjunction is what separates it -- one record from each
+  # arm, which no single-arm mutant can produce together.
+  FIND [[                      (if acc (eof-verdict-join acc v) v))))))]]
+  REPLACE [[                      (if acc acc v))))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "one arm cycling is a cycle even though the other finishes: cycle -- expected a true value.*a field action's error target is walked too: reachable stop -- expected a true value")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a field branch's false target is not an EOF successor"
+  # SUBSUMED BY the union mutant above, by construction -- taking the first arm
+  # does everything this does and more. Kept because it names its own decision.
+  # Anchored in `zero-width-successors`, the single definition all three
+  # consumers share -- factored in task 3 when the triplicated arms took every
+  # pin on them to SITES 3.
+  FIND [[          ((field-branch-node? n)
+           (list (field-branch-node-true-target n)
+                 (field-branch-node-false-target n)))]]
+  REPLACE [[          ((field-branch-node? n)
+           (list (field-branch-node-true-target n)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "one arm cycling is a cycle even though the other finishes: cycle -- expected a true value")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a field action's error target is not an EOF successor"
+  # The other half of the union, and the reason a field ACTION is multi-successor
+  # too: a walk following only `next` misses a stop sitting behind a failure.
+  FIND [[                 (list (field-action-node-next n) e)
+                 (list (field-action-node-next n)))))]]
+  REPLACE [[                 (list (field-action-node-next n))
+                 (list (field-action-node-next n)))))]]
+  EXPECT_STATUS 1
+  # A CONJUNCTION, tightened by task 4's whole-pass sweep. Extracting
+  # `zero-width-successors` made this arm feed THREE consumers, so each of its
+  # records is shared with a mutant of one consumer: the EOF record with
+  # "sibling EOF answers take the first arm", the reachability record with "a
+  # zero-width node's targets are not out-targets". Only the pair is this
+  # mutation's own.
+  EXPECT_OUTPUT_MATCHES
+    "a field action's error target is walked too: reachable stop -- expected a true value.*a zero-width node's targets are out-targets, so they are reachable: nothing unreachable")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: cycle no longer outranks eof-reachable-stop in the join"
+  # The ONE relation decision 0021 item 1 pins in the source: a cycle is the
+  # non-termination neither runtime loop guards against, so it must survive a
+  # join. Pinned on the MIRRORED arm order, which is the record that separates it
+  # from "the false target is not walked" -- a mutant that walks only the true
+  # arm answers this fixture correctly and the other one wrongly.
+  FIND [[    '(finish unresolved error default-error eof-reachable-stop cycle))]]
+  REPLACE [[    '(finish unresolved error default-error cycle eof-reachable-stop))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "cycle outranks eof-reachable-stop in the OTHER arm order too: cycle -- expected a true value")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the EOF walk keeps no completed-set"
+  FIND [[              ((assq name done) => cdr)
+]]
+  REPLACE [[              ]]
+  EXPECT_SURVIVES
+    "measured, not assumed: this mutant passes the whole verify lane unchanged. The completed-set is decision 0021 item 2's SECOND structure and its job is complexity, not correctness -- the path stack alone already answers every verdict correctly, because the only path-dependent answer is `cycle` and a re-visit off the current path re-derives the same verdict rather than a different one. What the set buys is that a diamond costs one visit instead of two, and a chain of k diamonds costs k instead of 2^k, which is exactly the defect 0021 item 2 names in the algorithm it rejects. No assertion over verdicts can see a difference, because there is none. A TIMING witness was considered and declined: a chain of ~25 branch nodes makes the mutant take 2^25 walks and blow the lane's TIMEOUT, but a catch that depends on how fast the host is is not a catch this suite can state, and the project has recorded before that a nonzero exit is not proof. Reopening condition: if a later slice gives the walk a verdict that DOES depend on which path reached a node, the memo stops being sound and this mutation stops being a survivor -- it becomes a bug detector, and must be re-measured then rather than inherited."
+  )
+
+# Slice ② task 3 adds FIVE for the zero-width census. Two of them are the
+# WALK/REPORT pair the M3 precedent in this file warns about, and they needed a
+# fixture of their own before they were separable at all -- see the middle two.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a zero-width node's targets are not out-targets"
+  # node-out-targets feeds name resolution, reachability AND the :908 check, so
+  # this one arm missing makes a well-formed machine report defects it does not
+  # have and hides one it does.
+  FIND [[          ((or (field-action-node? n) (field-branch-node? n))
+           (zero-width-successors n))
+]]
+  REPLACE [[          ]]
+  EXPECT_STATUS 1
+  # A CONJUNCTION, for the mirror of the reason above: the reachability record
+  # is shared with the helper-arm mutation and the :908 record with ":908 never
+  # fires", and only the pair belongs to this arm alone.
+  EXPECT_OUTPUT_MATCHES
+    "a zero-width node's targets are out-targets, so they are reachable: nothing unreachable.*a byte-reachable zero-width node into a finish is non-eof-into-finish: non-eof-into-finish")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the zero-progress WALK does not follow a zero-width node"
+  # Pinned on the through-a-dispatch fixture, which is the record the REPORT
+  # mutation below cannot produce: there the cycle's reported member is the
+  # byte-dispatch node, which stays in the report set either way, so narrowing
+  # the report leaves that diagnostic standing while narrowing the walk removes
+  # it. That fixture was added FOR this separation -- without it the two mutants
+  # emit identical records, which is exactly the half-fix M3 Slice ② shipped.
+  FIND [[              ((or (field-action-node? n) (field-branch-node? n))
+               (zero-width-successors n))
+]]
+  REPLACE [[              ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a cycle running THROUGH a zero-width node is attributed to the dispatch: attributed to start")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the zero-progress REPORT set excludes the zero-width kinds"
+  # SUBSUMED BY the walk mutation above, by construction and in the same nesting
+  # this file already records for the pause kind: narrowing the REPORT stops the
+  # zero-width nodes being flagged, narrowing the WALK stops those AND every node
+  # whose cycle merely runs through one. Each removes a superset of the last, so
+  # there is no record the narrower one owns. Kept because the two are distinct
+  # decisions and shipping only one of them is the defect this pass exists to
+  # prevent -- a `store`-into-itself machine that verifies clean and then hangs.
+  FIND [[                                  (field-action-node? n) (field-branch-node? n))
+                              (reaches-self? (node-name n)))]]
+  REPLACE [[                                  )
+                              (reaches-self? (node-name n)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a zero-width self-cycle is a zero-progress cycle: zero-progress-cycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the zero-width :908 check never fires"
+  FIND [[                        (if (and (or (field-action-node? n) (field-branch-node? n))
+                                 (memq (node-name n) br))]]
+  REPLACE [[                        (if #f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a byte-reachable zero-width node into a finish is non-eof-into-finish: non-eof-into-finish")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the zero-width :908 check is not gated on byte-reachability"
+  # The RESTRICTIVE direction, and the reason the gate exists at all. §16.2:908
+  # forbids NON-EOF control flow into a finish, so a zero-width node reached only
+  # along an EOF path legally continues into one -- decision 0011's ruling for
+  # the pause kind, applied here. Ungated, this check rejects a machine that has
+  # no defect. It SURVIVED until a fixture with an EOF-only-reachable zero-width
+  # node was written; the five cases already present could not see it, because
+  # every zero-width node in them is byte-reachable.
+  FIND [[                        (if (and (or (field-action-node? n) (field-branch-node? n))
+                                 (memq (node-name n) br))]]
+  REPLACE [[                        (if (or (field-action-node? n) (field-branch-node? n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an EOF-only-reachable zero-width node may continue into a finish: no non-eof-into-finish")
+
+# Slice ② task 4 adds EIGHT for pass-fields' operand half. Three by-construction
+# subsumptions are recorded at their own sites: each is a NARROWER edit of a
+# check a broader mutation already removes, and each is kept because it names its
+# own decision.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: field operand arity is not checked"
+  # The check the constructor deliberately does not make -- 0020 item 2: nothing
+  # can be read out of `arguments` before arity is known, which is the same
+  # sentence that put this here rather than there.
+  FIND [[       ((not (= (length args) (cadr row)))]]
+  REPLACE [[       ((and #f (not (= (length args) (cadr row))))]]
+  EXPECT_STATUS 1
+  # Pinned on the RAISE, which is this mutant's own record lane-wide and is
+  # also the decision's own stated reason: 0020 item 2 puts arity here rather
+  # than in the constructor because "nothing can be read out of `arguments`
+  # before arity is known", and unguarded, the range check reads a third
+  # element that is not there. The union mutants above produce every other
+  # record this one does, but not this: with the pass gone, the range check is
+  # never reached at all.
+  EXPECT_OUTPUT_MATCHES
+    "every predicate's arity is enforced: case raised -- Exception in caddr")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an operand naming no declared field is accepted"
+  # SUBSUMED BY "the operand width is read from the first declared field"
+  # below, by construction: that mutant looks up a field that always exists, so
+  # it never reports an undeclared one either, and it additionally answers the
+  # wrong width. Kept because the two name different decisions.
+  FIND [[           ((not width)]]
+  REPLACE [[           ((and #f (not width))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an undeclared field is invalid-field-operand: one -- expected 1, got 0")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the operand width is read from the first declared field"
+  # The reason the width lookup is keyed on the operand: with one field declared
+  # this is invisible, so the fixture declares TWO of different widths and asserts
+  # that a value legal for the WIDE one is accepted.
+  FIND [[(field-width-of fs (car args))]]
+  REPLACE [[(field-width-of fs (uint-field-name (car fs)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the width checked is the REFERENCED field's, not some other field's: legal for the wide field")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: operand range against the declared width is not checked"
+  # Pinned on the range fixture's TWO-fault count, which is the record the
+  # off-by-one mutation below cannot produce.
+  FIND [[                            (if (operand-in-width? v width) #f]]
+  REPLACE [[                            (if #t #f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an out-of-width range operand does not also report low > high: two width faults only -- expected 2, got 0")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the operand width bound is off by one"
+  # SUBSUMED BY the mutation above, by construction -- accepting 2^w accepts
+  # everything that accepting anything accepts, minus nothing this lane can see.
+  # The boundary is what it names: 255 is legal for a u8 and 256 is the first
+  # value that is not, so the premise case and this one together pin the edge
+  # rather than "some large number is refused".
+  FIND [[    (and (integer? v) (exact? v) (<= 0 v (- (expt 2 width) 1))))]]
+  REPLACE [[    (and (integer? v) (exact? v) (<= 0 v (expt 2 width))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a constant above the field's declared width is invalid-field-operand: 256 -- expected 1, got 0")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: low > high for a range predicate is accepted"
+  # Decision 0020 item 2's "consequence that will look wrong to a reader of
+  # 0017": the constructor accepts this and the verifier is where it is caught.
+  FIND [[                      (> (cadr args) (caddr args)))]]
+  REPLACE [[                      #f)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "low > high for range is invalid-field-operand: one -- expected 1, got 0")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a range's low may not equal its high"
+  # The RESTRICTIVE direction, and the boundary the check actually names: the
+  # test is `low > high`, not `low >= high`. Without this a `range` over a single
+  # value would be rejected and nothing would notice.
+  FIND [[                      (> (cadr args) (caddr args)))]]
+  REPLACE [[                      (>= (cadr args) (caddr args)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "low = high for range is legal: none -- expected 0, got 1")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the operand half is never run"
+  # The UNION mutant -- dropping the join removes every check above at once, so
+  # its record set contains each of theirs and is inside none of them. Separated
+  # by a CONJUNCTION: one arity record and one low/high record, which no
+  # single-check mutant produces together.
+  FIND [[       (pass-field-operands m fs))))]]
+  REPLACE [[       '())))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "wrong arity is invalid-field-operand: too few -- expected 1, got 0.*low > high for range is invalid-field-operand: one -- expected 1, got 0")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -5391,6 +5818,114 @@ byte_machine_mutation(
 # field record: its three components, the order the records are written in, and
 # the slot number the table itself carries. Each is pinned on a DISTINCT golden
 # value, all measured.
+
+# Slice ② task 5 adds SIX for the two zero-width kinds' encoding. Each is pinned
+# on a DISTINCT measured golden value, which is this file's shipped discipline
+# for a new encode arm: an inequality pair cannot see a dropped count or a
+# transposed pair, only a wrong value can.
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a sequence-dispatch state is not widened to the declared layout"
+  # *** The defect Slice ②'s whole-branch review found. *** The vector went from
+  # eight slots to eleven and `seq-state` -- which builds EVERY sequence-dispatch
+  # node's state -- was missed. The miss was invisible: sequence states carry
+  # kind `dispatch`, the only readers of slots 8-10 are kind-guarded, and all 92
+  # lanes stayed green while four of six states in the sequence-node fixture were
+  # three slots short of the layout this file declares.
+  #
+  # Its witness is deliberately TOTAL over the state kinds a fixture can produce.
+  # A case naming one kind would have passed throughout, which is why the miss
+  # survived task 5's own six mutations and its whole-pass sweep.
+  FIND [[                        (seq-eof-of n) (eof-reason-of (seq-eof-of n))
+                        #f #f #f))))]]
+  REPLACE [[                        (seq-eof-of n) (eof-reason-of (seq-eof-of n))))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "every normalized state has the declared layout length.across every fixture and every state kind: no state is the wrong length -- expected \\(\\), got \\(8 8 8 8\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the field-action and field-branch encode tags collide"
+  # Tags 5 and 6. Two machines identical but for the kind must differ.
+  FIND [[                (put-u8 p 5)]]
+  REPLACE [[                (put-u8 p 6)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a field-action machine's IR fingerprint is the measured golden value: fingerprint -- expected 1386504585301950044, got 15366307625511038639")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a field node's selector is dropped from the encoding"
+  # `store` and `add` differ only here, and both are observable to a generated
+  # parser, so two machines the fingerprint calls identical would emit different
+  # behaviour without this.
+  # Anchored on the field-ACTION arm specifically: the two arms open with the
+  # same two lines, so the bare pair resolves to two sites -- the
+  # SITES-fails-both-directions trap again, and the third time this slice has hit
+  # it. The tag byte above is what distinguishes them.
+  FIND [[                (put-u8 p 5)
+                (put-symbol p (normal-field-selector s))
+                (put-operands p (normal-field-arguments s))]]
+  REPLACE [[                (put-u8 p 5)
+                (put-operands p (normal-field-arguments s))]]
+  EXPECT_STATUS 1
+  # Pinned on the GOLDEN, not on the inequality case: a bare "these two differ"
+  # record is also broken by every mutation that makes ALL fingerprints equal --
+  # measured, it collided with both "the FNV prime is changed" and "the byte is
+  # never mixed into the hash". An exact value is the only pin an inequality
+  # cannot be confused with.
+  EXPECT_OUTPUT_MATCHES
+    "a field-action machine's IR fingerprint is the measured golden value: fingerprint -- expected 1386504585301950044, got 7772389593278784940")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a field node's operand count is dropped"
+  # Without the count the operand list has no boundary, so `(count 7)` followed
+  # by the next record is indistinguishable from a three-operand list.
+  FIND [[    (put-u16be p (length args))
+]]
+  REPLACE [[    ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a field-branch machine's IR fingerprint is the measured golden value: fingerprint -- expected 13536979658827033743, got 16908098597654702240")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: an operand's kind is not tagged"
+  # The reason each operand carries a tag byte: without it a field literally
+  # named `7` and the constant 7 could share bytes, and two different machines
+  # would share a fingerprint.
+  FIND [[                (cond ((symbol? a) (put-u8 p 0) (put-symbol p a))]]
+  REPLACE [[                (cond ((symbol? a) (put-symbol p a))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a field-action machine's IR fingerprint is the measured golden value: fingerprint -- expected 1386504585301950044, got 5142341432422259152")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: an absent error target is encoded as state zero"
+  # The reason the error target is written with a PRESENCE TAG rather than a
+  # sentinel id: `clear` cannot fail and carries no target, and state 0 is a
+  # perfectly ordinary state id, so a sentinel would make those two machines
+  # share a fingerprint.
+  FIND [[                  (if e (begin (put-u8 p 1) (put-u32be p e)) (put-u8 p 0))))]]
+  REPLACE [[                  (if e (put-u32be p e) (put-u32be p 0))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a field-action machine's IR fingerprint is the measured golden value: fingerprint -- expected 1386504585301950044, got 6902603388614441453")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a field branch's false target is not encoded"
+  # §9.1:305 requires an explicit target for every possible result; an encoding
+  # carrying only one of them describes a machine that does not exist.
+  FIND [[                (put-u32be p (car (normal-field-targets s)))
+                (put-u32be p (cdr (normal-field-targets s))))]]
+  REPLACE [[                (put-u32be p (car (normal-field-targets s))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a field-branch machine's IR fingerprint is the measured golden value: fingerprint -- expected 13536979658827033743, got 7453673270761194114")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
@@ -6595,6 +7130,112 @@ byte_machine_mutation(
   EXPECT_OUTPUT_MATCHES
     "a non-symbol, non-#f eof-target is rejected: bad eof-target")
 
+# Slice ② task 1 adds SEVEN for the two zero-width node kinds. The
+# constructor/verifier boundary they encode is decision 0020's, and the mutations
+# are of the CONSTRUCTOR half only -- arity, declared-field references, operand
+# range and `low <= high` are pass 6a's and are Task 4's mutations, not these.
+#
+# No mutation is written for `graph.sls`'s two export lists, following Slice ①b's
+# precedent ("the facade being two export lists with no decision of its own").
+# Measured anyway, so the precedent is followed knowingly rather than assumed:
+# dropping either list's names fails at EXPAND time with exit 255 -- an unbound
+# identifier for the export list, "missing definition for multiple exports" for
+# the import list -- and graph-tests.sps's own case cannot load at all. That is a
+# louder witness than a pin, and pinning it would cost a whole new pass (there is
+# no graph-tests verify command in this suite) for two decisions already fatal.
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: the field operation set admits a name outside the closed enumeration"
+  # §9.1:348's "it rejects arbitrary operation names" -- the ONE clause of that
+  # sentence pass 6a does not carry (decision 0020 item 4), because a closed set
+  # is evaluable from the node alone.
+  FIND [[  (define field-operations '(store clear increment decrement add set-mask clear-mask))]]
+  REPLACE [[  (define field-operations '(store clear increment decrement add set-mask clear-mask multiply))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an operation outside the closed set is refused: not an operation")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: the field predicate set admits a name outside the closed enumeration"
+  FIND [[  (define field-predicates '(equal zero nonzero range mask-any mask-all mask-none))]]
+  REPLACE [[  (define field-predicates '(equal zero nonzero range mask-any mask-all mask-none greater))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a predicate outside the closed set is refused: not a predicate")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: a field action's arguments are not checked as a proper list"
+  # The whole of what 0020 item 2 permits here. The paired assertion -- that a
+  # WRONG ARITY still builds -- has no mutation, by design: making the
+  # constructor read the schema is the defect this line's comment forbids, and a
+  # mutation that ADDS a check is not a mutation this suite can express.
+  FIND [[    (require-proper-list 'make-field-action-node 'arguments arguments)
+]]
+  REPLACE [[    ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "arguments must be a proper list, and nothing more is read: improper")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: the error-slot rule is inverted"
+  # Design §4.4's rule: `error` is #f EXACTLY when the operation cannot fail.
+  # Pinned on a VALID construction failing, which is the record the permissive
+  # direction below cannot produce.
+  FIND [[      (when (eq? safe (and (symbol? error) #t))]]
+  REPLACE [[      (when (not (eq? safe (and (symbol? error) #t)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a field action carries its six parts: case raised")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: the error-slot rule never fires"
+  # *** SUBSUMED BY the inverted mutation above, BY CONSTRUCTION, and written
+  # anyway. *** Measured in both directions: this mutant never raises, so on
+  # every combination it fails to reject, the inverted one fails to reject too --
+  # its record set is a strict subset, and no fixture can separate them, because
+  # "never raises" is contained in "raises only on the valid combinations". The
+  # conjunction below is therefore matched by the inverted mutant as well; that
+  # is a collision in attribution, not in detection, and it is recorded rather
+  # than papered over. The two name distinct decisions -- that the rule exists at
+  # all, and that it points the right way -- so both are kept.
+  FIND [[      (when (eq? safe (and (symbol? error) #t))
+        (byte-machine-contract-violation 'make-field-action-node 'invalid-argument 'error))]]
+  REPLACE [[      (when #f
+        (byte-machine-contract-violation 'make-field-action-node 'invalid-argument 'error))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the error slot is #f exactly when the operation cannot fail: safe op with a target -- expected a raise.*failing op without one -- expected a raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node? does not admit a field action"
+  # `node?` and `node-name` are the two census sites EVERY new kind must join,
+  # and missing either is silent at construction and loud much later. One
+  # mutation per site, per kind, so a half-taught pair cannot pass.
+  FIND [[        (field-action-node? x) (field-branch-node? x)))]]
+  REPLACE [[        (field-branch-node? x)))]]
+  EXPECT_STATUS 1
+  # `?` is a regex metacharacter -- unescaped, `node? --` matches "nod --",
+  # which no output contains, and the runner reports a wrong-reason catch.
+  EXPECT_OUTPUT_MATCHES
+    "field-action nodes.it is a node and answers node-name: node\\? -- expected a true value")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node-name does not answer for a field branch"
+  FIND [[          ((field-branch-node? x) (field-branch-node-name x))
+]]
+  REPLACE [[          ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "field-branch nodes.it is a node and answers node-name: case raised")
+
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # Milestone 4 Slice ①b task 2 declares NO mutation, deliberately, and this note
@@ -7384,8 +8025,13 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.member3-drift.chez.source
   LABEL "compile: an emitted local is missing from reserved-member-3"
-  FIND [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs pk))]]
-  REPLACE [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs))]]
+  # Re-anchored by Slice ② task 8: the list gained `v` and `r`, the two locals
+  # the emitted field arms bind, and reflowed onto two lines. Dropping `pk` is
+  # still the edit -- the same decision, the same expectation.
+  FIND [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs pk
+      v r))]]
+  REPLACE [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs
+      v r))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(pk\\)")
 
@@ -7625,10 +8271,242 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
   LABEL "runtime: parser-reset! does not restore the field values"
+  # *** CLOSED by Slice ② task 6+7, which is exactly the reopening condition the
+  # EXPECT_SURVIVES this replaces wrote for itself: "the same commit that gives
+  # fields a writer must delete this EXPECT_SURVIVES and pin the mutation, and
+  # the isolation case field-access-tests.sps declines for the same reason
+  # belongs there too." Both are done in that commit. ***
+  #
+  # Slice ①b could not witness this because parser-field-ref was read-only and
+  # nothing wrote a field, so slot 8 was constant for a parser's lifetime and
+  # restoring a constant is a no-op. A parse now changes it, and the difference
+  # between a reset that restores and one that does not is two numbers. The
+  # suite's declared survivors go back to TEN.
   FIND [[    (vector-set! parser 8 (initial-values (parser-field-decls parser)))))]]
   REPLACE [[    ))]]
-  EXPECT_SURVIVES
-    "measured, not assumed: this mutant passes the whole field-access lane unchanged. parser-field-ref is READ-ONLY by §13:801 and Slice ①b ships no writer at all, so slot 8 is constant for a parser's entire lifetime and restoring a constant is a no-op no caller can observe. The lane's reset case is not vacuous -- it fails against the initials mutation above, which is what proves reset reads the DECLARED values rather than zeros -- but it cannot separate a reset that restores from one that does not, because both leave the same numbers in place. The line is written NOW rather than deferred to Slice ② because ② adds the writer, and a ② that adds a field write without also adding the restore leaks one parse's field values into the next; the restore arriving first makes that a defect ② has to introduce rather than one it has to remember. Reopening condition: the same commit that gives fields a writer must delete this EXPECT_SURVIVES and pin the mutation, and the isolation case field-access-tests.sps declines for the same reason belongs there too.")
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "parser-reset! restores a field a parse has CHANGED: restored to the declared initial -- expected 254, got 255")
+
+# Slice ② tasks 6 and 7 add FIVE to this pass -- the first fixture in the tree
+# whose fields a parse actually changes, which is what makes them witnessable.
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: an overflowing field operation writes anyway"
+  # §25:1569 and §10.6:568: a failed operation leaves the prior value UNCHANGED,
+  # not saturated. This SURVIVED against the first fixture, whose only overflow
+  # started AT the ceiling -- where "unchanged" and "clamped to the maximum"
+  # coincide. An `add` that overflows from BELOW it separates them.
+  FIND [[              (field-action-node-error n))))]]
+  REPLACE [[              (begin (vector-set! fv slot m*) (field-action-node-error n)))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an overflow from BELOW the ceiling does not clamp: unchanged, not clamped -- expected 254, got 255")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: the field bound is never checked"
+  # The other direction: with no check the value simply exceeds its declared
+  # width and the error target is never reached.
+  FIND [[          (if (<= 0 r m*)]]
+  REPLACE [[          (if #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a failed operation leaves the prior value unchanged \\(§25:1569\\): count held at its maximum -- expected 255, got 256")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: increment does not increment"
+  # One arm of the operation table, standing for all seven: the arithmetic is
+  # written TWICE on purpose (§18:970-972) and this is the interpreter's copy.
+  FIND [[                    ((increment) (+ v 1))]]
+  REPLACE [[                    ((increment) v)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an increment commits into the parser's own storage: count -- expected 255, got 254")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "runtime: a zero-width step consumes a byte"
+  # Zero-width means zero-width: the loop must re-enter at the SAME pos. A
+  # zero-width node that advanced would silently eat the byte the next dispatch
+  # was going to read.
+  FIND [[               (parser-set-current! parser t)
+               (loop pos pk)))]]
+  REPLACE [[               (parser-set-current! parser t)
+               (loop (+ pos 1) pk)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "fields a parse actually writes \\(Slice ②\\)\\.a failed operation leaves the prior value unchanged \\(§25:1569\\): lifecycle -- expected error, got ready")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "runtime: a zero-width step resets the position kind"
+  # §12.7:777 makes position kind differential-compared, so the two lanes must
+  # agree. A zero-width step does not move the parser in the input, so the kind
+  # is carried THROUGH -- a failure reached after one reports what it would have
+  # reported without it.
+  FIND [[             (parser-set-current! parser t)
+             (loop t pk)))]]
+  REPLACE [[             (parser-set-current! parser t)
+             (loop t 'boundary)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a failure after a zero-width hop on an EOF chain reports eof, not boundary: position kind -- expected eof, got boundary")
+
+# Slice ② task 8 adds SIX for the EMITTER's field arms. Everything they pin is a
+# SECOND implementation of what the interpreter's mutations already pin -- the
+# arithmetic is written twice on purpose (§18:970-972), and these are the copy
+# the differential exists to compare.
+#
+# One mutation is measured and NOT written: swapping the branch arms produces a
+# record set IDENTICAL to "the emitted zero predicate is inverted" below -- not a
+# subset, the same set. On a two-armed branch, swapping the arms and negating the
+# predicate are the same function, so no fixture can separate them by behaviour;
+# only reading the source tells them apart.
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted bound check is absent"
+  # §25:1568's operation share, emitter side.
+  FIND [[         (if (and (>= r 0) (<= r "]]
+  REPLACE [[         (if (or #t (>= r 0) (<= r "]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "fields a parse actually writes \\(Slice ②\\)\\.both lanes agree over every input the fixture can take: count \\[10\\] -- expected 254, got 265")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted upper bound is off by one"
+  # The boundary rather than the check: a u8 accepts 255 and rejects 256.
+  FIND [[(num (- (expt 2 width) 1))]]
+  REPLACE [[(num (expt 2 width))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "fields a parse actually writes \\(Slice ②\\)\\.both lanes agree over every input the fixture can take: count \\[00\\] -- expected 255, got 256")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: an emitted overflow writes the value anyway"
+  # §25:1569 and §10.6:568, emitter side: a failed operation leaves the prior
+  # value UNCHANGED, not saturated. The fixture's `add` overflows from BELOW the
+  # ceiling, which is what makes unchanged and clamped distinguishable at all.
+  FIND [[                "             " (zero-width-jump (cdr tg)) ")))\n")]]
+  REPLACE [[                "             (begin (vector-set! fieldv " (num slot) " r) " (zero-width-jump (cdr tg)) "))))\n")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "fields a parse actually writes \\(Slice ②\\)\\.both lanes agree over every input the fixture can take: count \\[10\\] -- expected 254, got 264")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: an emitted increment does not increment"
+  # One arm of the emitter's operation table, and the counterpart of the
+  # interpreter mutation of the same name -- two implementations, two pins.
+  FIND [[      ((increment) "(+ v 1)")]]
+  REPLACE [[      ((increment) "v")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the generated lane writes, checks and routes identically: count -- expected 255, got 254")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: an emitted zero-width step consumes a byte"
+  # Zero-width means zero-width in the generated lane too: the emitted jump
+  # keeps pos, off and pk. Advancing would eat the byte the next dispatch reads.
+  FIND [[(string-append "(loop pos " (num target) " off pk)"))]]
+  REPLACE [[(string-append "(loop (+ pos 1) " (num target) " off pk)"))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "fields a parse actually writes \\(Slice ②\\)\\.both lanes agree over every input the fixture can take: lifecycle \\[00\\] -- expected error, got ready")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted zero predicate is inverted"
+  # The branch arm. See this block's header for the mutation it stands in for.
+  FIND [[      ((zero) "(= v 0)")]]
+  REPLACE [[      ((zero) "(not (= v 0))")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the generated lane writes, checks and routes identically: seen -- expected 1, got 101")
+
+# Slice ② task 9 adds THREE for the operation matrix. The two lower-bound
+# mutations are what the matrix exists for: every earlier fixture in this slice
+# overflows UPWARD, so a check that tested only the upper bound passed all of
+# them. §25:1568 asks for underflow at `decrement` from 0 as well, and it is the
+# only place the lower half of the bound is load-bearing.
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: the field lower bound is not checked"
+  # A decrement at 0 goes to -1 and is accepted. Caught in the INTERPRETER's
+  # half of the comparison, which is what makes it distinct from the emitter's.
+  FIND [[          (if (<= 0 r m*)]]
+  REPLACE [[          (if (<= r m*)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the operation matrix over every width \\(§25:1568, §25:1569\\)\\.overflow, underflow and success agree across widths and lanes: interp lo u8 \\[2\\] -- expected 0, got -1")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted field lower bound is not checked"
+  # The same decision in the emitter's copy of the arithmetic. Its record names
+  # the GENERATED half, which the interpreter mutation never touches.
+  FIND [[         (if (and (>= r 0) (<= r "]]
+  REPLACE [[         (if (and #t (<= r "]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the operation matrix over every width \\(§25:1568, §25:1569\\)\\.overflow, underflow and success agree across widths and lanes: gen lo u8 \\[2\\] -- expected 0, got -1")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: decrement does not decrement"
+  # The success control's other side: without a real decrement the underflow
+  # row stops underflowing and the lifecycle flips.
+  FIND [[                    ((decrement) (- v 1))]]
+  REPLACE [[                    ((decrement) v)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the operation matrix over every width \\(§25:1568, §25:1569\\)\\.overflow, underflow and success agree across widths and lanes: lifecycle u8 \\[2\\] -- expected ready, got error")
+
+# *** Slice ②'s whole-branch review found that SIX of the fourteen operations
+# and predicates appeared in no fixture at all -- clear-mask, equal, nonzero,
+# mask-any, mask-all and mask-none -- so their two independent implementations
+# were never compared. The design says writing them twice is "the single class
+# of defect this milestone introduces" and the differential is what catches it;
+# a differential only compares what a fixture EXERCISES. Measured: inverting the
+# EMITTER's mask-none alone left all 92 lanes at status 0. ***
+#
+# The coverage group closes it, and TWO mutations pin the group itself -- one per
+# lane, on a member that had no fixture before it. The other four are covered by
+# the same two checks and are not written separately: their record sets differ
+# only in which row of the same loop reddens, so a mutation per member would add
+# twelve pins that all resolve to the same two (case, check) pairs.
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted mask-none predicate is inverted"
+  # Previously unexercised in BOTH lanes. This is the exact mutation whose
+  # survival was the review's evidence: before the coverage group, it passed
+  # every lane in the tree.
+  FIND [[      ((mask-none) (string-append "(= 0 (bitwise-and v " (num a) "))"))]]
+  REPLACE [[      ((mask-none) (string-append "(not (= 0 (bitwise-and v " (num a) ")))"))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "every predicate takes the same arm in both lanes: gen mask-none 3 -- expected 1, got 2")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: mask-all is computed as mask-any"
+  # The INTERPRETER's half, and the reason the operands are chosen to separate
+  # each predicate from its siblings rather than merely to exercise it: with
+  # `mask-all 12` on f=12 this mutation answers correctly and SURVIVED. The
+  # operand is 14, where 12 has some of the mask bits but not all.
+  FIND [[                      ((mask-all) (= a (bitwise-and v a)))]]
+  REPLACE [[                      ((mask-all) (not (= 0 (bitwise-and v a))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "every predicate takes the same arm in both lanes: interp mask-all 14 -- expected 2, got 1")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

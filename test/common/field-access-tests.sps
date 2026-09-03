@@ -9,6 +9,7 @@
 ;;; half untested and a generated-only lane the reverse.
 (import (rnrs) (rnrs eval)
         (only (chezscheme) load greatest-fixnum)
+        (rnrs bytevectors)
         (byte-machine test harness)
         (byte-machine private conditions)
         (byte-machine graph)
@@ -83,6 +84,159 @@
 
 (define cm-ref (make-interpreted-machine (verify-machine m)))
 (define cm-gen (emit-and-load m 'field-access 'field-access-parser genfile))
+
+;; --- Slice ② task 6+7: a machine that WRITES fields ---
+;; Byte 0 increments `count` and stops; byte 1 runs `count` up against its u8
+;; ceiling through a branch. This is the first fixture in the tree whose fields
+;; a parse actually changes, which is what makes the two obligations Slice ①b
+;; deferred witnessable at last.
+(define wm
+  (make-machine 'writer 'start
+    (list (make-uint-field 'count 8 254 #f) (make-uint-field 'seen 16 0 #f))
+    '() '() (list eof-decl rej-decl)
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 0) (make-edge 'bump 'advance) #f)
+                  (make-byte-case (make-exact-byte-matcher 1) (make-edge 'big 'advance) #f))
+            (make-edge 'reject 'reexecute) #f #f)
+          ;; increment can fail, so it carries an error target -- the constructor
+          ;; makes that mandatory.
+          (make-field-action-node 'bump 'increment '(count) 'note 'over #f)
+          (make-field-action-node 'note 'add '(seen 1) 'chk 'over #f)
+          ;; A field BRANCH, so the emitted branch arm is exercised too. Without
+          ;; one, mutations of that arm survive the whole lane -- measured.
+          (make-field-branch-node 'chk 'zero '(count) 'odd 'start #f)
+          (make-field-action-node 'odd 'add '(seen 100) 'start 'over #f)
+          ;; Overflows from BELOW the ceiling: 254 + 10 = 264 > 255. Without this
+          ;; the only overflow in the fixture starts AT 255, where "leaves the
+          ;; prior value unchanged" and "clamps to the maximum" coincide -- and a
+          ;; mutant that clamps survives. Measured: it did.
+          (make-field-action-node 'big 'add '(count 10) 'start 'over #f)
+          (make-error-node 'over 'rejected #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+(define wm-ref (make-interpreted-machine (verify-machine wm)))
+(define wm-gen
+  (emit-and-load wm 'writer 'writer-parser (string-append tmpdir "/generated-writer.sls")))
+
+(define (feed-bytes cm bs)
+  (let ((p (make-parser cm '() #f)))
+    (parser-feed! p (u8-list->bytevector bs) 0 (length bs))
+    p))
+
+(harness-group "fields a parse actually writes (Slice ②)"
+  (lambda ()
+    (harness-case "an increment commits into the parser's own storage"
+      (lambda ()
+        (let ((p (feed-bytes wm-ref '(0))))
+          (check-equal "count" (parser-field-ref p 'count) 255)
+          (check-equal "seen" (parser-field-ref p 'seen) 1))))
+    (harness-case "a failed operation leaves the prior value unchanged (§25:1569)"
+      (lambda ()
+        ;; 254 -> 255 on the first byte; the second increment overflows a u8 and
+        ;; must route to the error target WITHOUT writing. §10.6:568 and
+        ;; §15:870: overflow leaves the prior value alone.
+        (let ((p (feed-bytes wm-ref '(0 0))))
+          (check-equal "count held at its maximum" (parser-field-ref p 'count) 255)
+          (check-equal "lifecycle" (parser-lifecycle p) 'error))))
+    (harness-case "an overflow from BELOW the ceiling does not clamp"
+      (lambda ()
+        ;; §10.6:568 and §15:870 say the prior value is unchanged -- not
+        ;; saturated. 254 + 10 overflows a u8, and `count` must still read 254.
+        (let ((p (feed-bytes wm-ref '(1))))
+          (check-equal "unchanged, not clamped" (parser-field-ref p 'count) 254)
+          (check-equal "lifecycle" (parser-lifecycle p) 'error))))
+    (harness-case "the failure routes to the declared error target"
+      (lambda ()
+        (let* ((p (feed-bytes wm-ref '(0 0)))
+               (r (parser-feed! p (make-bytevector 0) 0 0)))
+          (check-equal "status" (parser-result-status r) 'error))))
+    (harness-case "a failure after a zero-width hop on an EOF chain reports eof, not boundary"
+      (lambda ()
+        ;; *** H7: the design never poses this, and §12.7:777 makes position kind
+        ;; differential-compared, so the two lanes disagreeing is a lane failure
+        ;; rather than a cosmetic one. *** The ruling: a zero-width step does not
+        ;; move the parser in the input, so `pk` is carried THROUGH. On an EOF
+        ;; chain it is already 'eof by the time the hop happens, and a failure
+        ;; reached one hop later is still at end of input -- resetting it to
+        ;; 'boundary would claim the parser is between bytes when there are none.
+        (let* ((m (make-machine 'eofw 'start (list (make-uint-field 'count 8 255 #f))
+                    '() '() (list eof-decl rej-decl)
+                    (list (make-byte-dispatch-node 'start
+                            (list (make-byte-case (make-exact-byte-matcher 0)
+                                                  (make-edge 'start 'advance) #f))
+                            (make-edge 'reject 'reexecute) 'bump #f)
+                          ;; `next` must NOT return to the chain: routed back to
+                          ;; `start` this is an EOF cycle, and the verifier
+                          ;; rejects it -- which is task 2 and task 3 working.
+                          (make-field-action-node 'bump 'increment '(count) 'done 'over #f)
+                          (make-finish-node 'done #f)
+                          (make-error-node 'over 'rejected #f)
+                          (make-error-node 'reject 'rejected #f))
+                    'default-eof #f))
+               (p (make-parser (make-interpreted-machine (verify-machine m)) '() #f))
+               (r (parser-finish! p)))
+          (check-equal "status" (parser-result-status r) 'error)
+          (check-equal "position kind"
+                       (parser-error-position-kind (parser-result-error r)) 'eof))))
+    ;; *** Slice ①b's DEFERRED isolation case, now writable. *** ①b declined it
+    ;; with a written reason -- parser-field-ref was read-only and nothing wrote
+    ;; a field, so two parsers sharing one vector and two holding their own were
+    ;; observationally identical. A writer exists now, so the case can fail.
+    (harness-case "two parsers from one compiled machine do not share field storage"
+      (lambda ()
+        (let ((a (feed-bytes wm-ref '(0))) (b (make-parser wm-ref '() #f)))
+          (check-equal "the one that fed" (parser-field-ref a 'count) 255)
+          (check-equal "the one that did not" (parser-field-ref b 'count) 254))))
+    ;; *** Slice ①b's parser-reset! EXPECT_SURVIVES, now closable. *** Its own
+    ;; reason names this exact condition: the restore becomes witnessable the
+    ;; moment a writer exists, and the mutation must be re-pinned in that commit.
+    ;; *** The GENERATED lane runs the same schedule. *** Everything above drives
+    ;; the interpreter; these drive the emitted library, and the last case
+    ;; compares them. Without this the emitter's arms -- a separate
+    ;; implementation of the same arithmetic, written twice on purpose -- would
+    ;; be entirely unexercised.
+    (harness-case "the generated lane writes, checks and routes identically"
+      (lambda ()
+        (let ((a (feed-bytes wm-ref '(0))) (b (feed-bytes wm-gen '(0))))
+          (check-equal "count" (parser-field-ref b 'count) (parser-field-ref a 'count))
+          (check-equal "seen" (parser-field-ref b 'seen) (parser-field-ref a 'seen))
+          (check-equal "and the value itself" (parser-field-ref b 'count) 255))))
+    (harness-case "the generated lane leaves a failed operation's value unchanged"
+      (lambda ()
+        (let ((a (feed-bytes wm-ref '(1))) (b (feed-bytes wm-gen '(1))))
+          (check-equal "both unchanged" (parser-field-ref b 'count) (parser-field-ref a 'count))
+          (check-equal "and not clamped" (parser-field-ref b 'count) 254)
+          (check-equal "lifecycle" (parser-lifecycle b) 'error))))
+    (harness-case "both lanes agree over every input the fixture can take"
+      (lambda ()
+        ;; A loop with a sentinel reading the OBSERVED count: the two lanes must
+        ;; agree on the field values AND the status for each byte, not merely on
+        ;; the one byte a hand-written case happens to name.
+        (let ((seen 0))
+          (for-each
+           (lambda (bs)
+             (set! seen (+ seen 1))
+             ;; The check label names the WHOLE schedule, not just its first
+             ;; byte. With `(0)` and `(0 0)` both labelled "0", two different
+             ;; mutants produced byte-identical FAIL records and no pin could
+             ;; tell them apart -- measured by this task's own sweep.
+             (let ((a (feed-bytes wm-ref bs)) (b (feed-bytes wm-gen bs))
+                   (nm (apply string-append (map number->string bs))))
+               (check-equal (string-append "count [" nm "]")
+                            (parser-field-ref b 'count) (parser-field-ref a 'count))
+               (check-equal (string-append "seen [" nm "]")
+                            (parser-field-ref b 'seen) (parser-field-ref a 'seen))
+               (check-equal (string-append "lifecycle [" nm "]")
+                            (parser-lifecycle b) (parser-lifecycle a))))
+           '((0) (1) (2) (0 0) (0 1) (1 0)))
+          (check-equal "every schedule compared" seen 6))))
+    (harness-case "parser-reset! restores a field a parse has CHANGED"
+      (lambda ()
+        (let ((p (feed-bytes wm-ref '(0))))
+          (check-equal "changed by the parse" (parser-field-ref p 'count) 255)
+          (parser-reset! p)
+          (check-equal "restored to the declared initial" (parser-field-ref p 'count) 254)
+          (check-equal "and the other field too" (parser-field-ref p 'seen) 0))))))
 
 ;; The zero-field control exists PER LANE. It was one interpreted machine shared
 ;; by both groups, so the case inside "parser-field-ref (generated)" ran the
@@ -219,5 +373,202 @@
                      (map car (normal-machine-fields
                                (normalize-machine (verification-machine (verify-machine m)))))
                      '(count limit seen total))))))
+
+
+;; Milestone 4 Slice ② task 9: the OPERATION MATRIX (§25:1568's operation share,
+;; §25:1569 whole). Underflow at `decrement` from 0, overflow at `increment` and
+;; `add` from each width's maximum, at ALL FOUR widths, through BOTH executors.
+;;
+;; One machine per width rather than one per (width, operation): each carries a
+;; field at its maximum and a field at zero, and the byte chooses the operation.
+;; That keeps the emitted-and-loaded library count at four.
+(define (matrix-machine nm width)
+  (let ((mx (- (expt 2 width) 1)))
+    (make-machine nm 'start
+      (list (make-uint-field 'hi width mx #f) (make-uint-field 'lo width 0 #f))
+      '() '() (list eof-decl rej-decl)
+      (list (make-byte-dispatch-node 'start
+              (list (make-byte-case (make-exact-byte-matcher 0) (make-edge 'inc 'advance) #f)
+                    (make-byte-case (make-exact-byte-matcher 1) (make-edge 'plus 'advance) #f)
+                    (make-byte-case (make-exact-byte-matcher 2) (make-edge 'dec 'advance) #f)
+                    (make-byte-case (make-exact-byte-matcher 3) (make-edge 'good 'advance) #f))
+              (make-edge 'reject 'reexecute) #f #f)
+            (make-field-action-node 'inc 'increment '(hi) 'start 'over #f)
+            (make-field-action-node 'plus 'add (list 'hi 1) 'start 'over #f)
+            (make-field-action-node 'dec 'decrement '(lo) 'start 'over #f)
+            (make-field-action-node 'good 'increment '(lo) 'start 'over #f)
+            (make-error-node 'over 'rejected #f)
+            (make-error-node 'reject 'rejected #f))
+      'default-eof #f)))
+
+(define matrix-widths '(8 16 32 64))
+(define matrix-lanes
+  (map (lambda (w)
+         (let* ((nm (string->symbol (string-append "mx" (number->string w))))
+                (m (matrix-machine nm w)))
+           (list w
+                 (make-interpreted-machine (verify-machine m))
+                 (emit-and-load m nm (string->symbol (string-append (symbol->string nm) "-parser"))
+                                (string-append tmpdir "/generated-" (symbol->string nm) ".sls")))))
+       matrix-widths))
+
+(harness-group "the operation matrix over every width (§25:1568, §25:1569)"
+  (lambda ()
+    (harness-case "overflow, underflow and success agree across widths and lanes"
+      (lambda ()
+        ;; A loop with a sentinel reading the OBSERVED count, over widths AND
+        ;; over the schedules within each -- AGENTS.md's rule, and the reason an
+        ;; exhaustive loop that never executes cannot pass here.
+        (let ((widths 0) (checks 0))
+          (for-each
+           (lambda (row)
+             (set! widths (+ widths 1))
+             (let* ((w (car row)) (ref (cadr row)) (gen (caddr row))
+                    (mx (- (expt 2 w) 1))
+                    (tag (lambda (t sched)
+                           (string-append t " u" (number->string w) " ["
+                                          (apply string-append (map number->string sched))
+                                          "]"))))
+               (for-each
+                (lambda (spec)
+                  (set! checks (+ checks 1))
+                  (let* ((bs (car spec)) (fld (cadr spec)) (want (caddr spec)) (life (cadddr spec))
+                         (a (feed-bytes ref bs)) (b (feed-bytes gen bs)))
+                    ;; The value, in BOTH lanes, and the lifecycle -- a failed
+                    ;; operation must both leave the value alone (§25:1569) and
+                    ;; route to its error target.
+                    (check-equal (tag (string-append "interp " (symbol->string fld)) bs)
+                                 (parser-field-ref a fld) want)
+                    (check-equal (tag (string-append "gen " (symbol->string fld)) bs)
+                                 (parser-field-ref b fld) want)
+                    (check-equal (tag "lifecycle" bs) (parser-lifecycle b) (parser-lifecycle a))
+                    (check-equal (tag "expected lifecycle" bs) (parser-lifecycle a) life)))
+                (list
+                 ;; increment at the maximum: overflow, value unchanged.
+                 (list '(0) 'hi mx 'error)
+                 ;; add 1 at the maximum: overflow, value unchanged.
+                 (list '(1) 'hi mx 'error)
+                 ;; decrement at zero: UNDERFLOW, value unchanged.
+                 (list '(2) 'lo 0 'error)
+                 ;; and the success control, without which every row above
+                 ;; passes on a machine that simply never writes.
+                 (list '(3) 'lo 1 'ready)))))
+           matrix-lanes)
+          (check-equal "every width was exercised" widths 4)
+          (check-equal "every schedule was exercised" checks 16))))
+    (harness-case "the u64 maximum is a bignum, so the matrix is not fixnum-only"
+      (lambda ()
+        ;; §15:856's "must not rely on host fixnum width", asserted rather than
+        ;; assumed: without this the u64 row could silently be a fixnum row on a
+        ;; host with a wider fixnum, and would stop testing what it exists for.
+        (check "above greatest-fixnum" (> (- (expt 2 64) 1) (greatest-fixnum)))
+        (let ((ref (cadr (assv 64 matrix-lanes))))
+          (check-equal "and it is the declared initial"
+                       (parser-field-ref (make-parser ref '() #f) 'hi)
+                       18446744073709551615))))))
+
+
+;; *** COVERAGE GAP found by Slice ②'s whole-branch review, and closed here. ***
+;;
+;; The design says the seven operations and seven predicates are written TWICE on
+;; purpose (§18:970-972) and that the interpreter≡generated differential is what
+;; catches a divergence -- "the single class of defect this milestone
+;; introduces". But a differential only compares what a fixture EXERCISES, and
+;; before this group six of the fourteen appeared in no fixture at all:
+;; `clear-mask`, `equal`, `nonzero`, `mask-any`, `mask-all` and `mask-none`.
+;;
+;; Measured, not inferred: inverting the EMITTER's `mask-none` alone -- so that
+;; the two lanes compute opposite answers -- left every one of the 92 lanes at
+;; status 0. Two independent implementations, silently disagreeing.
+;;
+;; One byte per operation and one per predicate, all fourteen, driven through
+;; BOTH executors. The values are chosen so that no operation overflows: this
+;; group is about AGREEMENT, and the bound checks are the matrix group's job.
+(define cov-initial 12)
+(define (cov-marker nm k) (make-field-action-node nm 'set-mask (list 'seen k) 'start #f #f))
+(define cov-machine
+  (make-machine 'cov 'start
+    (list (make-uint-field 'f 8 cov-initial #f) (make-uint-field 'seen 8 0 #f))
+    '() '() (list eof-decl rej-decl)
+    (append
+     (list (make-byte-dispatch-node 'start
+             (map (lambda (i n)
+                    (make-byte-case (make-exact-byte-matcher i) (make-edge n 'advance) #f))
+                  '(0 1 2 3 4 5 6 7 8 9 10 11 12 13)
+                  '(o-store o-clear o-inc o-dec o-add o-set o-clr
+                    p-eq p-zero p-nz p-rng p-many p-mall p-mnone))
+             (make-edge 'reject 'reexecute) #f #f)
+           ;; The seven operations. store/clear/set-mask/clear-mask cannot fail,
+           ;; so the constructor forbids an error target on them; the other three
+           ;; require one.
+           (make-field-action-node 'o-store 'store '(f 200) 'start #f #f)
+           (make-field-action-node 'o-clear 'clear '(f) 'start #f #f)
+           (make-field-action-node 'o-inc 'increment '(f) 'start 'over #f)
+           (make-field-action-node 'o-dec 'decrement '(f) 'start 'over #f)
+           (make-field-action-node 'o-add 'add '(f 5) 'start 'over #f)
+           (make-field-action-node 'o-set 'set-mask '(f 129) 'start #f #f)
+           (make-field-action-node 'o-clr 'clear-mask '(f 8) 'start #f #f)
+           ;; The seven predicates, each routing to a shared pair of markers so
+           ;; the ARM TAKEN is observable as a value: true writes 1, false 2.
+           ;; *** The operands are chosen so each predicate is distinguishable
+           ;; from its SIBLINGS, not merely exercised. *** Measured: with
+           ;; `equal 12` on f=12 the answer is true, and an implementation that
+           ;; computed `nonzero` instead would also answer true -- the case would
+           ;; pass on the wrong predicate. `equal 99` is false where `nonzero` is
+           ;; true, so the two are separated. Same reasoning for `mask-all 14`
+           ;; below, which an implementation computing `mask-any` gets wrong;
+           ;; `mask-all 12` on f=12 does not separate them, and that mutation
+           ;; SURVIVED until this operand changed.
+           (make-field-branch-node 'p-eq 'equal '(f 99) 'yes 'no #f)
+           (make-field-branch-node 'p-zero 'zero '(f) 'yes 'no #f)
+           (make-field-branch-node 'p-nz 'nonzero '(f) 'yes 'no #f)
+           (make-field-branch-node 'p-rng 'range '(f 10 20) 'yes 'no #f)
+           (make-field-branch-node 'p-many 'mask-any '(f 4) 'yes 'no #f)
+           (make-field-branch-node 'p-mall 'mask-all '(f 14) 'yes 'no #f)
+           (make-field-branch-node 'p-mnone 'mask-none '(f 3) 'yes 'no #f)
+           (cov-marker 'yes 1)
+           (cov-marker 'no 2)
+           (make-error-node 'over 'rejected #f)
+           (make-error-node 'reject 'rejected #f)))
+    'default-eof #f))
+(define cov-ref (make-interpreted-machine (verify-machine cov-machine)))
+(define cov-gen (emit-and-load cov-machine 'cov 'cov-parser
+                               (string-append tmpdir "/generated-cov.sls")))
+
+(harness-group "all seven operations and all seven predicates, both lanes"
+  (lambda ()
+    (harness-case "every operation computes the same value in both lanes"
+      (lambda ()
+        ;; The expected values are stated, not merely compared across lanes: two
+        ;; lanes that are wrong in the SAME way would agree, and agreement bought
+        ;; that way is what this project has recorded as disarming its own test.
+        (let ((seen 0))
+          (for-each
+           (lambda (row)
+             (set! seen (+ seen 1))
+             (let* ((b (car row)) (want (cadr row)) (nm (caddr row))
+                    (a (feed-bytes cov-ref (list b))) (g (feed-bytes cov-gen (list b))))
+               (check-equal (string-append "interp " nm) (parser-field-ref a 'f) want)
+               (check-equal (string-append "gen " nm) (parser-field-ref g 'f) want)))
+           ;; f starts at 12.
+           '((0 200 "store") (1 0 "clear") (2 13 "increment") (3 11 "decrement")
+             (4 17 "add") (5 141 "set-mask") (6 4 "clear-mask")))
+          (check-equal "all seven operations" seen 7))))
+    (harness-case "every predicate takes the same arm in both lanes"
+      (lambda ()
+        ;; `seen` is 1 when the true arm ran and 2 when the false arm did, so an
+        ;; inverted predicate in EITHER lane is a different number here.
+        (let ((seen 0))
+          (for-each
+           (lambda (row)
+             (set! seen (+ seen 1))
+             (let* ((b (car row)) (want (cadr row)) (nm (caddr row))
+                    (a (feed-bytes cov-ref (list b))) (g (feed-bytes cov-gen (list b))))
+               (check-equal (string-append "interp " nm) (parser-field-ref a 'seen) want)
+               (check-equal (string-append "gen " nm) (parser-field-ref g 'seen) want)))
+           ;; f = 12 = #b1100.
+           '((7 2 "equal 99") (8 2 "zero") (9 1 "nonzero") (10 1 "range 10-20")
+             (11 1 "mask-any 4") (12 2 "mask-all 14") (13 1 "mask-none 3")))
+          (check-equal "all seven predicates" seen 7))))))
 
 (harness-finish)

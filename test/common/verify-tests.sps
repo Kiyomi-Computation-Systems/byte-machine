@@ -1119,4 +1119,328 @@
                      (ambiguity-count (machine (one-byte-nodes (make-edge 'reject 'reexecute))))
                      0)))))
 
+
+;; Milestone 4 Slice ② task 2: the eof-terminal rewrite (§4.4, decision 0021).
+;;
+;; *** These cases could not have been written before task 1. *** Every kind
+;; shipped before this slice is SINGLE-successor, so none can witness a join, a
+;; re-converging diamond, or the completed-set. That is why tasks 1 and 2 are
+;; swapped relative to the plan, which ordered the rewrite first "so its own
+;; tests are written against shipped kinds".
+;;
+;; Each machine routes its entry dispatch's eof-target into a field branch, so
+;; the :909 walk reaches the multi-successor node. The field kinds are not yet
+;; taught to the other passes (that is task 3), so these machines carry unrelated
+;; diagnostics too -- every assertion is therefore about the PRESENCE or ABSENCE
+;; of one code, never about a total count.
+(define (eof-into fa-nodes)
+  (make-machine 'm 'start '() '() '() (list eof-decl rej-decl)
+    (append (list (make-byte-dispatch-node 'start
+                    (list (make-byte-case (make-exact-byte-matcher 0)
+                                          (make-edge 'stop 'advance) #f))
+                    (make-edge 'reject 'reexecute) 'br #f)
+                  (make-stop-node 'stop #f)
+                  (make-error-node 'reject 'rejected #f))
+            fa-nodes)
+    'default-eof #f))
+
+(harness-group "the EOF walk over multi-successor zero-width nodes (§4.4, 0021)"
+  (lambda ()
+    (harness-case "both arms reaching a finish is not a cycle and not a stop"
+      (lambda ()
+        (let ((cs (codes (eof-into (list (make-field-branch-node 'br 'zero '(count) 'f1 'f2 #f)
+                                         (make-finish-node 'f1 #f)
+                                         (make-finish-node 'f2 #f))))))
+          (check "no cycle" (not (memq 'eof-zero-progress-cycle cs)))
+          (check "no reachable stop" (not (memq 'eof-reachable-stop cs))))))
+    (harness-case "a DIAMOND that re-converges is not a cycle"
+      (lambda ()
+        ;; The defect the rejected algorithm has: one shared `seen` that
+        ;; tolerates re-visits reports 'cycle for a diamond that merely
+        ;; re-converges. Both arms reach the SAME finish node here, so the walk
+        ;; meets `f1` twice.
+        (let ((cs (codes (eof-into (list (make-field-branch-node 'br 'zero '(count) 'a 'b #f)
+                                         (make-field-action-node 'a 'clear '(count) 'f1 #f #f)
+                                         (make-field-action-node 'b 'clear '(count) 'f1 #f #f)
+                                         (make-finish-node 'f1 #f))))))
+          (check "no cycle" (not (memq 'eof-zero-progress-cycle cs))))))
+    (harness-case "one arm cycling is a cycle even though the other finishes"
+      (lambda ()
+        ;; The join has to be `max`, not "first answer" and not "all arms agree":
+        ;; a branch one of whose arms genuinely cycles cannot report nothing.
+        (let ((cs (codes (eof-into (list (make-field-branch-node 'br 'zero '(count) 'f1 'loop #f)
+                                         (make-finish-node 'f1 #f)
+                                         (make-field-action-node 'loop 'clear '(count) 'br #f #f))))))
+          (check "cycle" (memq 'eof-zero-progress-cycle cs)))))
+    (harness-case "cycle outranks eof-reachable-stop when the arms differ"
+      (lambda ()
+        ;; The ONE relation decision 0021 item 1 pins in the source, and the only
+        ;; place two verdicts can now meet.
+        (let ((cs (codes (eof-into (list (make-field-branch-node 'br 'zero '(count) 'stop 'loop #f)
+                                         (make-field-action-node 'loop 'clear '(count) 'br #f #f))))))
+          (check "cycle" (memq 'eof-zero-progress-cycle cs))
+          (check "and not the stop" (not (memq 'eof-reachable-stop cs))))))
+    (harness-case "cycle outranks eof-reachable-stop in the OTHER arm order too"
+      (lambda ()
+        ;; The mirror of the case above, and not redundant with it: a mutant that
+        ;; walks only the TRUE arm answers correctly here (the cycle IS the true
+        ;; arm) and wrongly there, so this pair is what separates "the join uses
+        ;; the wrong order" from "the second arm is never walked at all". Without
+        ;; it those two mutants are indistinguishable.
+        (let ((cs (codes (eof-into (list (make-field-branch-node 'br 'zero '(count) 'loop 'stop #f)
+                                         (make-field-action-node 'loop 'clear '(count) 'br #f #f))))))
+          (check "cycle" (memq 'eof-zero-progress-cycle cs))
+          (check "and not the stop" (not (memq 'eof-reachable-stop cs))))))
+    (harness-case "an arm reaching a stop is eof-reachable-stop when no arm cycles"
+      (lambda ()
+        ;; The premise for the case above: without it, "not the stop" would pass
+        ;; because this walk never reports a stop through a branch at all.
+        (let ((cs (codes (eof-into (list (make-field-branch-node 'br 'zero '(count) 'stop 'f1 #f)
+                                         (make-finish-node 'f1 #f))))))
+          (check "reachable stop" (memq 'eof-reachable-stop cs)))))
+    (harness-case "a field action's error target is walked too"
+      (lambda ()
+        ;; `next` PLUS `error` -- a field action is multi-successor as well, and
+        ;; a walk that followed only `next` would miss a stop behind a failure.
+        (let ((cs (codes (eof-into (list (make-field-action-node 'br 'increment '(count) 'f1 'stop #f)
+                                         (make-finish-node 'f1 #f))))))
+          (check "reachable stop" (memq 'eof-reachable-stop cs)))))))
+
+
+;; Milestone 4 Slice ② task 3: the verifier census. Every site that switches on
+;; node kind and must learn the two zero-width kinds.
+;;
+;; *** Census row 14 (D4(d)) is DELIBERATELY NOT EXTENDED, and the last case
+;; here is what holds that decision. *** The design prescribed a
+;; byte-reachability-gated sibling block "same shape" as the pause one. Written
+;; that way it turns `dispatch --advance--> field-action --next--> stop` into a
+;; false eof-reachable-stop. A pause IS an EOF start -- parser-feed-op!'s pause
+;; arm commits `current` PAST it, so a later finish begins at the continuation --
+;; whereas a zero-width node never becomes `current`, because the dispatch arm
+;; returns need-input without moving it. Row 10's eof-terminal extension plus
+;; the shipped pause block already cover every real EOF start. The one stated,
+;; witnessed gap is "the machine ENTRY is a zero-width node", which no shipped
+;; fixture can reach today.
+(define (fields1) (list (make-uint-field 'count 8 0 #f)))
+(define (zw-machine nodes entry)
+  (make-machine 'm entry (fields1) '() '() (list eof-decl rej-decl) nodes 'default-eof #f))
+
+(harness-group "the zero-width census (Slice ② task 3)"
+  (lambda ()
+    (harness-case "a zero-width self-cycle is a zero-progress cycle"
+      (lambda ()
+        ;; The failure this closes: without BOTH the walk and the REPORT set,
+        ;; a `store`-into-itself machine verifies clean and then hangs in both
+        ;; lanes. The walk alone is the half-fix M3 Slice ② shipped.
+        (let ((cs (codes (zw-machine
+                          (list (make-field-action-node 'loop 'clear '(count) 'loop #f #f)
+                                (make-stop-node 'stop #f)
+                                (make-error-node 'reject 'rejected #f))
+                          'loop))))
+          (check "zero-progress-cycle" (memq 'zero-progress-cycle cs)))))
+    (harness-case "a two-node zero-width cycle through a branch is reported too"
+      (lambda ()
+        (let ((cs (codes (zw-machine
+                          (list (make-field-branch-node 'br 'zero '(count) 'act 'act #f)
+                                (make-field-action-node 'act 'clear '(count) 'br #f #f)
+                                (make-error-node 'reject 'rejected #f))
+                          'br))))
+          (check "zero-progress-cycle" (memq 'zero-progress-cycle cs)))))
+    (harness-case "a zero-width node's targets are out-targets, so they are reachable"
+      (lambda ()
+        ;; node-out-targets feeds name resolution AND reachability. Without the
+        ;; arm, `after` is unreached and `oops` is unreached, and the machine is
+        ;; rejected for a defect it does not have.
+        (let ((cs (codes (zw-machine
+                          ;; No spare node: an error node nothing names is
+                          ;; unreachable on its own account and would make this
+                          ;; case pass for the wrong reason.
+                          (list (make-field-action-node 'act 'increment '(count) 'after 'oops #f)
+                                (make-stop-node 'after #f)
+                                (make-error-node 'oops 'rejected #f))
+                          'act))))
+          (check "nothing unreachable" (not (memq 'unreachable-node cs))))))
+    (harness-case "a byte-reachable zero-width node into a finish is non-eof-into-finish"
+      (lambda ()
+        ;; §16.2:908 forbids non-EOF control flow into a finish terminal, and a
+        ;; byte path that runs dispatch -> field-action -> finish is exactly
+        ;; that. The shipped :908 check cannot see it: it filters on dispatch
+        ;; kinds, so the finish sits one hop further than it looks.
+        (let ((cs (codes (zw-machine
+                          (list (make-byte-dispatch-node 'start
+                                  (list (make-byte-case (make-exact-byte-matcher 0)
+                                                        (make-edge 'act 'advance) #f))
+                                  (make-edge 'reject 'reexecute) #f #f)
+                                (make-field-action-node 'act 'clear '(count) 'done #f #f)
+                                (make-finish-node 'done #f)
+                                (make-error-node 'reject 'rejected #f))
+                          'start))))
+          (check "non-eof-into-finish" (memq 'non-eof-into-finish cs)))))
+    (harness-case "a cycle running THROUGH a zero-width node is attributed to the dispatch"
+      (lambda ()
+        ;; This fixture is what separates "the WALK does not follow a zero-width
+        ;; node" from "the REPORT set does not include one". The cycle's reported
+        ;; member is the byte-dispatch node, which is in the report set either
+        ;; way -- so narrowing the report set leaves this diagnostic standing,
+        ;; while narrowing the walk removes it. Without this case the two mutants
+        ;; emit identical records, which is the half-fix M3 Slice ② shipped and
+        ;; Slice ③ closed.
+        (let ((ds (verification-diagnostics
+                   (verify-machine
+                    (zw-machine
+                     (list (make-byte-dispatch-node 'start
+                             (list (make-byte-case (make-exact-byte-matcher 0)
+                                                   (make-edge 'stop 'advance) #f))
+                             (make-edge 'act 'reexecute) #f #f)
+                           (make-field-action-node 'act 'clear '(count) 'start #f #f)
+                           (make-stop-node 'stop #f))
+                     'start)))))
+          (check "attributed to start"
+                 (memq 'start (map diagnostic-node
+                                   (filter (lambda (d)
+                                             (eq? (diagnostic-code d) 'zero-progress-cycle))
+                                           ds)))))))
+    (harness-case "an EOF-only-reachable zero-width node may continue into a finish"
+      (lambda ()
+        ;; Decision 0011 for the pause kind, applied here: §16.2:908 forbids
+        ;; NON-EOF control flow into a finish, so a zero-width node reached only
+        ;; along an EOF path legally continues into one. This is what the
+        ;; byte-reachability GATE buys -- without the gate the check fires on
+        ;; every zero-width node regardless of how it is reached, and this
+        ;; machine is rejected for a defect it does not have.
+        (let ((cs (codes (zw-machine
+                          (list (make-byte-dispatch-node 'start
+                                  (list (make-byte-case (make-exact-byte-matcher 0)
+                                                        (make-edge 'stop 'advance) #f))
+                                  (make-edge 'reject 'reexecute) 'act #f)
+                                (make-field-action-node 'act 'clear '(count) 'done #f #f)
+                                (make-finish-node 'done #f)
+                                (make-stop-node 'stop #f)
+                                (make-error-node 'reject 'rejected #f))
+                          'start))))
+          (check "no non-eof-into-finish" (not (memq 'non-eof-into-finish cs))))))
+    (harness-case "a byte path through a zero-width node into a STOP verifies clean"
+      (lambda ()
+        ;; *** The case that holds row 14's drop. *** Written "same shape" as the
+        ;; pause block, the prescribed sibling would report eof-reachable-stop
+        ;; here -- on a diagnostic and message about EOF, for a machine whose
+        ;; only path to that stop is a byte path. If a later slice adds that
+        ;; block, this case fails, which is the point.
+        (let ((cs (codes (zw-machine
+                          (list (make-byte-dispatch-node 'start
+                                  (list (make-byte-case (make-exact-byte-matcher 0)
+                                                        (make-edge 'act 'advance) #f))
+                                  (make-edge 'reject 'reexecute) #f #f)
+                                (make-field-action-node 'act 'clear '(count) 'stop #f #f)
+                                (make-stop-node 'stop #f)
+                                (make-error-node 'reject 'rejected #f))
+                          'start))))
+          (check "no eof-reachable-stop" (not (memq 'eof-reachable-stop cs)))
+          (check "no eof cycle" (not (memq 'eof-zero-progress-cycle cs)))
+          (check "no non-eof-into-finish" (not (memq 'non-eof-into-finish cs))))))))
+
+
+;; Milestone 4 Slice ② task 4: pass-fields' OPERAND half (§16.3:924 item 6,
+;; decision 0020 item 3). Everything here needs a SECOND object -- the field
+;; declaration -- which is exactly why none of it is a constructor contract, and
+;; why the constructor accepts every one of these nodes.
+(define (operand-machine node)
+  (make-machine 'm 'act (list (make-uint-field 'count 8 0 #f)) '() '()
+                (list eof-decl rej-decl)
+                (list node (make-stop-node 'next #f) (make-error-node 'oops 'rejected #f))
+                'default-eof #f))
+(define (operand-codes node)
+  (filter (lambda (c) (eq? c 'invalid-field-operand)) (codes (operand-machine node))))
+
+(harness-group "field operands (§16.3:924 item 6, operand half)"
+  (lambda ()
+    (harness-case "a well-formed operand list is clean"
+      (lambda ()
+        ;; The premise for every case below: without it they could all pass
+        ;; because ANY field node reports an operand fault.
+        (check-equal "none" (length (operand-codes
+                                     (make-field-action-node 'act 'store '(count 255) 'next #f #f)))
+                     0)))
+    (harness-case "wrong arity is invalid-field-operand"
+      (lambda ()
+        ;; The check the CONSTRUCTOR deliberately does not make -- 0020 item 2:
+        ;; nothing can be read out of `arguments` before arity is known.
+        (check-equal "too few" (length (operand-codes
+                                        (make-field-action-node 'act 'store '(count) 'next #f #f)))
+                     1)
+        (check-equal "too many" (length (operand-codes
+                                         (make-field-action-node 'act 'clear '(count 1) 'next #f #f)))
+                     1)))
+    (harness-case "an undeclared field is invalid-field-operand"
+      (lambda ()
+        (check-equal "one" (length (operand-codes
+                                    (make-field-action-node 'act 'clear '(nosuch) 'next #f #f)))
+                     1)))
+    (harness-case "a constant above the field's declared width is invalid-field-operand"
+      (lambda ()
+        ;; 255 is the u8 maximum and is accepted by the premise case above; 256
+        ;; is the first value that is not, so this pins the BOUNDARY and not
+        ;; merely that some large number is refused.
+        (check-equal "256" (length (operand-codes
+                                    (make-field-action-node 'act 'store '(count 256) 'next #f #f)))
+                     1)))
+    (harness-case "a mask above the declared width is invalid-field-operand"
+      (lambda ()
+        (check-equal "one" (length (operand-codes
+                                    (make-field-action-node 'act 'set-mask '(count 256) 'next #f #f)))
+                     1)))
+    (harness-case "the width checked is the REFERENCED field's, not some other field's"
+      (lambda ()
+        ;; Two fields of different widths: 256 is legal for `wide` and not for
+        ;; `count`. A check that used the first declaration, or any fixed width,
+        ;; passes the cases above and fails here.
+        (let* ((m (make-machine 'm 'act
+                                (list (make-uint-field 'count 8 0 #f)
+                                      (make-uint-field 'wide 16 0 #f))
+                                '() '() (list eof-decl rej-decl)
+                                (list (make-field-action-node 'act 'store '(wide 256) 'next #f #f)
+                                      (make-stop-node 'next #f))
+                                'default-eof #f))
+               (cs (filter (lambda (c) (eq? c 'invalid-field-operand)) (codes m))))
+          (check-equal "legal for the wide field" (length cs) 0))))
+    (harness-case "low > high for range is invalid-field-operand"
+      (lambda ()
+        ;; Decision 0020 item 2 names this as the consequence that will look
+        ;; wrong to a reader of 0017. The constructor accepts it -- asserted in
+        ;; ir-tests.sps -- and the verifier is where it is caught.
+        (check-equal "one" (length (operand-codes
+                                    (make-field-branch-node 'act 'range '(count 9 2) 'next 'next #f)))
+                     1)))
+    (harness-case "low = high for range is legal"
+      (lambda ()
+        ;; The boundary: the check is `low > high`, not `low >= high`.
+        (check-equal "none" (length (operand-codes
+                                     (make-field-branch-node 'act 'range '(count 5 5) 'next 'next #f)))
+                     0)))
+    (harness-case "an out-of-width range operand does not also report low > high"
+      (lambda ()
+        ;; A range whose operands are out of width would compare garbage; the
+        ;; low/high check is guarded on both being in range, so this reports the
+        ;; width fault once per bad operand and nothing else.
+        (check-equal "two width faults only"
+                     (length (operand-codes
+                              (make-field-branch-node 'act 'range '(count 300 299) 'next 'next #f)))
+                     2)))
+    (harness-case "every predicate's arity is enforced"
+      (lambda ()
+        ;; A loop with a sentinel over the observed count: the schema table is a
+        ;; closed enumeration, and naming three rows does not assert fourteen.
+        (let ((seen 0))
+          (for-each (lambda (row)
+                      (set! seen (+ seen 1))
+                      (check-equal (symbol->string (car row))
+                                   (length (operand-codes
+                                            (make-field-branch-node 'act (car row) (cadr row)
+                                                                    'next 'next #f)))
+                                   1))
+                    '((equal (count)) (zero (count 1)) (nonzero (count 1))
+                      (range (count 1)) (mask-any (count)) (mask-all (count))
+                      (mask-none (count))))
+          (check-equal "all seven predicates" seen 7))))))
+
 (harness-finish)

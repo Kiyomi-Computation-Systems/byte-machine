@@ -87,6 +87,8 @@
                     ((error-node? n) 'error)
                     ((finish-node? n) 'finish)
                     ((pause-node? n) 'pause)
+                    ((field-action-node? n) 'field-action)
+                    ((field-branch-node? n) 'field-branch)
                     (else (byte-machine-contract-violation 'interpret 'internal name))))))
       (define (dispatch name byte)
         (if (pair? name)
@@ -144,6 +146,56 @@
           (if (sequence-dispatch-node? n)
               (sequence-dispatch-node-eof-target n)
               (byte-dispatch-node-eof-target n))))
+      ;; --- Slice ②'s field semantics, interpreter side ---
+      ;; Slot = declaration index (§17:962), so the slot and the width come from
+      ;; the same walk over machine-fields and cannot disagree.
+      (define (field-slot-and-width fname)
+        (let loop ((fs (machine-fields m)) (i 0))
+          (cond ((null? fs) (byte-machine-contract-violation 'interpret 'internal fname))
+                ((eq? (uint-field-name (car fs)) fname) (cons i (uint-field-width (car fs))))
+                (else (loop (cdr fs) (+ i 1))))))
+      (define (field-max width) (- (expt 2 width) 1))
+      ;; §25:1569 and §10.6:568: a failed operation leaves the prior value
+      ;; UNCHANGED. That is why every arm computes first and commits last -- there
+      ;; is no partial write to undo, because there is no partial write.
+      (define (field-action-step n fv)
+        (let* ((args (field-action-node-arguments n))
+               (sw (field-slot-and-width (car args)))
+               (slot (car sw)) (m* (field-max (cdr sw)))
+               (v (vector-ref fv slot))
+               (k (and (pair? (cdr args)) (cadr args)))
+               (r (case (field-action-node-operation n)
+                    ((store) k)
+                    ((clear) 0)
+                    ((increment) (+ v 1))
+                    ((decrement) (- v 1))
+                    ((add) (+ v k))
+                    ((set-mask) (bitwise-ior v k))
+                    ((clear-mask) (bitwise-and v (bitwise-not k)))
+                    (else (byte-machine-contract-violation 'interpret 'internal 'operation)))))
+          (if (<= 0 r m*)
+              (begin (vector-set! fv slot r) (field-action-node-next n))
+              ;; Overflow or underflow. The value is not written, and the target
+              ;; is the declared error node -- which the constructor guarantees
+              ;; exists, because it is #f exactly when the operation cannot fail.
+              (field-action-node-error n))))
+      (define (field-branch-step n fv)
+        (let* ((args (field-branch-node-arguments n))
+               (sw (field-slot-and-width (car args)))
+               (v (vector-ref fv (car sw)))
+               (a (and (pair? (cdr args)) (cadr args)))
+               (b (and (pair? (cdr args)) (pair? (cddr args)) (caddr args)))
+               (yes (case (field-branch-node-predicate n)
+                      ((equal) (= v a))
+                      ((zero) (= v 0))
+                      ((nonzero) (not (= v 0)))
+                      ((range) (and (<= a v) (<= v b)))
+                      ((mask-any) (not (= 0 (bitwise-and v a))))
+                      ((mask-all) (= a (bitwise-and v a)))
+                      ((mask-none) (= 0 (bitwise-and v a)))
+                      (else (byte-machine-contract-violation 'interpret 'internal 'predicate)))))
+          (if yes (field-branch-node-true-target n) (field-branch-node-false-target n))))
+
       (make-compiled-machine
        (lambda (msg . args)
          (case msg
@@ -152,6 +204,33 @@
            ;; machine; the generated lane reads the same shape out of the ABI
            ;; payload's member 0. Pairs, in declaration order, which IS slot
            ;; order (§17:962, design §6 task 5).
+           ;; *** Slice ②'s checked arithmetic and predicate evaluation. The op
+           ;; RECEIVES the parser's field vector and COMMITS into it; the runtime
+           ;; only routes the target it answers. ***
+           ;;
+           ;; That shape is forced, and design §7's "the interpreter gains its
+           ;; own field storage" is unbuildable: this closure is built once per
+           ;; compiled machine and has no parser in scope, and runtime.sls
+           ;; records the prohibition verbatim because Slice ①b hit it. There is
+           ;; ONE store, parser slot 8, shared by both lanes.
+           ;;
+           ;; It is also the shape Slice ③ needs. If the op returned a VALUE for
+           ;; the runtime to store, ③'s accumulate would force the runtime to
+           ;; decide overflow-versus-digit, which puts §15:858-870's inequality
+           ;; in runtime.sls where the generated library can reach it -- and a
+           ;; lowering bug in overflow checking would stop being visible to the
+           ;; differential, the single class of defect this milestone introduces.
+           ;;
+           ;; The arithmetic is written TWICE on purpose (§18:970-972, decision
+           ;; 0015 point 3): this library derives field semantics from the source
+           ;; IR and shares no helper with the emitter. Widths are read here from
+           ;; `machine-fields`; the emitter reads them from the normalized table.
+           ((field-step)
+            (let* ((name (car args)) (fv (cadr args))
+                   (n (lookup nodes name)))
+              (if (field-action-node? n)
+                  (field-action-step n fv)
+                  (field-branch-step n fv))))
            ((field-initials)
             (list->vector (map (lambda (f) (cons (uint-field-name f)
                                                  (uint-field-initial f)))

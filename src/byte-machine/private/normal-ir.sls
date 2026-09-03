@@ -11,7 +11,8 @@
           normal-state-kind normal-state-id
           normal-dispatch-transitions normal-dispatch-fallback
           normal-error-code normal-error-reason normal-dispatch-eof normal-pause-target
-          normal-machine-debug-map normal-machine-fields)
+          normal-machine-debug-map normal-machine-fields
+          normal-field-selector normal-field-arguments normal-field-targets)
   (import (rnrs)
           (only (byte-machine private ir)
                 machine-nodes machine-entry machine-errors machine-default-eof-error
@@ -25,7 +26,12 @@
                 sequence-dispatch-node? sequence-dispatch-node-cases
                 sequence-dispatch-node-mismatch sequence-dispatch-node-eof-target
                 sequence-case-bytes sequence-case-target
-                machine-fields uint-field-name uint-field-width uint-field-initial))
+                machine-fields uint-field-name uint-field-width uint-field-initial
+                field-action-node? field-action-node-name field-action-node-operation
+                field-action-node-arguments field-action-node-next field-action-node-error
+                field-branch-node? field-branch-node-name field-branch-node-predicate
+                field-branch-node-arguments field-branch-node-true-target
+                field-branch-node-false-target))
 
   (define nm-tag (vector 'byte-machine-normal-machine))
   ;; The debug map is APPENDED after fp, never inserted before it:
@@ -67,7 +73,23 @@
   (define (normal-machine-fields m) (vector-ref m 5))
 
   (define ns-tag (vector 'byte-machine-normal-state))
-  ;; (vector ns-tag kind id transitions fallback code eof reason) ; unused slots #f.
+  ;; (vector ns-tag kind id transitions fallback code eof reason
+  ;;         selector arguments targets)                        ; unused slots #f.
+  ;;
+  ;; *** WIDENED in Milestone 4 Slice ② (design §0 D3), against §7's ruling to
+  ;; "carry it in the existing seven-slot state vector rather than widening it".
+  ;; That ruling was made against a SEVEN-slot premise which is wrong: Slice ①a
+  ;; appended `reason`, so the vector was already eight and had five free payload
+  ;; slots. ②'s two kinds need exactly five each, with zero spare, and Slice ③'s
+  ;; accumulate needs eight. Whoever widens pays the same six-state-literal edit
+  ;; once, and ② is already editing those six literals -- so ② widens and ③
+  ;; inherits the room rather than inventing a packing. ***
+  ;;
+  ;; `selector` (slot 8) is the operation or predicate symbol; `arguments`
+  ;; (slot 9) the operand list as written; `targets` (slot 10) the kind's own
+  ;; successor list -- (next . error-or-#f) for a field action, (true . false)
+  ;; for a field branch. Slice ③ reuses slot 6's shipped (node . id) /
+  ;; (default . code) convention for its EOF routing rather than adding another.
   ;; `reason` (slot 7, Milestone 4 Slice ①a) is the error declaration's static
   ;; reason STRING, added as its own slot rather than by widening slot 5 or the
   ;; eof pair: both of those are read by compile.sls through symbol->string, and
@@ -89,6 +111,9 @@
   (define (normal-error-reason s) (vector-ref s 7))
   (define (normal-dispatch-eof s) (vector-ref s 6))
   (define (normal-pause-target s) (cdr (vector-ref s 6)))
+  (define (normal-field-selector s) (vector-ref s 8))
+  (define (normal-field-arguments s) (vector-ref s 9))
+  (define (normal-field-targets s) (vector-ref s 10))
 
   ;; --- FNV-1a 64-bit over a canonical byte encoding (decision 0009) ---
   (define mask64 (- (expt 2 64) 1))
@@ -131,6 +156,17 @@
     (let ((b (string->utf8 (symbol->string sym))))
       (put-u16be p (bytevector-length b)) (put-bytevector p b)))
   (define (mode->byte m) (if (eq? m 'advance) 0 1))
+  ;; A field node's operand list: a u16be count, then each operand -- a symbol
+  ;; (the field name, always first) or an exact integer, distinguished by a tag
+  ;; byte so a field literally named `7` could never share bytes with the
+  ;; constant 7. Integers ride 64 bits for the same reason field initials do:
+  ;; the record layout must not vary with the value it carries.
+  (define (put-operands p args)
+    (put-u16be p (length args))
+    (for-each (lambda (a)
+                (cond ((symbol? a) (put-u8 p 0) (put-symbol p a))
+                      (else (put-u8 p 1) (put-u64be p a))))
+              args))
 
   ;; The `else` guards below are unreachable-today safety for a SEVENTH
   ;; node/state kind beyond the six now handled -- dispatch/stop/error/finish/
@@ -270,9 +306,18 @@
            (seq-state
             (lambda (n t ids id)
               (let ((mm (sequence-dispatch-node-mismatch n)))
+                ;; The three Slice ② slots, #f like every other kind that does
+                ;; not use them. MISSED when the vector was widened, and the
+                ;; miss was invisible: sequence states carry kind `dispatch`, so
+                ;; the only readers of slots 8-10 -- all kind-guarded -- never
+                ;; reach one, and every lane stayed green. What it left behind is
+                ;; a state SHORTER than the layout this file declares, so any
+                ;; totalising read over states raises on exactly these, and
+                ;; Slice ③'s accumulate is the next thing likely to add one.
                 (vector ns-tag 'dispatch id (trie-transitions t ids)
                         (cons (id-of (edge-target mm)) (edge-mode mm)) #f
-                        (seq-eof-of n) (eof-reason-of (seq-eof-of n))))))
+                        (seq-eof-of n) (eof-reason-of (seq-eof-of n))
+                        #f #f #f))))
            (declared
             (let loop ((ns nodes) (i 0) (acc '()))
               (if (null? ns) (reverse acc)
@@ -304,20 +349,40 @@
                                     (fb (byte-dispatch-node-fallback n)))
                                 (vector ns-tag 'dispatch i trs
                                         (cons (id-of (edge-target fb)) (edge-mode fb)) #f
-                                        (eof-of n) (eof-reason-of (eof-of n)))))
+                                        (eof-of n) (eof-reason-of (eof-of n))
+                                        #f #f #f)))
                              ((sequence-dispatch-node? n)
                               (let ((blk (block-of n)))
                                 (seq-state n (cadr blk) (caddr blk) i)))
-                             ((stop-node? n) (vector ns-tag 'stop i #f #f #f #f #f))
+                             ((stop-node? n) (vector ns-tag 'stop i #f #f #f #f #f #f #f #f))
                              ((error-node? n)
                               (vector ns-tag 'error i #f #f
                                       (errcode (error-node-error-name n)) #f
-                                      (errreason (error-node-error-name n))))
-                             ((finish-node? n) (vector ns-tag 'finish i #f #f #f #f #f))
+                                      (errreason (error-node-error-name n)) #f #f #f))
+                             ((finish-node? n) (vector ns-tag 'finish i #f #f #f #f #f #f #f #f))
                              ((pause-node? n)
                               (vector ns-tag 'pause i #f #f #f
-                                      (cons 'node (id-of (pause-node-continuation n))) #f))
-                             ;; The repertoire is now these six kinds. A future
+                                      (cons 'node (id-of (pause-node-continuation n))) #f
+                                      #f #f #f))
+                             ;; Slice ②'s two ZERO-WIDTH kinds. §4.6 settles that
+                             ;; the lowering is 1:1 -- neither allocates an
+                             ;; internal state -- so each is one source node
+                             ;; becoming one normalized state, and `prefix-blocks`
+                             ;; correctly skips them.
+                             ((field-action-node? n)
+                              (vector ns-tag 'field-action i #f #f #f #f #f
+                                      (field-action-node-operation n)
+                                      (field-action-node-arguments n)
+                                      (cons (id-of (field-action-node-next n))
+                                            (let ((e (field-action-node-error n)))
+                                              (and (symbol? e) (id-of e))))))
+                             ((field-branch-node? n)
+                              (vector ns-tag 'field-branch i #f #f #f #f #f
+                                      (field-branch-node-predicate n)
+                                      (field-branch-node-arguments n)
+                                      (cons (id-of (field-branch-node-true-target n))
+                                            (id-of (field-branch-node-false-target n)))))
+                             ;; The repertoire is now these EIGHT kinds. A future
                              ;; kind reaching here must fail loudly, not lower to
                              ;; nothing.
                              (else (assertion-violation 'normalize-machine "unknown node kind" n)))
@@ -399,6 +464,26 @@
                ((finish) (put-u8 p 3))
                ;; pause: tag 4 + u32be continuation state id (D5).
                ((pause) (put-u8 p 4) (put-u32be p (normal-pause-target s)))
+               ;; field action: tag 5 + selector + operands + next + error tag.
+               ;; field branch: tag 6 + selector + operands + both targets.
+               ;; The operand list is encoded because every part of it is
+               ;; observable to a generated parser -- a different constant is a
+               ;; different machine -- and the ERROR target is written with a
+               ;; presence tag rather than a sentinel id, so "no error target"
+               ;; and "the error target is state 0" cannot collide.
+               ((field-action)
+                (put-u8 p 5)
+                (put-symbol p (normal-field-selector s))
+                (put-operands p (normal-field-arguments s))
+                (put-u32be p (car (normal-field-targets s)))
+                (let ((e (cdr (normal-field-targets s))))
+                  (if e (begin (put-u8 p 1) (put-u32be p e)) (put-u8 p 0))))
+               ((field-branch)
+                (put-u8 p 6)
+                (put-symbol p (normal-field-selector s))
+                (put-operands p (normal-field-arguments s))
+                (put-u32be p (car (normal-field-targets s)))
+                (put-u32be p (cdr (normal-field-targets s))))
                (else (assertion-violation 'normalize-machine "unknown state kind"
                                           (normal-state-kind s)))))
            (loop (+ i 1)))))))

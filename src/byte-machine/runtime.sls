@@ -116,6 +116,9 @@
   ;; 3(c). It is dead weight in this slice and in ①b, and it is the whole reason
   ;; Slice ②'s field store moves no golden: adding the parameter LATER would
   ;; change the emitted text of every machine, including the zero-field ones.
+  ;; Retained for the mutation that pins the seventh parameter's presence; no
+  ;; call site passes it since Slice ② gave the generated lane the parser's own
+  ;; vector. Deleting it would take that pin with it.
   (define empty-fields (vector))
 
   ;; --- feed outcome (the runtime<-generated seam; accessors private) ---
@@ -311,6 +314,22 @@
              ;; at the continuation, mirroring the generated next-state.
              (parser-set-current! parser (op 'pause-target node))
              (make-parser-result 'paused pos (- pos start) (parser-offset parser) #f))
+            ;; *** Slice ②'s ZERO-WIDTH kinds. *** They consume no byte, so the
+            ;; loop re-enters at the SAME `pos` with the same offset, and the
+            ;; only state that moves is `current` plus whatever the op committed
+            ;; into the field vector. The op does the bound check and the write;
+            ;; this arm only routes.
+            ;;
+            ;; `pk` is carried THROUGH unchanged rather than reset. Position kind
+            ;; describes where in the input stream the parser is, and a
+            ;; zero-width step does not move it -- so a failure reached after one
+            ;; reports the same kind it would have reported without it. §12.7:777
+            ;; makes position kind differential-compared, so the two lanes must
+            ;; agree on this and the emitter carries the same rule.
+            ((field-action field-branch)
+             (let ((t (op 'field-step node (parser-field-values parser))))
+               (parser-set-current! parser t)
+               (loop pos pk)))
             ((dispatch)
              (if (>= pos end)
                  (make-parser-result 'need-input pos (- pos start) (parser-offset parser) #f)
@@ -329,7 +348,14 @@
   ;; The generated /v2 path: exec owns the dispatch loop; finish? = #f for feed.
   (define (parser-feed-v2! parser bv start end)
     (let* ((exec (parser-executor parser))
-           (o (exec (parser-current parser) (parser-offset parser) bv start end #f empty-fields)))
+           ;; The PARSER's own field vector, not the shared sentinel. Slice ①a
+           ;; reserved this parameter and both call sites passed `empty-fields`
+           ;; through ①a and ①b, which was correct while nothing read it; Slice
+           ;; ② emits arms that write through it, and a shared empty vector
+           ;; would make every generated field machine index out of bounds --
+           ;; measured, before this line changed.
+           (o (exec (parser-current parser) (parser-offset parser) bv start end #f
+                    (parser-field-values parser))))
       (parser-set-current! parser (feed-outcome-next-state o))
       (parser-set-offset! parser (feed-outcome-offset o))
       (make-parser-result (feed-outcome-status o) (feed-outcome-next o)
@@ -375,7 +401,8 @@
   ;; (no slice, so next/consumed mirror the stream offset / 0).
   (define (parser-finish-v2! parser)
     (let* ((exec (parser-executor parser))
-           (o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t empty-fields)))
+           (o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t
+                    (parser-field-values parser))))
       (parser-set-current! parser (feed-outcome-next-state o))
       (parser-set-offset! parser (feed-outcome-offset o))
       (case (feed-outcome-status o)
@@ -424,6 +451,13 @@
            (let ((e (parts->parser-error (op 'error-value node) off pk)))
              (parser-set-stored-error! parser e)
              (make-parser-result 'error off 0 off e)))
+          ;; The same zero-width routing on the EOF side. `pk` is carried
+          ;; through here too: on an EOF chain it is already 'eof, and a
+          ;; zero-width hop does not make the position a boundary again.
+          ((field-action field-branch)
+           (let ((t (op 'field-step node (parser-field-values parser))))
+             (parser-set-current! parser t)
+             (loop t pk)))
           ((dispatch)
            (let ((t (op 'eof-target node)))
              (if t

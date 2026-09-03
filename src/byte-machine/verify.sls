@@ -71,6 +71,30 @@
           ((eq? (node-name (car nodes)) name) (car nodes))
           (else (lookup (cdr nodes) name))))
   (define (error-names m) (map error-declaration-name (machine-errors m)))
+  ;; The successors of a ZERO-WIDTH node -- one fact, three consumers
+  ;; (`node-out-targets`, `reexec-targets` and `eof-successors`), defined once.
+  ;; Triplicating it is not an option: the arms are textually identical, so a
+  ;; mutation pinning one resolves to three sites and the suite hard-fails at
+  ;; declaration -- measured, and it is the SITES-fails-both-directions trap
+  ;; AGENTS.md names. Factoring it does NOT collapse three decisions into one:
+  ;; each caller's arm -- whether it consults this at all -- stays its own
+  ;; mutable line, and only the shared fact, "what does a zero-width node
+  ;; continue to", lives here.
+  (define (zero-width-successors n)
+    (cond ((pause-node? n) (list (pause-node-continuation n)))
+          ;; A field action's `error` is a successor exactly when it has one:
+          ;; the constructor makes it #f precisely when the operation cannot
+          ;; fail, so this never yields a node no failure can reach.
+          ((field-action-node? n)
+           (let ((e (field-action-node-error n)))
+             (if (symbol? e)
+                 (list (field-action-node-next n) e)
+                 (list (field-action-node-next n)))))
+          ((field-branch-node? n)
+           (list (field-branch-node-true-target n)
+                 (field-branch-node-false-target n)))
+          (else '())))
+
   (define (node-out-targets n)
     (cond ((byte-dispatch-node? n)
            (append (map (lambda (c) (edge-target (byte-case-edge c)))
@@ -87,6 +111,10 @@
           ((sequence-dispatch-node? n)
            (append (map sequence-case-target (sequence-dispatch-node-cases n))
                    (list (edge-target (sequence-dispatch-node-mismatch n)))))
+          ;; The two zero-width kinds (Slice ②), which feed name resolution,
+          ;; reachability and the :908 check below.
+          ((or (field-action-node? n) (field-branch-node? n))
+           (zero-width-successors n))
           (else '())))
   ;; A dispatch/sequence node's stored eof-target (a symbol, or #f meaning
   ;; "the machine default eof error"), or #f for any other node kind. Fix
@@ -211,7 +239,100 @@
                       (if (valid-name? (uint-field-name f)) #f
                           (make-diagnostic 'invalid-field-declaration (uint-field-name f)
                                            "field name is not portable")))
-                    fs)))))
+                    fs))
+       (pass-field-operands m fs))))
+
+  ;; --- the OPERAND half (Milestone 4 Slice ②; §16.3:924 item 6, decision 0020
+  ;; item 3). Everything here needs a SECOND object -- the field declaration --
+  ;; to evaluate at all, which is precisely why none of it is a constructor
+  ;; contract. The constructor closed what one node can answer: the operation and
+  ;; predicate sets, and `arguments` being a proper list. Everything below is
+  ;; relational.
+  ;;
+  ;; It lives INSIDE pass-fields rather than in a pass of its own. Slice ①b built
+  ;; this pass for it and records that in the tree; a sibling pass would duplicate
+  ;; an indentation-anchored line that `verify: pass-fields is never run` pins at
+  ;; SITES=1, and would leave Slice ③'s accumulate share two candidate homes.
+  ;;
+  ;; ONE code, `invalid-field-operand`, which spends §4.6's two-new-codes budget
+  ;; for this milestone. *** Slice ③'s accumulate share reuses it with NO NEW
+  ;; CODE and extends THIS pass -- there is deliberately one candidate home, not
+  ;; two, and `field-operand-schemas` below is where its rows go. ***
+  (define field-operand-schemas
+    ;; (name arity . operand-kinds-after-the-field), tabulated from §9.1:328-334
+    ;; and :336-346. Position 0 is the `field` in every one of the fourteen, which
+    ;; is why it is not repeated per row.
+    '((store 2 constant) (clear 1) (increment 1) (decrement 1) (add 2 constant)
+      (set-mask 2 mask) (clear-mask 2 mask)
+      (equal 2 constant) (zero 1) (nonzero 1) (range 3 low high)
+      (mask-any 2 mask) (mask-all 2 mask) (mask-none 2 mask)))
+
+  (define (field-width-of fs name)
+    (let loop ((fs fs))
+      (cond ((null? fs) #f)
+            ((eq? (uint-field-name (car fs)) name) (uint-field-width (car fs)))
+            (else (loop (cdr fs))))))
+
+  (define (operand-in-width? v width)
+    (and (integer? v) (exact? v) (<= 0 v (- (expt 2 width) 1))))
+
+  ;; One node's operands. Reported under the node's OWN name, not the field's:
+  ;; an operand fault is a property of the site that wrote it, and the field it
+  ;; names may not exist.
+  (define (field-operand-diagnostics fs name selector args)
+    (let ((row (assq selector field-operand-schemas)))
+      (cond
+       ;; Unreachable through the public API -- the constructor closed both
+       ;; enumerations -- and answered rather than raised, because a verifier
+       ;; that raises cannot accumulate.
+       ((not row)
+        (list (make-diagnostic 'invalid-field-operand name "unknown operation or predicate")))
+       ((not (= (length args) (cadr row)))
+        ;; §9.1:348's "exact arity ... it rejects extra arguments". Reported
+        ;; alone: nothing can be read out of `arguments` before arity is known,
+        ;; which is the same sentence that put this check here rather than in the
+        ;; constructor.
+        (list (make-diagnostic 'invalid-field-operand name "wrong number of operands")))
+       (else
+        (let ((width (field-width-of fs (car args))))
+          (cond
+           ((not width)
+            (list (make-diagnostic 'invalid-field-operand name
+                                   "operand names no declared field")))
+           (else
+            (append
+             (filter values
+                     (map (lambda (v)
+                            (if (operand-in-width? v width) #f
+                                (make-diagnostic 'invalid-field-operand name
+                                                 "operand is outside the field's declared width")))
+                          (cdr args)))
+             ;; `low <= high` for `range` -- decision 0020 item 2 names this as
+             ;; the consequence that looks wrong to a reader of 0017, which
+             ;; rejects `low > high` inside make-byte-range-matcher. There they
+             ;; are named parameters; here they are list positions the
+             ;; constructor may not read before arity is known.
+             (if (and (eq? selector 'range)
+                      (operand-in-width? (cadr args) width)
+                      (operand-in-width? (caddr args) width)
+                      (> (cadr args) (caddr args)))
+                 (list (make-diagnostic 'invalid-field-operand name
+                                        "range low exceeds high"))
+                 '())))))))))
+
+  (define (pass-field-operands m fs)
+    (apply append
+           (map (lambda (n)
+                  (cond ((field-action-node? n)
+                         (field-operand-diagnostics fs (node-name n)
+                                                    (field-action-node-operation n)
+                                                    (field-action-node-arguments n)))
+                        ((field-branch-node? n)
+                         (field-operand-diagnostics fs (node-name n)
+                                                    (field-branch-node-predicate n)
+                                                    (field-branch-node-arguments n)))
+                        (else '())))
+                (machine-nodes m))))
 
   ;; PASS 3: overlap within a dispatch node, over canonical matcher byte sets
   ;; (§16.2:893, §16.3:921). Two cases overlap when their canonical sets share
@@ -388,6 +509,21 @@
               ((sequence-dispatch-node? n)
                (if (eq? (edge-mode (sequence-dispatch-node-mismatch n)) 'reexecute)
                    (list (edge-target (sequence-dispatch-node-mismatch n))) '()))
+              ;; *** Slice ③ (integer accumulate) joins THIS arm and the REPORT
+              ;; guard below, and must join both in one commit for the reason
+              ;; recorded there. *** Its kind is input-reading rather than
+              ;; zero-width, so it does NOT belong in `zero-width-successors`
+              ;; -- it consumes a byte and makes progress. Recorded here because
+              ;; a ③ implementer reads this file, not Slice ②'s plan.
+              ;;
+              ;; Slice ②'s two kinds are ZERO-WIDTH, exactly like a pause: every
+              ;; edge out of them makes no progress, so every one is a
+              ;; reexecute-equivalent and all of them join this walk. A
+              ;; `store`-into-itself machine verifies clean and then hangs in
+              ;; BOTH lanes without this -- the precise failure M3 Slice ②
+              ;; shipped by extending the walk and not the REPORT set.
+              ((or (field-action-node? n) (field-branch-node? n))
+               (zero-width-successors n))
               (else '())))
       (define (reaches-self? start)
         (let loop ((frontier (reexec-targets (lookup nodes start))) (seen '()))
@@ -399,10 +535,18 @@
                               (cons (car frontier) seen)))))))
       (filter values
               (map (lambda (n)
-                     (if (and (or (byte-dispatch-node? n) (pause-node? n) (sequence-dispatch-node? n))
+                     ;; The REPORT set, extended in the SAME commit as the walk
+                     ;; above. Extending one without the other is the half-fix
+                     ;; M3 Slice ② shipped and Slice ③ closed: the walk finds the
+                     ;; cycle, nothing reports it, verify returns ok with zero
+                     ;; diagnostics, and the machine fails to terminate in both
+                     ;; lanes.
+                     (if (and (or (byte-dispatch-node? n) (pause-node? n)
+                                  (sequence-dispatch-node? n)
+                                  (field-action-node? n) (field-branch-node? n))
                               (reaches-self? (node-name n)))
                          (make-diagnostic 'zero-progress-cycle (node-name n)
-                                          "a zero-width cycle (reexecute edges/pause continuations) makes no progress")
+                                          "a zero-width cycle (reexecute edges, pause continuations, field actions and branches) makes no progress")
                          #f))
                    nodes))))
 
@@ -422,36 +566,97 @@
                                                   "eof-target names no node")))))
                    nodes)))))
 
-  ;; Walk the eof-target chain from `start`, classifying its terminal.
+  ;; Classify the EOF continuation of `start` (§16.2:909). Rewritten in
+  ;; Milestone 4 Slice ② to answer over a SET of successors, because a field
+  ;; branch has two targets and a field action has `next` plus `error`.
+  ;;
+  ;; *** The algorithm is §4.4's and decision 0021's, NOT design §7 Task 1's. ***
+  ;; §7 opens "§4.4 leaves two choices open that the implementer must not
+  ;; improvise" and then makes both the other way; §4.4 settles them 900 lines
+  ;; earlier in the same commit, and 0021 item 2 names §7's per-path `seen` as a
+  ;; REJECTED algorithm -- "one structure doing both jobs and pays 2^k paths for
+  ;; k branch nodes". §7's bullets are struck in the design and the correction is
+  ;; marked at the site.
+  ;;
+  ;; TWO structures, each doing one job:
+  ;;   `path` is the current DFS stack -- re-entering it is a cycle, and this is
+  ;;          per-path because a cycle is a property of the path.
+  ;;   `done` is a GLOBAL completed-set -- a node whose verdict is settled is not
+  ;;          re-explored, so a diamond whose arms re-converge costs one visit
+  ;;          rather than two, and 2^k paths never arise.
+  ;; A verdict memoized in `done` may have been reached while other nodes were on
+  ;; the path, which is sound here because the only path-dependent answer is
+  ;; `cycle`, and `cycle` means "a cycle is reachable from here" -- true from
+  ;; every path that reaches this node, not just the one that found it.
+  ;;
+  ;; `'unknown` is DELETED, not ranked least (0021 item 3: it "leaves the answer
+  ;; set rather than becoming its least element ... a residual arm may not
+  ;; reintroduce one"). Every kind `ir.sls` can construct has its own arm, so the
+  ;; residual `else` is unreachable and raises, matching the loud-else convention
+  ;; in normal-ir.sls, compile.sls and runtime.sls.
+  (define eof-verdict-ranking
+    '(finish unresolved error default-error eof-reachable-stop cycle))
+  (define (eof-verdict-rank v)
+    (let loop ((vs eof-verdict-ranking) (i 0))
+      (cond ((null? vs) (assertion-violation 'eof-terminal "unranked verdict" v))
+            ((eq? (car vs) v) i)
+            (else (loop (cdr vs) (+ i 1))))))
+  ;; Sibling answers join by max. 0021 item 1 pins only `cycle >
+  ;; eof-reachable-stop` -- a cycle is the non-termination neither runtime loop
+  ;; guards against, so it must survive a join -- and leaves the rest unfixed;
+  ;; the order above is this slice's call within that constraint.
+  (define (eof-verdict-join a b)
+    (if (>= (eof-verdict-rank a) (eof-verdict-rank b)) a b))
+
+  ;; The nodes an EOF walk continues to. Empty at a terminal; one for a pause or
+  ;; a dispatch with a symbolic eof-target; TWO for the zero-width field kinds,
+  ;; which is the whole reason this walk became multi-successor. A field action's
+  ;; `error` is a successor exactly when it has one -- the constructor makes that
+  ;; `#f` precisely when the operation cannot fail.
+  (define (eof-successors n) (zero-width-successors n))
+
   (define (eof-terminal m start)
-    (let ((nodes (machine-nodes m)))
-      (let loop ((name start) (seen '()))
-        (if (memq name seen) 'cycle
-            (let ((n (lookup nodes name)))
-              (cond ((not n) 'unresolved)             ; pass-eof reports missing target
-                    ((finish-node? n) 'finish)
-                    ((error-node? n) 'error)
-                    ((stop-node? n) 'eof-reachable-stop)
-                    ((pause-node? n) (loop (pause-node-continuation n) (cons name seen)))
-                    ;; Fix wave 1 (Important 3): kept as two separate arms rather
-                    ;; than routed through node-eof-target above. Every other arm
-                    ;; in this cond is one node predicate per arm, so this is the
-                    ;; only place a reader scanning "what does eof-terminal do for
-                    ;; a sequence node" finds its own clause; merging it with the
-                    ;; byte-dispatch arm via `(or (byte-dispatch-node? n)
-                    ;; (sequence-dispatch-node? n))` would be the only merged arm
-                    ;; in an otherwise exhaustive per-kind case analysis, and
-                    ;; would obscure that this walk's per-kind decision (loop
-                    ;; through the eof-target, or answer 'default-error) is made
-                    ;; independently for each kind even though the two bodies
-                    ;; happen to coincide today.
-                    ((byte-dispatch-node? n)
-                     (let ((t (byte-dispatch-node-eof-target n)))
-                       (if (symbol? t) (loop t (cons name seen)) 'default-error)))
-                    ((sequence-dispatch-node? n)
-                     (let ((t (sequence-dispatch-node-eof-target n)))
-                       (if (symbol? t) (loop t (cons name seen)) 'default-error)))
-                    (else 'unknown)))))))
+    (let ((nodes (machine-nodes m)) (done '()))
+      (define (walk name path)
+        (cond ((memq name path) 'cycle)
+              ((assq name done) => cdr)
+              (else
+               (let ((v (classify name (cons name path))))
+                 (set! done (cons (cons name v) done))
+                 v))))
+      (define (dispatch-arm t path)
+        (if (symbol? t) (walk t path) 'default-error))
+      (define (join-over names path)
+        (let loop ((ns names) (acc #f))
+          (if (null? ns)
+              ;; A zero-width node with no successors cannot occur -- both kinds
+              ;; have mandatory targets -- so this is the same unreachable shape
+              ;; as the else below, answered rather than raised because an empty
+              ;; join has an obvious identity and a missing kind does not.
+              (or acc 'unresolved)
+              (loop (cdr ns)
+                    (let ((v (walk (car ns) path)))
+                      (if acc (eof-verdict-join acc v) v))))))
+      (define (classify name path)
+        (let ((n (lookup nodes name)))
+          (cond ((not n) 'unresolved)             ; pass-eof reports missing target
+                ((finish-node? n) 'finish)
+                ((error-node? n) 'error)
+                ((stop-node? n) 'eof-reachable-stop)
+                ;; Kept as two arms rather than routed through node-eof-target:
+                ;; every other arm here is one predicate per kind, and merging
+                ;; these two would be the only merged arm in an otherwise
+                ;; exhaustive per-kind analysis -- obscuring that the decision is
+                ;; made independently per kind even though the bodies coincide.
+                ((byte-dispatch-node? n)
+                 (dispatch-arm (byte-dispatch-node-eof-target n) path))
+                ((sequence-dispatch-node? n)
+                 (dispatch-arm (sequence-dispatch-node-eof-target n) path))
+                ((or (pause-node? n) (field-action-node? n) (field-branch-node? n))
+                 (join-over (eof-successors n) path))
+                (else (assertion-violation 'eof-terminal
+                                           "no EOF classification for node kind" name)))))
+      (walk start '())))
 
   ;; Byte-flow reachability (feed can arrive): entry DFS over node-out-targets
   ;; -- dispatch case/fallback edges plus reached-pause continuations --
@@ -510,6 +715,27 @@
                                   (list (make-diagnostic 'non-eof-into-finish (node-name n)
                                                          "a pause continuation byte-reaches a finish terminal"))
                                   '()))
+                            '()))
+                      nodes))
+          ;; :908 through a ZERO-WIDTH node (Slice ②), on the pause precedent:
+          ;; gated on byte-reachability, not on an unconditional source-kind
+          ;; filter. §16.2:908 forbids "non-EOF control flow into a finish
+          ;; terminal", and a byte path that runs `dispatch -> field-action ->
+          ;; finish` is exactly that -- the shipped :908 check above cannot see
+          ;; it, because it filters on dispatch kinds and a zero-width node is
+          ;; not one, so the finish sits one hop further than it looks.
+          (apply append
+                 (map (lambda (n)
+                        (if (and (or (field-action-node? n) (field-branch-node? n))
+                                 (memq (node-name n) br))
+                            (filter values
+                                    (map (lambda (t)
+                                           (let ((tn (lookup nodes t)))
+                                             (if (and tn (finish-node? tn))
+                                                 (make-diagnostic 'non-eof-into-finish (node-name n)
+                                                                  "a zero-width node byte-reaches a finish terminal")
+                                                 #f)))
+                                         (node-out-targets n)))
                             '()))
                       nodes))
           (apply append

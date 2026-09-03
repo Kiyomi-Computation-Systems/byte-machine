@@ -6,6 +6,7 @@
         (byte-machine test harness)
         (byte-machine test eof-machine)
         (byte-machine test pause-machine)
+        (byte-machine test sequence-node-machine)
         (byte-machine graph)
         (byte-machine verify)
         (byte-machine private normal-ir))
@@ -578,5 +579,115 @@
                       (lambda () (normalize (seq-machine 'amb-rev '(((65 66 67) . halt)
                                                                     ((65 66) . stop))
                                                          (list (make-stop-node 'halt #f))))))))))
+
+
+;; Milestone 4 Slice ② task 5: the two zero-width kinds lower 1:1 and encode at
+;; tags 5 and 6. Each new encode arm gets its OWN exact-value golden, which is
+;; this file's shipped discipline -- an inequality pair cannot see a dropped
+;; count or a transposed pair, only a wrong VALUE can.
+(define s2-eof (make-error-declaration 'default-eof 'eof "unexpected end of input" #f))
+(define s2-rej (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))
+(define (s2-machine nodes)
+  (make-machine 'm 'act (list (make-uint-field 'count 8 0 #f)) '() '()
+                (list s2-eof s2-rej) nodes 'default-eof #f))
+(define (s2-fp m) (normal-machine-fingerprint (normalize m)))
+(define (action-machine args)
+  (s2-machine (list (make-field-action-node 'act 'add args 'next 'oops #f)
+                    (make-stop-node 'next #f) (make-error-node 'oops 'rejected #f))))
+(define (branch-machine args)
+  (s2-machine (list (make-field-branch-node 'act 'range args 'next 'next #f)
+                    (make-stop-node 'next #f))))
+
+(harness-group "the zero-width kinds in the normalized IR (Slice ②)"
+  (lambda ()
+    (harness-case "a field-action machine's IR fingerprint is the measured golden value"
+      (lambda ()
+        (check-equal "fingerprint" (s2-fp (action-machine '(count 7))) 1386504585301950044)))
+    (harness-case "a field-branch machine's IR fingerprint is the measured golden value"
+      (lambda ()
+        (check-equal "fingerprint" (s2-fp (branch-machine '(count 2 9))) 13536979658827033743)))
+    (harness-case "the two kinds do not share an encoding"
+      (lambda ()
+        ;; Tags 5 and 6. Two machines identical but for the kind must differ, or
+        ;; the tag byte is not doing its job.
+        (check "different" (not (= (s2-fp (action-machine '(count 7)))
+                                   (s2-fp (branch-machine '(count 2 9))))))))
+    (harness-case "an operand VALUE reaches the encoding"
+      (lambda ()
+        (check "different" (not (= (s2-fp (action-machine '(count 7)))
+                                   (s2-fp (action-machine '(count 8))))))))
+    (harness-case "an operand's POSITION reaches the encoding"
+      (lambda ()
+        ;; Swapping low and high is a different machine -- and one the verifier
+        ;; rejects, which is why this compares fingerprints of the NORMALIZED
+        ;; form rather than going through verify-machine.
+        (check "different" (not (= (s2-fp (branch-machine '(count 2 9)))
+                                   (s2-fp (branch-machine '(count 9 2))))))))
+    (harness-case "the selector reaches the encoding"
+      (lambda ()
+        (let ((a (s2-machine (list (make-field-action-node 'act 'increment '(count) 'next 'oops #f)
+                                   (make-stop-node 'next #f)
+                                   (make-error-node 'oops 'rejected #f))))
+              (b (s2-machine (list (make-field-action-node 'act 'decrement '(count) 'next 'oops #f)
+                                   (make-stop-node 'next #f)
+                                   (make-error-node 'oops 'rejected #f)))))
+          (check "different" (not (= (s2-fp a) (s2-fp b)))))))
+    (harness-case "an absent error target is not the same as targeting state zero"
+      (lambda ()
+        ;; The reason the error target is written with a PRESENCE TAG rather than
+        ;; a sentinel id: `clear` cannot fail and carries no target, and state 0
+        ;; is a perfectly ordinary state id.
+        (let ((safe (s2-machine (list (make-field-action-node 'act 'clear '(count) 'next #f #f)
+                                      (make-stop-node 'next #f))))
+              (fallible (s2-machine (list (make-field-action-node 'act 'increment '(count) 'next 'act #f)
+                                          (make-stop-node 'next #f)))))
+          (check "different" (not (= (s2-fp safe) (s2-fp fallible)))))))
+    (harness-case "widening the state vector moved no existing fingerprint"
+      (lambda ()
+        ;; Design §0 D3's whole cost argument: ② pays the six-literal edit and
+        ;; existing machines encode identically, because the new slots are #f for
+        ;; every shipped kind and none of them is written. Asserted at ①a's own
+        ;; measured value rather than left to the goldens to notice.
+        (check-equal "unmoved" (normal-machine-fingerprint n1) 14095574568398596535)))))
+
+
+;; *** Whole-branch review of Slice ②: every normalized state must be the LENGTH
+;; THIS FILE'S LAYOUT DECLARES, and one kind was not. ***
+;;
+;; Slice ② widened the vector from eight slots to eleven and missed `seq-state`,
+;; which builds every sequence-dispatch node's state. Sequence states carry kind
+;; `dispatch`, and the only readers of slots 8-10 are kind-guarded, so nothing
+;; reached one and all 92 lanes stayed green -- while four of the six states in
+;; the sequence-node fixture were three slots short of the declared layout.
+;;
+;; This case is TOTAL over the state kinds a fixture can produce, deliberately:
+;; a case naming one kind would have passed the whole time. It is the check that
+;; makes "the vector was widened" a fact rather than a claim, and the reason a
+;; later slice adding a kind cannot repeat the miss.
+(define (state-lengths m)
+  (let* ((ss (normal-machine-states (normalize m))))
+    (let loop ((i 0) (acc '()))
+      (if (>= i (vector-length ss)) (reverse acc)
+          (loop (+ i 1) (cons (vector-length (vector-ref ss i)) acc))))))
+
+(harness-group "every normalized state has the declared layout length"
+  (lambda ()
+    (harness-case "across every fixture and every state kind"
+      (lambda ()
+        ;; A sentinel over the OBSERVED count of states inspected, not over the
+        ;; number of fixtures: a fixture that lowered to zero states would
+        ;; otherwise contribute nothing and pass.
+        (let ((seen 0) (bad '()))
+          (for-each
+           (lambda (m)
+             (for-each (lambda (len)
+                         (set! seen (+ seen 1))
+                         (unless (= len 11) (set! bad (cons len bad))))
+                       (state-lengths m)))
+           (list one-byte two (make-eof-machine) (make-pause-machine)
+                 (make-sequence-node-machine)
+                 (action-machine '(count 7)) (branch-machine '(count 2 9))))
+          (check-equal "no state is the wrong length" bad '())
+          (check "every fixture contributed states" (> seen 20)))))))
 
 (harness-finish)
