@@ -973,4 +973,146 @@
           (check-equal "the lanes agree" (parser-result-status rg)
                        (parser-result-status ra)))))))
 
+
+;; *** Whole-branch review, 2026-09-03: FOUR operands of the accumulate node
+;; that no executing fixture reached. *** Every accumulate machine in the tree
+;; declared exactly ONE field (so the slot was always 0 and the width always the
+;; only width), named ITSELF as its digit-target (so nothing checked the operand
+;; was read at all), gave its non-digit edge mode `advance` (so §10.6:567's
+;; "normally reexecuting the delimiter" -- the NORMAL case -- ran nowhere), and
+;; overflowed only in base 10 (so `base` in the bound's divisor was
+;; indistinguishable from the literal 10).
+;;
+;; One machine separates all four, because they are four operands of one node and
+;; a fixture per operand would share every other operand's blind spot:
+;;
+;;   fields (pad n)   -- `n` is SLOT 1. A lane reading slot 0 reads `pad`.
+;;   base 16          -- and the overflow case below is a u16 ceiling in base 16.
+;;   digit-target     -- `bump`, a separate node, not `acc` itself.
+;;   nondigit-edge    -- `(tail . reexecute)`, so the delimiter is RE-READ.
+(define drift-errs (list eof-decl rej-decl))
+(define two-field-acc
+  (make-machine 'twofield 'start
+    (list (make-uint-field 'pad 8 0 #f) (make-uint-field 'n 16 0 #f))
+    '() '() drift-errs
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 35)
+                                  (make-edge 'acc 'advance) #f))
+            (make-edge 'over 'reexecute) #f #f)
+          (make-integer-accumulate-node 'acc 'n 16 'bump
+                                        (make-edge 'tail 'reexecute)
+                                        'over #f #f)
+          ;; The digit target: a zero-width action that counts digits into the
+          ;; OTHER field. It witnesses two things at once -- that the digit edge
+          ;; goes where the node says, and that the accumulate commits into slot
+          ;; 1 while this commits into slot 0.
+          (make-field-action-node 'bump 'increment '(pad) 'acc 'over #f)
+          ;; Reached only by the non-digit edge, and only because that edge
+          ;; REEXECUTES: the delimiter must still be in hand for this dispatch to
+          ;; match it. With mode `advance` the byte is consumed at `acc` and this
+          ;; node sees the next one instead -- which is what makes the mode
+          ;; observable rather than merely declared.
+          (make-byte-dispatch-node 'tail
+            (list (make-byte-case (make-exact-byte-matcher 120)
+                                  (make-edge 'sawx 'advance) #f))
+            (make-edge 'over 'reexecute) #f #f)
+          (make-stop-node 'sawx #f)
+          (make-error-node 'over 'rejected #f))
+    'default-eof #f))
+
+(define tf-pair
+  (cons (make-interpreted-machine (verify-machine two-field-acc))
+        (emit-and-load two-field-acc 'twofield 'twofield-parser
+                       (string-append tmpdir "/generated-twofield.sls"))))
+
+(define (tf-run cm str)
+  (let ((p (make-parser cm '() #f)))
+    (cons (parser-feed! p (str->bytes str) 0 (string-length str)) p)))
+
+(harness-group "the accumulate node's four unreached operands (Slice ③, review)"
+  (lambda ()
+    (harness-case "the machine verifies clean"
+      (lambda ()
+        ;; First and separately: if a later slice decides this shape is illegal,
+        ;; THIS is the check that should fail and say so, rather than the four
+        ;; below failing for a reason that reads like an executor defect.
+        (let ((v (verify-machine two-field-acc)))
+          (check "accepted" (verification-ok? v))
+          (check-equal "no diagnostics" (length (verification-diagnostics v)) 0))))
+    (harness-case "the accumulate commits into the field it NAMES, not into slot zero"
+      (lambda ()
+        ;; `n` is slot 1 and `pad` slot 0. A lane that reads or writes slot 0
+        ;; accumulates into `pad` -- an 8-bit field, which would also overflow at
+        ;; the third hex digit -- so this separates the slot lookup from the
+        ;; width lookup as well.
+        (let* ((a (cdr (tf-run (car tf-pair) "#1aF")))
+               (g (cdr (tf-run (cdr tf-pair) "#1aF"))))
+          (check-equal "interpreter n" (parser-field-ref a 'n) #x1aF)
+          (check-equal "generated n" (parser-field-ref g 'n) #x1aF)
+          ;; And the OTHER field is untouched by the accumulate itself: `pad`
+          ;; holds the digit count the action wrote, three, not a partial sum.
+          (check-equal "interpreter pad" (parser-field-ref a 'pad) 3)
+          (check-equal "generated pad" (parser-field-ref g 'pad) 3))))
+    (harness-case "the digit edge goes to the DECLARED target, not back to the node"
+      (lambda ()
+        ;; `pad` is 3 above only because each accepted digit routed through
+        ;; `bump`. A lane that ignored digit-target and self-looped would leave
+        ;; `pad` at 0 while `n` still reached 0x1aF -- which is why the count is
+        ;; asserted rather than merely the accumulated value.
+        (let* ((a (cdr (tf-run (car tf-pair) "#1")))
+               (g (cdr (tf-run (cdr tf-pair) "#1"))))
+          (check-equal "interpreter one digit, one hop" (parser-field-ref a 'pad) 1)
+          (check-equal "generated one digit, one hop" (parser-field-ref g 'pad) 1))))
+    (harness-case "the non-digit edge REEXECUTES, so the delimiter is read again"
+      (lambda ()
+        ;; §10.6:567's normal case, and the whole tree's first execution of it.
+        ;; `tail` matches only `x`. Reaching `sawx` means `x` was still in hand
+        ;; when the fallback edge was taken; under mode `advance` it would have
+        ;; been consumed at `acc` and `tail` would have run out of input.
+        (let* ((ra (car (tf-run (car tf-pair) "#1aFx")))
+               (rg (car (tf-run (cdr tf-pair) "#1aFx"))))
+          (check-equal "interpreter stopped at sawx" (parser-result-status ra) 'stopped)
+          (check-equal "generated stopped at sawx" (parser-result-status rg) 'stopped)
+          ;; The consumed count is the direct evidence: five bytes fed, five
+          ;; consumed, which only holds if `x` was consumed by `tail` rather than
+          ;; by `acc`.
+          (check-equal "interpreter consumed" (parser-result-consumed ra) 5)
+          (check-equal "generated consumed" (parser-result-consumed rg) 5))))
+    (harness-case "the overflow bound divides by the node's OWN base, at base 16"
+      (lambda ()
+        ;; *** MEASURED, and the first shape did not work. *** `#FFFFF` does not
+        ;; separate a divisor of 16 from a divisor of 10: at the fourth digit
+        ;; 0xFFF = 4095 passes both bounds ((65535-15)/16 = 4095 and /10 = 6552),
+        ;; and at the fifth 0xFFFF = 65535 fails both. A mutant dividing by 10
+        ;; survived it.
+        ;;
+        ;; The separating value has to land BETWEEN the two bounds, so
+        ;; `#1000F` is the case: after four digits n = 0x1000 = 4096, which is
+        ;; above 4095 and below 6552. The correct bound refuses the `F` and
+        ;; errors with n unchanged; a bound dividing by 10 accepts it and writes
+        ;; 4096*16+15 = 65551 -- a value OUTSIDE the u16 the field declares,
+        ;; which is the whole point of a checked multiply-add.
+        (let* ((rb (car (tf-run (car tf-pair) "#1000F")))
+               (b (cdr (tf-run (car tf-pair) "#1000F")))
+               (rbg (car (tf-run (cdr tf-pair) "#1000F")))
+               (bg (cdr (tf-run (cdr tf-pair) "#1000F"))))
+          (check-equal "interpreter refuses the fifth digit" (parser-result-status rb) 'error)
+          (check-equal "generated refuses the fifth digit" (parser-result-status rbg) 'error)
+          (check-equal "interpreter leaves 0x1000" (parser-field-ref b 'n) #x1000)
+          (check-equal "generated leaves 0x1000" (parser-field-ref bg 'n) #x1000))
+        ;; The ceiling case as well: four F's fit exactly, the fifth cannot.
+        (let* ((ra (car (tf-run (car tf-pair) "#FFFFF")))
+               (a (cdr (tf-run (car tf-pair) "#FFFFF")))
+               (rg (car (tf-run (cdr tf-pair) "#FFFFF")))
+               (g (cdr (tf-run (cdr tf-pair) "#FFFFF"))))
+          (check-equal "interpreter reached the u16 ceiling" (parser-field-ref a 'n) #xFFFF)
+          (check-equal "generated reached the u16 ceiling" (parser-field-ref g 'n) #xFFFF)
+          (check-equal "interpreter errored" (parser-result-status ra) 'error)
+          (check-equal "generated errored" (parser-result-status rg) 'error)
+          (check-equal "position kind"
+                       (parser-error-position-kind (parser-result-error ra)) 'byte)
+          (check-equal "the lanes agree on the error"
+                       (parser-error-reason (parser-result-error rg))
+                       (parser-error-reason (parser-result-error ra))))))))
+
 (harness-finish)

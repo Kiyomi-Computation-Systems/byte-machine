@@ -837,6 +837,10 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Whole-branch review: the differential.field pass gains SEVEN for the four
+# accumulate operands no executing fixture reached. Mutations become
+# 361 + 7 = 368.
+#
 # Whole-branch review: the verify pass gains THREE for the kind filters Slice
 # ③ did not widen -- two Criticals and one Important. Mutations become
 # 358 + 3 = 361.
@@ -965,7 +969,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 50)
-set(EXPECTED_MUTATIONS 361)
+set(EXPECTED_MUTATIONS 368)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -9179,6 +9183,89 @@ byte_machine_mutation(
                                                       '(dispatch))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "no error declaration for code")
+
+# --- Whole-branch review, 2026-09-03: FOUR operands of the accumulate node that
+# no EXECUTING fixture reached. Every accumulate machine in the tree declared one
+# field, named itself as its digit-target, gave its non-digit edge mode
+# `advance`, and overflowed only in base 10 -- so the slot lookup, the
+# digit-target operand, §10.6:567's normal reexecute case, and the base in the
+# bound's divisor were all free parameters. Seven mutations against one fixture
+# that separates all four; each was measured caught by that fixture's group.
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: the accumulate commits into slot zero instead of the field it names"
+  FIND [[               (slot (car sw)) (m* (field-max (cdr sw)))
+               (base (integer-accumulate-node-base n))]]
+  REPLACE [[               (slot 0) (m* (field-max (cdr sw)))
+               (base (integer-accumulate-node-base n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the accumulate commits into the field it NAMES, not into slot zero: interpreter n")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted accumulate commits into slot zero instead of the field it names"
+  FIND [[(slot (car sw)) (mx (- (expt 2 (cdr sw)) 1))]]
+  REPLACE [[(slot 0) (mx (- (expt 2 (cdr sw)) 1))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the accumulate commits into the field it NAMES, not into slot zero: generated n")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: the overflow bound divides by ten rather than by the node's base"
+  # The fixture shape matters and the first one did not work: `#FFFFF` cannot
+  # separate a divisor of 16 from one of 10, because 0xFFF passes both bounds and
+  # 0xFFFF fails both. The separating value lands BETWEEN them -- `#1000F`, where
+  # 4096 > (65535-15)/16 and 4096 <= (65535-15)/10, so the mutant accepts a digit
+  # that writes 65551 into a u16.
+  FIND [[(div (- m* d) base)]]
+  REPLACE [[(div (- m* d) 10)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the overflow bound divides by the node's OWN base, at base 16: interpreter leaves 0x1000")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted overflow bound divides by ten rather than by the node's base"
+  FIND [[(div (- " (num mx) " d) " (num base) ")]]
+  REPLACE [[(div (- " (num mx) " d) 10)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the overflow bound divides by the node's OWN base, at base 16: generated leaves 0x1000")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted digit jump self-loops instead of taking digit-target"
+  # The operand nothing could see while every accumulate node in the tree WAS its
+  # own digit-target: a self-loop is indistinguishable from reading the operand
+  # until one fixture points the digit edge somewhere else.
+  FIND [[                              (loop (+ pos 1) " (num digit) " (+ off 1) (quote boundary)))]]
+  REPLACE [[                              (loop (+ pos 1) " id " (+ off 1) (quote boundary)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the digit edge goes to the DECLARED target, not back to the node: generated one digit, one hop")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: the non-digit edge always advances, ignoring its declared mode"
+  # §10.6:567's NORMAL case -- "normally reexecuting the delimiter" -- which no
+  # executing fixture in the tree took until this one. Under the mutant the
+  # delimiter is consumed at the accumulate node and the fallback dispatch that
+  # was supposed to read it runs out of input instead.
+  FIND [[            (let ((e (integer-accumulate-node-nondigit-edge n)))
+              (cons (edge-target e) (edge-mode e))))]]
+  REPLACE [[            (let ((e (integer-accumulate-node-nondigit-edge n)))
+              (cons (edge-target e) 'advance)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the non-digit edge REEXECUTES, so the delimiter is read again: interpreter stopped at sawx")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted non-digit edge always advances, ignoring its declared mode"
+  # The emitter's copy of the same decision. Written as a tautology rather than
+  # by deleting the branch, so the mutation changes WHICH arm is rendered without
+  # changing the shape of the code around it.
+  FIND [[                 " (if (eq? (cdr nd) 'advance)]]
+  REPLACE [[                 " (if (eq? (car nd) (car nd))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the non-digit edge REEXECUTES, so the delimiter is read again: generated stopped at sawx")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
