@@ -796,6 +796,12 @@ cmake_minimum_required(VERSION 3.26)
 # Slice ①b's Critical fix wave: 271 -> 273. Two join Pass 33, both recovered from
 # task 4's unsound subsumption call.
 #
+# Slice ② task 1: the ir pass gains SEVEN for the two zero-width node kinds --
+# the two closed sets, the proper-list check, both directions of the error-slot
+# rule, and one per census site (`node?`, `node-name`). No pass is added and
+# graph.sls gets none, for the reason recorded at those mutations' site.
+# Passes stay at 49 and mutations become 275 + 7 = 282.
+#
 # Slice ①b's Important fix wave: 273 -> 275. Two more join Pass 33, for the field
 # name each diagnostic carries in its `node` slot -- a decision stated in §0 D2
 # and in verify.sls's own comment, and asserted nowhere until the whole-branch
@@ -808,7 +814,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 275)
+set(EXPECTED_MUTATIONS 282)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -6594,6 +6600,112 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "a non-symbol, non-#f eof-target is rejected: bad eof-target")
+
+# Slice ② task 1 adds SEVEN for the two zero-width node kinds. The
+# constructor/verifier boundary they encode is decision 0020's, and the mutations
+# are of the CONSTRUCTOR half only -- arity, declared-field references, operand
+# range and `low <= high` are pass 6a's and are Task 4's mutations, not these.
+#
+# No mutation is written for `graph.sls`'s two export lists, following Slice ①b's
+# precedent ("the facade being two export lists with no decision of its own").
+# Measured anyway, so the precedent is followed knowingly rather than assumed:
+# dropping either list's names fails at EXPAND time with exit 255 -- an unbound
+# identifier for the export list, "missing definition for multiple exports" for
+# the import list -- and graph-tests.sps's own case cannot load at all. That is a
+# louder witness than a pin, and pinning it would cost a whole new pass (there is
+# no graph-tests verify command in this suite) for two decisions already fatal.
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: the field operation set admits a name outside the closed enumeration"
+  # §9.1:348's "it rejects arbitrary operation names" -- the ONE clause of that
+  # sentence pass 6a does not carry (decision 0020 item 4), because a closed set
+  # is evaluable from the node alone.
+  FIND [[  (define field-operations '(store clear increment decrement add set-mask clear-mask))]]
+  REPLACE [[  (define field-operations '(store clear increment decrement add set-mask clear-mask multiply))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an operation outside the closed set is refused: not an operation")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: the field predicate set admits a name outside the closed enumeration"
+  FIND [[  (define field-predicates '(equal zero nonzero range mask-any mask-all mask-none))]]
+  REPLACE [[  (define field-predicates '(equal zero nonzero range mask-any mask-all mask-none greater))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a predicate outside the closed set is refused: not a predicate")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: a field action's arguments are not checked as a proper list"
+  # The whole of what 0020 item 2 permits here. The paired assertion -- that a
+  # WRONG ARITY still builds -- has no mutation, by design: making the
+  # constructor read the schema is the defect this line's comment forbids, and a
+  # mutation that ADDS a check is not a mutation this suite can express.
+  FIND [[    (require-proper-list 'make-field-action-node 'arguments arguments)
+]]
+  REPLACE [[    ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "arguments must be a proper list, and nothing more is read: improper")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: the error-slot rule is inverted"
+  # Design §4.4's rule: `error` is #f EXACTLY when the operation cannot fail.
+  # Pinned on a VALID construction failing, which is the record the permissive
+  # direction below cannot produce.
+  FIND [[      (when (eq? safe (and (symbol? error) #t))]]
+  REPLACE [[      (when (not (eq? safe (and (symbol? error) #t)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a field action carries its six parts: case raised")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: the error-slot rule never fires"
+  # *** SUBSUMED BY the inverted mutation above, BY CONSTRUCTION, and written
+  # anyway. *** Measured in both directions: this mutant never raises, so on
+  # every combination it fails to reject, the inverted one fails to reject too --
+  # its record set is a strict subset, and no fixture can separate them, because
+  # "never raises" is contained in "raises only on the valid combinations". The
+  # conjunction below is therefore matched by the inverted mutant as well; that
+  # is a collision in attribution, not in detection, and it is recorded rather
+  # than papered over. The two name distinct decisions -- that the rule exists at
+  # all, and that it points the right way -- so both are kept.
+  FIND [[      (when (eq? safe (and (symbol? error) #t))
+        (byte-machine-contract-violation 'make-field-action-node 'invalid-argument 'error))]]
+  REPLACE [[      (when #f
+        (byte-machine-contract-violation 'make-field-action-node 'invalid-argument 'error))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the error slot is #f exactly when the operation cannot fail: safe op with a target -- expected a raise.*failing op without one -- expected a raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node? does not admit a field action"
+  # `node?` and `node-name` are the two census sites EVERY new kind must join,
+  # and missing either is silent at construction and loud much later. One
+  # mutation per site, per kind, so a half-taught pair cannot pass.
+  FIND [[        (field-action-node? x) (field-branch-node? x)))]]
+  REPLACE [[        (field-branch-node? x)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    # `?` is a regex metacharacter -- unescaped, `node? --` matches "nod --",
+    # which no output contains, and the runner reports a wrong-reason catch.
+    "field-action nodes.it is a node and answers node-name: node\\? -- expected a true value")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node-name does not answer for a field branch"
+  FIND [[          ((field-branch-node? x) (field-branch-node-name x))
+]]
+  REPLACE [[          ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "field-branch nodes.it is a node and answers node-name: case raised")
+
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

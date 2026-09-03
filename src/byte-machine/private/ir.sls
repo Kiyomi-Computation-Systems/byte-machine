@@ -35,6 +35,15 @@
           sequence-dispatch-node-name sequence-dispatch-node-cases
           sequence-dispatch-node-mismatch sequence-dispatch-node-eof-target
           make-sequence-case sequence-case? sequence-case-bytes sequence-case-target
+          make-field-action-node field-action-node?
+          field-action-node-name field-action-node-operation
+          field-action-node-arguments field-action-node-next
+          field-action-node-error field-action-node-source-label
+          make-field-branch-node field-branch-node?
+          field-branch-node-name field-branch-node-predicate
+          field-branch-node-arguments field-branch-node-true-target
+          field-branch-node-false-target field-branch-node-source-label
+          field-operations field-predicates
           node? node-name
           make-verification-result verification-result? verification-result-ok?
           verification-result-diagnostics verification-result-machine)
@@ -267,6 +276,85 @@
   (define (pause-node-name n) (vector-ref n 1))
   (define (pause-node-continuation n) (vector-ref n 2))
 
+  ;; --- zero-width field nodes (Milestone 4 Slice ②; §9.1:301-306, §10.6:550,
+  ;; :575). Both are ZERO-WIDTH: they consume no byte, which is what every
+  ;; verifier extension in ② turns on.
+  ;;
+  ;; *** The constructor/verifier boundary is decision 0020's, and item 2 fixes
+  ;; the whole of it in one line: `arguments` is checked as a proper list AND NO
+  ;; FURTHER. *** Everything needing the §9.1:326-346 schema -- which position
+  ;; holds the field, how many positions there are, what each means -- is the
+  ;; verifier's, because §9.1:348 assigns exact arity there and nothing can be
+  ;; read out of `arguments` before arity is known. So `low <= high` for `range`
+  ;; is the VERIFIER's, even though 0017 rejects `low > high` inside
+  ;; `make-byte-range-matcher`: there they are named parameters, here they are
+  ;; the second and third elements of a list whose length this constructor is not
+  ;; entitled to assume. 0020 item 2 flags that as the consequence a reader of
+  ;; 0017 will think is wrong.
+  ;;
+  ;; What IS closed here is evaluable from the one node being built: the
+  ;; operation and predicate sets (§9.1:348's "it rejects arbitrary operation
+  ;; names" -- the one clause of that sentence pass 6a does not carry), the
+  ;; symbols, and the error slot's rule below.
+  (define field-operations '(store clear increment decrement add set-mask clear-mask))
+  (define field-predicates '(equal zero nonzero range mask-any mask-all mask-none))
+  ;; The four operations that provably cannot fail once their constant or mask is
+  ;; range-checked against the field width -- which is pass 6a's check, not this
+  ;; one. `increment`, `decrement` and `add` can fail.
+  (define infallible-field-operations '(store clear set-mask clear-mask))
+
+  (define (require-proper-list who what v)
+    (unless (list? v)
+      (byte-machine-contract-violation who 'invalid-argument what))
+    v)
+
+  (define field-action-node-tag (tag 'byte-machine-field-action-node))
+  ;; The `error` slot names a TARGET NODE and must be #f EXACTLY when the
+  ;; operation cannot fail. Permitting a target on a safe operation would not
+  ;; fail loudly anywhere downstream: node-out-targets feeds `error` into the
+  ;; reachability walk unconditionally, so the target is reached and no pass
+  ;; checks whether the operation can actually fail. This constructor is the only
+  ;; place that can. Precedent for a target-or-#f slot: `eof-target` (§9.1:318).
+  (define (make-field-action-node name operation arguments next error source-label)
+    (require-symbol 'make-field-action-node 'name name)
+    (unless (memq operation field-operations)
+      (byte-machine-contract-violation 'make-field-action-node 'invalid-argument 'operation))
+    (require-proper-list 'make-field-action-node 'arguments arguments)
+    (require-symbol 'make-field-action-node 'next next)
+    (let ((safe (and (memq operation infallible-field-operations) #t)))
+      (when (eq? safe (and (symbol? error) #t))
+        (byte-machine-contract-violation 'make-field-action-node 'invalid-argument 'error))
+      (unless (or (eq? error #f) (symbol? error))
+        (byte-machine-contract-violation 'make-field-action-node 'invalid-argument 'error)))
+    (vector field-action-node-tag name operation arguments next error source-label))
+  (define (field-action-node? x) (tagged? field-action-node-tag x))
+  (define (field-action-node-name n) (vector-ref n 1))
+  (define (field-action-node-operation n) (vector-ref n 2))
+  (define (field-action-node-arguments n) (vector-ref n 3))
+  (define (field-action-node-next n) (vector-ref n 4))
+  (define (field-action-node-error n) (vector-ref n 5))
+  (define (field-action-node-source-label n) (vector-ref n 6))
+
+  (define field-branch-node-tag (tag 'byte-machine-field-branch-node))
+  ;; §9.1:305 requires "an explicit target for every possible result", so both
+  ;; targets are mandatory symbols -- there is no #f arm and no fallthrough.
+  ;; This is the kind that makes the EOF walk multi-successor.
+  (define (make-field-branch-node name predicate arguments true-target false-target source-label)
+    (require-symbol 'make-field-branch-node 'name name)
+    (unless (memq predicate field-predicates)
+      (byte-machine-contract-violation 'make-field-branch-node 'invalid-argument 'predicate))
+    (require-proper-list 'make-field-branch-node 'arguments arguments)
+    (require-symbol 'make-field-branch-node 'true-target true-target)
+    (require-symbol 'make-field-branch-node 'false-target false-target)
+    (vector field-branch-node-tag name predicate arguments true-target false-target source-label))
+  (define (field-branch-node? x) (tagged? field-branch-node-tag x))
+  (define (field-branch-node-name n) (vector-ref n 1))
+  (define (field-branch-node-predicate n) (vector-ref n 2))
+  (define (field-branch-node-arguments n) (vector-ref n 3))
+  (define (field-branch-node-true-target n) (vector-ref n 4))
+  (define (field-branch-node-false-target n) (vector-ref n 5))
+  (define (field-branch-node-source-label n) (vector-ref n 6))
+
   ;; --- error node (references a declaration by NAME) ---
   (define error-node-tag (tag 'byte-machine-error-node))
   (define (make-error-node name error-declaration source-label)
@@ -339,7 +427,8 @@
   ;; --- node dispatch ---
   (define (node? x)
     (or (byte-dispatch-node? x) (sequence-dispatch-node? x) (stop-node? x)
-        (error-node? x) (finish-node? x) (pause-node? x)))
+        (error-node? x) (finish-node? x) (pause-node? x)
+        (field-action-node? x) (field-branch-node? x)))
   (define (node-name x)
     (cond ((byte-dispatch-node? x) (byte-dispatch-node-name x))
           ((sequence-dispatch-node? x) (sequence-dispatch-node-name x))
@@ -347,6 +436,8 @@
           ((error-node? x) (error-node-name x))
           ((finish-node? x) (finish-node-name x))
           ((pause-node? x) (pause-node-name x))
+          ((field-action-node? x) (field-action-node-name x))
+          ((field-branch-node? x) (field-branch-node-name x))
           (else (byte-machine-contract-violation 'node-name 'invalid-argument 'node))))
 
   ;; --- uint field descriptor (§9.1:283, §10.2:488-491) ---

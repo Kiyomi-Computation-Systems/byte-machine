@@ -19,6 +19,7 @@
           make-machine make-byte-dispatch-node make-byte-case
           make-exact-byte-matcher make-edge make-stop-node make-finish-node
           make-pause-node make-error-node make-error-declaration
+          make-field-action-node make-field-branch-node
           make-byte-set-matcher make-byte-range-matcher
           make-byte-complement-matcher ascii-bytes
           matcher? exact-byte-matcher? exact-byte-matcher-byte
@@ -36,6 +37,7 @@
                 make-machine make-byte-dispatch-node make-byte-case
                 make-exact-byte-matcher make-edge make-stop-node make-finish-node
                 make-pause-node make-error-node make-error-declaration
+                make-field-action-node make-field-branch-node
                 make-byte-set-matcher make-byte-range-matcher
                 make-byte-complement-matcher ascii-bytes
                 matcher? exact-byte-matcher? exact-byte-matcher-byte

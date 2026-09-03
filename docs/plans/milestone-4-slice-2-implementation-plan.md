@@ -177,17 +177,39 @@ on. Re-resolve every one by content before relying on it.
 Each task is one commit: failing tests first, then the implementation, then mutations measured
 in both directions, then the gate. Tasks 1-3 are strictly ordered; 4-9 depend on 1-3.
 
-- [ ] **Task 1 — `eof-terminal`, the multi-successor rewrite (D1).** Before either new kind
-  exists, so its own tests are written against shipped kinds. One DFS, path stack plus global
+> ***TASKS 1 AND 2 ARE SWAPPED, 2026-09-03, on measurement.*** The plan ordered the
+> `eof-terminal` rewrite first "so its own tests are written against shipped kinds". That
+> reasoning is wrong: **every shipped kind is single-successor**, so no shipped kind can
+> witness a multi-successor join, a diamond that re-converges, or the completed-set's reuse.
+> Written first, the rewrite would ship with tests that cannot fail — the exact shape this
+> project has twice recorded as a defect. The two zero-width kinds land first; `field-branch`
+> is what makes a diamond constructible, and the rewrite follows with real witnesses.
+
+- [x] **Task 1 — The two zero-width kinds: descriptor, façade, and the machine guard.**
+  *(was Task 2)* `ir.sls` constructors, predicates and accessors; `graph.sls`'s export list and
+  its mirrored `only` import, both in one commit. Decision 0020 fixes the boundary and item 2
+  fixes the whole of it in one line: **`arguments` is a proper list and no further.** Arity,
+  declared-field references, operand range and `low <= high` are pass 6a's — Task 4's, not
+  this one's — and 0020 flags `low <= high` as the consequence that will look wrong to a reader
+  of 0017. The error slot's rule (`#f` exactly when the operation cannot fail) IS the
+  constructor's, because nothing downstream fails loudly on a target the operation can never
+  reach: `node-out-targets` feeds it into the reachability walk unconditionally.
+
+  Seven mutations. `graph.sls`'s two lists get none, following ①b's precedent — measured
+  anyway, so the precedent is followed knowingly: either list losing the names is an
+  **expand-time** failure at exit 255, louder than a pin, and pinning it would cost a whole
+  pass for two decisions already fatal. `release` 92/92, 49 passes / 282 mutations, no golden
+  moved.
+
+  *Trap worth carrying: `?` is a regex metacharacter, so a pin naming `node?` matched `nod `
+  and the runner reported a wrong-reason catch.*
+
+- [ ] **Task 2 — `eof-terminal`, the multi-successor rewrite (D1).** *(was Task 1)* Now that
+  `field-branch` exists, the rewrite's own properties are witnessable. One DFS, path stack plus global
   completed-set, `'unknown` deleted with an arm per constructible kind. Pin
   `cycle > eof-reachable-stop`. Re-measure the four `eof-terminal` pins and both callers.
   **Gate:** a diamond that re-converges is not `'cycle`; a genuine cycle still is; no
   `'unknown` remains anywhere in the file.
-
-- [ ] **Task 2 — The two zero-width kinds: descriptor, façade, and the machine guard.**
-  `ir.sls` constructors, predicates and accessors; `graph.sls`'s export list and its mirrored
-  `only` import, both in one commit. Operand shape per 0020 — anything a constructor can close
-  is closed there, not in the verifier.
 
 - [ ] **Task 3 — The verifier census, walk and REPORT guard together (H12, D5).** Every site
   from the corrected census. `pass-overlap` and `pass-sequence-ambiguity` stay unextended,
