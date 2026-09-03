@@ -837,6 +837,13 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Slice ③ task 4: the differential.field pass gains FIVE pinned and TWO
+# EXPECT_SURVIVES for the checked multiply-add. The survivors are the pre-check
+# form itself, in both lanes, and their reason is §15:856: the form is mandated
+# for a host that WRAPS, and Chez does not, so no fixture on this host can
+# distinguish it from a compute-then-check. Declared survivors go from ten to
+# TWELVE. Mutations become 342 + 7 = 349.
+#
 # Slice ③ task 3: the normal-ir pass gains SIX for integer accumulate's
 # lowering and encoding at tag 7 -- the tag, the base, the nondigit mode, the
 # overflow target, the EOF accessor, and the state's layout length. The dispatch
@@ -930,7 +937,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 342)
+set(EXPECTED_MUTATIONS 349)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -2691,16 +2698,35 @@ byte_machine_mutation(
   # the FIND would leave the mutant replacing a two-argument tail with a
   # one-argument one, failing as an arity error rather than as the
   # consumed-count defect the pin names.
-  FIND [[(loop (+ pos 1) 'boundary)]]
-  REPLACE [[(loop pos 'byte)]]
+  # Re-anchored by Slice ③ task 4: the accumulate arm's digit tail is the same
+  # two-argument shape, so a bare FIND matches twice. Anchored on the DISPATCH
+  # arm's own preceding line, which the accumulate arm does not share.
+  # Re-anchored AGAIN by Slice ③ task 4: the dispatch and accumulate arms were
+  # textually identical once the op had answered, so this tail was factored into
+  # `route-byte-step!`. The pin now covers BOTH arms, which is correct -- it is
+  # one decision, and each arm's CALL stays separately mutable.
+  FIND [[              (parser-set-offset! parser (+ 1 (parser-offset parser)))
+              (loop (+ pos 1) 'boundary))]]
+  REPLACE [[              (parser-set-offset! parser (+ 1 (parser-offset parser)))
+              (loop pos 'byte))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "one-byte parser lifecycle\\.the accepted byte stops after consuming one byte: consumed")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: need-input becomes a spurious stop"
-  FIND [[(make-parser-result 'need-input pos]]
-  REPLACE [[(make-parser-result 'stopped pos]]
+  # Re-anchored by Slice ③ task 4: the accumulate arm yields need-input at the end
+  # of a slice exactly as the dispatch arm does, so a bare FIND matches twice.
+  # Anchored on the DISPATCH arm specifically: Slice ③'s accumulate arm yields
+  # need-input at the end of a slice in the same shape, so a bare FIND matches
+  # twice. That duplication is NOT factored -- the two guards are separate
+  # decisions about two kinds, and only their tails coincided.
+  FIND [[            ((dispatch)
+             (if (>= pos end)
+                 (make-parser-result 'need-input pos]]
+  REPLACE [[            ((dispatch)
+             (if (>= pos end)
+                 (make-parser-result 'stopped pos]]
   EXPECT_STATUS 1
   # Not bare "need-input": that word also appears in the DETAIL of unrelated
   # runtime mutants ("expected need-input, got stopped"), so it was satisfied
@@ -2713,8 +2739,12 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: advance does not increment the stream offset"
-  FIND [[(parser-set-offset! parser (+ 1 (parser-offset parser)))]]
-  REPLACE [[(parser-set-offset! parser (parser-offset parser))]]
+  # Re-anchored by Slice ③ task 4 onto `route-byte-step!`, where the increment
+  # now lives once for both byte-consuming kinds.
+  FIND [[              (parser-set-offset! parser (+ 1 (parser-offset parser)))
+              (loop (+ pos 1) 'boundary))]]
+  REPLACE [[              (parser-set-offset! parser (parser-offset parser))
+              (loop (+ pos 1) 'boundary))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "one-byte parser lifecycle\\.the accepted byte stops after consuming one byte: stream offset")
 
@@ -5613,10 +5643,21 @@ byte_machine_mutation(
   # about (an internal value with no witness): none of the brief's own Step 1
   # fixtures ever call parser-finish! on a compound current, so this test
   # group was added specifically to give this value one.
+  # Re-anchored by Slice ③ task 4: `eof-target-of` became a `cond` with a LOUD
+  # else when the accumulate kind joined it -- §4.7 item 4's hazard, which was
+  # live: the old two-way `if` fell through into `byte-dispatch-node-eof-target`,
+  # a bare slot read, and on an accumulate node slot 4 is `digit-target`, a
+  # symbol. The compound dereference this pin names is unchanged.
   FIND [[        (let ((n (lookup nodes (if (pair? cur) (car cur) cur))))]]
   REPLACE [[        (let ((n (lookup nodes cur)))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
-    "EOF mid-sequence routes through the sequence node's own eof-target, not the machine default: case raised -- Exception in vector-ref: #f is not a vector")
+  # The SIGNATURE moved with Slice ③ task 4, and moved in the right direction:
+  # `eof-target-of` became a `cond` with a LOUD else (§4.7 item 4's hazard, which
+  # was live -- the old two-way `if` fell through into a bare slot read, and on
+  # an accumulate node that slot is `digit-target`, a symbol). Undereferencing a
+  # compound now reaches that else and raises a CONTRACT VIOLATION rather than a
+  # vector-ref type error. Same decision, same case, louder failure.
+    "EOF mid-sequence routes through the sequence node's own eof-target, not the machine default: case raised -- Exception occurred with condition components")
 
 # The same two internal invariants normal-ir.sls's own trie asserts (decision
 # 0015 point 2), disabled the same way normal-ir.sls's own guard mutations
@@ -6604,8 +6645,15 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: the exhausted dispatch does not branch on finish?"
-  FIND [[(if finish?\n"]]
-  REPLACE [[(if #f\n"]]
+  # Anchored on the DISPATCH arm's own preceding line: Slice ③'s accumulate arm
+  # renders the same `(if finish?` guard, so a bare FIND matches twice.
+  # Re-anchored by Slice ③ task 4 onto `render-exhausted-preamble`: the dispatch
+  # and accumulate arms rendered this identically, and no anchor separated them
+  # because the two preambles ARE the same decision. The pin now covers both.
+  FIND [[     "       (if (>= pos end)\n"
+     "           (if finish?\n"]]
+  REPLACE [[     "       (if (>= pos end)\n"
+     "           (if #f\n"]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish eof guard")
 
 # Milestone 2 Slice ③'s Task 4 (the pause node in the emitter) adds two more
@@ -8323,10 +8371,12 @@ byte_machine_mutation(
   # Re-anchored by Slice ② task 8: the list gained `v` and `r`, the two locals
   # the emitted field arms bind, and reflowed onto two lines. Dropping `pk` is
   # still the edit -- the same decision, the same expectation.
+  # Re-anchored by Slice ③ task 4: the list gained `d`, the emitted accumulate
+  # arm's digit local. Dropping `pk` is still the edit.
   FIND [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs pk
-      v r))]]
+      v r d))]]
   REPLACE [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs
-      v r))]]
+      v r d))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(pk\\)")
 
@@ -8370,10 +8420,13 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.position-kind.chez.source
   LABEL "runtime: the interpreter's advance jump carries the reexecute position kind"
-  FIND [[(loop (+ pos 1) 'boundary))
-                       (loop pos 'byte)))))]]
-  REPLACE [[(loop (+ pos 1) 'byte))
-                       (loop pos 'byte)))))]]
+  # Re-anchored by Slice ③ task 4 onto `route-byte-step!`, where the two
+  # byte-consuming kinds now share one tail. The decision -- an ADVANCE reports
+  # `boundary`, a reexecute reports `byte` -- is unchanged and now covers both.
+  FIND [[              (loop (+ pos 1) 'boundary))
+            (loop pos 'byte)))]]
+  REPLACE [[              (loop (+ pos 1) 'byte))
+            (loop pos 'byte)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "an advance-mode mismatch reports boundary after the committed byte: kind -- expected boundary, got byte")
 
@@ -8802,6 +8855,91 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "every predicate takes the same arm in both lanes: interp mask-all 14 -- expected 2, got 1")
+
+# Slice ③ task 4 adds FIVE pinned and TWO survivors for the checked
+# multiply-add, written twice as §18:970-972 requires.
+#
+# *** The two survivors are the SAME decision in the two lanes, and their reason
+# is §15:856 itself. *** Replacing the pre-check `current <= floor((maximum -
+# digit) / base)` with a compute-then-check `current * base + digit <= maximum`
+# gives IDENTICAL answers on this host, because Chez has bignums and never
+# wraps. §15:864-868 specifies the pre-check anyway, and §15:856 says why --
+# "must not rely on host fixnum width or silent wrapping" -- so the form is
+# mandated for a host this project does not run on. No fixture can distinguish
+# them here; that is a property of the host, not a gap in the lane.
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: base 16's lowercase digits are not digits"
+  # The reason the fixture spells 1aF: base 16's digits are three DISJOINT
+  # ASCII ranges, and a fixture using only 0-9 passes against an implementation
+  # that handles no letters at all.
+  FIND [[((and (>= byte 97) (<= byte 102)) (+ 10 (- byte 97)))]]
+  REPLACE [[((and (>= byte 97) (<= byte 102)) #f)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the checked multiply-add, both lanes \\(Slice ③\\).base 16 accepts all three ASCII digit ranges: interpreter")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: a digit is not bounded by the base"
+  # `a` is a digit in base 16 and not in base 10. Without this bound a base-10
+  # machine would accumulate hex letters.
+  FIND [[(and v (< v base) v)]]
+  REPLACE [[(and v v)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the checked multiply-add, both lanes \\(Slice ③\\).a base-10 machine does not accept a hex letter as a digit: interpreter")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: an overflow consumes the offending digit"
+  # §12.7:772-773: overflow does NOT consume the digit, which is what makes the
+  # reported position kind `byte` rather than `boundary`. The value being
+  # unchanged is the other half and is pinned by the matrix.
+  FIND [[(cons (integer-accumulate-node-overflow-error n) 'reexecute)]]
+  REPLACE [[(cons (integer-accumulate-node-overflow-error n) 'advance)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the checked multiply-add, both lanes \\(Slice ③\\).an overflow reports position kind BYTE, at the offending digit: interpreter")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: base 16's lowercase digits are not emitted as digits"
+  # The emitter's copy of the same decision -- written twice on purpose, and
+  # this is the half the differential exists to compare.
+  FIND [[" ((and (>= b 97) (<= b 102)) (+ 10 (- b 97)))"]]
+  REPLACE [[" "]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the checked multiply-add, both lanes \\(Slice ③\\).base 16 accepts all three ASCII digit ranges: generated")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: an emitted overflow consumes the offending digit"
+  FIND [[            "                       (loop pos " (num over) " off (quote byte))))))))\n"]]
+  REPLACE [[            "                       (loop (+ pos 1) " (num over) " (+ off 1) (quote boundary))))))))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the checked multiply-add, both lanes \\(Slice ③\\).an overflow reports position kind BYTE, at the offending digit: generated")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: the overflow check is made after the multiply-add"
+  FIND [[((<= (vector-ref fv slot) (div (- m* d) base))]]
+  REPLACE [[((<= (+ (* (vector-ref fv slot) base) d) m*)]]
+  EXPECT_SURVIVES
+    "measured, not assumed: this mutant passes the whole lane unchanged, in both lanes, and it always will on this host. §15:864-868 specifies the check as `current <= floor((maximum - digit) / base)`, BEFORE the multiply-add; this mutant computes `current * base + digit` first and tests the product. Under Chez the product is an exact integer of unbounded size, so the two forms agree on every input and no fixture can separate them -- including the u64 case, where the accumulated value is already a bignum and the product simply becomes a larger one. The pre-check is written anyway because §15:856 mandates it: \"must not rely on host fixnum width or silent wrapping\". The form is for a host that WRAPS, where computing the product first would silently produce a small wrong number and the check would pass. This project does not run on such a host, so the requirement is unwitnessable here by construction -- a property of the host, not a gap in the lane. Reopening condition: a backend whose integers wrap, or any change that makes the accumulation use fixnum-specialised arithmetic, makes this mutant a bug detector and it must be re-measured and pinned then."
+  )
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted overflow check is made after the multiply-add"
+  FIND [[            "                   (if (<= v (div (- " (num mx) " d) " (num base) "))\n"]]
+  REPLACE [[            "                   (if (<= (+ (* v " (num base) ") d) " (num mx) ")\n"]]
+  EXPECT_SURVIVES
+    "measured, not assumed: this mutant passes the whole lane unchanged, in both lanes, and it always will on this host. §15:864-868 specifies the check as `current <= floor((maximum - digit) / base)`, BEFORE the multiply-add; this mutant computes `current * base + digit` first and tests the product. Under Chez the product is an exact integer of unbounded size, so the two forms agree on every input and no fixture can separate them -- including the u64 case, where the accumulated value is already a bignum and the product simply becomes a larger one. The pre-check is written anyway because §15:856 mandates it: \"must not rely on host fixnum width or silent wrapping\". The form is for a host that WRAPS, where computing the product first would silently produce a small wrong number and the check would pass. This project does not run on such a host, so the requirement is unwitnessable here by construction -- a property of the host, not a gap in the lane. Reopening condition: a backend whose integers wrap, or any change that makes the accumulation use fixnum-specialised arithmetic, makes this mutant a bug detector and it must be re-measured and pinned then. The emitter's copy of the same decision; the two are one ruling and both are recorded so neither can be quietly changed alone."
+  )
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

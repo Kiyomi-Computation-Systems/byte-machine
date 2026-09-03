@@ -293,6 +293,26 @@
   ;; runs a single live dispatch walk from `current` to its next stop/error/
   ;; finish/pause.
   (define (parser-feed-op! parser bv start end)
+
+      ;; Route a byte-consuming step: park `current` on the target, then either
+      ;; consume the byte and continue at a boundary, or leave it for whatever
+      ;; comes next and report §12.7:768's `byte` -- AT the offending byte, which
+      ;; is what makes an overflow report where it happened.
+      ;;
+      ;; Shared by the dispatch arm and Slice ③'s accumulate arm. Written out
+      ;; twice the two are textually IDENTICAL, so three shipped mutations
+      ;; anchored on this tail resolved to two sites and the suite hard-failed at
+      ;; declaration -- and no longer anchor could separate them, because once the
+      ;; op has answered the two arms genuinely do the same thing. Factoring is
+      ;; the honest fix; each arm's CALL stays its own line, and what differs
+      ;; between them -- which op message, and what it is given -- stays there.
+      (define (route-byte-step! target mode pos loop)
+        (parser-set-current! parser target)
+        (if (eq? mode 'advance)
+            (begin
+              (parser-set-offset! parser (+ 1 (parser-offset parser)))
+              (loop (+ pos 1) 'boundary))
+            (loop pos 'byte)))
     (let ((op (parser-executor parser)))
       ;; The position kind is a loop variable, set from a literal at each jump
       ;; (decision 0022 item 5), initialized `boundary` unconditionally with no
@@ -330,19 +350,23 @@
              (let ((t (op 'field-step node (parser-field-values parser))))
                (parser-set-current! parser t)
                (loop pos pk)))
+            ;; Slice ③'s INPUT-READING kind. It needs a byte, so it yields
+            ;; `need-input` at the end of a slice and resumes at the same node on
+            ;; the next feed -- its whole split-point behaviour, inherited from
+            ;; the dispatch shape rather than invented. The op answers
+            ;; `(target . mode)` because a step has three outcomes with two
+            ;; different consumption behaviours.
+            ((accumulate)
+             (if (>= pos end)
+                 (make-parser-result 'need-input pos (- pos start) (parser-offset parser) #f)
+                 (let ((r (op 'accumulate-step node (parser-field-values parser)
+                              (bytevector-u8-ref bv pos))))
+                   (route-byte-step! (car r) (cdr r) pos loop))))
             ((dispatch)
              (if (>= pos end)
                  (make-parser-result 'need-input pos (- pos start) (parser-offset parser) #f)
-                 (let* ((byte (bytevector-u8-ref bv pos))
-                        (trans (op 'dispatch node byte))
-                        (target (car trans))
-                        (mode (cdr trans)))
-                   (parser-set-current! parser target)
-                   (if (eq? mode 'advance)
-                       (begin
-                         (parser-set-offset! parser (+ 1 (parser-offset parser)))
-                         (loop (+ pos 1) 'boundary))
-                       (loop pos 'byte)))))
+                 (let ((trans (op 'dispatch node (bytevector-u8-ref bv pos))))
+                   (route-byte-step! (car trans) (cdr trans) pos loop))))
             (else (assertion-violation 'parser-feed! "unknown node kind" (op 'kind node))))))))
 
   ;; The generated /v2 path: exec owns the dispatch loop; finish? = #f for feed.
@@ -458,7 +482,9 @@
            (let ((t (op 'field-step node (parser-field-values parser))))
              (parser-set-current! parser t)
              (loop t pk)))
-          ((dispatch)
+          ;; At finish there is no input, so an accumulate node takes its own
+          ;; declared EOF edge exactly as a dispatch node does (§10.6:569).
+          ((accumulate dispatch)
            (let ((t (op 'eof-target node)))
              (if t
                  (begin (parser-set-current! parser t) (loop t 'eof))

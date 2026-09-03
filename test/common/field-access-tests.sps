@@ -571,4 +571,102 @@
              (11 1 "mask-any 4") (12 2 "mask-all 14") (13 1 "mask-none 3")))
           (check-equal "all seven predicates" seen 7))))))
 
+
+;; Milestone 4 Slice ③ task 4: the checked multiply-add, BOTH lanes.
+;;
+;; §15:864-868 gives the inequality as a check BEFORE the multiply-add --
+;; `current <= floor((maximum - digit) / base)` -- not a compute-then-check, and
+;; §15:856 says why: "must not rely on host fixnum width or silent wrapping".
+;; Computing the product first is safe under Chez's bignums and would not be
+;; safe under a host that wraps, so both lanes render the pre-check.
+(define (acc-mach nm base width)
+  (make-machine nm 'start (list (make-uint-field 'n width 0 #f)) '() '()
+    (list eof-decl rej-decl)
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-byte-range-matcher 0 255)
+                                  (make-edge 'acc 'reexecute) #f))
+            (make-edge 'acc 'reexecute) #f #f)
+          (make-integer-accumulate-node 'acc 'n base 'acc
+                                        (make-edge 'done 'advance) 'over #f #f)
+          (make-stop-node 'done #f)
+          ;; No spare `reject` node: the range matcher covers all 256 bytes, so
+          ;; the fallback is unreachable and an error node nothing names is
+          ;; itself unreachable.
+          (make-error-node 'over 'rejected #f))
+    'default-eof #f))
+(define (acc-lanes nm base width)
+  (let ((m (acc-mach nm base width)))
+    (cons (make-interpreted-machine (verify-machine m))
+          (emit-and-load m nm (string->symbol (string-append (symbol->string nm) "-parser"))
+                         (string-append tmpdir "/generated-" (symbol->string nm) ".sls")))))
+(define acc10 (acc-lanes 'acc10 10 32))
+(define acc16 (acc-lanes 'acc16 16 32))
+(define acc8bit (acc-lanes 'acc8 10 8))
+(define (str->bytes str) (u8-list->bytevector (map char->integer (string->list str))))
+(define (run-acc cm str)
+  (let ((p (make-parser cm '() #f)))
+    (parser-feed! p (str->bytes str) 0 (string-length str))
+    p))
+
+(harness-group "the checked multiply-add, both lanes (Slice ③)"
+  (lambda ()
+    (harness-case "base 10 accumulates across a run of digits"
+      (lambda ()
+        (let ((a (run-acc (car acc10) "12345x")) (g (run-acc (cdr acc10) "12345x")))
+          (check-equal "interpreter" (parser-field-ref a 'n) 12345)
+          (check-equal "generated" (parser-field-ref g 'n) 12345))))
+    (harness-case "base 16 accepts all three ASCII digit ranges"
+      (lambda ()
+        ;; The reason the digit test is not one `case` group with one `d`: base
+        ;; 16's digits are three DISJOINT ranges, and a fixture using only 0-9
+        ;; would pass against an implementation that handled no letters at all.
+        (let ((a (run-acc (car acc16) "1aF!")) (g (run-acc (cdr acc16) "1aF!")))
+          (check-equal "interpreter" (parser-field-ref a 'n) 431)
+          (check-equal "generated" (parser-field-ref g 'n) 431))))
+    (harness-case "a base-10 machine does not accept a hex letter as a digit"
+      (lambda ()
+        ;; The converse, without which "base reaches the arithmetic" is unwitnessed.
+        (let ((a (run-acc (car acc10) "1a")) (g (run-acc (cdr acc10) "1a")))
+          (check-equal "interpreter" (parser-field-ref a 'n) 1)
+          (check-equal "generated" (parser-field-ref g 'n) 1))))
+    (harness-case "overflow leaves the value unchanged and does not consume the digit"
+      (lambda ()
+        ;; §10.6:568, §15:870 and §12.7:772-773 together. A u8 field reaches 25,
+        ;; and the next digit would make 255 -- legal -- while a further one
+        ;; would not. "999" therefore overflows at the third byte with n = 99.
+        (let ((a (run-acc (car acc8bit) "999")) (g (run-acc (cdr acc8bit) "999")))
+          (check-equal "interpreter holds 99" (parser-field-ref a 'n) 99)
+          (check-equal "generated holds 99" (parser-field-ref g 'n) 99)
+          (check-equal "both errored" (parser-lifecycle g) (parser-lifecycle a))
+          (check-equal "lifecycle" (parser-lifecycle a) 'error))))
+    (harness-case "an overflow reports position kind BYTE, at the offending digit"
+      (lambda ()
+        ;; §12.7:768's row, and §12.7:773's "does not consume" made observable:
+        ;; the kind is `byte` rather than `boundary` precisely because the
+        ;; offending byte was not consumed. §12.7:777 makes it comparable.
+        (let* ((a (run-acc (car acc8bit) "999")) (g (run-acc (cdr acc8bit) "999"))
+               (ra (parser-feed! a (make-bytevector 0) 0 0))
+               (rg (parser-feed! g (make-bytevector 0) 0 0)))
+          (check-equal "interpreter" (parser-error-position-kind (parser-result-error ra)) 'byte)
+          (check-equal "generated" (parser-error-position-kind (parser-result-error rg)) 'byte))))
+    (harness-case "the boundary digit is accepted, one below the overflow"
+      (lambda ()
+        ;; Without this the overflow case passes against an implementation that
+        ;; rejects one digit too early. 255 is the u8 maximum and must be reached.
+        (let ((a (run-acc (car acc8bit) "255x")) (g (run-acc (cdr acc8bit) "255x")))
+          (check-equal "interpreter" (parser-field-ref a 'n) 255)
+          (check-equal "generated" (parser-field-ref g 'n) 255)
+          (check-equal "not an error" (parser-lifecycle a) 'stopped))))
+    (harness-case "the u64 path crosses the bignum boundary in both lanes"
+      (lambda ()
+        ;; §15:856's "must not rely on host fixnum width", end to end: 2^60 has
+        ;; nineteen decimal digits and the accumulated value passes
+        ;; (greatest-fixnum) partway through.
+        (let* ((l (acc-lanes 'acc64 10 64))
+               (a (run-acc (car l) "1152921504606846976x"))
+               (g (run-acc (cdr l) "1152921504606846976x")))
+          (check-equal "interpreter" (parser-field-ref a 'n) 1152921504606846976)
+          (check-equal "generated" (parser-field-ref g 'n) 1152921504606846976)
+          (check "above greatest-fixnum" (> (parser-field-ref a 'n) (greatest-fixnum))))))))
+
 (harness-finish)

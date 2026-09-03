@@ -212,9 +212,35 @@ directions, then the gate.
 
   `release` 92/92, 49 passes / 342 mutations, no golden moved.
 
-- [ ] **Task 4 — The checked multiply-add, both lanes (D6).** §15:864-868's inequality, written
-  twice. Overflow leaves the value unchanged **and does not consume the digit** (§12.7:772-773) —
-  which fixes `pos`, `off` and the position kind, not just the value.
+- [x] **Task 4 — The checked multiply-add, both lanes (D5, D6, H1, H5).**
+  §15:864-868's inequality written as the spec writes it — a check **before** the multiply-add.
+  Overflow leaves the value unchanged *and* does not consume the digit, so the reported position
+  kind is `byte`, pinned in both lanes.
+
+  **D5 settled: a separate `accumulate-step` message returning `(target . mode)`**, not a widened
+  `field-step`. The mode is unavoidable here — a digit advances, a non-digit takes its edge's
+  mode, an overflow consumes nothing — and widening `field-step` would have changed every
+  zero-width arm ② shipped for no gain.
+
+  **H5 confirmed:** base 16's digits are three disjoint ASCII ranges, so the digit test is a
+  range comparison per base, not one `case` group.
+
+  **§4.7 item 4's hazard was LIVE and is fixed.** `eof-target-of` was a two-way `if` with no else,
+  so an accumulate node fell into `byte-dispatch-node-eof-target` — a bare `(vector-ref n 4)`,
+  which on an accumulate node is `digit-target`, a symbol. It would have silently routed EOF into
+  the digit path. Now a `cond` with a loud else.
+
+  **Two `EXPECT_SURVIVES`, one per lane, and their reason is §15:856 itself.** Compute-then-check
+  gives identical answers under Chez's bignums; the pre-check form is mandated for a host that
+  *wraps*, which this project does not run on. Unwitnessable by construction — a property of the
+  host, not a gap. Survivors go to **12**.
+
+  **H1 realised in full: nine shipped pins had to be re-anchored**, and four duplications could
+  not be separated by any anchor because the two arms genuinely do the same thing. Three shared
+  tails were factored — `route-byte-step!`, `render-exhausted-preamble`, `put-eof-routing` — each
+  leaving every caller's *call* separately mutable.
+
+  `release` 92/92, 49 passes / 349 mutations, no golden moved.
 
 - [ ] **Task 5 — need-input resumption and split-point fragmentation.** The state an accumulate
   node must carry across a feed boundary, which is not obviously a field. The shipped split-point
