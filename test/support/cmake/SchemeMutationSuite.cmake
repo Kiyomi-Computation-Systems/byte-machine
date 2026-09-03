@@ -837,6 +837,13 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Slice ③ task 3: the normal-ir pass gains SIX for integer accumulate's
+# lowering and encoding at tag 7 -- the tag, the base, the nondigit mode, the
+# overflow target, the EOF accessor, and the state's layout length. The dispatch
+# and accumulate arms' identical EOF routing was FACTORED into `put-eof-routing`
+# (SITES trap, sixth time) and the shipped default-eof pin re-anchored onto it.
+# Mutations become 336 + 6 = 342.
+#
 # Slice ③ task 2: Pass 33 gains SIX for the input-reading kind's census --
 # both zero-progress disjuncts separately, the digit edge's exclusion, the
 # REPORT set, out-targets, and the field reference. FOUR shipped report-guard
@@ -923,7 +930,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 336)
+set(EXPECTED_MUTATIONS 342)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -5933,6 +5940,78 @@ byte_machine_mutation(
 # for a new encode arm: an inequality pair cannot see a dropped count or a
 # transposed pair, only a wrong value can.
 
+# Slice ③ task 3 adds SIX for integer accumulate's lowering and encoding at
+# tag 7. Each on its own measured golden value -- the four that share a CASE are
+# separated by their distinct `got` digests, which is what an exact-value pin
+# buys over an inequality.
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the accumulate encode tag collides with field-branch"
+  FIND [[                (put-u8 p 7)]]
+  REPLACE [[                (put-u8 p 6)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer accumulate in the normalized IR \\(Slice ③\\).a base-10 accumulate machine's fingerprint is the measured golden value: fingerprint -- expected 14659003778876959304, got 6374358628100294515")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: an accumulate node's base is dropped from the encoding"
+  # The base decides which bytes are digits, so a generated parser observes it
+  # and two machines differing only in it are different machines.
+  FIND [[                (put-u8 p (normal-field-selector s))
+                (put-symbol p (car (normal-field-arguments s)))]]
+  REPLACE [[                (put-symbol p (car (normal-field-arguments s)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer accumulate in the normalized IR \\(Slice ③\\).a base-10 accumulate machine's fingerprint is the measured golden value: fingerprint -- expected 14659003778876959304, got 9369177108359133434")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the accumulate nondigit edge's MODE is dropped"
+  # §10.6:567's non-digit edge is normally a reexecute, so the mode is the
+  # whole point of it being an edge rather than a bare target.
+  FIND [[                  (put-u8 p (mode->byte (cdr (cadr tg))))
+]]
+  REPLACE [[                  ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer accumulate in the normalized IR \\(Slice ③\\).a base-10 accumulate machine's fingerprint is the measured golden value: fingerprint -- expected 14659003778876959304, got 13335447011493986019")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the accumulate overflow target is dropped"
+  FIND [[                  (put-u32be p (caddr tg)))]]
+  REPLACE [[                  )]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer accumulate in the normalized IR \\(Slice ③\\).a base-10 accumulate machine's fingerprint is the measured golden value: fingerprint -- expected 14659003778876959304, got 5178054717376752018")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: an accumulate node's EOF edge is read as absent"
+  # §4.7 item 4's hazard, in the normalizer: `eof-of` reads
+  # `byte-dispatch-node-eof-target`, a bare slot read with NO tag guard, so
+  # handing it an accumulate node returns a plausible value from the wrong slot.
+  # `acc-eof-of` exists so that cannot happen, and this pins it.
+  FIND [[(let ((t (integer-accumulate-node-eof-target n)))]]
+  REPLACE [[(let ((t #f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer accumulate in the normalized IR \\(Slice ③\\).the EOF routing reaches the encoding: node routing -- expected 11426950116850452563, got 14659003778876959304")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: an accumulate state is not widened to the declared layout"
+  # The check Slice ②'s `seq-state` miss earned, applied to the kind added
+  # after it: total over the states a fixture produces, so a kind short of the
+  # declared layout cannot hide behind a kind-guarded reader.
+  FIND [[                                        (list (id-of (integer-accumulate-node-digit-target n))]]
+  REPLACE [[                                        #f #f (list (id-of (integer-accumulate-node-digit-target n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer accumulate in the normalized IR \\(Slice ③\\).a base-10 accumulate machine's fingerprint is the measured golden value: case raised -- Exception in car")
+
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: a sequence-dispatch state is not widened to the declared layout"
@@ -6116,10 +6195,15 @@ byte_machine_mutation(
   # static reason (decision 0019 item 2), so the old FIND occurs zero times. The
   # decision this witnesses is unchanged -- the default-eof CODE must reach the
   # encoding -- so the REPLACE drops put-symbol and keeps the rest.
-  FIND [[(begin (put-u8 p 1) (put-symbol p (cdr eof))
-                             (put-reason p (normal-error-reason s)))]]
-  REPLACE [[(begin (put-u8 p 1)
-                             (put-reason p (normal-error-reason s)))]]
+  # Re-anchored by Slice ③ task 3: the dispatch and accumulate arms wrote this
+  # routing identically, taking every pin on it to SITES 2, so it was factored
+  # into `put-eof-routing`. The decision and the expectation are unchanged; only
+  # the text it sits on moved, and it now covers BOTH arms -- which is why each
+  # arm's CALL stays its own separately mutable line.
+  FIND [[        (begin (put-u8 p 1) (put-symbol p (cdr eof))
+               (put-reason p reason))))]]
+  REPLACE [[        (begin (put-u8 p 1)
+               (put-reason p reason))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 14095574568398596535, got 11628869637435983804")
 
 # Milestone 2 whole-branch review (item d): the NODE-eof encode arm -- tag 0 +

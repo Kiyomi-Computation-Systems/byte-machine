@@ -690,4 +690,46 @@
           (check-equal "no state is the wrong length" bad '())
           (check "every fixture contributed states" (> seen 20)))))))
 
+
+;; Milestone 4 Slice ③ task 3: integer accumulate lowers 1:1 and encodes at tag 7.
+;; Its own exact-value goldens, per this file's discipline for a new encode arm.
+(define (acc-machine base eof)
+  (make-machine 'm 'acc (list (make-uint-field 'count 32 0 #f)) '() '()
+    (list s2-eof s2-rej)
+    (list (make-integer-accumulate-node 'acc 'count base 'acc
+                                        (make-edge 'stop 'reexecute) 'over eof #f)
+          (make-stop-node 'stop #f) (make-error-node 'over 'rejected #f))
+    'default-eof #f))
+
+(harness-group "integer accumulate in the normalized IR (Slice ③)"
+  (lambda ()
+    (harness-case "a base-10 accumulate machine's fingerprint is the measured golden value"
+      (lambda ()
+        (check-equal "fingerprint" (s2-fp (acc-machine 10 #f)) 14659003778876959304)))
+    (harness-case "a base-16 accumulate machine's fingerprint is the measured golden value"
+      (lambda ()
+        (check-equal "fingerprint" (s2-fp (acc-machine 16 #f)) 127868743529861350)))
+    (harness-case "the BASE reaches the encoding"
+      (lambda ()
+        ;; Two machines identical but for the base are different machines: the
+        ;; base decides which bytes are digits, so a generated parser observes it.
+        (check "different" (not (= (s2-fp (acc-machine 10 #f)) (s2-fp (acc-machine 16 #f)))))))
+    (harness-case "the EOF routing reaches the encoding"
+      (lambda ()
+        ;; `#f` routes to the machine default-eof error and a symbol routes to a
+        ;; node -- slot 6's shipped (node . id) / (default . code) convention,
+        ;; reused verbatim rather than given a parallel encoding.
+        (check-equal "node routing" (s2-fp (acc-machine 10 'stop)) 11426950116850452563)
+        (check "differs from the default routing"
+               (not (= (s2-fp (acc-machine 10 'stop)) (s2-fp (acc-machine 10 #f)))))))
+    (harness-case "the accumulate state has the declared layout length"
+      (lambda ()
+        ;; The check Slice ②'s `seq-state` miss earned: total over the states a
+        ;; fixture produces, so a kind three slots short cannot hide behind a
+        ;; kind-guarded reader.
+        (let ((bad '()))
+          (for-each (lambda (len) (unless (= len 11) (set! bad (cons len bad))))
+                    (state-lengths (acc-machine 10 #f)))
+          (check-equal "all eleven" bad '()))))))
+
 (harness-finish)

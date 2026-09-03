@@ -192,8 +192,25 @@ directions, then the gate.
   **Fixtures: the overflow self-cycle AND the nondigit self-cycle**, since neither distinguishes
   the other's mutant.
 
-- [ ] **Task 3 — The normalizer: lowering and encode tag 7 (H2).** Four target slots plus
-  `reason`. Slot 6 keeps its shipped convention. Its own measured fingerprint golden.
+- [x] **Task 3 — The normalizer: lowering and encode tag 7 (H2).**
+  1:1 like ②'s kinds, so it allocates no internal state. `selector` carries the base,
+  `arguments` the field name, `targets` the three byte targets; the EOF routing rides **slot 6's
+  shipped `(node . id)` / `(default . code)` convention** with `reason` in slot 7 — H2 confirmed.
+
+  **`acc-eof-of` is a separate lambda, not a widened `eof-of`.** `eof-of` reads
+  `byte-dispatch-node-eof-target`, a bare slot read with no tag guard, so handing it another
+  kind returns a plausible value from the wrong slot — §4.7 item 4's hazard, avoided by
+  construction and pinned.
+
+  Six mutations, each on its own measured golden; the four sharing a case are separated by
+  distinct `got` digests, which is what an exact-value pin buys over an inequality. The
+  layout-length check ②'s `seq-state` miss earned is applied to the new kind.
+
+  *Seventh SITES collision: the dispatch and accumulate arms wrote the EOF routing identically,
+  taking every pin on it to two sites. Factored into `put-eof-routing`; each arm's **call**
+  stays separately mutable.*
+
+  `release` 92/92, 49 passes / 342 mutations, no golden moved.
 
 - [ ] **Task 4 — The checked multiply-add, both lanes (D6).** §15:864-868's inequality, written
   twice. Overflow leaves the value unchanged **and does not consume the digit** (§12.7:772-773) —
