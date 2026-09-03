@@ -6,15 +6,16 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ## [Unreleased]
 
-Milestones 0 through 3 (portability spike, minimal executable machine,
-incremental execution and lifecycle, byte classes and sequences) have closed.
-Milestone 3 closed **2026-08-30** with Slice ③ (multiple alternatives,
-ambiguity, and cycle analysis), after Slices ① (byte classes) and ② (sequence
-dispatch and prefix lowering); Milestone 4 (fields, actions, and branches) is in
-progress — its Gate 0 discharged **2026-08-31** (decisions 0018–0022) and Slice
-①a landed **2026-09-02**, Slice ①b (fields: declaration, slots, and
-`parser-field-ref`) **2026-09-02**, and Slice ② (field action and field branch)
-**2026-09-03**, with Slice ③ remaining. See
+Milestones 0 through 4 (portability spike, minimal executable machine,
+incremental execution and lifecycle, byte classes and sequences, fields and
+actions and branches) have closed. Milestone 3 closed **2026-08-30** with Slice
+③ (multiple alternatives, ambiguity, and cycle analysis), after Slices ① (byte
+classes) and ② (sequence dispatch and prefix lowering). Milestone 4 closed
+**2026-09-03** with Slice ③ (integer accumulation), after its Gate 0
+**2026-08-31** (decisions 0018–0022), Slice ①a **2026-09-02** (the ABI,
+encoding and `parser-error` seam), Slice ①b **2026-09-02** (fields:
+declaration, slots, and `parser-field-ref`), and Slice ② **2026-09-03** (field
+action and field branch). See
 [the implementation plan](docs/plans/byte-machine-implementation-plan.md) §25
 for overall scope; the entries below record what each milestone actually
 delivered. No versioned release exists yet.
@@ -1020,6 +1021,54 @@ delivered. No versioned release exists yet.
   The three committed goldens and every pinned IR fingerprint are byte-identical
   to `51fd5f3`: the normalized state vector was widened and no existing machine's
   encoding moved.
+
+- **Machines read integers out of the input stream.** `make-integer-accumulate-node`
+  (§10.6:560) is Milestone 4's one **input-reading** node kind: it consumes digit
+  bytes in base 10 or 16 and folds them into a declared field, taking an explicit
+  fallback edge on the first non-digit and a mandatory error target on overflow.
+  The checked multiply-add is written as §15:864-868 specifies it — a bound test
+  **before** the multiply, not a compute-then-check — because §15:856 forbids
+  relying on host fixnum width, and the offending digit is **not consumed**
+  (§12.7:773), which is what makes an overflow report position kind `byte` at the
+  digit itself rather than `boundary` after it.
+
+  The digit test is rendered as **range comparisons per base**, not one `case`
+  group: base 16 has three disjoint ASCII ranges and a single `case` over literal
+  bytes cannot express it. Both lanes are compared over **all 256 byte values in
+  both bases**, byte by byte, together with the partition's size in each lane and
+  the six ASCII neighbours of the three digit ranges — the bytes an off-by-one at
+  a bound moves, and the ones a fixture naming a handful of digits never feeds.
+
+  **A parse that spans a feed boundary needs no state of its own.** The
+  accumulated value *is* the field, which already survives a feed, and the node
+  stays parked because its arm returns `need-input` without moving on. Every
+  split point of a multi-digit input is driven, not one.
+
+  §12.7's position table gains its fourth row and Milestone 4's last: `byte`
+  from an unconsumed digit, asserted in both lanes for kind **and offset**.
+
+  A fourth committed golden, `generated-accumulate.golden.sls`, pins the emitted
+  arm. It is the one place `test/fixtures/` grew: the emitter renders three digit
+  ranges, a checked multiply-add and two distinct EOF routes that no existing
+  golden contains, and the pass that guards it carries a mutation which reorders
+  two disjoint range tests — every behavioural lane passes, and only the golden
+  sees it.
+
+  The property generator gained an accumulate draw, **and it found a shipped
+  emitter defect**: the reached-declaration walk credited only dispatch states
+  with the default-EOF route, so a machine whose only default-eof consumer was an
+  accumulate node had that declaration filtered out of the emitted table and
+  rendering raised on a machine the verifier had just accepted. Fixed, and pinned
+  on a fixed fixture rather than on the seeded lane that found it.
+
+  Measured at the slice's close: `release` **94/94** — two new determinism lanes
+  — `pr` 94/94, `harness` 34/34, `no-scheme` 8/8; the Scheme mutation suite
+  **50 passes / 358 mutations**, the CMake suite unchanged at 1 pass / 72;
+  **twelve** declared `EXPECT_SURVIVES`, two added and both halves of one ruling:
+  on a host with unbounded integers a compute-then-check mutant of the overflow
+  test passes every lane, in either the interpreter or the emitter, and each
+  carries the host property that would make it a detector again. Every existing
+  golden and every pinned IR fingerprint is byte-identical to `51fd5f3`.
 
 ### Removed
 

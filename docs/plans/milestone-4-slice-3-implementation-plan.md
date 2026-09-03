@@ -355,8 +355,44 @@ directions, then the gate.
 
   `release` 94/94 (two new lanes), 50 passes / 357 mutations.
 
-- [ ] **Task 10 — Sweeps, the `differential.field` debt (H10), status surfaces, CHANGELOG, and
+- [x] **Task 10 — Sweeps, the `differential.field` debt (H10), status surfaces, CHANGELOG, and
   the full-milestone Exit section (H13).** Milestone 4 closes here.
+
+  **Sweeps, with the method and both record keys stated** — the key decides the number, so one
+  number alone would be a claim about the key:
+
+  | pass | pins | ordered pairs | collisions (value-insensitive / value-sensitive) |
+  | --- | --- | --- | --- |
+  | property | 6 | 30 | 3 → **0** / **0** |
+  | position-kind | 7 | 42 | **0** / **0** |
+  | determinism.accumulate | 1 | 0 | — |
+  | differential.field | 31 | 930 | 17 → 12 / 6 |
+  | normal-ir | 43 | 1806 | 169 / **0** |
+
+  **The property pass's three closed**, cause first: every anti-vacuity counter required the two
+  lanes to *agree*, so any divergence zeroed all of them and each draw's own pin owned no record.
+  Each now has an interpreter-only half beside the agreed one — "the arm never ran" separated from
+  "the lanes disagreed about it".
+
+  **H10's debt closed for the case ② named.** ② diagnosed symmetric comparison and prescribed
+  per-lane assertions against expected values; that is written, and the emitter's zero-width pin
+  no longer nests in the interpreter's. What remains is a different class, recorded as the Exit
+  block's fourth limitation: *delete-a-check* subsumes *alter-a-check*, and a fixture-wide break
+  subsumes every narrow pin under it. None involves a ③ pin.
+
+  **H14 had a gap.** `member3-drift-tests.sps` said "the three locals this slice added" and still
+  named ①a's three; ② added `v` and `r` to `reserved-member-3` and made the fixture render them
+  but never named them, so dropping either would have failed nothing. ③ adds an accumulate node
+  (where `d` is bound), names all six, renames the case, and pins it.
+
+  **H11 restated from measurement.** `release` 94/94, `pr` 94/94, `harness` 34/34, `no-scheme`
+  8/8; 50 passes / 358 mutations; CMake 1/72; **twelve** `EXPECT_SURVIVES`; **78** `verify.sls`
+  pins; **nine** fingerprint literals at **eleven** sites; no existing golden moved and no
+  fingerprint literal removed since `51fd5f3`.
+
+  **H13 discharged**: all three §25:1568-1570 criteria carry dated dispositions naming slice, file
+  and case, the "traces" word has its §4.6 reading recorded, and the three limitations are
+  restated with a fourth added.
 
 ---
 

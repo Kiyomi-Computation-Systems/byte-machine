@@ -2305,6 +2305,42 @@ re-baseline"; commit `51fd5f3` licensed a move of `generated-pause.golden.sls`
 after that point, so an ①a-anchored diff reports a false positive. See decision
 0019's foot.)*
 
+*(Annotated 2026-09-03 at Slice ③'s close. The paragraph above is left as
+written; these are the places what shipped differs from what it predicted, and
+each is a decision with a reason rather than a shortfall.)*
+
+- **No `unit.accumulate` or `differential.accumulate` lane pair exists.** The
+  accumulate work is in the shipped `byte-machine.differential.field.chez.
+  {source,aot}` lanes, which already carry the field fixtures the node writes
+  through; a fourth lane pair over the same library would have been a second
+  place to keep the same fixtures in step. Two new lanes were registered instead
+  — `byte-machine.determinism.accumulate.chez.{source,aot}` — and they are a
+  different claim, not the same one renamed: emission determinism against a
+  committed golden. `release` moves 92 → **94**, not 96.
+- **The fourth golden means `git diff 51fd5f3..HEAD -- test/fixtures/` is NOT
+  empty**, and the paragraph above asks for exactly that. It is one added file,
+  `generated-accumulate.golden.sls`; no existing golden moved and no fingerprint
+  literal was removed from either pinning file (measured both ways). §8 ordered
+  the determinism lane and the empty diff in the same breath and they are
+  incompatible — see the Slice ③ implementation plan's Task 9, whose one
+  mutation is the argument for keeping the lane.
+- **`cur` is not in `reserved-member-3`; `v r d` are.** `cur` is the
+  interpreter's local and is never emitted, so reserving it would have been a
+  reservation nothing could exercise — the exact defect the drift guard exists
+  to catch. `d` is the emitted digit local and has its own mutation.
+- **`EXPECT_SURVIVES` is 12, not "unchanged at the count Slice ② closed with"
+  (ten).** ③ adds two, and they are one ruling recorded twice: §15:864-868's
+  pre-check is written in both the interpreter and the emitter, and on a host
+  with unbounded integers a compute-then-check mutant of either passes every
+  lane. Measured, not assumed, and both carry a reopening condition naming the
+  host property that would make them detectors.
+- **The property lane's guard is three counters, not one `accumulated-count`.**
+  A drawn node proves only that it was constructed, and the node has three arms.
+  Each counter also gained an interpreter-only half after the whole-pass sweep
+  showed the agreed halves were zeroed by any cross-lane divergence.
+- **Nine fingerprint literals at eleven assertion sites**, up from six at eight,
+  and **78** `verify.sls` pins, up from 72.
+
 ## Exit (full Milestone 4)
 
 §25:1568-1570's three criteria, allocated to the slices that will discharge
@@ -2320,8 +2356,49 @@ in those parts, the way Milestone 3 attributed §25:1533 in halves.
 | **:1569** — "failed operations leave prior values unchanged" | **② and ③**, in halves | Both halves are true *by construction* rather than by rollback, because §15:856 mandates a preflight bound check: no uncommitted value is ever written. ② proves it for `increment`, `decrement` and `add` — and proves the complementary claim for `store`, `clear`, `set-mask` and `clear-mask`, which per §4.3's `error`-slot rule cannot fail and therefore carry `#f` in the `error` slot. ③ proves it for the multiply-add, where §10.6:568 and §12.7:773 additionally fix that the offending digit is *not consumed*. |
 | **:1570** — "interpreter/generated fields and traces match" | **all four slices** | Read per §4.6 as §22.4:1262-1272's comparison list. ①a discharges its error clause — §22.4:1271's "error domain, code, public source-node name, absolute position, and position kind" — against node kinds shipped in M1 and M2. ①b takes §22.4:1267's "final state and fields" clause, the first cross-lane field comparison, for a machine that declares fields but writes none. ② extends that same comparison over the two zero-width kinds and ③ over the accumulate kind, and each adds one row to §12.7's position table. The "traces" word gets a dated disposition recording §4.6's reading, not a limitation record. |
 
-**Three limitations this milestone closes over rather than glosses**, to be
-restated with their qualifiers at close:
+**Dispositions, 2026-09-03 — MILESTONE 4 CLOSED.** Each criterion above is
+discharged; the table is left as written and these are its dated dispositions,
+naming the slice, the file and the case in the tree.
+
+- **:1568 — boundary, overflow and underflow at every width.** *Discharged in
+  three parts, as allocated.* ①b's declaration part: `ir-tests.sps`, the
+  `make-uint-field` width rows — `2^w` rejected by the **constructor**, a
+  contract violation and never a diagnostic. ②'s operation part:
+  `field-access-tests.sps`, the width × operation × boundary matrix, with
+  underflow at `decrement` from 0 and overflow at `increment`/`add` from each
+  width's maximum. ③'s accumulate part: the same file's "the u64 path crosses
+  the bignum boundary in both lanes" and "the boundary digit is accepted, one
+  below the overflow" cases, plus the u16 ceiling in
+  `determinism-accumulate-tests.sps`. The u64 row does run at 2^64−1, above
+  `(greatest-fixnum)`.
+- **:1569 — failed operations leave prior values unchanged.** *Discharged in
+  halves, by construction rather than by rollback, as allocated.* ②'s half:
+  `field-access-tests.sps`, "a failed operation leaves the prior value
+  unchanged (§25:1569)", plus the complementary `#f`-error-slot claim for the
+  four operations §4.3 proves cannot fail. ③'s half: the same file's overflow
+  cases, which additionally assert §12.7:773's *does not consume* — the digit
+  is not taken, and `position-kind-tests.sps`'s fourth row pins the offset that
+  makes that observable rather than merely stated.
+- **:1570 — interpreter/generated fields and traces match.** *Discharged by all
+  four slices, read per §4.6 as §22.4:1262-1272's comparison list.* ①a's error
+  clause: `position-kind-tests.sps`, every kind by value in both executors.
+  ①b's §22.4:1267 clause: the first cross-lane field comparison. ②'s extension
+  over the two zero-width kinds and ③'s over the accumulate kind: the
+  `differential.field` lanes, which since ③ assert each lane against a
+  **measured expected value** as well as against the other lane — agreement
+  alone is symmetric, and Slice ②'s own whole-pass sweep recorded that as the
+  fix it was owed. ③ also extends the comparison into the property lane, whose
+  oracle now carries field values. Each slice added its row to §12.7's position
+  table; ③'s is the fourth, `byte` from an unconsumed digit.
+  - *The "traces" word.* §4.6's reading stands and is recorded here rather than
+    as a limitation: §22.4:1262-1272 is the comparison list, and a "trace" in
+    §25:1570 is that list applied at every step, which is what the differential
+    lanes do — a fresh parser pair per input, compared after every feed. No
+    separate trace artifact exists and none is owed.
+
+**Three limitations this milestone closes over rather than glosses**, restated
+with their qualifiers at close (2026-09-03) — each is still true of the tree as
+shipped, and each is a property of what exists rather than a gap in M4:
 
 1. **`parser-error-domain` ships with one producible value.** The `callback`
    domain and the `detail` payload have no producer until Milestone 5 (§9.3:401
@@ -2338,6 +2415,22 @@ restated with their qualifiers at close:
    declared-field-reference rule rather than by a distinct one. If a later
    milestone adds a second field type, this disposition is the record of why no
    separate check exists to extend.
+
+**A fourth limitation, added at close by Slice ③** — recorded rather than
+discovered later, because it is a property of the sweep method and not of any
+one pin:
+
+4. **Six pins in the `differential.field` pass own no uniquely attributing
+   record, and cannot be given one by anchoring.** Measured at close: 31 pins,
+   930 ordered pairs, six collisions under a value-sensitive record key (twelve
+   under a stricter value-insensitive one). Every one is a mutation that DELETES
+   a check subsuming one that ALTERS it, or a mutation broad enough to break a
+   fixture's whole premise — the accessor's slot resolution, a declaration's
+   initial — subsuming every narrow pin beneath it. In each case the mutation
+   *is* the decision, so narrowing it would be pinning a different decision.
+   **None involves a pin Slice ③ added.** Slice ②'s recorded debt — pins nesting
+   in neither direction because a differential lane's checks are symmetric — is
+   closed by the per-lane expected values named in :1570's disposition above.
 
 ## 9. Explicitly out of Milestone 4
 
