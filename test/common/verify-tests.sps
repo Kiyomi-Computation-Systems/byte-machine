@@ -1206,4 +1206,137 @@
                                          (make-finish-node 'f1 #f))))))
           (check "reachable stop" (memq 'eof-reachable-stop cs)))))))
 
+
+;; Milestone 4 Slice ② task 3: the verifier census. Every site that switches on
+;; node kind and must learn the two zero-width kinds.
+;;
+;; *** Census row 14 (D4(d)) is DELIBERATELY NOT EXTENDED, and the last case
+;; here is what holds that decision. *** The design prescribed a
+;; byte-reachability-gated sibling block "same shape" as the pause one. Written
+;; that way it turns `dispatch --advance--> field-action --next--> stop` into a
+;; false eof-reachable-stop. A pause IS an EOF start -- parser-feed-op!'s pause
+;; arm commits `current` PAST it, so a later finish begins at the continuation --
+;; whereas a zero-width node never becomes `current`, because the dispatch arm
+;; returns need-input without moving it. Row 10's eof-terminal extension plus
+;; the shipped pause block already cover every real EOF start. The one stated,
+;; witnessed gap is "the machine ENTRY is a zero-width node", which no shipped
+;; fixture can reach today.
+(define (fields1) (list (make-uint-field 'count 8 0 #f)))
+(define (zw-machine nodes entry)
+  (make-machine 'm entry (fields1) '() '() (list eof-decl rej-decl) nodes 'default-eof #f))
+
+(harness-group "the zero-width census (Slice ② task 3)"
+  (lambda ()
+    (harness-case "a zero-width self-cycle is a zero-progress cycle"
+      (lambda ()
+        ;; The failure this closes: without BOTH the walk and the REPORT set,
+        ;; a `store`-into-itself machine verifies clean and then hangs in both
+        ;; lanes. The walk alone is the half-fix M3 Slice ② shipped.
+        (let ((cs (codes (zw-machine
+                          (list (make-field-action-node 'loop 'clear '(count) 'loop #f #f)
+                                (make-stop-node 'stop #f)
+                                (make-error-node 'reject 'rejected #f))
+                          'loop))))
+          (check "zero-progress-cycle" (memq 'zero-progress-cycle cs)))))
+    (harness-case "a two-node zero-width cycle through a branch is reported too"
+      (lambda ()
+        (let ((cs (codes (zw-machine
+                          (list (make-field-branch-node 'br 'zero '(count) 'act 'act #f)
+                                (make-field-action-node 'act 'clear '(count) 'br #f #f)
+                                (make-error-node 'reject 'rejected #f))
+                          'br))))
+          (check "zero-progress-cycle" (memq 'zero-progress-cycle cs)))))
+    (harness-case "a zero-width node's targets are out-targets, so they are reachable"
+      (lambda ()
+        ;; node-out-targets feeds name resolution AND reachability. Without the
+        ;; arm, `after` is unreached and `oops` is unreached, and the machine is
+        ;; rejected for a defect it does not have.
+        (let ((cs (codes (zw-machine
+                          ;; No spare node: an error node nothing names is
+                          ;; unreachable on its own account and would make this
+                          ;; case pass for the wrong reason.
+                          (list (make-field-action-node 'act 'increment '(count) 'after 'oops #f)
+                                (make-stop-node 'after #f)
+                                (make-error-node 'oops 'rejected #f))
+                          'act))))
+          (check "nothing unreachable" (not (memq 'unreachable-node cs))))))
+    (harness-case "a byte-reachable zero-width node into a finish is non-eof-into-finish"
+      (lambda ()
+        ;; §16.2:908 forbids non-EOF control flow into a finish terminal, and a
+        ;; byte path that runs dispatch -> field-action -> finish is exactly
+        ;; that. The shipped :908 check cannot see it: it filters on dispatch
+        ;; kinds, so the finish sits one hop further than it looks.
+        (let ((cs (codes (zw-machine
+                          (list (make-byte-dispatch-node 'start
+                                  (list (make-byte-case (make-exact-byte-matcher 0)
+                                                        (make-edge 'act 'advance) #f))
+                                  (make-edge 'reject 'reexecute) #f #f)
+                                (make-field-action-node 'act 'clear '(count) 'done #f #f)
+                                (make-finish-node 'done #f)
+                                (make-error-node 'reject 'rejected #f))
+                          'start))))
+          (check "non-eof-into-finish" (memq 'non-eof-into-finish cs)))))
+    (harness-case "a cycle running THROUGH a zero-width node is attributed to the dispatch"
+      (lambda ()
+        ;; This fixture is what separates "the WALK does not follow a zero-width
+        ;; node" from "the REPORT set does not include one". The cycle's reported
+        ;; member is the byte-dispatch node, which is in the report set either
+        ;; way -- so narrowing the report set leaves this diagnostic standing,
+        ;; while narrowing the walk removes it. Without this case the two mutants
+        ;; emit identical records, which is the half-fix M3 Slice ② shipped and
+        ;; Slice ③ closed.
+        (let ((ds (verification-diagnostics
+                   (verify-machine
+                    (zw-machine
+                     (list (make-byte-dispatch-node 'start
+                             (list (make-byte-case (make-exact-byte-matcher 0)
+                                                   (make-edge 'stop 'advance) #f))
+                             (make-edge 'act 'reexecute) #f #f)
+                           (make-field-action-node 'act 'clear '(count) 'start #f #f)
+                           (make-stop-node 'stop #f))
+                     'start)))))
+          (check "attributed to start"
+                 (memq 'start (map diagnostic-node
+                                   (filter (lambda (d)
+                                             (eq? (diagnostic-code d) 'zero-progress-cycle))
+                                           ds)))))))
+    (harness-case "an EOF-only-reachable zero-width node may continue into a finish"
+      (lambda ()
+        ;; Decision 0011 for the pause kind, applied here: §16.2:908 forbids
+        ;; NON-EOF control flow into a finish, so a zero-width node reached only
+        ;; along an EOF path legally continues into one. This is what the
+        ;; byte-reachability GATE buys -- without the gate the check fires on
+        ;; every zero-width node regardless of how it is reached, and this
+        ;; machine is rejected for a defect it does not have.
+        (let ((cs (codes (zw-machine
+                          (list (make-byte-dispatch-node 'start
+                                  (list (make-byte-case (make-exact-byte-matcher 0)
+                                                        (make-edge 'stop 'advance) #f))
+                                  (make-edge 'reject 'reexecute) 'act #f)
+                                (make-field-action-node 'act 'clear '(count) 'done #f #f)
+                                (make-finish-node 'done #f)
+                                (make-stop-node 'stop #f)
+                                (make-error-node 'reject 'rejected #f))
+                          'start))))
+          (check "no non-eof-into-finish" (not (memq 'non-eof-into-finish cs))))))
+    (harness-case "a byte path through a zero-width node into a STOP verifies clean"
+      (lambda ()
+        ;; *** The case that holds row 14's drop. *** Written "same shape" as the
+        ;; pause block, the prescribed sibling would report eof-reachable-stop
+        ;; here -- on a diagnostic and message about EOF, for a machine whose
+        ;; only path to that stop is a byte path. If a later slice adds that
+        ;; block, this case fails, which is the point.
+        (let ((cs (codes (zw-machine
+                          (list (make-byte-dispatch-node 'start
+                                  (list (make-byte-case (make-exact-byte-matcher 0)
+                                                        (make-edge 'act 'advance) #f))
+                                  (make-edge 'reject 'reexecute) #f #f)
+                                (make-field-action-node 'act 'clear '(count) 'stop #f #f)
+                                (make-stop-node 'stop #f)
+                                (make-error-node 'reject 'rejected #f))
+                          'start))))
+          (check "no eof-reachable-stop" (not (memq 'eof-reachable-stop cs)))
+          (check "no eof cycle" (not (memq 'eof-zero-progress-cycle cs)))
+          (check "no non-eof-into-finish" (not (memq 'non-eof-into-finish cs))))))))
+
 (harness-finish)

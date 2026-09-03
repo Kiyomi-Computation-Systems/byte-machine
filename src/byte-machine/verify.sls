@@ -71,6 +71,30 @@
           ((eq? (node-name (car nodes)) name) (car nodes))
           (else (lookup (cdr nodes) name))))
   (define (error-names m) (map error-declaration-name (machine-errors m)))
+  ;; The successors of a ZERO-WIDTH node -- one fact, three consumers
+  ;; (`node-out-targets`, `reexec-targets` and `eof-successors`), defined once.
+  ;; Triplicating it is not an option: the arms are textually identical, so a
+  ;; mutation pinning one resolves to three sites and the suite hard-fails at
+  ;; declaration -- measured, and it is the SITES-fails-both-directions trap
+  ;; AGENTS.md names. Factoring it does NOT collapse three decisions into one:
+  ;; each caller's arm -- whether it consults this at all -- stays its own
+  ;; mutable line, and only the shared fact, "what does a zero-width node
+  ;; continue to", lives here.
+  (define (zero-width-successors n)
+    (cond ((pause-node? n) (list (pause-node-continuation n)))
+          ;; A field action's `error` is a successor exactly when it has one:
+          ;; the constructor makes it #f precisely when the operation cannot
+          ;; fail, so this never yields a node no failure can reach.
+          ((field-action-node? n)
+           (let ((e (field-action-node-error n)))
+             (if (symbol? e)
+                 (list (field-action-node-next n) e)
+                 (list (field-action-node-next n)))))
+          ((field-branch-node? n)
+           (list (field-branch-node-true-target n)
+                 (field-branch-node-false-target n)))
+          (else '())))
+
   (define (node-out-targets n)
     (cond ((byte-dispatch-node? n)
            (append (map (lambda (c) (edge-target (byte-case-edge c)))
@@ -87,6 +111,10 @@
           ((sequence-dispatch-node? n)
            (append (map sequence-case-target (sequence-dispatch-node-cases n))
                    (list (edge-target (sequence-dispatch-node-mismatch n)))))
+          ;; The two zero-width kinds (Slice ②), which feed name resolution,
+          ;; reachability and the :908 check below.
+          ((or (field-action-node? n) (field-branch-node? n))
+           (zero-width-successors n))
           (else '())))
   ;; A dispatch/sequence node's stored eof-target (a symbol, or #f meaning
   ;; "the machine default eof error"), or #f for any other node kind. Fix
@@ -388,6 +416,14 @@
               ((sequence-dispatch-node? n)
                (if (eq? (edge-mode (sequence-dispatch-node-mismatch n)) 'reexecute)
                    (list (edge-target (sequence-dispatch-node-mismatch n))) '()))
+              ;; Slice ②'s two kinds are ZERO-WIDTH, exactly like a pause: every
+              ;; edge out of them makes no progress, so every one is a
+              ;; reexecute-equivalent and all of them join this walk. A
+              ;; `store`-into-itself machine verifies clean and then hangs in
+              ;; BOTH lanes without this -- the precise failure M3 Slice ②
+              ;; shipped by extending the walk and not the REPORT set.
+              ((or (field-action-node? n) (field-branch-node? n))
+               (zero-width-successors n))
               (else '())))
       (define (reaches-self? start)
         (let loop ((frontier (reexec-targets (lookup nodes start))) (seen '()))
@@ -399,10 +435,18 @@
                               (cons (car frontier) seen)))))))
       (filter values
               (map (lambda (n)
-                     (if (and (or (byte-dispatch-node? n) (pause-node? n) (sequence-dispatch-node? n))
+                     ;; The REPORT set, extended in the SAME commit as the walk
+                     ;; above. Extending one without the other is the half-fix
+                     ;; M3 Slice ② shipped and Slice ③ closed: the walk finds the
+                     ;; cycle, nothing reports it, verify returns ok with zero
+                     ;; diagnostics, and the machine fails to terminate in both
+                     ;; lanes.
+                     (if (and (or (byte-dispatch-node? n) (pause-node? n)
+                                  (sequence-dispatch-node? n)
+                                  (field-action-node? n) (field-branch-node? n))
                               (reaches-self? (node-name n)))
                          (make-diagnostic 'zero-progress-cycle (node-name n)
-                                          "a zero-width cycle (reexecute edges/pause continuations) makes no progress")
+                                          "a zero-width cycle (reexecute edges, pause continuations, field actions and branches) makes no progress")
                          #f))
                    nodes))))
 
@@ -469,17 +513,7 @@
   ;; which is the whole reason this walk became multi-successor. A field action's
   ;; `error` is a successor exactly when it has one -- the constructor makes that
   ;; `#f` precisely when the operation cannot fail.
-  (define (eof-successors n)
-    (cond ((pause-node? n) (list (pause-node-continuation n)))
-          ((field-action-node? n)
-           (let ((e (field-action-node-error n)))
-             (if (symbol? e)
-                 (list (field-action-node-next n) e)
-                 (list (field-action-node-next n)))))
-          ((field-branch-node? n)
-           (list (field-branch-node-true-target n)
-                 (field-branch-node-false-target n)))
-          (else '())))
+  (define (eof-successors n) (zero-width-successors n))
 
   (define (eof-terminal m start)
     (let ((nodes (machine-nodes m)) (done '()))
@@ -581,6 +615,27 @@
                                   (list (make-diagnostic 'non-eof-into-finish (node-name n)
                                                          "a pause continuation byte-reaches a finish terminal"))
                                   '()))
+                            '()))
+                      nodes))
+          ;; :908 through a ZERO-WIDTH node (Slice ②), on the pause precedent:
+          ;; gated on byte-reachability, not on an unconditional source-kind
+          ;; filter. §16.2:908 forbids "non-EOF control flow into a finish
+          ;; terminal", and a byte path that runs `dispatch -> field-action ->
+          ;; finish` is exactly that -- the shipped :908 check above cannot see
+          ;; it, because it filters on dispatch kinds and a zero-width node is
+          ;; not one, so the finish sits one hop further than it looks.
+          (apply append
+                 (map (lambda (n)
+                        (if (and (or (field-action-node? n) (field-branch-node? n))
+                                 (memq (node-name n) br))
+                            (filter values
+                                    (map (lambda (t)
+                                           (let ((tn (lookup nodes t)))
+                                             (if (and tn (finish-node? tn))
+                                                 (make-diagnostic 'non-eof-into-finish (node-name n)
+                                                                  "a zero-width node byte-reaches a finish terminal")
+                                                 #f)))
+                                         (node-out-targets n)))
                             '()))
                       nodes))
           (apply append

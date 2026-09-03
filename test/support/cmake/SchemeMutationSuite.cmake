@@ -796,6 +796,13 @@ cmake_minimum_required(VERSION 3.26)
 # Slice ①b's Critical fix wave: 271 -> 273. Two join Pass 33, both recovered from
 # task 4's unsound subsumption call.
 #
+# Slice ② task 3: Pass 33 gains FIVE for the zero-width census -- out-targets,
+# the zero-progress walk and its REPORT set (the pair the M3 precedent warns
+# about, separable only after a fixture was added for it), and both directions of
+# the :908 gate. FIVE shipped pins were re-anchored in the same commit, three of
+# them for the same reflowed report guard. Passes stay at 49 and mutations become
+# 287 + 5 = 292.
+#
 # Slice ② task 2: Pass 33 gains FIVE for the multi-successor eof-terminal
 # rewrite -- four pinned and one EXPECT_SURVIVES for the completed-set, whose job
 # is complexity rather than correctness. Three shipped eof-terminal pins were
@@ -822,7 +829,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 287)
+set(EXPECTED_MUTATIONS 292)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3610,7 +3617,13 @@ byte_machine_mutation(
   # FIND re-anchored by Milestone 3 Slice ③ Task 2: PASS 5's report guard gained
   # a `(sequence-dispatch-node? n)` disjunct (§25:1533) and was reflowed onto
   # two lines. The decision, the REPLACE and the pin are unchanged.
-  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n) (sequence-dispatch-node? n))
+  # RE-ANCHORED AGAIN by Slice ② task 2's census: the guard gained the two
+  # zero-width kinds and reflowed onto three lines. Third re-anchor of the same
+  # decision; the REPLACE and the pin are still unchanged, which is what says the
+  # decision has not moved even though its text keeps doing so.
+  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
+                                  (sequence-dispatch-node? n)
+                                  (field-action-node? n) (field-branch-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[(if #f]]
   EXPECT_STATUS 1
@@ -3802,8 +3815,17 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a byte edge into a finish terminal is accepted"
-  FIND [[(if (and tn (finish-node? tn))]]
-  REPLACE [[(if (and tn #f)]]
+  # *** SITES went to 2 when Slice ② task 3 added the zero-width :908 block,
+  # which is the SITES-fails-both-directions trap AGENTS.md names: new code that
+  # DUPLICATES a pinned line breaks the pin as surely as deleting it. Re-anchored
+  # on the surrounding line rather than reworded, so the shipped block keeps the
+  # shape its own comments describe. ***
+  FIND [[                                          (if (and tn (finish-node? tn))
+                                              (make-diagnostic 'non-eof-into-finish (node-name n)
+                                                               "a byte edge targets a finish terminal")]]
+  REPLACE [[                                          (if (and tn #f)
+                                              (make-diagnostic 'non-eof-into-finish (node-name n)
+                                                               "a byte edge targets a finish terminal")]]
   # Task 3 whole-pass audit: bare "non-eof-into-finish" is a diagnostic CODE,
   # and the Slice ③ audit fixed exactly this shape for the pause group below
   # while leaving this group bare -- measured matching "a byte-reachable pause
@@ -4144,9 +4166,17 @@ byte_machine_mutation(
   # fixture rather than a re-anchoring, and the whole-branch review scoped it
   # out of this fix wave deliberately; the pin below is unchanged and still
   # catches its own mutant.
-  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n) (sequence-dispatch-node? n))
+  # Re-anchored AGAIN by Slice ② task 3's census, FIND and REPLACE, same reflow
+  # as the two sibling pins: the guard gained the two zero-width kinds. The edit
+  # this LABEL claims is unchanged -- drop only the pause clause -- and so is the
+  # nesting it records.
+  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
+                                  (sequence-dispatch-node? n)
+                                  (field-action-node? n) (field-branch-node? n))
                               (reaches-self? (node-name n)))]]
-  REPLACE [[(if (and (or (byte-dispatch-node? n) (sequence-dispatch-node? n))
+  REPLACE [[(if (and (or (byte-dispatch-node? n)
+                                  (sequence-dispatch-node? n)
+                                  (field-action-node? n) (field-branch-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "chain of pauses that cycles is a zero-progress EOF cycle: zero-progress-cycle diagnostic")
 
@@ -4252,11 +4282,14 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a sequence node's case and mismatch targets are not out-targets (arm 1, node-out-targets)"
-  FIND [[((sequence-dispatch-node? n)
+  # Re-anchored by Slice ② task 3: the arm no longer abuts `(else '())`, because
+  # the two zero-width kinds' arms were added between them. Anchored on the arm
+  # itself now, which is what the LABEL names, rather than on its neighbour.
+  FIND [[          ((sequence-dispatch-node? n)
            (append (map sequence-case-target (sequence-dispatch-node-cases n))
                    (list (edge-target (sequence-dispatch-node-mismatch n)))))
-          (else '())))]]
-  REPLACE [[(else '())))]]
+]]
+  REPLACE [[          ]]
   # Comparison-caught: with the arm removed, the well-formed fixture's
   # sequence case and mismatch edge targets ('stop and 'reject) are never fed
   # to node-out-targets, so pass-reachability treats both as unreached and the
@@ -4347,11 +4380,13 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a sequence node's reexecute mismatch edge is invisible to the zero-progress walk (arm 3, reexec-targets)"
-  FIND [[((sequence-dispatch-node? n)
+  # Re-anchored by Slice ② task 3: this arm no longer abuts `(else '())`, since
+  # the zero-width kinds' arm was added between them. Anchored on the arm itself.
+  FIND [[              ((sequence-dispatch-node? n)
                (if (eq? (edge-mode (sequence-dispatch-node-mismatch n)) 'reexecute)
                    (list (edge-target (sequence-dispatch-node-mismatch n))) '()))
-              (else '())))]]
-  REPLACE [[(else '())))]]
+]]
+  REPLACE [[              ]]
   # Comparison-caught: with the arm removed, reexec-targets no longer sees
   # through the sequence node, so the dispatch node's own reexecute-only
   # cycle through it goes undetected and zero-progress-cycle never fires.
@@ -4454,8 +4489,12 @@ byte_machine_mutation(
   # this one lands on "got 2" -- three distinct values on one check, all
   # measured, none predicted. Comparison-caught: the count check fails outright
   # rather than depending on where a mutant happens to crash.
-  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n) (sequence-dispatch-node? n))]]
-  REPLACE [[(if (and (or (byte-dispatch-node? n) (pause-node? n))]]
+  # RE-ANCHORED by Slice ② task 2's census, same reflow as the sibling pin.
+  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
+                                  (sequence-dispatch-node? n)
+                                  (field-action-node? n) (field-branch-node? n))]]
+  REPLACE [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
+                                  (field-action-node? n) (field-branch-node? n))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "and the sequence node itself are three zero-progress cycles: zero-progress-cycle count -- expected 3, got 2")
@@ -4881,9 +4920,14 @@ byte_machine_mutation(
   LABEL "verify: a field branch's false target is not an EOF successor"
   # SUBSUMED BY the union mutant above, by construction -- taking the first arm
   # does everything this does and more. Kept because it names its own decision.
-  FIND [[           (list (field-branch-node-true-target n)
+  # Anchored in `zero-width-successors`, the single definition all three
+  # consumers share -- factored in task 3 when the triplicated arms took every
+  # pin on them to SITES 3.
+  FIND [[          ((field-branch-node? n)
+           (list (field-branch-node-true-target n)
                  (field-branch-node-false-target n)))]]
-  REPLACE [[           (list (field-branch-node-true-target n)))]]
+  REPLACE [[          ((field-branch-node? n)
+           (list (field-branch-node-true-target n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "one arm cycling is a cycle even though the other finishes: cycle -- expected a true value")
@@ -4893,8 +4937,10 @@ byte_machine_mutation(
   LABEL "verify: a field action's error target is not an EOF successor"
   # The other half of the union, and the reason a field ACTION is multi-successor
   # too: a walk following only `next` misses a stop sitting behind a failure.
-  FIND [[                 (list (field-action-node-next n) e)]]
-  REPLACE [[                 (list (field-action-node-next n))]]
+  FIND [[                 (list (field-action-node-next n) e)
+                 (list (field-action-node-next n)))))]]
+  REPLACE [[                 (list (field-action-node-next n))
+                 (list (field-action-node-next n)))))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "a field action's error target is walked too: reachable stop -- expected a true value")
@@ -4922,6 +4968,86 @@ byte_machine_mutation(
   EXPECT_SURVIVES
     "measured, not assumed: this mutant passes the whole verify lane unchanged. The completed-set is decision 0021 item 2's SECOND structure and its job is complexity, not correctness -- the path stack alone already answers every verdict correctly, because the only path-dependent answer is `cycle` and a re-visit off the current path re-derives the same verdict rather than a different one. What the set buys is that a diamond costs one visit instead of two, and a chain of k diamonds costs k instead of 2^k, which is exactly the defect 0021 item 2 names in the algorithm it rejects. No assertion over verdicts can see a difference, because there is none. A TIMING witness was considered and declined: a chain of ~25 branch nodes makes the mutant take 2^25 walks and blow the lane's TIMEOUT, but a catch that depends on how fast the host is is not a catch this suite can state, and the project has recorded before that a nonzero exit is not proof. Reopening condition: if a later slice gives the walk a verdict that DOES depend on which path reached a node, the memo stops being sound and this mutation stops being a survivor -- it becomes a bug detector, and must be re-measured then rather than inherited."
   )
+
+# Slice ② task 3 adds FIVE for the zero-width census. Two of them are the
+# WALK/REPORT pair the M3 precedent in this file warns about, and they needed a
+# fixture of their own before they were separable at all -- see the middle two.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a zero-width node's targets are not out-targets"
+  # node-out-targets feeds name resolution, reachability AND the :908 check, so
+  # this one arm missing makes a well-formed machine report defects it does not
+  # have and hides one it does.
+  FIND [[          ((or (field-action-node? n) (field-branch-node? n))
+           (zero-width-successors n))
+]]
+  REPLACE [[          ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a zero-width node's targets are out-targets, so they are reachable: nothing unreachable")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the zero-progress WALK does not follow a zero-width node"
+  # Pinned on the through-a-dispatch fixture, which is the record the REPORT
+  # mutation below cannot produce: there the cycle's reported member is the
+  # byte-dispatch node, which stays in the report set either way, so narrowing
+  # the report leaves that diagnostic standing while narrowing the walk removes
+  # it. That fixture was added FOR this separation -- without it the two mutants
+  # emit identical records, which is exactly the half-fix M3 Slice ② shipped.
+  FIND [[              ((or (field-action-node? n) (field-branch-node? n))
+               (zero-width-successors n))
+]]
+  REPLACE [[              ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a cycle running THROUGH a zero-width node is attributed to the dispatch: attributed to start")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the zero-progress REPORT set excludes the zero-width kinds"
+  # SUBSUMED BY the walk mutation above, by construction and in the same nesting
+  # this file already records for the pause kind: narrowing the REPORT stops the
+  # zero-width nodes being flagged, narrowing the WALK stops those AND every node
+  # whose cycle merely runs through one. Each removes a superset of the last, so
+  # there is no record the narrower one owns. Kept because the two are distinct
+  # decisions and shipping only one of them is the defect this pass exists to
+  # prevent -- a `store`-into-itself machine that verifies clean and then hangs.
+  FIND [[                                  (field-action-node? n) (field-branch-node? n))
+                              (reaches-self? (node-name n)))]]
+  REPLACE [[                                  )
+                              (reaches-self? (node-name n)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a zero-width self-cycle is a zero-progress cycle: zero-progress-cycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the zero-width :908 check never fires"
+  FIND [[                        (if (and (or (field-action-node? n) (field-branch-node? n))
+                                 (memq (node-name n) br))]]
+  REPLACE [[                        (if #f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a byte-reachable zero-width node into a finish is non-eof-into-finish: non-eof-into-finish")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the zero-width :908 check is not gated on byte-reachability"
+  # The RESTRICTIVE direction, and the reason the gate exists at all. §16.2:908
+  # forbids NON-EOF control flow into a finish, so a zero-width node reached only
+  # along an EOF path legally continues into one -- decision 0011's ruling for
+  # the pause kind, applied here. Ungated, this check rejects a machine that has
+  # no defect. It SURVIVED until a fixture with an EOF-only-reachable zero-width
+  # node was written; the five cases already present could not see it, because
+  # every zero-width node in them is byte-reachable.
+  FIND [[                        (if (and (or (field-action-node? n) (field-branch-node? n))
+                                 (memq (node-name n) br))]]
+  REPLACE [[                        (if (or (field-action-node? n) (field-branch-node? n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an EOF-only-reachable zero-width node may continue into a finish: no non-eof-into-finish")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source

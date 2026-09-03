@@ -236,7 +236,27 @@ in both directions, then the gate. Tasks 1-3 are strictly ordered; 4-9 depend on
   **Gate:** a diamond that re-converges is not `'cycle`; a genuine cycle still is; no
   `'unknown` remains anywhere in the file.
 
-- [ ] **Task 3 — The verifier census, walk and REPORT guard together (H12, D5).** Every site
+- [x] **Task 3 — The verifier census, walk and REPORT guard together (H12, D5).**
+  Four sites: `node-out-targets`, `reexec-targets`, `pass-zero-progress`'s REPORT guard (with
+  its now-false message text), and a new byte-reachability-gated `:908` block. **Row 14 is
+  dropped**, and a case holds the drop: a byte path through a zero-width node into a *stop*
+  must verify clean, so if a later slice writes the prescribed sibling block that case fails.
+
+  **Two fixtures existed only to make mutants separable, and both were written because the
+  first measurement showed they were not.** The walk and the REPORT guard emitted *identical*
+  records — the M3 half-fix shape exactly — until a cycle running **through** a zero-width node
+  was added, whose reported member is the dispatch and so survives the report narrowing.
+  And removing the `:908` byte-reachability gate **survived** until an EOF-only-reachable
+  zero-width node was written; every zero-width node in the first five cases is byte-reachable,
+  so nothing could see it.
+
+  **`zero-width-successors` was extracted, not triplicated.** Three consumers wanted the same
+  fact and the arms were textually identical, so every pin on them resolved to three sites — the
+  SITES-fails-both-directions trap, hit twice in this task. Factoring does not collapse three
+  decisions: each caller's arm stays its own mutable line.
+
+  Five mutations; **five shipped pins re-anchored**, three of them the same report guard for the
+  third time. `release` 92/92, 49 passes / 292 mutations, no golden moved. Every site
   from the corrected census. `pass-overlap` and `pass-sequence-ambiguity` stay unextended,
   permanently. **Row 14 is dropped** with its gap recorded and witnessed. Fixture proving
   `dispatch --advance--> field-action --next--> stop` verifies clean.
