@@ -210,6 +210,34 @@
   moment. What was actually wrong was in a different file — a prior slice's plan.
   Name precisely which artifact is wrong; they are not interchangeable. Keep the
   retraction rather than deleting it, because the failure is the instructive part.
+* **A whole-pass sweep re-judges the pins that EXIST; it cannot notice a decision no pin names.**
+  A clean sweep answers "do my pins still identify their own mutants", never
+  "is every decision here pinned" — and it reads like the second. Milestone 4
+  Slice ② widened the normalized state vector from eight slots to eleven and
+  missed `seq-state`, the literal building every sequence-dispatch node's state;
+  those shipped three slots short of the layout the file declares, and survived
+  the task's own six mutations, a 36-pin/1260-pair sweep reporting **zero**
+  collisions, and all 92 lanes. Invisible because those states carry kind
+  `dispatch` and every reader of the new slots is kind-guarded. The plan and the
+  commit both said "six state literals move in this commit"; there are **eight**,
+  and the eighth is the one that was missed — a count describing the work done
+  rather than the work owed. When a change has a CENSUS shape ("every X gains
+  Y"), the check must be **total over X**, enumerated mechanically, with a
+  sentinel reading the observed count — never a case per X you thought of.
+* **A differential compares two implementations only where a fixture reaches both — and the operand must separate a member from its SIBLINGS.**
+  Milestone 4 writes seven field operations and seven predicates twice on purpose,
+  because a shared helper would make a lowering bug invisible to the
+  interpreter≡generated differential. Slice ② shipped with **six of the fourteen
+  in no fixture at all**; measured, inverting the emitter's `mask-none` alone left
+  all 92 lanes at status 0. The subtler half: with `mask-all 12` on a field
+  holding 12, an implementation computing `mask-any` answers *correctly*, so the
+  case passed on the wrong predicate and the mutation survived — the operand had
+  to become 14, where 12 carries some mask bits but not all. For any closed
+  enumeration implemented more than once, census which members a fixture actually
+  reaches before claiming coverage, then per member ask which sibling answers the
+  same on that operand. Assert EXPECTED values, not only that the lanes agree:
+  two lanes wrong the same way agree.
+
 * **`SITES` fails in BOTH directions — new code that DUPLICATES a pinned line breaks it too.**
   The familiar failure is "found 0, expected 1": an edit changed a `FIND`'s text.
   The one that gets missed is **"pattern occurs 2 times ... expected 1"**, when a
