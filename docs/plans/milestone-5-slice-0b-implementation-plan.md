@@ -153,9 +153,20 @@ as "any state an execution can occupy", or a later slice will re-derive it wrong
   offenders must verify clean (fails today for three of them); the six byte-reachable offenders
   must be rejected **at the source node** (the reverse-direction pin); and a named assertion that
   `make-pause-machine` verifies clean *and* that `pe`'s continuation is a finish node.
-- [ ] **T3 — the entry-is-finish clause (OQ-2).** One failing fixture plus the empty-feed and
-  one-byte runtime assertions. Five lines. Separate commit so the decision stays independently
-  revertible.
+- [x] **T3 — the entry-is-finish clause (OQ-2).** Done, as its own clause and its own pin so the
+  decision stays independently revertible.
+
+  **The runtime evidence had to be captured before the fix.** Measured pre-clause: `entry =
+  finish` verified with zero diagnostics and `parser-feed!` returned `finished` for an **empty**
+  slice, consuming 0 — which §11.1:638's closed list ("a callback, stop, or error") does not
+  permit, and §12.1:671's `ready --feed-->` set does not contain. Once the verifier rejects the
+  machine no executor will build it, so that measurement cannot be re-asserted as a live test; it
+  is recorded at the fixture as the evidence that justified the rule, and the case asserts what
+  stays observable — the verdict, exactly one finding, at the entry.
+
+  A second case pins the shape people actually want (`§12.4:725`: an entry that *routes* EOF to a
+  finish), so the clause cannot be widened into `eof-machine.sls` by a later slice. Census moved
+  **29 → 30**; second red run, second re-baseline.
 - [ ] **T4 — `:909` becomes the parked-set block (D-1).** Failing fixtures for all four D-1
   cells **plus the two already-correct one-hop controls, which must stay at exactly one
   finding** — that is the anti-duplication pin.

@@ -774,6 +774,21 @@
        ;; already owns that job -- the direct antidote to the failure mode Slice
        ;; ③ shipped three times: a kind taught to the accessors and not to the
        ;; hand-written filters reading them.
+       ;; The ZERO-HOP case (Slice ⓪b, OQ-2): the entry itself being a finish
+       ;; terminal. Decision 0011 item 4(b) and §10.6:616 both state the rule over
+       ;; REACHING, and the entry is reached by `parser-feed!`. Measured before
+       ;; this clause: such a machine verified clean and `parser-feed!` returned
+       ;; `finished` for an EMPTY slice, which §11.1:638's closed list ("a
+       ;; callback, stop, or error") does not permit. Reuses the code rather than
+       ;; spending a new one, on the Slice ③ precedent.
+       ;;
+       ;; Multiplicity 1 by construction: one entry, and a finish node has no
+       ;; out-targets, so the per-edge loop below cannot also fire on it.
+       (let ((en (lookup nodes (machine-entry m))))
+         (if (and en (finish-node? en))
+             (list (make-diagnostic 'non-eof-into-finish (machine-entry m)
+                                    "the entry is a finish terminal"))
+             '()))
        (let ((br908 (byte-reached m)))
          (apply append
                 (map (lambda (n)

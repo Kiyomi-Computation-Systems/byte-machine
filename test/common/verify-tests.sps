@@ -1799,4 +1799,62 @@
           (check-equal "all six kinds driven" seen 6)
           (check-equal "each rejected exactly once, at `hop`" bad '()))))))
 
+;; Milestone 5 Slice ⓪b task 3: the ENTRY may not be a finish terminal (OQ-2).
+;;
+;; §16.2:908 forbids "non-EOF control flow INTO a finish terminal", and decision
+;; 0011 item 4(b) states the same rule over REACHING: "a `finish` node reached by
+;; non-EOF (byte) control flow is rejected". §10.6:616 agrees -- "may be reached
+;; only while processing `parser-finish!`". The entry is reached by
+;; `parser-feed!`, so zero hops is still reaching.
+;;
+;; *** Measured before the clause below existed: `entry = finish` verified with
+;; ZERO diagnostics, and `parser-feed!` returned `finished` for an EMPTY slice
+;; and for a one-byte slice alike, consuming 0. *** §11.1:638's closed list of
+;; what an empty slice may produce is "a callback, stop, or error" -- `finished`
+;; is not in it, and §12.1:671's `ready --feed-->` target set does not contain it
+;; either. Three independent sentences forbid the shape.
+;;
+;; The runtime half of that measurement cannot be re-asserted as a live test:
+;; once the verifier rejects the machine, no executor will build it. So it is
+;; recorded here as the measurement that justified the rule, and the case below
+;; asserts what remains observable -- the verdict.
+;;
+;; NO NEW CODE: this reuses `non-eof-into-finish`, on the Slice ③ precedent where
+;; `invalid-field-operand` took a second meaning rather than spending a code. A
+;; new code would need a new §16.2 bullet, and the parent plan is append-only, so
+;; its anchor would land nine hundred lines from its siblings.
+(harness-group "the entry may not be a finish terminal (Slice ⓪b)"
+  (lambda ()
+    (harness-case "a machine whose entry IS a finish node is rejected, once, at the entry"
+      (lambda ()
+        ;; Multiplicity 1 by construction: there is exactly one entry, and a
+        ;; finish node has no out-targets, so the per-edge clause cannot also
+        ;; fire on it.
+        (let ((ds (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                       (verification-diagnostics
+                        (verify-machine
+                         (make-machine 'ef 'fin '() '() '() (list eof-decl rej-decl)
+                                       (list (make-finish-node 'fin #f))
+                                       'default-eof #f))))))
+          (check-equal "exactly one finding, at the entry"
+                       ds '((non-eof-into-finish . fin))))))
+    (harness-case "an entry that ROUTES eof to a finish is still legal"
+      (lambda ()
+        ;; The shape people actually want, and the one §12.4:725 describes: a
+        ;; stream-idle entry may route EOF to a successful `finished`. The tree
+        ;; already ships it as `eof-machine.sls`. Asserted here so the clause
+        ;; above cannot be widened into it by a later slice.
+        (let ((v (verify-machine
+                  (make-machine 'ok 'start '() '() '() (list eof-decl rej-decl)
+                                (list (make-byte-dispatch-node 'start
+                                        (list (make-byte-case (make-exact-byte-matcher 0)
+                                                              (make-edge 'stop 'advance) #f))
+                                        (make-edge 'rej 'reexecute) 'fin #f)
+                                      (make-finish-node 'fin #f)
+                                      (make-stop-node 'stop #f)
+                                      (make-error-node 'rej 'rejected #f))
+                                'default-eof #f))))
+          (check "accepted" (verification-ok? v))
+          (check-equal "no diagnostics" (length (verification-diagnostics v)) 0))))))
+
 (harness-finish)

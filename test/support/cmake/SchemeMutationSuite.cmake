@@ -837,6 +837,8 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Milestone 5 Slice ⓪b task 3: the zero-hop entry clause. Mutations 368 + 1 = 369.
+#
 # Milestone 5 Slice ⓪b task 2: §16.2:908's three hand-written sites collapse
 # into one derived block. SEVEN mutations removed (their decisions no longer
 # exist separately; residue recorded at the site), THREE added. Mutations
@@ -982,7 +984,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 51)
-set(EXPECTED_MUTATIONS 368)
+set(EXPECTED_MUTATIONS 369)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -5469,6 +5471,20 @@ byte_machine_mutation(
                      nodes)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "a byte case targeting a finish node is rejected")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the entry being a finish terminal is not rejected (Slice ⓪b, OQ-2)"
+  # The zero-hop case. Kept as its own clause and its own pin rather than folded
+  # into the per-edge loop, because it is an independently revertible decision:
+  # §16.2:908's words are about control flow INTO a node, and reading the entry
+  # as "reached by parser-feed!" is an interpretation the plan argues for
+  # explicitly. If a later slice disagrees, this is the one line to remove.
+  FIND [[         (if (and en (finish-node? en))]]
+  REPLACE [[         (if (and en (finish-node? en) #f)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a machine whose entry IS a finish node is rejected, once, at the entry")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

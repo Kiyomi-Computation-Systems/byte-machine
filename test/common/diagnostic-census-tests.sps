@@ -88,7 +88,7 @@
     (missing-target 2) (missing-error-declaration 1) (invalid-field-declaration 2)
     (invalid-field-operand 6) (overlapping-cases 1) (ambiguous-sequence-prefix 1)
     (unreachable-node 1) (zero-progress-cycle 1) (invalid-eof-target 2)
-    (non-eof-into-finish 1) (eof-reachable-stop 2) (eof-zero-progress-cycle 2)
+    (non-eof-into-finish 2) (eof-reachable-stop 2) (eof-zero-progress-cycle 2)
     (invalid-name 3)))
 
 ;; *** RE-MEASURED 2026-09-03, Slice ⓪b task 2: `non-eof-into-finish` went 3 -> 1
@@ -98,6 +98,10 @@
 ;; into one derived block keyed on byte-reachability. The census went red on the
 ;; commit that did it, which is exactly what a pinned site table is for. Slice
 ;; ⓪'s own plan predicted this move and named it as expected.
+;;
+;; Then 29 -> 30 at task 3, which ADDS a site: the zero-hop clause for an entry
+;; that is itself a finish terminal. Two moves, two commits, two red runs -- the
+;; table is doing its job in both directions.
 
 (harness-group "the diagnostic code set is derived from verify.sls, not declared here"
   (lambda ()
