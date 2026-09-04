@@ -2027,3 +2027,40 @@ three verifier defects — two Critical — past 368 mutations, a 50-pass suite 
 ten per-task gates, all one shape: a new node kind reached the shared accessors
 and missed a hand-written per-kind filter. That is why Milestone 5 opened with
 two hardening slices rather than with its own scope, dispositioned above.
+
+### §9.3:407-411 — Milestone 5 Gate 0, a sixth parser accessor
+
+**2026-09-04, Milestone 5 Gate 0.** §9.3's normative call list above is **not
+reworded**; it stands exactly as written. This appends one entry to it:
+
+```scheme
+(parser-active-span parser)                 ; active span name, or #f
+```
+
+It joins the five read accessors at §9.3:407-411 under the same rules — the
+parser representation stays opaque (§9.3:425), the accessor is read-only, and it
+answers while lifecycle is `busy`, as all five do.
+
+**Why the list was short one entry.** §13:820 commits the runtime to reporting,
+for an automatic feed-boundary fragment, "the current source input node together
+with the active span name", and §10.2:495 places span markers outside machine
+fields, so `parser-field-ref` cannot answer and no other listed accessor names a
+span. Without a public accessor, §13:822 and §13:823 — the span-data callback
+sees its span active, the span-complete callback sees it inactive — have no
+observable form, and §22.4:1267's cross-lane comparison of "final state and
+fields" cannot see "one active named span" (§25:1581) at all.
+
+**Rejected.** Widening `parser-state-name` to a compound value in the
+feed-boundary case: §13:820 calls that fragment *automatic*, so no caller can
+predict which calls return the compound, and every existing caller's contract
+becomes conditional on a case it cannot anticipate. A debug-only surface with no
+public witness: it leaves the cross-lane oracle blind to this milestone's newest
+construct.
+
+Recorded in **decision 0028**
+(`docs/decisions/0028-callback-slots-and-visible-state.md`), which also settles
+that §13:821's "parser operations are rejected" scopes to §12.2's four mutating
+operation columns and not to the read accessors. Slice ①b implements the
+accessor.
+
+Plan: `docs/plans/milestone-5-gate-0-implementation-plan.md`.

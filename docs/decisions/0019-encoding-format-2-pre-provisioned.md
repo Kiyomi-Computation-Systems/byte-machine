@@ -12,6 +12,10 @@ Milestone: 4, Gate 0 (milestone-4-design.md §4.2)
 >   licensed. Point 5 as written makes that a STOP condition; read as written it
 >   now produces a false positive for every later slice. The baseline for the
 >   remaining slices is **`51fd5f3`**, not ①a's merge. See the foot of this file.
+> - **2026-09-04 (Milestone 5)** — **annotates item 3**: all three reserved slots
+>   are spent, and Milestone 4 spent them.
+>   [Decision 0025](./0025-milestone-5-seam-encoding-abi-exec.md) reserves again
+>   on this item's precedent rather than drawing on it. See the foot of this file.
 
 ## Context
 
@@ -127,6 +131,11 @@ Note also that no record owns that byte: normal-ir.sls:250 credits the layout to
    Slot (c) is the one a reader will miss, because it is not in the encoding at
    all; it is reserved here for the same reason and by the same argument. Its
    own two-site breakage is Consequences' second bullet, not this inventory.
+
+   > **Annotated 2026-09-04 (Milestone 5)** by
+   > [decision 0025](./0025-milestone-5-seam-encoding-abi-exec.md) — all three
+   > slots are now filled, as named. The reserve is empty. See the dated note
+   > below; the text above is left as decided.
 
 4. **This is a format decision, not a transformation, so §17:966 does not reach
    it.** That line reads: "Normalization must not perform speculative
@@ -278,3 +287,43 @@ tree. All are corrected to `51fd5f3`. Slice ①b's whole-branch review found thi
 record unamended while the licence lived only in 0022's amendment, the design's
 preamble and ①b's plan — none of which a reader arriving at point 5 by citation
 reaches.
+
+## 2026-09-04 (Milestone 5) — item 3's three slots are all spent; 0025 reserves again rather than drawing on them
+
+Item 3 reserved three slots and named where each would be filled. **All three
+were filled, as named, inside Milestone 4.** Measured on 2026-09-04 against
+`cc66302`, each against the code and against the in-tree comment that credits
+this item:
+
+- (a) *the encoding's field table* — `encode-normal` takes a `fields` parameter
+  (`normal-ir.sls:462`), and `normal-ir.sls:474` reads "①a wrote this count as a
+  literal zero with no records, and Slice ①b fills it".
+- (b) *the ABI payload's field-initials member* — `compile.sls:504` reads
+  "Decision 0019 item 3(b)'s member 0, filled by Slice ①b", and
+  `test/fixtures/generated-accumulate.golden.sls:36` renders
+  `(quote #(#((value . 0))))`.
+- (c) *emitted `exec`'s seventh parameter* — `compile.sls:63-64` reads "`fieldv`
+  is emitted `exec`'s seventh parameter, reserved empty here and filled in Slice
+  ② (decision 0019 item 3(c))", and the template at `compile.sls:532` is
+  `(define (exec state offset bv start end finish? fieldv)`.
+
+**Nothing item 3 says becomes false; this note only records that its plan
+happened.** It is written because item 3 is where a later milestone arrives
+looking for room, and the inventory reads the same whether the slots are held or
+gone.
+
+**What Milestone 5 takes from item 3 is the precedent, not a slot.**
+[Decision 0025](./0025-milestone-5-seam-encoding-abi-exec.md) widens emitted
+`exec` again — a parser handle and a callback slot vector, both reserved and
+unused — and grows the ABI payload by a second member, empty, with
+`current-abi-version` going 3→4. It reserves on this item's argument (a parameter
+added *later* moves the emitted text of every machine, including the ones the
+feature does not touch, so the widening is paid once) and pays its own
+re-baseline. There is no unspent slot for it to occupy.
+
+**Item 5 is not reached by this note.** Its guarantee is scoped "for the rest of
+Milestone 4", and Milestone 4 closed on 2026-09-03; decision 0025 point 4 states
+the Milestone 5 instance of the same discipline in its own record rather than
+extending item 5's words. Note also that item 5 says *three* committed goldens
+and there are now four: `generated-accumulate.golden.sls` arrived with Slice ③,
+inside the scope item 5 covered.
