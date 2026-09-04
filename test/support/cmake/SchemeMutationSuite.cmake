@@ -837,6 +837,9 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Milestone 5 Slice ⓪ task 5: the verdict lattice joins pass 52. Mutations
+# 373 + 1 = 374.
+#
 # Milestone 5 Slice ⓪ task 2: a NEW pass (52) for the kind x position matrix,
 # carrying the closed-set ratchet. Passes 51 + 1 = 52; mutations 372 + 1 = 373.
 #
@@ -995,7 +998,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 52)
-set(EXPECTED_MUTATIONS 373)
+set(EXPECTED_MUTATIONS 374)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -9329,6 +9332,23 @@ byte_machine_mutation(
   REPLACE [[        (integer-accumulate-node? x) (stop-node? x)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the same nine kinds -- expected")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls
+  SPEC byte-machine.unit.kind-position-census.chez.source
+  LABEL "verify: cycle and eof-reachable-stop are merged into one tier"
+  # The 25-cell verdict lattice is what certifies Slice ⓪b's tiers rather than
+  # taking them on trust: every sibling pair, and the join must be the higher
+  # tier. Merging the top two tiers collapses ten of the twenty-five cells onto
+  # the wrong diagnostic -- `cycle` stops outranking `eof-reachable-stop`, which
+  # is the ONE relation decision 0021 item 1 pins by name, and the one a
+  # non-terminating machine depends on.
+  FIND [[      (eof-reachable-stop)                      ; §16.2:909
+      (cycle)))                                 ; 0021 item 1]]
+  REPLACE [[      (eof-reachable-stop cycle)                ; §16.2:909
+      ()))                                      ; 0021 item 1]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the join is the higher tier every time")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

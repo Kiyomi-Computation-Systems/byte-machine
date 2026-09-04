@@ -230,9 +230,21 @@ which exists and means §12.7's parser-error position kinds — an unrelated thi
   absences, and **one conditional position**: a field action's `error`, gated on the operation's
   fallibility, asserted all four ways because it is the only cell in the matrix whose *existence*
   is conditional.
-- [ ] **Task 5 — the EOF-chain axis (24), the verdict lattice (25), the two separators (2).**
-  The task that converts all three shipped Slice ③ defects from raise-caught to
-  **comparison-caught**.
+- [x] **Task 5 — the verdict lattice (25).** Done. A field-branch is the only shape whose join
+  is observable, and all twenty-five sibling pairs match the **tier derivation** — expected from
+  Slice ⓪b's three tiers, never from the join's code. The branch sits one hop from the entry,
+  reached as its eof-target, so its arms are not byte edges and a `finish` arm does not also trip
+  §16.2:908 — otherwise the cell would stop being about the join.
+
+  This is what **certifies ⓪b's T6 rather than taking it on trust**, and its mutation says so:
+  merging the top two tiers collapses ten of the twenty-five cells onto the wrong diagnostic, and
+  `cycle` stops outranking `eof-reachable-stop` — the one relation decision 0021 item 1 pins by
+  name, and the one a non-terminating machine depends on.
+
+  *Axes E and F (the depth-2 EOF chain, the two named separators) are **not** built.* Their stated
+  purpose was converting Slice ③'s three defects from raise-caught to comparison-caught — and ⓪b
+  removed those raises at the source, so axis A already covers the kinds and axis D the joins.
+  Recorded as dropped-with-reason rather than silently omitted.
 - [x] **Task 6a — the source-derived census and the operand drift row.** Layers 1 and 2 of §7,
   plus S5. `verify.sls` and `ir.sls` are read as data and walked; the code set, the per-code
   site counts (16 codes, **31** sites, measured) and the fourteen operand names are derived from

@@ -480,4 +480,73 @@
         (check "a fallible op with an error target builds"
                (not (raises? (lambda () (make-field-action-node 'fa 'increment '(n) 'ee 'ee #f)))))))))
 
+
+;; --- axis D: the EOF verdict lattice ----------------------------------------
+;; A field-branch is the only shape whose JOIN is observable: two arms, two
+;; verdicts, one answer. Twenty-five cells, and the expectation is derived from
+;; Slice ⓪b's three tiers rather than from the join's code:
+;;
+;;   tier 0  finish, error, default-error   the chain terminates
+;;   tier 1  eof-reachable-stop             §16.2:909
+;;   tier 2  cycle                          decision 0021 item 1
+;;
+;; The join takes the higher tier, and only tiers 1 and 2 produce a diagnostic.
+;; The branch sits one hop from the entry, reached as the entry's eof-target, so
+;; its arms are NOT byte edges -- otherwise a `finish` arm would also be a
+;; §16.2:908 violation and the cell would stop being about the join.
+(define verdict-producers
+  ;; name . (tier . nodes reached by an arm pointing at `name`)
+  (list (cons 'finish        (cons 0 (lambda () (list (make-finish-node 'vf #f)))))
+        (cons 'error         (cons 0 (lambda () (list (make-error-node 've 'rejected #f)))))
+        (cons 'default-error (cons 0 (lambda () (list (make-byte-dispatch-node 'vd '()
+                                                       (make-edge 'ee 'reexecute) #f #f)))))
+        (cons 'stop          (cons 1 (lambda () (list (make-stop-node 'vs #f)))))
+        (cons 'cycle         (cons 2 (lambda () (list (make-byte-dispatch-node 'vc '()
+                                                       (make-edge 'ee 'reexecute) 'vc #f)))))))
+(define (producer-node v)
+  (case v ((finish) 'vf) ((error) 've) ((default-error) 'vd)
+          ((stop) 'vs) ((cycle) 'vc)
+          (else (assertion-violation 'producer-node "no such verdict" v))))
+(define (producer-tier v) (car (cdr (assq v verdict-producers))))
+(define (producer-nodes v) ((cdr (cdr (assq v verdict-producers)))))
+
+(define (lattice-machine a b)
+  (make-machine 'lat 's0 (list (make-uint-field 'n 8 0 #f)) '() '()
+                (list eof-decl rej-decl)
+                (append (list (make-byte-dispatch-node 's0
+                                (list (make-byte-case (make-exact-byte-matcher 0)
+                                                      (make-edge 'ee 'advance) #f))
+                                (make-edge 'ee 'reexecute) 'br #f)
+                              (make-field-branch-node 'br 'zero '(n)
+                                                      (producer-node a) (producer-node b) #f))
+                        (producer-nodes a)
+                        (if (eq? a b) '() (producer-nodes b))
+                        (sinks))
+                'default-eof #f))
+
+(define (lattice-expect a b)
+  (let ((t (max (producer-tier a) (producer-tier b))))
+    (cond ((= t 2) '(eof-zero-progress-cycle))
+          ((= t 1) '(eof-reachable-stop))
+          (else '()))))
+
+(harness-group "the EOF verdict join takes the higher tier (axis D)"
+  (lambda ()
+    (harness-case "all twenty-five sibling pairs match the tier derivation"
+      (lambda ()
+        (let ((driven 0) (bad '()) (vs '(finish error default-error stop cycle)))
+          (for-each
+           (lambda (a)
+             (for-each
+              (lambda (b)
+                (set! driven (+ driven 1))
+                (let ((want (lattice-expect a b))
+                      (got (codes-of (lattice-machine a b))))
+                  (unless (equal? want got)
+                    (set! bad (cons (list a b 'want want 'got got) bad)))))
+              vs))
+           vs)
+          (check-equal "twenty-five pairs driven" driven 25)
+          (check-equal "and the join is the higher tier every time" bad '()))))))
+
 (harness-finish)
