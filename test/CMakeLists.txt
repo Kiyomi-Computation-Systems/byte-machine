@@ -1438,6 +1438,35 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/reserved-drift-tests.sps"
   TIMEOUT 120)
 
+# --- Milestone 5 Slice ⓪ task 6: the verifier's diagnostic census ------------
+# The program READS `verify.sls` and `ir.sls` as data, so it needs a path to the
+# source tree -- and it must be the tree that is actually RUNNING. Under the
+# mutation suite that is the staged copy, not `${CMAKE_SOURCE_DIR}`: a census
+# reading the pristine source while running a mutated object would report every
+# source-side mutation as caught for no reason at all. The suite therefore
+# overrides this variable to its own `STAGE_DIR` once, next to where STAGE_DIR is
+# defined; these two registrations carry the un-staged value for ordinary runs.
+# An unset variable RAISES in the program rather than defaulting.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.diagnostic-census.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/diagnostic-census-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_VERIFY}
+          "${CMAKE_SOURCE_DIR}/test/common/diagnostic-census-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.diagnostic-census.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/diagnostic-census-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_VERIFY}
+          "${CMAKE_SOURCE_DIR}/test/common/diagnostic-census-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src")
+
 # --- Milestone 4 Slice ①a task 4.7-2: the member-3 drift guard ---------------
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.member3-drift.chez.source

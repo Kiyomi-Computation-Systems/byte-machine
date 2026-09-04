@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FIFTY PASSES, BECAUSE FIFTY DIFFERENT WITNESSES ARE NEEDED
+# FIFTY-ONE PASSES, BECAUSE FIFTY-ONE DIFFERENT WITNESSES ARE NEEDED
 # (46 through Milestone 3; Milestone 4 Slice ①a adds the member-3 drift
 # guard and the position-kind lane, and Slice ①b the field-access lane -- since
 # renamed byte-machine.differential.field, the only lane in which the field
@@ -161,7 +161,7 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "FIFTY PASSES..." above. Declared here, rather than only in prose,
+# See "FIFTY-ONE PASSES..." above. Declared here, rather than only in prose,
 # so the count enforced at the bottom of this file is the same text a reader
 # checks by eye at the top -- one number to keep in sync, not two that can
 # quietly disagree. 25 passes / 60 mutations before the aot task; pass 26 adds
@@ -837,6 +837,10 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Milestone 5 Slice ⓪ task 6: a NEW pass (51) for the diagnostic census --
+# the operand-table drift row and the per-code site counts. Passes become
+# 50 + 1 = 51; mutations 369 + 2 = 371.
+#
 # Milestone 5 Slice ⓪ task 1: the verify pass gains ONE for the pause-continuation
 # EOF cycle site, which was live code with no witness. Mutations become
 # 368 + 1 = 369.
@@ -972,8 +976,8 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-set(EXPECTED_PASSES 50)
-set(EXPECTED_MUTATIONS 369)
+set(EXPECTED_PASSES 51)
+set(EXPECTED_MUTATIONS 371)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -1110,6 +1114,15 @@ else()
   set(WORK_DIR "${SOURCE_ROOT}/build/scheme-mutation")
 endif()
 set(STAGE_DIR "${WORK_DIR}/stage")
+
+# Milestone 5 Slice ⓪ task 6: the diagnostic census READS verify.sls and ir.sls
+# as data, and under this suite it must read the STAGED tree -- the one the
+# mutation was applied to. Set once, here, rather than per pass: every
+# execute_process launched from this script inherits it, so the census sees the
+# same text the lane is executing. Reading ${CMAKE_SOURCE_DIR} instead would make
+# every source-side mutation report as caught while the census compared the
+# pristine file against itself.
+set(ENV{BYTE_MACHINE_SOURCE_ROOT} "${STAGE_DIR}/src")
 
 # The object guard the Chez launcher requires. It lives outside the stage
 # because the stage is removed and rebuilt on every run, and the launcher
@@ -9365,9 +9378,56 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
+# --- Milestone 5 Slice ⓪ task 6: the diagnostic census (pass 51) -------------
+#
+# This pass is why BYTE_MACHINE_SOURCE_ROOT is set to ${STAGE_DIR}/src at the top
+# of this file: the census READS the source it is asserting about, so it must
+# read the staged copy the mutation was applied to. Pointed at the pristine tree
+# it would compare a file with itself and report every mutation here as caught.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/diagnostic-census-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.diagnostic-census.chez.source
+  LABEL "ir: an eighth field operation is declared with no operand schema row"
+  # The drift the row exists for, and measured caught by the census ALONE -- the
+  # two tables live in different files, written under different rules, and
+  # nothing compared them before. verify.sls's own comment at the schema lookup
+  # calls a mismatch "unreachable through the public API", which is verbatim the
+  # shape of Slice ③'s first Critical: a closed-set claim made in prose.
+  FIND [[(define field-operations '(store clear increment decrement add set-mask clear-mask))]]
+  REPLACE [[(define field-operations '(store clear increment decrement add set-mask clear-mask frobnicate))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the fourteen names agree across the two files: declared names equal tabulated names")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.unit.diagnostic-census.chez.source
+  LABEL "verify: an emission site is relabelled with another existing code"
+  # The per-code site counts, which is the half of the census that notices a code
+  # moving rather than appearing. Behavioural lanes also redden here -- a
+  # relabelled site reports the wrong code to a fixture that names it -- but the
+  # record pinned is the census's own count row, which is what attributes the
+  # failure to the site table rather than to any one fixture.
+  FIND [[(list (make-diagnostic 'eof-reachable-stop (node-name n)
+                                                      "an EOF path reaches a stop terminal")))]]
+  REPLACE [[(list (make-diagnostic 'zero-progress-cycle (node-name n)
+                                                      "an EOF path reaches a stop terminal")))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the code set and the per-site counts match the pinned table")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FIFTY PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FIFTY-ONE PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

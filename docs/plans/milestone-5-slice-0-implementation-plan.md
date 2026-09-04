@@ -172,8 +172,23 @@ which exists and means §12.7's parser-error position kinds — an unrelated thi
 - [ ] **Task 5 — the EOF-chain axis (24), the verdict lattice (25), the two separators (2).**
   The task that converts all three shipped Slice ③ defects from raise-caught to
   **comparison-caught**.
-- [ ] **Task 6 — the diagnostic-code and emission-site census, and the operand-table drift row.**
-  Three layers (§7).
+- [x] **Task 6a — the source-derived census and the operand drift row.** Layers 1 and 2 of §7,
+  plus S5. `verify.sls` and `ir.sls` are read as data and walked; the code set, the per-code
+  site counts (16 codes, **31** sites, measured) and the fourteen operand names are derived from
+  the artifacts, never declared in the test. Guards: every emitted code is a quoted symbol (32
+  `make-diagnostic` forms, minus the definition header, subtracted **by name**), and each source
+  file is exactly one datum. Two lanes, two mutations, a new pass 51 — the operand drift row's
+  mutant is caught by the census **alone**. `release` 96/96, 51 passes / **371** mutations.
+
+  *Plumbing, resolved more cheaply than §9's H5 feared:* one variable,
+  `BYTE_MACHINE_SOURCE_ROOT`, and the mutation suite overrides it to `${STAGE_DIR}/src` **once**,
+  beside where `STAGE_DIR` is defined — every `execute_process` in that script inherits it, so
+  all 51 passes are covered by a single line rather than per-pass plumbing. Unset raises.
+
+- [ ] **Task 6b — fixture coverage (layer 3 of §7).** One machine per code, iterated over the
+  **source-derived** key set with S4 counting rows asserted inside the loop. The discriminator is
+  the diagnostic's node slot plus fixture shape — **never** message text (§16.4 and `verify.sls`
+  forbid comparing rendered text, and the texts are not unique: two pairs of sites share one).
 - [ ] **Task 7 — the dispositions append and the mutation registrations.** Append under
   `## Dated dispositions` at `byte-machine-implementation-plan.md:1802` (file is 1825 lines;
   **never insert above** — AGENTS.md:324). Record OQ-1…OQ-5, the skeleton decision, that the
