@@ -18,10 +18,12 @@ declaration, slots, and `parser-field-ref`), and Slice ② **2026-09-03** (field
 action and field branch). See
 [the implementation plan](docs/plans/byte-machine-implementation-plan.md) §25
 for overall scope; the entries below record what each milestone actually
-delivered. Milestone 5's own scope has not begun: two hardening slices ran
-first and closed **2026-09-04** — Slice ⓪ (the verifier's kind × position
-matrix and a diagnostic-code census derived from the source rather than
-declared) and Slice ⓪b (the EOF walk cluster). No versioned release exists
+delivered. Milestone 5 (callbacks, poisoning, and spans) is in progress. Two
+hardening slices ran first and closed **2026-09-04** — Slice ⓪ (the verifier's
+kind × position matrix and a diagnostic-code census derived from the source
+rather than declared) and Slice ⓪b (the EOF walk cluster). Gate 0 discharged
+**2026-09-04** as decisions 0024-0029, and Slice ①a — the seam — landed the
+same day, taking the generated ABI to version 4. No versioned release exists
 yet.
 
 ### Added
