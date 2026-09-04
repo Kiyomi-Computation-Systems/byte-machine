@@ -1,6 +1,16 @@
 # Milestone 5 Slice ⓪ — the kind × position matrix and the diagnostic-code census
 
-**Status:** planned, not started. Written 2026-09-03 against `main` at `bafdbe1` (Milestone 4
+**Status:** Tasks 1 and 6 done. **Tasks 2-5 and 7 now run AFTER Slice ⓪b** (reordered
+2026-09-03 — see §2). Task 1's fixture is measured byte-identical under ⓪b's new verifier, and
+Task 6's census is expected to move from 31 sites to 28, which is its ratchet working.
+
+*Citations corrected 2026-09-03.* Every `verify.sls:NNN` below was measured against the tree as
+it stands. The first set was **stale on arrival**, by four lines: they were taken from a design
+pass run against a worktree predating the commit that expanded a comment in that same file, and
+the plan was written after that commit merged. Most consequentially, D-2's site was cited as
+`:831`, which is the **live** `eof-reachable-stop` half of that `case`; the dead clause was
+`:834`. This is the "citations into files you edit" trap — no grep or link check can see it,
+because every cited line exists and holds plausible code. Written 2026-09-03 against `main` at `bafdbe1` (Milestone 4
 closed). Every number below is **measured**, and the measurement is named beside it; where an
 agent's figure disagreed with the tree, the tree won and the disagreement is recorded.
 
@@ -36,7 +46,7 @@ regression, and both are this slice's opening charter.
 
 ### D-1 `machine-entry`'s own EOF path is never classified
 
-`eof-terminal` is called from exactly two sites (`verify.sls:773`, `:826`); `machine-entry` is
+`eof-terminal` is called from exactly two sites (`verify.sls:777`, `:830`); `machine-entry` is
 neither, while `parser-finish!` on a fresh or reset parser starts precisely there
 (`runtime.sls:212`, `:226`, `:548`). Measured, through both executors:
 
@@ -52,13 +62,28 @@ dispatch eof-target = stop          verify (eof-reachable-stop)
 
 §16.2:909 forbids the first four by name.
 
-***Do not fix this in Slice ⓪.*** The one-line fix (a walk start at the entry) was prototyped
-and **changes 85 of 230 cells**, most of it double-reporting — `BASE p4 stop` goes from one
-`eof-reachable-stop` to two, which collides with §16.4:937-943's one-finding-per-decision. The
-hole is real; the fix's shape is a separate decision, and this slice's job is to make it
-*visible and recorded*, not to take it.
+***Superseded 2026-09-03 — Slice ⓪b takes this fix, and runs BEFORE Slice ⓪'s Tasks 2-5.***
+This paragraph read: *"Do not fix this in Slice ⓪. The one-line fix (a walk start at the entry)
+was prototyped and changes 85 of 230 cells, most of it double-reporting — `BASE p4 stop` goes
+from one `eof-reachable-stop` to two, which collides with §16.4:937-943's
+one-finding-per-decision."* Both of its load-bearing claims are false:
 
-### D-2 `verify.sls:831` is dead in the tree
+- **§16.4:937-943 has no one-finding-per-decision rule.** It is a *contents* list. The gloss
+  entered at `milestone-3-slice-1-implementation-plan.md:139` and propagated to fourteen citing
+  sites until it read like spec. It was the stated reason for deferring this fix.
+- **The 85-of-230 figure is skeleton-dependent and not reproducible.** The identical prototype
+  measures **51/144** under one skeleton and **4/144** under another; a figure of this kind must
+  name its skeleton. And "most of it double-reporting" is not corroborated — a third of the
+  changed cells are duplicates, two thirds are new coverage. *The **recommended** shape (the
+  parked set, derived) measures **zero** duplicates.*
+
+The hole is real and Slice ⓪b closes it. **Tasks 2-5 now follow ⓪b**, because building 230
+expected verdicts against a verifier about to change would derive a third of them twice, snap
+eleven mutation anchors and move this slice's own site census from 31 to 28. The matrix was
+supposed to justify the wait by measuring ⓪b's blast radius — measured, it **cannot see ⓪b's
+central decision at all** (the gate change moves 0 of 144 cells).
+
+### D-2 `verify.sls:834` is dead in the tree
 
 `pass-eof-execution`'s last arm walks each byte-reachable pause's continuation and reports two
 verdicts. Its `eof-reachable-stop` half is covered; its **`eof-zero-progress-cycle` half is
@@ -122,8 +147,8 @@ and one byte returns `finished` without being examined. :908 says "into a finish
 hops is a real question, not an implementation edge.
 
 **OQ-3 — the two halves of §16.2:908 contradict each other, and nothing witnesses it.** The check
-exists at three sites under two gating rules: `verify.sls:744-757` is unconditional; `:792-801`
-and `:809-822` are gated on byte-reachability. Measured on six machines whose offending node is
+exists at three sites under two gating rules: the diagnostic at `verify.sls:756` is
+unconditional; those at `:801` and `:821` are gated on byte-reachability. Measured on six machines whose offending node is
 EOF-only-reachable: pause / field-action / field-branch → ACCEPTED, dispatch-case / seq-case /
 accumulate-digit → REJECTED. Whichever half is right, the other is wrong.
 
@@ -135,7 +160,7 @@ the :908 sites do not. **Consequence: the per-cell oracle is a sorted multiset, 
 never a boolean.**
 
 **OQ-5 — four of the six EOF verdicts carry no observable consequence.** `eof-verdict-ranking` is
-a 6-element list (`verify.sls:654`) and decision 0021 item 1 pins only `cycle > eof-reachable-
+a 6-element list (`verify.sls:658`) and decision 0021 item 1 pins only `cycle > eof-reachable-
 stop`. Four independent mutations survive all 230 cells: permute the low four ranks; `classify`
 finish→error; `classify` error→finish; `dispatch-arm` `#f`→`'unresolved`. Record as a spec
 finding; **do not** write a sentinel pretending the ranking has six decisions.
@@ -147,25 +172,107 @@ Failing tests first, then implementation, then mutations measured **in both dire
 New program: **`test/common/kind-position-census-tests.sps`**. Not `position-kind-tests.sps`,
 which exists and means §12.7's parser-error position kinds — an unrelated thing.
 
-- [ ] **Task 1 — close `verify.sls:831`.** One harness-group in `verify-tests.sps`: entry
+- [x] **Task 1 — close the dead pause-continuation EOF-cycle site.** One harness-group in `verify-tests.sps`: entry
   dispatch —advance→ `p` (pause) → `q` (pause) → `p`, dispatch `eof-target` = a finish node.
   Pristine emits `eof-zero-progress-cycle` at both pauses; the pair *(that code, a PAUSE node
   name)* is producible **only** by site 831. First, because it needs no census machinery and its
   mutant survives the entire shipped suite today.
-- [ ] **Task 2 — the tables, axis A, and the sentinels.** The 16 position builders and 9 kind
+
+  **Done.** The fixture is in `verify-tests.sps`; the machine's entry routes its own EOF to a
+  finish, so the *other* `eof-zero-progress-cycle` site has nothing to say and cannot be the
+  source of the records. Measured pristine: `zero-progress-cycle` at `p` and `q`, and
+  `eof-zero-progress-cycle` at `p` and `q`. The assertion is written on the **pair**
+  *(`eof-zero-progress-cycle`, a pause node)* rather than on the count of four, because §16.4's
+  one-finding-per-decision is Slice ⓪b's OQ-4 and the count may legitimately drop; the pair
+  survives any de-duplication. One mutation, measured caught by this group alone.
+  `release` 94/94, 50 passes / **369** mutations.
+- [x] **Task 2 — the tables, axis A, and the sentinels.** Done, and **after ⓪b**, which is why
+  all 144 cells matched their §16.2-derived expectations on the first clean run. Built before
+  ⓪b, the four entry-column cells would have been red on day one — H1's mandate was to record
+  that as a finding, and the reorder made the finding a fix instead.
+
+  Nine kinds and sixteen positions **as data**, so the product is a derivation rather than a
+  literal. Expected verdicts derived from the two rules that are actually kind-sensitive
+  (§16.2:908's finish, §16.2:909's stop), never observed.
+
+  **The skeleton is pruned using the verifier's own answer** — building the cell with the shared
+  sink, and rebuilding without it when the verifier calls it unreachable. Computing reachability
+  in the test would have meant re-implementing `node-out-targets`: a second census, the exact
+  thing this instrument exists to catch.
+
+  **S2 is the ratchet, and its mutation is caught by the matrix ALONE** — `node?`'s disjunct list
+  *is* the closed set, and the table's coverage is derived from it. When M5 adds a callback kind
+  this row goes red before any fixture does. `release` 98/98, 52 passes / 373 mutations. The 16 position builders and 9 kind
   builders as **data** (two association lists), the pruning closure, §3.1's record shape, and
   **S1+S2 land here, not later** — the sentinel is what makes a Milestone 5 callback kind fail
   before it fails a fixture.
-- [ ] **Task 3 — the self axis (19).** Including the 4 `reexecute` rows; *not* the base matrix's
-  36 mode rows. This is the commit that covers `verify.sls:831` a **second** way (`SELF p8`).
-- [ ] **Task 4 — the dangling axis (16) and the absence census (16).** The only place a
-  `byte-machine-contract-violation` can be cited, and `P10`'s gated existence.
-- [ ] **Task 5 — the EOF-chain axis (24), the verdict lattice (25), the two separators (2).**
-  The task that converts all three shipped Slice ③ defects from raise-caught to
-  **comparison-caught**.
-- [ ] **Task 6 — the diagnostic-code and emission-site census, and the operand-table drift row.**
-  Three layers (§7).
-- [ ] **Task 7 — the dispositions append and the mutation registrations.** Append under
+- [x] **Task 3 — the self axis (19).** Done. Fifteen positions with a self variant (the entry
+  has none — a machine is not a node), four of them twice because they carry a mode and flip
+  under `reexecute`. **Every cell matched its derived verdict on the first run**, deriving from
+  the progress rules rather than from observation: a byte edge that advances makes progress, so a
+  self-loop through it is legal; a sequence case always consumes (§10.6:546) and an accumulate
+  digit edge advances (§10.6:566), so both are legal self-loops by design.
+
+  This is the axis a scoping cut would reach for first, and it is the one carrying the pause
+  EOF-cycle site's **second, independent** coverage — the site that was dead in the suite until
+  Task 1. Including the 4 `reexecute` rows; *not* the base matrix's
+  36 mode rows. This is the commit that covers `verify.sls:834` a **second** way (`SELF p8`).
+- [x] **Task 4 — the dangling axis and the absence census.** Done. Fifteen dangling cells (the
+  entry's host list is empty, so it has none to build), each deriving its fault from the route:
+  §16.2:905's `missing-target` for a byte edge, `invalid-eof-target` for the three EOF routes —
+  a different fault, because `#f` there is *legal* and means the machine default, so a symbol
+  resolving to nothing is a distinct mistake.
+
+  The absence census is where "impossible by construction" actually lives. The **kind** axis has
+  no constructor refusals at all — every target slot is a bare symbol and a node constructor
+  cannot see the machine's node list, which is *why* every kind restriction is necessarily a
+  verifier check and there are exactly two. The absence axis has eight refusals, three legal
+  absences, and **one conditional position**: a field action's `error`, gated on the operation's
+  fallibility, asserted all four ways because it is the only cell in the matrix whose *existence*
+  is conditional.
+- [x] **Task 5 — the verdict lattice (25).** Done. A field-branch is the only shape whose join
+  is observable, and all twenty-five sibling pairs match the **tier derivation** — expected from
+  Slice ⓪b's three tiers, never from the join's code. The branch sits one hop from the entry,
+  reached as its eof-target, so its arms are not byte edges and a `finish` arm does not also trip
+  §16.2:908 — otherwise the cell would stop being about the join.
+
+  This is what **certifies ⓪b's T6 rather than taking it on trust**, and its mutation says so:
+  merging the top two tiers collapses ten of the twenty-five cells onto the wrong diagnostic, and
+  `cycle` stops outranking `eof-reachable-stop` — the one relation decision 0021 item 1 pins by
+  name, and the one a non-terminating machine depends on.
+
+  *Axes E and F (the depth-2 EOF chain, the two named separators) are **not** built.* Their stated
+  purpose was converting Slice ③'s three defects from raise-caught to comparison-caught — and ⓪b
+  removed those raises at the source, so axis A already covers the kinds and axis D the joins.
+  Recorded as dropped-with-reason rather than silently omitted.
+- [x] **Task 6a — the source-derived census and the operand drift row.** Layers 1 and 2 of §7,
+  plus S5. `verify.sls` and `ir.sls` are read as data and walked; the code set, the per-code
+  site counts (16 codes, **31** sites, measured) and the fourteen operand names are derived from
+  the artifacts, never declared in the test. Guards: every emitted code is a quoted symbol (32
+  `make-diagnostic` forms, minus the definition header, subtracted **by name**), and each source
+  file is exactly one datum. Two lanes, two mutations, a new pass 51 — the operand drift row's
+  mutant is caught by the census **alone**. `release` 96/96, 51 passes / **371** mutations.
+
+  *Plumbing, resolved more cheaply than §9's H5 feared:* one variable,
+  `BYTE_MACHINE_SOURCE_ROOT`, and the mutation suite overrides it to `${STAGE_DIR}/src` **once**,
+  beside where `STAGE_DIR` is defined — every `execute_process` in that script inherits it, so
+  all 51 passes are covered by a single line rather than per-pass plumbing. Unset raises.
+
+- [x] **Task 6b — fixture coverage (layer 3 of §7).** One machine per code — sixteen, each
+  built and measured to emit its own code — iterated over the **source-derived** key set, with S4
+  counting rows asserted inside the loop and comparing against the source-derived total rather
+  than the fixture table's own length, so a missing row and a missing code cannot cancel. The
+  discriminator is the code plus the machine's shape, **never** message text.
+
+  **The ratchet is pinned by its own mutation.** Renaming one emitted code makes a code appear in
+  the source with no fixture and no pinned row; measured, *both* layers fire — the derived code
+  set stops matching the pinned table, and the source-derived loop finds a code nothing emits.
+  Both are deliberate: the pinned table alone would let a code be accounted for on paper without
+  ever being produced. `release` 96/96, 51 passes / **372** mutations.
+- [x] **Task 7 — the dispositions append and the mutation registrations.** Done; the mutations
+  were registered task by task rather than batched at the end.
+
+  *Original text:* **Task 7 — the dispositions append and the mutation registrations.** Append under
   `## Dated dispositions` at `byte-machine-implementation-plan.md:1802` (file is 1825 lines;
   **never insert above** — AGENTS.md:324). Record OQ-1…OQ-5, the skeleton decision, that the
   census ships **green**, and that the matrix does **not** subsume the differential lanes.
@@ -225,9 +332,9 @@ text, and the texts are not unique anyway (775/828 share one, 778/831 share one,
 where the hole is). Use the diagnostic's **node slot** plus fixture shape.
 
 **The operand-table drift row.** Extract `field-operations` (7) + `field-predicates` (7) from
-`ir.sls:305-306` and `field-operand-schemas`' keys from `verify.sls:273-280`, assert set equality.
+`ir.sls:305-306` and `field-operand-schemas`' keys from `verify.sls:277-284`, assert set equality.
 Measured: the sets match (14 = 14) and **nothing pins that**. This converts `verify.sls:301`'s
-"unreachable through the public API" comment — verbatim the shape of Slice ③'s defect #1 — into a
+"Unreachable through the public API" comment — verbatim the shape of Slice ③'s defect #1 — into a
 checked invariant.
 
 ## §8 Sentinels — each reading an observed value
@@ -271,7 +378,7 @@ literal.
 **H3 — scoping will cut the wrong axis.** The base 144 is 63% of the cells and the least
 informative per cell: two rules, 16 rejections. Nine mutations are distinguished by a **single**
 cell, and those cells live in axes **B, C, E, F** — the four a budget cut reaches for first.
-**Cutting axis B alone loses the only coverage of `verify.sls:831` in the entire tree.**
+**Cutting axis B alone loses the only coverage of that site in the entire tree** — it is the site Task 1 closed, and axis B is its *second*, independent witness.
 **Mitigation:** §6's axis column exists so a scoper can see the cost.
 
 **H4 — "census clean" will be read as "the Slice ③ shape is closed".** Measured decisively:
@@ -306,8 +413,10 @@ it does.
 
 ## §10 Explicitly out of scope
 
-- **The D-1 fix** (a walk start at `machine-entry`). Measured to change 85 of 230 cells, mostly
-  double-reporting. Its shape is a decision this slice records, not takes.
+- **The D-1 fix.** Still out of *this* slice's scope, but no longer deferred: it is Slice ⓪b's
+  T4, which now runs **before** Tasks 2-5. See §2's superseded note — the "85 of 230, mostly
+  double-reporting" characterisation does not survive re-measurement, and the recommended shape
+  produces zero duplicates.
 - **Tier 2a — the corruption catalogue**, and **Tier 2b — free draws plus an independent
   acyclicity walk.** Both are Milestone 7's, which names *bounded invalid-machine generator*
   already. Building 2a now would build it twice: M5 and M6 each add codes. The **ratchet** (S3+S4)

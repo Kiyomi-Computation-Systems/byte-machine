@@ -1877,3 +1877,107 @@ the six EOF verdicts carry no observable consequence** — four independent muta
 ranking survive all 230 cells.
 
 Full plan: `docs/plans/milestone-5-slice-0-implementation-plan.md`.
+
+### §16.2:908 / §16.2:909 — Milestone 5 Slice ⓪b, the EOF walk cluster
+
+**2026-09-03.** Neither §16.2 bullet is reworded; this records a second hardening slice, after
+Slice ⓪ and before Milestone 5's own work, and one finding that changes how :908 must be read.
+
+**§16.2:908's two halves contradict each other in the shipped verifier.** The check exists at
+three sites under two gating rules — one unconditional, two gated on byte-reachability. Measured
+on six machines whose offending node is reachable ONLY as an eof-target: pause, field-action and
+field-branch are accepted; byte-dispatch, sequence-dispatch and integer-accumulate are rejected.
+
+**Resolved in favour of the gated reading, and the evidence is decisive in both directions.**
+Applying the unconditional reading uniformly breaks five shipped programs, and the refusal names
+`pe` — the shipped pause machine's EOF-only pause whose continuation is a finish node, which is
+**decision 0011's canonical legal shape**, named in that fixture's own header. The unconditional
+rule, applied consistently, rejects the machine 0011 was written to permit. The gated reading
+leaves every byte-reachable offender of all six kinds still rejected.
+
+**Decision 0021 item 5's stated reason is false.** It splits the kinds by "reads input" versus
+"zero-width"; a byte-dispatch, a sequence-dispatch and an accumulate node can each be
+EOF-only-reachable, and then their byte edges are never traversed by any execution. Slice ⓪b
+annotates 0021 rather than correcting it in place, per AGENTS.md's rule for a sentence that was
+never true, and opens decision 0023 for the affirmative rules.
+
+**A rule cited fourteen times in this repository does not exist.** "One finding per decision" is
+not in §16.4:937-943, which is a contents list with no cardinality clause; the gloss entered at
+`milestone-3-slice-1-implementation-plan.md:139` and propagated. It was the stated reason for
+keeping Slice ⓪'s D-1 fix out of scope. What §16.4:940 *does* require — an edge or source label
+beside the node — is implemented nowhere: `make-diagnostic` takes three arguments at all 31 call
+sites. Slice ⓪b adds it, keyed on edge ROLE rather than index, because `verify.sls:380-386`
+explicitly declines to promise the order of two diagnostics from one node.
+
+**The `85 of 230` figure in this section's Slice ⓪ disposition is skeleton-dependent and should
+not be relied on.** The identical prototype measures 51/144 under one skeleton and 4/144 under
+another; and "most of it double-reporting" is not corroborated — a third of the changed cells are
+duplicates, two thirds are new coverage. A figure of this kind must name its skeleton.
+
+Full plan: `docs/plans/milestone-5-slice-0b-implementation-plan.md`.
+
+### §16.2:908 / §16.2:909 / §16.4:940 — Milestone 5 Slice ⓪b, delivered
+
+**2026-09-03.** The disposition above recorded Slice ⓪b as planned; this records what it
+did. Neither §16.2 bullet is reworded, and §16.4:937-943 is not either — see the third
+item, which is about a rule that was never there.
+
+- **:908 is one derived block gated on byte-reachability**, replacing three hand-written
+  sites that disagreed with each other. Its half of `pass-eof-execution` now names **one**
+  kind predicate where it named six, and `node-out-edges` is the single census it consults.
+  The entry is a subject of the rule: `entry = a finish node` is rejected, reusing the
+  existing code with no new one.
+- **:909 walks the states a parser can be PARKED on**, the entry among them — closing a
+  hole in which `entry = a stop node` verified with zero diagnostics and `parser-finish!`
+  returned `stopped`. Because the start set is a **set**, no machine double-reports.
+- **§16.4:940's edge/source label is implemented**, carrying a role rather than an index.
+  The "one finding per decision" rule cited against these checks **does not exist** in
+  §16.4:937-943, which is a contents list; the gloss entered at
+  `milestone-3-slice-1-implementation-plan.md:139` and propagated to fourteen sites.
+- **The EOF verdict order is three tiers.** Four of the six undecidable verdict relations
+  were acceptance holes — with `default-error` above `cycle`, a machine verifies clean and
+  never terminates.
+
+Recorded in **decision 0023**; decision 0021 is **annotated** at two sentences that were
+never true, per this repository's rule for a record rather than an instruction.
+
+**Left open deliberately, and not to be read as closed:** `pass-reachability` walks
+`all-out-targets`, so a node reachable only through an untakeable EOF edge counts as
+reached. The old :908 filter was answering that question by accident; it is its own §16.2
+question and now has no accidental answer.
+
+Plan: `docs/plans/milestone-5-slice-0b-implementation-plan.md`.
+
+### §25:1611 — Milestone 5 Slice ⓪, delivered
+
+**2026-09-03.** Milestone 7's scope is unchanged; this records what the hardening slice before
+Milestone 5 actually built, and one thing it deliberately did not.
+
+- **A diagnostic census** derived from the artifact: `verify.sls` is read as a datum and walked
+  for emission sites, so the code set, the per-code site counts and the fourteen operand names
+  are never declared in a test. It ships **green** — it would not have caught any of Slice ③'s
+  three defects, and the plan says so — and its value is the ratchet: a new code, or a new site
+  under an existing code, fails it until accounted for. It fired **four times** during Slice ⓪b,
+  each on the commit that moved it.
+- **A kind × position matrix**: 144 cells over nine kinds and sixteen positions, plus 19
+  self-reference cells, 15 dangling cells, a 16-entry absence census and a 25-cell verdict
+  lattice. Expected verdicts are **derived from §16.2 before the machine is run**, never
+  observed — the mandate that would otherwise have frozen four live defects into an artifact
+  reading as authoritative.
+- **The operand-schema drift row**, which closes an unchecked agreement between two files whose
+  own comment called a mismatch "unreachable through the public API" — verbatim the shape of
+  Slice ③'s first Critical.
+
+**Two ordering facts worth keeping.** The slice was **reordered mid-flight**: Tasks 2–5 were
+scheduled before Slice ⓪b and moved after it, because the stated reason for the original order
+— that fixing D-1 would collide with §16.4:937-943's one-finding-per-decision — rested on a rule
+that **does not exist** in §16.4. Run in the new order, all 144 cells matched on the first clean
+run; in the old order, four would have been red on arrival. And the matrix was measured
+**unable to witness ⓪b's central decision** (the byte-reachability gate moves zero cells), so it
+never was the instrument that justified the wait.
+
+**Axes E and F of the plan are not built**, recorded here rather than left as an unticked box:
+their purpose was converting Slice ③'s defects from raise-caught to comparison-caught, and ⓪b
+removed those raises at the source.
+
+Plan: `docs/plans/milestone-5-slice-0-implementation-plan.md`.

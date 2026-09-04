@@ -20,18 +20,27 @@
 (library (byte-machine verify)
   (export verify-machine verification-ok? verification-diagnostics
           verification-machine
-          diagnostic? diagnostic-code diagnostic-node diagnostic-message)
+          diagnostic? diagnostic-code diagnostic-node diagnostic-message
+          diagnostic-edge)
   (import (rnrs)
           (byte-machine private ir))
 
   ;; --- diagnostics ---
   (define diagnostic-tag (vector 'byte-machine-diagnostic))
-  (define (make-diagnostic code node message) (vector diagnostic-tag code node message))
+  ;; §16.4:940 asks for "node and edge/source label where applicable". The label
+  ;; half was implemented nowhere: three arguments at every call site. The record
+  ;; now carries it, `#f` when it does not apply, so two findings from one node --
+  ;; a `case` edge and a `fallback` edge into the same finish terminal -- stop
+  ;; being the identical record.
+  (define (make-diagnostic code node message) (vector diagnostic-tag code node message #f))
+  (define (make-diagnostic/edge code node message edge)
+    (vector diagnostic-tag code node message edge))
   (define (diagnostic? x)
     (and (vector? x) (> (vector-length x) 0) (eq? (vector-ref x 0) diagnostic-tag)))
   (define (diagnostic-code d) (vector-ref d 1))
   (define (diagnostic-node d) (vector-ref d 2))
   (define (diagnostic-message d) (vector-ref d 3))
+  (define (diagnostic-edge d) (vector-ref d 4))
 
   ;; --- name grammar [a-z][a-z0-9-]* and reserved-set member 1 ---
   (define reserved-member-1
@@ -80,55 +89,68 @@
   ;; each caller's arm -- whether it consults this at all -- stays its own
   ;; mutable line, and only the shared fact, "what does a zero-width node
   ;; continue to", lives here.
-  (define (zero-width-successors n)
-    (cond ((pause-node? n) (list (pause-node-continuation n)))
+  ;; Slice ⓪b task 5 carries §16.4:940's edge ROLE alongside each target. The
+  ;; census stays here, singular: `zero-width-edges` is the fact, and both
+  ;; `zero-width-successors` and `node-out-edges` are views of it. Attaching the
+  ;; roles in `node-out-edges` instead would have recomputed a field action's
+  ;; successors in a second place -- the duplication this comment already forbids.
+  (define (zero-width-edges n)
+    (cond ((pause-node? n) (list (cons 'continuation (pause-node-continuation n))))
           ;; A field action's `error` is a successor exactly when it has one:
           ;; the constructor makes it #f precisely when the operation cannot
           ;; fail, so this never yields a node no failure can reach.
           ((field-action-node? n)
            (let ((e (field-action-node-error n)))
              (if (symbol? e)
-                 (list (field-action-node-next n) e)
-                 (list (field-action-node-next n)))))
+                 (list (cons 'next (field-action-node-next n)) (cons 'error e))
+                 (list (cons 'next (field-action-node-next n))))))
           ((field-branch-node? n)
-           (list (field-branch-node-true-target n)
-                 (field-branch-node-false-target n)))
+           (list (cons 'true (field-branch-node-true-target n))
+                 (cons 'false (field-branch-node-false-target n))))
           (else '())))
 
-  (define (node-out-targets n)
+  (define (zero-width-successors n) (map cdr (zero-width-edges n)))
+
+  ;; *** ONE census, two views (Slice ⓪b task 5). *** `node-out-edges` is the
+  ;; census -- every byte out-edge as a `(role . target)` pair -- and
+  ;; `node-out-targets` is a derived view of it. Duplicating the cond to attach
+  ;; roles would have made a second census of exactly the kind this slice spent
+  ;; two tasks removing.
+  ;;
+  ;; The role is §16.4:940's "edge/source label where applicable", which
+  ;; `make-diagnostic`'s three arguments implemented nowhere. It is a ROLE, not
+  ;; an index: verify.sls declines elsewhere to promise the order of two
+  ;; diagnostics from one node, and an index would newly promise it.
+  (define (node-out-edges n)
     (cond ((byte-dispatch-node? n)
-           (append (map (lambda (c) (edge-target (byte-case-edge c)))
+           (append (map (lambda (c) (cons 'case (edge-target (byte-case-edge c))))
                         (byte-dispatch-node-cases n))
-                   (list (edge-target (byte-dispatch-node-fallback n)))))
+                   (list (cons 'fallback (edge-target (byte-dispatch-node-fallback n))))))
           ;; A pause's single zero-width out-edge (§10.6): resolution-checked by
           ;; PASS 2 (a malformed continuation is 'missing-target, §16.2:905) and
-          ;; walked by reachability. The §16.2:908 check below filters on
-          ;; byte-dispatch-node?, sequence-dispatch-node? AND
-          ;; integer-accumulate-node?; a pause is in none of them, so this arm
-          ;; does not feed it. (The conclusion has always held. The stated REASON
-          ;; named one predicate and went stale twice -- most recently when this
-          ;; slice's own fix widened that filter, eight hundred lines below.)
-          ((pause-node? n) (list (pause-node-continuation n)))
-          ;; A sequence node's byte out-edges: every alternative's target plus
-          ;; the mismatch edge's. Feeding this arm also repairs pass-names'
-          ;; target resolution and byte-reached, which both walk this function.
+          ;; walked by reachability. Since Slice ⓪b the §16.2:908 check is gated
+          ;; on byte-reachability rather than on a source-kind filter, so this arm
+          ;; DOES feed it -- a byte-reachable pause continuing into a finish is
+          ;; rejected, and an EOF-only one is not.
+          ((pause-node? n) (zero-width-edges n))
           ((sequence-dispatch-node? n)
-           (append (map sequence-case-target (sequence-dispatch-node-cases n))
-                   (list (edge-target (sequence-dispatch-node-mismatch n)))))
-          ;; The two zero-width kinds (Slice ②), which feed name resolution,
-          ;; reachability and the :908 check below.
+           (append (map (lambda (c) (cons 'alternative (sequence-case-target c)))
+                        (sequence-dispatch-node-cases n))
+                   (list (cons 'mismatch
+                               (edge-target (sequence-dispatch-node-mismatch n))))))
           ((or (field-action-node? n) (field-branch-node? n))
-           (zero-width-successors n))
+           (zero-width-edges n))
           ;; Integer accumulate (Slice ③). Three of its four explicit targets are
           ;; BYTE out-targets; the fourth, `eof-target`, is not -- it belongs to
-          ;; node-eof-target below, exactly as a dispatch node's does, so that
-          ;; `all-out-targets` adds it for reachability and the :908 filter does
-          ;; not see it.
+          ;; node-eof-target below.
           ((integer-accumulate-node? n)
-           (list (integer-accumulate-node-digit-target n)
-                 (edge-target (integer-accumulate-node-nondigit-edge n))
-                 (integer-accumulate-node-overflow-error n)))
+           (list (cons 'digit (integer-accumulate-node-digit-target n))
+                 (cons 'nondigit
+                       (edge-target (integer-accumulate-node-nondigit-edge n)))
+                 (cons 'overflow (integer-accumulate-node-overflow-error n))))
           (else '())))
+
+  (define (node-out-targets n) (map cdr (node-out-edges n)))
   ;; A dispatch/sequence node's stored eof-target (a symbol, or #f meaning
   ;; "the machine default eof error"), or #f for any other node kind. Fix
   ;; wave 1 (Important 3): the single source of "node kind -> eof-target
@@ -655,13 +677,46 @@
   ;; reintroduce one"). Every kind `ir.sls` can construct has its own arm, so the
   ;; residual `else` is unreachable and raises, matching the loud-else convention
   ;; in normal-ir.sls, compile.sls and runtime.sls.
-  (define eof-verdict-ranking
-    '(finish unresolved error default-error eof-reachable-stop cycle))
+  ;; *** THREE TIERS, not a flat six (Slice ⓪b, OQ-5). ***
+  ;;
+  ;; The join takes the max, so the order decides which sibling verdict survives.
+  ;; A flat list of six has 720 orderings; measured, only THREE equivalence
+  ;; classes are observable, and 24 of the orderings are indistinguishable by any
+  ;; machine. Under this project's rules an unwitnessable ordering is not a
+  ;; decision -- and worse, four of the six undecidable pairs are ACCEPTANCE
+  ;; HOLES: with `default-error` ranked above `cycle`, a field-branch machine
+  ;; verifies with zero diagnostics and `parser-finish!` never returns.
+  ;;
+  ;; Tiers make the 24-permutation survivor unwritable rather than something to
+  ;; declare EXPECT_SURVIVES, and turn each tier assignment into a single-token
+  ;; mutation caught by a failed comparison rather than by a raise.
+  ;;
+  ;; All six symbols are KEPT. Milestone 5's span check needs `finish`
+  ;; distinguished from `error` at `classify`, and 0021 item 3's loud-else
+  ;; discipline forbids merging arms.
+  ;;
+  ;; *** CORRECTED 2026-09-03, whole-branch review: this said `unresolved` is
+  ;; UNPRODUCIBLE. It is not. *** `classify`'s `((not n) 'unresolved)` arm below
+  ;; still answers it, for any EOF successor naming no node -- reached today, by
+  ;; two routes (a dispatch's dangling eof-target, and a zero-width arm naming
+  ;; nothing). What became a loud raise is `join-over`'s EMPTY join, a different
+  ;; site; I generalised from one to the other without checking.
+  ;;
+  ;; So `unresolved`'s tier is load-bearing: a machine whose EOF chain reaches a
+  ;; dangling name AND a stop must still report the stop, which happens only
+  ;; because `unresolved` loses the join. That is now a fixture and a pin --
+  ;; without them the claim two paragraphs up, that tiers make every assignment a
+  ;; single-token mutation caught by a failed comparison, was false for one of
+  ;; the six.
+  (define eof-verdict-tiers
+    '((finish unresolved error default-error)   ; the chain terminates
+      (eof-reachable-stop)                      ; §16.2:909
+      (cycle)))                                 ; 0021 item 1
   (define (eof-verdict-rank v)
-    (let loop ((vs eof-verdict-ranking) (i 0))
-      (cond ((null? vs) (assertion-violation 'eof-terminal "unranked verdict" v))
-            ((eq? (car vs) v) i)
-            (else (loop (cdr vs) (+ i 1))))))
+    (let loop ((ts eof-verdict-tiers) (i 0))
+      (cond ((null? ts) (assertion-violation 'eof-terminal "unranked verdict" v))
+            ((memq v (car ts)) i)
+            (else (loop (cdr ts) (+ i 1))))))
   ;; Sibling answers join by max. 0021 item 1 pins only `cycle >
   ;; eof-reachable-stop` -- a cycle is the non-termination neither runtime loop
   ;; guards against, so it must survive a join -- and leaves the rest unfixed;
@@ -691,10 +746,15 @@
         (let loop ((ns names) (acc #f))
           (if (null? ns)
               ;; A zero-width node with no successors cannot occur -- both kinds
-              ;; have mandatory targets -- so this is the same unreachable shape
-              ;; as the else below, answered rather than raised because an empty
-              ;; join has an obvious identity and a missing kind does not.
-              (or acc 'unresolved)
+              ;; have mandatory targets. This was answered with `'unresolved`
+              ;; rather than raised, on the reasoning that an empty join has an
+              ;; obvious identity. *** Slice ⓪b makes it LOUD: measured, the arm
+              ;; is dead, and answering an impossible input quietly is how a
+              ;; verdict nothing produces stayed in a six-element ranking that
+              ;; four mutations could permute undetected. *** An impossible input
+              ;; made loud is not a gap being closed; it is a gap being refused.
+              (or acc (assertion-violation 'eof-terminal
+                                           "empty zero-width join" names))
               (loop (cdr ns)
                     (let ((v (walk (car ns) path)))
                       (if acc (eof-verdict-join acc v) v))))))
@@ -739,26 +799,72 @@
   (define (pass-eof-execution m)
     (let ((nodes (machine-nodes m)))
       (append
-       ;; :908 — a byte edge (case or fallback) into a finish terminal.
-       ;; Slice ③ adds `integer-accumulate-node?`: `node-out-targets` already
-       ;; yields its three BYTE out-targets (digit, non-digit, overflow), but
-       ;; this filter did not admit the kind, so none of the three was ever
-       ;; checked and an accumulate node whose digit target was a finish terminal
-       ;; verified with zero diagnostics. Found by the whole-branch review.
-       (apply append
-              (map (lambda (n)
-                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n)
-                             (integer-accumulate-node? n))
-                         (filter values
-                                 (map (lambda (t)
-                                        (let ((tn (lookup nodes t)))
-                                          (if (and tn (finish-node? tn))
-                                              (make-diagnostic 'non-eof-into-finish (node-name n)
-                                                               "a byte edge targets a finish terminal")
-                                              #f)))
-                                      (node-out-targets n)))
-                         '()))
-                   nodes))
+       ;; :908 — ONE derived block, replacing three hand-written ones (Slice ⓪b).
+       ;;
+       ;; §16.2:908 forbids "non-EOF control flow into a finish terminal", and
+       ;; decision 0011 item 4(b) states the same rule over REACHING. So the
+       ;; question is not what KIND the source node is; it is whether the source
+       ;; is byte-reachable. The three shipped blocks answered it three ways --
+       ;; one unconditional and kind-filtered, two gated on byte-reachability --
+       ;; and therefore disagreed: a node reachable ONLY as an eof-target was
+       ;; accepted when it was a pause, a field-action or a field-branch, and
+       ;; rejected when it was a byte-dispatch, a sequence-dispatch or an
+       ;; accumulate. The byte edge is untakeable in all six.
+       ;;
+       ;; *** The gated reading is correct, measured in both directions. ***
+       ;; Applying the unconditional reading uniformly breaks five shipped
+       ;; programs, and the machine it refuses is `make-pause-machine`: an
+       ;; EOF-only pause continuing into a finish node, which is decision 0011's
+       ;; canonical LEGAL shape, named in that fixture's own header. Decision
+       ;; 0021 item 5 split the kinds by "reads input" versus "zero-width"; all
+       ;; three input-reading kinds can be EOF-only-reachable, so the split's
+       ;; stated reason is false and its verdict wrong. See decision 0023.
+       ;;
+       ;; The gate is SOUND, not merely convenient: once an execution takes an
+       ;; eof-target it can never feed again (`parser-feed!` prohibits the
+       ;; `finish-ready` row), so feed-reachable is a subset of `byte-reached`
+       ;; and gating on it cannot miss a real violation.
+       ;;
+       ;; Reported once per offending edge AT ITS SOURCE NODE. The alternative --
+       ;; reporting at the finish node -- measures identical accept/reject sets
+       ;; but merges findings from two different sources into one, and the source
+       ;; is the half that says which edge to fix (§16.4:940).
+       ;;
+       ;; `node-out-targets` is now the single census this rule consults, and it
+       ;; already owns that job -- the direct antidote to the failure mode Slice
+       ;; ③ shipped three times: a kind taught to the accessors and not to the
+       ;; hand-written filters reading them.
+       ;; The ZERO-HOP case (Slice ⓪b, OQ-2): the entry itself being a finish
+       ;; terminal. Decision 0011 item 4(b) and §10.6:616 both state the rule over
+       ;; REACHING, and the entry is reached by `parser-feed!`. Measured before
+       ;; this clause: such a machine verified clean and `parser-feed!` returned
+       ;; `finished` for an EMPTY slice, which §11.1:638's closed list ("a
+       ;; callback, stop, or error") does not permit. Reuses the code rather than
+       ;; spending a new one, on the Slice ③ precedent.
+       ;;
+       ;; Multiplicity 1 by construction: one entry, and a finish node has no
+       ;; out-targets, so the per-edge loop below cannot also fire on it.
+       (let ((en (lookup nodes (machine-entry m))))
+         (if (and en (finish-node? en))
+             (list (make-diagnostic 'non-eof-into-finish (machine-entry m)
+                                    "the entry is a finish terminal"))
+             '()))
+       (let ((br908 (byte-reached m)))
+         (apply append
+                (map (lambda (n)
+                       (if (memq (node-name n) br908)
+                           (filter values
+                                   (map (lambda (re)
+                                          (let ((tn (lookup nodes (cdr re))))
+                                            (if (and tn (finish-node? tn))
+                                                (make-diagnostic/edge
+                                                 'non-eof-into-finish (node-name n)
+                                                 "a byte edge targets a finish terminal"
+                                                 (car re))
+                                                #f)))
+                                        (node-out-edges n)))
+                           '()))
+                     nodes)))
        ;; :909 + the EOF-cycle check — walk each INPUT-READING node's eof-target
        ;; chain. Slice ③ adds `integer-accumulate-node?` here too, and this is the
        ;; arm whose absence was worst: `parser-finish-op!` says in its own words
@@ -768,75 +874,58 @@
        ;; whose EOF chain reached a stop terminal was accepted although
        ;; `eof-reachable-stop` exists to reject exactly that. Found by the
        ;; whole-branch review; both shapes are now fixtures.
-       (apply append
-              (map (lambda (n)
-                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n)
-                             (integer-accumulate-node? n))
-                         (let ((t (node-eof-target n)))
-                           (if (symbol? t)
-                               (case (eof-terminal m t)
-                                 ((eof-reachable-stop)
-                                  (list (make-diagnostic 'eof-reachable-stop (node-name n)
-                                                         "an EOF path reaches a stop terminal")))
-                                 ((cycle)
-                                  (list (make-diagnostic 'eof-zero-progress-cycle (node-name n)
-                                                         "an EOF path cycles without reaching a terminal")))
-                                 (else '()))
-                               '()))
-                         '()))
-                   nodes))
-       ;; D4(b)/(d): checks keyed on byte-reachability. A feed pause parks
-       ;; current on its continuation and resume returns the row to ready, so
-       ;; every byte-reachable pause's continuation is both a feed re-entry
-       ;; point (:908 -- it must not be a finish terminal) and a possible EOF-
-       ;; processing start (:909 -- its chain must reach finish or error,
-       ;; never a stop, never a cycle).
-       (let ((br (byte-reached m)))
-         (append
-          (apply append
-                 (map (lambda (n)
-                        (if (and (pause-node? n) (memq (node-name n) br))
-                            (let ((cn (lookup nodes (pause-node-continuation n))))
-                              (if (and cn (finish-node? cn))
-                                  (list (make-diagnostic 'non-eof-into-finish (node-name n)
-                                                         "a pause continuation byte-reaches a finish terminal"))
-                                  '()))
-                            '()))
-                      nodes))
-          ;; :908 through a ZERO-WIDTH node (Slice ②), on the pause precedent:
-          ;; gated on byte-reachability, not on an unconditional source-kind
-          ;; filter. §16.2:908 forbids "non-EOF control flow into a finish
-          ;; terminal", and a byte path that runs `dispatch -> field-action ->
-          ;; finish` is exactly that -- the shipped :908 check above cannot see
-          ;; it, because it filters on dispatch kinds and a zero-width node is
-          ;; not one, so the finish sits one hop further than it looks.
-          (apply append
-                 (map (lambda (n)
-                        (if (and (or (field-action-node? n) (field-branch-node? n))
-                                 (memq (node-name n) br))
-                            (filter values
-                                    (map (lambda (t)
-                                           (let ((tn (lookup nodes t)))
-                                             (if (and tn (finish-node? tn))
-                                                 (make-diagnostic 'non-eof-into-finish (node-name n)
-                                                                  "a zero-width node byte-reaches a finish terminal")
-                                                 #f)))
-                                         (node-out-targets n)))
-                            '()))
-                      nodes))
-          (apply append
-                 (map (lambda (n)
-                        (if (and (pause-node? n) (memq (node-name n) br))
-                            (case (eof-terminal m (pause-node-continuation n))
-                              ((eof-reachable-stop)
-                               (list (make-diagnostic 'eof-reachable-stop (node-name n)
-                                                      "an EOF path reaches a stop terminal")))
-                              ((cycle)
-                               (list (make-diagnostic 'eof-zero-progress-cycle (node-name n)
-                                                      "an EOF path cycles without reaching a terminal")))
-                              (else '()))
-                            '()))
-                      nodes)))))))
+       ;; *** Slice ⓪b: the start set is the PARKED set, derived. ***
+       ;;
+       ;; The old shape enumerated source KINDS and classified each one's
+       ;; eof-TARGET, and `machine-entry` was in no kind's list -- so the EOF path
+       ;; that begins at the entry was never classified, though `parser-finish!`
+       ;; on a fresh or reset parser starts precisely there. Measured: `entry = a
+       ;; stop node` verified with ZERO diagnostics and returned `stopped`, while
+       ;; the identical property one hop away was correctly rejected.
+       ;;
+       ;; The set below is the states an execution can be parked on: the entry,
+       ;; every byte-reachable pause (whose continuation `current` is left on),
+       ;; and every byte-reachable node carrying its own EOF route. Because it is
+       ;; a SET, the entry appears exactly once -- so a machine whose entry is
+       ;; also a dispatch with an eof-target reports ONE finding, not two. The
+       ;; naive fix, a second walk start bolted onto the entry, double-reports
+       ;; there, and the only filter that suppresses it is a per-kind census of
+       ;; the entry: the construct that shipped three Slice ③ defects.
+       ;;
+       ;; Each node is classified as ITSELF rather than by its eof-target, which
+       ;; unifies the two old blocks -- `classify` on a dispatch already follows
+       ;; its eof-target and on a pause already joins over its continuation -- so
+       ;; the reported node stays where it was and no shipped `diagnostic-node`
+       ;; assertion moves.
+       ;;
+       ;; This NARROWS decision 0011 item 4(a)'s literal "reachable from any
+       ;; state": a graph node no execution can occupy is not a state that
+       ;; originates a traversal. Recorded in decision 0023 rather than left for
+       ;; a later slice to re-derive.
+       (let ((br909 (byte-reached m)))
+         (apply append
+                (map (lambda (n)
+                       (if (and (memq (node-name n) br909)
+                                (or (eq? (node-name n) (machine-entry m))
+                                    (pause-node? n)
+                                    (symbol? (node-eof-target n))))
+                           (case (eof-terminal m (node-name n))
+                             ((eof-reachable-stop)
+                              (list (make-diagnostic 'eof-reachable-stop (node-name n)
+                                                     "an EOF path reaches a stop terminal")))
+                             ((cycle)
+                              (list (make-diagnostic 'eof-zero-progress-cycle (node-name n)
+                                                     "an EOF path cycles without reaching a terminal")))
+                             (else '()))
+                           '()))
+                     nodes)))
+       ;; The D4(b)/(d) pause blocks that stood here are SUBSUMED (Slice ⓪b):
+       ;; the :908 half by the derived byte-reachability block above, and the
+       ;; :909 half by the parked set, which includes every byte-reachable pause
+       ;; and classifies it through the same `eof-terminal` call. Both were gated
+       ;; on `byte-reached` already; the gate is now the whole rule rather than
+       ;; one kind's special case.
+       )))
 
   ;; PASS 7: generated-name safety (member 1) — machine, node, error names/codes.
   (define (pass-names-valid m)

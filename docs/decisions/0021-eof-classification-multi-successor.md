@@ -1,5 +1,11 @@
 # 0021: EOF-chain classification is a multi-successor search — one DFS, worst case over all paths
 
+> **Amended 2026-09-03 by [decision 0023](0023-eof-walk-starts-and-finish-reachability.md).**
+> Items 2, 3 and 4 stand unchanged. **Item 1's "regardless of order" clause and item 5's
+> kind split were never true** — see the annotations at each. 0023 states the affirmative
+> rules: the walk-start set, §16.2:908's membership form, the two decision units, and the
+> three-tier verdict lattice.
+
 Date: 2026-08-31
 Status: accepted
 Milestone: 4, Gate 0 (milestone-4-design.md §4.4)
@@ -73,7 +79,17 @@ it.
    `eof-reachable-stop` — is pinned in the source for determinism even where it
    is not yet observable; every other verdict falls through
    `pass-eof-execution`'s `case` to no diagnostic regardless of order, so this
-   decision leaves the rest unfixed. `pass-eof-execution` `case`s on
+   decision leaves the rest unfixed.
+
+   > ***ANNOTATED 2026-09-03 (decision 0023): "regardless of order" was never
+   > true.*** Six of the fifteen verdict pairs decide **accept versus reject**,
+   > not merely which diagnostic prints, and four of those six are acceptance
+   > holes: with `default-error` ranked above `cycle`, a field-branch machine
+   > verifies with zero diagnostics and `parser-finish!` never returns —
+   > reproduced. Leaving "the rest unfixed" therefore left 720 orderings of which
+   > some silently accept non-terminating machines, and 24 that no machine can
+   > tell apart. 0023 replaces the flat list with three tiers, which makes the 24
+   > unwritable rather than an `EXPECT_SURVIVES`. `pass-eof-execution` `case`s on
    `eof-terminal`'s **single** answer (`verify.sls:417-424`, `:449-456`), so a
    node yields at most one EOF diagnostic however many arms its chain has, and
    the join's choice *is* the diagnostic the user sees.
@@ -135,7 +151,19 @@ it.
    `(pause-node? n)` at `:438` and `:448`. Decision 0011's reasoning — recorded
    in the tree at `verify.sls:387-390`, "an eof-only-reachable pause legally
    continues into a finish node (decision 0011); a byte-reachable one must not"
-   — applies verbatim to any zero-width kind. Integer accumulate reads input and
+   — applies verbatim to any zero-width kind.
+
+   > ***ANNOTATED 2026-09-03 (decision 0023): the sentence that follows was never
+   > true, and its verdict is wrong.*** "Integer accumulate reads input" does not
+   > put a node on the feed path: a byte-dispatch, a sequence-dispatch AND an
+   > accumulate node can each be reachable only as an eof-target, and then their
+   > byte edges are never traversed by any execution. Measured on twelve
+   > machines. §16.2:908 is gated on byte-reachability for **every** kind, and
+   > the three sites this item created are now one derived block. Left in place
+   > rather than corrected: it is a record, and the reasoning it shows is the
+   > reasoning that has to stop being repeated.
+
+   Integer accumulate reads input and
    joins the two unconditional filters instead, in Slice ③.
 
 ## Consequences
