@@ -31,6 +31,13 @@
           uint-field-initial uint-field-source-label
           make-error-declaration error-declaration? error-declaration-name
           error-declaration-code error-declaration-reason
+          make-callback-declaration callback-declaration?
+          callback-declaration-name callback-declaration-kind
+          callback-declaration-required? callback-declaration-branch-keys
+          callback-declaration-default-branch callback-declaration-source-label
+          make-span-declaration span-declaration? span-declaration-name
+          span-declaration-data-callback span-declaration-complete-callback
+          span-declaration-source-label
           make-sequence-dispatch-node sequence-dispatch-node?
           sequence-dispatch-node-name sequence-dispatch-node-cases
           sequence-dispatch-node-mismatch sequence-dispatch-node-eof-target
@@ -532,6 +539,78 @@
   (define (uint-field-initial f) (vector-ref f 3))
   (define (uint-field-source-label f) (vector-ref f 4))
 
+  ;; --- callback declaration (§9.1:284-285, §10.3:499-506) ---
+  ;; The six parts §10.3 names: a symbolic name, a kind from a closed set, a
+  ;; required?/optional flag, the branch keys an optional decision callback may
+  ;; return, the default branch for one, and an optional diagnostic label.
+  ;;
+  ;; *** WHAT IS DELIBERATELY *NOT* CHECKED HERE, and why. *** Three checks are
+  ;; locally evaluable from these six arguments and all three belong to the
+  ;; verifier (design §6, decision 0020's split):
+  ;;   - §16.2:891, an optional DECISION callback without a valid declared
+  ;;     default branch -- `kind`, `required?`, `branch-keys` and
+  ;;     `default-branch` are all right here, and it is still pass 6a's;
+  ;;   - §16.2:902, a branch key colliding with `continue` or `pause`
+  ;;     (§9.3:421 fixes the reserved pair);
+  ;;   - §16.2:886's grammar over `name` and the branch keys.
+  ;; The comment on make-uint-field above states the consequence of moving one
+  ;; of them here, and it is not a style point: a machine whose construction
+  ;; failed never exists, so the verifier arm becomes unreachable through the
+  ;; public API and its permissive mutation survives while the suite reports it
+  ;; caught. Local SHAPE is this constructor's; every judgement about the
+  ;; declaration's CONTENT is pass 6a's.
+  (define callback-declaration-tag (tag 'byte-machine-callback-declaration))
+  (define (make-callback-declaration name kind required? branch-keys
+                                     default-branch source-label)
+    (require-symbol 'make-callback-declaration 'name name)
+    (unless (memq kind '(event decision span-data span-complete))
+      (byte-machine-contract-violation 'make-callback-declaration
+                                       'invalid-argument 'kind))
+    (unless (boolean? required?)
+      (byte-machine-contract-violation 'make-callback-declaration
+                                       'invalid-argument 'required?))
+    ;; Shape only: that the keys are a proper list of symbols. WHICH keys are
+    ;; admissible, and whether `default-branch` is among them, is pass 6a's.
+    (unless (and (list? branch-keys) (for-all symbol? branch-keys))
+      (byte-machine-contract-violation 'make-callback-declaration
+                                       'invalid-argument 'branch-keys))
+    (unless (or (eq? default-branch #f) (symbol? default-branch))
+      (byte-machine-contract-violation 'make-callback-declaration
+                                       'invalid-argument 'default-branch))
+    (vector callback-declaration-tag name kind required? branch-keys
+            default-branch source-label))
+  (define (callback-declaration? x) (tagged? callback-declaration-tag x))
+  (define (callback-declaration-name d) (vector-ref d 1))
+  (define (callback-declaration-kind d) (vector-ref d 2))
+  (define (callback-declaration-required? d) (vector-ref d 3))
+  (define (callback-declaration-branch-keys d) (vector-ref d 4))
+  (define (callback-declaration-default-branch d) (vector-ref d 5))
+  (define (callback-declaration-source-label d) (vector-ref d 6))
+
+  ;; --- span declaration (§9.1:286, §10.4:512-517) ---
+  ;; The four parts §10.4 names. Both callback slots are declaration NAMES, not
+  ;; declarations: §16.2:892 ("invalid span callback declarations") is the
+  ;; cross-reference that resolves them and checks their kinds, and a
+  ;; cross-reference is the verifier's by decision 0020 item 1 -- this
+  ;; constructor cannot see the callback table at all.
+  (define span-declaration-tag (tag 'byte-machine-span-declaration))
+  (define (make-span-declaration name data-callback complete-callback
+                                 source-label)
+    (require-symbol 'make-span-declaration 'name name)
+    (require-symbol 'make-span-declaration 'data-callback data-callback)
+    ;; §10.4:516 makes the completion callback optional; #f is its absence, on
+    ;; the byte-dispatch eof-target convention.
+    (unless (or (eq? complete-callback #f) (symbol? complete-callback))
+      (byte-machine-contract-violation 'make-span-declaration
+                                       'invalid-argument 'complete-callback))
+    (vector span-declaration-tag name data-callback complete-callback
+            source-label))
+  (define (span-declaration? x) (tagged? span-declaration-tag x))
+  (define (span-declaration-name d) (vector-ref d 1))
+  (define (span-declaration-data-callback d) (vector-ref d 2))
+  (define (span-declaration-complete-callback d) (vector-ref d 3))
+  (define (span-declaration-source-label d) (vector-ref d 4))
+
   ;; --- machine (default-eof-error is a declared error NAME) ---
   (define machine-tag (tag 'byte-machine-machine))
   (define machine-ir-version 1)     ; stamped; v0.1 callers do not override (§9.1)
@@ -558,6 +637,17 @@
     ;; measured, a machine could carry (junk 42 "string") and nothing read it.
     (unless (for-all uint-field? fields)
       (byte-machine-contract-violation 'make-machine 'invalid-argument 'fields))
+    ;; Milestone 5 Slice ①b, the same sentence as fields above and for the same
+    ;; reason. Measured before this guard existed: `machine-callbacks` and
+    ;; `machine-spans` had been constructor parameters, vector slots and
+    ;; exported accessors since the descriptor was written, and NOTHING read
+    ;; either -- three hits in the whole tree, all inside this file. A proper
+    ;; list of junk was a valid callbacks table. These two guards are what make
+    ;; the slots load-bearing, and this slice is their first reader.
+    (unless (for-all callback-declaration? callbacks)
+      (byte-machine-contract-violation 'make-machine 'invalid-argument 'callbacks))
+    (unless (for-all span-declaration? spans)
+      (byte-machine-contract-violation 'make-machine 'invalid-argument 'spans))
     (vector machine-tag machine-ir-version name entry fields callbacks spans
             errors nodes default-eof-error source-label))
   (define (machine? x) (tagged? machine-tag x))

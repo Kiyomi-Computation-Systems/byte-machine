@@ -338,6 +338,152 @@
 ;; violations, never diagnostics: a machine whose field failed construction
 ;; never exists, and re-checking any of them in the verifier would ship an arm
 ;; no public API can reach (0020's one-rejection-site rule).
+(harness-group "callback and span declarations (Milestone 5 Slice ①b)"
+  (lambda ()
+    (harness-case "a callback declaration carries its six parts"
+      (lambda ()
+        (let ((d (make-callback-declaration 'on-header 'decision #t
+                                            '(keep skip) 'keep 'the-label)))
+          (check "predicate" (callback-declaration? d))
+          (check-equal "name" (callback-declaration-name d) 'on-header)
+          (check-equal "kind" (callback-declaration-kind d) 'decision)
+          (check-equal "required?" (callback-declaration-required? d) #t)
+          (check-equal "branch keys" (callback-declaration-branch-keys d) '(keep skip))
+          (check-equal "default branch" (callback-declaration-default-branch d) 'keep)
+          (check-equal "label" (callback-declaration-source-label d) 'the-label))))
+    (harness-case "a span declaration carries its four parts"
+      (lambda ()
+        (let ((d (make-span-declaration 'body 'on-data 'on-done 'the-label)))
+          (check "predicate" (span-declaration? d))
+          (check-equal "name" (span-declaration-name d) 'body)
+          (check-equal "data callback" (span-declaration-data-callback d) 'on-data)
+          (check-equal "complete callback" (span-declaration-complete-callback d) 'on-done)
+          (check-equal "label" (span-declaration-source-label d) 'the-label))))
+    (harness-case "the completion callback is optional and #f is its absence"
+      (lambda ()
+        (check-equal "absent" (span-declaration-complete-callback
+                               (make-span-declaration 'body 'on-data #f #f))
+                     #f)))
+    (harness-case "each predicate refuses the other family"
+      (lambda ()
+        (let ((c (make-callback-declaration 'c 'event #f '() #f #f))
+              (p (make-span-declaration 's 'd #f #f)))
+          (check "callback is not a span" (not (span-declaration? c)))
+          (check "span is not a callback" (not (callback-declaration? p)))
+          (check "neither is a uint field"
+                 (and (not (uint-field? c)) (not (uint-field? p))))
+          (check "a bare vector is neither"
+                 (and (not (callback-declaration? (vector 'c 'event #f '() #f #f)))
+                      (not (span-declaration? (vector 's 'd #f #f))))))))
+    (harness-case "the kind set is closed at the four §10.3:502 names"
+      (lambda ()
+        ;; Sentinel over OBSERVED constructions, on the uint-field precedent.
+        (let ((built 0))
+          (for-each (lambda (k)
+                      (set! built (+ built 1))
+                      (check-equal (string-append "kind " (symbol->string k))
+                                   (callback-declaration-kind
+                                    (make-callback-declaration 'c k #f '() #f #f))
+                                   k))
+                    '(event decision span-data span-complete))
+          (check-equal "four kinds built" built 4))
+        (for-each (lambda (k)
+                    (check-raises "refused"
+                                  (contract-violation? 'make-callback-declaration 'kind)
+                                  (lambda () (make-callback-declaration 'c k #f '() #f #f))))
+                  '(callback span data complete event-callback #f))))
+    (harness-case "every other local shape is refused, by who + code + detail"
+      (lambda ()
+        (check-raises "name" (contract-violation? 'make-callback-declaration 'name)
+                      (lambda () (make-callback-declaration "c" 'event #f '() #f #f)))
+        (check-raises "required?" (contract-violation? 'make-callback-declaration 'required?)
+                      (lambda () (make-callback-declaration 'c 'event 'yes '() #f #f)))
+        (check-raises "branch-keys not a list"
+                      (contract-violation? 'make-callback-declaration 'branch-keys)
+                      (lambda () (make-callback-declaration 'c 'decision #f 'keep #f #f)))
+        (check-raises "branch-keys not all symbols"
+                      (contract-violation? 'make-callback-declaration 'branch-keys)
+                      (lambda () (make-callback-declaration 'c 'decision #f '(keep "skip") #f #f)))
+        (check-raises "default-branch" (contract-violation? 'make-callback-declaration
+                                                            'default-branch)
+                      (lambda () (make-callback-declaration 'c 'decision #f '(k) 7 #f)))
+        (check-raises "span name" (contract-violation? 'make-span-declaration 'name)
+                      (lambda () (make-span-declaration "s" 'd #f #f)))
+        (check-raises "span data callback"
+                      (contract-violation? 'make-span-declaration 'data-callback)
+                      (lambda () (make-span-declaration 's #f #f #f)))
+        (check-raises "span complete callback"
+                      (contract-violation? 'make-span-declaration 'complete-callback)
+                      (lambda () (make-span-declaration 's 'd 7 #f)))))
+    (harness-case "what the constructor deliberately ACCEPTS, because pass 6a owns it"
+      (lambda ()
+        ;; Each of these is a machine the VERIFIER must reject and the
+        ;; constructor must not. ir.sls's own comment says why: a check here
+        ;; makes the verifier arm unreachable through the public API, and its
+        ;; permissive mutation then survives while the suite reports it caught.
+        ;; When pass 6a lands (task 2), these three become positive diagnostic
+        ;; fixtures; here they only prove construction succeeds.
+        (check "an optional decision callback with NO default branch is built"
+               (callback-declaration?
+                (make-callback-declaration 'c 'decision #f '(keep skip) #f #f)))
+        (check "a default branch outside the declared keys is built"
+               (callback-declaration?
+                (make-callback-declaration 'c 'decision #f '(keep) 'other #f)))
+        (check "a branch key colliding with a reserved outcome is built"
+               (callback-declaration?
+                (make-callback-declaration 'c 'decision #f '(continue pause) #f #f)))
+        (check "a nonportable name is built"
+               (callback-declaration?
+                (make-callback-declaration 'Not-Portable 'event #f '() #f #f)))))))
+
+(harness-group "make-machine guards its callback and span collections"
+  (lambda ()
+    (harness-case "a well-formed declaration table is accepted"
+      (lambda ()
+        (check "built"
+               (machine?
+                (make-machine 'm 'start '()
+                              (list (make-callback-declaration 'c 'event #f '() #f #f))
+                              (list (make-span-declaration 's 'c #f #f))
+                              (list (make-error-declaration 'e 'code "reason" #f))
+                              (list (make-stop-node 'start #f))
+                              'e #f)))))
+    (harness-case "junk in either collection is refused, and named"
+      (lambda ()
+        ;; *** THE POINT OF THIS TASK. *** Before these guards, `machine-callbacks`
+        ;; and `machine-spans` had been constructor parameters, vector slots and
+        ;; exported accessors with NO reader anywhere in the tree, so a proper
+        ;; list of junk was a valid declaration table. The detail must be
+        ;; `callbacks`/`spans`, not `collection`: the collection loop above
+        ;; already accepts any proper list and answers `collection`.
+        (let ((ok-nodes (list (make-stop-node 'start #f)))
+              (ok-errs (list (make-error-declaration 'e 'code "reason" #f))))
+          (check-raises "callbacks" (contract-violation? 'make-machine 'callbacks)
+                        (lambda () (make-machine 'm 'start '() (list 'junk) '()
+                                                 ok-errs ok-nodes 'e #f)))
+          (check-raises "spans" (contract-violation? 'make-machine 'spans
+                                                     )
+                        (lambda () (make-machine 'm 'start '() '() (list 42)
+                                                 ok-errs ok-nodes 'e #f)))
+          ;; A span declaration in the callbacks slot is junk too -- the guard is
+          ;; per-family, not merely "is a declaration".
+          (check-raises "a span in the callbacks slot"
+                        (contract-violation? 'make-machine 'callbacks)
+                        (lambda () (make-machine 'm 'start '()
+                                                 (list (make-span-declaration 's 'd #f #f))
+                                                 '() ok-errs ok-nodes 'e #f))))))
+    (harness-case "the accessors read back what was declared"
+      (lambda ()
+        ;; Slice ①b is the FIRST reader of these two accessors; they have been
+        ;; exported and dead since the descriptor was written.
+        (let* ((c (make-callback-declaration 'c 'event #f '() #f #f))
+               (p (make-span-declaration 's 'c #f #f))
+               (m (make-machine 'm 'start '() (list c) (list p)
+                                (list (make-error-declaration 'e 'code "r" #f))
+                                (list (make-stop-node 'start #f)) 'e #f)))
+          (check-equal "callbacks" (machine-callbacks m) (list c))
+          (check-equal "spans" (machine-spans m) (list p)))))))
+
 (harness-group "uint field descriptors"
   (lambda ()
     (harness-case "a field carries its four parts"
