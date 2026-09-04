@@ -134,7 +134,22 @@ as "any state an execution can occupy", or a later slice will re-derive it wrong
   `verify.sls:NNN` citations were corrected when this plan was written. Remaining: annotate the
   parent plan's dated disposition and Slice ⓪ §2/§10 — **the 85/230 figure is
   skeleton-dependent** and must name its skeleton or be dropped (§7).
-- [ ] **T2 — `:908` becomes one derived block (OQ-3).** Fixtures first: the six EOF-only
+- [x] **T2 — `:908` becomes one derived block (OQ-3).** Done. Three hand-written sites — one
+  unconditional and kind-filtered, two gated — became one block keyed on `byte-reached`.
+  `pass-eof-execution`'s `:908` half now names **one** kind predicate (`finish-node?`, the kind
+  the rule is *about*) where it named six. Twelve-machine battery: all six EOF-only-reachable
+  offenders accepted, all six byte-reachable ones rejected **at the source node**.
+
+  **Costs, all as predicted and each handled rather than absorbed:** `combined6` re-baselined by
+  making its `seq` byte-reachable — the case's intent is *two findings from two sources*, so the
+  second source was made real rather than the expected count lowered. The census's site table
+  moved **31 → 29** (`non-eof-into-finish` 3 → 1) and went red on this commit, which is the
+  ratchet working. **Seven mutation anchors** broke; their decisions no longer exist separately,
+  so they are removed with residue recorded at the site, and three new pins replace them —
+  the gate, the gate's non-vacuity, and the out-target census. Net 372 → 368.
+
+  *The gate-drop mutant is caught by the shipped pause machine's own case*, which is the
+  both-directions evidence that the unconditional reading is wrong, wired in as a pin. Fixtures first: the six EOF-only
   offenders must verify clean (fails today for three of them); the six byte-reachable offenders
   must be rejected **at the source node** (the reverse-direction pin); and a named assertion that
   `make-pause-machine` verifies clean *and* that `pe`'s continuation is a finish node.

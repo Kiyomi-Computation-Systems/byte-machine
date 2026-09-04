@@ -1031,7 +1031,17 @@
                                      (codes
                                       (make-machine 'combined6 's0 '() '() '() errs
                                         (list (make-byte-dispatch-node 's0
-                                                (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'done 'advance) #f))
+                                                (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'done 'advance) #f)
+                                                      ;; *** Slice ⓪b: `seq` needs its own inbound
+                                                      ;; byte case. *** §16.2:908 is now gated on
+                                                      ;; byte-reachability, and `seq` was reachable
+                                                      ;; from nowhere -- so its edge into `done` is
+                                                      ;; untakeable and correctly no longer reported.
+                                                      ;; This case's INTENT is two findings from two
+                                                      ;; different source nodes, and that intent is
+                                                      ;; preserved by making the second source real
+                                                      ;; rather than by lowering the expected count.
+                                                      (make-byte-case (make-exact-byte-matcher 2) (make-edge 'seq 'advance) #f))
                                                 (make-edge 'reject 'reexecute) #f #f)
                                               (seq-node (one-alt '(1 2) 'done) (make-edge 'reject 'reexecute) #f)
                                               (make-finish-node 'done #f)
@@ -1698,5 +1708,95 @@
                                            (eq? (diagnostic-code d)
                                                 'eof-zero-progress-cycle))
                                          ds))))))))))
+
+;; Milestone 5 Slice ⓪b task 2: §16.2:908 is a rule about BYTE-REACHABILITY, and
+;; the shipped verifier states it two ways that contradict each other.
+;;
+;; The check lives at three sites under two gating rules -- one unconditional,
+;; two gated on byte-reachability. So a node reachable ONLY as an eof-target is
+;; accepted when it is a pause, a field-action or a field-branch, and rejected
+;; when it is a byte-dispatch, a sequence-dispatch or an integer-accumulate. The
+;; byte edge is untakeable in all six.
+;;
+;; *** The gated reading is the correct one, and the evidence runs both ways. ***
+;; Applying the unconditional reading uniformly breaks five shipped programs, and
+;; the machine it refuses is `make-pause-machine` -- decision 0011's canonical
+;; legal shape, an EOF-only pause continuing into a finish node, named in that
+;; fixture's own header. The rule that rejects the fixture 0011 was written to
+;; permit is the wrong rule.
+;;
+;; Decision 0021 item 5 split the kinds by "reads input" versus "zero-width", on
+;; the reasoning that an input-reading node is always on the feed path. These
+;; twelve machines are the counterexample: all three input-reading kinds can be
+;; EOF-only-reachable.
+(define (t2-hop kind)
+  ;; The offender: a node of `kind` carrying a BYTE edge into the finish `fin`.
+  (case kind
+    ((byte-dispatch)
+     (make-byte-dispatch-node 'hop
+       (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'fin 'advance) #f))
+       (make-edge 'rej 'reexecute) #f #f))
+    ((sequence-dispatch)
+     (make-sequence-dispatch-node 'hop (list (make-sequence-case '(1) 'fin #f))
+       (make-edge 'rej 'reexecute) #f #f))
+    ((integer-accumulate)
+     (make-integer-accumulate-node 'hop 'n 10 'fin (make-edge 'stop 'advance) 'rej #f #f))
+    ((pause) (make-pause-node 'hop 'fin #f))
+    ((field-action) (make-field-action-node 'hop 'clear '(n) 'fin #f #f))
+    ((field-branch) (make-field-branch-node 'hop 'zero '(n) 'fin 'rej #f))
+    (else (assertion-violation 't2-hop "no such kind" kind))))
+
+(define (t2-machine kind eof-only?)
+  ;; Byte 9 always reaches `stop`, so `stop` is reachable in both variants and no
+  ;; incidental unreachable-node muddies the record.
+  (make-machine 'x 'start (list (make-uint-field 'n 8 0 #f)) '() '()
+                (list eof-decl rej-decl)
+                (list (make-byte-dispatch-node 'start
+                        (list (make-byte-case (make-exact-byte-matcher 0)
+                                              (make-edge (if eof-only? 'stop 'hop) 'advance) #f)
+                              (make-byte-case (make-exact-byte-matcher 9)
+                                              (make-edge 'stop 'advance) #f))
+                        (make-edge 'rej 'reexecute) (if eof-only? 'hop #f) #f)
+                      (t2-hop kind) (make-finish-node 'fin #f)
+                      (make-stop-node 'stop #f) (make-error-node 'rej 'rejected #f))
+                'default-eof #f))
+
+(define t2-kinds
+  '(byte-dispatch sequence-dispatch integer-accumulate pause field-action field-branch))
+
+(harness-group "§16.2:908 is gated on byte-reachability, for every kind (Slice ⓪b)"
+  (lambda ()
+    (harness-case "an EOF-only-reachable byte edge into a finish is accepted"
+      (lambda ()
+        ;; The half that fails today for the three input-reading kinds. The edge
+        ;; is untakeable: once an execution takes an eof-target it can never feed
+        ;; again, so no byte ever traverses it.
+        (let ((seen 0) (bad '()))
+          (for-each (lambda (k)
+                      (set! seen (+ seen 1))
+                      (let ((ds (map diagnostic-code
+                                     (verification-diagnostics
+                                      (verify-machine (t2-machine k #t))))))
+                        (unless (null? ds) (set! bad (cons (cons k ds) bad)))))
+                    t2-kinds)
+          (check-equal "all six kinds driven" seen 6)
+          (check-equal "none rejected" bad '()))))
+    (harness-case "a BYTE-reachable byte edge into a finish is rejected at its source node"
+      (lambda ()
+        ;; The reverse-direction pin: the gate must not become vacuous. Asserted
+        ;; on the (code . node) pair, because the node slot is the half that says
+        ;; WHICH edge to fix, and one candidate shape for this check reported at
+        ;; the finish node instead -- merging findings from different sources.
+        (let ((seen 0) (bad '()))
+          (for-each (lambda (k)
+                      (set! seen (+ seen 1))
+                      (let ((ds (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                                     (verification-diagnostics
+                                      (verify-machine (t2-machine k #f))))))
+                        (unless (equal? ds '((non-eof-into-finish . hop)))
+                          (set! bad (cons (cons k ds) bad)))))
+                    t2-kinds)
+          (check-equal "all six kinds driven" seen 6)
+          (check-equal "each rejected exactly once, at `hop`" bad '()))))))
 
 (harness-finish)

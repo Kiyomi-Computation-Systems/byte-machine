@@ -837,6 +837,11 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Milestone 5 Slice ⓪b task 2: §16.2:908's three hand-written sites collapse
+# into one derived block. SEVEN mutations removed (their decisions no longer
+# exist separately; residue recorded at the site), THREE added. Mutations
+# become 372 - 7 + 3 = 368.
+#
 # Milestone 5 Slice ⓪ task 6: a NEW pass (51) for the diagnostic census -- the
 # operand-table drift row, the per-code site counts, and the ratchet itself.
 # Passes become 50 + 1 = 51; mutations 369 + 3 = 372.
@@ -977,7 +982,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 51)
-set(EXPECTED_MUTATIONS 372)
+set(EXPECTED_MUTATIONS 368)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3995,36 +4000,6 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "a reason may carry quote backslash and newline: no diagnostics -- expected 0, got 2")
 
-# Milestone 2 Slice ②b-1's Task 1 (decision 0011) adds three more decisions to
-# this pass: the §16.2 EOF-execution checks. Each FIND is a verbatim, unique
-# substring of pass-eof-execution / eof-terminal in verify.sls.
-byte_machine_mutation(
-  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: a byte edge into a finish terminal is accepted"
-  # *** SITES went to 2 when Slice ② task 3 added the zero-width :908 block,
-  # which is the SITES-fails-both-directions trap AGENTS.md names: new code that
-  # DUPLICATES a pinned line breaks the pin as surely as deleting it. Re-anchored
-  # on the surrounding line rather than reworded, so the shipped block keeps the
-  # shape its own comments describe. ***
-  FIND [[                                          (if (and tn (finish-node? tn))
-                                              (make-diagnostic 'non-eof-into-finish (node-name n)
-                                                               "a byte edge targets a finish terminal")]]
-  REPLACE [[                                          (if (and tn #f)
-                                              (make-diagnostic 'non-eof-into-finish (node-name n)
-                                                               "a byte edge targets a finish terminal")]]
-  # Task 3 whole-pass audit: bare "non-eof-into-finish" is a diagnostic CODE,
-  # and the Slice ③ audit fixed exactly this shape for the pause group below
-  # while leaving this group bare -- measured matching "a byte-reachable pause
-  # into finish is rejected", whose case name and check label both carry the
-  # same code. This case's "has non-eof-into-finish" check is the only place
-  # the phrase occurs; the case-name tail is kept as well, its parentheses
-  # escaped because MATCHES is a real regex. (The reverse direction -- this
-  # mutant's own captured output also containing arm 6's sequence-case-into-
-  # finish record, since the :908 inner check really is shared code -- is
-  # genuine and documented beside arm 6's own pin below.)
-  EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "a byte case targeting a finish node is rejected \\(non-eof-into-finish\\): has non-eof-into-finish")
-
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: an EOF-reachable stop terminal is accepted"
@@ -4160,39 +4135,6 @@ byte_machine_mutation(
   REPLACE [[    (cond ((pause-node? n) '())]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "both EOF terminals reported -- expected 2, got 0")
-
-byte_machine_mutation(
-  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: a byte-reachable pause into finish is rejected"
-  # Slice 3 pin re-audit: bare "non-eof-into-finish" is a diagnostic code and
-  # was measured matching the pre-Slice-3 byte-edge-into-finish case's own
-  # "has non-eof-into-finish" check -- a different decision. This case's own
-  # label is "non-eof-into-finish diagnostic", which occurs exactly once in
-  # verify-tests.sps; the case name ends in "(§16.2:908)", so parenthesis-free
-  # anchoring means the check label rather than a case-name tail.
-  #
-  # Milestone 3 Slice ③ Task 1's whole-pass sweep: that anchor stopped being
-  # unique when Slice ② added verify-tests.sps's "a byte case and a sequence
-  # case both into a finish terminal are two non-eof-into-finish diagnosticS"
-  # case. The pin is an unanchored regex and the check label above is a
-  # substring of that case's NAME, so every mutant that reddens that case
-  # matched this pin -- measured at 40 mutations, three of them did: "verify:
-  # a byte edge into a finish terminal is accepted", "verify: a sequence
-  # node's case and mismatch targets are not out-targets (arm 1,
-  # node-out-targets)", and "verify: a sequence case's byte edge into a finish
-  # terminal is not flagged (arm 6, :908)". UNDER-ANCHORED, not subsumed:
-  # this mutant owns "non-eof-into-finish diagnostic -- expected a true
-  # value", the check's own failure form, which none of the three emits (all
-  # three fail the count check instead, "-- expected 2, got N"). Requiring the
-  # " -- expected" delimiter immediately after the label forces the next
-  # character to be the delimiter rather than the "s" of "diagnostics" -- the
-  # same idiom the "AB|AB" pin in Pass 34 uses against "AB|ABC". Re-judged
-  # through byte_machine_mutation_verdict against all 39 other captured
-  # outputs: the pin below matches this mutant and no other.
-  FIND [[(if (and cn (finish-node? cn))]]
-  REPLACE [[(if (and cn #f (finish-node? cn))]]
-  EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "non-eof-into-finish diagnostic -- expected a true value")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -4380,58 +4322,6 @@ byte_machine_mutation(
                                   (integer-accumulate-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "chain of pauses that cycles is a zero-progress EOF cycle: zero-progress-cycle diagnostic")
-
-# Second: the `(memq (node-name n) br)` byte-reachability gate shared by both
-# D4(b)/(d) checks above -- the entire reason `byte-reached` exists -- had a
-# test witness (dropping it makes the well-formed fixture's `pe -> done`
-# illegal) but no mutation. The guard text is identical at both call sites,
-# so a bare FIND double-matches (confirmed: 2 occurrences) and widening to a
-# two-line FIND including each site's next line (`(let ((cn ...` vs.
-# `(case (eof-terminal ...`) makes each unique without restructuring the
-# shared shape. Measured both candidates directly rather than assuming
-# either witnessed the decision: dropping the gate at the second site (the
-# eof-terminal-chain check) is NOT CAUGHT by this suite at all (exit 0) --
-# every EOF-only-reachable pause fixture's continuation either resolves to
-# `'finish` (no diagnostic either way) or to a stop/cycle the dispatch node's
-# own, ungated :909 walk above already flags with the identical code, so the
-# gate's removal there produces only a redundant duplicate diagnostic no
-# check distinguishes (the whole-branch review's Minor item on duplicate
-# same-code diagnostics is the same underlying gap). Dropping it at the
-# first site (the non-eof-into-finish check) is cleanly caught: the
-# well-formed fixture's `pe` (eof-only-reachable, continuation a finish
-# node) newly and wrongly reports non-eof-into-finish, so that fixture's
-# sole "accepted" check -- the only case in this file using that label --
-# fails. That site is used below.
-byte_machine_mutation(
-  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: a pause's byte-reachability gate is not checked (non-eof-into-finish)"
-  # Slice ③ anchored this on the well-formed pause fixture's "accepted"
-  # check. The whole-branch review (a9de657..c302cdd) then measured Task 3's
-  # new "verify: a case is compared against itself" mutant reddening that same
-  # check, joining the pre-existing "a pause continuation is an out-target
-  # (resolution + reachability)" mutant -- three mutations, one boolean, one
-  # FAIL record between them, byte for byte identical (a boolean `check`
-  # prints no "got", so there is no varying detail to key on). That review
-  # recorded it as subsumed and left it collided.
-  #
-  # Task 3's whole-pass audit closes it, and the subsumption was real: the fix
-  # is not a tighter pin but a check that did not exist. "accepted" is a
-  # VERDICT -- any diagnostic at all reddens it, so it cannot say which
-  # decision broke. The eof-terminal-chain gate below already had this
-  # problem and solved it by ATTRIBUTION; the same move works here.
-  # "a well-formed pause machine verifies" now also asserts that fixture emits
-  # no 'non-eof-into-finish, which is exactly what ungating the :908 site
-  # makes it emit (pe is EOF-only-reachable and legally continues into a
-  # finish node, decision 0011). The self-comparison mutant emits
-  # 'overlapping-cases there and the out-target mutant 'unreachable-node, so
-  # each of the three now fails a check that names its own decision.
-  # Measured: this pin matches no other mutant's output in the pass.
-  FIND [[(if (and (pause-node? n) (memq (node-name n) br))
-                            (let ((cn (lookup nodes (pause-node-continuation n))))]]
-  REPLACE [[(if (pause-node? n)
-                            (let ((cn (lookup nodes (pause-node-continuation n))))]]
-  EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "a well-formed pause machine verifies: no non-eof-into-finish")
 
 # Cleanup follow-up: the second site's gap above is closed here too -- not by
 # VERDICT (still genuinely impossible, per the measurement above) but by
@@ -4795,75 +4685,6 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "a byte-dispatch eof self-loop and a two-node dispatch/sequence eof cycle are three eof-zero-progress cycles: eof-zero-progress-cycle count -- expected 3, got 1")
-
-byte_machine_mutation(
-  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: a sequence case's byte edge into a finish terminal is not flagged (arm 6, :908)"
-  FIND [[              (map (lambda (n)
-                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n)
-                             (integer-accumulate-node? n))
-                         (filter values]]
-  REPLACE [[              (map (lambda (n)
-                     (if (byte-dispatch-node? n)
-                         (filter values]]
-  # Comparison-caught: with the filter narrowed back to byte-dispatch-only, a
-  # sequence case whose target is a finish terminal is never inspected here,
-  # so non-eof-into-finish never fires.
-  #
-  # Pin sweep (Step 12): this pin's own FAIL record is ALSO produced,
-  # byte-identical, by TWO other mutations in this pass: the pre-existing
-  # "verify: a byte edge into a finish terminal is accepted" (the :908 inner
-  # check itself is shared code, reached by both node kinds through the
-  # filter this arm widens) and this task's own arm 1 above (removing a
-  # sequence node's out-targets entirely also empties what :908 has to
-  # inspect for it). Both are strictly broader decisions whose failure sets
-  # are supersets of this one's. Filed genuinely subsumed on both sides here
-  # and left collided.
-  #
-  # Milestone 3 Slice ② Task 2 comment fix: the paragraph above previously
-  # described that captured output only as "single-line" -- the same
-  # unverified phrasing Task 1's fix wave measured wrong at arm 7 below.
-  # Measured here too: THIS mutant's own run reports failed-cases=1,
-  # failures=1 (only this fixture's own case), so the collision claim above
-  # stands as written -- "single-line" happened to be accurate for arm 6,
-  # unlike arm 7, but it was still an assertion nobody had measured.
-  #
-  # Review fix wave (Critical), re-measured at 34 mutations: a whole-FAIL-
-  # record subset test alone reports AGENTS.md's bucket 3 ("separable but
-  # deliberately declined") as clean too, and the "on both sides" verdict
-  # above was exactly that for ONE of the two sides. verify-tests.sps's "a
-  # byte case and a sequence case both into a finish terminal are two
-  # non-eof-into-finish diagnostics" case puts an INDEPENDENT byte-dispatch
-  # case into a finish node (a decision only "a byte edge into a finish
-  # terminal is accepted" touches, never this mutation, since byte-dispatch
-  # nodes stay in the :908 filter under this mutation) beside this mutation's
-  # own case above, and counts both. Measured directly against all 34
-  # mutants' captured output: correct code reports 2; "a byte edge into a
-  # finish terminal is accepted" disables the shared finish-check for every
-  # node kind and reports 0; this mutation still finds the byte-dispatch
-  # violation but not the sequence one, reporting 1 -- a "got" value "a byte
-  # edge into a finish terminal is accepted" never produces on this check
-  # (it has "got 0"). UNDER-ANCHORED against THAT sibling, not subsumed:
-  # re-anchored to the combined record below, which closes that half.
-  #
-  # The OTHER side does not close. Arm 1 empties node-out-targets for every
-  # sequence node, which starves this same :908 loop identically to this
-  # mutation's own narrower filter -- both report "got 1" on the very check
-  # just used to close the other side (measured; grepped both captured
-  # outputs directly). This mutation's entire two-record failure set --
-  # "non-eof-into-finish" on its own case above, and "got 1" on the new
-  # count check -- is still a full subset of arm 1's larger failure set at
-  # this size (arm 1 additionally fails the well-formed-machine, both
-  # missing-target, and the unreachable-node checks, none of which this
-  # mutation touches: node-out-targets feeds passes this mutation's own
-  # :908-filter change never reaches). No fixture built from this mutation's
-  # own effect can differ from arm 1's, because arm 1's blast radius is a
-  # strict superset of this one's wherever a sequence node's :908
-  # contribution is concerned. GENUINELY SUBSUMED by arm 1, confirmed by
-  # exhaustion at 34 mutations, not by default: see arm 1's own pin below.
-  EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES
-    "a byte case and a sequence case both into a finish terminal are two non-eof-into-finish diagnostics: non-eof-into-finish count -- expected 2, got 1")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -5322,33 +5143,6 @@ byte_machine_mutation(
   EXPECT_OUTPUT_MATCHES
     "a zero-width self-cycle is a zero-progress cycle: zero-progress-cycle")
 
-byte_machine_mutation(
-  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: the zero-width :908 check never fires"
-  FIND [[                        (if (and (or (field-action-node? n) (field-branch-node? n))
-                                 (memq (node-name n) br))]]
-  REPLACE [[                        (if #f]]
-  EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES
-    "a byte-reachable zero-width node into a finish is non-eof-into-finish: non-eof-into-finish")
-
-byte_machine_mutation(
-  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: the zero-width :908 check is not gated on byte-reachability"
-  # The RESTRICTIVE direction, and the reason the gate exists at all. §16.2:908
-  # forbids NON-EOF control flow into a finish, so a zero-width node reached only
-  # along an EOF path legally continues into one -- decision 0011's ruling for
-  # the pause kind, applied here. Ungated, this check rejects a machine that has
-  # no defect. It SURVIVED until a fixture with an EOF-only-reachable zero-width
-  # node was written; the five cases already present could not see it, because
-  # every zero-width node in them is byte-reachable.
-  FIND [[                        (if (and (or (field-action-node? n) (field-branch-node? n))
-                                 (memq (node-name n) br))]]
-  REPLACE [[                        (if (or (field-action-node? n) (field-branch-node? n))]]
-  EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES
-    "an EOF-only-reachable zero-width node may continue into a finish: no non-eof-into-finish")
-
 # Slice ② task 4 adds EIGHT for pass-fields' operand half. Three by-construction
 # subsumptions are recorded at their own sites: each is a NARROWER edit of a
 # check a broader mutation already removes, and each is kept because it names its
@@ -5582,20 +5376,6 @@ byte_machine_mutation(
   EXPECT_OUTPUT_MATCHES
     "an accumulate whose own EOF target is itself is an EOF zero-progress cycle: eof-zero-progress-cycle")
 
-byte_machine_mutation(
-  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: the :908 byte-edge-into-finish check stops admitting accumulate nodes"
-  # node-out-targets already yielded the accumulate node's three byte
-  # out-targets -- digit, non-digit and overflow -- and this filter simply never
-  # asked for them, so all three could target a finish terminal unchallenged.
-  FIND [[                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n)
-                             (integer-accumulate-node? n))
-                         (filter values]]
-  REPLACE [[                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n))
-                         (filter values]]
-  EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "an accumulate BYTE edge into a finish terminal is rejected: non-eof-into-finish")
-
 # --- Milestone 5 Slice ⓪ task 1: the site that was DEAD IN THE SUITE ----------
 #
 # Measured before the fixture existed: deleting this clause left every runnable
@@ -5618,6 +5398,77 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "an eof-zero-progress-cycle is reported AT A PAUSE NODE: at least one, at a pause")
+
+# --- Milestone 5 Slice ⓪b task 2: §16.2:908 becomes ONE derived block ---------
+#
+# SEVEN mutations were REMOVED here, and their residue is recorded rather than
+# lost. They pinned decisions that no longer exist as separate code: three
+# hand-written :908 sites (one unconditional and kind-filtered, two gated on
+# byte-reachability) collapsed into one block keyed on byte-reachability alone.
+# The removed labels, and where each decision now lives:
+#
+#   "a byte edge into a finish terminal is accepted"          -> the shared
+#       finish-node? test, now pinned by "reads only the first out-target"
+#       and by the vacuous-gate pin below.
+#   "a byte-reachable pause into finish is rejected"          -> subsumed: the
+#   "the zero-width :908 check never fires"                      one block sees
+#       every kind through node-out-targets, so a per-kind site cannot be
+#       removed independently of the others.
+#   "a pause's byte-reachability gate is not checked"         -> subsumed into
+#   "the zero-width :908 check is not gated on byte-reachability"  the single
+#       gate, pinned below in both directions.
+#   "a sequence case's byte edge ... (arm 6, :908)"           -> the outer
+#   ":908 byte-edge-into-finish stops admitting accumulate"      source-kind
+#       filter is GONE. There is no kind census left to narrow, which is the
+#       point of the change: those two mutations existed because the filter
+#       existed, and it is the construct that shipped three Slice ③ defects.
+#
+# Net: 7 removed, 3 added.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the :908 check is not gated on byte-reachability"
+  # The decision OQ-3 settled. Measured in both directions: this mutant rejects
+  # `make-pause-machine` -- decision 0011's canonical legal shape, an EOF-only
+  # pause continuing into a finish -- so the shipped fixture's own case reddens
+  # alongside the new twelve-machine battery. That is the evidence the
+  # unconditional reading is wrong, wired in as a pin.
+  FIND [[                       (if (memq (node-name n) br908)
+                           (filter values]]
+  REPLACE [[                       (if #t
+                           (filter values]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an EOF-only-reachable byte edge into a finish is accepted: none rejected")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the :908 gate is vacuous, so no byte edge into a finish is ever rejected"
+  # The reverse direction. A gate that admits nothing passes the acceptance half
+  # of the battery for the wrong reason, so the rule needs its own pin against
+  # emptiness -- the shape AGENTS.md calls seeding an output before asserting it.
+  FIND [[                       (if (memq (node-name n) br908)
+                           (filter values]]
+  REPLACE [[                       (if #f
+                           (filter values]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a BYTE-reachable byte edge into a finish is rejected at its source node")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the :908 check reads only the first of a node's out-targets"
+  # `node-out-targets` is now the single census this rule consults. Reading one
+  # element of it is the shape that survives a per-node dedup and still misses a
+  # real violation -- a dispatch whose SECOND case targets a finish.
+  FIND [[                                        (node-out-targets n)))
+                           '()))
+                     nodes)))]]
+  REPLACE [[                                        (list (car (node-out-targets n)))))
+                           '()))
+                     nodes)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a byte case targeting a finish node is rejected")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

@@ -88,8 +88,16 @@
     (missing-target 2) (missing-error-declaration 1) (invalid-field-declaration 2)
     (invalid-field-operand 6) (overlapping-cases 1) (ambiguous-sequence-prefix 1)
     (unreachable-node 1) (zero-progress-cycle 1) (invalid-eof-target 2)
-    (non-eof-into-finish 3) (eof-reachable-stop 2) (eof-zero-progress-cycle 2)
+    (non-eof-into-finish 1) (eof-reachable-stop 2) (eof-zero-progress-cycle 2)
     (invalid-name 3)))
+
+;; *** RE-MEASURED 2026-09-03, Slice ⓪b task 2: `non-eof-into-finish` went 3 -> 1
+;; and the total 31 -> 29. *** This is the ratchet FIRING, not a regression: ⓪b
+;; collapsed §16.2:908's three hand-written sites -- one unconditional and
+;; kind-filtered, two gated on byte-reachability, which is why they disagreed --
+;; into one derived block keyed on byte-reachability. The census went red on the
+;; commit that did it, which is exactly what a pinned site table is for. Slice
+;; ⓪'s own plan predicted this move and named it as expected.
 
 (harness-group "the diagnostic code set is derived from verify.sls, not declared here"
   (lambda ()

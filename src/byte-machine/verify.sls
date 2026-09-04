@@ -739,26 +739,55 @@
   (define (pass-eof-execution m)
     (let ((nodes (machine-nodes m)))
       (append
-       ;; :908 — a byte edge (case or fallback) into a finish terminal.
-       ;; Slice ③ adds `integer-accumulate-node?`: `node-out-targets` already
-       ;; yields its three BYTE out-targets (digit, non-digit, overflow), but
-       ;; this filter did not admit the kind, so none of the three was ever
-       ;; checked and an accumulate node whose digit target was a finish terminal
-       ;; verified with zero diagnostics. Found by the whole-branch review.
-       (apply append
-              (map (lambda (n)
-                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n)
-                             (integer-accumulate-node? n))
-                         (filter values
-                                 (map (lambda (t)
-                                        (let ((tn (lookup nodes t)))
-                                          (if (and tn (finish-node? tn))
-                                              (make-diagnostic 'non-eof-into-finish (node-name n)
-                                                               "a byte edge targets a finish terminal")
-                                              #f)))
-                                      (node-out-targets n)))
-                         '()))
-                   nodes))
+       ;; :908 — ONE derived block, replacing three hand-written ones (Slice ⓪b).
+       ;;
+       ;; §16.2:908 forbids "non-EOF control flow into a finish terminal", and
+       ;; decision 0011 item 4(b) states the same rule over REACHING. So the
+       ;; question is not what KIND the source node is; it is whether the source
+       ;; is byte-reachable. The three shipped blocks answered it three ways --
+       ;; one unconditional and kind-filtered, two gated on byte-reachability --
+       ;; and therefore disagreed: a node reachable ONLY as an eof-target was
+       ;; accepted when it was a pause, a field-action or a field-branch, and
+       ;; rejected when it was a byte-dispatch, a sequence-dispatch or an
+       ;; accumulate. The byte edge is untakeable in all six.
+       ;;
+       ;; *** The gated reading is correct, measured in both directions. ***
+       ;; Applying the unconditional reading uniformly breaks five shipped
+       ;; programs, and the machine it refuses is `make-pause-machine`: an
+       ;; EOF-only pause continuing into a finish node, which is decision 0011's
+       ;; canonical LEGAL shape, named in that fixture's own header. Decision
+       ;; 0021 item 5 split the kinds by "reads input" versus "zero-width"; all
+       ;; three input-reading kinds can be EOF-only-reachable, so the split's
+       ;; stated reason is false and its verdict wrong. See decision 0023.
+       ;;
+       ;; The gate is SOUND, not merely convenient: once an execution takes an
+       ;; eof-target it can never feed again (`parser-feed!` prohibits the
+       ;; `finish-ready` row), so feed-reachable is a subset of `byte-reached`
+       ;; and gating on it cannot miss a real violation.
+       ;;
+       ;; Reported once per offending edge AT ITS SOURCE NODE. The alternative --
+       ;; reporting at the finish node -- measures identical accept/reject sets
+       ;; but merges findings from two different sources into one, and the source
+       ;; is the half that says which edge to fix (§16.4:940).
+       ;;
+       ;; `node-out-targets` is now the single census this rule consults, and it
+       ;; already owns that job -- the direct antidote to the failure mode Slice
+       ;; ③ shipped three times: a kind taught to the accessors and not to the
+       ;; hand-written filters reading them.
+       (let ((br908 (byte-reached m)))
+         (apply append
+                (map (lambda (n)
+                       (if (memq (node-name n) br908)
+                           (filter values
+                                   (map (lambda (t)
+                                          (let ((tn (lookup nodes t)))
+                                            (if (and tn (finish-node? tn))
+                                                (make-diagnostic 'non-eof-into-finish (node-name n)
+                                                                 "a byte edge targets a finish terminal")
+                                                #f)))
+                                        (node-out-targets n)))
+                           '()))
+                     nodes)))
        ;; :909 + the EOF-cycle check — walk each INPUT-READING node's eof-target
        ;; chain. Slice ③ adds `integer-accumulate-node?` here too, and this is the
        ;; arm whose absence was worst: `parser-finish-op!` says in its own words
@@ -793,37 +822,6 @@
        ;; never a stop, never a cycle).
        (let ((br (byte-reached m)))
          (append
-          (apply append
-                 (map (lambda (n)
-                        (if (and (pause-node? n) (memq (node-name n) br))
-                            (let ((cn (lookup nodes (pause-node-continuation n))))
-                              (if (and cn (finish-node? cn))
-                                  (list (make-diagnostic 'non-eof-into-finish (node-name n)
-                                                         "a pause continuation byte-reaches a finish terminal"))
-                                  '()))
-                            '()))
-                      nodes))
-          ;; :908 through a ZERO-WIDTH node (Slice ②), on the pause precedent:
-          ;; gated on byte-reachability, not on an unconditional source-kind
-          ;; filter. §16.2:908 forbids "non-EOF control flow into a finish
-          ;; terminal", and a byte path that runs `dispatch -> field-action ->
-          ;; finish` is exactly that -- the shipped :908 check above cannot see
-          ;; it, because it filters on dispatch kinds and a zero-width node is
-          ;; not one, so the finish sits one hop further than it looks.
-          (apply append
-                 (map (lambda (n)
-                        (if (and (or (field-action-node? n) (field-branch-node? n))
-                                 (memq (node-name n) br))
-                            (filter values
-                                    (map (lambda (t)
-                                           (let ((tn (lookup nodes t)))
-                                             (if (and tn (finish-node? tn))
-                                                 (make-diagnostic 'non-eof-into-finish (node-name n)
-                                                                  "a zero-width node byte-reaches a finish terminal")
-                                                 #f)))
-                                         (node-out-targets n)))
-                            '()))
-                      nodes))
           (apply append
                  (map (lambda (n)
                         (if (and (pause-node? n) (memq (node-name n) br))
