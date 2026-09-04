@@ -326,6 +326,112 @@
               (check-equal "the same nine kinds" from-source from-table))))))))
 
 
+;; --- axis A': the POSITION drift row (Milestone 5 Slice ①a task 5) -----------
+;;
+;; *** THIS ROW IS STRUCTURALLY WEAKER THAN S2 ABOVE, AND THE DIFFERENCE IS NOT A
+;; DETAIL. *** S2 derives its set from `ir.sls` and tests `verify.sls`: two
+;; independent files, so a mutation to either is caught by the other. There is no
+;; equivalent source for POSITIONS. Decision 0025 point 4 and the design both said
+;; to derive them "from the IR"; measured 2026-09-04, `ir.sls` has no position
+;; vocabulary at all -- the only enumeration with the right cardinality is in
+;; `verify.sls`, the file this census exists to test. So this row tests that file
+;; against itself.
+;;
+;; Two consequences a later reader must not have to rediscover:
+;;   1. Under the mutation suite it is BLIND. `SchemeMutationSuite.cmake:1150`
+;;      points BYTE_MACHINE_SOURCE_ROOT at the STAGED tree, so a mutation that
+;;      deletes an edge role deletes it from the code AND from the set derived
+;;      here: the mutant is self-consistent and this row stays green.
+;;   2. What it DOES catch is a hand edit -- a role added to `verify.sls` with no
+;;      matrix position to receive it. That is the Milestone 4 defect shape one
+;;      level up, and before this row NOTHING read `position-table` at all.
+;;
+;; The role-to-position MAPPING below is declared, not derived, and that is
+;; deliberate: the two vocabularies genuinely disagree (see `alternative`), so a
+;; derivation would have to encode the disagreement silently. Declaring it makes
+;; the mismatch the artifact. The ROLE SET is derived, so a new role with no
+;; mapping entry reddens.
+
+(define (edge-roles-in-source)
+  ;; Every `(cons 'ROLE ...)` inside verify.sls, which is how `zero-width-edges`
+  ;; and `node-out-edges` -- the one census, two views -- label an out-edge.
+  (let ((datum (call-with-input-file
+                   (string-append source-root "/byte-machine/verify.sls")
+                 read))
+        (acc '()))
+    (let loop ((x datum))
+      (when (pair? x)
+        (when (and (eq? (car x) 'cons)
+                   (pair? (cdr x))
+                   (pair? (cadr x))
+                   (eq? (car (cadr x)) 'quote)
+                   (symbol? (cadr (cadr x))))
+          (let ((r (cadr (cadr x))))
+            (unless (memq r acc) (set! acc (cons r acc)))))
+        (loop (car x))
+        (loop (cdr x))))
+    acc))
+
+;; role (as verify.sls spells it) -> the position-table names that carry it.
+;; `alternative` is the mismatch this row exists to make visible: verify.sls
+;; labels a sequence alternative's edge `alternative`, the matrix calls that
+;; position `sequence-case`. Neither is wrong; nothing connected them until now.
+(define role->positions
+  '((case          dispatch-case)
+    (fallback      dispatch-fallback)
+    (alternative   sequence-case)
+    (mismatch      sequence-mismatch)
+    (continuation  pause-continuation)
+    (next          field-action-next)
+    (error         field-action-error)
+    (true          field-branch-true)
+    (false         field-branch-false)
+    (digit         accumulate-digit)
+    (nondigit      accumulate-nondigit)
+    (overflow      accumulate-overflow)))
+
+(harness-group "every edge role verify.sls labels has a matrix position (A')"
+  (lambda ()
+    (harness-case "the derived role set is exactly the mapping's keys"
+      (lambda ()
+        (let ((roles (edge-roles-in-source)))
+          (check "roles were found in verify.sls" (> (length roles) 0))
+          (let ((sorted (lambda (l) (list-sort (lambda (a b)
+                                                 (string<? (symbol->string a)
+                                                           (symbol->string b)))
+                                               l))))
+            (check-equal "derived roles equal the mapped roles"
+                         (sorted roles)
+                         (sorted (map car role->positions)))))))
+    (harness-case "every mapped position exists in position-table"
+      (lambda ()
+        ;; Sentinel reads the OBSERVED count, not the mapping's length: a loop
+        ;; that never runs cannot satisfy it.
+        (let ((names (map car position-table)) (checked 0) (missing '()))
+          (for-each
+           (lambda (entry)
+             (for-each (lambda (pos)
+                         (set! checked (+ checked 1))
+                         (unless (memq pos names)
+                           (set! missing (cons pos missing))))
+                       (cdr entry)))
+           role->positions)
+          (check-equal "every mapped position was looked up" checked 12)
+          (check-equal "and each one exists" missing '()))))
+    (harness-case "the four EOF and entry positions are accounted for outside the role map"
+      (lambda ()
+        ;; `node-eof-target` and the machine entry carry no `(cons 'role ...)`
+        ;; label, so they cannot appear in the derived set. They are named here so
+        ;; that position-table's 16 rows are 12 mapped + these 4, and a row added
+        ;; with neither a role nor a place here reddens the count below.
+        (let ((names (map car position-table)))
+          (for-each (lambda (p) (check (symbol->string p) (memq p names)))
+                    '(machine-entry dispatch-eof-target sequence-eof-target
+                      accumulate-eof-target))
+          (check-equal "position-table is exactly 12 role-carrying + 4 unlabelled"
+                       (length position-table) 16))))))
+
+
 ;; --- axis B: self-reference --------------------------------------------------
 ;; The target IS the owning node. This is where the zero-progress rules live, and
 ;; it is the axis a scoping cut would reach for first -- wrongly: it is the only
