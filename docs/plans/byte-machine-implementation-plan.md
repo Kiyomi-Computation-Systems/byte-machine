@@ -1877,3 +1877,41 @@ the six EOF verdicts carry no observable consequence** — four independent muta
 ranking survive all 230 cells.
 
 Full plan: `docs/plans/milestone-5-slice-0-implementation-plan.md`.
+
+### §16.2:908 / §16.2:909 — Milestone 5 Slice ⓪b, the EOF walk cluster
+
+**2026-09-03.** Neither §16.2 bullet is reworded; this records a second hardening slice, after
+Slice ⓪ and before Milestone 5's own work, and one finding that changes how :908 must be read.
+
+**§16.2:908's two halves contradict each other in the shipped verifier.** The check exists at
+three sites under two gating rules — one unconditional, two gated on byte-reachability. Measured
+on six machines whose offending node is reachable ONLY as an eof-target: pause, field-action and
+field-branch are accepted; byte-dispatch, sequence-dispatch and integer-accumulate are rejected.
+
+**Resolved in favour of the gated reading, and the evidence is decisive in both directions.**
+Applying the unconditional reading uniformly breaks five shipped programs, and the refusal names
+`pe` — the shipped pause machine's EOF-only pause whose continuation is a finish node, which is
+**decision 0011's canonical legal shape**, named in that fixture's own header. The unconditional
+rule, applied consistently, rejects the machine 0011 was written to permit. The gated reading
+leaves every byte-reachable offender of all six kinds still rejected.
+
+**Decision 0021 item 5's stated reason is false.** It splits the kinds by "reads input" versus
+"zero-width"; a byte-dispatch, a sequence-dispatch and an accumulate node can each be
+EOF-only-reachable, and then their byte edges are never traversed by any execution. Slice ⓪b
+annotates 0021 rather than correcting it in place, per AGENTS.md's rule for a sentence that was
+never true, and opens decision 0023 for the affirmative rules.
+
+**A rule cited fourteen times in this repository does not exist.** "One finding per decision" is
+not in §16.4:937-943, which is a contents list with no cardinality clause; the gloss entered at
+`milestone-3-slice-1-implementation-plan.md:139` and propagated. It was the stated reason for
+keeping Slice ⓪'s D-1 fix out of scope. What §16.4:940 *does* require — an edge or source label
+beside the node — is implemented nowhere: `make-diagnostic` takes three arguments at all 31 call
+sites. Slice ⓪b adds it, keyed on edge ROLE rather than index, because `verify.sls:380-386`
+explicitly declines to promise the order of two diagnostics from one node.
+
+**The `85 of 230` figure in this section's Slice ⓪ disposition is skeleton-dependent and should
+not be relied on.** The identical prototype measures 51/144 under one skeleton and 4/144 under
+another; and "most of it double-reporting" is not corroborated — a third of the changed cells are
+duplicates, two thirds are new coverage. A figure of this kind must name its skeleton.
+
+Full plan: `docs/plans/milestone-5-slice-0b-implementation-plan.md`.
