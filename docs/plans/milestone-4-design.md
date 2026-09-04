@@ -24,8 +24,9 @@ task inside Slice ② rather than a slice of its own.
 >
 > - **2026-09-03 (Slice ③ planning)** — **amends §8**, re-measured against the
 >   merged tree at `14c4f30`: 63 findings, nine blocking. §8 was written at
->   `a942327`, before ①a, ①b and ② existed, and Slice ② alone changed six of the
->   seven files ③ touches. The corrections a reader must not miss, each marked at
+>   `a942327`, before ①a, ①b and ② existed, and Slice ② alone changed **all seven**
+>   of the files ③ touches. *(Corrected 2026-09-03: this read "six of the seven";
+>   the two sets are identical, `graph.sls` included.)* The corrections a reader must not miss, each marked at
 >   its own site:
 >   - **§8 Task 3's `reexec-targets` instruction is FALSE and ships a hang.**
 >     `overflow-error` is not "terminal-directed" — this document says so itself
@@ -2305,6 +2306,47 @@ re-baseline"; commit `51fd5f3` licensed a move of `generated-pause.golden.sls`
 after that point, so an ①a-anchored diff reports a false positive. See decision
 0019's foot.)*
 
+*(Annotated 2026-09-03 at Slice ③'s close. The paragraph above is left as
+written; these are the places what shipped differs from what it predicted, and
+each is a decision with a reason rather than a shortfall.)*
+
+- **No `unit.accumulate` or `differential.accumulate` lane pair exists.** The
+  accumulate work is in the shipped `byte-machine.differential.field.chez.
+  {source,aot}` lanes, which already carry the field fixtures the node writes
+  through; a fourth lane pair over the same library would have been a second
+  place to keep the same fixtures in step. Two new lanes were registered instead
+  — `byte-machine.determinism.accumulate.chez.{source,aot}` — and they are a
+  different claim, not the same one renamed: emission determinism against a
+  committed golden. `release` moves 92 → **94**, not 96.
+- **The fourth golden means `git diff 51fd5f3..HEAD -- test/fixtures/` is NOT
+  empty**, and the paragraph above asks for exactly that. It is one added file,
+  `generated-accumulate.golden.sls`; no existing golden moved and no fingerprint
+  literal was removed from either pinning file (measured both ways). §8 ordered
+  the determinism lane and the empty diff in the same breath and they are
+  incompatible — see the Slice ③ implementation plan's Task 9, whose one
+  mutation is the argument for keeping the lane.
+- **`cur` is not in `reserved-member-3`; `v r d` are.** `cur` is the
+  interpreter's local and is never emitted, so reserving it would have been a
+  reservation nothing could exercise — the exact defect the drift guard exists
+  to catch. `d` is the emitted digit local and has its own mutation.
+- **`EXPECT_SURVIVES` is 12, not "unchanged at the count Slice ② closed with"
+  (ten).** ③ adds two, and they are one ruling recorded twice: §15:864-868's
+  pre-check is written in both the interpreter and the emitter, and on a host
+  with unbounded integers a compute-then-check mutant of either passes every
+  lane. Measured, not assumed, and both carry a reopening condition naming the
+  host property that would make them detectors.
+- **The property lane's guard is three counters, not one `accumulated-count`.**
+  A drawn node proves only that it was constructed, and the node has three arms.
+  TWO of the three -- `acc-count` and `over-count` -- also gained an
+  interpreter-only half after the whole-pass sweep showed the agreed halves were
+  zeroed by any cross-lane divergence. `field-count` did not and needs none: it
+  counts machines whose DRAW declared a field, which no cross-lane divergence
+  can change. *(Corrected 2026-09-03; this said "each counter".)*
+- **Nine fingerprint literals at eleven assertion sites**, up from six at eight,
+  and **81** `verify.sls` pins, up from 72. *(Re-measured 2026-09-03: this read
+  78, true when the block was written and stale one commit later — the review's
+  three filter fixes added three pins.)*
+
 ## Exit (full Milestone 4)
 
 §25:1568-1570's three criteria, allocated to the slices that will discharge
@@ -2320,8 +2362,61 @@ in those parts, the way Milestone 3 attributed §25:1533 in halves.
 | **:1569** — "failed operations leave prior values unchanged" | **② and ③**, in halves | Both halves are true *by construction* rather than by rollback, because §15:856 mandates a preflight bound check: no uncommitted value is ever written. ② proves it for `increment`, `decrement` and `add` — and proves the complementary claim for `store`, `clear`, `set-mask` and `clear-mask`, which per §4.3's `error`-slot rule cannot fail and therefore carry `#f` in the `error` slot. ③ proves it for the multiply-add, where §10.6:568 and §12.7:773 additionally fix that the offending digit is *not consumed*. |
 | **:1570** — "interpreter/generated fields and traces match" | **all four slices** | Read per §4.6 as §22.4:1262-1272's comparison list. ①a discharges its error clause — §22.4:1271's "error domain, code, public source-node name, absolute position, and position kind" — against node kinds shipped in M1 and M2. ①b takes §22.4:1267's "final state and fields" clause, the first cross-lane field comparison, for a machine that declares fields but writes none. ② extends that same comparison over the two zero-width kinds and ③ over the accumulate kind, and each adds one row to §12.7's position table. The "traces" word gets a dated disposition recording §4.6's reading, not a limitation record. |
 
-**Three limitations this milestone closes over rather than glosses**, to be
-restated with their qualifiers at close:
+**Dispositions, 2026-09-03 — MILESTONE 4 CLOSED.** Each criterion above is
+discharged; the table is left as written and these are its dated dispositions,
+naming the slice, the file and the case in the tree.
+
+- **:1568 — boundary, overflow and underflow at every width.** *Discharged in
+  three parts, as allocated.* ①b's declaration part: `ir-tests.sps`, the
+  `make-uint-field` width rows — `2^w` rejected by the **constructor**, a
+  contract violation and never a diagnostic. ②'s operation part:
+  `field-access-tests.sps`, the width × operation × boundary matrix, with
+  underflow at `decrement` from 0 and overflow at `increment`/`add` from each
+  width's maximum. ③'s accumulate part: the same file's "the u64 path crosses
+  the bignum boundary in both lanes" and "the boundary digit is accepted, one
+  below the overflow" cases, and — added by the whole-branch review, which
+  found the original citation was to a lane that runs only the GENERATED
+  library — the u16 base-16 ceiling in that same file's "the overflow bound
+  divides by the node's OWN base" case, asserted in **both** lanes. The u64 row
+  does run at 2^64−1, above `(greatest-fixnum)`.
+- **:1569 — failed operations leave prior values unchanged.** *Discharged in
+  halves, by construction rather than by rollback, as allocated.* ②'s half:
+  `field-access-tests.sps`, "a failed operation leaves the prior value
+  unchanged (§25:1569)"; the complementary `#f`-error-slot claim for the four
+  operations §4.3 proves cannot fail is asserted at the CONSTRUCTOR, in
+  `ir-tests.sps`, not in the differential lane. *(Corrected 2026-09-03 -- one
+  citation covered both halves; `field-access-tests.sps` merely USES `#f` error
+  slots when building fixtures, it never asserts the rule.)* ③'s half: the same file's overflow
+  cases, which additionally assert §12.7:773's *does not consume* — the digit
+  is not taken, and `position-kind-tests.sps`'s fourth row pins the offset that
+  makes that observable rather than merely stated.
+- **:1570 — interpreter/generated fields and traces match.** *Discharged by all
+  four slices, read per §4.6 as §22.4:1262-1272's comparison list.* ①a's error
+  clause: `position-kind-tests.sps`, every kind by value in both executors.
+  ①b's §22.4:1267 clause: the first cross-lane field comparison. ②'s extension
+  over the two zero-width kinds and ③'s over the accumulate kind: the
+  `differential.field` lanes, which since ③ assert each lane against a
+  **measured expected value** as well as against the other lane — agreement
+  alone is symmetric, and Slice ②'s own whole-pass sweep recorded that as the
+  fix it was owed. ③ also extends the comparison into the property lane, whose
+  oracle now carries field values. ③ added the fourth row to §12.7's
+  position table, `byte` from an unconsumed digit.
+
+  *Corrected 2026-09-03. This read "Each slice added its row to §12.7's position table" --
+  false, and worse, it re-asserted the exact claim this branch's FIRST commit was written to
+  correct.* `position-kind-tests.sps` held Slice ①a's three rows unchanged through ①b and ②,
+  and gained its fourth only in ③ (`7280bae`); commit `0a5d9dd` corrected that file's own header
+  for saying otherwise. A disposition written at close is exactly where a tidy symmetry gets
+  re-introduced, and what checks it is the file, never the sentence's own plausibility.
+  - *The "traces" word.* §4.6's reading stands and is recorded here rather than
+    as a limitation: §22.4:1262-1272 is the comparison list, and a "trace" in
+    §25:1570 is that list applied at every step, which is what the differential
+    lanes do — a fresh parser pair per input, compared after every feed. No
+    separate trace artifact exists and none is owed.
+
+**Three limitations this milestone closes over rather than glosses**, restated
+with their qualifiers at close (2026-09-03) — each is still true of the tree as
+shipped, and each is a property of what exists rather than a gap in M4:
 
 1. **`parser-error-domain` ships with one producible value.** The `callback`
    domain and the `detail` payload have no producer until Milestone 5 (§9.3:401
@@ -2338,6 +2433,51 @@ restated with their qualifiers at close:
    declared-field-reference rule rather than by a distinct one. If a later
    milestone adds a second field type, this disposition is the record of why no
    separate check exists to extend.
+
+**A fourth limitation, added at close by Slice ③** — recorded rather than
+discovered later, because it is a property of the sweep method and not of any
+one pin:
+
+4. **Three pins in the `differential.field` pass own no uniquely attributing
+   record, and cannot be given one by anchoring.** Re-measured at close (see the
+   correction below): **39 pins, 1482 ordered pairs, three collisions** under a
+   value-sensitive record key, nineteen under a stricter value-insensitive one.
+   All three are a mutation that DELETES a check subsuming one that ALTERS it —
+   "the bound check is absent" contains "the upper bound is off by one" and "the
+   lower bound is not checked" by construction. In each case the mutation *is*
+   the decision, so narrowing it would be pinning a different decision.
+   **None involves a pin Slice ③ added.** Slice ②'s recorded debt — pins nesting
+   in neither direction because a differential lane's checks are symmetric — is
+   closed by the per-lane expected values named in :1570's disposition above.
+
+   *Corrected 2026-09-03, whole-branch review. This entry first read "31 pins,
+   930 ordered pairs, six collisions"; the pass held 32 pins and one was never
+   judged.* The sweep tool classified a mutation as a declared survivor by
+   testing whether the string `EXPECT_SURVIVES` appeared anywhere in its block —
+   and two blocks discuss the keyword in their comments. So the census under-
+   counted, which is this milestone's own "a claim of done outruns the doing"
+   arriving inside the tool that was supposed to be checking for it. The tool
+   now matches the directive at line start, and the numbers above are from the
+   corrected run on the closed branch, which also carries the seven pins the
+   review's four-operand finding added.
+
+   **The whole corrected census**, both keys, for every pass Slice ③ touched:
+
+   | pass | pins | ordered pairs | value-insensitive | value-sensitive |
+   | --- | --- | --- | --- | --- |
+   | property | 6 | 30 | 0 | 0 |
+   | position-kind | 7 | 42 | 0 | 0 |
+   | member3-drift | 2 | 2 | 2 | 0 |
+   | determinism.accumulate | 1 | 0 | — | — |
+   | unit.ir | 37 | 1332 | 3 | 1 |
+   | differential.field | 39 | 1482 | 19 | **3** |
+   | verify.rejections | 79 | 6162 | 76 | 35 |
+   | normal-ir | 43 | 1806 | 169 | 0 |
+
+   *The `unit.ir` row was added 2026-09-03. The table's heading is a universal -- "every pass
+   Slice ③ touched" -- and it omitted a pass ③ took from 32 pins to 39, the accumulate
+   constructor's own contract decisions. A table headed by a universal must be built from a diff
+   of what changed, never from memory of what was interesting.*
 
 ## 9. Explicitly out of Milestone 4
 

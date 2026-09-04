@@ -41,8 +41,11 @@
 ;; nothing exercises -- the guard would stop guarding the thing ② added to it.
 ;; The two field arms are what put those locals in the rendered text.
 ;;
-;; Slice ③ extends this same fixture rather than building another: whatever
-;; locals the accumulate arm binds must appear here or they are unwitnessed too.
+;; *** Slice ③ extends the same fixture again, with an integer-accumulate node.
+;; *** Its arm binds `b`, `d` and `v`; `b` and `v` come from arms already here,
+;; but `d` does not, and without this node `d` would sit in reserved-member-3 as
+;; a reservation nothing exercises -- the same gap ② closed for `v` and `r`,
+;; reopened by ③'s own addition to the list.
 (define (make-field-drift-machine)
   (make-machine 'pausem 'start (list (make-uint-field 'count 8 0 #f)) '() '()
     (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
@@ -56,7 +59,12 @@
           ;; A STOP, not a finish: Slice ②'s own :908 check rejects a
           ;; byte-reachable zero-width node targeting a finish terminal, which
           ;; this fixture ran into on its first draft.
-          (make-field-branch-node 'test 'zero '(count) 'done 'start #f)
+          (make-field-branch-node 'test 'zero '(count) 'done 'acc #f)
+          ;; Slice ③'s INPUT-READING arm. Reached from the branch's false leg so
+          ;; the fixture keeps a single entry; base 16 because that arm renders
+          ;; the three-range `cond`, which is where `d` is bound.
+          (make-integer-accumulate-node 'acc 'count 16 'acc
+                                        (make-edge 'done 'advance) 'reject #f #f)
           (make-stop-node 'done #f)
           (make-error-node 'reject 'rejected #f))
     'default-eof #f))
@@ -117,20 +125,28 @@
         (let ((extra 'seed))
           (set! extra (subtract leftover reserved-member-3))
           (check-equal "no undeclared emitted local" extra '()))))
-    (harness-case "the three locals this slice added are actually exercised"
+    (harness-case "every local a slice added to the list is actually exercised"
       (lambda ()
         ;; Named individually rather than counted: a count passes when one entry
         ;; is swapped for another, and `fieldv` in particular is reachable only
         ;; because it is spelled that way -- (rnrs) binds `fields`, so had the
         ;; parameter been named that, the first subtraction above would have
         ;; swallowed it and its membership could never be exercised.
+        ;;
+        ;; *** The list grows with the slices, and Slice ③ found it had not. ***
+        ;; It said "the three locals THIS SLICE added" and still named Slice ①a's
+        ;; three; ② added `v` and `r` to reserved-member-3 and made the fixture
+        ;; render them, but never named them here, so nothing failed when a
+        ;; later edit could have dropped either. ③ adds `d` and names all six,
+        ;; and the case is renamed so the next slice inherits the obligation
+        ;; rather than a claim about one slice.
         (let ((seen 'seed) (n 0))
           (set! seen '())
           (for-each (lambda (s)
                       (set! n (+ n 1))
                       (when (memq s observed) (set! seen (cons s seen))))
-                    '(fieldv errs pk))
-          (check-equal "three checked" n 3)
-          (check-equal "all three emitted" (length seen) 3))))))
+                    '(fieldv errs pk v r d))
+          (check-equal "six checked" n 6)
+          (check-equal "all six emitted" (length seen) 6))))))
 
 (harness-finish)

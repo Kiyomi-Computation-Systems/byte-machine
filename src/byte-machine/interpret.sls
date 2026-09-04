@@ -89,6 +89,7 @@
                     ((pause-node? n) 'pause)
                     ((field-action-node? n) 'field-action)
                     ((field-branch-node? n) 'field-branch)
+                    ((integer-accumulate-node? n) 'accumulate)
                     (else (byte-machine-contract-violation 'interpret 'internal name))))))
       (define (dispatch name byte)
         (if (pair? name)
@@ -141,11 +142,24 @@
                 nm (declaration-index nm))))
       ;; Every lowered prefix state inherits the source node's EOF edge
       ;; (§12.4:727), so a compound current answers with its own node's.
+      ;; *** §4.7 item 4's hazard, and it was LIVE. *** This was a two-way `if`
+      ;; with no else arm, so any kind that is not a sequence node fell through
+      ;; into `byte-dispatch-node-eof-target` -- a bare `(vector-ref n 4)` with no
+      ;; tag guard. On an integer-accumulate node slot 4 is `digit-target`, a
+      ;; SYMBOL, so it would have returned a plausible-looking node name and
+      ;; silently routed EOF into the digit path. Measured against the shipped
+      ;; accessor before this was rewritten.
+      ;;
+      ;; A `cond` with an arm per kind and a LOUD else, matching the convention
+      ;; every other per-kind analysis in this project uses: a kind that reaches
+      ;; here without an arm must crash, not answer.
       (define (eof-target-of cur)
         (let ((n (lookup nodes (if (pair? cur) (car cur) cur))))
-          (if (sequence-dispatch-node? n)
-              (sequence-dispatch-node-eof-target n)
-              (byte-dispatch-node-eof-target n))))
+          (cond ((sequence-dispatch-node? n) (sequence-dispatch-node-eof-target n))
+                ((byte-dispatch-node? n) (byte-dispatch-node-eof-target n))
+                ((integer-accumulate-node? n) (integer-accumulate-node-eof-target n))
+                (else (byte-machine-contract-violation 'interpret 'internal
+                                                       (node-name n))))))
       ;; --- Slice ②'s field semantics, interpreter side ---
       ;; Slot = declaration index (§17:962), so the slot and the width come from
       ;; the same walk over machine-fields and cannot disagree.
@@ -196,6 +210,43 @@
                       (else (byte-machine-contract-violation 'interpret 'internal 'predicate)))))
           (if yes (field-branch-node-true-target n) (field-branch-node-false-target n))))
 
+      ;; --- Slice ③: the checked multiply-add, interpreter side ---
+      ;; §15:864-868 gives the inequality, and gives it as a check BEFORE the
+      ;; operation, not a compute-then-check:
+      ;;     current <= floor((maximum - digit) / base)
+      ;; That shape is the spec's, and §15:856 says why -- "must not rely on host
+      ;; fixnum width or silent wrapping". Computing `cur * base + d` first and
+      ;; testing the product is safe under Chez's bignums and would NOT be safe
+      ;; under a host that wraps, so the pre-check is what gets written.
+      ;; When `d` exceeds the maximum the numerator goes negative and the
+      ;; comparison fails for every non-negative `cur`, which is correct.
+      (define (digit-value byte base)
+        (let ((v (cond ((and (>= byte 48) (<= byte 57)) (- byte 48))
+                       ((and (>= byte 97) (<= byte 102)) (+ 10 (- byte 97)))
+                       ((and (>= byte 65) (<= byte 70)) (+ 10 (- byte 65)))
+                       (else #f))))
+          (and v (< v base) v)))
+      (define (accumulate-step n fv byte)
+        (let* ((fname (integer-accumulate-node-field n))
+               (sw (field-slot-and-width fname))
+               (slot (car sw)) (m* (field-max (cdr sw)))
+               (base (integer-accumulate-node-base n))
+               (d (digit-value byte base)))
+          (cond
+           ((not d)
+            ;; §10.6:567: the non-digit takes its explicit fallback edge, whose
+            ;; own mode decides whether the delimiter is re-read.
+            (let ((e (integer-accumulate-node-nondigit-edge n)))
+              (cons (edge-target e) (edge-mode e))))
+           ((<= (vector-ref fv slot) (div (- m* d) base))
+            (vector-set! fv slot (+ (* (vector-ref fv slot) base) d))
+            (cons (integer-accumulate-node-digit-target n) 'advance))
+           (else
+            ;; §10.6:568, §15:870 and §12.7:772-773: the value is unchanged AND
+            ;; the offending digit is not consumed, so the mode is reexecute and
+            ;; the position kind the runtime reports is `byte`.
+            (cons (integer-accumulate-node-overflow-error n) 'reexecute)))))
+
       (make-compiled-machine
        (lambda (msg . args)
          (case msg
@@ -225,6 +276,17 @@
            ;; 0015 point 3): this library derives field semantics from the source
            ;; IR and shares no helper with the emitter. Widths are read here from
            ;; `machine-fields`; the emitter reads them from the normalized table.
+           ;; *** Slice ③'s accumulate step. A SEPARATE message from `field-step`,
+           ;; returning `(target . mode)` rather than a bare target. ***
+           ;;
+           ;; The mode is unavoidable here -- a digit advances, a non-digit takes
+           ;; its edge's own mode, and an overflow consumes nothing (§12.7:772) --
+           ;; and widening `field-step`'s return to a pair would change every
+           ;; zero-width arm Slice ② shipped for no gain, since those kinds have
+           ;; no mode to carry. One message per shape.
+           ((accumulate-step)
+            (let* ((name (car args)) (fv (cadr args)) (byte (caddr args)))
+              (accumulate-step (lookup nodes name) fv byte)))
            ((field-step)
             (let* ((name (car args)) (fv (cadr args))
                    (n (lookup nodes name)))

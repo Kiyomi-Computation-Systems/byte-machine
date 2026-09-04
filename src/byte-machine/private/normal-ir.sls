@@ -27,6 +27,10 @@
                 sequence-dispatch-node-mismatch sequence-dispatch-node-eof-target
                 sequence-case-bytes sequence-case-target
                 machine-fields uint-field-name uint-field-width uint-field-initial
+                integer-accumulate-node? integer-accumulate-node-name
+                integer-accumulate-node-field integer-accumulate-node-base
+                integer-accumulate-node-digit-target integer-accumulate-node-nondigit-edge
+                integer-accumulate-node-overflow-error integer-accumulate-node-eof-target
                 field-action-node? field-action-node-name field-action-node-operation
                 field-action-node-arguments field-action-node-next field-action-node-error
                 field-branch-node? field-branch-node-name field-branch-node-predicate
@@ -271,6 +275,17 @@
            ;; internal prefix state appends after the whole declared block, in
            ;; declaring-node order. Interleaving would renumber every later node
            ;; and move the fingerprint of every machine containing a sequence.
+           ;; Slice ③: an accumulate node's own EOF edge. A separate lambda
+           ;; rather than a widened `eof-of`, for the reason eof-terminal's two
+           ;; parallel arms already record -- `eof-of` reads
+           ;; `byte-dispatch-node-eof-target`, a bare slot read with no tag
+           ;; guard, so handing it another kind returns a plausible-looking value
+           ;; from the wrong slot. §4.7 item 4 names that exact hazard.
+           (acc-eof-of (lambda (n)
+                         (let ((t (integer-accumulate-node-eof-target n)))
+                           (if (symbol? t)
+                               (cons 'node (id-of t))
+                               (cons 'default default-eof-code)))))
            (seq-eof-of (lambda (n)
                          (let ((t (sequence-dispatch-node-eof-target n)))
                            (if (symbol? t) (cons 'node (id-of t))
@@ -382,7 +397,29 @@
                                       (field-branch-node-arguments n)
                                       (cons (id-of (field-branch-node-true-target n))
                                             (id-of (field-branch-node-false-target n)))))
-                             ;; The repertoire is now these EIGHT kinds. A future
+                             ;; Integer accumulate (Slice ③), the milestone's
+                             ;; only INPUT-READING kind. 1:1 like ②'s two, so it
+                             ;; allocates no internal state and prefix-blocks
+                             ;; correctly skips it.
+                             ;;
+                             ;; It needs FIVE payload values -- field, base, and
+                             ;; three byte targets -- plus its EOF routing, which
+                             ;; rides slot 6 in the shipped (node . id) /
+                             ;; (default . code) convention, and the `reason`
+                             ;; slot 7 that convention requires when the routing
+                             ;; is (default . code). `selector` carries the base,
+                             ;; `arguments` the field name, `targets` the three.
+                             ((integer-accumulate-node? n)
+                              (let ((nd (integer-accumulate-node-nondigit-edge n))
+                                    (eof (acc-eof-of n)))
+                                (vector ns-tag 'accumulate i #f #f #f
+                                        eof (eof-reason-of eof)
+                                        (integer-accumulate-node-base n)
+                                        (list (integer-accumulate-node-field n))
+                                        (list (id-of (integer-accumulate-node-digit-target n))
+                                              (cons (id-of (edge-target nd)) (edge-mode nd))
+                                              (id-of (integer-accumulate-node-overflow-error n))))))
+                             ;; The repertoire is now these NINE kinds. A future
                              ;; kind reaching here must fail loudly, not lower to
                              ;; nothing.
                              (else (assertion-violation 'normalize-machine "unknown node kind" n)))
@@ -410,6 +447,18 @@
       (values entry states debug-map)))
 
   ;; Encoding: (entry, states) -> canonical bytes (decision 0009 layout).
+  ;; EOF routing, written identically by the dispatch arm and the accumulate arm
+  ;; (Slice ③). Factored rather than duplicated: written out twice the text is
+  ;; identical, so a mutation pinning either resolves to TWO sites and the suite
+  ;; hard-fails at declaration -- the SITES-fails-both-directions trap, hit for
+  ;; the sixth time in this slice family. Each caller's CALL stays its own line,
+  ;; so the two arms remain separately mutable.
+  (define (put-eof-routing p eof reason)
+    (if (eq? (car eof) 'node)
+        (begin (put-u8 p 0) (put-u32be p (cdr eof)))
+        (begin (put-u8 p 1) (put-symbol p (cdr eof))
+               (put-reason p reason))))
+
   (define (encode-normal entry states fields)
     (call-with-bytevector-output-port
      (lambda (p)
@@ -453,11 +502,7 @@
                 (let ((fb (normal-dispatch-fallback s)))
                   (put-u32be p (car fb)) (put-u8 p (mode->byte (cdr fb))))
                 ;; eof routing: tag 0 + u32be node id, or tag 1 + default-eof code.
-                (let ((eof (normal-dispatch-eof s)))
-                  (if (eq? (car eof) 'node)
-                      (begin (put-u8 p 0) (put-u32be p (cdr eof)))
-                      (begin (put-u8 p 1) (put-symbol p (cdr eof))
-                             (put-reason p (normal-error-reason s))))))
+                (put-eof-routing p (normal-dispatch-eof s) (normal-error-reason s)))
                ((stop) (put-u8 p 1))
                ((error) (put-u8 p 2) (put-symbol p (normal-error-code s))
                         (put-reason p (normal-error-reason s)))
@@ -478,6 +523,20 @@
                 (put-u32be p (car (normal-field-targets s)))
                 (let ((e (cdr (normal-field-targets s))))
                   (if e (begin (put-u8 p 1) (put-u32be p e)) (put-u8 p 0))))
+               ;; accumulate: tag 7 + base + field name + digit target +
+               ;; nondigit (target, mode) + overflow target + eof routing. Every
+               ;; part is observable to a generated parser -- a different base is
+               ;; a different machine -- so every part is encoded.
+               ((accumulate)
+                (put-u8 p 7)
+                (put-u8 p (normal-field-selector s))
+                (put-symbol p (car (normal-field-arguments s)))
+                (let ((tg (normal-field-targets s)))
+                  (put-u32be p (car tg))
+                  (put-u32be p (car (cadr tg)))
+                  (put-u8 p (mode->byte (cdr (cadr tg))))
+                  (put-u32be p (caddr tg)))
+                (put-eof-routing p (normal-dispatch-eof s) (normal-error-reason s)))
                ((field-branch)
                 (put-u8 p 6)
                 (put-symbol p (normal-field-selector s))

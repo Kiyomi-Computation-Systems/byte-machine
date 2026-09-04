@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FORTY-NINE PASSES, BECAUSE FORTY-NINE DIFFERENT WITNESSES ARE NEEDED
+# FIFTY PASSES, BECAUSE FIFTY DIFFERENT WITNESSES ARE NEEDED
 # (46 through Milestone 3; Milestone 4 Slice ①a adds the member-3 drift
 # guard and the position-kind lane, and Slice ①b the field-access lane -- since
 # renamed byte-machine.differential.field, the only lane in which the field
@@ -161,7 +161,7 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "FORTY-EIGHT PASSES..." above. Declared here, rather than only in prose,
+# See "FIFTY PASSES..." above. Declared here, rather than only in prose,
 # so the count enforced at the bottom of this file is the same text a reader
 # checks by eye at the top -- one number to keep in sync, not two that can
 # quietly disagree. 25 passes / 60 mutations before the aot task; pass 26 adds
@@ -837,6 +837,62 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Whole-branch review: the differential.field pass gains SEVEN for the four
+# accumulate operands no executing fixture reached. Mutations become
+# 361 + 7 = 368.
+#
+# Whole-branch review: the verify pass gains THREE for the kind filters Slice
+# ③ did not widen -- two Criticals and one Important. Mutations become
+# 358 + 3 = 361.
+#
+# Slice ③ task 10: the member3-drift pass gains ONE -- the accumulate arm's
+# digit local, which the list reserved and nothing exercised. Mutations become
+# 357 + 1 = 358.
+#
+# Slice ③ task 9: a NEW pass (50) for the accumulate determinism lane and its
+# fourth golden, carrying ONE mutation no behavioural lane can catch.
+# Passes become 49 + 1 = 50; mutations 356 + 1 = 357.
+#
+# Slice ③ task 8: the property pass gains TWO for the accumulate draw, and the
+# differential.field pass ONE for the emitter defect that draw uncovered.
+# Mutations become 353 + 3 = 356.
+#
+# Slice ③ task 7: the position-kind pass gains ONE for that lane's fourth row --
+# the offset the field lane cannot assert. Passes stay at 49; it joins the
+# existing position-kind pass because that is the pass whose verify command runs
+# position-kind-tests.sps. Mutations become 352 + 1 = 353.
+#
+# Slice ③ task 6: the differential.field pass gains TWO for the digit-range
+# bounds, one per lane. Mutations become 350 + 2 = 352.
+#
+# Slice ③ task 5: the differential.field pass gains ONE for the accumulate
+# arm's end-of-slice guard. The rest of the task is tests for INHERITED
+# behaviour -- see that mutation's own note. Mutations become 349 + 1 = 350.
+#
+# Slice ③ task 4: the differential.field pass gains FIVE pinned and TWO
+# EXPECT_SURVIVES for the checked multiply-add. The survivors are the pre-check
+# form itself, in both lanes, and their reason is §15:856: the form is mandated
+# for a host that WRAPS, and Chez does not, so no fixture on this host can
+# distinguish it from a compute-then-check. Declared survivors go from ten to
+# TWELVE. Mutations become 342 + 7 = 349.
+#
+# Slice ③ task 3: the normal-ir pass gains SIX for integer accumulate's
+# lowering and encoding at tag 7 -- the tag, the base, the nondigit mode, the
+# overflow target, the EOF accessor, and the state's layout length. The dispatch
+# and accumulate arms' identical EOF routing was FACTORED into `put-eof-routing`
+# (SITES trap, sixth time) and the shipped default-eof pin re-anchored onto it.
+# Mutations become 336 + 6 = 342.
+#
+# Slice ③ task 2: Pass 33 gains SIX for the input-reading kind's census --
+# both zero-progress disjuncts separately, the digit edge's exclusion, the
+# REPORT set, out-targets, and the field reference. FOUR shipped report-guard
+# pins were re-anchored for the sixth disjunct. Mutations become 330 + 6 = 336.
+#
+# Slice ③ task 1: the ir pass gains SEVEN for the integer-accumulate node --
+# the base set, the nondigit edge's shape, the mandatory overflow target, the
+# eof-target's shape, both census sites, and the constructor/verifier boundary in
+# the restrictive direction. Mutations become 323 + 7 = 330.
+#
 # Slice ②'s whole-branch review, second finding: the normal-ir pass gains ONE for
 # the sequence-dispatch state's layout length -- see that mutation's own note.
 # There are EIGHT `(vector ns-tag ...)` literals in this normalizer, not the six
@@ -912,8 +968,8 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-set(EXPECTED_PASSES 49)
-set(EXPECTED_MUTATIONS 323)
+set(EXPECTED_PASSES 50)
+set(EXPECTED_MUTATIONS 368)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -2674,16 +2730,35 @@ byte_machine_mutation(
   # the FIND would leave the mutant replacing a two-argument tail with a
   # one-argument one, failing as an arity error rather than as the
   # consumed-count defect the pin names.
-  FIND [[(loop (+ pos 1) 'boundary)]]
-  REPLACE [[(loop pos 'byte)]]
+  # Re-anchored by Slice ③ task 4: the accumulate arm's digit tail is the same
+  # two-argument shape, so a bare FIND matches twice. Anchored on the DISPATCH
+  # arm's own preceding line, which the accumulate arm does not share.
+  # Re-anchored AGAIN by Slice ③ task 4: the dispatch and accumulate arms were
+  # textually identical once the op had answered, so this tail was factored into
+  # `route-byte-step!`. The pin now covers BOTH arms, which is correct -- it is
+  # one decision, and each arm's CALL stays separately mutable.
+  FIND [[              (parser-set-offset! parser (+ 1 (parser-offset parser)))
+              (loop (+ pos 1) 'boundary))]]
+  REPLACE [[              (parser-set-offset! parser (+ 1 (parser-offset parser)))
+              (loop pos 'byte))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "one-byte parser lifecycle\\.the accepted byte stops after consuming one byte: consumed")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: need-input becomes a spurious stop"
-  FIND [[(make-parser-result 'need-input pos]]
-  REPLACE [[(make-parser-result 'stopped pos]]
+  # Re-anchored by Slice ③ task 4: the accumulate arm yields need-input at the end
+  # of a slice exactly as the dispatch arm does, so a bare FIND matches twice.
+  # Anchored on the DISPATCH arm specifically: Slice ③'s accumulate arm yields
+  # need-input at the end of a slice in the same shape, so a bare FIND matches
+  # twice. That duplication is NOT factored -- the two guards are separate
+  # decisions about two kinds, and only their tails coincided.
+  FIND [[            ((dispatch)
+             (if (>= pos end)
+                 (make-parser-result 'need-input pos]]
+  REPLACE [[            ((dispatch)
+             (if (>= pos end)
+                 (make-parser-result 'stopped pos]]
   EXPECT_STATUS 1
   # Not bare "need-input": that word also appears in the DETAIL of unrelated
   # runtime mutants ("expected need-input, got stopped"), so it was satisfied
@@ -2696,8 +2771,12 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: advance does not increment the stream offset"
-  FIND [[(parser-set-offset! parser (+ 1 (parser-offset parser)))]]
-  REPLACE [[(parser-set-offset! parser (parser-offset parser))]]
+  # Re-anchored by Slice ③ task 4 onto `route-byte-step!`, where the increment
+  # now lives once for both byte-consuming kinds.
+  FIND [[              (parser-set-offset! parser (+ 1 (parser-offset parser)))
+              (loop (+ pos 1) 'boundary))]]
+  REPLACE [[              (parser-set-offset! parser (parser-offset parser))
+              (loop (+ pos 1) 'boundary))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "one-byte parser lifecycle\\.the accepted byte stops after consuming one byte: stream offset")
 
@@ -3712,7 +3791,8 @@ byte_machine_mutation(
   # decision has not moved even though its text keeps doing so.
   FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
                                   (sequence-dispatch-node? n)
-                                  (field-action-node? n) (field-branch-node? n))
+                                  (field-action-node? n) (field-branch-node? n)
+                                  (integer-accumulate-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[(if #f]]
   EXPECT_STATUS 1
@@ -4015,10 +4095,23 @@ byte_machine_mutation(
   # shares. Only the EXPECT_OUTPUT_MATCHES pin -- main's attribution check,
   # which is what let main's audit close this collision at all -- moved over
   # from main's side.
-  FIND [[;; on byte-dispatch-node?, so this arm does not feed it.
-          ((pause-node? n) (list (pause-node-continuation n)))]]
-  REPLACE [[;; on byte-dispatch-node?, so this arm does not feed it.
-          ((pause-node? n) '())]]
+  #
+  # *** Re-anchored a THIRD time, 2026-09-03, and this time OFF the prose. ***
+  # The anchor above was the arm's preceding COMMENT line, chosen because the
+  # bare pause arm occurs three times in this file. That comment stated a reason
+  # that had gone stale -- it named one predicate where the §16.2:908 filter now
+  # names three -- and correcting it broke this FIND (0 occurrences, the suite
+  # hard-failed at declaration). An anchor on prose breaks every time the prose
+  # is corrected, which is the opposite of what an anchor is for.
+  #
+  # The anchor is now the pause arm plus the FOLLOWING clause's first comment
+  # line: measured unique (1 occurrence, against 3 for the bare arm), code-side,
+  # and insensitive to edits of the paragraph above it -- which is the paragraph
+  # that keeps needing them.
+  FIND [[          ((pause-node? n) (list (pause-node-continuation n)))
+          ;; A sequence node's byte out-edges]]
+  REPLACE [[          ((pause-node? n) '())
+          ;; A sequence node's byte out-edges]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "a well-formed pause machine verifies: no unreachable-node")
 
@@ -4261,11 +4354,13 @@ byte_machine_mutation(
   # nesting it records.
   FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
                                   (sequence-dispatch-node? n)
-                                  (field-action-node? n) (field-branch-node? n))
+                                  (field-action-node? n) (field-branch-node? n)
+                                  (integer-accumulate-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[(if (and (or (byte-dispatch-node? n)
                                   (sequence-dispatch-node? n)
-                                  (field-action-node? n) (field-branch-node? n))
+                                  (field-action-node? n) (field-branch-node? n)
+                                  (integer-accumulate-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "chain of pauses that cycles is a zero-progress EOF cycle: zero-progress-cycle diagnostic")
 
@@ -4581,9 +4676,11 @@ byte_machine_mutation(
   # RE-ANCHORED by Slice ② task 2's census, same reflow as the sibling pin.
   FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
                                   (sequence-dispatch-node? n)
-                                  (field-action-node? n) (field-branch-node? n))]]
+                                  (field-action-node? n) (field-branch-node? n)
+                                  (integer-accumulate-node? n))]]
   REPLACE [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
-                                  (field-action-node? n) (field-branch-node? n))]]
+                                  (field-action-node? n) (field-branch-node? n)
+                                  (integer-accumulate-node? n))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "and the sequence node itself are three zero-progress cycles: zero-progress-cycle count -- expected 3, got 2")
@@ -4685,14 +4782,13 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a sequence case's byte edge into a finish terminal is not flagged (arm 6, :908)"
-  FIND [[       ;; :908 — a byte edge (case or fallback) into a finish terminal.
-       (apply append
-              (map (lambda (n)
-                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n))]]
-  REPLACE [[       ;; :908 — a byte edge (case or fallback) into a finish terminal.
-       (apply append
-              (map (lambda (n)
-                     (if (byte-dispatch-node? n)]]
+  FIND [[              (map (lambda (n)
+                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n)
+                             (integer-accumulate-node? n))
+                         (filter values]]
+  REPLACE [[              (map (lambda (n)
+                     (if (byte-dispatch-node? n)
+                         (filter values]]
   # Comparison-caught: with the filter narrowed back to byte-dispatch-only, a
   # sequence case whose target is a finish terminal is never inspected here,
   # so non-eof-into-finish never fires.
@@ -4759,17 +4855,12 @@ byte_machine_mutation(
   # check is unchanged, but the inner accessor-selecting `if` now reads
   # node-eof-target (see arm 2 above) instead of re-checking
   # byte-dispatch-node? a second time.
-  FIND [[       ;; :909 + the EOF-cycle check — walk each dispatch node's eof-target chain.
-       (apply append
-              (map (lambda (n)
-                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n))
+  FIND [[                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n)
+                             (integer-accumulate-node? n))
                          (let ((t (node-eof-target n)))
                            (if (symbol? t)
                                (case (eof-terminal m t)]]
-  REPLACE [[       ;; :909 + the EOF-cycle check — walk each dispatch node's eof-target chain.
-       (apply append
-              (map (lambda (n)
-                     (if (byte-dispatch-node? n)
+  REPLACE [[                     (if (byte-dispatch-node? n)
                          (let ((t (node-eof-target n)))
                            (if (symbol? t)
                                (case (eof-terminal m t)]]
@@ -5068,6 +5159,98 @@ byte_machine_mutation(
 # WALK/REPORT pair the M3 precedent in this file warns about, and they needed a
 # fixture of their own before they were separable at all -- see the middle two.
 
+# Slice ③ task 2 adds SIX for the input-reading kind's census.
+#
+# *** The two zero-progress disjuncts have SEPARATE fixtures, and that is the
+# whole point of design §8's correction. *** §8 said only `nondigit-edge` can be
+# `reexecute` "since the overflow edge is non-consuming but terminal-directed" --
+# it is not, and §8 contradicts itself sixteen lines later. Measured: cutting
+# Slice ②'s field-action arm to one disjunct makes a self-targeting error edge
+# verify with ZERO diagnostics. Each disjunct's mutation fails only its own
+# fixture, which is what a one-fixture task would have hidden.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an accumulate's OVERFLOW edge is invisible to the zero-progress walk"
+  # §12.7:772 makes the overflow non-consuming and §15:870 leaves the field
+  # unchanged, so an overflow-error naming its own node re-reads the same byte
+  # forever -- and neither runtime loop guards against it. This is the arm
+  # design §8's instruction would have omitted.
+  FIND [[                (list (integer-accumulate-node-overflow-error n))))]]
+  REPLACE [[                '()))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the input-reading kind in the verifier census \\(Slice ③\\).an accumulate whose OVERFLOW edge targets itself is a zero-progress cycle: zero-progress-cycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an accumulate's NONDIGIT reexecute edge is invisible to the zero-progress walk"
+  # The disjunct §8 did name. Its own fixture, because the overflow mutation
+  # above passes this one and vice versa.
+  FIND [[                (if (eq? (edge-mode (integer-accumulate-node-nondigit-edge n)) 'reexecute)
+                    (list (edge-target (integer-accumulate-node-nondigit-edge n)))
+                    '())]]
+  REPLACE [[                '()]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the input-reading kind in the verifier census \\(Slice ③\\).an accumulate whose NONDIGIT edge reexecutes into itself is a zero-progress cycle: zero-progress-cycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the accumulate DIGIT edge wrongly joins the zero-progress walk"
+  # The restrictive direction, and the reason the digit edge stays out:
+  # §10.6:566 makes it always advance, so a machine looping on digits makes
+  # progress and must not be reported.
+  FIND [[                (list (integer-accumulate-node-overflow-error n))))]]
+  REPLACE [[                (list (integer-accumulate-node-overflow-error n)
+                      (integer-accumulate-node-digit-target n))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the input-reading kind in the verifier census \\(Slice ③\\).the DIGIT edge self-targeting is not a cycle -- it advances: no cycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the zero-progress REPORT set excludes the accumulate kind"
+  # SUBSUMED BY either walk mutation above, by construction and in the nesting
+  # this file already records for the pause kind -- narrowing the report stops
+  # the accumulate node being flagged, narrowing a walk stops that AND every node
+  # whose cycle runs through one. Kept because shipping one without the other is
+  # the half-fix this pass exists to prevent.
+  FIND [[                                  (integer-accumulate-node? n))
+                              (reaches-self? (node-name n)))]]
+  REPLACE [[                                  )
+                              (reaches-self? (node-name n)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the input-reading kind in the verifier census \\(Slice ③\\).an accumulate whose NONDIGIT edge reexecutes into itself is a zero-progress cycle: zero-progress-cycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an accumulate's byte targets are not out-targets"
+  # Three of its four explicit targets are byte out-targets; the fourth,
+  # eof-target, belongs to node-eof-target so that all-out-targets adds it for
+  # reachability and the :908 filter does not see it.
+  FIND [[          ((integer-accumulate-node? n)
+           (list (integer-accumulate-node-digit-target n)]]
+  REPLACE [[          ((and #f (integer-accumulate-node? n))
+           (list (integer-accumulate-node-digit-target n)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the input-reading kind in the verifier census \\(Slice ③\\).an accumulate's three byte targets are out-targets, so they are reachable: nothing unreachable")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an accumulate's field reference is not checked"
+  # D3's sibling arm. Not a `field-operand-schemas` row: that table is keyed on
+  # a selector and an arity and an accumulate node has neither. Reported under
+  # the NODE's name, matching the operand walk's own convention -- design §8
+  # prescribes the field name, which would put two conventions under one code.
+  FIND [[    (if (field-width-of fs (integer-accumulate-node-field n))]]
+  REPLACE [[    (if #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the input-reading kind in the verifier census \\(Slice ③\\).an accumulate naming no declared field is invalid-field-operand: invalid-field-operand")
+
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a zero-width node's targets are not out-targets"
@@ -5112,9 +5295,11 @@ byte_machine_mutation(
   # there is no record the narrower one owns. Kept because the two are distinct
   # decisions and shipping only one of them is the defect this pass exists to
   # prevent -- a `store`-into-itself machine that verifies clean and then hangs.
-  FIND [[                                  (field-action-node? n) (field-branch-node? n))
+  # Re-anchored by Slice ③ task 2: the guard gained its sixth disjunct.
+  FIND [[                                  (field-action-node? n) (field-branch-node? n)
+                                  (integer-accumulate-node? n))
                               (reaches-self? (node-name n)))]]
-  REPLACE [[                                  )
+  REPLACE [[                                  (integer-accumulate-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
@@ -5342,6 +5527,58 @@ byte_machine_mutation(
   EXPECT_OUTPUT_MATCHES
     "two fields sharing a name is invalid-field-declaration: one finding -- expected 1, got 3.*distinct portable field names verify clean: no diagnostics -- expected 0, got 3")
 
+# --- Whole-branch review, 2026-09-03: the three kind filters Slice ③ did not
+# widen. Each is a hand-enumerated list of node kinds that `node-eof-target` and
+# `node-out-targets` were taught about and these were not, and each was written
+# with an EXPLICIT `else` or an implicit '() so that a missing kind is silent --
+# which is why nothing failed for a whole slice.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: eof-terminal's classify loses its accumulate arm and raises out of verification"
+  # The worst FAILURE MODE of the three, though not the worst consequence: this
+  # one raises, so a legal machine gets no verdict at all rather than a wrong
+  # one, and compile-machine raises with it. Caught by a case that asserts
+  # verify-machine RETURNS -- an ok?/diagnostics assertion cannot see a raise.
+  FIND [[                ((integer-accumulate-node? n)
+                 (dispatch-arm (integer-accumulate-node-eof-target n) path))
+                (else (assertion-violation 'eof-terminal]]
+  REPLACE [[                (else (assertion-violation 'eof-terminal]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "an EOF chain may reach an accumulate node at all: case raised")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the :909 EOF-chain walk stops admitting accumulate nodes"
+  # The worst CONSEQUENCE. parser-finish-op! records in its own comment that it
+  # carries no local cycle guard because it relies on these two checks, so
+  # without this filter arm a machine whose accumulate node names itself as its
+  # eof-target verifies with zero diagnostics and then loops forever in BOTH
+  # executors -- and one whose EOF chain reaches a stop terminal is accepted
+  # although eof-reachable-stop exists to reject exactly that.
+  FIND [[                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n)
+                             (integer-accumulate-node? n))
+                         (let ((t (node-eof-target n)))]]
+  REPLACE [[                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n))
+                         (let ((t (node-eof-target n)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an accumulate whose own EOF target is itself is an EOF zero-progress cycle: eof-zero-progress-cycle")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the :908 byte-edge-into-finish check stops admitting accumulate nodes"
+  # node-out-targets already yielded the accumulate node's three byte
+  # out-targets -- digit, non-digit and overflow -- and this filter simply never
+  # asked for them, so all three could target a finish terminal unchallenged.
+  FIND [[                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n)
+                             (integer-accumulate-node? n))
+                         (filter values]]
+  REPLACE [[                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n))
+                         (filter values]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "an accumulate BYTE edge into a finish terminal is rejected: non-eof-into-finish")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 34: the reference interpreter (Milestone 1 Phase 2) ----------------
@@ -5497,10 +5734,21 @@ byte_machine_mutation(
   # about (an internal value with no witness): none of the brief's own Step 1
   # fixtures ever call parser-finish! on a compound current, so this test
   # group was added specifically to give this value one.
+  # Re-anchored by Slice ③ task 4: `eof-target-of` became a `cond` with a LOUD
+  # else when the accumulate kind joined it -- §4.7 item 4's hazard, which was
+  # live: the old two-way `if` fell through into `byte-dispatch-node-eof-target`,
+  # a bare slot read, and on an accumulate node slot 4 is `digit-target`, a
+  # symbol. The compound dereference this pin names is unchanged.
   FIND [[        (let ((n (lookup nodes (if (pair? cur) (car cur) cur))))]]
   REPLACE [[        (let ((n (lookup nodes cur)))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
-    "EOF mid-sequence routes through the sequence node's own eof-target, not the machine default: case raised -- Exception in vector-ref: #f is not a vector")
+  # The SIGNATURE moved with Slice ③ task 4, and moved in the right direction:
+  # `eof-target-of` became a `cond` with a LOUD else (§4.7 item 4's hazard, which
+  # was live -- the old two-way `if` fell through into a bare slot read, and on
+  # an accumulate node that slot is `digit-target`, a symbol). Undereferencing a
+  # compound now reaches that else and raises a CONTRACT VIOLATION rather than a
+  # vector-ref type error. Same decision, same case, louder failure.
+    "EOF mid-sequence routes through the sequence node's own eof-target, not the machine default: case raised -- Exception occurred with condition components")
 
 # The same two internal invariants normal-ir.sls's own trie asserts (decision
 # 0015 point 2), disabled the same way normal-ir.sls's own guard mutations
@@ -5824,6 +6072,78 @@ byte_machine_mutation(
 # for a new encode arm: an inequality pair cannot see a dropped count or a
 # transposed pair, only a wrong value can.
 
+# Slice ③ task 3 adds SIX for integer accumulate's lowering and encoding at
+# tag 7. Each on its own measured golden value -- the four that share a CASE are
+# separated by their distinct `got` digests, which is what an exact-value pin
+# buys over an inequality.
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the accumulate encode tag collides with field-branch"
+  FIND [[                (put-u8 p 7)]]
+  REPLACE [[                (put-u8 p 6)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer accumulate in the normalized IR \\(Slice ③\\).a base-10 accumulate machine's fingerprint is the measured golden value: fingerprint -- expected 14659003778876959304, got 6374358628100294515")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: an accumulate node's base is dropped from the encoding"
+  # The base decides which bytes are digits, so a generated parser observes it
+  # and two machines differing only in it are different machines.
+  FIND [[                (put-u8 p (normal-field-selector s))
+                (put-symbol p (car (normal-field-arguments s)))]]
+  REPLACE [[                (put-symbol p (car (normal-field-arguments s)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer accumulate in the normalized IR \\(Slice ③\\).a base-10 accumulate machine's fingerprint is the measured golden value: fingerprint -- expected 14659003778876959304, got 9369177108359133434")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the accumulate nondigit edge's MODE is dropped"
+  # §10.6:567's non-digit edge is normally a reexecute, so the mode is the
+  # whole point of it being an edge rather than a bare target.
+  FIND [[                  (put-u8 p (mode->byte (cdr (cadr tg))))
+]]
+  REPLACE [[                  ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer accumulate in the normalized IR \\(Slice ③\\).a base-10 accumulate machine's fingerprint is the measured golden value: fingerprint -- expected 14659003778876959304, got 13335447011493986019")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the accumulate overflow target is dropped"
+  FIND [[                  (put-u32be p (caddr tg)))]]
+  REPLACE [[                  )]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer accumulate in the normalized IR \\(Slice ③\\).a base-10 accumulate machine's fingerprint is the measured golden value: fingerprint -- expected 14659003778876959304, got 5178054717376752018")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: an accumulate node's EOF edge is read as absent"
+  # §4.7 item 4's hazard, in the normalizer: `eof-of` reads
+  # `byte-dispatch-node-eof-target`, a bare slot read with NO tag guard, so
+  # handing it an accumulate node returns a plausible value from the wrong slot.
+  # `acc-eof-of` exists so that cannot happen, and this pins it.
+  FIND [[(let ((t (integer-accumulate-node-eof-target n)))]]
+  REPLACE [[(let ((t #f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer accumulate in the normalized IR \\(Slice ③\\).the EOF routing reaches the encoding: node routing -- expected 11426950116850452563, got 14659003778876959304")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: an accumulate state is not widened to the declared layout"
+  # The check Slice ②'s `seq-state` miss earned, applied to the kind added
+  # after it: total over the states a fixture produces, so a kind short of the
+  # declared layout cannot hide behind a kind-guarded reader.
+  FIND [[                                        (list (id-of (integer-accumulate-node-digit-target n))]]
+  REPLACE [[                                        #f #f (list (id-of (integer-accumulate-node-digit-target n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer accumulate in the normalized IR \\(Slice ③\\).a base-10 accumulate machine's fingerprint is the measured golden value: case raised -- Exception in car")
+
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: a sequence-dispatch state is not widened to the declared layout"
@@ -6007,10 +6327,15 @@ byte_machine_mutation(
   # static reason (decision 0019 item 2), so the old FIND occurs zero times. The
   # decision this witnesses is unchanged -- the default-eof CODE must reach the
   # encoding -- so the REPLACE drops put-symbol and keeps the rest.
-  FIND [[(begin (put-u8 p 1) (put-symbol p (cdr eof))
-                             (put-reason p (normal-error-reason s)))]]
-  REPLACE [[(begin (put-u8 p 1)
-                             (put-reason p (normal-error-reason s)))]]
+  # Re-anchored by Slice ③ task 3: the dispatch and accumulate arms wrote this
+  # routing identically, taking every pin on it to SITES 2, so it was factored
+  # into `put-eof-routing`. The decision and the expectation are unchanged; only
+  # the text it sits on moved, and it now covers BOTH arms -- which is why each
+  # arm's CALL stays its own separately mutable line.
+  FIND [[        (begin (put-u8 p 1) (put-symbol p (cdr eof))
+               (put-reason p reason))))]]
+  REPLACE [[        (begin (put-u8 p 1)
+               (put-reason p reason))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "fingerprint -- expected 14095574568398596535, got 11628869637435983804")
 
 # Milestone 2 whole-branch review (item d): the NODE-eof encode arm -- tag 0 +
@@ -6411,8 +6736,15 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: the exhausted dispatch does not branch on finish?"
-  FIND [[(if finish?\n"]]
-  REPLACE [[(if #f\n"]]
+  # Anchored on the DISPATCH arm's own preceding line: Slice ③'s accumulate arm
+  # renders the same `(if finish?` guard, so a bare FIND matches twice.
+  # Re-anchored by Slice ③ task 4 onto `render-exhausted-preamble`: the dispatch
+  # and accumulate arms rendered this identically, and no anchor separated them
+  # because the two preambles ARE the same decision. The pin now covers both.
+  FIND [[     "       (if (>= pos end)\n"
+     "           (if finish?\n"]]
+  REPLACE [[     "       (if (>= pos end)\n"
+     "           (if #f\n"]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish eof guard")
 
 # Milestone 2 Slice ③'s Task 4 (the pause node in the emitter) adds two more
@@ -6688,6 +7020,43 @@ byte_machine_mutation(
   # paused-count) fails at 0. Pinned to the assertion's own words, unique to
   # this one check.
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "idle-completion finish")
+
+# Slice ③ task 8: the accumulate DRAW. Two mutations, both against the
+# generator rather than the library under test, because what this task added to
+# the property lane is a draw and the thing that can rot is the draw's ability to
+# reach the node's arms at all. A generator that silently stops producing
+# accumulate work would leave every assertion below it passing.
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-gen.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "machine-gen: the pinned accumulate case advances instead of reexecuting"
+  # byte-trial feeds ONE byte to a fresh pair. Advancing consumes it at the
+  # dispatch, so `accp` is entered with the slice already exhausted and answers
+  # need-input; the trial then finishes and takes the node's EOF route. The node
+  # is reached on every trial and its digit arm never runs once -- the exact
+  # shape of vacuity the three counters were added for.
+  FIND [[(make-edge 'accp 'reexecute)]]
+  REPLACE [[(make-edge 'accp 'advance)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "at least one generated machine's trial commits a digit -- expected a true value")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-gen.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "machine-gen: the accumulate field's initial is one below the only workable value"
+  # 25 is the ONLY u8 initial at which a single digit can go either way: at 24
+  # even `9` fits (249), at 26 even `0` does not (260). One below and the
+  # overflow arm becomes unreachable in a one-byte trial while the digit arm
+  # still runs -- so the accumulate draw keeps looking healthy and has lost a
+  # third of its reach. Caught by the overflow counter alone.
+  FIND [[(make-uint-field 'n 8 25 #f)]]
+  REPLACE [[(make-uint-field 'n 8 24 #f)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "at least one generated machine's trial overflows the field -- expected a true value")
+
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -7144,6 +7513,103 @@ byte_machine_mutation(
 # louder witness than a pin, and pinning it would cost a whole new pass (there is
 # no graph-tests verify command in this suite) for two decisions already fatal.
 
+# Slice ③ task 1 adds SEVEN for the integer-accumulate node -- the milestone's
+# last kind, and its only INPUT-READING one.
+#
+# The constructor/verifier boundary here is 0017's, not 0020's: 0020 item 2
+# keeps the constructor out of `arguments` because that is a LIST whose length it
+# may not assume, and this kind has no `arguments` -- its operands are NAMED
+# PARAMETERS, the situation 0017 point 1 addresses. So `base` is closed here and
+# gets a mutation; the FIELD REFERENCE is the verifier's and gets one too, in the
+# restrictive direction, because closing it here would be the boundary error.
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: the accumulate base set admits an unsupported base"
+  # §16.2:904's base half, discharged at construction rather than as a
+  # diagnostic: a base is evaluable from the one node being built, so a verifier
+  # arm would be dead code whose permissive mutation survives (0020's
+  # one-rejection-site rule).
+  FIND [[  (define accumulate-bases '(10 16))]]
+  REPLACE [[  (define accumulate-bases '(10 16 8))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer-accumulate nodes.both bases are accepted and nothing else is: base 8 -- expected a raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: an accumulate node's nondigit fallback need not be an edge"
+  # It is an EDGE, not a bare target, because §10.6:567's non-digit "takes an
+  # explicit fallback edge, normally reexecuting the delimiter" -- the MODE is
+  # the whole point and a bare symbol cannot carry one.
+  FIND [[    (unless (edge? nondigit-edge)
+]]
+  REPLACE [[    (unless #t
+]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer-accumulate nodes.the nondigit edge must be an edge: a bare symbol -- expected a raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: an accumulate node's overflow-error may be absent"
+  # Never #f, unlike a field action's `error`: accumulation can ALWAYS overflow,
+  # so there is nothing for the can-it-fail rule to decide and §10.6:568's
+  # "explicit error edge" is unconditional.
+  FIND [[    (require-symbol 'make-integer-accumulate-node 'overflow-error overflow-error)
+]]
+  REPLACE [[    ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer-accumulate nodes.the overflow-error is a mandatory symbol: absent -- expected a raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: an accumulate node's eof-target is unchecked"
+  # Symbol or #f, the byte-dispatch convention (§9.1:318), where #f means the
+  # machine default-eof error.
+  FIND [[    (unless (or (eq? eof-target #f) (symbol? eof-target))
+]]
+  REPLACE [[    (unless #t
+]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer-accumulate nodes.the eof-target is a symbol or #f: a number -- expected a raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node? does not admit an integer-accumulate node"
+  # The two census sites every new kind must join. One mutation per site, so a
+  # half-taught pair cannot pass.
+  FIND [[        (integer-accumulate-node? x)))]]
+  REPLACE [[        ))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer-accumulate nodes.it is a node and answers node-name: node\\? -- expected a true value")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node-name does not answer for an integer-accumulate node"
+  FIND [[          ((integer-accumulate-node? x) (integer-accumulate-node-name x))
+]]
+  REPLACE [[          ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer-accumulate nodes.it is a node and answers node-name: case raised")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: the constructor closes the field REFERENCE, which is the verifier's"
+  # The RESTRICTIVE direction, and the boundary itself. Closing the field
+  # reference here would need the declaration list, which one node cannot see --
+  # this mutant fakes it with a fixed set, and the case that catches it is the
+  # one asserting an undeclared name still BUILDS.
+  FIND [[    (require-symbol 'make-integer-accumulate-node 'field field)]]
+  REPLACE [[    (unless (memq field '(count)) (byte-machine-contract-violation 'make-integer-accumulate-node 'invalid-argument 'field))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "integer-accumulate nodes.the field reference is NOT checked here: case raised")
+
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
   LABEL "ir: the field operation set admits a name outside the closed enumeration"
@@ -7217,8 +7683,13 @@ byte_machine_mutation(
   # `node?` and `node-name` are the two census sites EVERY new kind must join,
   # and missing either is silent at construction and loud much later. One
   # mutation per site, per kind, so a half-taught pair cannot pass.
-  FIND [[        (field-action-node? x) (field-branch-node? x)))]]
-  REPLACE [[        (field-branch-node? x)))]]
+  # Re-anchored by Slice ③ task 1: `node?` gained the integer-accumulate kind and
+  # the disjunction reflowed onto three lines. The decision and the pin are
+  # unchanged -- this still drops the field-action disjunct.
+  FIND [[        (field-action-node? x) (field-branch-node? x)
+        (integer-accumulate-node? x)))]]
+  REPLACE [[        (field-branch-node? x)
+        (integer-accumulate-node? x)))]]
   EXPECT_STATUS 1
   # `?` is a regex metacharacter -- unescaped, `node? --` matches "nod --",
   # which no output contains, and the runner reports a wrong-reason catch.
@@ -8028,12 +8499,27 @@ byte_machine_mutation(
   # Re-anchored by Slice ② task 8: the list gained `v` and `r`, the two locals
   # the emitted field arms bind, and reflowed onto two lines. Dropping `pk` is
   # still the edit -- the same decision, the same expectation.
+  # Re-anchored by Slice ③ task 4: the list gained `d`, the emitted accumulate
+  # arm's digit local. Dropping `pk` is still the edit.
   FIND [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs pk
-      v r))]]
+      v r d))]]
   REPLACE [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs
-      v r))]]
+      v r d))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(pk\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.member3-drift.chez.source
+  LABEL "compile: reserved-member-3 loses the accumulate arm's digit local"
+  # Slice ③ adds `d` to the list and an accumulate node to this fixture, so the
+  # entry is EXERCISED rather than merely declared -- the gap ② closed for `v`
+  # and `r`, reopened by ③'s own addition. Dropping it is what the guard is for:
+  # the emitted body binds a local the list does not reserve, and a caller may
+  # legitimately bind the same name.
+  FIND [[      v r d))]]
+  REPLACE [[      v r))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(d\\)")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -8075,10 +8561,13 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.position-kind.chez.source
   LABEL "runtime: the interpreter's advance jump carries the reexecute position kind"
-  FIND [[(loop (+ pos 1) 'boundary))
-                       (loop pos 'byte)))))]]
-  REPLACE [[(loop (+ pos 1) 'byte))
-                       (loop pos 'byte)))))]]
+  # Re-anchored by Slice ③ task 4 onto `route-byte-step!`, where the two
+  # byte-consuming kinds now share one tail. The decision -- an ADVANCE reports
+  # `boundary`, a reexecute reports `byte` -- is unchanged and now covers both.
+  FIND [[              (loop (+ pos 1) 'boundary))
+            (loop pos 'byte)))]]
+  REPLACE [[              (loop (+ pos 1) 'byte))
+            (loop pos 'byte)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "an advance-mode mismatch reports boundary after the committed byte: kind -- expected boundary, got byte")
 
@@ -8156,6 +8645,45 @@ byte_machine_mutation(
   # error state a prior feed parked on is reached by NO jump, so only it can
   # observe what the loop was initialized to.
   EXPECT_OUTPUT_MATCHES "both lanes report boundary, not eof: interpreter -- expected boundary, got eof")
+
+# Slice ③ task 7 adds ONE, HERE rather than to the field pass, because a
+# mutation's specification is a LABEL and the program actually run is this pass's
+# verify command -- the two must name the same lane or the mutation runs against
+# the wrong program and reads as uncaught. (It did, first time: appended to the
+# field pass with a position-kind SPEC, it ran field-access-tests.sps and was
+# reported UNCAUGHT.)
+#
+# It belongs to the position-kind lane rather than the field lane because what
+# the new table row asserts and the field lane does not is the OFFSET. field-access-tests.sps already pins the overflow's position KIND in
+# both lanes; a mutation that moves the kind is caught there. This one moves the
+# offset alone -- the kind stays `byte` -- and it is caught by task 7's row and
+# by nothing else in the tree. Measured: the whole release selection under this
+# mutant fails exactly the two position-kind lanes (plus the mutation suite's own
+# baseline, which any dirty tree fails), and differential.field passes.
+#
+# *** ANNOTATED 2026-09-03, whole-branch review: that measurement was true when
+# it was taken and the sentence above is now STALE. *** Re-measured on the closed
+# branch, this mutant fails SIX behavioural lanes: both position-kind lanes, both
+# determinism.accumulate lanes (Task 9's golden reads the emitted bytes, and this
+# mutation changes them) and both property.differential lanes (Task 8's draw puts
+# an accumulate node in front of the oracle). The claim that survives re-measuring
+# is the one this pin is actually for: differential.field still passes, so the
+# OFFSET is still a thing only the position-kind row asserts. Left in place rather
+# than reworded, because a measured claim that later became false is a record of
+# how a lane's reach grows, and rewriting it would erase that.
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "compile: the emitted overflow advances the stream offset past the digit it did not consume"
+  # §12.7:773's "does not consume" made falsifiable. The generated arm keeps
+  # `pos` -- so it does not re-read the byte -- while advancing the ABSOLUTE
+  # offset, which is precisely the inconsistency a kind-only assertion cannot
+  # see: the error still says `byte`, it just says it about the wrong byte.
+  FIND [["                       (loop pos " (num over) " off (quote byte))))))))\n")))]]
+  REPLACE [["                       (loop pos " (num over) " (+ off 1) (quote byte))))))))\n")))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an accumulate overflow reports byte at the unconsumed digit: offset -- expected 2, got 3")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -8508,11 +9036,311 @@ byte_machine_mutation(
   EXPECT_OUTPUT_MATCHES
     "every predicate takes the same arm in both lanes: interp mask-all 14 -- expected 2, got 1")
 
+# Slice ③ task 4 adds FIVE pinned and TWO survivors for the checked
+# multiply-add, written twice as §18:970-972 requires.
+#
+# *** The two survivors are the SAME decision in the two lanes, and their reason
+# is §15:856 itself. *** Replacing the pre-check `current <= floor((maximum -
+# digit) / base)` with a compute-then-check `current * base + digit <= maximum`
+# gives IDENTICAL answers on this host, because Chez has bignums and never
+# wraps. §15:864-868 specifies the pre-check anyway, and §15:856 says why --
+# "must not rely on host fixnum width or silent wrapping" -- so the form is
+# mandated for a host this project does not run on. No fixture can distinguish
+# them here; that is a property of the host, not a gap in the lane.
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: base 16's lowercase digits are not digits"
+  # The reason the fixture spells 1aF: base 16's digits are three DISJOINT
+  # ASCII ranges, and a fixture using only 0-9 passes against an implementation
+  # that handles no letters at all.
+  FIND [[((and (>= byte 97) (<= byte 102)) (+ 10 (- byte 97)))]]
+  REPLACE [[((and (>= byte 97) (<= byte 102)) #f)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the checked multiply-add, both lanes \\(Slice ③\\).base 16 accepts all three ASCII digit ranges: interpreter")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: a digit is not bounded by the base"
+  # `a` is a digit in base 16 and not in base 10. Without this bound a base-10
+  # machine would accumulate hex letters.
+  FIND [[(and v (< v base) v)]]
+  REPLACE [[(and v v)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the checked multiply-add, both lanes \\(Slice ③\\).a base-10 machine does not accept a hex letter as a digit: interpreter")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: an overflow consumes the offending digit"
+  # §12.7:772-773: overflow does NOT consume the digit, which is what makes the
+  # reported position kind `byte` rather than `boundary`. The value being
+  # unchanged is the other half and is pinned by the matrix.
+  FIND [[(cons (integer-accumulate-node-overflow-error n) 'reexecute)]]
+  REPLACE [[(cons (integer-accumulate-node-overflow-error n) 'advance)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the checked multiply-add, both lanes \\(Slice ③\\).an overflow reports position kind BYTE, at the offending digit: interpreter")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: base 16's lowercase digits are not emitted as digits"
+  # The emitter's copy of the same decision -- written twice on purpose, and
+  # this is the half the differential exists to compare.
+  FIND [[" ((and (>= b 97) (<= b 102)) (+ 10 (- b 97)))"]]
+  REPLACE [[" "]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the checked multiply-add, both lanes \\(Slice ③\\).base 16 accepts all three ASCII digit ranges: generated")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: an emitted overflow consumes the offending digit"
+  FIND [[            "                       (loop pos " (num over) " off (quote byte))))))))\n"]]
+  REPLACE [[            "                       (loop (+ pos 1) " (num over) " (+ off 1) (quote boundary))))))))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the checked multiply-add, both lanes \\(Slice ③\\).an overflow reports position kind BYTE, at the offending digit: generated")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: the overflow check is made after the multiply-add"
+  FIND [[((<= (vector-ref fv slot) (div (- m* d) base))]]
+  REPLACE [[((<= (+ (* (vector-ref fv slot) base) d) m*)]]
+  EXPECT_SURVIVES
+    "measured, not assumed: this mutant passes the whole lane unchanged, in both lanes, and it always will on this host. §15:864-868 specifies the check as `current <= floor((maximum - digit) / base)`, BEFORE the multiply-add; this mutant computes `current * base + digit` first and tests the product. Under Chez the product is an exact integer of unbounded size, so the two forms agree on every input and no fixture can separate them -- including the u64 case, where the accumulated value is already a bignum and the product simply becomes a larger one. The pre-check is written anyway because §15:856 mandates it: \"must not rely on host fixnum width or silent wrapping\". The form is for a host that WRAPS, where computing the product first would silently produce a small wrong number and the check would pass. This project does not run on such a host, so the requirement is unwitnessable here by construction -- a property of the host, not a gap in the lane. Reopening condition: a backend whose integers wrap, or any change that makes the accumulation use fixnum-specialised arithmetic, makes this mutant a bug detector and it must be re-measured and pinned then."
+  )
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted overflow check is made after the multiply-add"
+  FIND [[            "                   (if (<= v (div (- " (num mx) " d) " (num base) "))\n"]]
+  REPLACE [[            "                   (if (<= (+ (* v " (num base) ") d) " (num mx) ")\n"]]
+  EXPECT_SURVIVES
+    "measured, not assumed: this mutant passes the whole lane unchanged, in both lanes, and it always will on this host. §15:864-868 specifies the check as `current <= floor((maximum - digit) / base)`, BEFORE the multiply-add; this mutant computes `current * base + digit` first and tests the product. Under Chez the product is an exact integer of unbounded size, so the two forms agree on every input and no fixture can separate them -- including the u64 case, where the accumulated value is already a bignum and the product simply becomes a larger one. The pre-check is written anyway because §15:856 mandates it: \"must not rely on host fixnum width or silent wrapping\". The form is for a host that WRAPS, where computing the product first would silently produce a small wrong number and the check would pass. This project does not run on such a host, so the requirement is unwitnessable here by construction -- a property of the host, not a gap in the lane. Reopening condition: a backend whose integers wrap, or any change that makes the accumulation use fixnum-specialised arithmetic, makes this mutant a bug detector and it must be re-measured and pinned then. The emitter's copy of the same decision; the two are one ruling and both are recorded so neither can be quietly changed alone."
+  )
+
+# Slice ③ task 5 adds ONE. Its content is otherwise TESTS for behaviour the
+# accumulate arm INHERITS rather than implements, and that is the task's finding:
+# an accumulate node needs no state of its own across a feed boundary. The
+# partially-accumulated value IS the field -- parser slot 8, which already
+# survives a feed -- and `current` stays parked on the node because the arm
+# returns need-input without moving it, exactly as the dispatch arm does. The
+# recon asked where that state would live "since it is not obviously a field";
+# it is one.
+#
+# Two candidate mutations were measured and are NOT written, because neither is
+# this task's: resetting `current` on need-input SURVIVES (the fixture's entry
+# reexecutes back into the accumulate node, so the routing masks it), and reading
+# the previous byte is caught by task 4's cases rather than by these.
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "runtime: an exhausted accumulate slice reports stopped instead of need-input"
+  # The accumulate arm's own end-of-slice decision, and the only one this task
+  # owns. Caught by the split cases alone -- a single-feed fixture never reaches
+  # the guard, which is why fragmentation needed cases of its own rather than
+  # being assumed to follow from the dispatch arm's pin.
+  #
+  # *** ANNOTATED 2026-09-03: "by the split cases alone" was true when measured
+  # and is now stale. *** Re-measured on the closed branch, this mutant reddens
+  # FOUR groups -- the split cases, task 6's all-256 partition, task 8's
+  # default-EOF consumer group, and both property.differential lanes -- every one
+  # of them added AFTER this sentence was written. What the pin still rests on is
+  # the claim about SHAPE, which re-measuring does not touch: a single-feed
+  # fixture cannot reach this guard, so fragmentation needed cases of its own.
+  # Left rather than reworded, because a uniqueness claim decaying as the lane
+  # grows around it is the useful record here.
+  FIND [[            ((accumulate)
+             (if (>= pos end)
+                 (make-parser-result 'need-input pos]]
+  REPLACE [[            ((accumulate)
+             (if (>= pos end)
+                 (make-parser-result 'stopped pos]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "split-point fragmentation \\(Slice ③\\).a number split across a feed boundary accumulates whole: interpreter")
+
+# Slice ③ task 6 adds TWO -- one per lane, because the task's claim is about
+# both lanes agreeing and a mutation to only one of them is what that claim is
+# for. Each is an off-by-one at a digit-range BOUND, the defect the shipped
+# handful-of-digits fixtures structurally cannot see: they name `a`, `F` and `!`,
+# so the bytes that move when a bound slips by one are exactly the bytes they
+# never feed. Both are caught by task 6's group ALONE -- measured.
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: the base 16 lowercase digit range stops one short of f"
+  # 102 is `f`. No shipped fixture feeds it -- the base 16 lane's case uses `a`
+  # and `F` -- so this survives every other accumulate test in the tree. Caught
+  # twice over here: the all-256 comparison reports the divergent byte, and the
+  # partition SIZE drops 22 -> 21, which is the assertion cross-lane agreement
+  # cannot make (two lanes wrong together still agree).
+  FIND [[((and (>= byte 97) (<= byte 102)) (+ 10 (- byte 97)))]]
+  REPLACE [[((and (>= byte 97) (<= byte 101)) (+ 10 (- byte 97)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "base 16 partitions every byte identically in both lanes: no divergence -- expected none, got \\(102")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted base 10 digit range admits the colon"
+  # 58 is `:`, the byte immediately above `9`, and it decodes to 10 -- a digit
+  # worth exactly the base. The emitter is the mutated side here and the
+  # interpreter is untouched, so this is caught by the CROSS-LANE half of the
+  # partition rather than by any absolute count: the generated machine accepts a
+  # byte the interpreter rejects.
+  FIND [["(and (>= b 48) (<= b 57) (- b 48))"]]
+  REPLACE [["(and (>= b 48) (<= b 58) (- b 48))"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "base 10 partitions every byte identically in both lanes: no divergence -- expected none, got \\(58")
+
+# Slice ③ task 8's SHIPPED-CODE fix, found by the property generator. The
+# emitter's reached-declaration walk credited only `dispatch` states with the
+# default-EOF route, so a machine whose only default-eof consumer was an
+# accumulate node had that declaration filtered out of the emitted errs table and
+# index-of raised while rendering a machine the verifier had just accepted.
+#
+# Pinned HERE, on a fixed fixture, rather than on the property lane that found
+# it: the generated sequence re-rolls whenever any draw changes, and a defect
+# whose only witness is a seeded draw has a witness that can vanish without
+# anyone editing it. (It fails the property lane too -- measured.)
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: only dispatch states are credited with consuming the default EOF declaration"
+  FIND [[((and (memq (normal-state-kind st)
+                                                      '(dispatch accumulate))]]
+  REPLACE [[((and (memq (normal-state-kind st)
+                                                      '(dispatch))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "no error declaration for code")
+
+# --- Whole-branch review, 2026-09-03: FOUR operands of the accumulate node that
+# no EXECUTING fixture reached. Every accumulate machine in the tree declared one
+# field, named itself as its digit-target, gave its non-digit edge mode
+# `advance`, and overflowed only in base 10 -- so the slot lookup, the
+# digit-target operand, §10.6:567's normal reexecute case, and the base in the
+# bound's divisor were all free parameters. Seven mutations against one fixture
+# that separates all four; each was measured caught by that fixture's group.
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: the accumulate commits into slot zero instead of the field it names"
+  FIND [[               (slot (car sw)) (m* (field-max (cdr sw)))
+               (base (integer-accumulate-node-base n))]]
+  REPLACE [[               (slot 0) (m* (field-max (cdr sw)))
+               (base (integer-accumulate-node-base n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the accumulate commits into the field it NAMES, not into slot zero: interpreter n")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted accumulate commits into slot zero instead of the field it names"
+  FIND [[(slot (car sw)) (mx (- (expt 2 (cdr sw)) 1))]]
+  REPLACE [[(slot 0) (mx (- (expt 2 (cdr sw)) 1))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the accumulate commits into the field it NAMES, not into slot zero: generated n")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: the overflow bound divides by ten rather than by the node's base"
+  # The fixture shape matters and the first one did not work: `#FFFFF` cannot
+  # separate a divisor of 16 from one of 10, because 0xFFF passes both bounds and
+  # 0xFFFF fails both. The separating value lands BETWEEN them -- `#1000F`, where
+  # 4096 > (65535-15)/16 and 4096 <= (65535-15)/10, so the mutant accepts a digit
+  # that writes 65551 into a u16.
+  FIND [[(div (- m* d) base)]]
+  REPLACE [[(div (- m* d) 10)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the overflow bound divides by the node's OWN base, at base 16: interpreter leaves 0x1000")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted overflow bound divides by ten rather than by the node's base"
+  FIND [[(div (- " (num mx) " d) " (num base) ")]]
+  REPLACE [[(div (- " (num mx) " d) 10)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the overflow bound divides by the node's OWN base, at base 16: generated leaves 0x1000")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted digit jump self-loops instead of taking digit-target"
+  # The operand nothing could see while every accumulate node in the tree WAS its
+  # own digit-target: a self-loop is indistinguishable from reading the operand
+  # until one fixture points the digit edge somewhere else.
+  FIND [[                              (loop (+ pos 1) " (num digit) " (+ off 1) (quote boundary)))]]
+  REPLACE [[                              (loop (+ pos 1) " id " (+ off 1) (quote boundary)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "one digit is taken and the DECLARED digit-target stops the parse: generated stopped")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: the non-digit edge always advances, ignoring its declared mode"
+  # §10.6:567's NORMAL case -- "normally reexecuting the delimiter" -- which no
+  # executing fixture in the tree took until this one. Under the mutant the
+  # delimiter is consumed at the accumulate node and the fallback dispatch that
+  # was supposed to read it runs out of input instead.
+  FIND [[            (let ((e (integer-accumulate-node-nondigit-edge n)))
+              (cons (edge-target e) (edge-mode e))))]]
+  REPLACE [[            (let ((e (integer-accumulate-node-nondigit-edge n)))
+              (cons (edge-target e) 'advance)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the delimiter is re-read with no action anywhere in the path: interpreter stopped at sawx")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted non-digit edge always advances, ignoring its declared mode"
+  # The emitter's copy of the same decision. Written as a tautology rather than
+  # by deleting the branch, so the mutation changes WHICH arm is rendered without
+  # changing the shape of the code around it.
+  FIND [[                 " (if (eq? (cdr nd) 'advance)]]
+  REPLACE [[                 " (if (eq? (car nd) (car nd))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the delimiter is re-read with no action anywhere in the path: generated stopped at sawx")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Slice ③ task 9: the accumulate determinism lane (pass 50) ---------------
+#
+# A pass of its own because the verify command is a different program, and the
+# ONE mutation in it is one no behavioural lane can catch: it reorders the two
+# uppercase/lowercase arms of the emitted base 16 digit `cond`. The ranges are
+# disjoint, so every input decodes to the same digit and every differential,
+# property and position-kind lane passes -- the emitted BYTES change, and the
+# committed golden is the only thing that looks at those.
+#
+# That is the whole argument for a fourth golden, made falsifiable. §8 asked for
+# this lane and for an empty test/fixtures diff in the same breath; this mutation
+# is why the lane won.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/determinism-accumulate-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.determinism.accumulate.chez.source
+  LABEL "compile: the emitted base 16 digit cond tries uppercase before lowercase"
+  FIND [[                            " ((and (>= b 97) (<= b 102)) (+ 10 (- b 97)))"
+                            " ((and (>= b 65) (<= b 70)) (+ 10 (- b 65)))"]]
+  REPLACE [[                            " ((and (>= b 65) (<= b 70)) (+ 10 (- b 65)))"
+                            " ((and (>= b 97) (<= b 102)) (+ 10 (- b 97)))"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the emitted bytes equal the committed golden: golden")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FORTY-EIGHT PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FIFTY PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

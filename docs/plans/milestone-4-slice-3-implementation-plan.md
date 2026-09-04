@@ -19,7 +19,7 @@ comparison over the input-reading kind.
   byte-identical, new files added"* — never "the diff is empty". Verify by value, not by
   `git status`.
 - **Every `file:line` in design §8 is presumed stale.** §8 was written at `a942327`, before ①a,
-  ①b and ② existed; Slice ② alone changed six of the seven files ③ touches. Recon measured
+  ①b and ② existed; Slice ② alone changed **all seven** of the files ③ touches. *(Corrected 2026-09-03: this read "six of the seven"; the two sets are identical — `git diff --name-only f3b5558..14c4f30 -- src/byte-machine/` and the same against `main..HEAD` both list the same seven files, `graph.sls` included.)* Recon measured
   63 hazards, nine blocking. Cite constructs by name.
 - **Correct a stale instruction in place; annotate a stale record.** §8's `reexec-targets`
   instruction is already corrected in the design — read the marker before implementing.
@@ -97,7 +97,8 @@ inbound edge must be pinned `reexecute` (state the zero-progress argument: the a
 itself advances on the digit edge, so no cycle forms), or the draw exercises only the EOF path.
 Two further traps: *"a declared u8 field so overflow is reachable inside 256 draws"* is
 satisfiable at exactly one initial; **any new draw in `gen-machine` re-rolls the seeded sequence
-and invalidates the two shipped goldens**; and the property lane's oracle compares no field value
+and invalidates the two shipped goldens**  *(annotated 2026-09-03: there were THREE committed
+goldens, not two — and the claim is false either way; see Task 8)*; and the property lane's oracle compares no field value
 today, so an accumulate draw would compare nothing.
 
 **H5 — The base-16 digit arm cannot be one `case` group with one `d`.** §8's own example
@@ -124,9 +125,11 @@ direction; closing it needs per-lane assertions against expected values. ③ add
 lane and will hit it.
 
 **H11 — Every count in §8 is the `a942327` column.** Measured at `14c4f30`: suite **49 passes /
-323 mutations** (declared at `:915-916`), **ten** `EXPECT_SURVIVES`, **94** lanes, **72**
-`verify.sls` pins, **six** pinned IR fingerprints at eight assertion sites — not three, and at
-none of the cited lines. Restate every one from measurement.
+323 mutations** (declared at `:915-916`), **ten** `EXPECT_SURVIVES`, ~~**94** lanes~~ **92**
+lanes *(corrected 2026-09-03 by the whole-branch review — every other figure in this hazard
+checks out; this one did not, and a hazard about miscounted counts is the worst place to keep a
+miscount)*, **72** `verify.sls` pins, **six** pinned IR fingerprints at eight assertion sites —
+not three, and at none of the cited lines. Restate every one from measurement.
 
 **H12 — `eof-terminal`'s residual `else` is now LOUD.** §8's "verifies clean and crashes later"
 reasoning is stale: it raises out of verification. The failure mode ③ must design against
@@ -146,43 +149,278 @@ and `cur` joining `reserved-member-3` is **not enough** — the fixture carries 
 Each task is one commit: failing tests first, the implementation, mutations measured in both
 directions, then the gate.
 
-- [ ] **Task 1 — The accumulate node: constructor, façade, and the op-step return shape (D5, H3).**
-  Seven parameters plus the label. Constructor closes what one node can answer — `base` ∈ {10,16}
-  (§16.2:904's base half), the symbols, the edge shape. The field reference is the verifier's.
-  **Decide and state the op-step return shape here**, once, before any consumer exists.
+- [x] **Task 1 — The accumulate node: constructor and façade (H3).**
+  Seven parameters plus the label. **The boundary here is 0017's, not 0020's** — 0020 keeps the
+  constructor out of `arguments` because that is a *list* whose length it may not assume, and
+  this kind has no `arguments`: its operands are named parameters, exactly 0017 point 1's
+  situation. So `base` ∈ {10,16} is closed here (§16.2:904's base half) and the **field
+  reference** is the verifier's, asserted in both directions — a case proving an undeclared name
+  still *builds*, and a restrictive mutation that closes it here.
 
-- [ ] **Task 2 — The verifier census (D1, D3, H1, H7, H8).** Fifteen sites re-measured; the
+  `overflow-error` is a **mandatory symbol**, unlike a field action's `error`: accumulation can
+  always overflow, so there is nothing for the can-it-fail rule to decide. `nondigit-edge` is an
+  **edge**, not a bare target, because §10.6:567's mode is the whole point.
+
+  Seven mutations; `node?`'s pin re-anchored. **H3 followed:** the façade exports the
+  constructor only, matching ②. *The 10-space export line is a substring of the 16-space import
+  line, so both had to be anchored by neighbour — the fifth time this slice-family has hit a
+  SITES trap.*
+
+  **The op-step return shape is deferred to Task 4**, where the first consumer exists; deciding
+  it here would be a decision with nothing to check it.
+
+  `release` 92/92, 49 passes / 330 mutations, no golden moved.
+
+- [x] **Task 2 — The verifier census (D1, D3, H1, H7).**
+  Five sites: `node-out-targets` (three byte targets), `node-eof-target` (the fourth, so
+  `all-out-targets` adds it for reachability and the `:908` filter does not see it),
+  `reexec-targets` with **two disjuncts**, the REPORT guard's sixth, and `pass-fields`' sibling
+  arm.
+
+  **D1 held, and the two fixtures prove it separately.** Measured: the overflow-disjunct
+  mutation fails *only* the overflow self-cycle case, the nondigit-disjunct mutation *only* the
+  nondigit one. A single fixture would have hidden whichever half it did not exercise — which is
+  exactly what §8's instruction would have shipped, since it names only `nondigit-edge`.
+
+  A third fixture pins the **digit** edge's exclusion (§10.6:566 makes it always advance), so a
+  walk that wrongly added it fails; and a fourth is the clean premise.
+
+  **D3 held:** the field-reference check is a sibling arm reusing `invalid-field-operand`,
+  reported under the **node's** name per ②'s convention.
+
+  Six mutations; **four shipped report-guard pins re-anchored** for the sixth disjunct — the
+  fourth time that guard has moved. `release` 92/92, 49 passes / 336 mutations, no golden moved. Fifteen sites re-measured; the
   accumulate kind joins as **input-reading**. `reexec-targets` takes **two disjuncts** and the
   REPORT guard its sixth, in one commit. `pass-fields` gains its sibling arm.
   **Fixtures: the overflow self-cycle AND the nondigit self-cycle**, since neither distinguishes
   the other's mutant.
 
-- [ ] **Task 3 — The normalizer: lowering and encode tag 7 (H2).** Four target slots plus
-  `reason`. Slot 6 keeps its shipped convention. Its own measured fingerprint golden.
+- [x] **Task 3 — The normalizer: lowering and encode tag 7 (H2).**
+  1:1 like ②'s kinds, so it allocates no internal state. `selector` carries the base,
+  `arguments` the field name, `targets` the three byte targets; the EOF routing rides **slot 6's
+  shipped `(node . id)` / `(default . code)` convention** with `reason` in slot 7 — H2 confirmed.
 
-- [ ] **Task 4 — The checked multiply-add, both lanes (D6).** §15:864-868's inequality, written
-  twice. Overflow leaves the value unchanged **and does not consume the digit** (§12.7:772-773) —
-  which fixes `pos`, `off` and the position kind, not just the value.
+  **`acc-eof-of` is a separate lambda, not a widened `eof-of`.** `eof-of` reads
+  `byte-dispatch-node-eof-target`, a bare slot read with no tag guard, so handing it another
+  kind returns a plausible value from the wrong slot — §4.7 item 4's hazard, avoided by
+  construction and pinned.
 
-- [ ] **Task 5 — need-input resumption and split-point fragmentation.** The state an accumulate
-  node must carry across a feed boundary, which is not obviously a field. The shipped split-point
-  idiom is hardcoded for a 4-byte input.
+  Six mutations, each on its own measured golden; the four sharing a case are separated by
+  distinct `got` digests, which is what an exact-value pin buys over an inequality. The
+  layout-length check ②'s `seq-state` miss earned is applied to the new kind.
 
-- [ ] **Task 6 — Bases 10 and 16, all-256 partitions (H5).** The digit arm's shape is a decision.
+  *Seventh SITES collision: the dispatch and accumulate arms wrote the EOF routing identically,
+  taking every pin on it to two sites. Factored into `put-eof-routing`; each arm's **call**
+  stays separately mutable.*
+
+  `release` 92/92, 49 passes / 342 mutations, no golden moved.
+
+- [x] **Task 4 — The checked multiply-add, both lanes (D5, D6, H1, H5).**
+  §15:864-868's inequality written as the spec writes it — a check **before** the multiply-add.
+  Overflow leaves the value unchanged *and* does not consume the digit, so the reported position
+  kind is `byte`, pinned in both lanes.
+
+  **D5 settled: a separate `accumulate-step` message returning `(target . mode)`**, not a widened
+  `field-step`. The mode is unavoidable here — a digit advances, a non-digit takes its edge's
+  mode, an overflow consumes nothing — and widening `field-step` would have changed every
+  zero-width arm ② shipped for no gain.
+
+  **H5 confirmed:** base 16's digits are three disjoint ASCII ranges, so the digit test is a
+  range comparison per base, not one `case` group.
+
+  **§4.7 item 4's hazard was LIVE and is fixed.** `eof-target-of` was a two-way `if` with no else,
+  so an accumulate node fell into `byte-dispatch-node-eof-target` — a bare `(vector-ref n 4)`,
+  which on an accumulate node is `digit-target`, a symbol. It would have silently routed EOF into
+  the digit path. Now a `cond` with a loud else.
+
+  **Two `EXPECT_SURVIVES`, one per lane, and their reason is §15:856 itself.** Compute-then-check
+  gives identical answers under Chez's bignums; the pre-check form is mandated for a host that
+  *wraps*, which this project does not run on. Unwitnessable by construction — a property of the
+  host, not a gap. Survivors go to **12**.
+
+  **H1 realised in full: nine shipped pins had to be re-anchored**, and four duplications could
+  not be separated by any anchor because the two arms genuinely do the same thing. Three shared
+  tails were factored — `route-byte-step!`, `render-exhausted-preamble`, `put-eof-routing` — each
+  leaving every caller's *call* separately mutable.
+
+  `release` 92/92, 49 passes / 349 mutations, no golden moved.
+
+- [x] **Task 5 — need-input resumption and split-point fragmentation.**
+  **The finding: an accumulate node needs no state of its own across a feed boundary.** The
+  recon asked where the partially-consumed-digits state would live "since it is not obviously a
+  field" — it *is* one. The accumulated value is the field, parser slot 8, which already survives
+  a feed; and `current` stays parked because the arm returns `need-input` without moving it,
+  exactly as the dispatch arm does. The behaviour is **inherited, not invented**, and these cases
+  are what make that a fact rather than an assumption.
+
+  **Every split point, not one** — the shipped idiom elsewhere is hardcoded for a four-byte
+  input, and a single split cannot see a defect that only appears at the first or last byte. A
+  sentinel reads the observed count. Plus the degenerate empty slice, and the interaction case: a
+  non-consuming overflow whose digit arrives in the *second* slice must still report `byte`.
+
+  **One mutation** — the arm's own end-of-slice guard, caught by the split cases alone. Two
+  candidates were measured and **not** written: resetting `current` on need-input *survives*
+  (the fixture's entry reexecutes back into the node, so the routing masks it), and reading the
+  previous byte is caught by Task 4's cases rather than these.
+
+  `release` 92/92, 49 passes / 350 mutations, no golden moved.
+
+- [x] **Task 6 — Bases 10 and 16, all-256 partitions (H5).** The digit arm's shape is a decision.
+
+  Every byte 0-255 is fed to both bases in **both lanes**, and the two lanes must agree byte by
+  byte. Three assertions, because cross-lane agreement alone is not enough: the **partition size**
+  (10 and 22) is the check two lanes wrong *together* would still pass, and the **six ASCII
+  neighbours** of the three digit ranges — `/` `:` `@` `G` backtick `g` — are the bytes an
+  off-by-one moves. Sentinels read observed counts.
+
+  **Two mutations, one per lane**, because the claim is about the lanes agreeing. The interpreter's
+  base-16 lowercase bound stops one short of `f`; the emitter's base-10 bound admits `:` as a digit
+  worth exactly the base. Both were measured caught **by this group alone** — no shipped fixture
+  feeds either byte, so the bounds were unwitnessed before this task.
+
+  `release` 92/92, 49 passes / 352 mutations, no golden moved.
   Both lanes, every byte.
 
-- [ ] **Task 7 — The `byte` position row (H9).** New fixture, new row, two sentinel bumps, two
-  `SOURCES` edits, both lanes.
+- [x] **Task 7 — The `byte` position row (H9).** New fixture, new row, two sentinel bumps, both
+  lanes.
 
-- [ ] **Task 8 — The property generator's field draw (H4).** Inbound edge pinned `reexecute`; the
-  oracle extended to compare a field value; the two shipped goldens **re-measured**, because any
-  new draw re-rolls the seeded sequence.
+  §12.7:768's rejected-digit half is now producible, so the row it was owed is added: an
+  accumulate overflow, in both executors, asserted for kind **and offset** and compared as the
+  whole six-member projection. `field-access-tests.sps` already pins the KIND for this shape; the
+  offset is what only this table can say, and the offset is the discriminator — §12.7:773's "does
+  not consume" means 2, where a consuming overflow would report 3.
 
-- [ ] **Task 9 — The determinism lane and the fourth golden (D4).** Its own
-  `BYTE_MACHINE_*_GOLDEN_FILE` in the mutation-suite registration.
+  Sentinels 3→4 and 6→8. Four rows for three kinds: ③'s row is a **second producer of `byte`** by
+  a different mechanism, and the table indexes producers.
 
-- [ ] **Task 10 — Sweeps, the `differential.field` debt (H10), status surfaces, CHANGELOG, and
+  **No `SOURCES` edits after all.** H9 budgeted two on the assumption of a fixture library; the
+  machine is built inline, as the three machines further down that file already are — a library
+  would have existed for one caller.
+
+  **One mutation:** the emitted overflow advances the absolute offset while keeping `pos`, so the
+  error still says `byte` about the wrong byte. Measured: the whole release selection under it
+  fails exactly the two position-kind lanes, and `differential.field` passes.
+  *(Stale — annotated 2026-09-03. That was true when measured; the mutant now fails **six**
+  behavioural lanes, because Task 9's golden reads the emitted bytes it changes and Task 8's draw
+  puts an accumulate node in front of the property oracle. `differential.field` does still pass,
+  which is the half the pin is for. The identical sentence in the mutation suite was annotated at
+  the time and this copy was missed — a claim written twice goes stale twice.)*
+
+  *A mutation's `SPEC` is a label; the program actually run is its pass's verify command.* Written
+  into the field pass with a position-kind SPEC, this mutation ran `field-access-tests.sps` and was
+  reported UNCAUGHT. It belongs to the position-kind pass. Recorded in the suite at that mutation.
+
+  `release` 92/92, 49 passes / 353 mutations, no golden moved.
+
+- [x] **Task 8 — The property generator's field draw (H4).**
+
+  **It found a shipped emitter defect.** The `reached` walk in `compile.sls` credited only
+  `dispatch` states with the default-EOF route, so a machine whose *only* default-eof consumer was
+  an accumulate node had that declaration filtered out of the emitted `errs` table and `index-of`
+  raised — while rendering a machine the verifier had just accepted with zero diagnostics. Every
+  shipped accumulate fixture misses it: each has an entry dispatch that also defaults its eof
+  route. Fixed, and pinned on a **fixed fixture** (`acc-eof-only`) rather than on the seeded lane,
+  because a witness that only exists at one seed can vanish without anyone editing it.
+
+  Inbound edge pinned `reexecute` — but on the **pinned digit case**, not in `gen-case`. A first
+  version pinned free cases too; that mutant **survived the whole release selection**, so the line
+  is gone rather than documented. With a `reexecute` inbound edge the node only ever sees the byte
+  that routed to it, so a *pinned digit case* (the way `stop` is pinned) is what makes the digit
+  and overflow arms reachable at all — H4 does not name this, and without it the draw would
+  exercise the non-digit arm and nothing else.
+
+  Overflow got its **own declaration and terminal**, so it is distinguishable from the fallback
+  rejection in both the compared projection and the counters. Oracle extended: `rfields` appends
+  the field values, `gen-machine` returns the names (graph exports no `machine-fields`). Three
+  anti-vacuity counters, one per arm that can go missing.
+
+  **H4's golden claim was false.** The shipped goldens — **three**, not the two H4 and this
+  record both said until the whole-branch review counted them — are of fixed fixture machines,
+  not PRNG-drawn ones; nothing moved. What *did* move is the seeded sequence: pause 7→4 and finish
+  14→8, both re-measured and recorded in the lane.
+
+  Three mutations: the pinned edge's mode, the field initial (25 is the only workable value), and
+  the emitter fix. `release` 92/92, 49 passes / 356 mutations.
+
+- [x] **Task 9 — The determinism lane and the fourth golden (D4).**
+
+  `determinism.accumulate` in both lanes, over a new `(byte-machine test accumulate-machine)` —
+  **base 16**, so the golden carries the emitter's three-range digit arm rather than base 10's
+  one-range fast path, and **both EOF routes**, because the defect Task 8 found lived exactly in
+  the difference between them.
+
+  **§8's "empty `test/fixtures` diff" loses.** The argument is made falsifiable rather than
+  asserted: pass 50's one mutation reorders the emitted uppercase and lowercase hex arms. The
+  ranges are disjoint, so every input decodes identically and every behavioural lane passes — the
+  bytes change, and the committed golden is the only thing that reads them.
+
+  D4's env-var warning is discharged **before** the pass existed, not after:
+  `BYTE_MACHINE_ACCUMULATE_GOLDEN_FILE` is in the mutation-suite registration, since the failure
+  mode is a red BASELINE that names neither the variable nor the lane.
+
+  *A new pass goes after the previous pass's `_run`, not before it* — `_reset()` placed first
+  discards the previous pass's accumulated mutations, and the totals check reports it as 33
+  missing declarations. Fixed; the totals check is what caught it.
+
+  `release` 94/94 (two new lanes), 50 passes / 357 mutations.
+
+- [x] **Task 10 — Sweeps, the `differential.field` debt (H10), status surfaces, CHANGELOG, and
   the full-milestone Exit section (H13).** Milestone 4 closes here.
+
+  **Sweeps, with the method and both record keys stated** — the key decides the number, so one
+  number alone would be a claim about the key:
+
+  | pass | pins | ordered pairs | collisions (value-insensitive / value-sensitive) |
+  | --- | --- | --- | --- |
+  | property | 6 | 30 | 3 → **0** / **0** |
+  | position-kind | 7 | 42 | **0** / **0** |
+  | member3-drift | 2 | 2 | 2 / **0** |
+  | determinism.accumulate | 1 | 0 | — |
+  | differential.field | 39 | 1482 | 19 / **3** |
+  | verify.rejections | 79 | 6162 | 76 / 35 |
+  | normal-ir | 43 | 1806 | 169 / **0** |
+
+  *Re-measured 2026-09-03 after the whole-branch review. This table first read "31 pins, 930
+  pairs, 17 → 12 / 6" for `differential.field`; the pass held 32 pins and one was never judged,*
+  because the sweep tool tested for the string `EXPECT_SURVIVES` anywhere in a mutation's block
+  and two blocks discuss the keyword in their comments. The tool now matches the directive at
+  line start. The `differential.field` row also carries the review's seven new pins, and its
+  value-sensitive collisions fell 6 → **3** once a second fixture with **no zero-width node** was
+  added: the first one's evidence for two of the new claims ran through a field action, so those
+  pins nested inside older pins that break any action and have nothing to do with accumulation.
+
+  **The property pass's three closed**, cause first: every anti-vacuity counter required the two
+  lanes to *agree*, so any divergence zeroed all of them and each draw's own pin owned no record.
+  Each now has an interpreter-only half beside the agreed one — "the arm never ran" separated from
+  "the lanes disagreed about it".
+
+  **H10's debt closed for the case ② named.** ② diagnosed symmetric comparison and prescribed
+  per-lane assertions against expected values; that is written, and the emitter's zero-width pin
+  no longer nests in the interpreter's. What remains is a different class, recorded as the Exit
+  block's fourth limitation: *delete-a-check* subsumes *alter-a-check*, and a fixture-wide break
+  subsumes every narrow pin under it. None involves a ③ pin.
+
+  **H14 had a gap.** `member3-drift-tests.sps` said "the three locals this slice added" and still
+  named ①a's three; ② added `v` and `r` to `reserved-member-3` and made the fixture render them
+  but never named them, so dropping either would have failed nothing. ③ adds an accumulate node
+  (where `d` is bound), names all six, renames the case, and pins it.
+
+  **H11 restated from measurement.** `release` 94/94, `pr` 94/94, `harness` 34/34, `no-scheme`
+  8/8; 50 passes / **368** mutations; CMake 1/72; **twelve** `EXPECT_SURVIVES`; **81** `verify.sls`
+  pins; **nine** fingerprint literals at **eleven** sites; no existing golden moved and no
+  fingerprint literal removed since `51fd5f3`.
+
+  *Re-measured after the whole-branch review (2026-09-03). This line first read "358 mutations"
+  and "78 `verify.sls` pins", both true when Task 10 was written and both stale two commits later:
+  `40ab9a0` added three verify mutations (358→361, and 78→81 pins) and `fb1c55b` added seven to
+  the field pass (361→368). The census table above was re-measured and this summary line was not —
+  the same document then disagreed with itself and with the CHANGELOG. A count restated in two
+  places is a count that will disagree with itself; the fix wave's own commits are the thing to
+  re-read after, not just the tests.*
+
+  **H13 discharged**: all three §25:1568-1570 criteria carry dated dispositions naming slice, file
+  and case, the "traces" word has its §4.6 reading recorded, and the three limitations are
+  restated with a fourth added.
 
 ---
 

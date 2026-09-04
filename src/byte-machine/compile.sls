@@ -67,7 +67,7 @@
   ;; `(rnrs)` subtraction would therefore swallow.
   (define reserved-member-3
     '(exec loop pos st off b bv start end state offset finish? fieldv errs pk
-      v r))
+      v r d))
   (define (lower-alpha? c) (and (char>=? c #\a) (char<=? c #\z)))
   (define (name-char? c)
     (or (lower-alpha? c) (and (char>=? c #\0) (char<=? c #\9)) (char=? c #\-)))
@@ -215,6 +215,22 @@
       ((mask-none) (string-append "(= 0 (bitwise-and v " (num a) "))"))
       (else (assertion-violation 'render-machine "unknown field predicate" pred))))
 
+  ;; The exhausted-input preamble every BYTE-CONSUMING emitted arm opens with:
+  ;; at end of slice, take the EOF branch under finish? and yield need-input
+  ;; otherwise. Shared by the dispatch arm and Slice ③'s accumulate arm, which
+  ;; render it identically -- written out twice it takes every pin on it to two
+  ;; sites, and no anchor separates them because the two preambles ARE the same
+  ;; decision. Each arm's call stays its own line.
+  (define (render-exhausted-preamble s id names index-of nm)
+    (string-append
+     "      ((" id ")\n"
+     "       (if (>= pos end)\n"
+     "           (if finish?\n"
+     "               " (render-eof-branch (normal-dispatch-eof s) id
+                                          (string->symbol (nm (normal-state-id s)))
+                                          (normal-error-reason s) index-of) "\n"
+     "               (byte-machine-make-feed-outcome/v1 (quote need-input) pos #f " id " off))\n"))
+
   (define (render-state-arm s names index-of fields)
     (let ((id (number->string (normal-state-id s)))
           ;; Total by construction: the debug map and the internal state list
@@ -247,6 +263,40 @@
         ((pause)
          (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
                         (number->string (normal-pause-target s)) " off))\n"))
+        ;; Slice ③'s INPUT-READING kind. The digit test is rendered as a range
+        ;; comparison per base rather than a `case` over literal bytes: base 16
+        ;; has three disjoint ASCII ranges, so one `case` group with one `d`
+        ;; cannot express it (§8's own example contradicts its following
+        ;; sentence). §15:864-868's inequality is rendered as the spec writes it
+        ;; -- a check BEFORE the multiply-add, not a compute-then-check, because
+        ;; §15:856 forbids relying on host fixnum width.
+        ((accumulate)
+         (let* ((base (normal-field-selector s))
+                (fname (car (normal-field-arguments s)))
+                (sw (field-slot-width fields fname))
+                (slot (car sw)) (mx (- (expt 2 (cdr sw)) 1))
+                (tg (normal-field-targets s))
+                (digit (car tg)) (nd (cadr tg)) (over (caddr tg))
+                (dexpr (if (= base 10)
+                           "(and (>= b 48) (<= b 57) (- b 48))"
+                           (string-append
+                            "(cond ((and (>= b 48) (<= b 57)) (- b 48))"
+                            " ((and (>= b 97) (<= b 102)) (+ 10 (- b 97)))"
+                            " ((and (>= b 65) (<= b 70)) (+ 10 (- b 65)))"
+                            " (else #f))"))))
+           (string-append
+            (render-exhausted-preamble s id names index-of nm)
+            "           (let* ((b (bytevector-u8-ref bv pos)) (d " dexpr "))\n"
+            "             (if (not d)\n"
+            "                 " (if (eq? (cdr nd) 'advance)
+                                    (string-append "(loop (+ pos 1) " (num (car nd)) " (+ off 1) (quote boundary))")
+                                    (string-append "(loop pos " (num (car nd)) " off (quote byte))")) "\n"
+            "                 (let ((v (vector-ref fieldv " (num slot) ")))\n"
+            "                   (if (<= v (div (- " (num mx) " d) " (num base) "))\n"
+            "                       (begin (vector-set! fieldv " (num slot)
+                                     " (+ (* v " (num base) ") d))\n"
+            "                              (loop (+ pos 1) " (num digit) " (+ off 1) (quote boundary)))\n"
+            "                       (loop pos " (num over) " off (quote byte))))))))\n")))
         ((field-action)
          (let* ((args (normal-field-arguments s))
                 (sw (field-slot-width fields (car args)))
@@ -288,19 +338,19 @@
         ((dispatch)
          (let ((fb (normal-dispatch-fallback s)))
            (string-append
-            "      ((" id ")\n"
-            "       (if (>= pos end)\n"
-            "           (if finish?\n"
-            "               " (render-eof-branch (normal-dispatch-eof s) id
-                                                   (string->symbol (nm (normal-state-id s)))
-                                                   (normal-error-reason s) index-of) "\n"
-            "               (byte-machine-make-feed-outcome/v1 (quote need-input) pos #f " id " off))\n"
+            (render-exhausted-preamble s id names index-of nm)
             "           (let ((b (bytevector-u8-ref bv pos)))\n"
             "             (case b\n"
             (apply string-append (map render-transition-arm (normal-dispatch-transitions s)))
             "               (else " (loop-tail (car fb) (cdr fb)) ")))))\n")))
         ;; Unreachable today -- this case already covers every kind
-        ;; normal-state-kind can produce (dispatch/stop/error/finish/pause);
+        ;; normal-state-kind can produce: dispatch, stop, error, finish, pause,
+        ;; field-action, field-branch (Slice ②) and accumulate (Slice ③).
+        ;; *** The parenthetical here listed only the first five until
+        ;; 2026-09-03, having survived both slices that widened the set --
+        ;; including the one eleven lines above this comment. A comment that
+        ;; enumerates a closed set is a census, and this milestone shipped three
+        ;; defects from exactly that shape; ***
         ;; verified by inspection, not mutation (same convention as
         ;; normal-ir.sls's own else guards).
         (else (assertion-violation 'render-machine "unknown state kind"
@@ -339,7 +389,38 @@
                                  (r (normal-error-reason st))
                                  (c (cond ((eq? (normal-state-kind st) 'error)
                                            (normal-error-code st))
-                                          ((and (eq? (normal-state-kind st) 'dispatch)
+                                          ;; *** Slice ③: `accumulate` belongs
+                                          ;; here too. *** It is the milestone's
+                                          ;; other INPUT-READING kind, it carries
+                                          ;; an eof route in the same slot, and
+                                          ;; render-exhausted-preamble renders
+                                          ;; that route for both kinds through
+                                          ;; the same code -- so an accumulate
+                                          ;; node whose eof-target is #f asks
+                                          ;; index-of for the machine default
+                                          ;; declaration exactly as a dispatch
+                                          ;; does. Testing only for `dispatch`
+                                          ;; left that declaration out of the
+                                          ;; reached set, the filter below
+                                          ;; dropped it from the errs table, and
+                                          ;; index-of then raised "no error
+                                          ;; declaration for code" while
+                                          ;; rendering a machine the verifier had
+                                          ;; just accepted.
+                                          ;;
+                                          ;; Invisible to every shipped
+                                          ;; accumulate fixture: each has an
+                                          ;; entry dispatch that ALSO defaults
+                                          ;; its eof route, so the pair was in
+                                          ;; the set for another state's sake.
+                                          ;; It takes a machine whose only
+                                          ;; default-eof consumer is the
+                                          ;; accumulate node -- which is what the
+                                          ;; property generator drew as soon as
+                                          ;; it could route the entry's eof to a
+                                          ;; finish node instead.
+                                          ((and (memq (normal-state-kind st)
+                                                      '(dispatch accumulate))
                                                 (eq? (car (normal-dispatch-eof st)) 'default))
                                            (cdr (normal-dispatch-eof st)))
                                           (else #f))))

@@ -547,4 +547,103 @@
         (check "accepted at construction"
                (field-branch-node? (make-field-branch-node 'a 'range '(count 9 2) 'y 'n #f)))))))
 
+
+;; Milestone 4 Slice ③ task 1: the integer-accumulate node (§9.1:301-306,
+;; §10.6:566-571, §11.4:652). The last node kind of the milestone, and the only
+;; INPUT-READING one -- it consumes a byte and makes progress, which is what
+;; separates it from Slice ②'s two zero-width kinds at every verifier site.
+;;
+;; *** The constructor/verifier boundary here is 0017's, NOT 0020's. *** 0020
+;; item 2 keeps the constructor out of `arguments` because that is a LIST whose
+;; length it may not assume; this kind has no `arguments` -- its operands are
+;; NAMED PARAMETERS, exactly the situation 0017 point 1 addresses when it rejects
+;; `low > high` inside `make-byte-range-matcher`. So `base` is closed here (the
+;; base half of §16.2:904), and only the FIELD REFERENCE -- which needs a second
+;; object, the declaration list -- is the verifier's.
+(harness-group "integer-accumulate nodes"
+  (lambda ()
+    (harness-case "an accumulate node carries its seven parts"
+      (lambda ()
+        (let ((n (make-integer-accumulate-node 'acc 'count 10 'acc
+                                               (make-edge 'done 'reexecute)
+                                               'over 'eofward 'lbl)))
+          (check "predicate" (integer-accumulate-node? n))
+          (check-equal "name" (integer-accumulate-node-name n) 'acc)
+          (check-equal "field" (integer-accumulate-node-field n) 'count)
+          (check-equal "base" (integer-accumulate-node-base n) 10)
+          (check-equal "digit-target" (integer-accumulate-node-digit-target n) 'acc)
+          (check-equal "nondigit-edge target"
+                       (edge-target (integer-accumulate-node-nondigit-edge n)) 'done)
+          (check-equal "overflow-error" (integer-accumulate-node-overflow-error n) 'over)
+          (check-equal "eof-target" (integer-accumulate-node-eof-target n) 'eofward)
+          (check-equal "label" (integer-accumulate-node-source-label n) 'lbl))))
+    (harness-case "it is a node and answers node-name"
+      (lambda ()
+        (let ((n (make-integer-accumulate-node 'acc 'count 16 'acc
+                                               (make-edge 'done 'reexecute) 'over #f #f)))
+          (check "node?" (node? n))
+          (check-equal "node-name" (node-name n) 'acc))))
+    (harness-case "both bases are accepted and nothing else is"
+      (lambda ()
+        ;; §16.2:904's "unsupported base", discharged HERE rather than as a
+        ;; diagnostic: a base is evaluable from the one node being built, so a
+        ;; verifier arm for it would be dead code whose permissive mutation
+        ;; survives -- 0020's one-rejection-site rule.
+        (let ((seen 0))
+          (for-each (lambda (b)
+                      (set! seen (+ seen 1))
+                      (check-equal (number->string b)
+                                   (integer-accumulate-node-base
+                                    (make-integer-accumulate-node 'a 'count b 'a
+                                                                  (make-edge 'd 'reexecute)
+                                                                  'o #f #f))
+                                   b))
+                    '(10 16))
+          (check-equal "both bases" seen 2))
+        (check-raises "base 8" (contract-violation? 'make-integer-accumulate-node 'base)
+                      (lambda () (make-integer-accumulate-node 'a 'count 8 'a
+                                                               (make-edge 'd 'reexecute) 'o #f #f)))
+        (check-raises "base 2" (contract-violation? 'make-integer-accumulate-node 'base)
+                      (lambda () (make-integer-accumulate-node 'a 'count 2 'a
+                                                               (make-edge 'd 'reexecute) 'o #f #f)))))
+    (harness-case "the nondigit edge must be an edge"
+      (lambda ()
+        ;; It is an EDGE, not a bare target: §10.6:567 says the non-digit "takes
+        ;; an explicit fallback edge, normally reexecuting the delimiter", so its
+        ;; MODE is the whole point and a bare symbol could not carry one.
+        (check-raises "a bare symbol"
+                      (contract-violation? 'make-integer-accumulate-node 'nondigit-edge)
+                      (lambda () (make-integer-accumulate-node 'a 'count 10 'a 'done 'o #f #f)))))
+    (harness-case "the eof-target is a symbol or #f"
+      (lambda ()
+        ;; #f means the machine default-eof error, the same convention
+        ;; byte-dispatch uses (§9.1:318).
+        (check-equal "absent"
+                     (integer-accumulate-node-eof-target
+                      (make-integer-accumulate-node 'a 'count 10 'a (make-edge 'd 'reexecute)
+                                                    'o #f #f))
+                     #f)
+        (check-raises "a number"
+                      (contract-violation? 'make-integer-accumulate-node 'eof-target)
+                      (lambda () (make-integer-accumulate-node 'a 'count 10 'a
+                                                               (make-edge 'd 'reexecute) 'o 7 #f)))))
+    (harness-case "the overflow-error is a mandatory symbol"
+      (lambda ()
+        ;; Unlike a field action's `error`, this is never #f: §10.6:568 says
+        ;; overflow "takes an explicit error edge", and accumulation can ALWAYS
+        ;; overflow -- there is no base or width at which it cannot.
+        (check-raises "absent"
+                      (contract-violation? 'make-integer-accumulate-node 'overflow-error)
+                      (lambda () (make-integer-accumulate-node 'a 'count 10 'a
+                                                               (make-edge 'd 'reexecute) #f #f #f)))))
+    (harness-case "the field reference is NOT checked here"
+      (lambda ()
+        ;; The half that needs a second object -- the declaration list -- and so
+        ;; cannot be a constructor contract. Asserted rather than merely absent,
+        ;; so the boundary is witnessed instead of assumed.
+        (check "an undeclared field name builds fine"
+               (integer-accumulate-node?
+                (make-integer-accumulate-node 'a 'nosuch 10 'a (make-edge 'd 'reexecute)
+                                              'o #f #f)))))))
+
 (harness-finish)

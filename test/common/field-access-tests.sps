@@ -212,23 +212,53 @@
         ;; A loop with a sentinel reading the OBSERVED count: the two lanes must
         ;; agree on the field values AND the status for each byte, not merely on
         ;; the one byte a hand-written case happens to name.
+        ;;
+        ;; *** Slice ③: each lane is also asserted against an EXPECTED value, not
+        ;; only against the other lane. *** Agreement is symmetric, so breaking
+        ;; either implementation of the same decision produces the SAME record --
+        ;; which is why Slice ②'s whole-pass sweep found the emitter's
+        ;; zero-width-consumes-a-byte pin nesting inside the interpreter's, with
+        ;; no record of its own, and recorded per-lane expected values as the
+        ;; fix it was owed. This is that fix. The table is MEASURED from the
+        ;; green tree, not asserted from the design: `count` is a u8 declared at
+        ;; 254, byte 0 increments it to 255 and byte 1 runs it up against the
+        ;; ceiling until the failure branch fires.
         (let ((seen 0))
           (for-each
-           (lambda (bs)
+           (lambda (row)
              (set! seen (+ seen 1))
              ;; The check label names the WHOLE schedule, not just its first
              ;; byte. With `(0)` and `(0 0)` both labelled "0", two different
              ;; mutants produced byte-identical FAIL records and no pin could
              ;; tell them apart -- measured by this task's own sweep.
-             (let ((a (feed-bytes wm-ref bs)) (b (feed-bytes wm-gen bs))
-                   (nm (apply string-append (map number->string bs))))
+             (let* ((bs (car row)) (want-count (cadr row))
+                    (want-seen (caddr row)) (want-life (cadddr row))
+                    (a (feed-bytes wm-ref bs)) (b (feed-bytes wm-gen bs))
+                    (nm (apply string-append (map number->string bs))))
                (check-equal (string-append "count [" nm "]")
                             (parser-field-ref b 'count) (parser-field-ref a 'count))
                (check-equal (string-append "seen [" nm "]")
                             (parser-field-ref b 'seen) (parser-field-ref a 'seen))
                (check-equal (string-append "lifecycle [" nm "]")
-                            (parser-lifecycle b) (parser-lifecycle a))))
-           '((0) (1) (2) (0 0) (0 1) (1 0)))
+                            (parser-lifecycle b) (parser-lifecycle a))
+               (check-equal (string-append "interpreter count [" nm "]")
+                            (parser-field-ref a 'count) want-count)
+               (check-equal (string-append "generated count [" nm "]")
+                            (parser-field-ref b 'count) want-count)
+               (check-equal (string-append "interpreter seen [" nm "]")
+                            (parser-field-ref a 'seen) want-seen)
+               (check-equal (string-append "generated seen [" nm "]")
+                            (parser-field-ref b 'seen) want-seen)
+               (check-equal (string-append "interpreter lifecycle [" nm "]")
+                            (parser-lifecycle a) want-life)
+               (check-equal (string-append "generated lifecycle [" nm "]")
+                            (parser-lifecycle b) want-life)))
+           '(((0)   255 1 ready)
+             ((1)   254 0 error)
+             ((2)   254 0 error)
+             ((0 0) 255 1 error)
+             ((0 1) 255 1 error)
+             ((1 0) 254 0 error)))
           (check-equal "every schedule compared" seen 6))))
     (harness-case "parser-reset! restores a field a parse has CHANGED"
       (lambda ()
@@ -570,5 +600,586 @@
            '((7 2 "equal 99") (8 2 "zero") (9 1 "nonzero") (10 1 "range 10-20")
              (11 1 "mask-any 4") (12 2 "mask-all 14") (13 1 "mask-none 3")))
           (check-equal "all seven predicates" seen 7))))))
+
+
+;; Milestone 4 Slice ③ task 4: the checked multiply-add, BOTH lanes.
+;;
+;; §15:864-868 gives the inequality as a check BEFORE the multiply-add --
+;; `current <= floor((maximum - digit) / base)` -- not a compute-then-check, and
+;; §15:856 says why: "must not rely on host fixnum width or silent wrapping".
+;; Computing the product first is safe under Chez's bignums and would not be
+;; safe under a host that wraps, so both lanes render the pre-check.
+(define (acc-mach nm base width)
+  (make-machine nm 'start (list (make-uint-field 'n width 0 #f)) '() '()
+    (list eof-decl rej-decl)
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-byte-range-matcher 0 255)
+                                  (make-edge 'acc 'reexecute) #f))
+            (make-edge 'acc 'reexecute) #f #f)
+          (make-integer-accumulate-node 'acc 'n base 'acc
+                                        (make-edge 'done 'advance) 'over #f #f)
+          (make-stop-node 'done #f)
+          ;; No spare `reject` node: the range matcher covers all 256 bytes, so
+          ;; the fallback is unreachable and an error node nothing names is
+          ;; itself unreachable.
+          (make-error-node 'over 'rejected #f))
+    'default-eof #f))
+(define (acc-lanes nm base width)
+  (let ((m (acc-mach nm base width)))
+    (cons (make-interpreted-machine (verify-machine m))
+          (emit-and-load m nm (string->symbol (string-append (symbol->string nm) "-parser"))
+                         (string-append tmpdir "/generated-" (symbol->string nm) ".sls")))))
+(define acc10 (acc-lanes 'acc10 10 32))
+(define acc16 (acc-lanes 'acc16 16 32))
+(define acc8bit (acc-lanes 'acc8 10 8))
+(define (str->bytes str) (u8-list->bytevector (map char->integer (string->list str))))
+(define (run-acc cm str)
+  (let ((p (make-parser cm '() #f)))
+    (parser-feed! p (str->bytes str) 0 (string-length str))
+    p))
+
+(harness-group "the checked multiply-add, both lanes (Slice ③)"
+  (lambda ()
+    (harness-case "base 10 accumulates across a run of digits"
+      (lambda ()
+        (let ((a (run-acc (car acc10) "12345x")) (g (run-acc (cdr acc10) "12345x")))
+          (check-equal "interpreter" (parser-field-ref a 'n) 12345)
+          (check-equal "generated" (parser-field-ref g 'n) 12345))))
+    (harness-case "base 16 accepts all three ASCII digit ranges"
+      (lambda ()
+        ;; The reason the digit test is not one `case` group with one `d`: base
+        ;; 16's digits are three DISJOINT ranges, and a fixture using only 0-9
+        ;; would pass against an implementation that handled no letters at all.
+        (let ((a (run-acc (car acc16) "1aF!")) (g (run-acc (cdr acc16) "1aF!")))
+          (check-equal "interpreter" (parser-field-ref a 'n) 431)
+          (check-equal "generated" (parser-field-ref g 'n) 431))))
+    (harness-case "a base-10 machine does not accept a hex letter as a digit"
+      (lambda ()
+        ;; The converse, without which "base reaches the arithmetic" is unwitnessed.
+        (let ((a (run-acc (car acc10) "1a")) (g (run-acc (cdr acc10) "1a")))
+          (check-equal "interpreter" (parser-field-ref a 'n) 1)
+          (check-equal "generated" (parser-field-ref g 'n) 1))))
+    (harness-case "overflow leaves the value unchanged and does not consume the digit"
+      (lambda ()
+        ;; §10.6:568, §15:870 and §12.7:772-773 together. A u8 field reaches 25,
+        ;; and the next digit would make 255 -- legal -- while a further one
+        ;; would not. "999" therefore overflows at the third byte with n = 99.
+        (let ((a (run-acc (car acc8bit) "999")) (g (run-acc (cdr acc8bit) "999")))
+          (check-equal "interpreter holds 99" (parser-field-ref a 'n) 99)
+          (check-equal "generated holds 99" (parser-field-ref g 'n) 99)
+          (check-equal "both errored" (parser-lifecycle g) (parser-lifecycle a))
+          (check-equal "lifecycle" (parser-lifecycle a) 'error))))
+    (harness-case "an overflow reports position kind BYTE, at the offending digit"
+      (lambda ()
+        ;; §12.7:768's row, and §12.7:773's "does not consume" made observable:
+        ;; the kind is `byte` rather than `boundary` precisely because the
+        ;; offending byte was not consumed. §12.7:777 makes it comparable.
+        (let* ((a (run-acc (car acc8bit) "999")) (g (run-acc (cdr acc8bit) "999"))
+               (ra (parser-feed! a (make-bytevector 0) 0 0))
+               (rg (parser-feed! g (make-bytevector 0) 0 0)))
+          (check-equal "interpreter" (parser-error-position-kind (parser-result-error ra)) 'byte)
+          (check-equal "generated" (parser-error-position-kind (parser-result-error rg)) 'byte))))
+    (harness-case "the boundary digit is accepted, one below the overflow"
+      (lambda ()
+        ;; Without this the overflow case passes against an implementation that
+        ;; rejects one digit too early. 255 is the u8 maximum and must be reached.
+        (let ((a (run-acc (car acc8bit) "255x")) (g (run-acc (cdr acc8bit) "255x")))
+          (check-equal "interpreter" (parser-field-ref a 'n) 255)
+          (check-equal "generated" (parser-field-ref g 'n) 255)
+          (check-equal "not an error" (parser-lifecycle a) 'stopped))))
+    (harness-case "the u64 path crosses the bignum boundary in both lanes"
+      (lambda ()
+        ;; §15:856's "must not rely on host fixnum width", end to end: 2^60 has
+        ;; nineteen decimal digits and the accumulated value passes
+        ;; (greatest-fixnum) partway through.
+        (let* ((l (acc-lanes 'acc64 10 64))
+               (a (run-acc (car l) "1152921504606846976x"))
+               (g (run-acc (cdr l) "1152921504606846976x")))
+          (check-equal "interpreter" (parser-field-ref a 'n) 1152921504606846976)
+          (check-equal "generated" (parser-field-ref g 'n) 1152921504606846976)
+          (check "above greatest-fixnum" (> (parser-field-ref a 'n) (greatest-fixnum))))))))
+
+
+;; Milestone 4 Slice ③ task 5: need-input resumption and split-point fragmentation.
+;;
+;; *** The finding this task exists to record: an accumulate node needs NO state
+;; of its own across a feed boundary. *** The recon asked where the
+;; partially-consumed-digits state would live, since it is "not obviously a
+;; field". It is: the accumulated value IS the field, which is parser slot 8 and
+;; already survives a feed, and `current` stays parked on the accumulate node
+;; because the arm returns `need-input` without moving it -- exactly what the
+;; dispatch arm does. The split-point behaviour is INHERITED, not invented, and
+;; these cases are what makes that a fact rather than an assumption.
+(define (feed-split cm str at)
+  ;; Feed `str` in two slices, split after `at` bytes.
+  (let ((p (make-parser cm '() #f)) (bs (str->bytes str)))
+    (parser-feed! p bs 0 at)
+    (parser-feed! p bs at (bytevector-length bs))
+    p))
+
+(harness-group "split-point fragmentation (Slice ③)"
+  (lambda ()
+    (harness-case "a number split across a feed boundary accumulates whole"
+      (lambda ()
+        (let ((a (feed-split (car acc10) "12345x" 2))
+              (g (feed-split (cdr acc10) "12345x" 2)))
+          (check-equal "interpreter" (parser-field-ref a 'n) 12345)
+          (check-equal "generated" (parser-field-ref g 'n) 12345))))
+    (harness-case "every split point of the same input gives the same answer"
+      (lambda ()
+        ;; EVERY split, not one: the shipped split-point idiom elsewhere in the
+        ;; tree is hardcoded for a four-byte input, and a single split cannot see
+        ;; a defect that only appears when the boundary lands on the first or
+        ;; last byte. A sentinel reads the OBSERVED count of splits.
+        (let* ((str "12345x") (n (string-length str)) (seen 0))
+          (let loop ((at 0))
+            (when (<= at n)
+              (set! seen (+ seen 1))
+              (let ((a (feed-split (car acc10) str at))
+                    (g (feed-split (cdr acc10) str at)))
+                (check-equal (string-append "interpreter split " (number->string at))
+                             (parser-field-ref a 'n) 12345)
+                (check-equal (string-append "generated split " (number->string at))
+                             (parser-field-ref g 'n) 12345))
+              (loop (+ at 1))))
+          (check-equal "every split point was tried" seen 7))))
+    (harness-case "an empty slice mid-number yields need-input and changes nothing"
+      (lambda ()
+        ;; The degenerate boundary: a feed with no bytes must not advance, must
+        ;; not lose the partial value, and must leave the parser resumable.
+        (let* ((p (make-parser (car acc10) '() #f))
+               (bs (str->bytes "12345x")))
+          (parser-feed! p bs 0 3)
+          (let ((mid (parser-field-ref p 'n))
+                (r (parser-feed! p (make-bytevector 0) 0 0)))
+            (check-equal "partial value" mid 123)
+            (check-equal "need-input" (parser-result-status r) 'need-input)
+            (check-equal "unchanged by the empty slice" (parser-field-ref p 'n) 123)
+            (parser-feed! p bs 3 6)
+            (check-equal "resumes and completes" (parser-field-ref p 'n) 12345)))))
+    (harness-case "an overflow split across a boundary still reports at the offending byte"
+      (lambda ()
+        ;; The interaction the two features have with each other: a
+        ;; non-consuming overflow whose digit arrives in the SECOND slice must
+        ;; still report `byte`, not `boundary`.
+        (let* ((a (feed-split (car acc8bit) "999" 2))
+               (r (parser-feed! a (make-bytevector 0) 0 0)))
+          (check-equal "held at 99" (parser-field-ref a 'n) 99)
+          (check-equal "position kind"
+                       (parser-error-position-kind (parser-result-error r)) 'byte))))))
+
+
+;; Milestone 4 Slice ③ task 6: bases 10 and 16 over ALL 256 byte values, both
+;; lanes. The partition is the point -- every byte is either a digit for that
+;; base or it is not, and the two lanes must agree on which, byte by byte, with
+;; no byte untested. A fixture naming a handful of digits and a handful of
+;; delimiters cannot see a boundary error at `/`, `:`, `@`, `G`, backtick or `g`
+;; -- the SIX ASCII neighbours of the three digit ranges, two per range. (This
+;; sentence said "four" and listed five until the whole-branch review counted
+;; them against the case below, which has always driven six.)
+(define (byte-answer cm b)
+  ;; Feed exactly one byte and report (field . lifecycle): a digit accumulates
+  ;; and leaves the parser ready, a non-digit takes the fallback to `done`.
+  (let ((p (make-parser cm '() #f)))
+    (parser-feed! p (make-bytevector 1 b) 0 1)
+    (cons (parser-field-ref p 'n) (parser-lifecycle p))))
+
+(harness-group "all 256 bytes, both bases, both lanes (Slice ③)"
+  (lambda ()
+    (harness-case "base 10 partitions every byte identically in both lanes"
+      (lambda ()
+        ;; A sentinel over the OBSERVED count of bytes compared, and a single
+        ;; first-divergence report rather than 256 failures -- the shipped
+        ;; all-256 lanes' own idiom.
+        (let ((seen 0) (bad 'none))
+          (let loop ((b 0))
+            (when (< b 256)
+              (set! seen (+ seen 1))
+              (let ((a (byte-answer (car acc10) b)) (g (byte-answer (cdr acc10) b)))
+                (when (and (eq? bad 'none) (not (equal? a g))) (set! bad (list b a g))))
+              (loop (+ b 1))))
+          (check-equal "every byte compared" seen 256)
+          (check-equal "no divergence" bad 'none))))
+    (harness-case "base 16 partitions every byte identically in both lanes"
+      (lambda ()
+        (let ((seen 0) (bad 'none))
+          (let loop ((b 0))
+            (when (< b 256)
+              (set! seen (+ seen 1))
+              (let ((a (byte-answer (car acc16) b)) (g (byte-answer (cdr acc16) b)))
+                (when (and (eq? bad 'none) (not (equal? a g))) (set! bad (list b a g))))
+              (loop (+ b 1))))
+          (check-equal "every byte compared" seen 256)
+          (check-equal "no divergence" bad 'none))))
+    (harness-case "base 10 accepts exactly ten bytes, base 16 exactly twenty-two"
+      (lambda ()
+        ;; The partition's SIZE, which cross-lane agreement cannot see: two lanes
+        ;; that both accepted no bytes at all would agree perfectly. Counted
+        ;; PER LANE rather than once, because an emitter-only range error leaves
+        ;; the interpreter's count right -- so a single count would attribute
+        ;; every partition defect to the interpreter.
+        (let ((n10 0) (n16 0) (g10 0) (g16 0))
+          (let loop ((b 0))
+            (when (< b 256)
+              (when (eq? (cdr (byte-answer (car acc10) b)) 'ready) (set! n10 (+ n10 1)))
+              (when (eq? (cdr (byte-answer (car acc16) b)) 'ready) (set! n16 (+ n16 1)))
+              (when (eq? (cdr (byte-answer (cdr acc10) b)) 'ready) (set! g10 (+ g10 1)))
+              (when (eq? (cdr (byte-answer (cdr acc16) b)) 'ready) (set! g16 (+ g16 1)))
+              (loop (+ b 1))))
+          (check-equal "interpreter base 10" n10 10)
+          (check-equal "interpreter base 16" n16 22)
+          (check-equal "generated base 10" g10 10)
+          (check-equal "generated base 16" g16 22))))
+    (harness-case "every digit range endpoint decodes to its own value, in both lanes"
+      (lambda ()
+        ;; The six ENDPOINTS of the three ASCII ranges, asserted as decoded
+        ;; VALUES rather than as a lifecycle. That is what separates an off-by-one
+        ;; at a bound from every other way the arm can break: a mutation that
+        ;; stops the whole node from running leaves these unread, while a
+        ;; mutation that moves one bound by one changes exactly one of these
+        ;; numbers. The whole-pass sweep is what showed the difference matters --
+        ;; asserted as lifecycles, the `f` bound's pin owned no record of its own.
+        (let ((seen 0))
+          (for-each
+           (lambda (spec)
+             (set! seen (+ seen 1))
+             (let ((b (cadr spec)) (want (caddr spec)))
+               (check-equal (string-append "interpreter " (car spec))
+                            (car (byte-answer (car acc16) b)) want)
+               (check-equal (string-append "generated " (car spec))
+                            (car (byte-answer (cdr acc16) b)) want)))
+           '(("zero" 48 0) ("nine" 57 9) ("A" 65 10) ("F" 70 15)
+             ("a" 97 10) ("f" 102 15)))
+          (check-equal "all six endpoints" seen 6))))
+    (harness-case "the six ASCII neighbours of the digit ranges are not digits"
+      (lambda ()
+        ;; `/` and `:` bracket 0-9; `@` and `G` bracket A-F; backtick and `g`
+        ;; bracket a-f. An off-by-one that widens a range moves exactly one of
+        ;; these, and the all-256 comparison cannot see it when both lanes move
+        ;; together -- which they would, being written from the same reading.
+        ;; Asserted as a VALUE too: a non-digit leaves the field at its initial.
+        (let ((seen 0))
+          (for-each (lambda (spec)
+                      (set! seen (+ seen 1))
+                      (check-equal (string-append "interpreter " (car spec))
+                                   (byte-answer (car acc16) (cadr spec)) '(0 . stopped))
+                      (check-equal (string-append "generated " (car spec))
+                                   (byte-answer (cdr acc16) (cadr spec)) '(0 . stopped)))
+                    '(("slash" 47) ("colon" 58) ("at" 64) ("G" 71) ("backtick" 96) ("g" 103)))
+          (check-equal "all six neighbours" seen 6))))))
+
+
+;; Milestone 4 Slice ③ task 8, found by the PROPERTY GENERATOR: the emitter's
+;; reached-declaration walk credited only `dispatch` states with the default-EOF
+;; route, so a machine whose ONLY default-eof consumer is an accumulate node had
+;; that declaration filtered out of the emitted errs table, and index-of then
+;; raised "no error declaration for code" while rendering a machine the verifier
+;; had just accepted with zero diagnostics.
+;;
+;; Every accumulate fixture in this file misses it by construction: each has an
+;; entry dispatch that also defaults its eof route, so the pair was in the
+;; reached set for another state's sake. Separating them takes an entry whose eof
+;; goes somewhere ELSE -- here a finish node -- which is what the generator drew
+;; as soon as the eof draw and the accumulate draw fired together.
+;;
+;; Kept as a fixed fixture rather than left to the property lane: the generated
+;; sequence re-rolls whenever any draw changes, and a defect whose only witness
+;; is a seeded draw has a witness that can vanish without anyone editing it.
+(define acc-eof-only
+  (let ((errs (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
+                    (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))))
+    (make-machine 'acc-eof-only 'start (list (make-uint-field 'n 8 0 #f)) '() '() errs
+                  (list (make-byte-dispatch-node
+                         'start
+                         (list (make-byte-case (make-byte-range-matcher 0 255)
+                                               (make-edge 'acc 'reexecute) #f))
+                         (make-edge 'over 'reexecute)
+                         ;; The entry's own eof goes to a FINISH, so the entry
+                         ;; needs no default-eof declaration. The accumulate node
+                         ;; below declares eof-target #f and is the only state
+                         ;; left that can reach the machine default.
+                         'done #f)
+                        (make-integer-accumulate-node 'acc 'n 10 'acc
+                                                      (make-edge 'stopped 'advance)
+                                                      'over #f #f)
+                        (make-finish-node 'done #f)
+                        (make-stop-node 'stopped #f)
+                        (make-error-node 'over 'rejected #f))
+                  'default-eof #f)))
+
+;; Emitted ONCE and shared by the cases below -- the generated library name is
+;; (generated <machine-name>), so two emissions of the same machine would load
+;; two libraries under one name into the same process -- but LAZILY, inside a
+;; case rather than at top level. The defect this fixture pins makes emission
+;; RAISE, and a raise at top level kills the program before the harness can
+;; record anything: the lane exits 255 with no case named, where the same raise
+;; inside a case is recorded against that case and exits 1. The difference is
+;; what a reader sees when it regresses -- and the mutation suite reads the
+;; status, so 255 is reported as caught for the WRONG REASON.
+(define acc-eof-cache #f)
+(define (acc-eof-pair)
+  (unless acc-eof-cache
+    (set! acc-eof-cache
+          (cons (make-interpreted-machine (verify-machine acc-eof-only))
+                (emit-and-load acc-eof-only 'acc-eof-only 'acc-eof-only-parser
+                               (string-append tmpdir "/generated-acc-eof-only.sls")))))
+  acc-eof-cache)
+
+(harness-group "an accumulate node is a default-EOF consumer (Slice ③)"
+  (lambda ()
+    (harness-case "the verifier accepts a machine whose only default-eof consumer is the accumulate node"
+      (lambda ()
+        ;; Stated first and separately: if a later slice decides this shape is
+        ;; illegal, THIS is the check that should fail and say so, rather than
+        ;; the emission below failing for a reason that reads like an emitter
+        ;; defect.
+        (let ((v (verify-machine acc-eof-only)))
+          (check "accepted" (verification-ok? v))
+          (check-equal "no diagnostics" (length (verification-diagnostics v)) 0))))
+    (harness-case "the accumulate node's own eof route resolves the default declaration"
+      (lambda ()
+        ;; The route that actually asks index-of for the default-eof declaration,
+        ;; and the reason the emission used to RAISE rather than fail a
+        ;; comparison. A digit leaves the parser parked on `acc`, whose eof-target
+        ;; is #f; finishing there takes the machine default.
+        (let* ((pair (acc-eof-pair)) (a (car pair)) (g (cdr pair))
+               (pa (make-parser a '() #f)) (pg (make-parser g '() #f)))
+          (parser-feed! pa (str->bytes "7") 0 1)
+          (parser-feed! pg (str->bytes "7") 0 1)
+          (check-equal "interpreter accumulated" (parser-field-ref pa 'n) 7)
+          (check-equal "generated accumulated" (parser-field-ref pg 'n) 7)
+          (let ((ra (parser-finish! pa)) (rg (parser-finish! pg)))
+            (check-equal "interpreter errors at eof" (parser-result-status ra) 'error)
+            (check-equal "the lanes agree on the status"
+                         (parser-result-status rg) (parser-result-status ra))
+            ;; The reason is the assertion the filter defect was about: the
+            ;; declaration must still be IN the emitted table to be named here.
+            (check-equal "interpreter names the default-eof declaration"
+                         (parser-error-reason (parser-result-error ra))
+                         "unexpected end of input")
+            (check-equal "generated names the same declaration"
+                         (parser-error-reason (parser-result-error rg))
+                         "unexpected end of input")
+            (check-equal "position kind"
+                         (parser-error-position-kind (parser-result-error rg)) 'eof)))))
+    (harness-case "while the entry's own eof route still reaches its finish node"
+      (lambda ()
+        ;; The other half of the separation, and what makes the fixture's shape
+        ;; load-bearing rather than incidental: the entry does NOT default its eof
+        ;; route, which is precisely why the accumulate node was the only consumer
+        ;; of the default declaration and why the filter dropped it.
+        (let* ((pair (acc-eof-pair)) (a (car pair)) (g (cdr pair))
+               (ra (parser-finish! (make-parser a '() #f)))
+               (rg (parser-finish! (make-parser g '() #f))))
+          (check-equal "interpreter finishes" (parser-result-status ra) 'finished)
+          (check-equal "the lanes agree" (parser-result-status rg)
+                       (parser-result-status ra)))))))
+
+
+;; *** Whole-branch review, 2026-09-03: FOUR operands of the accumulate node
+;; that no executing fixture reached. *** Every accumulate machine in the tree
+;; declared exactly ONE field (so the slot was always 0 and the width always the
+;; only width), named ITSELF as its digit-target (so nothing checked the operand
+;; was read at all), gave its non-digit edge mode `advance` (so §10.6:567's
+;; "normally reexecuting the delimiter" -- the NORMAL case -- ran nowhere), and
+;; overflowed only in base 10 IN THIS FILE (so `base` in the bound's divisor was
+;; indistinguishable from the literal 10 here).
+;;
+;; *** That fourth conjunct needs its qualifier and did not have it until
+;; 2026-09-03. *** determinism-accumulate-tests.sps had been driving a base 16
+;; overflow since six commits earlier -- but only through the GENERATED lane, so
+;; no interpreter-side divisor mutation was ever caught by it, and the case below
+;; was still owed. "No fixture reaches this" is a claim about the whole TREE, and
+;; it had been checked against one file.
+;;
+;; One machine separates all four, because they are four operands of one node and
+;; a fixture per operand would share every other operand's blind spot:
+;;
+;;   fields (pad n)   -- `n` is SLOT 1. A lane reading slot 0 reads `pad`.
+;;   base 16          -- and the overflow case below is a u16 ceiling in base 16.
+;;   digit-target     -- `bump`, a separate node, not `acc` itself.
+;;   nondigit-edge    -- `(tail . reexecute)`, so the delimiter is RE-READ.
+(define drift-errs (list eof-decl rej-decl))
+(define two-field-acc
+  (make-machine 'twofield 'start
+    (list (make-uint-field 'pad 8 0 #f) (make-uint-field 'n 16 0 #f))
+    '() '() drift-errs
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 35)
+                                  (make-edge 'acc 'advance) #f))
+            (make-edge 'over 'reexecute) #f #f)
+          (make-integer-accumulate-node 'acc 'n 16 'bump
+                                        (make-edge 'tail 'reexecute)
+                                        'over #f #f)
+          ;; The digit target: a zero-width action that counts digits into the
+          ;; OTHER field. It witnesses two things at once -- that the digit edge
+          ;; goes where the node says, and that the accumulate commits into slot
+          ;; 1 while this commits into slot 0.
+          (make-field-action-node 'bump 'increment '(pad) 'acc 'over #f)
+          ;; Reached only by the non-digit edge, and only because that edge
+          ;; REEXECUTES: the delimiter must still be in hand for this dispatch to
+          ;; match it. With mode `advance` the byte is consumed at `acc` and this
+          ;; node sees the next one instead -- which is what makes the mode
+          ;; observable rather than merely declared.
+          (make-byte-dispatch-node 'tail
+            (list (make-byte-case (make-exact-byte-matcher 120)
+                                  (make-edge 'sawx 'advance) #f))
+            (make-edge 'over 'reexecute) #f #f)
+          (make-stop-node 'sawx #f)
+          (make-error-node 'over 'rejected #f))
+    'default-eof #f))
+
+(define tf-pair
+  (cons (make-interpreted-machine (verify-machine two-field-acc))
+        (emit-and-load two-field-acc 'twofield 'twofield-parser
+                       (string-append tmpdir "/generated-twofield.sls"))))
+
+(define (tf-run-on cm str)
+  (let ((p (make-parser cm '() #f)))
+    (cons (parser-feed! p (str->bytes str) 0 (string-length str)) p)))
+(define tf-run tf-run-on)
+
+(harness-group "the accumulate node's four unreached operands (Slice ③, review)"
+  (lambda ()
+    (harness-case "the machine verifies clean"
+      (lambda ()
+        ;; First and separately: if a later slice decides this shape is illegal,
+        ;; THIS is the check that should fail and say so, rather than the four
+        ;; below failing for a reason that reads like an executor defect.
+        (let ((v (verify-machine two-field-acc)))
+          (check "accepted" (verification-ok? v))
+          (check-equal "no diagnostics" (length (verification-diagnostics v)) 0))))
+    (harness-case "the accumulate commits into the field it NAMES, not into slot zero"
+      (lambda ()
+        ;; `n` is slot 1 and `pad` slot 0. A lane that reads or writes slot 0
+        ;; accumulates into `pad` -- an 8-bit field, which would also overflow at
+        ;; the third hex digit -- so this separates the slot lookup from the
+        ;; width lookup as well.
+        (let* ((a (cdr (tf-run (car tf-pair) "#1aF")))
+               (g (cdr (tf-run (cdr tf-pair) "#1aF"))))
+          (check-equal "interpreter n" (parser-field-ref a 'n) #x1aF)
+          (check-equal "generated n" (parser-field-ref g 'n) #x1aF)
+          ;; And the OTHER field is untouched by the accumulate itself: `pad`
+          ;; holds the digit count the action wrote, three, not a partial sum.
+          (check-equal "interpreter pad" (parser-field-ref a 'pad) 3)
+          (check-equal "generated pad" (parser-field-ref g 'pad) 3))))
+    (harness-case "the digit edge goes to the DECLARED target, not back to the node"
+      (lambda ()
+        ;; `pad` is 3 above only because each accepted digit routed through
+        ;; `bump`. A lane that ignored digit-target and self-looped would leave
+        ;; `pad` at 0 while `n` still reached 0x1aF -- which is why the count is
+        ;; asserted rather than merely the accumulated value.
+        (let* ((a (cdr (tf-run (car tf-pair) "#1")))
+               (g (cdr (tf-run (cdr tf-pair) "#1"))))
+          (check-equal "interpreter one digit, one hop" (parser-field-ref a 'pad) 1)
+          (check-equal "generated one digit, one hop" (parser-field-ref g 'pad) 1))))
+    (harness-case "the non-digit edge REEXECUTES, so the delimiter is read again"
+      (lambda ()
+        ;; §10.6:567's normal case, and the whole tree's first execution of it.
+        ;; `tail` matches only `x`. Reaching `sawx` means `x` was still in hand
+        ;; when the fallback edge was taken; under mode `advance` it would have
+        ;; been consumed at `acc` and `tail` would have run out of input.
+        (let* ((ra (car (tf-run (car tf-pair) "#1aFx")))
+               (rg (car (tf-run (cdr tf-pair) "#1aFx"))))
+          (check-equal "interpreter stopped at sawx" (parser-result-status ra) 'stopped)
+          (check-equal "generated stopped at sawx" (parser-result-status rg) 'stopped)
+          ;; The consumed count is the direct evidence: five bytes fed, five
+          ;; consumed, which only holds if `x` was consumed by `tail` rather than
+          ;; by `acc`.
+          (check-equal "interpreter consumed" (parser-result-consumed ra) 5)
+          (check-equal "generated consumed" (parser-result-consumed rg) 5))))
+    (harness-case "the overflow bound divides by the node's OWN base, at base 16"
+      (lambda ()
+        ;; *** MEASURED, and the first shape did not work. *** `#FFFFF` does not
+        ;; separate a divisor of 16 from a divisor of 10: at the fourth digit
+        ;; 0xFFF = 4095 passes both bounds ((65535-15)/16 = 4095 and /10 = 6552),
+        ;; and at the fifth 0xFFFF = 65535 fails both. A mutant dividing by 10
+        ;; survived it.
+        ;;
+        ;; The separating value has to land BETWEEN the two bounds, so
+        ;; `#1000F` is the case: after four digits n = 0x1000 = 4096, which is
+        ;; above 4095 and below 6552. The correct bound refuses the `F` and
+        ;; errors with n unchanged; a bound dividing by 10 accepts it and writes
+        ;; 4096*16+15 = 65551 -- a value OUTSIDE the u16 the field declares,
+        ;; which is the whole point of a checked multiply-add.
+        (let* ((rb (car (tf-run (car tf-pair) "#1000F")))
+               (b (cdr (tf-run (car tf-pair) "#1000F")))
+               (rbg (car (tf-run (cdr tf-pair) "#1000F")))
+               (bg (cdr (tf-run (cdr tf-pair) "#1000F"))))
+          (check-equal "interpreter refuses the fifth digit" (parser-result-status rb) 'error)
+          (check-equal "generated refuses the fifth digit" (parser-result-status rbg) 'error)
+          (check-equal "interpreter leaves 0x1000" (parser-field-ref b 'n) #x1000)
+          (check-equal "generated leaves 0x1000" (parser-field-ref bg 'n) #x1000))
+        ;; The ceiling case as well: four F's fit exactly, the fifth cannot.
+        (let* ((ra (car (tf-run (car tf-pair) "#FFFFF")))
+               (a (cdr (tf-run (car tf-pair) "#FFFFF")))
+               (rg (car (tf-run (cdr tf-pair) "#FFFFF")))
+               (g (cdr (tf-run (cdr tf-pair) "#FFFFF"))))
+          (check-equal "interpreter reached the u16 ceiling" (parser-field-ref a 'n) #xFFFF)
+          (check-equal "generated reached the u16 ceiling" (parser-field-ref g 'n) #xFFFF)
+          (check-equal "interpreter errored" (parser-result-status ra) 'error)
+          (check-equal "generated errored" (parser-result-status rg) 'error)
+          (check-equal "position kind"
+                       (parser-error-position-kind (parser-result-error ra)) 'byte)
+          (check-equal "the lanes agree on the error"
+                       (parser-error-reason (parser-result-error rg))
+                       (parser-error-reason (parser-result-error ra))))))))
+
+;; The same two claims again on a machine with NO zero-width node, because the
+;; whole-pass sweep showed the fixture above cannot attribute them. Its evidence
+;; for the digit-target hop is a count `bump` writes, and its evidence for the
+;; reexecute mode is a consumed count `bump` also affects -- so every pin that
+;; breaks a zero-width action or an increment breaks those cases too, and the
+;; three new pins nested inside three older ones that have nothing to do with
+;; accumulation. Here the digit target is a STOP node and the delimiter path
+;; carries no action at all, so the only machinery either case can blame is the
+;; accumulate arm itself.
+(define lone-acc
+  (make-machine 'lone 'start (list (make-uint-field 'n 16 0 #f)) '() '() drift-errs
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 35)
+                                  (make-edge 'acc 'advance) #f))
+            (make-edge 'over 'reexecute) #f #f)
+          ;; digit-target is `halt`, so ONE digit is taken and the machine stops.
+          ;; A lane that self-looped instead would ask for more input.
+          (make-integer-accumulate-node 'acc 'n 16 'halt
+                                        (make-edge 'tail 'reexecute)
+                                        'over #f #f)
+          (make-stop-node 'halt #f)
+          (make-byte-dispatch-node 'tail
+            (list (make-byte-case (make-exact-byte-matcher 120)
+                                  (make-edge 'sawx 'advance) #f))
+            (make-edge 'over 'reexecute) #f #f)
+          (make-stop-node 'sawx #f)
+          (make-error-node 'over 'rejected #f))
+    'default-eof #f))
+
+(define lone-pair
+  (cons (make-interpreted-machine (verify-machine lone-acc))
+        (emit-and-load lone-acc 'lone 'lone-parser
+                       (string-append tmpdir "/generated-lone.sls"))))
+
+(harness-group "the same two operands, on a machine with no zero-width node"
+  (lambda ()
+    (harness-case "the machine verifies clean"
+      (lambda ()
+        (let ((v (verify-machine lone-acc)))
+          (check "accepted" (verification-ok? v))
+          (check-equal "no diagnostics" (length (verification-diagnostics v)) 0))))
+    (harness-case "one digit is taken and the DECLARED digit-target stops the parse"
+      (lambda ()
+        ;; A self-loop would leave the parser asking for input instead.
+        (let ((ra (car (tf-run-on (car lone-pair) "#1")))
+              (rg (car (tf-run-on (cdr lone-pair) "#1"))))
+          (check-equal "interpreter stopped" (parser-result-status ra) 'stopped)
+          (check-equal "generated stopped" (parser-result-status rg) 'stopped))))
+    (harness-case "the delimiter is re-read with no action anywhere in the path"
+      (lambda ()
+        (let* ((ra (car (tf-run-on (car lone-pair) "#x")))
+               (rg (car (tf-run-on (cdr lone-pair) "#x"))))
+          (check-equal "interpreter consumed both" (parser-result-consumed ra) 2)
+          (check-equal "generated consumed both" (parser-result-consumed rg) 2)
+          (check-equal "interpreter stopped at sawx" (parser-result-status ra) 'stopped)
+          (check-equal "generated stopped at sawx" (parser-result-status rg) 'stopped))))))
 
 (harness-finish)

@@ -102,8 +102,12 @@
                    (list (edge-target (byte-dispatch-node-fallback n)))))
           ;; A pause's single zero-width out-edge (§10.6): resolution-checked by
           ;; PASS 2 (a malformed continuation is 'missing-target, §16.2:905) and
-          ;; walked by reachability. The §16.2:908 dispatch check below filters
-          ;; on byte-dispatch-node?, so this arm does not feed it.
+          ;; walked by reachability. The §16.2:908 check below filters on
+          ;; byte-dispatch-node?, sequence-dispatch-node? AND
+          ;; integer-accumulate-node?; a pause is in none of them, so this arm
+          ;; does not feed it. (The conclusion has always held. The stated REASON
+          ;; named one predicate and went stale twice -- most recently when this
+          ;; slice's own fix widened that filter, eight hundred lines below.)
           ((pause-node? n) (list (pause-node-continuation n)))
           ;; A sequence node's byte out-edges: every alternative's target plus
           ;; the mismatch edge's. Feeding this arm also repairs pass-names'
@@ -115,6 +119,15 @@
           ;; reachability and the :908 check below.
           ((or (field-action-node? n) (field-branch-node? n))
            (zero-width-successors n))
+          ;; Integer accumulate (Slice ③). Three of its four explicit targets are
+          ;; BYTE out-targets; the fourth, `eof-target`, is not -- it belongs to
+          ;; node-eof-target below, exactly as a dispatch node's does, so that
+          ;; `all-out-targets` adds it for reachability and the :908 filter does
+          ;; not see it.
+          ((integer-accumulate-node? n)
+           (list (integer-accumulate-node-digit-target n)
+                 (edge-target (integer-accumulate-node-nondigit-edge n))
+                 (integer-accumulate-node-overflow-error n)))
           (else '())))
   ;; A dispatch/sequence node's stored eof-target (a symbol, or #f meaning
   ;; "the machine default eof error"), or #f for any other node kind. Fix
@@ -126,6 +139,9 @@
   (define (node-eof-target n)
     (cond ((byte-dispatch-node? n) (byte-dispatch-node-eof-target n))
           ((sequence-dispatch-node? n) (sequence-dispatch-node-eof-target n))
+          ;; Slice ③: an accumulate node declares its own EOF edge (§10.6:569),
+          ;; with #f meaning the machine default -- the byte-dispatch convention.
+          ((integer-accumulate-node? n) (integer-accumulate-node-eof-target n))
           (else #f)))
   ;; byte out-targets PLUS a dispatch/sequence node's eof-target (for
   ;; reachability only).
@@ -320,10 +336,29 @@
                                         "range low exceeds high"))
                  '())))))))))
 
+  ;; Slice ③'s accumulate share (D3). A SIBLING ARM, not a
+  ;; `field-operand-schemas` row: that table is keyed on a SELECTOR and an ARITY,
+  ;; and an accumulate node has `field` and `base` and neither. Slice ②'s promise
+  ;; of one home is kept -- this lives in `pass-fields` and reuses
+  ;; `invalid-field-operand`, so §4.6's spent two-code budget holds.
+  ;;
+  ;; Only the FIELD REFERENCE: the base is closed at construction (§16.2:904's
+  ;; base half), so an arm for it here would be dead code whose permissive
+  ;; mutation survives. Reported under the NODE's name, matching the convention
+  ;; the operand walk above already states -- design §8 prescribes the field
+  ;; name, which would put two conventions under one code.
+  (define (accumulate-operand-diagnostics fs n)
+    (if (field-width-of fs (integer-accumulate-node-field n))
+        '()
+        (list (make-diagnostic 'invalid-field-operand (node-name n)
+                               "accumulate names no declared field"))))
+
   (define (pass-field-operands m fs)
     (apply append
            (map (lambda (n)
-                  (cond ((field-action-node? n)
+                  (cond ((integer-accumulate-node? n)
+                         (accumulate-operand-diagnostics fs n))
+                        ((field-action-node? n)
                          (field-operand-diagnostics fs (node-name n)
                                                     (field-action-node-operation n)
                                                     (field-action-node-arguments n)))
@@ -524,6 +559,31 @@
               ;; shipped by extending the walk and not the REPORT set.
               ((or (field-action-node? n) (field-branch-node? n))
                (zero-width-successors n))
+              ;; *** Integer accumulate contributes TWO edges, not one. Design §8
+              ;; says only `nondigit-edge` can be `reexecute`, "since the
+              ;; overflow edge is non-consuming but TERMINAL-DIRECTED". It is not
+              ;; terminal-directed -- §8 contradicts itself sixteen lines later,
+              ;; declining to extend pass-names' error-node? filter "since
+              ;; overflow-error names a target NODE" -- and nothing anywhere
+              ;; constrains that target's kind. ***
+              ;;
+              ;; So the overflow edge joins unconditionally: §12.7:772 makes it
+              ;; NON-CONSUMING and §15:870 leaves the field unchanged, so an
+              ;; overflow-error naming its own accumulate node re-reads the same
+              ;; byte forever. Neither runtime loop guards against that. The
+              ;; digit edge stays out -- it always advances (§10.6:566).
+              ;;
+              ;; Measured before this arm was written: cutting Slice ②'s
+              ;; field-action arm back to one disjunct makes a self-targeting
+              ;; error edge verify with ZERO diagnostics. The two self-cycles
+              ;; need SEPARATE fixtures -- neither distinguishes the other's
+              ;; mutant, and the REPORT guard below has the same blind spot.
+              ((integer-accumulate-node? n)
+               (append
+                (if (eq? (edge-mode (integer-accumulate-node-nondigit-edge n)) 'reexecute)
+                    (list (edge-target (integer-accumulate-node-nondigit-edge n)))
+                    '())
+                (list (integer-accumulate-node-overflow-error n))))
               (else '())))
       (define (reaches-self? start)
         (let loop ((frontier (reexec-targets (lookup nodes start))) (seen '()))
@@ -543,10 +603,11 @@
                      ;; lanes.
                      (if (and (or (byte-dispatch-node? n) (pause-node? n)
                                   (sequence-dispatch-node? n)
-                                  (field-action-node? n) (field-branch-node? n))
+                                  (field-action-node? n) (field-branch-node? n)
+                                  (integer-accumulate-node? n))
                               (reaches-self? (node-name n)))
                          (make-diagnostic 'zero-progress-cycle (node-name n)
-                                          "a zero-width cycle (reexecute edges, pause continuations, field actions and branches) makes no progress")
+                                          "a zero-progress cycle (reexecute edges, pause continuations, field actions and branches, accumulate overflow edges) makes no progress")
                          #f))
                    nodes))))
 
@@ -654,6 +715,16 @@
                  (dispatch-arm (sequence-dispatch-node-eof-target n) path))
                 ((or (pause-node? n) (field-action-node? n) (field-branch-node? n))
                  (join-over (eof-successors n) path))
+                ;; *** Slice ③, added by the whole-branch review. *** An
+                ;; integer-accumulate node is a legal EOF target -- this slice
+                ;; taught `node-eof-target` to read one -- and it carries its own
+                ;; eof-target, so it classifies exactly as a dispatch does: hop,
+                ;; and let the walk decide. Without this arm every EOF chain that
+                ;; reached one fell into the `else` below and `verify-machine`
+                ;; RAISED instead of returning a verification result, on machines
+                ;; both executors already ran correctly.
+                ((integer-accumulate-node? n)
+                 (dispatch-arm (integer-accumulate-node-eof-target n) path))
                 (else (assertion-violation 'eof-terminal
                                            "no EOF classification for node kind" name)))))
       (walk start '())))
@@ -669,9 +740,15 @@
     (let ((nodes (machine-nodes m)))
       (append
        ;; :908 — a byte edge (case or fallback) into a finish terminal.
+       ;; Slice ③ adds `integer-accumulate-node?`: `node-out-targets` already
+       ;; yields its three BYTE out-targets (digit, non-digit, overflow), but
+       ;; this filter did not admit the kind, so none of the three was ever
+       ;; checked and an accumulate node whose digit target was a finish terminal
+       ;; verified with zero diagnostics. Found by the whole-branch review.
        (apply append
               (map (lambda (n)
-                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n))
+                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n)
+                             (integer-accumulate-node? n))
                          (filter values
                                  (map (lambda (t)
                                         (let ((tn (lookup nodes t)))
@@ -682,10 +759,19 @@
                                       (node-out-targets n)))
                          '()))
                    nodes))
-       ;; :909 + the EOF-cycle check — walk each dispatch node's eof-target chain.
+       ;; :909 + the EOF-cycle check — walk each INPUT-READING node's eof-target
+       ;; chain. Slice ③ adds `integer-accumulate-node?` here too, and this is the
+       ;; arm whose absence was worst: `parser-finish-op!` says in its own words
+       ;; that it carries no local cycle guard because it relies on these two
+       ;; checks, so an accumulate node whose eof-target was itself verified with
+       ;; zero diagnostics and then looped FOREVER in both executors, and one
+       ;; whose EOF chain reached a stop terminal was accepted although
+       ;; `eof-reachable-stop` exists to reject exactly that. Found by the
+       ;; whole-branch review; both shapes are now fixtures.
        (apply append
               (map (lambda (n)
-                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n))
+                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n)
+                             (integer-accumulate-node? n))
                          (let ((t (node-eof-target n)))
                            (if (symbol? t)
                                (case (eof-terminal m t)
