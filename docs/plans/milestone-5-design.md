@@ -734,9 +734,19 @@ Slice ③'s.
 
 - `make-callback-declaration` (`§9.1:284-285`) and `make-span-declaration` (`§9.1:286`), with
   the `for-all` guards `make-machine` currently lacks for both collections (§4.12 item 1,
-  pending approval — the collection loop is `ir.sls:548-551`, the fields guard it should
-  resemble is `:559-560`).
-- The `graph.sls` export convention of §4.12 item 4, pending approval.
+  **approved 2026-09-04** — the collection loop is `ir.sls:548-551` and checks only `list?`;
+  the per-element guards are separate `unless (for-all P coll)` forms at `:552-560`, so this is
+  a fourth and fifth such form, not an edit to the loop). Measured: `machine-callbacks` and
+  `machine-spans` already exist as constructor parameters, vector slots and exported accessors,
+  and **nothing anywhere reads either** — ①b is their first reader, and the guard is what makes
+  them load-bearing.
+- **(Removed 2026-09-04 — stale by one settlement.)** This bullet said "the `graph.sls` export
+  convention of §4.12 item 4, pending approval". Item 4 was **declined** and moved to §10, so
+  stating a convention is out of scope. What survives is the *precedent*: ①b's two declaration
+  families export a predicate and accessors on the `uint-field` pattern, and the header gains
+  nothing. **Note there are two precedents, not one** — `make-error-declaration` is exported
+  constructor-only, and it also stores a `source-label` it has no accessor for. The owner's
+  decline text names `uint-field`, so ①b follows that one knowingly.
 - Verification pass 6a's callback half: `§16.2:890` ("missing or incompatible callbacks"),
   `:891` (optional decision callbacks without a valid declared default branch), `:892`
   ("invalid span callback declarations"), `:901`'s declaration share, and `:902` — whose content
