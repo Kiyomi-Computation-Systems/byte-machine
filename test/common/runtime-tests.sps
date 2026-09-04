@@ -255,9 +255,9 @@
            (let ((b (bytevector-u8-ref bv pos)))
              (if (= b 0) (loop (+ pos 1) 1 (+ off 1)) (loop pos 2 off))))))))
 (define (v2-machine)
-  (byte-machine-make-compiled-machine 3 99 0 stub-exec (vector (vector))))
+  (byte-machine-make-compiled-machine 4 99 0 stub-exec (vector (vector))))
 (define (v2-pause-machine)
-  (byte-machine-make-compiled-machine 3 99 3 stub-exec (vector (vector))))
+  (byte-machine-make-compiled-machine 4 99 3 stub-exec (vector (vector))))
 
 ;; Milestone 4 Slice ①a task 3 retired the whole 'v1 feed-only executor path.
 ;; Once /v1 refuses every version nothing can construct one, so make-parser's
@@ -306,12 +306,12 @@
   (lambda ()
     (harness-case "the superseded version is refused and the current one accepted"
       (lambda ()
-        (check-raises "abi 2 refused" assertion-violation?
+        (check-raises "abi 3 refused" assertion-violation?
                       (lambda () (byte-machine-make-compiled-machine
-                                  2 99 0 stub-exec (vector (vector)))))
-        (check "abi 3 accepted"
+                                  3 99 0 stub-exec (vector (vector)))))
+        (check "abi 4 accepted"
                (compiled-machine? (byte-machine-make-compiled-machine
-                                   3 99 0 stub-exec (vector (vector)))))))
+                                   4 99 0 stub-exec (vector (vector)))))))
     (harness-case "the version check precedes every other guard"
       (lambda ()
         ;; Decision 0018 item 1: the check is FIRST, so a mismatch is reported
@@ -330,11 +330,11 @@
                       (lambda () (byte-machine-make-compiled-machine 2 99 0 'not-a-procedure #f)))
         (check-raises "a non-vector payload is refused at the current version"
                       (irritant-is #f)
-                      (lambda () (byte-machine-make-compiled-machine 3 99 0 stub-exec #f)))
+                      (lambda () (byte-machine-make-compiled-machine 4 99 0 stub-exec #f)))
         (check-raises "an empty payload has no member 0"
                       (irritant-is (vector))
                       (lambda () (byte-machine-make-compiled-machine
-                                  3 99 0 stub-exec (vector))))))))
+                                  4 99 0 stub-exec (vector))))))))
 
 
 (harness-group "generated-code ABI (/v2): feed and finish"

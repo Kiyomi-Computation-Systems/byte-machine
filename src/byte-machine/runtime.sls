@@ -58,7 +58,14 @@
   ;; project: Chez prefers a compiled object over source and staleness is
   ;; transitive across imports, so a stale object of a generated library really
   ;; can meet a newer runtime inside this repository's own build.
-  (define current-abi-version 3)
+  ;;
+  ;; Bumped to 4 by Milestone 5 Slice ①a (decision 0025 point 2), which grew the
+  ;; ABI payload with a second member -- empty here, filled by ①b. §9.5:444 is
+  ;; what forces the bump; the strict equality below is what enforces it. The
+  ;; `>= 1` metadata check further down is a LENGTH minimum and enforces nothing
+  ;; about the version: a two-member payload satisfies it unchanged, which is
+  ;; the freedom the quoted vector was chosen for.
+  (define current-abi-version 4)
 
   ;; The one unversioned constructor. Its FIRST action is the version check, so a
   ;; mismatch is reported before any part of the payload is interpreted -- which
