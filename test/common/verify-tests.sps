@@ -2044,13 +2044,26 @@
 ;; check needs `finish` distinguished from `error` at `classify`, and 0021 item
 ;; 3's loud-else discipline forbids merging arms.
 (define (t6-join-machine x-nodes x-name)
-  ;; The entry is a field-branch, the only shape whose join is observable: one
-  ;; arm reaches X, the other a stop. Whatever X's own verdict, the join must be
-  ;; the stop -- `eof-reachable-stop` is tier 1 and every benign verdict tier 0.
-  (make-machine 'j 'br (list (make-uint-field 'n 8 0 #f)) '() '()
+  ;; A field-branch is the only shape whose join is observable: one arm reaches
+  ;; X, the other a stop, and whatever X's own verdict the join must be the stop
+  ;; -- `eof-reachable-stop` is tier 1 and every benign verdict tier 0.
+  ;;
+  ;; *** The branch sits ONE HOP from the entry, not at it. *** Placed at the
+  ;; entry, these fixtures depend on the entry being a walk start -- which is
+  ;; task 4's decision, not this one -- and the whole-pass sweep duly found the
+  ;; tier pins nesting inside task 4's. Reached instead as a dispatch's
+  ;; eof-target, the join is still exercised (and reported at the dispatch),
+  ;; while task 4's entry disjunct is irrelevant to it: `s0` starts a walk
+  ;; through the OTHER disjunct, its own EOF route.
+  (make-machine 'j 's0 (list (make-uint-field 'n 8 0 #f)) '() '()
                 (list eof-decl rej-decl)
-                (append (list (make-field-branch-node 'br 'zero '(n) x-name 'stop #f)
-                              (make-stop-node 'stop #f))
+                (append (list (make-byte-dispatch-node 's0
+                                (list (make-byte-case (make-exact-byte-matcher 0)
+                                                      (make-edge 'stop 'advance) #f))
+                                (make-edge 'rj 'reexecute) 'br #f)
+                              (make-field-branch-node 'br 'zero '(n) x-name 'stop #f)
+                              (make-stop-node 'stop #f)
+                              (make-error-node 'rj 'rejected #f))
                         x-nodes)
                 'default-eof #f))
 
@@ -2063,7 +2076,7 @@
                           (verification-diagnostics
                            (verify-machine
                             (t6-join-machine (list (make-error-node 'x 'rejected #f)) 'x))))
-                     '((eof-reachable-stop . br)))))
+                     '((eof-reachable-stop . s0)))))
     (harness-case "a `default-error` sibling does not mask the stop"
       (lambda ()
         ;; X is a dispatch with NO eof-target, so `dispatch-arm` answers
@@ -2074,21 +2087,25 @@
                           (verification-diagnostics
                            (verify-machine
                             (t6-join-machine
+                             ;; `rj2`, not `rj`: the skeleton already declares an
+                             ;; error node called `rj`, and a second one is a
+                             ;; duplicate-name finding that has nothing to do
+                             ;; with the join under test.
                              (list (make-byte-dispatch-node 'x '()
-                                     (make-edge 'rj 'reexecute) #f #f)
-                                   (make-error-node 'rj 'rejected #f))
+                                     (make-edge 'rj2 'reexecute) #f #f)
+                                   (make-error-node 'rj2 'rejected #f))
                              'x))))
-                     '((eof-reachable-stop . br)))))
+                     '((eof-reachable-stop . s0)))))
     (harness-case "a `finish` sibling does not mask the stop either"
       (lambda ()
-        ;; A field-branch arm is a BYTE out-target, so a finish there is also a
-        ;; §16.2:908 violation. Both findings are asserted: the point is that the
-        ;; stop is still reported, not that it is reported alone.
-        (check-equal "both findings, stop included"
-                     (map diagnostic-code
+        ;; Moving the branch off the entry made this case cleaner as well as
+        ;; better-anchored: `br` is EOF-only-reachable, so its arm into a finish
+        ;; is NOT a §16.2:908 violation and the join is the only thing asserted.
+        (check-equal "the stop, and nothing else"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
                           (verification-diagnostics
                            (verify-machine
                             (t6-join-machine (list (make-finish-node 'x #f)) 'x))))
-                     '(non-eof-into-finish eof-reachable-stop))))))
+                     '((eof-reachable-stop . s0)))))))
 
 (harness-finish)

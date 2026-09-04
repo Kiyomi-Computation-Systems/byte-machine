@@ -1915,3 +1915,35 @@ another; and "most of it double-reporting" is not corroborated — a third of th
 duplicates, two thirds are new coverage. A figure of this kind must name its skeleton.
 
 Full plan: `docs/plans/milestone-5-slice-0b-implementation-plan.md`.
+
+### §16.2:908 / §16.2:909 / §16.4:940 — Milestone 5 Slice ⓪b, delivered
+
+**2026-09-03.** The disposition above recorded Slice ⓪b as planned; this records what it
+did. Neither §16.2 bullet is reworded, and §16.4:937-943 is not either — see the third
+item, which is about a rule that was never there.
+
+- **:908 is one derived block gated on byte-reachability**, replacing three hand-written
+  sites that disagreed with each other. Its half of `pass-eof-execution` now names **one**
+  kind predicate where it named six, and `node-out-edges` is the single census it consults.
+  The entry is a subject of the rule: `entry = a finish node` is rejected, reusing the
+  existing code with no new one.
+- **:909 walks the states a parser can be PARKED on**, the entry among them — closing a
+  hole in which `entry = a stop node` verified with zero diagnostics and `parser-finish!`
+  returned `stopped`. Because the start set is a **set**, no machine double-reports.
+- **§16.4:940's edge/source label is implemented**, carrying a role rather than an index.
+  The "one finding per decision" rule cited against these checks **does not exist** in
+  §16.4:937-943, which is a contents list; the gloss entered at
+  `milestone-3-slice-1-implementation-plan.md:139` and propagated to fourteen sites.
+- **The EOF verdict order is three tiers.** Four of the six undecidable verdict relations
+  were acceptance holes — with `default-error` above `cycle`, a machine verifies clean and
+  never terminates.
+
+Recorded in **decision 0023**; decision 0021 is **annotated** at two sentences that were
+never true, per this repository's rule for a record rather than an instruction.
+
+**Left open deliberately, and not to be read as closed:** `pass-reachability` walks
+`all-out-targets`, so a node reachable only through an untakeable EOF edge counts as
+reached. The old :908 filter was answering that question by accident; it is its own §16.2
+question and now has no accidental answer.
+
+Plan: `docs/plans/milestone-5-slice-0b-implementation-plan.md`.

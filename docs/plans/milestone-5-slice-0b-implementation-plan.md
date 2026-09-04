@@ -212,10 +212,24 @@ as "any state an execution can occupy", or a later slice will re-derive it wrong
   a raise-catch, re-measured and re-pinned; AGENTS.md prefers comparisons because a raise usually
   depends on where the mutant happens to crash, and here it crashes at the decision's own site,
   which is the case that preference exempts.
-- [ ] **T7 — records and the whole-branch sweep.** Decision 0023; 0021's annotations; the dated
-  disposition appended at `byte-machine-implementation-plan.md:1802` (**file is 1879 lines;
-  append, never insert**). Re-run the `verify.sls` sweep in **both** directions and confirm the
-  **twelve** `EXPECT_SURVIVES` directives are unchanged.
+- [x] **T7 — records and the whole-branch sweep.** Done. Decision **0023** states the affirmative
+  rules; **0021 is annotated** at its header and at items 1 and 5, the two sentences that were
+  never true; the parent plan gains a *delivered* disposition by append (hunk
+  `@@ -1917,0 +1918,32 @@`, nothing above line 1802 moved).
+
+  **Sweep: 80 pins, 6320 ordered pairs, 36 collisions value-sensitive** (100 under the stricter
+  value-insensitive key), and the **twelve** `EXPECT_SURVIVES` directives are unchanged.
+
+  *The sweep earned its place.* It found the tier pins (T6) nesting inside the entry pin (T4) —
+  because the join fixtures put the field-branch **at the entry**, so they depended on T4's
+  decision rather than T6's. Moving the branch one hop, reached as a dispatch's eof-target,
+  separates them: `s0` still starts a walk through its *other* disjunct. The relocated fixtures
+  are also cleaner — `br` is EOF-only-reachable, so the `finish` variant no longer trips §16.2:908
+  and the join is the only thing asserted.
+
+  What remains is the broad-break class the project already records as unfixable by anchoring: a
+  mutation that disables a diagnostic, a join, or a successor set entirely subsumes one that
+  merely re-tiers a verdict. **No ⓪b pin nests inside another ⓪b pin.**
 
 ## §6 Hazards
 
