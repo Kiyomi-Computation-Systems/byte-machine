@@ -167,9 +167,23 @@ as "any state an execution can occupy", or a later slice will re-derive it wrong
   A second case pins the shape people actually want (`§12.4:725`: an entry that *routes* EOF to a
   finish), so the clause cannot be widened into `eof-machine.sls` by a later slice. Census moved
   **29 → 30**; second red run, second re-baseline.
-- [ ] **T4 — `:909` becomes the parked-set block (D-1).** Failing fixtures for all four D-1
-  cells **plus the two already-correct one-hop controls, which must stay at exactly one
-  finding** — that is the anti-duplication pin.
+- [x] **T4 — `:909` becomes the parked-set block (D-1).** Done. Two blocks — one enumerating
+  three kinds and classifying each one's eof-*target*, one for byte-reachable pauses — became one
+  walk over the states a parser can be parked on, classifying each node as **itself**. The entry
+  is in the set exactly once, so the four D-1 cells are now rejected and the two one-hop controls
+  still report **exactly one** finding each: the anti-duplication pin holds.
+
+  **Two shipped cases re-baselined, both keeping their full strength rather than being lowered.**
+  `eofcyc`'s `seq` and `combined5`'s `x` and `seq` were reachable from nowhere or only as
+  eof-targets, so they no longer start walks; each was made **byte-reachable** instead, which
+  preserves the intent (`eofcyc`: a cycle *through a sequence node*) and the discriminating count
+  (`combined5`: three findings, not one).
+
+  **Five anchors removed** with residue recorded, **four added** — including Slice ⓪ Task 1's
+  pin, *re-anchored rather than deleted*: its decision is intact and its fixture byte-identical
+  under the new walk, only the code moved. The census pin from Task 6a also needed re-anchoring
+  onto the surviving `eof-reachable-stop` site. Census **30 → 28**, its third re-baseline in
+  three commits.
 - [ ] **T5 — the edge/source label (§16.4:940, OQ-4).** Two isolating fixtures no axis of the
   230-cell matrix builds: `case 65 → stop, case 66 → finish, fallback → stop`, and its sequence
   twin.

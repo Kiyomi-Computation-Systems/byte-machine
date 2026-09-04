@@ -88,7 +88,7 @@
     (missing-target 2) (missing-error-declaration 1) (invalid-field-declaration 2)
     (invalid-field-operand 6) (overlapping-cases 1) (ambiguous-sequence-prefix 1)
     (unreachable-node 1) (zero-progress-cycle 1) (invalid-eof-target 2)
-    (non-eof-into-finish 2) (eof-reachable-stop 2) (eof-zero-progress-cycle 2)
+    (non-eof-into-finish 2) (eof-reachable-stop 1) (eof-zero-progress-cycle 1)
     (invalid-name 3)))
 
 ;; *** RE-MEASURED 2026-09-03, Slice ⓪b task 2: `non-eof-into-finish` went 3 -> 1
@@ -102,6 +102,12 @@
 ;; Then 29 -> 30 at task 3, which ADDS a site: the zero-hop clause for an entry
 ;; that is itself a finish terminal. Two moves, two commits, two red runs -- the
 ;; table is doing its job in both directions.
+;;
+;; Then 30 -> 28 at task 4, which collapses the two §16.2:909 blocks into one
+;; walk over the parked set: `eof-reachable-stop` and `eof-zero-progress-cycle`
+;; each go 2 -> 1. THREE re-baselines in three commits, each caught on the commit
+;; that caused it. A site table that never moves is a table nobody is editing
+;; underneath; one that moves silently is the defect this file exists to prevent.
 
 (harness-group "the diagnostic code set is derived from verify.sls, not declared here"
   (lambda ()

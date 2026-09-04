@@ -812,44 +812,58 @@
        ;; whose EOF chain reached a stop terminal was accepted although
        ;; `eof-reachable-stop` exists to reject exactly that. Found by the
        ;; whole-branch review; both shapes are now fixtures.
-       (apply append
-              (map (lambda (n)
-                     (if (or (byte-dispatch-node? n) (sequence-dispatch-node? n)
-                             (integer-accumulate-node? n))
-                         (let ((t (node-eof-target n)))
-                           (if (symbol? t)
-                               (case (eof-terminal m t)
-                                 ((eof-reachable-stop)
-                                  (list (make-diagnostic 'eof-reachable-stop (node-name n)
-                                                         "an EOF path reaches a stop terminal")))
-                                 ((cycle)
-                                  (list (make-diagnostic 'eof-zero-progress-cycle (node-name n)
-                                                         "an EOF path cycles without reaching a terminal")))
-                                 (else '()))
-                               '()))
-                         '()))
-                   nodes))
-       ;; D4(b)/(d): checks keyed on byte-reachability. A feed pause parks
-       ;; current on its continuation and resume returns the row to ready, so
-       ;; every byte-reachable pause's continuation is both a feed re-entry
-       ;; point (:908 -- it must not be a finish terminal) and a possible EOF-
-       ;; processing start (:909 -- its chain must reach finish or error,
-       ;; never a stop, never a cycle).
-       (let ((br (byte-reached m)))
-         (append
-          (apply append
-                 (map (lambda (n)
-                        (if (and (pause-node? n) (memq (node-name n) br))
-                            (case (eof-terminal m (pause-node-continuation n))
-                              ((eof-reachable-stop)
-                               (list (make-diagnostic 'eof-reachable-stop (node-name n)
-                                                      "an EOF path reaches a stop terminal")))
-                              ((cycle)
-                               (list (make-diagnostic 'eof-zero-progress-cycle (node-name n)
-                                                      "an EOF path cycles without reaching a terminal")))
-                              (else '()))
-                            '()))
-                      nodes)))))))
+       ;; *** Slice ⓪b: the start set is the PARKED set, derived. ***
+       ;;
+       ;; The old shape enumerated source KINDS and classified each one's
+       ;; eof-TARGET, and `machine-entry` was in no kind's list -- so the EOF path
+       ;; that begins at the entry was never classified, though `parser-finish!`
+       ;; on a fresh or reset parser starts precisely there. Measured: `entry = a
+       ;; stop node` verified with ZERO diagnostics and returned `stopped`, while
+       ;; the identical property one hop away was correctly rejected.
+       ;;
+       ;; The set below is the states an execution can be parked on: the entry,
+       ;; every byte-reachable pause (whose continuation `current` is left on),
+       ;; and every byte-reachable node carrying its own EOF route. Because it is
+       ;; a SET, the entry appears exactly once -- so a machine whose entry is
+       ;; also a dispatch with an eof-target reports ONE finding, not two. The
+       ;; naive fix, a second walk start bolted onto the entry, double-reports
+       ;; there, and the only filter that suppresses it is a per-kind census of
+       ;; the entry: the construct that shipped three Slice ③ defects.
+       ;;
+       ;; Each node is classified as ITSELF rather than by its eof-target, which
+       ;; unifies the two old blocks -- `classify` on a dispatch already follows
+       ;; its eof-target and on a pause already joins over its continuation -- so
+       ;; the reported node stays where it was and no shipped `diagnostic-node`
+       ;; assertion moves.
+       ;;
+       ;; This NARROWS decision 0011 item 4(a)'s literal "reachable from any
+       ;; state": a graph node no execution can occupy is not a state that
+       ;; originates a traversal. Recorded in decision 0023 rather than left for
+       ;; a later slice to re-derive.
+       (let ((br909 (byte-reached m)))
+         (apply append
+                (map (lambda (n)
+                       (if (and (memq (node-name n) br909)
+                                (or (eq? (node-name n) (machine-entry m))
+                                    (pause-node? n)
+                                    (symbol? (node-eof-target n))))
+                           (case (eof-terminal m (node-name n))
+                             ((eof-reachable-stop)
+                              (list (make-diagnostic 'eof-reachable-stop (node-name n)
+                                                     "an EOF path reaches a stop terminal")))
+                             ((cycle)
+                              (list (make-diagnostic 'eof-zero-progress-cycle (node-name n)
+                                                     "an EOF path cycles without reaching a terminal")))
+                             (else '()))
+                           '()))
+                     nodes)))
+       ;; The D4(b)/(d) pause blocks that stood here are SUBSUMED (Slice ⓪b):
+       ;; the :908 half by the derived byte-reachability block above, and the
+       ;; :909 half by the parked set, which includes every byte-reachable pause
+       ;; and classifies it through the same `eof-terminal` call. Both were gated
+       ;; on `byte-reached` already; the gate is now the whole rule rather than
+       ;; one kind's special case.
+       )))
 
   ;; PASS 7: generated-name safety (member 1) — machine, node, error names/codes.
   (define (pass-names-valid m)

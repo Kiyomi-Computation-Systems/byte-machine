@@ -864,7 +864,17 @@
         (check "eof-zero-progress-cycle"
                (has-code?
                 (make-machine 'eofcyc 'start '() '() '() errs
-                  (list (dispatch (list accept-case) (make-edge 'reject 'reexecute))
+                  ;; *** Slice ⓪b: `seq` needs an inbound BYTE case. *** The EOF
+                  ;; walk now starts only from states a parser can be parked on,
+                  ;; and `seq` was reachable from nowhere -- so its self-cycling
+                  ;; eof-target is unreachable and correctly no longer reported.
+                  ;; The case's intent is that a cycle THROUGH A SEQUENCE NODE is
+                  ;; caught, so the sequence node is made reachable rather than
+                  ;; the expectation weakened.
+                  (list (dispatch (list accept-case
+                                        (make-byte-case (make-exact-byte-matcher 7)
+                                                        (make-edge 'seq 'advance) #f))
+                                  (make-edge 'reject 'reexecute))
                         (seq-node (one-alt '(1 2) 'stop) (make-edge 'reject 'reexecute) 'seq)
                         (make-stop-node 'stop #f)
                         (make-error-node 'reject 'rejected #f))
@@ -996,7 +1006,21 @@
                                       (make-machine 'combined5 'start '() '() '() errs
                                         (list (make-byte-dispatch-node 'x '()
                                                 (make-edge 'reject 'reexecute) 'x #f)
-                                              (make-byte-dispatch-node 'start (list accept-case)
+                                              ;; *** Slice ⓪b: `x` and `seq` need inbound BYTE
+                                              ;; cases. *** The EOF walk now starts only from
+                                              ;; states a parser can be parked on. `x` was
+                                              ;; reachable from nowhere and `seq` only as an
+                                              ;; eof-target, so neither started a walk and the
+                                              ;; count fell to 1. Both are made byte-reachable,
+                                              ;; which keeps all THREE findings and the case's
+                                              ;; full discriminating power, rather than lowering
+                                              ;; the expectation to match the new rule.
+                                              (make-byte-dispatch-node 'start
+                                                (list accept-case
+                                                      (make-byte-case (make-exact-byte-matcher 7)
+                                                                      (make-edge 'x 'advance) #f)
+                                                      (make-byte-case (make-exact-byte-matcher 8)
+                                                                      (make-edge 'seq 'advance) #f))
                                                 (make-edge 'reject 'reexecute) 'seq #f)
                                               (seq-node (one-alt '(1 2) 'stop) (make-edge 'reject 'reexecute) 'start)
                                               (make-stop-node 'stop #f)
@@ -1856,5 +1880,79 @@
                                 'default-eof #f))))
           (check "accepted" (verification-ok? v))
           (check-equal "no diagnostics" (length (verification-diagnostics v)) 0))))))
+
+;; Milestone 5 Slice ⓪b task 4: the §16.2:909 walk starts from the states a
+;; parser can be PARKED on -- which includes the ENTRY, and did not (D-1).
+;;
+;; `eof-terminal` was called from exactly two sites, and `machine-entry` was
+;; neither, although `parser-finish!` on a fresh or reset parser starts precisely
+;; there. So the EOF path that begins AT the entry was never classified.
+;;
+;; *** Measured before the fix: `entry = a stop node` verified with ZERO
+;; diagnostics and `parser-finish!` returned `stopped`. *** The identical
+;; property one hop away -- a dispatch whose eof-target is that stop, or a pause
+;; whose continuation is -- was correctly rejected with `eof-reachable-stop`.
+;; §16.2:909 forbids the first by name.
+;;
+;; The naive fix (bolt a second walk start onto the entry) DOUBLE-REPORTS
+;; wherever the entry is already a start, and the only filter that suppresses
+;; that is a per-kind census of the entry -- the construct that shipped three
+;; Slice ③ defects. The shape used instead is a SET of parkable states, so the
+;; entry appears exactly once by construction. The two one-hop controls below are
+;; the anti-duplication pin: they must stay at exactly ONE finding.
+(define (t4-machine entry-kind)
+  (let ((nodes
+         (case entry-kind
+           ;; D-1's four cells: the entry itself terminates an EOF path badly.
+           ((stop) (list (make-stop-node 'e #f)))
+           ((field-action)
+            (list (make-field-action-node 'e 'clear '(n) 'stop #f #f) (make-stop-node 'stop #f)))
+           ((field-branch)
+            (list (make-field-branch-node 'e 'zero '(n) 'stop 'stop #f) (make-stop-node 'stop #f)))
+           ;; The two one-hop controls, already correct today.
+           ((dispatch-eof)
+            (list (make-byte-dispatch-node 'e
+                    (list (make-byte-case (make-exact-byte-matcher 0)
+                                          (make-edge 'stop 'advance) #f))
+                    (make-edge 'rej 'reexecute) 'stop #f)
+                  (make-stop-node 'stop #f) (make-error-node 'rej 'rejected #f)))
+           ((pause-cont)
+            (list (make-pause-node 'e 'stop #f) (make-stop-node 'stop #f)))
+           (else (assertion-violation 't4-machine "no such entry kind" entry-kind)))))
+    (make-machine 'x 'e (list (make-uint-field 'n 8 0 #f)) '() '()
+                  (list eof-decl rej-decl) nodes 'default-eof #f)))
+
+(harness-group "the §16.2:909 walk starts at the entry too (Slice ⓪b)"
+  (lambda ()
+    (harness-case "an entry whose own EOF path reaches a stop is rejected"
+      (lambda ()
+        ;; The four D-1 cells. Each verified CLEAN before this task.
+        (let ((seen 0) (bad '()))
+          (for-each (lambda (k)
+                      (set! seen (+ seen 1))
+                      (let ((ds (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                                     (verification-diagnostics
+                                      (verify-machine (t4-machine k))))))
+                        (unless (equal? ds '((eof-reachable-stop . e)))
+                          (set! bad (cons (cons k ds) bad)))))
+                    '(stop field-action field-branch))
+          (check-equal "three entry kinds driven" seen 3)
+          (check-equal "each rejected exactly once, at the entry" bad '()))))
+    (harness-case "the one-hop controls still report exactly ONE finding"
+      (lambda ()
+        ;; The anti-duplication pin. Both of these were already correct; the risk
+        ;; the fix introduces is reporting them TWICE, once for the entry start
+        ;; and once for the node's own. A set of parkable states cannot.
+        (let ((seen 0) (bad '()))
+          (for-each (lambda (k)
+                      (set! seen (+ seen 1))
+                      (let ((ds (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                                     (verification-diagnostics
+                                      (verify-machine (t4-machine k))))))
+                        (unless (equal? ds '((eof-reachable-stop . e)))
+                          (set! bad (cons (cons k ds) bad)))))
+                    '(dispatch-eof pause-cont))
+          (check-equal "both controls driven" seen 2)
+          (check-equal "each reports once, not twice" bad '()))))))
 
 (harness-finish)
