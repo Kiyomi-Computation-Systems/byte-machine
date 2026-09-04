@@ -1947,3 +1947,37 @@ reached. The old :908 filter was answering that question by accident; it is its 
 question and now has no accidental answer.
 
 Plan: `docs/plans/milestone-5-slice-0b-implementation-plan.md`.
+
+### §25:1611 — Milestone 5 Slice ⓪, delivered
+
+**2026-09-03.** Milestone 7's scope is unchanged; this records what the hardening slice before
+Milestone 5 actually built, and one thing it deliberately did not.
+
+- **A diagnostic census** derived from the artifact: `verify.sls` is read as a datum and walked
+  for emission sites, so the code set, the per-code site counts and the fourteen operand names
+  are never declared in a test. It ships **green** — it would not have caught any of Slice ③'s
+  three defects, and the plan says so — and its value is the ratchet: a new code, or a new site
+  under an existing code, fails it until accounted for. It fired **four times** during Slice ⓪b,
+  each on the commit that moved it.
+- **A kind × position matrix**: 144 cells over nine kinds and sixteen positions, plus 19
+  self-reference cells, 15 dangling cells, a 16-entry absence census and a 25-cell verdict
+  lattice. Expected verdicts are **derived from §16.2 before the machine is run**, never
+  observed — the mandate that would otherwise have frozen four live defects into an artifact
+  reading as authoritative.
+- **The operand-schema drift row**, which closes an unchecked agreement between two files whose
+  own comment called a mismatch "unreachable through the public API" — verbatim the shape of
+  Slice ③'s first Critical.
+
+**Two ordering facts worth keeping.** The slice was **reordered mid-flight**: Tasks 2–5 were
+scheduled before Slice ⓪b and moved after it, because the stated reason for the original order
+— that fixing D-1 would collide with §16.4:937-943's one-finding-per-decision — rested on a rule
+that **does not exist** in §16.4. Run in the new order, all 144 cells matched on the first clean
+run; in the old order, four would have been red on arrival. And the matrix was measured
+**unable to witness ⓪b's central decision** (the byte-reachability gate moves zero cells), so it
+never was the instrument that justified the wait.
+
+**Axes E and F of the plan are not built**, recorded here rather than left as an unticked box:
+their purpose was converting Slice ③'s defects from raise-caught to comparison-caught, and ⓪b
+removed those raises at the source.
+
+Plan: `docs/plans/milestone-5-slice-0-implementation-plan.md`.

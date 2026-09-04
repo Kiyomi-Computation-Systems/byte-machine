@@ -269,7 +269,10 @@ which exists and means §12.7's parser-error position kinds — an unrelated thi
   set stops matching the pinned table, and the source-derived loop finds a code nothing emits.
   Both are deliberate: the pinned table alone would let a code be accounted for on paper without
   ever being produced. `release` 96/96, 51 passes / **372** mutations.
-- [ ] **Task 7 — the dispositions append and the mutation registrations.** Append under
+- [x] **Task 7 — the dispositions append and the mutation registrations.** Done; the mutations
+  were registered task by task rather than batched at the end.
+
+  *Original text:* **Task 7 — the dispositions append and the mutation registrations.** Append under
   `## Dated dispositions` at `byte-machine-implementation-plan.md:1802` (file is 1825 lines;
   **never insert above** — AGENTS.md:324). Record OQ-1…OQ-5, the skeleton decision, that the
   census ships **green**, and that the matrix does **not** subsume the differential lanes.
