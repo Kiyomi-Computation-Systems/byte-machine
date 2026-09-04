@@ -54,6 +54,30 @@
 ;; exactly one today -- `make-diagnostic`'s own `(define (make-diagnostic code
 ;; node message) ...)` header -- and that one is subtracted BY NAME below rather
 ;; than by hoping the arithmetic works out.
+;; *** The constructor NAMES are derived, not hardcoded. *** Found by the
+;; whole-branch review: with two names written into this walk, a third
+;; constructor -- and every code emitted through it -- would ship unpinned and
+;; untested while the census stayed green. The set is instead every `(define
+;; (make-diagnostic... ) ...)` in the file, so adding one puts its sites in scope
+;; automatically and its own header into the subtraction below.
+(define (make-diagnostic-name? sym)
+  (and (symbol? sym)
+       (let ((nm (symbol->string sym)) (pre "make-diagnostic"))
+         (and (>= (string-length nm) (string-length pre))
+              (string=? (substring nm 0 (string-length pre)) pre)))))
+
+(define diagnostic-constructors
+  (let loop ((x (car verify-src)) (acc '()))
+    (cond ((pair? x)
+           (let ((acc (if (and (eq? (car x) 'define) (pair? (cdr x)) (pair? (cadr x))
+                               (make-diagnostic-name? (car (cadr x)))
+                               (not (memq (car (cadr x)) acc)))
+                          (cons (car (cadr x)) acc)
+                          acc)))
+             (loop (cdr x) (loop (car x) acc))))
+          ((vector? x) (loop (vector->list x) acc))
+          (else acc))))
+
 (define (walk-diagnostics x)
   ;; Both constructors count. `make-diagnostic/edge` (Slice ⓪b task 5) carries
   ;; §16.4:940's edge label; it is an emission site exactly as much as the
@@ -62,7 +86,7 @@
   ;; to prevent, one level up.
   (let loop ((x x) (codes '()) (total 0))
     (cond ((pair? x)
-           (if (memq (car x) '(make-diagnostic make-diagnostic/edge))
+           (if (memq (car x) diagnostic-constructors)
                (let* ((a (and (pair? (cdr x)) (cadr x)))
                       (q (and (pair? a) (eq? (car a) 'quote) (cadr a))))
                  (let-values (((c t) (loop (cdr x) codes (+ total 1))))
@@ -131,8 +155,13 @@
         ;; `make-diagnostic/edge`. Subtracted BY NAME and BY COUNT: if a future
         ;; site computes its code dynamically, this goes red rather than the site
         ;; slipping out of the census unnoticed.
-        (check-equal "quoted sites plus the two definition headers"
-                     (+ (length (census-codes the-census)) 2)
+        ;; One header per constructor, counted from the DERIVED set rather than
+        ;; from the literal 2 this used to carry.
+        (check "at least two diagnostic constructors were found"
+               (>= (length diagnostic-constructors) 2))
+        (check-equal "quoted sites plus one header per constructor"
+                     (+ (length (census-codes the-census))
+                        (length diagnostic-constructors))
                      (census-total the-census))))
     (harness-case "the code set and the per-site counts match the pinned table"
       (lambda ()

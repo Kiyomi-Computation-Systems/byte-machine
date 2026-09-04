@@ -2011,6 +2011,55 @@
           (check-equal "alternative and mismatch, labelled"
                        ds '((non-eof-into-finish s alternative)
                             (non-eof-into-finish s mismatch))))))
+    (harness-case "the other four kinds label their edges too"
+      (lambda ()
+        ;; *** Added by the whole-branch review: nine of the thirteen role labels
+        ;; had no test and no pin. *** The dispatch and sequence cases above
+        ;; covered four; a role that is never asserted is a slot that can be
+        ;; wired to the wrong accessor, or to a constant, without anything
+        ;; failing -- which is the same shape as a label that is always present.
+        ;;
+        ;; Each machine points EVERY byte out-edge of one kind at a finish
+        ;; terminal, so the full role set for that kind is asserted at once, as a
+        ;; multiset rather than a membership test.
+        (let ((seen 0) (bad '()))
+          (for-each
+           (lambda (row)
+             (set! seen (+ seen 1))
+             (let* ((nm (car row)) (nodes (cadr row)) (want (caddr row))
+                    (got (map (lambda (d) (list (diagnostic-code d) (diagnostic-node d)
+                                                (diagnostic-edge d)))
+                              (verification-diagnostics
+                               (verify-machine
+                                (make-machine 'roles3 'd (list (make-uint-field 'n 8 0 #f))
+                                              '() '() (list eof-decl rej-decl)
+                                              (append
+                                               (list (make-byte-dispatch-node 'd
+                                                       (list (make-byte-case
+                                                              (make-exact-byte-matcher 0)
+                                                              (make-edge nm 'advance) #f))
+                                                       (make-edge 'rj 'reexecute) #f #f)
+                                                     (make-finish-node 'fin #f)
+                                                     (make-error-node 'rj 'rejected #f))
+                                               nodes)
+                                              'default-eof #f))))))
+               (unless (equal? want got) (set! bad (cons (list nm 'want want 'got got) bad)))))
+           (list
+            (list 'ac (list (make-integer-accumulate-node 'ac 'n 10 'fin
+                                                          (make-edge 'fin 'advance) 'fin #f #f))
+                  '((non-eof-into-finish ac digit)
+                    (non-eof-into-finish ac nondigit)
+                    (non-eof-into-finish ac overflow)))
+            (list 'fa (list (make-field-action-node 'fa 'increment '(n) 'fin 'fin #f))
+                  '((non-eof-into-finish fa next)
+                    (non-eof-into-finish fa error)))
+            (list 'fb (list (make-field-branch-node 'fb 'zero '(n) 'fin 'fin #f))
+                  '((non-eof-into-finish fb true)
+                    (non-eof-into-finish fb false)))
+            (list 'p (list (make-pause-node 'p 'fin #f))
+                  '((non-eof-into-finish p continuation)))))
+          (check-equal "four kinds driven" seen 4)
+          (check-equal "every role label is the accessor's own" bad '()))))
     (harness-case "a diagnostic with no applicable edge carries #f"
       (lambda ()
         ;; "Where applicable" is half the requirement. A finding that is about a
@@ -2096,6 +2145,21 @@
                                    (make-error-node 'rj2 'rejected #f))
                              'x))))
                      '((eof-reachable-stop . s0)))))
+    (harness-case "an UNRESOLVED sibling does not mask the stop"
+      (lambda ()
+        ;; The sixth verdict, and the one the tier group did not cover until the
+        ;; whole-branch review found it. `classify` answers `'unresolved` for an
+        ;; EOF successor naming no node; the machine is rejected either way (the
+        ;; dangling name is its own finding), but the §16.2:909 violation is
+        ;; reported ONLY because `unresolved` sits in the benign tier and loses
+        ;; the join. Move it up one tier and the stop is silently masked.
+        (check-equal "both findings: the dangling name AND the stop"
+                     (list-sort (lambda (a b) (string<? (symbol->string a)
+                                                        (symbol->string b)))
+                                (map diagnostic-code
+                                     (verification-diagnostics
+                                      (verify-machine (t6-join-machine '() 'nowhere)))))
+                     '(eof-reachable-stop missing-target))))
     (harness-case "a `finish` sibling does not mask the stop either"
       (lambda ()
         ;; Moving the branch off the entry made this case cleaner as well as

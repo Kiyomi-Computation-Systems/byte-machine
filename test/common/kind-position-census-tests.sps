@@ -30,6 +30,17 @@
 (import (rnrs)
         (byte-machine test harness)
         (byte-machine graph)
+        ;; The kind PREDICATES, for the row-key check below. They come from the
+        ;; private library rather than from `(byte-machine graph)`, whose header
+        ;; states that reading a built machine back is deliberately not part of
+        ;; the construction surface -- widening that for a test would be trading
+        ;; a documented contract for a convenience. Importing a private library
+        ;; is the shipped practice for tests that need internals
+        ;; (field-access-tests.sps does it for `normal-ir` and `conditions`).
+        (only (byte-machine private ir)
+              byte-dispatch-node? sequence-dispatch-node? stop-node? error-node?
+              finish-node? pause-node? field-action-node? field-branch-node?
+              integer-accumulate-node?)
         (byte-machine verify))
 
 (harness-begin "unit.kind-position-census")
@@ -137,6 +148,22 @@
                                    (make-integer-accumulate-node 'ac 'n 10 'ac
                                      (make-edge 'ee 'advance) 'ee 't #f)))))))
 
+;; *** Every row must BUILD the kind it is keyed by. *** Found by the
+;; whole-branch review: without this, swapping one builder for another kind's
+;; leaves the whole suite green while sixteen cells silently test the wrong kind
+;; and the kind they claim to test disappears from the matrix entirely. A table
+;; keyed by a name nothing checks is a census with no census.
+(define kind-predicates
+  (list (cons 'byte-dispatch byte-dispatch-node?)
+        (cons 'sequence-dispatch sequence-dispatch-node?)
+        (cons 'stop stop-node?)
+        (cons 'error error-node?)
+        (cons 'finish finish-node?)
+        (cons 'pause pause-node?)
+        (cons 'field-action field-action-node?)
+        (cons 'field-branch field-branch-node?)
+        (cons 'integer-accumulate integer-accumulate-node?)))
+
 (define (position-name p) (car p))
 (define (position-byte? p) (cadr p))
 (define (position-eof? p) (caddr p))
@@ -202,12 +229,13 @@
         ;; S1: the count is read from the loop as it runs, and compared against a
         ;; product computed in a SEPARATE expression. A cell that never ran
         ;; cannot satisfy the comparison below vacuously.
-        (let ((driven 0) (bad '()))
+        (let ((driven 0) (bad '()) (pruned 0))
           (for-each
            (lambda (p)
              (for-each
               (lambda (kv)
                 (set! driven (+ driven 1))
+                (unless (cdr (observe p (car kv))) (set! pruned (+ pruned 1)))
                 (let ((want (list-sort (lambda (a b) (string<? (symbol->string a)
                                                                (symbol->string b)))
                                        (expected-codes p (car kv))))
@@ -219,7 +247,15 @@
            position-table)
           (check-equal "every cell was driven"
                        driven (* (length position-table) (length kind-table)))
-          (check-equal "and every one matches §16.2" bad '()))))))
+          (check-equal "and every one matches §16.2" bad '())
+          ;; *** The pruned skeleton is ASSERTED, not merely computed. *** The
+          ;; comment above claimed the surviving sink set was part of each cell's
+          ;; recorded value; the whole-branch review found it was computed and
+          ;; thrown away, so a change that stopped pruning altogether left the
+          ;; matrix green. This is an OBSERVED count: three cells drop the sink,
+          ;; and they are exactly the three terminal kinds placed AT THE ENTRY,
+          ;; where nothing else in the machine can reference it.
+          (check-equal "exactly three cells prune the sink" pruned 3))))))
 
 ;; S2: the closed-set drift row. `node?`'s disjunct list in ir.sls IS the set of
 ;; kinds; the table above must cover it exactly. THIS is the row that goes red
@@ -246,6 +282,27 @@
                    (map car (cdr body))
                    #f)))
             (else (or (loop (car x)) (loop (cdr x))))))))
+
+(harness-group "each kind row builds the kind it is keyed by"
+  (lambda ()
+    (harness-case "the builder's product satisfies its key's predicate"
+      (lambda ()
+        ;; The predicate table is keyed the same way as the builder table, and S2
+        ;; below checks that key set against ir.sls -- so a kind cannot be missing
+        ;; from BOTH without S2 noticing.
+        (let ((checked 0) (bad '()))
+          (for-each
+           (lambda (kv)
+             (let ((pred (assq (car kv) kind-predicates)))
+               (if (not pred)
+                   (set! bad (cons (list (car kv) 'no-predicate) bad))
+                   (begin
+                     (set! checked (+ checked 1))
+                     (unless ((cdr pred) ((cdr kv) 't))
+                       (set! bad (cons (list (car kv) 'wrong-kind) bad)))))))
+           kind-table)
+          (check-equal "every builder was checked" checked (length kind-table))
+          (check-equal "and each builds its own kind" bad '()))))))
 
 (harness-group "the kind table covers exactly ir.sls's closed set (S2)"
   (lambda ()

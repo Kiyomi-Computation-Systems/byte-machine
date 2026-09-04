@@ -693,9 +693,21 @@
   ;;
   ;; All six symbols are KEPT. Milestone 5's span check needs `finish`
   ;; distinguished from `error` at `classify`, and 0021 item 3's loud-else
-  ;; discipline forbids merging arms. `unresolved` is currently UNPRODUCIBLE --
-  ;; the only site that answered it is now a loud raise, below -- and stays
-  ;; listed so that a future producer is ranked rather than raising here.
+  ;; discipline forbids merging arms.
+  ;;
+  ;; *** CORRECTED 2026-09-03, whole-branch review: this said `unresolved` is
+  ;; UNPRODUCIBLE. It is not. *** `classify`'s `((not n) 'unresolved)` arm below
+  ;; still answers it, for any EOF successor naming no node -- reached today, by
+  ;; two routes (a dispatch's dangling eof-target, and a zero-width arm naming
+  ;; nothing). What became a loud raise is `join-over`'s EMPTY join, a different
+  ;; site; I generalised from one to the other without checking.
+  ;;
+  ;; So `unresolved`'s tier is load-bearing: a machine whose EOF chain reaches a
+  ;; dangling name AND a stop must still report the stop, which happens only
+  ;; because `unresolved` loses the join. That is now a fixture and a pin --
+  ;; without them the claim two paragraphs up, that tiers make every assignment a
+  ;; single-token mutation caught by a failed comparison, was false for one of
+  ;; the six.
   (define eof-verdict-tiers
     '((finish unresolved error default-error)   ; the chain terminates
       (eof-reachable-stop)                      ; §16.2:909

@@ -837,6 +837,10 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Whole-branch review: the verify pass gains TWO -- `unresolved`'s tier, which
+# was load-bearing and unwitnessed, and the zero-width kinds' edge roles, nine
+# of thirteen of which had no witness. Mutations 374 + 2 = 376.
+#
 # Milestone 5 Slice ⓪ task 5: the verdict lattice joins pass 52. Mutations
 # 373 + 1 = 374.
 #
@@ -998,7 +1002,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 52)
-set(EXPECTED_MUTATIONS 374)
+set(EXPECTED_MUTATIONS 376)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -5320,15 +5324,24 @@ byte_machine_mutation(
   # real violation -- a dispatch whose SECOND case targets a finish.
   # Re-anchored at Slice ⓪b task 5: node-out-targets is now a derived view of
   # node-out-edges, whose arms yield (role . target) pairs.
+  # *** Re-shaped by the whole-branch review: this REPLACE was caught by a CRASH,
+  # not by the decision its label names. *** `(car '())` raises on any node with
+  # no out-edges, so 109 of 116 cases failed with the identical
+  # "Exception in car: () is not a pair" -- including the case the pin's own
+  # regex anchors on. AGENTS.md prefers a comparison precisely because a raise
+  # depends on where the mutant happens to crash. Taking the LAST edge instead
+  # keeps the mutation total (it still reads one edge of many) and makes the
+  # failure a comparison on the case that names the decision.
   FIND [[                                        (node-out-edges n)))
                            '()))
                      nodes)))]]
-  REPLACE [[                                        (list (car (node-out-edges n)))))
+  REPLACE [[                                        (let ((es (node-out-edges n)))
+                                          (if (null? es) '() (list (car es))))))
                            '()))
                      nodes)))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "a byte case targeting a finish node is rejected")
-
+  EXPECT_OUTPUT_MATCHES
+    "a byte-dispatch's case and fallback into one finish are two distinguishable findings")
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: the entry being a finish terminal is not rejected (Slice ⓪b, OQ-2)"
@@ -5474,6 +5487,40 @@ byte_machine_mutation(
       (eof-reachable-stop default-error)        ; §16.2:909]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "a `default-error` sibling does not mask the stop")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: unresolved is promoted out of the benign tier"
+  # Added by the whole-branch review, which found this tier assignment
+  # LOAD-BEARING AND UNWITNESSED -- while the source claimed the verdict was
+  # unproducible and the tier comment claimed every assignment was a one-token
+  # caught mutation. Both were false for this one symbol. `classify` still
+  # answers `'unresolved` for an EOF successor naming no node, and a machine
+  # whose chain reaches a dangling name AND a stop reports the stop only because
+  # `unresolved` loses the join.
+  FIND [[    '((finish unresolved error default-error)   ; the chain terminates
+      (eof-reachable-stop)                      ; §16.2:909
+      (cycle)))                                 ; 0021 item 1]]
+  REPLACE [[    '((finish error default-error)              ; the chain terminates
+      (eof-reachable-stop)                      ; §16.2:909
+      (cycle unresolved)))                      ; 0021 item 1]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "an UNRESOLVED sibling does not mask the stop")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the zero-width kinds report one role for all their edges"
+  # Added by the whole-branch review, which found NINE of the thirteen role
+  # labels with no test and no pin -- so a role could be wired to the wrong
+  # accessor, or to a constant, for four of the six kinds without anything
+  # failing. That is the same shape as a label that is always present: there,
+  # carrying no information; here, carrying the wrong one.
+  FIND [[          ((or (field-action-node? n) (field-branch-node? n))
+           (zero-width-edges n))]]
+  REPLACE [[          ((or (field-action-node? n) (field-branch-node? n))
+           (map (lambda (re) (cons 'next (cdr re))) (zero-width-edges n)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the other four kinds label their edges too")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
