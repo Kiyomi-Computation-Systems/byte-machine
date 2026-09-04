@@ -14,6 +14,9 @@ Milestone: 5, Gate 0 (milestone-5-design.md §4.3, §4.8)
 >   slice's final review: its "the mutant is self-consistent and the row stays
 >   green" does not follow, and its `cmake:1150` is now `:1157`. Per this
 >   directory's README, an annotation on a note rides that note's bullet.)*
+> - **2026-09-04 (Milestone 5, Slice ①b planning)** — **amends** the trailing-section
+>   SHAPE recorded by the execution note below: two guarded tables with no section
+>   discriminator are ambiguous, so each present section gains a one-byte tag.
 > - **2026-09-04 (Milestone 5, Slice ①a execution)** — **amends point 4**: its
 >   allocation of point 1's encoding shape to Slice ①a. There is no artifact move
 >   to pay, so the seam argument does not reach it; ①b lands the section with the
@@ -315,3 +318,32 @@ guard because an unconditional count is two bytes on every machine — is record
 at the head of `encode-normal` (`src/byte-machine/private/normal-ir.sls`) so that
 ①b implements a written-down shape rather than re-deriving one. What moves is the
 slice that owns the code.
+
+## 2026-09-04 (Milestone 5, Slice ①b planning) — the recorded shape needed a section tag
+
+The execution note above deferred point 1's encoding section to Slice ①b and
+recorded its shape so ①b would implement a written-down design rather than
+re-derive one. **Measured while writing the ①b plan, the shape as recorded is
+ambiguous.**
+
+`[... state records...][callback table?][span table?]`, each table
+`[u16be count][records...]` wholly inside its own emptiness guard, gives the byte
+stream **no section discriminator**. A machine with one callback and no spans, and
+a machine with no callbacks and one span, both emit `[count][one record]`. They
+differ only if a callback record and a span record can never be byte-equal — and
+`§9.1:284-286` makes both symbol-shaped, so they can collide.
+
+**That would falsify the claim this record's own point 1 rests its rejected
+alternative on** — that declaration identity is fingerprint-visible. Two machines
+declaring different things would share a fingerprint.
+
+**Resolution, and it costs nothing the guard did not already cost:** each *present*
+section writes a one-byte section tag before its count, and the tag lives inside
+the guard. A machine declaring neither still writes **zero bytes**, so point 1's
+byte-identity holds unchanged and no golden moves. Tags 8 and 9 — measured, the
+`(put-u8 p N)` census in `normal-ir.sls` runs 0 through 7 with 8 unused, and a
+second `(put-u8 p 4)` would fail the mutation suite at declaration against its
+bare `FIND`.
+
+The comment at `encode-normal`'s head is an **instruction** and is corrected in
+place by Slice ①b's Task 3. Nothing in point 1 changes.
