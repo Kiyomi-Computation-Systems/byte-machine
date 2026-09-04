@@ -4095,10 +4095,23 @@ byte_machine_mutation(
   # shares. Only the EXPECT_OUTPUT_MATCHES pin -- main's attribution check,
   # which is what let main's audit close this collision at all -- moved over
   # from main's side.
-  FIND [[;; on byte-dispatch-node?, so this arm does not feed it.
-          ((pause-node? n) (list (pause-node-continuation n)))]]
-  REPLACE [[;; on byte-dispatch-node?, so this arm does not feed it.
-          ((pause-node? n) '())]]
+  #
+  # *** Re-anchored a THIRD time, 2026-09-03, and this time OFF the prose. ***
+  # The anchor above was the arm's preceding COMMENT line, chosen because the
+  # bare pause arm occurs three times in this file. That comment stated a reason
+  # that had gone stale -- it named one predicate where the §16.2:908 filter now
+  # names three -- and correcting it broke this FIND (0 occurrences, the suite
+  # hard-failed at declaration). An anchor on prose breaks every time the prose
+  # is corrected, which is the opposite of what an anchor is for.
+  #
+  # The anchor is now the pause arm plus the FOLLOWING clause's first comment
+  # line: measured unique (1 occurrence, against 3 for the bare arm), code-side,
+  # and insensitive to edits of the paragraph above it -- which is the paragraph
+  # that keeps needing them.
+  FIND [[          ((pause-node? n) (list (pause-node-continuation n)))
+          ;; A sequence node's byte out-edges]]
+  REPLACE [[          ((pause-node? n) '())
+          ;; A sequence node's byte out-edges]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "a well-formed pause machine verifies: no unreachable-node")
 
@@ -9129,6 +9142,16 @@ byte_machine_mutation(
   # owns. Caught by the split cases alone -- a single-feed fixture never reaches
   # the guard, which is why fragmentation needed cases of its own rather than
   # being assumed to follow from the dispatch arm's pin.
+  #
+  # *** ANNOTATED 2026-09-03: "by the split cases alone" was true when measured
+  # and is now stale. *** Re-measured on the closed branch, this mutant reddens
+  # FOUR groups -- the split cases, task 6's all-256 partition, task 8's
+  # default-EOF consumer group, and both property.differential lanes -- every one
+  # of them added AFTER this sentence was written. What the pin still rests on is
+  # the claim about SHAPE, which re-measuring does not touch: a single-feed
+  # fixture cannot reach this guard, so fragmentation needed cases of its own.
+  # Left rather than reworded, because a uniqueness claim decaying as the lane
+  # grows around it is the useful record here.
   FIND [[            ((accumulate)
              (if (>= pos end)
                  (make-parser-result 'need-input pos]]

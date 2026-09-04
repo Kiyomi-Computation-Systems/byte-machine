@@ -102,8 +102,12 @@
                    (list (edge-target (byte-dispatch-node-fallback n)))))
           ;; A pause's single zero-width out-edge (§10.6): resolution-checked by
           ;; PASS 2 (a malformed continuation is 'missing-target, §16.2:905) and
-          ;; walked by reachability. The §16.2:908 dispatch check below filters
-          ;; on byte-dispatch-node?, so this arm does not feed it.
+          ;; walked by reachability. The §16.2:908 check below filters on
+          ;; byte-dispatch-node?, sequence-dispatch-node? AND
+          ;; integer-accumulate-node?; a pause is in none of them, so this arm
+          ;; does not feed it. (The conclusion has always held. The stated REASON
+          ;; named one predicate and went stale twice -- most recently when this
+          ;; slice's own fix widened that filter, eight hundred lines below.)
           ((pause-node? n) (list (pause-node-continuation n)))
           ;; A sequence node's byte out-edges: every alternative's target plus
           ;; the mismatch edge's. Feeding this arm also repairs pass-names'

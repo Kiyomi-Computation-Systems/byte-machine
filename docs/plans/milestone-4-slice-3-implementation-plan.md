@@ -19,7 +19,7 @@ comparison over the input-reading kind.
   byte-identical, new files added"* — never "the diff is empty". Verify by value, not by
   `git status`.
 - **Every `file:line` in design §8 is presumed stale.** §8 was written at `a942327`, before ①a,
-  ①b and ② existed; Slice ② alone changed six of the seven files ③ touches. Recon measured
+  ①b and ② existed; Slice ② alone changed **all seven** of the files ③ touches. *(Corrected 2026-09-03: this read "six of the seven"; the two sets are identical — `git diff --name-only f3b5558..14c4f30 -- src/byte-machine/` and the same against `main..HEAD` both list the same seven files, `graph.sls` included.)* Recon measured
   63 hazards, nine blocking. Cite constructs by name.
 - **Correct a stale instruction in place; annotate a stale record.** §8's `reexec-targets`
   instruction is already corrected in the design — read the marker before implementing.
@@ -300,6 +300,11 @@ directions, then the gate.
   **One mutation:** the emitted overflow advances the absolute offset while keeping `pos`, so the
   error still says `byte` about the wrong byte. Measured: the whole release selection under it
   fails exactly the two position-kind lanes, and `differential.field` passes.
+  *(Stale — annotated 2026-09-03. That was true when measured; the mutant now fails **six**
+  behavioural lanes, because Task 9's golden reads the emitted bytes it changes and Task 8's draw
+  puts an accumulate node in front of the property oracle. `differential.field` does still pass,
+  which is the half the pin is for. The identical sentence in the mutation suite was annotated at
+  the time and this copy was missed — a claim written twice goes stale twice.)*
 
   *A mutation's `SPEC` is a label; the program actually run is its pass's verify command.* Written
   into the field pass with a position-kind SPEC, this mutation ran `field-access-tests.sps` and was
@@ -401,9 +406,17 @@ directions, then the gate.
   (where `d` is bound), names all six, renames the case, and pins it.
 
   **H11 restated from measurement.** `release` 94/94, `pr` 94/94, `harness` 34/34, `no-scheme`
-  8/8; 50 passes / 358 mutations; CMake 1/72; **twelve** `EXPECT_SURVIVES`; **78** `verify.sls`
+  8/8; 50 passes / **368** mutations; CMake 1/72; **twelve** `EXPECT_SURVIVES`; **81** `verify.sls`
   pins; **nine** fingerprint literals at **eleven** sites; no existing golden moved and no
   fingerprint literal removed since `51fd5f3`.
+
+  *Re-measured after the whole-branch review (2026-09-03). This line first read "358 mutations"
+  and "78 `verify.sls` pins", both true when Task 10 was written and both stale two commits later:
+  `40ab9a0` added three verify mutations (358→361, and 78→81 pins) and `fb1c55b` added seven to
+  the field pass (361→368). The census table above was re-measured and this summary line was not —
+  the same document then disagreed with itself and with the CHANGELOG. A count restated in two
+  places is a count that will disagree with itself; the fix wave's own commits are the thing to
+  re-read after, not just the tests.*
 
   **H13 discharged**: all three §25:1568-1570 criteria carry dated dispositions naming slice, file
   and case, the "traces" word has its §4.6 reading recorded, and the three limitations are

@@ -982,8 +982,15 @@
 ;; only width), named ITSELF as its digit-target (so nothing checked the operand
 ;; was read at all), gave its non-digit edge mode `advance` (so §10.6:567's
 ;; "normally reexecuting the delimiter" -- the NORMAL case -- ran nowhere), and
-;; overflowed only in base 10 (so `base` in the bound's divisor was
-;; indistinguishable from the literal 10).
+;; overflowed only in base 10 IN THIS FILE (so `base` in the bound's divisor was
+;; indistinguishable from the literal 10 here).
+;;
+;; *** That fourth conjunct needs its qualifier and did not have it until
+;; 2026-09-03. *** determinism-accumulate-tests.sps had been driving a base 16
+;; overflow since six commits earlier -- but only through the GENERATED lane, so
+;; no interpreter-side divisor mutation was ever caught by it, and the case below
+;; was still owed. "No fixture reaches this" is a claim about the whole TREE, and
+;; it had been checked against one file.
 ;;
 ;; One machine separates all four, because they are four operands of one node and
 ;; a fixture per operand would share every other operand's blind spot:

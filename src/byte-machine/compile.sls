@@ -344,7 +344,13 @@
             (apply string-append (map render-transition-arm (normal-dispatch-transitions s)))
             "               (else " (loop-tail (car fb) (cdr fb)) ")))))\n")))
         ;; Unreachable today -- this case already covers every kind
-        ;; normal-state-kind can produce (dispatch/stop/error/finish/pause);
+        ;; normal-state-kind can produce: dispatch, stop, error, finish, pause,
+        ;; field-action, field-branch (Slice ②) and accumulate (Slice ③).
+        ;; *** The parenthetical here listed only the first five until
+        ;; 2026-09-03, having survived both slices that widened the set --
+        ;; including the one eleven lines above this comment. A comment that
+        ;; enumerates a closed set is a census, and this milestone shipped three
+        ;; defects from exactly that shape; ***
         ;; verified by inspection, not mutation (same convention as
         ;; normal-ir.sls's own else guards).
         (else (assertion-violation 'render-machine "unknown state kind"

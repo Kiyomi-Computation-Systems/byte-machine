@@ -24,8 +24,9 @@ task inside Slice ② rather than a slice of its own.
 >
 > - **2026-09-03 (Slice ③ planning)** — **amends §8**, re-measured against the
 >   merged tree at `14c4f30`: 63 findings, nine blocking. §8 was written at
->   `a942327`, before ①a, ①b and ② existed, and Slice ② alone changed six of the
->   seven files ③ touches. The corrections a reader must not miss, each marked at
+>   `a942327`, before ①a, ①b and ② existed, and Slice ② alone changed **all seven**
+>   of the files ③ touches. *(Corrected 2026-09-03: this read "six of the seven";
+>   the two sets are identical, `graph.sls` included.)* The corrections a reader must not miss, each marked at
 >   its own site:
 >   - **§8 Task 3's `reexec-targets` instruction is FALSE and ships a hang.**
 >     `overflow-error` is not "terminal-directed" — this document says so itself
@@ -2336,10 +2337,15 @@ each is a decision with a reason rather than a shortfall.)*
   host property that would make them detectors.
 - **The property lane's guard is three counters, not one `accumulated-count`.**
   A drawn node proves only that it was constructed, and the node has three arms.
-  Each counter also gained an interpreter-only half after the whole-pass sweep
-  showed the agreed halves were zeroed by any cross-lane divergence.
+  TWO of the three -- `acc-count` and `over-count` -- also gained an
+  interpreter-only half after the whole-pass sweep showed the agreed halves were
+  zeroed by any cross-lane divergence. `field-count` did not and needs none: it
+  counts machines whose DRAW declared a field, which no cross-lane divergence
+  can change. *(Corrected 2026-09-03; this said "each counter".)*
 - **Nine fingerprint literals at eleven assertion sites**, up from six at eight,
-  and **78** `verify.sls` pins, up from 72.
+  and **81** `verify.sls` pins, up from 72. *(Re-measured 2026-09-03: this read
+  78, true when the block was written and stale one commit later — the review's
+  three filter fixes added three pins.)*
 
 ## Exit (full Milestone 4)
 
@@ -2376,8 +2382,11 @@ naming the slice, the file and the case in the tree.
 - **:1569 — failed operations leave prior values unchanged.** *Discharged in
   halves, by construction rather than by rollback, as allocated.* ②'s half:
   `field-access-tests.sps`, "a failed operation leaves the prior value
-  unchanged (§25:1569)", plus the complementary `#f`-error-slot claim for the
-  four operations §4.3 proves cannot fail. ③'s half: the same file's overflow
+  unchanged (§25:1569)"; the complementary `#f`-error-slot claim for the four
+  operations §4.3 proves cannot fail is asserted at the CONSTRUCTOR, in
+  `ir-tests.sps`, not in the differential lane. *(Corrected 2026-09-03 -- one
+  citation covered both halves; `field-access-tests.sps` merely USES `#f` error
+  slots when building fixtures, it never asserts the rule.)* ③'s half: the same file's overflow
   cases, which additionally assert §12.7:773's *does not consume* — the digit
   is not taken, and `position-kind-tests.sps`'s fourth row pins the offset that
   makes that observable rather than merely stated.
@@ -2390,8 +2399,15 @@ naming the slice, the file and the case in the tree.
   **measured expected value** as well as against the other lane — agreement
   alone is symmetric, and Slice ②'s own whole-pass sweep recorded that as the
   fix it was owed. ③ also extends the comparison into the property lane, whose
-  oracle now carries field values. Each slice added its row to §12.7's position
-  table; ③'s is the fourth, `byte` from an unconsumed digit.
+  oracle now carries field values. ③ added the fourth row to §12.7's
+  position table, `byte` from an unconsumed digit.
+
+  *Corrected 2026-09-03. This read "Each slice added its row to §12.7's position table" --
+  false, and worse, it re-asserted the exact claim this branch's FIRST commit was written to
+  correct.* `position-kind-tests.sps` held Slice ①a's three rows unchanged through ①b and ②,
+  and gained its fourth only in ③ (`7280bae`); commit `0a5d9dd` corrected that file's own header
+  for saying otherwise. A disposition written at close is exactly where a tidy symmetry gets
+  re-introduced, and what checks it is the file, never the sentence's own plausibility.
   - *The "traces" word.* §4.6's reading stands and is recorded here rather than
     as a limitation: §22.4:1262-1272 is the comparison list, and a "trace" in
     §25:1570 is that list applied at every step, which is what the differential
@@ -2453,9 +2469,15 @@ one pin:
    | position-kind | 7 | 42 | 0 | 0 |
    | member3-drift | 2 | 2 | 2 | 0 |
    | determinism.accumulate | 1 | 0 | — | — |
+   | unit.ir | 37 | 1332 | 3 | 1 |
    | differential.field | 39 | 1482 | 19 | **3** |
    | verify.rejections | 79 | 6162 | 76 | 35 |
    | normal-ir | 43 | 1806 | 169 | 0 |
+
+   *The `unit.ir` row was added 2026-09-03. The table's heading is a universal -- "every pass
+   Slice ③ touched" -- and it omitted a pass ③ took from 32 pins to 39, the accumulate
+   constructor's own contract decisions. A table headed by a universal must be built from a diff
+   of what changed, never from memory of what was interesting.*
 
 ## 9. Explicitly out of Milestone 4
 
