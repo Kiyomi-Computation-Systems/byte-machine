@@ -10,7 +10,7 @@
 
 ---
 
-## ⚠ One scope change this plan proposes, and it needs the owner's decision
+## Settled by the owner 2026-09-04: `parser-state-name` is Slice ②'s, whole
 
 **`parser-state-name` cannot be answered by the generated lane in this slice.** Measured at `f78b710`:
 
@@ -21,9 +21,11 @@
 
 So the export can ship, but only half of it works, and the differential would compare an answer against a hole.
 
-**Proposed: `parser-state-name` ships in ①b answering in the interpreted lane, and its generated-lane half moves to Slice ②** — which is the slice that first *invokes* a callback and therefore the first that can witness the value. Carrying the id→name table into the ABI payload is the alternative; it is real work, it grows member 1 for every machine, and nothing in ①b would read it.
+**Settled: the whole export moves to Slice ②** — not merely its generated half, which is what this plan first proposed. The owner's call is the stronger one and the reason is worth keeping: **a public accessor that answers in one lane and not the other is worse than one that does not exist yet.** It would ship a `§9.3` name whose contract holds only where a caller happens to be, and the differential would compare an answer against a hole rather than failing.
 
-**Nothing else in the slice depends on this decision.** Every task below is written to proceed either way; only Task 5's export list and Task 7's exit note change.
+Slice ② is where it belongs — the first slice that *invokes* a callback, and therefore the first with a caller that can witness the value, and the first that must carry an id→name table for the generated lane regardless.
+
+**Consequence for this slice: ①b owes FIVE exports, not six.** `parser-active-span` (decision `0028`) still ships here, because a span *declaration* exists in ①b and the accessor answers `#f` with no active span in either lane — it has no id→name problem. Task 7 records the deferral's other end.
 
 ---
 
@@ -168,9 +170,9 @@ Expected: **empty**, and every fingerprint unchanged. All four goldens declare n
 
 - [ ] **Step 1: The exports**
 
-Measured absent from all of `src/`: `parser-state-name`, `parser-stream-offset`, `parser-user-context`, `make-callback-failure`, `callback-failure?`. Plus `parser-active-span` from decision `0028`.
+Measured absent from all of `src/`: `parser-stream-offset`, `parser-user-context`, `make-callback-failure`, `callback-failure?`. Plus `parser-active-span` from decision `0028`. (`parser-state-name` is also absent and stays that way — Slice ②'s.)
 
-**`parser-state-name` is the scope question at the head of this plan.** Under the proposal it ships answering in the interpreted lane, and its generated-lane half is Slice ②'s, recorded at both ends.
+**`parser-state-name` is NOT in this list** — settled 2026-09-04, it is Slice ②'s whole (see the head of this plan). Five exports here, and `parser-active-span` is the sixth name only in the sense that it is new; it ships because it answers `#f` in both lanes with no active span.
 
 `make-callback-failure` takes a symbolic code satisfying `§9.3:423`'s portable ASCII grammar and an opaque detail. `callback-continue` and `callback-pause` already exist (`runtime.sls:35-36`) — check whether they are exported.
 
@@ -209,7 +211,10 @@ rg -o "\\(cons '" src/byte-machine/verify.sls | wc -l
 ```
 Expected: `interpret.sls` untouched; "the same nine kinds" green; the `cons` occurrence count still **13**. **Note the test name is `unit.kind-position-census`** — `-R kind-position.chez.source` matches nothing and reports silence, which Slice ①a's own probe nearly mistook for proof.
 
-- [ ] **Step 3: Record what ② inherits** — `parser-state-name`'s generated-lane half (if the proposal is taken), and the node-side share of `§16.2:890`/`:901`. A deferral needs both ends.
+- [ ] **Step 3: Record what ② inherits, in a place ② will read** — not only in a commit message. `AGENTS.md`: a deferral needs both ends.
+  1. **`parser-state-name`, whole** (owner, 2026-09-04). Slice ② must carry an id→name table into the generated lane; `normal-machine-debug-map` (`normal-ir.sls:64`) is the map and `compile.sls:377` is the only place it is read today, at emission time.
+  2. The node-side share of `§16.2:890` and `:901`.
+  3. The generated lane's `busy` guard, which needs a caller to witness.
 
 - [ ] **Step 4: Commit**
 
