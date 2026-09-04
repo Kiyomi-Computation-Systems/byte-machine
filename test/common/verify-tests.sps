@@ -1629,4 +1629,74 @@
         (let ((cs (codes (acc-eof-machine #f 'fin (list (make-finish-node 'fin #f))))))
           (check "non-eof-into-finish" (memq 'non-eof-into-finish cs)))))))
 
+;; Milestone 5 Slice ⓪ task 1: the site that reports an EOF zero-progress cycle
+;; for a PAUSE continuation.
+;;
+;; *** Measured before this group existed: deleting that site's `((cycle) ...)`
+;; clause left every runnable program in the tree byte-identical. *** It was dead
+;; in the suite while being live in the code -- the only site that can see a
+;; cycle which BEGINS at a pause continuation and involves no dispatch
+;; eof-target at all. The other `eof-zero-progress-cycle` site attributes such a
+;; cycle to a DISPATCH node; this one attributes it to the pause.
+;;
+;; That matters beyond bookkeeping: `parser-finish-op!` records in its own
+;; comment that it carries no local cycle guard because it relies on these
+;; checks. A machine of this shape verifying clean is a machine that loops
+;; forever in both executors -- the same consequence Milestone 4 Slice ③'s
+;; second Critical had.
+;;
+;; The assertion is written on the PAIR (code, node-kind), not on the count.
+;; Four diagnostics are emitted today, and Slice ⓪b may reduce that: §16.4's
+;; one-finding-per-decision is an open question (the §16.2:908 sites emit two or
+;; three findings for one decision, and this pass may follow). The pair
+;; `eof-zero-progress-cycle` AT A PAUSE NODE is what only this site can produce,
+;; and it survives any de-duplication ⓪b chooses.
+(define (pause-cycle-machine)
+  ;; entry --advance--> p (pause) -> q (pause) -> p, and the ENTRY's own eof
+  ;; route is a finish, so the dispatch arm of this check has nothing to say
+  ;; and cannot be the source of the records below.
+  (make-machine 'pcyc 'start '() '() '() (list eof-decl rej-decl)
+                (list (make-byte-dispatch-node 'start
+                        (list (make-byte-case (make-exact-byte-matcher 0)
+                                              (make-edge 'p 'advance) #f))
+                        (make-edge 'rej 'reexecute) 'fin #f)
+                      (make-pause-node 'p 'q #f)
+                      (make-pause-node 'q 'p #f)
+                      (make-finish-node 'fin #f)
+                      (make-error-node 'rej 'rejected #f))
+                'default-eof #f))
+
+(harness-group "an EOF cycle through pause continuations is attributed to the pause (Slice ⓪)"
+  (lambda ()
+    (harness-case "the machine is rejected"
+      (lambda ()
+        ;; Stated separately so that a later slice making this shape UNBUILDABLE
+        ;; fails here and says so, rather than silently emptying the case below.
+        (let ((v (verify-machine (pause-cycle-machine))))
+          (check "rejected" (not (verification-ok? v)))
+          (check "some diagnostic" (> (length (verification-diagnostics v)) 0)))))
+    (harness-case "an eof-zero-progress-cycle is reported AT A PAUSE NODE"
+      (lambda ()
+        ;; The pair only this site can produce. A sentinel counts the pairs it
+        ;; OBSERVES rather than trusting the diagnostic list's length, so a walk
+        ;; that returned nothing cannot satisfy this vacuously.
+        (let ((ds (verification-diagnostics (verify-machine (pause-cycle-machine))))
+              (pause-names '(p q))
+              (seen '()))
+          (for-each (lambda (d)
+                      (when (and (eq? (diagnostic-code d) 'eof-zero-progress-cycle)
+                                 (memq (diagnostic-node d) pause-names))
+                        (set! seen (cons (diagnostic-node d) seen))))
+                    ds)
+          (check "at least one, at a pause" (>= (length seen) 1))
+          ;; And the OTHER site's attribution is absent: no dispatch node carries
+          ;; this code here, which is what makes the record above this site's own.
+          (check "not attributed to the dispatch"
+                 (not (memq 'start
+                            (map diagnostic-node
+                                 (filter (lambda (d)
+                                           (eq? (diagnostic-code d)
+                                                'eof-zero-progress-cycle))
+                                         ds))))))))))
+
 (harness-finish)

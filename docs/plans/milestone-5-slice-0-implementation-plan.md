@@ -147,11 +147,20 @@ Failing tests first, then implementation, then mutations measured **in both dire
 New program: **`test/common/kind-position-census-tests.sps`**. Not `position-kind-tests.sps`,
 which exists and means §12.7's parser-error position kinds — an unrelated thing.
 
-- [ ] **Task 1 — close `verify.sls:831`.** One harness-group in `verify-tests.sps`: entry
+- [x] **Task 1 — close the dead pause-continuation EOF-cycle site.** One harness-group in `verify-tests.sps`: entry
   dispatch —advance→ `p` (pause) → `q` (pause) → `p`, dispatch `eof-target` = a finish node.
   Pristine emits `eof-zero-progress-cycle` at both pauses; the pair *(that code, a PAUSE node
   name)* is producible **only** by site 831. First, because it needs no census machinery and its
   mutant survives the entire shipped suite today.
+
+  **Done.** The fixture is in `verify-tests.sps`; the machine's entry routes its own EOF to a
+  finish, so the *other* `eof-zero-progress-cycle` site has nothing to say and cannot be the
+  source of the records. Measured pristine: `zero-progress-cycle` at `p` and `q`, and
+  `eof-zero-progress-cycle` at `p` and `q`. The assertion is written on the **pair**
+  *(`eof-zero-progress-cycle`, a pause node)* rather than on the count of four, because §16.4's
+  one-finding-per-decision is Slice ⓪b's OQ-4 and the count may legitimately drop; the pair
+  survives any de-duplication. One mutation, measured caught by this group alone.
+  `release` 94/94, 50 passes / **369** mutations.
 - [ ] **Task 2 — the tables, axis A, and the sentinels.** The 16 position builders and 9 kind
   builders as **data** (two association lists), the pruning closure, §3.1's record shape, and
   **S1+S2 land here, not later** — the sentinel is what makes a Milestone 5 callback kind fail

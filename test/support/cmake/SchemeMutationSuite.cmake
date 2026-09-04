@@ -837,6 +837,10 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Milestone 5 Slice ⓪ task 1: the verify pass gains ONE for the pause-continuation
+# EOF cycle site, which was live code with no witness. Mutations become
+# 368 + 1 = 369.
+#
 # Whole-branch review: the differential.field pass gains SEVEN for the four
 # accumulate operands no executing fixture reached. Mutations become
 # 361 + 7 = 368.
@@ -969,7 +973,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 50)
-set(EXPECTED_MUTATIONS 368)
+set(EXPECTED_MUTATIONS 369)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -5578,6 +5582,29 @@ byte_machine_mutation(
                          (filter values]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "an accumulate BYTE edge into a finish terminal is rejected: non-eof-into-finish")
+
+# --- Milestone 5 Slice ⓪ task 1: the site that was DEAD IN THE SUITE ----------
+#
+# Measured before the fixture existed: deleting this clause left every runnable
+# program in the tree byte-identical -- 26 programs, 504 case-runs, zero
+# failures. The clause is live code with no witness, and it is the only site
+# that can attribute an EOF zero-progress cycle to a PAUSE node; the other site
+# attributes such a cycle to a dispatch node's eof-target chain, which this
+# fixture's machine deliberately does not have (its entry's eof route is a
+# finish). parser-finish-op! relies on these checks for termination, so the
+# shape this clause rejects is one that loops forever in both executors.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an EOF cycle through pause continuations is not reported"
+  FIND [[                              ((cycle)
+                               (list (make-diagnostic 'eof-zero-progress-cycle (node-name n)
+                                                      "an EOF path cycles without reaching a terminal")))
+                              (else '()))]]
+  REPLACE [[                              (else '()))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an eof-zero-progress-cycle is reported AT A PAUSE NODE: at least one, at a pause")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
