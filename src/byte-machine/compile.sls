@@ -61,13 +61,21 @@
       callback-continue callback-pause))
   ;; Every identifier the emitted body binds, so a caller-chosen output binding
   ;; cannot collide with one. `fieldv` is emitted `exec`'s seventh parameter,
-  ;; reserved empty here and filled in Slice ② (decision 0019 item 3(c)); it is
-  ;; deliberately not spelled `fields`, which `(rnrs)` binds as
-  ;; define-record-type's auxiliary keyword and which the drift guard's own
-  ;; `(rnrs)` subtraction would therefore swallow.
+  ;; reserved empty by Milestone 4 Slice ①a and filled by its Slice ② (decision
+  ;; 0019 item 3(c)); it is deliberately not spelled `fields`, which `(rnrs)`
+  ;; binds as define-record-type's auxiliary keyword and which the drift guard's
+  ;; own `(rnrs)` subtraction would therefore swallow.
+  ;;
+  ;; `psr` and `cbv` are the eighth and ninth, added by Milestone 5 Slice ①a
+  ;; (decision 0025 point 3) and reserved the same way: the emitted body ignores
+  ;; both, and Slice ② emits the arms that read them. `psr` is the parser a
+  ;; callback receives as its first argument (§13:784) and BOTH call sites
+  ;; already pass the real one -- there is no sentinel, because the value exists
+  ;; and passing it now spares ② a second call-site edit. `cbv` is the resolved
+  ;; callback slot vector and passes `empty-callbacks` until ①b binds one.
   (define reserved-member-3
     '(exec loop pos st off b bv start end state offset finish? fieldv errs pk
-      v r d))
+      v r d psr cbv))
   (define (lower-alpha? c) (and (char>=? c #\a) (char<=? c #\z)))
   (define (name-char? c)
     (or (lower-alpha? c) (and (char>=? c #\0) (char<=? c #\9)) (char=? c #\-)))
@@ -501,15 +509,18 @@
                                             "#(" (symbol->string (error-declaration-code (car ds)))
                                             " \"" (escape-string (error-declaration-reason (car ds)))
                                             "\")")))))
-           ;; Decision 0019 item 3(b)'s member 0, filled by Slice ①b. It renders
-           ;; the field DECLARATIONS as (name . initial) pairs in slot order,
-           ;; not bare initials: the parser needs the initials AND the
-           ;; name-to-slot resolution parser-field-ref answers by, the slot is
-           ;; the pair's position, so one member determines both and a second
-           ;; member would be a second ABI growth for data the first already
-           ;; carries. With no fields this is the empty string, so the member
-           ;; renders `#()` and the payload `#(#())` -- byte-identical to ①a,
-           ;; which is decision 0019 item 5 and the reason no golden moves.
+           ;; Decision 0019 item 3(b)'s member 0, filled by Milestone 4 Slice
+           ;; ①b. It renders the field DECLARATIONS as (name . initial) pairs in
+           ;; slot order, not bare initials: the parser needs the initials AND
+           ;; the name-to-slot resolution parser-field-ref answers by, the slot
+           ;; is the pair's position, so one member determines both. That
+           ;; argument is about FIELD data and is NOT a prohibition on further
+           ;; members -- Milestone 5 Slice ①a adds member 1, reserved empty.
+           ;; Decision 0025 POINT 2 is what grants it; point 3 is the `exec`
+           ;; parameters, and 0025 explicitly declines to allocate member 1's
+           ;; contents, so this comment does not either. Rendered as a bare `#()`
+           ;; here and filled by whichever slice needs it. With no fields the payload is now
+           ;; `#(#() #())`.
            ;;
            ;; Rendered from the NORMALIZED table rather than from machine-fields,
            ;; so the emitted slot order is the same object the IR fingerprint was
@@ -529,7 +540,7 @@
         "  (export " bstr ")\n"
         "  (import (rnrs) (byte-machine runtime))\n"
         "  (define errs (quote #(" errs ")))\n"
-        "  (define (exec state offset bv start end finish? fieldv)\n"
+        "  (define (exec state offset bv start end finish? fieldv psr cbv)\n"
         ;; The kind is initialized `boundary` UNCONDITIONALLY, with no finish?
         ;; key: nothing has been consumed since either kind of call began, so an
         ;; error state reached with no jump taken reports a boundary at the
@@ -547,8 +558,8 @@
                                                                  (normal-machine-fields normal))))))
         "      (else (assertion-violation (quote exec) \"unknown state\" st)))))\n"
         "  (define " bstr "\n"
-        "    (byte-machine-make-compiled-machine 3 " (number->string fp) " "
-        (number->string entry) " exec (quote #(#(" fields "))))))\n"))))
+        "    (byte-machine-make-compiled-machine 4 " (number->string fp) " "
+        (number->string entry) " exec (quote #(#(" fields ") #())))))\n"))))
 
   (define (emit-machine compilation binding port)
     (let ((bytes (render-machine compilation binding)))

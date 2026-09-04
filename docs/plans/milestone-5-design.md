@@ -676,8 +676,9 @@ moved the line — that class is caught by review or not at all.
   tests `verify.sls` — two independent files. It catches a hand-edit that adds a position to the
   verifier without adding a matrix cell, which is what nothing checks today; it does *not* catch
   a mutation, because the census reads the staged tree
-  (`SchemeMutationSuite.cmake:1150`) and a mutant is self-consistent. The row's own comment must
-  say so.
+  (`SchemeMutationSuite.cmake:1157`). **Corrected by Slice ①a's final review: that does not make
+  it blind** — the derived set is compared against a mapping declared in the test, so a mutation
+  to `verify.sls` reddens it. The row's own comment states what it can and cannot certify.
 
 **Oracle — two-sided, and both sides are commands with falsifiable results.**
 

@@ -10,7 +10,14 @@ Milestone: 5, Gate 0 (milestone-5-design.md §4.3, §4.8)
 > - **2026-09-04 (Milestone 5, Slice ①a planning)** — **amends point 4**: its
 >   handoff says the position-axis drift row derives `position-table`'s names
 >   "from the IR". Measured while writing the Slice ①a plan: there is nothing in
->   `ir.sls` to derive them from.
+>   `ir.sls` to derive them from. *(That note is itself annotated in place by the
+>   slice's final review: its "the mutant is self-consistent and the row stays
+>   green" does not follow, and its `cmake:1150` is now `:1157`. Per this
+>   directory's README, an annotation on a note rides that note's bullet.)*
+> - **2026-09-04 (Milestone 5, Slice ①a execution)** — **amends point 4**: its
+>   allocation of point 1's encoding shape to Slice ①a. There is no artifact move
+>   to pay, so the seam argument does not reach it; ①b lands the section with the
+>   data. Point 1's shape is unchanged and is recorded in `normal-ir.sls`.
 
 ## Context
 
@@ -160,6 +167,14 @@ the four goldens (one each), `test/common/normal-ir-tests.sps` (4),
    4" and is spent with that milestone; this point is the Milestone 5 instance of
    the same discipline, not an extension of 0019's.)
 
+   > **Amended 2026-09-04 (Milestone 5, Slice ①a planning)** — this point's
+   > position-axis handoff names a derivation that does not exist; `ir.sls` has
+   > no position vocabulary.
+
+   > **Amended 2026-09-04 (Milestone 5, Slice ①a execution)** — point 1's
+   > encoding shape is Slice ①b's work, not ①a's: a trailing section moves no
+   > artifact, so the seam argument does not reach it.
+
 ## Consequences
 
 **The oracle is two-sided, and the two sides fail for different reasons.**
@@ -247,6 +262,17 @@ And because the census reads the **staged** tree
 the code and the derived set: the mutant is self-consistent and the row stays
 green.
 
+> **Annotated 2026-09-04, later the same day, by the slice's own final review.**
+> The paragraph immediately above is **wrong in its conclusion**, and the row is
+> better than it says. The derived set is compared against a mapping that is
+> **declared in the test file**, not derived — so a mutation whose `FILE` is
+> `verify.sls` stages a mutated `verify.sls` beside an unmutated copy of the
+> test, the two sides disagree, and the row goes **red**. It is a mutation
+> witness. Also: the env line is `SchemeMutationSuite.cmake:**1157**`, not 1150 —
+> the citation was correct when measured and this branch's own edits moved it.
+> Left standing rather than rewritten, because what was believed when point 4 was
+> re-allocated is the evidence.
+
 **Nothing above this note is rewritten, and point 4's allocation stands** — the
 row is still Slice ①a's. What changes is what the row can be. The Slice ①a plan's
 Task 5 resolves it: derive from `verify.sls`, and require the row's own comment to
@@ -257,3 +283,35 @@ hand-written data that no assertion reads.
 
 The design's `§5` bullet, being an **instruction** rather than a record, was
 corrected in place on the same date.
+
+## 2026-09-04 (Milestone 5, Slice ①a execution) — point 1's shape is right; point 4 allocated it to the wrong slice
+
+Point 4 says "①a makes points 1-3 real". Points 2 and 3 it did. **Point 1 it did
+not, and should not have.**
+
+**The seam argument is that a change moving a committed artifact is paid once,
+before any semantics, so every later slice can assert "no golden moved" as a
+gate. Measured while executing ①a: the trailing slot-table section moves no
+artifact, ever.** A section that writes zero bytes for a machine declaring
+neither a callback nor a span leaves the byte stream identical, and `fnv1a-64`
+folds over exactly those bytes — so the fingerprint is the same whether the
+section-writing code exists or not. Adding it in ①b costs precisely what adding
+it in ①a costs: nothing.
+
+**That is the whole difference between a trailing section and a header slot, and
+it is why decision 0019 had to reserve and this one does not.** 0019 item 3(a)'s
+field count sits *inside* the header, which every machine writes unconditionally,
+so its position had to be claimed a slice ahead or every fingerprint would move
+twice. Point 1 chose a trailing section precisely to avoid that, and then point 4
+scheduled it as though it had not.
+
+Landing it in ①a would have meant a guard over two always-empty lists — live code
+no input can reach, in the milestone that opened with two hardening slices about
+exactly that, and in the file `encode-normal` lives in.
+
+**Nothing in point 1 changes.** The shape it fixes — an optional trailing
+section, present only when nonempty, header unchanged, the count *inside* the
+guard because an unconditional count is two bytes on every machine — is recorded
+at the head of `encode-normal` (`src/byte-machine/private/normal-ir.sls`) so that
+①b implements a written-down shape rather than re-deriving one. What moves is the
+slice that owns the code.

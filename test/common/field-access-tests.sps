@@ -396,7 +396,7 @@
         (check "member 0 lists all four in order"
                (harness-string-contains?
                 (utf8->string (render-machine (compile-machine m '()) 'field-access-parser))
-                "(quote #(#((count . 7) (limit . 65535) (seen . 4294967295) (total . 1152921504606846976))))"))))
+                "(quote #(#((count . 7) (limit . 65535) (seen . 4294967295) (total . 1152921504606846976)) #()))"))))
     (harness-case "the normalizer's slot order is the declaration order"
       (lambda ()
         (check-equal "names by slot"

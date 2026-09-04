@@ -4,7 +4,7 @@
 
 **Goal:** Move every committed artifact **once**, before any Milestone 5 semantics exist, so that each later slice can assert "no fingerprint moved" as a *gate* rather than a hope. Decision `0025` made real, plus the position-axis drift row `0025` point 4 hands over without settling.
 
-**Architecture:** Six tasks over `compile.sls`, `runtime.sls`, `private/normal-ir.sls`, four committed goldens, five test files and the mutation suite. **No node kind, no callback behaviour, no verifier pass.** The slice's own boundary is checkable and Task 6 checks it: `node?`'s disjunct list must still be nine when the slice ends.
+**Architecture:** Six tasks over `compile.sls`, `runtime.sls`, `private/normal-ir.sls`, four committed goldens, five test files and the mutation suite. **Corrected during execution 2026-09-04: Tasks 1-3 are ONE atomic change and ship in one or two commits, not three.** The goldens are regenerated once, and until the ABI literal and the `exec` signature move together the differential lanes fail loading a version-3 library into a version-4 runtime. As first written, Task 1 said the tree is "deliberately inconsistent" until Task 3 while Task 2 required "the full suite green" — both cannot hold, and the standing rule that tests pass before every commit means the plan, not the rule, was wrong. **No node kind, no callback behaviour, no verifier pass.** The slice's own boundary is checkable and Task 6 checks it: `node?`'s disjunct list must still be nine when the slice ends.
 
 **Tech Stack:** Chez Scheme 10.4.1 (R6RS), CMake/CTest, the in-repo mutation suite.
 
@@ -28,7 +28,7 @@
 | `src/byte-machine/runtime.sls` | `current-abi-version` 3→4 (`:61`) and its comment | 1 |
 | `src/byte-machine/compile.sls` | emitted `exec` gains two parameters (`:532`); `reserved-member-3` gains their names (`:68-70`) and its comment is corrected | 2 |
 | `src/byte-machine/compile.sls` | emitted ABI literal 3→4 and the payload's second member (`:550-551`); the member-0 comment block (`:504-517`) corrected | 3 |
-| `src/byte-machine/private/normal-ir.sls` | the optional trailing slot-table section, and the header comment (`:465-467`) | 4 |
+| `src/byte-machine/private/normal-ir.sls` | **as executed:** the trailing section's *shape* recorded as a comment at `encode-normal`'s head; the section's CODE deferred to Slice ①b, and the header writes left byte-identical. See Task 4's correction note | 4 |
 
 **Modified — tests and fixtures:**
 
@@ -67,7 +67,9 @@
 rg -n "current-abi-version" src/byte-machine/runtime.sls
 ctest --test-dir build/dev -R "byte-machine.unit.runtime" --output-on-failure
 ```
-Expected: `:61` is 4 and `:79` compares against it; the runtime lane green. **The generated goldens still say `3` at this point and that is correct** — they are re-baselined in Task 3, and between Task 1 and Task 3 the tree is deliberately inconsistent. Do not "fix" them here.
+Expected: `:61` is 4 and `:79` compares against it; the runtime lane green. **The full suite is NOT green until Task 3 completes** — see the Architecture note. Do not commit here unless Tasks 2 and 3 land in the same commit.
+
+**And `runtime-tests.sps:306-315` is not the only place that hard-codes a version.** Measured during execution: four more sites in the same file carry a literal `3`, two of them (`:258`, `:260`) the shared stub compiled machines every `/v2` group builds on, which is why one missed constant surfaces as eleven unrelated-looking failures. Use `rg -n "byte-machine-make-compiled-machine\s+3\b"`, which finds all of them.
 
 - [ ] **Step 4: Commit**
 
@@ -88,6 +90,8 @@ Expected: `:61` is 4 and `:79` compares against it; the runtime lane green. **Th
 ```
 
 **Measured absence, and it is a finding worth keeping:** no mutation anywhere in the suite anchors on this line — searched all 366 `FIND`/`REPLACE` bodies for `exec state offset`, `(define (exec` and `bv start end finish?`, zero hits outside `reserved-member-3`'s list. **The emitted `exec` signature is unwitnessed by the mutation suite.** Not this slice's to fix, but Task 6 records it.
+
+**Two further sites, found during execution because the build failed and no search had named them.** `test/common/compile-tests.sps:206-212` asserts the signature verbatim — it is the *only* witness to that line anywhere, which is what the absence above makes it. And `test/common/runtime-tests.sps:232`'s `stub-exec` stands in for generated code, so **its arity tracks the emitted one and nothing asserts that**: the mismatch appears as `incorrect number of arguments 9` from every `/v2` group at once. Widen both.
 
 Both new names join `reserved-member-3` (`compile.sls:68-70`, 18 symbols today). Its comment describes `fieldv` as "reserved empty here and filled in Slice ②" — **that happened in Milestone 4**; correct it in place and name the two new reservations and their filling slice.
 
@@ -159,6 +163,8 @@ rg -n "quote #\(#\(" test/ --glob '!test/fixtures/*'
 ```
 Expected: every hit accounted for before you build. A missed one fails as a golden mismatch naming a file you did not expect.
 
+**That search is necessary and not sufficient**, measured during execution: `compile-tests.sps:205` and `field-access-tests.sps:399` pin payload text carrying *field pairs*, so neither matches a `#(#())` pattern. Search for `(quote #(#(` as above **and** read every hit's full string, including the ones whose member 0 is non-empty.
+
 - [ ] **Step 5: Verify — the forward oracle, and the half that can fail**
 
 ```bash
@@ -171,7 +177,22 @@ Expected: the constructor line moved in all four, and **every fingerprint litera
 
 ---
 
-## Task 4: The optional trailing slot-table section
+## Task 4: Record the trailing-section shape — the CODE moves to Slice ①b
+
+> **Corrected during execution, 2026-09-04.** This task as first written landed the section in
+> ①a. It should not, and decision `0025` carries a dated note saying so. **The seam argument is
+> that a change moving a committed artifact is paid once — and this one moves no artifact,
+> ever.** A section writing zero bytes for a machine declaring neither leaves the stream, and so
+> the fingerprint, identical whether the code exists or not; adding it in ①b costs exactly what
+> adding it in ①a costs. That is the whole difference between a trailing section and the header
+> slot 0019 had to reserve a slice ahead. Landing it here would have meant a guard over two
+> always-empty lists — live code no input can reach, in the milestone that opened with two
+> slices about exactly that.
+>
+> **What ①a owes is the shape, written down before anything depends on it**, and the steps below
+> are kept because their traps are what ①b must not walk into.
+
+## Task 4 (as executed): the shape recorded at `encode-normal`'s head
 
 **Files:** `src/byte-machine/private/normal-ir.sls` (`:462-490`, `:546-548`).
 
@@ -211,7 +232,7 @@ Expected: **every fingerprint unchanged, all four goldens unchanged by this task
 
 The only enumeration with the right cardinality is in **`verify.sls`** — the file the census exists to test. **That asymmetry is the whole point of the kind axis and it does not transfer:** the kind row derives from `ir.sls` and tests `verify.sls`, two independent files, so a mutation to one is caught by the other. A position row deriving from `verify.sls` tests `verify.sls` against itself.
 
-**And the census reads the mutated tree.** `SchemeMutationSuite.cmake:1150` is `set(ENV{BYTE_MACHINE_SOURCE_ROOT} "${STAGE_DIR}/src")`, so a mutation that deletes an arm deletes it from the code *and* from the derived set: the mutant is self-consistent and the row stays green.
+**The census reads the mutated tree** — `SchemeMutationSuite.cmake:1157` is `set(ENV{BYTE_MACHINE_SOURCE_ROOT} "${STAGE_DIR}/src")`. **Corrected by the slice's final review: this does NOT make the row blind.** The derived set is compared against a mapping *declared in the test*, so a mutation whose `FILE` is `verify.sls` stages a mutated verifier beside an unmutated test and the two sides disagree. The row is a mutation witness.
 
 - [ ] **Step 2: Build the row anyway, and label exactly what it buys**
 
@@ -246,7 +267,7 @@ The reverse-chronological ledger's current top is `:840-842`. Insert this slice'
 ctest --test-dir build/dev -R "kind-position" --output-on-failure
 git diff --stat main..HEAD -- src/byte-machine/private/ir.sls src/byte-machine/verify.sls src/byte-machine/interpret.sls
 ```
-Expected: `kind-position-census-tests.sps:326`'s "the same nine kinds" green — **that is what proves this slice added no node kind** — and the second command prints **nothing**.
+Expected: the second command prints **nothing** — *that* empty diff over `ir.sls`, `verify.sls` and `interpret.sls` is what proves the slice added no node kind. `kind-position-census-tests.sps:326`'s "the same nine kinds" is green too, and is worth having for a different reason: it compares `node?`'s disjuncts against the matrix's keys, so it catches a kind added to one and not the other. **It does not by itself prove no kind was added** — a slice that added a kind to both would keep it green — and an earlier draft of this step said it did.
 
 - [ ] **Step 3: Whole-slice verification**
 
@@ -257,9 +278,11 @@ rg -n "14095574568398596535|17903327606435836645|15997144668070819532|1699977225
 ```
 Expected: 98/98 and the mutation suite at its new declared totals; four goldens changed, **two lines each and no more**; every fingerprint literal still present and unchanged.
 
-- [ ] **Step 4: Record the unwitnessed signature**
+- [ ] **Step 4: Close the unwitnessed signature — corrected during execution**
 
-Task 2 measured that **no mutation anywhere anchors on the emitted `exec` parameter list.** Widening it is invisible to the suite. That is not this slice's to fix — a pin belongs with the slice that gives the parameters meaning — but it is a real gap and must be carried into Slice ②'s plan rather than noticed again from scratch. `AGENTS.md`: a deferral needs both ends.
+Task 2 measured that **no mutation anywhere anchors on the emitted `exec` parameter list.** This step as first written deferred a pin to Slice ②, "because a pin belongs with the slice that gives the parameters meaning".
+
+**That was wrong and the gap is closed here.** `AGENTS.md`: a guard shown not to guard gets closed, not documented. And the witness already exists — Task 2 added `compile-tests.sps`'s "exec carries its three reserved parameters", the only assertion naming that line as *text* and the only one that runs in the mutation's own SPEC lane. **Not the only thing in the tree that would notice**: the four goldens carry the same line at `:5` and the determinism lanes compare them byte for byte. An earlier draft of this step claimed tree-wide uniqueness, from a measurement that had searched the mutation declarations only. The mutation drops the last reserved parameter, so it is caught by a failed comparison in that assertion rather than by a raise from a later arity mismatch.
 
 - [ ] **Step 5: Commit**
 

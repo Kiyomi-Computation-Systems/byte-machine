@@ -479,6 +479,28 @@
        ;; bargain and holds -- a zero-field machine encodes byte-identically to
        ;; ①a's, which normal-ir-tests.sps asserts at ①a's own measured value
        ;; rather than leaving it to the goldens to notice.
+       ;;
+       ;; *** THE CALLBACK AND SPAN SLOT TABLES ARE NOT HERE, AND MILESTONE 5
+       ;; SLICE ①a DELIBERATELY DID NOT ADD THEM. *** Decision 0025 point 1 fixes
+       ;; their shape -- an OPTIONAL TRAILING SECTION, present only when
+       ;; nonempty, with the header unchanged -- and its point 4 handed the shape
+       ;; to ①a on the reasoning that the seam slice pays every artifact move
+       ;; once. Measured while executing ①a: there is no move to pay. A trailing
+       ;; section that writes ZERO bytes for a machine declaring neither leaves
+       ;; the stream, and therefore the fingerprint, byte-identical whether the
+       ;; code exists or not -- so adding it later costs exactly nothing, which
+       ;; is the whole difference between a trailing section and the header slot
+       ;; 0019 had to reserve a slice ahead.
+       ;;
+       ;; Landing it here would have meant a guard over two always-empty lists:
+       ;; live code no input can reach, in the file whose milestone opened with
+       ;; two slices about exactly that. Slice ①b adds the section together with
+       ;; the data that makes it reachable. What ①a owes and this comment
+       ;; discharges is the SHAPE, recorded before anything depends on it:
+       ;;   [... state records...][callback table?][span table?]
+       ;; each table wholly inside its own emptiness guard -- the count included,
+       ;; because an unconditional count is two bytes on every machine in the
+       ;; tree and moves all four goldens.
        (put-u8 p 2)
        (put-u32be p entry)
        (put-u32be p (vector-length states))

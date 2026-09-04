@@ -837,6 +837,19 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Milestone 5 Slice ①a's final review: ONE more, on a zero-width edge role's
+# label. The position drift row's own comment claimed it was BLIND under this
+# suite; the review measured that backwards -- the derived set meets a mapping
+# DECLARED in the test, so a mutated verifier disagrees with it. Mutations
+# 377 + 1 = 378.
+#
+# Milestone 5 Slice ①a: ONE, on the emitted `exec` parameter list. The slice's
+# own planning measured that no FIND anywhere anchored on that line, so widening
+# the signature was invisible here; the pin drops the last reserved parameter and
+# is caught by compile-tests.sps's signature assertion, the only witness to that
+# line in the tree. Mutations 376 + 1 = 377. Passes unchanged at 52: the compile
+# unit pass already existed.
+#
 # Whole-branch review: the verify pass gains TWO -- `unresolved`'s tier, which
 # was load-bearing and unwitnessed, and the zero-width kinds' edge roles, nine
 # of thirteen of which had no witness. Mutations 374 + 2 = 376.
@@ -1002,7 +1015,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 52)
-set(EXPECTED_MUTATIONS 376)
+set(EXPECTED_MUTATIONS 378)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3024,10 +3037,14 @@ byte_machine_mutation(
   # Re-anchored by Slice ② task 8: the seventh argument stopped being the shared
   # `empty-fields` sentinel and became the parser's own vector, which is what
   # the reservation was FOR. The `finish?` flag this pin names is unchanged.
+  # Re-anchored by Milestone 5 Slice ①a task 2: both call sites gained `psr` and
+  # `cbv` (decision 0025 point 3). The `finish?` flag is STILL what this pin
+  # names, and it is still the sixth argument -- only the tail grew. (Counted:
+  # current-state, offset, empty-bv, 0, 0, #t.)
   FIND [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t
-                    (parser-field-values parser))))]]
+                    (parser-field-values parser) parser empty-callbacks)))]]
   REPLACE [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #f
-                    (parser-field-values parser))))]]
+                    (parser-field-values parser) parser empty-callbacks)))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish with no input routes to the default-eof error: default-eof code")
 
 # Second: the /v2 TOMBSTONE. Milestone 4 Slice ①a task 3 rewrote both retired
@@ -6572,6 +6589,31 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: emitted exec loses a Milestone 5 reserved parameter"
+  # Milestone 5 Slice ①a task 6, closing a gap the slice's own planning MEASURED:
+  # across all 366 declarations, no FIND anchored on the emitted `exec` parameter
+  # list, so a change to the emitted signature was invisible to this suite. The
+  # plan proposed carrying that to Slice ②, on the ground that a pin belongs with
+  # the slice that gives the parameters meaning. It is closed HERE instead,
+  # because a demonstrated gap gets closed rather than documented, and the
+  # witness already exists: compile-tests.sps's "exec carries its three reserved
+  # parameters" is the only assertion naming that line as TEXT, and the only one
+  # that runs in this mutation's own SPEC lane. It is not the only thing in the
+  # tree that would notice -- the four goldens carry the same line at `:5` and
+  # the determinism lanes compare them byte for byte -- and an earlier draft of
+  # this comment said "the only assertion in the tree", which was false.
+  #
+  # Dropping `cbv` -- the last parameter -- rather than mangling the whole list:
+  # a caught-by-COMPARISON failure of the signature assertion, not a raise from
+  # some later arity mismatch, which is what AGENTS.md prefers and what makes the
+  # record name this decision.
+  FIND [["  (define (exec state offset bv start end finish? fieldv psr cbv)\n"]]
+  REPLACE [["  (define (exec state offset bv start end finish? fieldv psr)\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "exec carries its three reserved parameters: the full parameter list")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: a non-empty option list is accepted"
   FIND [[(unless (null? options)]]
   REPLACE [[(unless #t]]
@@ -6783,7 +6825,7 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
-  LABEL "compile: the final newline is emitted as CRLF"
+  LABEL "compile: the emitted library line's terminator is CRLF"
   # Re-anchored in Slice ①a task 3. The pin's FIND is compile.sls's render TAIL,
   # which the metadata PAYLOAD's placement rewrote -- not the constructor rename
   # one line above it, which is what the design's own die-list attributed the
@@ -6797,8 +6839,15 @@ byte_machine_mutation(
   # it names -- the tail is where every payload change lands, and any pin
   # anchored there will keep moving. Its REPLACE and its expectation are
   # unchanged; only the text it sits on moved.
-  FIND [[" exec (quote #(#(" fields "))))))\n"))))]]
-  REPLACE [[" exec (quote #(#(" fields "))))))\r\n"))))]]
+  # Re-anchored by Milestone 5 Slice ①a task 3, and MOVED OFF THE TAIL for good.
+  # This pin has now been broken by three consecutive slices without any of them
+  # touching the decision it names, and the comment above predicted this one.
+  # The library line is the new anchor: no payload change reaches it, every
+  # machine renders it, and a CRLF injected there satisfies the same expectation
+  # ("no carriage return byte appears and the last byte is LF"). Do not move it
+  # back to the tail -- the tail is where every payload change lands.
+  FIND [["(library (generated " mname ")\n"]]
+  REPLACE [["(library (generated " mname ")\r\n"]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "no carriage return byte appears and the last byte is LF: carriage return present")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
@@ -8444,10 +8493,16 @@ byte_machine_mutation(
   # still the edit -- the same decision, the same expectation.
   # Re-anchored by Slice ③ task 4: the list gained `d`, the emitted accumulate
   # arm's digit local. Dropping `pk` is still the edit.
+  # Re-anchored by Milestone 5 Slice ①a task 2: the list gained `psr` and `cbv`,
+  # emitted `exec`'s eighth and ninth parameters (decision 0025 point 3).
+  # Dropping `pk` is STILL the edit -- the same decision, the same expectation,
+  # the fourth re-anchor. This pin moves whenever the list does, by design: it
+  # anchors on the whole list precisely so that a name added without a matching
+  # guard entry is what breaks it.
   FIND [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs pk
-      v r d))]]
+      v r d psr cbv))]]
   REPLACE [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs
-      v r d))]]
+      v r d psr cbv))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(pk\\)")
 
@@ -8459,8 +8514,13 @@ byte_machine_mutation(
   # and `r`, reopened by ③'s own addition. Dropping it is what the guard is for:
   # the emitted body binds a local the list does not reserve, and a caller may
   # legitimately bind the same name.
-  FIND [[      v r d))]]
-  REPLACE [[      v r))]]
+  # Re-anchored by Milestone 5 Slice ①a task 2: the continuation line gained
+  # `psr cbv`. Dropping `d` is still the edit. Measured after the edit: this FIND
+  # and the whole-list FIND above remain textually distinct and each occurs
+  # exactly once, which the suite asserts in both directions (no SITES is
+  # declared anywhere in this file, so every FIND is pinned at one occurrence).
+  FIND [[      v r d psr cbv))]]
+  REPLACE [[      v r psr cbv))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(d\\)")
 
@@ -9379,6 +9439,27 @@ byte_machine_mutation(
   REPLACE [[        (integer-accumulate-node? x) (stop-node? x)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the same nine kinds -- expected")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls
+  SPEC byte-machine.unit.kind-position-census.chez.source
+  LABEL "verify: a zero-width edge role loses its label"
+  # Milestone 5 Slice ①a's FINAL REVIEW, closing a gap the slice's own comment
+  # had argued was unclosable. That comment claimed the position drift row is
+  # BLIND under this suite -- the census reads the STAGED tree (:1157), so a
+  # mutation deleting a role deletes it from the code AND from the set derived
+  # in the test. The first half is true; the conclusion is not. The derived set
+  # is compared against `role->positions`, which is DECLARED in the test file,
+  # and a mutation rewrites only the file its own FILE names -- so the mutated
+  # verifier meets an unmutated mapping and the two disagree.
+  #
+  # This pin is the proof. Renaming `true` breaks the derived-equals-mapped
+  # assertion by a COMPARISON, naming both sides, rather than by a raise
+  # somewhere downstream. Measured: caught by the census lane alone.
+  FIND [[           (list (cons 'true (field-branch-node-true-target n))]]
+  REPLACE [[           (list (cons 'tru (field-branch-node-true-target n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "derived roles equal the mapped roles -- expected")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls

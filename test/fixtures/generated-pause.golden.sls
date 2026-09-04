@@ -2,7 +2,7 @@
   (export pausem)
   (import (rnrs) (byte-machine runtime))
   (define errs (quote #(#(unexpected-byte "unexpected byte") #(truncated-input "truncated input"))))
-  (define (exec state offset bv start end finish? fieldv)
+  (define (exec state offset bv start end finish? fieldv psr cbv)
     (let loop ((pos start) (st state) (off offset) (pk (quote boundary)))
       (case st
       ((0)
@@ -31,4 +31,4 @@
       ((7) (byte-machine-make-feed-outcome/v1 (quote error) pos (byte-machine-make-parser-error/v1 (vector-ref errs 0) (quote reject) 7 off pk) 7 off))
       (else (assertion-violation (quote exec) "unknown state" st)))))
   (define pausem
-    (byte-machine-make-compiled-machine 3 17903327606435836645 0 exec (quote #(#())))))
+    (byte-machine-make-compiled-machine 4 17903327606435836645 0 exec (quote #(#() #())))))

@@ -58,7 +58,14 @@
   ;; project: Chez prefers a compiled object over source and staleness is
   ;; transitive across imports, so a stale object of a generated library really
   ;; can meet a newer runtime inside this repository's own build.
-  (define current-abi-version 3)
+  ;;
+  ;; Bumped to 4 by Milestone 5 Slice ①a (decision 0025 point 2), which grew the
+  ;; ABI payload with a second member -- empty here, filled by ①b. §9.5:444 is
+  ;; what forces the bump; the strict equality below is what enforces it. The
+  ;; `>= 1` metadata check further down is a LENGTH minimum and enforces nothing
+  ;; about the version: a two-member payload satisfies it unchanged, which is
+  ;; the freedom the quoted vector was chosen for.
+  (define current-abi-version 4)
 
   ;; The one unversioned constructor. Its FIRST action is the version check, so a
   ;; mismatch is reported before any part of the payload is interpreted -- which
@@ -116,10 +123,27 @@
   ;; 3(c). It is dead weight in this slice and in ①b, and it is the whole reason
   ;; Slice ②'s field store moves no golden: adding the parameter LATER would
   ;; change the emitted text of every machine, including the zero-field ones.
-  ;; Retained for the mutation that pins the seventh parameter's presence; no
-  ;; call site passes it since Slice ② gave the generated lane the parser's own
-  ;; vector. Deleting it would take that pin with it.
+  ;; *** ITS STATED REASON FOR EXISTING IS FALSE, and Milestone 5 Slice ①a's
+  ;; final review measured it. *** The line here read "Retained for the mutation
+  ;; that pins the seventh parameter's presence ... Deleting it would take that
+  ;; pin with it." No mutation references this binding: searched the whole tree,
+  ;; and the only `empty-fields` outside this file's own comments is prose in
+  ;; `milestone-4-slice-2-implementation-plan.md`. Slice ② gave both call sites
+  ;; the parser's own vector and re-anchored that pin onto
+  ;; `(parser-field-values parser)` in the same commit, which is what actually
+  ;; retired this binding.
+  ;;
+  ;; Kept rather than deleted, because deleting it is not a seam slice's work and
+  ;; the milestone's boundary is stated. What is corrected is the REASON: it is
+  ;; dead weight with no pin depending on it, and the slice that next touches
+  ;; this region should remove it.
   (define empty-fields (vector))
+  ;; Milestone 5 Slice ①a (decision 0025 point 3): the resolved callback slot
+  ;; vector emitted `exec` receives as `cbv`. Empty until Slice ①b resolves
+  ;; bindings into it. Unlike `empty-fields` -- whose sharing became a defect the
+  ;; moment Slice ② wrote through it -- nothing writes through this one, and the
+  ;; slice that gives it contents owns replacing the sentinel.
+  (define empty-callbacks (vector))
 
   ;; --- feed outcome (the runtime<-generated seam; accessors private) ---
   (define feed-outcome-tag (tag 'byte-machine-feed-outcome))
@@ -379,7 +403,7 @@
            ;; would make every generated field machine index out of bounds --
            ;; measured, before this line changed.
            (o (exec (parser-current parser) (parser-offset parser) bv start end #f
-                    (parser-field-values parser))))
+                    (parser-field-values parser) parser empty-callbacks)))
       (parser-set-current! parser (feed-outcome-next-state o))
       (parser-set-offset! parser (feed-outcome-offset o))
       (make-parser-result (feed-outcome-status o) (feed-outcome-next o)
@@ -426,7 +450,7 @@
   (define (parser-finish-v2! parser)
     (let* ((exec (parser-executor parser))
            (o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t
-                    (parser-field-values parser))))
+                    (parser-field-values parser) parser empty-callbacks)))
       (parser-set-current! parser (feed-outcome-next-state o))
       (parser-set-offset! parser (feed-outcome-offset o))
       (case (feed-outcome-status o)
