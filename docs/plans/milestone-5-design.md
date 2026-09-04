@@ -25,13 +25,24 @@ the line wrong can still find the thing.
 > leaving a false one is a landmine and what it used to say is in git. Later dated notes are
 > indexed here, newest first, each naming the section it amends.
 >
-> *(No amendments yet.)*
+>
+> **2026-09-04, the review of the first draft (`6ee27bc`).** No *record* here has been amended;
+> everything the review moved was an **instruction** and was corrected in place, per the law
+> above. Kept as a record because a reader should know what the first draft got wrong: sixty-four
+> findings raised, twenty-nine refuted, and of what survived, the two that mattered were **§5's
+> forward oracle** — it asserted an empty `git diff -- test/fixtures/`, which is false, because
+> the goldens are emitted *text* and this slice moves two lines in each — and **the appendix
+> census**, which asserted completeness while missing six rows, one of them the very site that
+> shipped a Milestone 4 defect. Both are now stated with the recogniser or the measurement that
+> makes them checkable. Three arguments were also weakened from "decisive" to what the artifacts
+> actually support (§4.3, §4.6, §4.12 item 4); in each case the resolution was right and the
+> stated reason was not.
 
 **Governing plan.** The parent plan's `§25` "Milestone 5" subsection is authoritative. Its
 Scope list is `§25:1576-1584` and its Exit criteria are `§25:1588-1591`. **This document
 changes no scope and rewords no criterion**; where it appears to say something the parent does
-not, the parent wins and this document is wrong. Two additions this document *proposes* are
-collected in §4.7 and are not in scope until the owner approves them on a stated date.
+not, the parent wins and this document is wrong. Four additions this document *proposes* are
+collected in §4.12 and are not in scope until the owner approves them on a stated date.
 
 ---
 
@@ -67,8 +78,8 @@ defect surface is measured, not estimated** — see §3's site census and the ap
 | Slice ①a | seam | ABI payload member, exec signature, encoding shape, position-axis drift row | no `§25` bullet; pays every artifact move once |
 | Slice ①b | declarations | callback and span declarations, binding resolution, five missing `§9.3` exports | `§25:1576` |
 | Slice ② | node kind + lifecycle | callback-invocation node, outcomes, `busy`, reentrancy, poisoning | `§25:1577`, `:1578`, `:1579`, `:1580`; exit `:1588` |
-| Slice ③ | node kinds + dataflow | span start/end, fragments, completion-pending, span verification | `§25:1581`, `:1582`, `:1583`, `:1584`; exit `:1589`, `:1590` |
-| Slice ④ | evidence | retention oracle with its negative control, EOF/reset fragment legs, the lifetime reference | exit `:1591`; the milestone close note |
+| Slice ③ | node kinds + dataflow | span start/end, fragments, completion-pending, span verification | `§25:1581`, `:1582`, `:1583`, `:1584`; exit `:1590`, and `:1589`'s boundary/pause/completion/error legs |
+| Slice ④ | evidence | retention oracle with its negative control, EOF/reset fragment legs, the lifetime reference | exit `:1591`, and `:1589`'s EOF and reset legs; the milestone close note |
 
 **Dependency order is strict and each edge is forced, not preferred.** ①a before ①b because
 the generated lane's `make-parser` sees only the ABI payload, so a declaration cannot reach it
@@ -91,10 +102,11 @@ about a final value, and `§22.4:1268`'s callback-order comparison has never bee
 
 **Why Gate 0 comes first.** Every prior milestone opened this way and the reason is recorded in
 Milestone 4's Gate 0 plan: a record's Consequences section is what removes work from the slice
-that would otherwise re-derive it, so a slice starting without its record pays twice. Thirteen
-design calls are collected in §4; four of them (DC-4, DC-5, DC-10, DC-12) are externally
-observable through the IR fingerprint, the emitted text, or a diagnostic's identity, and an
-implementing slice that picks one by accident pins the wrong answer in a golden.
+that would otherwise re-derive it, so a slice starting without its record pays twice. Ten
+design calls are collected in §4.1-§4.10. Four are externally observable — §4.3's encoding shape
+and §4.4's state-id order through the IR fingerprint, §4.8's exec parameters and ABI member
+through the emitted text, and §4.5's reachability relation through which diagnostic a fixture
+emits — and an implementing slice that picks one by accident pins the wrong answer in a golden.
 
 **Why the seam is its own slice, and why it contains no semantics.** Slice ①a moves every
 committed artifact once, before any behaviour exists to argue about. Decision 0019 set this
@@ -199,10 +211,11 @@ constructs, at `:97` (`zero-width-edges`), `:124` (`node-out-edges`), `:161` (`n
 (zero-progress report set), `:761` (`classify`), `:848` (the `:908` zero-hop entry clause),
 `:859` (the `:908` per-edge target), `:908` (the `:909` parked-set gate).
 
-The full cross-library census is the appendix. Every site gets a row and every row states
-*either* the new arm *or* that the site is deliberately not extended, with the reason —
-Milestone 4's Slice ② used exactly this checklist shape and it is the only thing that has ever
-caught this defect class before it shipped.
+The full cross-library census is the appendix, which states the **recogniser** it was built
+with so that its completeness can be re-derived rather than trusted. Every site gets a row and
+every row states *either* the new arm *or* that the site is deliberately not extended, with the
+reason — Milestone 4's Slice ② used exactly this checklist shape and it is the only thing that
+has ever caught this defect class before it shipped.
 
 **The two ratchets Slice ⓪ built fire automatically here, and that is what it was for.**
 `test/common/kind-position-census-tests.sps:326` compares `node?`'s disjunct list against the
@@ -241,8 +254,8 @@ discovers one mid-task and reports it as its own regression.
 4. **`pass-zero-progress` applies no reachability gate**, though `§16.2:898` says "reachable
    zero-progress cycles". Measured: its report loop (`verify.sls:618-634`) maps over
    `(machine-nodes m)` with no `reached` term anywhere in the pass. Benign today — such a
-   machine is rejected by `unreachable-node` regardless — but it is the same question as DC-10,
-   in a pass Slice ③ must extend with three zero-width kinds. Resolve it with DC-10.
+   machine is rejected by `unreachable-node` regardless — but it is the same question §4.5
+   settles, in a pass Slice ③ must extend with three zero-width kinds. Resolve it with §4.5.
 
 **And one hazard that is not a divergence but will mislead a slice.** Two comments in
 `verify.sls` (`:402` and `:468`) justify their design by citing `§16.4:937-943` for a
@@ -319,10 +332,12 @@ when nonempty. The header does not grow. A machine that declares neither encodes
 byte-identically to today.**
 
 Measured header (`src/byte-machine/private/normal-ir.sls:465-467`):
-`[version u8][entry u32be][state-count u32be][field-count u16be]`, and decision 0019's three
-pre-provisioned header slots are all spent on fields. Growing it moves all four committed
+`[version u8][entry u32be][state-count u32be][field-count u16be]`. **Decision 0019
+pre-provisioned three slots and only one of them was ever in this header** — item 3(a)'s `u16be`
+field count. Item 3(b) is the ABI payload's field-initials member and 3(c) is emitted `exec`'s
+seventh parameter, neither of which is in the encoding at all. All three are spent. Growing it moves all four committed
 goldens under `test/fixtures/` and the fingerprint literal pinned at
-`test/common/normal-ir-tests.sps:96-98` for machines that have no callbacks and no spans —
+`test/common/normal-ir-tests.sps:96-99` for machines that have no callbacks and no spans —
 paying a re-baseline for machines the feature does not touch. Decision 0019 struck exactly this
 bargain once; restating it is consistent, not novel.
 
@@ -354,8 +369,9 @@ observable through the IR fingerprint and the order of emitted `case` arms — d
 Context is what makes that observable — so it must be pinned by a record.
 
 **Also settled here:** a span end lowers to **one internal state per resumable substep**, not a
-fused state. `§17:966` forbids speculative fusion, and `§14:837` requires resume "at the next
-undelivered substep", which is only expressible if each substep has one.
+fused state. `§17:966` forbids speculative fusion, and `§14:838` — rule 9, the span-end pause
+rule, not rule 8's boundary-flush pause — requires resume "at the next undelivered substep",
+which is only expressible if each substep has one.
 
 ### 4.5 "Reachable path" means byte-reachability plus the EOF walk
 
@@ -388,11 +404,13 @@ indexed slot.
 optional callback produces no entry in the callback-order sequence.**
 
 The alternative — an installed closure returning the singleton — is uniform but allocates a
-closure per unbound optional callback at construction and, decisively, **produces a different
-`§22.4:1268` callback-order sequence for the same machine and the same bindings.** The choice
-is externally observable, so both lanes must make it identically; that is exactly the class of
-divergence `§18:970` says the differential exists to catch, and it cannot be left to each lane
-to decide.
+closure per unbound optional callback at construction, and buys nothing observable in return.
+**No witness distinguishes the two designs**, and this document says so rather than claiming
+one: an unbound optional callback has, by construction, no application closure to record with,
+so neither shape puts an entry in a `§22.4:1268` sequence the application can see. The
+resolution is taken on cost, not on observability. It still binds **both lanes** — a divergence
+here would be invisible to the differential, which is the reason to write it down rather than
+the reason to prefer it.
 
 ### 4.7 The span lattice must meet at merge points
 
@@ -429,7 +447,7 @@ version of it would have sent Slice ①a writing a test for a hole that does not
 reported that "`runtime.sls:84-88`'s `>= 1` check will not enforce the bump, so the slice owes
 a test that it did." That conflates two different checks. The **version** check
 (`runtime.sls:79`) is `(= abi-version current-abi-version)` — strict equality, which *does*
-enforce the bump. The `>= 1` at `runtime.sls:85` is a **minimum length** check on the metadata
+enforce the bump. The `>= 1` at `runtime.sls:84` is a **minimum length** check on the metadata
 vector, which is what lets the payload grow at all. The constructor's own comment
 (`runtime.sls:63-71`) states the coupling: the payload is one quoted vector rather than a
 rest-arg precisely so that "the vector keeps growth and the check coupled." Slice ①a still owes
@@ -479,9 +497,9 @@ construct with its cross-lane oracle deliberately blinded.
 - **An event callback's branch map must be empty, and the verifier is what rejects a non-empty
   one.** `§10.3:504` gives branch keys only to decision callbacks, so every key in an event
   callback's map is undeclared and `§16.2:901`'s existing "undeclared" clause already covers
-  it. A constructor-side rejection is *excluded*: `§9.1:322` gives the constructor the callback
-  *name* only, so "is this an event callback" is a cross-reference, which decision 0020 item 1
-  assigns to the verifier.
+  it. A constructor-side rejection is *excluded*: `§9.1:307-308`'s signature gives the constructor
+  the callback *name* only and `§9.1:322` limits constructors to local shape, so "is this an
+  event callback" is a cross-reference — which decision 0020 item 1 assigns to the verifier.
 - **EOF never delivers a span-data fragment; an EOF span-end delivers only the completion
   callback.** Derived, not chosen, and the derivation is short enough to check: `§14:833`'s
   re-anchor clause is unconditional (§3's last bullet), so at every feed return with an open
@@ -533,12 +551,18 @@ each is stated with what was measured, so the owner is approving a fact rather t
 4. **The `graph.sls` export convention is stated for the first time, and applied forward
    only.** Measured against the full file: Milestone 3's sequence-dispatch exports its
    predicate, four accessors, `sequence-case?` and two case accessors; **Milestone 4's three
-   node kinds export constructors only** — no `field-action-node?`, no `field-branch-node?`, no
-   `integer-accumulate-node?` — while `graph.sls`'s own header (`src/byte-machine/graph.sls:6-15`)
-   describes the Milestone 3 behaviour as the precedent Milestone 4 followed. The header and
-   the exports disagree. **Proposed: Milestone 5's three kinds and two declaration families
-   export predicates and accessors (the Milestone 3 shape), and the header is corrected to say
-   what the file actually does.** Retrofitting Milestone 4's three kinds is *not* proposed —
+   node kinds export constructors only** (`graph.sls:22-23`) — no `field-action-node?`, no
+   `field-branch-node?`, no `integer-accumulate-node?`. **The header does not contradict this**,
+   and an earlier draft of this document said it did. `graph.sls:12-15` records that Milestone 4
+   added `make-uint-field` "with its predicate and one accessor per §10.2:488-491 part" — a
+   *declaration* family, and `uint-field?` with four accessors is indeed exported (`:17-18`) —
+   and then draws the line: "Machine ACCESSORS stay private: §9.1 fixes a construction surface,
+   and reading a built machine back is not part of it." Node-kind predicates fall on the private
+   side of that line, and Milestone 4 followed it. What is genuinely unstated is why
+   sequence-dispatch is the exception. **Proposed: Milestone 5's two declaration families export
+   predicates and accessors on the `uint-field` precedent, its three node kinds export
+   constructors only on the Milestone 4 precedent, and the header gains one sentence naming
+   sequence-dispatch as the outlier it is.** Retrofitting Milestone 4's three kinds is *not* proposed —
    that is a change to shipped surface with no Milestone 5 consumer.
 
 ---
@@ -572,16 +596,34 @@ moved the line — that class is caught by review or not at all.
 
 **Oracle — two-sided, and both sides are commands with falsifiable results.**
 
-*Forward:* the four committed goldens under `test/fixtures/` and the fingerprint literal at
-`test/common/normal-ir-tests.sps:96-98` move **exactly once**, by a diff the slice states in
-advance and a reviewer can diff against. Under §4.3's resolution the expected move for a
-machine declaring neither callbacks nor spans is **none at all**, so
-`git diff --stat <base>..HEAD -- test/fixtures/` being empty is the assertion, not a hope.
+*Forward:* the four committed goldens under `test/fixtures/` move **exactly once**, by a diff
+this slice states in advance and a reviewer can diff against. **They are emitted *text*, so
+§4.3's "encodes byte-identically to today" does not spare them** — an earlier draft of this
+document claimed an empty `git diff -- test/fixtures/` was the assertion, and that was wrong.
+Measured: every golden carries the `exec` signature at `:5` and the constructor call as its last
+line (`generated-one-byte.golden.sls:21`, `generated-pause.golden.sls:34`,
+`generated-accumulate.golden.sls:36`, `generated-http-version.golden.sls:86`), and this slice's
+work list moves both — the parameter list widens, the literal `3` becomes `4`, and the metadata
+vector gains its second member. **Two lines per file, four files, and nothing else.**
 
-*Backward:* every existing suite green with zero semantic re-baseline; `unit.reserved-drift`
-and `unit.member3-drift` green with the new entries (they are subset assertions, so an
-unregistered emitted identifier reddens rather than colliding silently); and — the one that
-proves the slice's own boundary — **`node?`'s disjunct list is still nine**, so
+What §4.3 buys is the other half of the gate, and it is the sharper half: **every fingerprint is
+unchanged.** The four goldens each carry one (`14095574568398596535` and its three siblings) and
+`test/common/normal-ir-tests.sps:96-99` pins the same value as a literal. A fingerprint that
+moves in this slice means the encoding changed when §4.3 said it would not — that is the
+assertion, and unlike an empty diff it can actually fail.
+
+*Backward:* every existing suite green with zero semantic re-baseline. **The two drift guards
+are not the same shape, and the difference bites in the next slice.** `member3-drift` is the
+subset assertion (`test/common/member3-drift-tests.sps:127`, `extra` must be `'()`), so an
+unregistered emitted local reddens rather than colliding silently — that is the one this slice's
+new `reserved-member-3` entries answer to. `reserved-drift` is **set equality**
+(`test/common/reserved-drift-tests.sps:37-40`, "the declared set equals the live runtime export
+set") between `reserved-member-2` and `(byte-machine runtime)`'s live exports, so it reddens in
+*both* directions: Slice ①b adds six runtime exports (§6) and each one must join
+`reserved-member-2` in the same commit or that lane goes red. This slice adds none, so it stays
+green here — the note is for §6, which would otherwise meet a red test it was told was a subset
+assertion. And — the one that proves this slice's own boundary — **`node?`'s disjunct list is
+still nine**, so
 `kind-position-census-tests.sps:326` stays green. A seam slice that accidentally added a node
 kind would fail that assertion, which is what makes "no semantics" checkable rather than
 asserted.
@@ -596,8 +638,9 @@ guard keeps working, not that a hole is being closed.
 
 **Scope, as an allocation.** Discharges `§25:1576` ("callback declarations and indexed
 binding") **whole**. It adds **no node kind** — that boundary is the slice's own oracle.
-Declaration-side shares of `§16.2:890`, `:891`, `:892` and `:901` land here; the node-side
-share of `:901` is Slice ②'s, and every span-topology check is Slice ③'s.
+Declaration-side shares of `§16.2:885`, `:886`'s *name* clause, `:890`, `:891`, `:892` and
+`:901` land here; the node-side share of `:901` is Slice ②'s, and every span-topology check is
+Slice ③'s.
 
 **The work.**
 
@@ -611,6 +654,13 @@ share of `:901` is Slice ②'s, and every span-topology check is Slice ③'s.
   ("invalid span callback declarations"), `:901`'s declaration share, and `:902` — whose content
   `§9.3:421` already fixes, so only its code is minted. "Incompatible" and "invalid" are the
   derivations recorded in §3, not new definitions.
+- **`§16.2:885` and `§16.2:886`'s name clause acquire two new subjects, and neither is a new
+  check.** Measured: `pass-names` (`verify.sls:203-236`) scans node names and error declaration
+  names and reads no other declaration collection, so callback and span names are outside every
+  duplicate-name and grammar check the tree performs today. `§9.1:284-286` gives both families a
+  `name`, and `§10.1:480` puts declaration names under `[a-z][a-z0-9-]*`. Extending an existing
+  pass to two new collections is cheaper than a new pass and is the whole of the work — but it
+  is work no scope bullet names, which is why it is written down here.
 - `make-parser`'s `§9.3:419` binding resolution, with the `reentrancy`, `poisoned parser` and
   `callback binding error` codes of `§9.4:438`.
 - **The five `§9.3` exports that do not exist anywhere in `src/`.** Measured at `db86ab6`, each
@@ -658,12 +708,12 @@ checked.
 - `dynamic-wind` poisoning (`§12.6:749`; `§7.1:160` names the mechanism as available).
 - §4.1/§4.2's callback-contract error, and `§16.2:901`'s node half.
 - **Every per-kind site, worked from the appendix census as a checklist with a row per site.**
-  Thirteen constructs in `verify.sls` (§3.1), plus `interpret.sls:84` (kind dispatch) and
-  `:156` (`eof-target-of`), `normal-ir.sls`'s `lower-machine` cond (`:342-425`) and
-  `encode-normal`'s wire tags (`:494-547`, tags 0-7 taken), `compile.sls`'s `render-state-arm`
-  case (`:247-357`), and `runtime.sls`'s two differently-grouped kind cases (`:323` feed, `:459`
-  finish). Each row states the new arm **or** that the site is deliberately not extended, with
-  the reason.
+  **The appendix is the authority and this bullet deliberately does not restate it** — a partial
+  copy of that list is how a site goes missing, and an earlier draft of this document carried one
+  that was short by six rows. Re-run the appendix's stated recogniser at plan-writing time and
+  reconcile against the table; a row the recogniser finds and the table lacks is the finding.
+  Each row states the new arm **or** that the site is deliberately not extended, with the
+  reason.
 - **Disposition `§12.3:711`'s paused-finish divergence** (§3.2 item 3) rather than inherit it:
   `§12.4:729` lets EOF processing invoke callbacks and pause, so this slice turns one shipped
   paused-finish path into many.
@@ -695,8 +745,11 @@ checked.
 
 **Scope, as an allocation.** Discharges `§25:1581` (one active named span), `:1582` (boundary
 flush and completion), `:1583` (pause-safe span internal continuations) and `:1584` (span
-dataflow verification), and exit criteria `§25:1589` (fragment tests) and `:1590` (every
-invalid span topology rejected).
+dataflow verification), exit criterion `§25:1590` (every invalid span topology rejected), and
+**four of the six legs of `§25:1589`.** That criterion reads "fragment tests cover boundaries,
+pause, completion, error, EOF, and reset"; this slice discharges boundaries, pause, completion
+and error, and Slice ④ discharges EOF and reset (§9). Neither slice discharges `:1589` whole,
+and saying so is how the milestone avoids each believing the other covered a leg.
 
 **The work.**
 
@@ -822,14 +875,21 @@ oracle must *fail* on, designed alongside the oracle rather than added after it 
 
 ## Appendix — per-kind site census
 
-Every site a new node kind must reach, measured at `db86ab6`. Slice ② and Slice ③ each work
-this table as a checklist, one row per site, each row stating the new arm **or** that the site
-is deliberately not extended and why. This table is the instrument that would have caught all
-three of Milestone 4 Slice ③'s defects.
+Every site a new node kind must reach, measured at `db86ab6` by `rg -n -- '-node\?'` and
+`rg -n 'normal-state-kind'` over `src/byte-machine/`, dropping comment-only lines and
+import/export lists, grouped by enclosing construct. **The recogniser is stated so that the
+table's completeness is checkable rather than asserted** — an earlier draft of this document
+claimed completeness without one and was missing six rows.
+
+Slice ② and Slice ③ each work this table as a checklist, one row per site, each row stating the
+new arm **or** that the site is deliberately not extended and why. This table is the instrument
+that would have caught all three of Milestone 4 Slice ③'s defects — and row `compile.sls:422` is
+literally where one of them was.
 
 | File | Site | Construct |
 |---|---|---|
 | `private/ir.sls` | `:484-488` | `node?` — the closed-set disjunct list; a census test reads it |
+| `private/ir.sls` | `:489-499` | `node-name` — nine-arm `cond` directly below `node?`; **no census test reads it**, and a missing arm falls to a raising `else` |
 | `verify.sls` | `:97` | `zero-width-edges` |
 | `verify.sls` | `:124` | `node-out-edges` |
 | `verify.sls` | `:161` | `node-eof-target` |
@@ -843,11 +903,16 @@ three of Milestone 4 Slice ③'s defects.
 | `verify.sls` | `:848` | `§16.2:908` zero-hop entry clause |
 | `verify.sls` | `:859` | `§16.2:908` per-edge target |
 | `verify.sls` | `:908` | `§16.2:909` parked-set gate |
-| `interpret.sls` | `:84` | kind dispatch |
-| `interpret.sls` | `:156` | `eof-target-of` |
+| `interpret.sls` | `:84-92` | kind dispatch |
+| `interpret.sls` | `:98` | sequence-dispatch special case |
+| `interpret.sls` | `:158-160` | `eof-target-of` |
+| `interpret.sls` | `:293` | field-action special case |
 | `private/normal-ir.sls` | `:342-425` | `lower-machine` cond |
 | `private/normal-ir.sls` | `:494-547` | `encode-normal` wire tags (0-7 taken) |
+| `private/normal-ir.sls` | `:547` | the `normal-state-kind` else that closes the encoder |
 | `compile.sls` | `:247-357` | `render-state-arm` case |
+| `compile.sls` | `:390` | error reason/code selection on `normal-state-kind` |
+| `compile.sls` | `:422` | reached-declaration walk, `'(dispatch accumulate)` — **the Slice ③ defect site** |
 | `runtime.sls` | `:323` | feed kind case |
 | `runtime.sls` | `:459` | finish kind case |
 
