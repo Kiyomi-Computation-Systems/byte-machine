@@ -174,12 +174,16 @@
         (check "import" (has? "(import (rnrs) (byte-machine runtime))"))))
     (harness-case "it constructs the compiled machine through one unversioned call"
       (lambda ()
-        ;; Decision 0018: the versioned NAME is retired, the version NUMBER
-        ;; survives and moves to 3, and the trailing quoted vector is the
-        ;; growable payload whose member 0 is the empty field-initials vector.
-        ;; It renders as #(#()) rather than #() because an empty vector has no
-        ;; member 0 -- ①b would have to add one, moving every golden in the
-        ;; slice whose headline invariant is that none moves.
+        ;; Decision 0018: the versioned NAME is retired and the version NUMBER
+        ;; survives; 0018 moved it to 3. The trailing quoted vector is the
+        ;; growable payload. The payload is a vector OF members rather than a
+        ;; bare #() because an empty vector has no member 0 -- Milestone 4 ①b
+        ;; would have had to add one, moving every golden in the slice whose
+        ;; headline invariant is that none moves.
+        ;;
+        ;; Milestone 5 Slice ①a (decision 0025 point 2) moves the version to 4
+        ;; and grows the payload with a second member, reserved empty. So the
+        ;; literal below reads 4 and a zero-field payload renders #(#() #()).
         (check "unversioned call"
                (has? "(byte-machine-make-compiled-machine 4 14095574568398596535 0 exec (quote #(#() #())))"))
         (check "no versioned name survives"
@@ -195,7 +199,10 @@
     ;; `parser-field-ref` answers by -- and the slot is the pair's POSITION, so
     ;; one member carries both and still renders `#()` when there are no fields.
     ;; A second member would have been a second ABI growth for data the first
-    ;; already determines.
+    ;; already determines. That argument is about FIELD data and is NOT a
+    ;; prohibition on further members: Milestone 5 Slice ①a adds member 1,
+    ;; reserved empty (decision 0025 point 2), and it is the trailing `#()` in
+    ;; the expectation below.
     (harness-case "a field-declaring machine renders its declarations in member 0"
       (lambda ()
         (check "pairs in slot order"
@@ -212,11 +219,15 @@
         ;; machine, including the ones the feature never touches, so the
         ;; widening is paid once before any arm needs it.
         ;;
-        ;; This case is the ONLY witness to the emitted signature anywhere in the
-        ;; tree. Measured for the Slice ①a plan across all 366 mutation
-        ;; declarations: no FIND anchors on this line, so a mutation to the
-        ;; parameter list is invisible to the mutation suite and this assertion
-        ;; is what stands between it and silence.
+        ;; This is the only assertion that names the parameter list as TEXT, and
+        ;; the only witness that runs in the SPEC lane of the mutation that pins
+        ;; it. It is NOT the only thing in the tree that would notice a change:
+        ;; measured 2026-09-04, all four committed goldens carry the same line at
+        ;; `:5`, and the determinism lanes compare them byte for byte. An earlier
+        ;; draft of this comment claimed tree-wide uniqueness and was wrong --
+        ;; the standing rule is that a novelty claim needs measuring, and the
+        ;; measurement that produced it had searched the MUTATION declarations
+        ;; only.
         (check "the full parameter list"
                (has? "(define (exec state offset bv start end finish? fieldv psr cbv)"))))
     (harness-case "the accepted byte advances and the fallback reexecutes"

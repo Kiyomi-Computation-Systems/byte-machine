@@ -515,9 +515,11 @@
            ;; the name-to-slot resolution parser-field-ref answers by, the slot
            ;; is the pair's position, so one member determines both. That
            ;; argument is about FIELD data and is NOT a prohibition on further
-           ;; members -- Milestone 5 Slice ①a adds member 1 for the callback and
-           ;; span slots (decision 0025 point 3), rendered as a bare `#()` here
-           ;; and filled by its own ①b. With no fields the payload is now
+           ;; members -- Milestone 5 Slice ①a adds member 1, reserved empty.
+           ;; Decision 0025 POINT 2 is what grants it; point 3 is the `exec`
+           ;; parameters, and 0025 explicitly declines to allocate member 1's
+           ;; contents, so this comment does not either. Rendered as a bare `#()`
+           ;; here and filled by whichever slice needs it. With no fields the payload is now
            ;; `#(#() #())`.
            ;;
            ;; Rendered from the NORMALIZED table rather than from machine-fields,

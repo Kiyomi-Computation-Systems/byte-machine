@@ -28,7 +28,7 @@
 | `src/byte-machine/runtime.sls` | `current-abi-version` 3→4 (`:61`) and its comment | 1 |
 | `src/byte-machine/compile.sls` | emitted `exec` gains two parameters (`:532`); `reserved-member-3` gains their names (`:68-70`) and its comment is corrected | 2 |
 | `src/byte-machine/compile.sls` | emitted ABI literal 3→4 and the payload's second member (`:550-551`); the member-0 comment block (`:504-517`) corrected | 3 |
-| `src/byte-machine/private/normal-ir.sls` | the optional trailing slot-table section, and the header comment (`:465-467`) | 4 |
+| `src/byte-machine/private/normal-ir.sls` | **as executed:** the trailing section's *shape* recorded as a comment at `encode-normal`'s head; the section's CODE deferred to Slice ①b, and the header writes left byte-identical. See Task 4's correction note | 4 |
 
 **Modified — tests and fixtures:**
 
@@ -232,7 +232,7 @@ Expected: **every fingerprint unchanged, all four goldens unchanged by this task
 
 The only enumeration with the right cardinality is in **`verify.sls`** — the file the census exists to test. **That asymmetry is the whole point of the kind axis and it does not transfer:** the kind row derives from `ir.sls` and tests `verify.sls`, two independent files, so a mutation to one is caught by the other. A position row deriving from `verify.sls` tests `verify.sls` against itself.
 
-**And the census reads the mutated tree.** `SchemeMutationSuite.cmake:1150` is `set(ENV{BYTE_MACHINE_SOURCE_ROOT} "${STAGE_DIR}/src")`, so a mutation that deletes an arm deletes it from the code *and* from the derived set: the mutant is self-consistent and the row stays green.
+**The census reads the mutated tree** — `SchemeMutationSuite.cmake:1157` is `set(ENV{BYTE_MACHINE_SOURCE_ROOT} "${STAGE_DIR}/src")`. **Corrected by the slice's final review: this does NOT make the row blind.** The derived set is compared against a mapping *declared in the test*, so a mutation whose `FILE` is `verify.sls` stages a mutated verifier beside an unmutated test and the two sides disagree. The row is a mutation witness.
 
 - [ ] **Step 2: Build the row anyway, and label exactly what it buys**
 
@@ -267,7 +267,7 @@ The reverse-chronological ledger's current top is `:840-842`. Insert this slice'
 ctest --test-dir build/dev -R "kind-position" --output-on-failure
 git diff --stat main..HEAD -- src/byte-machine/private/ir.sls src/byte-machine/verify.sls src/byte-machine/interpret.sls
 ```
-Expected: `kind-position-census-tests.sps:326`'s "the same nine kinds" green — **that is what proves this slice added no node kind** — and the second command prints **nothing**.
+Expected: the second command prints **nothing** — *that* empty diff over `ir.sls`, `verify.sls` and `interpret.sls` is what proves the slice added no node kind. `kind-position-census-tests.sps:326`'s "the same nine kinds" is green too, and is worth having for a different reason: it compares `node?`'s disjuncts against the matrix's keys, so it catches a kind added to one and not the other. **It does not by itself prove no kind was added** — a slice that added a kind to both would keep it green — and an earlier draft of this step said it did.
 
 - [ ] **Step 3: Whole-slice verification**
 
@@ -282,7 +282,7 @@ Expected: 98/98 and the mutation suite at its new declared totals; four goldens 
 
 Task 2 measured that **no mutation anywhere anchors on the emitted `exec` parameter list.** This step as first written deferred a pin to Slice ②, "because a pin belongs with the slice that gives the parameters meaning".
 
-**That was wrong and the gap is closed here.** `AGENTS.md`: a guard shown not to guard gets closed, not documented. And the witness already exists — Task 2 added `compile-tests.sps`'s "exec carries its three reserved parameters", which the same measurement makes *the only assertion over that line in the tree*. The mutation drops the last reserved parameter, so it is caught by a failed comparison in that assertion rather than by a raise from a later arity mismatch.
+**That was wrong and the gap is closed here.** `AGENTS.md`: a guard shown not to guard gets closed, not documented. And the witness already exists — Task 2 added `compile-tests.sps`'s "exec carries its three reserved parameters", the only assertion naming that line as *text* and the only one that runs in the mutation's own SPEC lane. **Not the only thing in the tree that would notice**: the four goldens carry the same line at `:5` and the determinism lanes compare them byte for byte. An earlier draft of this step claimed tree-wide uniqueness, from a measurement that had searched the mutation declarations only. The mutation drops the last reserved parameter, so it is caught by a failed comparison in that assertion rather than by a raise from a later arity mismatch.
 
 - [ ] **Step 5: Commit**
 

@@ -123,9 +123,20 @@
   ;; 3(c). It is dead weight in this slice and in ①b, and it is the whole reason
   ;; Slice ②'s field store moves no golden: adding the parameter LATER would
   ;; change the emitted text of every machine, including the zero-field ones.
-  ;; Retained for the mutation that pins the seventh parameter's presence; no
-  ;; call site passes it since Slice ② gave the generated lane the parser's own
-  ;; vector. Deleting it would take that pin with it.
+  ;; *** ITS STATED REASON FOR EXISTING IS FALSE, and Milestone 5 Slice ①a's
+  ;; final review measured it. *** The line here read "Retained for the mutation
+  ;; that pins the seventh parameter's presence ... Deleting it would take that
+  ;; pin with it." No mutation references this binding: searched the whole tree,
+  ;; and the only `empty-fields` outside this file's own comments is prose in
+  ;; `milestone-4-slice-2-implementation-plan.md`. Slice ② gave both call sites
+  ;; the parser's own vector and re-anchored that pin onto
+  ;; `(parser-field-values parser)` in the same commit, which is what actually
+  ;; retired this binding.
+  ;;
+  ;; Kept rather than deleted, because deleting it is not a seam slice's work and
+  ;; the milestone's boundary is stated. What is corrected is the REASON: it is
+  ;; dead weight with no pin depending on it, and the slice that next touches
+  ;; this region should remove it.
   (define empty-fields (vector))
   ;; Milestone 5 Slice ①a (decision 0025 point 3): the resolved callback slot
   ;; vector emitted `exec` receives as `cbv`. Empty until Slice ①b resolves

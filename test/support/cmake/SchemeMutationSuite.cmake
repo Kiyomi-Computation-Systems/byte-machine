@@ -837,6 +837,12 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Milestone 5 Slice ①a's final review: ONE more, on a zero-width edge role's
+# label. The position drift row's own comment claimed it was BLIND under this
+# suite; the review measured that backwards -- the derived set meets a mapping
+# DECLARED in the test, so a mutated verifier disagrees with it. Mutations
+# 377 + 1 = 378.
+#
 # Milestone 5 Slice ①a: ONE, on the emitted `exec` parameter list. The slice's
 # own planning measured that no FIND anywhere anchored on that line, so widening
 # the signature was invisible here; the pin drops the last reserved parameter and
@@ -1009,7 +1015,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 52)
-set(EXPECTED_MUTATIONS 377)
+set(EXPECTED_MUTATIONS 378)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3033,7 +3039,8 @@ byte_machine_mutation(
   # the reservation was FOR. The `finish?` flag this pin names is unchanged.
   # Re-anchored by Milestone 5 Slice ①a task 2: both call sites gained `psr` and
   # `cbv` (decision 0025 point 3). The `finish?` flag is STILL what this pin
-  # names, and it is still the fifth argument -- only the tail grew.
+  # names, and it is still the sixth argument -- only the tail grew. (Counted:
+  # current-state, offset, empty-bv, 0, 0, #t.)
   FIND [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t
                     (parser-field-values parser) parser empty-callbacks)))]]
   REPLACE [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #f
@@ -6590,8 +6597,11 @@ byte_machine_mutation(
   # the slice that gives the parameters meaning. It is closed HERE instead,
   # because a demonstrated gap gets closed rather than documented, and the
   # witness already exists: compile-tests.sps's "exec carries its three reserved
-  # parameters" is the only assertion over that line in the tree, which is
-  # exactly what the measured absence made it.
+  # parameters" is the only assertion naming that line as TEXT, and the only one
+  # that runs in this mutation's own SPEC lane. It is not the only thing in the
+  # tree that would notice -- the four goldens carry the same line at `:5` and
+  # the determinism lanes compare them byte for byte -- and an earlier draft of
+  # this comment said "the only assertion in the tree", which was false.
   #
   # Dropping `cbv` -- the last parameter -- rather than mangling the whole list:
   # a caught-by-COMPARISON failure of the signature assertion, not a raise from
@@ -6815,7 +6825,7 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
-  LABEL "compile: the final newline is emitted as CRLF"
+  LABEL "compile: the emitted library line's terminator is CRLF"
   # Re-anchored in Slice ①a task 3. The pin's FIND is compile.sls's render TAIL,
   # which the metadata PAYLOAD's placement rewrote -- not the constructor rename
   # one line above it, which is what the design's own die-list attributed the
@@ -9429,6 +9439,27 @@ byte_machine_mutation(
   REPLACE [[        (integer-accumulate-node? x) (stop-node? x)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the same nine kinds -- expected")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls
+  SPEC byte-machine.unit.kind-position-census.chez.source
+  LABEL "verify: a zero-width edge role loses its label"
+  # Milestone 5 Slice ①a's FINAL REVIEW, closing a gap the slice's own comment
+  # had argued was unclosable. That comment claimed the position drift row is
+  # BLIND under this suite -- the census reads the STAGED tree (:1157), so a
+  # mutation deleting a role deletes it from the code AND from the set derived
+  # in the test. The first half is true; the conclusion is not. The derived set
+  # is compared against `role->positions`, which is DECLARED in the test file,
+  # and a mutation rewrites only the file its own FILE names -- so the mutated
+  # verifier meets an unmutated mapping and the two disagree.
+  #
+  # This pin is the proof. Renaming `true` breaks the derived-equals-mapped
+  # assertion by a COMPARISON, naming both sides, rather than by a raise
+  # somewhere downstream. Measured: caught by the census lane alone.
+  FIND [[           (list (cons 'true (field-branch-node-true-target n))]]
+  REPLACE [[           (list (cons 'tru (field-branch-node-true-target n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "derived roles equal the mapped roles -- expected")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls

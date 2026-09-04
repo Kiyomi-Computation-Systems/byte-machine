@@ -328,23 +328,33 @@
 
 ;; --- axis A': the POSITION drift row (Milestone 5 Slice ①a task 5) -----------
 ;;
-;; *** THIS ROW IS STRUCTURALLY WEAKER THAN S2 ABOVE, AND THE DIFFERENCE IS NOT A
-;; DETAIL. *** S2 derives its set from `ir.sls` and tests `verify.sls`: two
-;; independent files, so a mutation to either is caught by the other. There is no
-;; equivalent source for POSITIONS. Decision 0025 point 4 and the design both said
-;; to derive them "from the IR"; measured 2026-09-04, `ir.sls` has no position
-;; vocabulary at all -- the only enumeration with the right cardinality is in
-;; `verify.sls`, the file this census exists to test. So this row tests that file
-;; against itself.
+;; *** THIS ROW RATCHETS AGAINST DRIFT; IT CANNOT CERTIFY COMPLETENESS. *** S2
+;; above derives its set from `ir.sls`, a file INDEPENDENT of the census's
+;; subject. There is no equivalent source for POSITIONS: decision 0025 point 4
+;; and the design both said to derive them "from the IR", and measured
+;; 2026-09-04, `ir.sls` has no position vocabulary to derive from -- the only
+;; enumeration with the right cardinality is in `verify.sls`, the file this
+;; census exists to test. So the POSITION side is a hand-written fixture table,
+;; not a second derivation, and no assertion here can say the sixteen rows are
+;; the right sixteen.
 ;;
-;; Two consequences a later reader must not have to rediscover:
-;;   1. Under the mutation suite it is BLIND. `SchemeMutationSuite.cmake:1150`
-;;      points BYTE_MACHINE_SOURCE_ROOT at the STAGED tree, so a mutation that
-;;      deletes an edge role deletes it from the code AND from the set derived
-;;      here: the mutant is self-consistent and this row stays green.
-;;   2. What it DOES catch is a hand edit -- a role added to `verify.sls` with no
-;;      matrix position to receive it. That is the Milestone 4 defect shape one
-;;      level up, and before this row NOTHING read `position-table` at all.
+;; *** A CLAIM MADE HERE ON FIRST WRITING WAS BACKWARDS, and the correction is
+;; worth more than the original point. *** It said the row is BLIND under the
+;; mutation suite, reasoning that the census reads the STAGED tree
+;; (`SchemeMutationSuite.cmake:1157`) so a mutation deleting an edge role deletes
+;; it from the code AND from the set derived here. The first half is true and the
+;; conclusion does not follow: the derived set is compared against
+;; `role->positions` BELOW, which lives in this file and is DECLARED. A mutation
+;; whose FILE is `verify.sls` stages a mutated `verify.sls` and an unmutated copy
+;; of this test, so the two sides disagree and the row goes RED. The row is a
+;; mutation witness. It is unwitnessed only in the sense that nothing has yet
+;; declared a mutation pointing at it.
+;;
+;; What it catches, then, is any edit -- by hand or by mutation -- that adds or
+;; removes an edge role in `verify.sls` without a matching position. That is the
+;; Milestone 4 defect shape one level up. `position-table` was already read by
+;; the axis-A driver and the dangling-target group before this row; what none of
+;; them did was compare it against anything OUTSIDE this file.
 ;;
 ;; The role-to-position MAPPING below is declared, not derived, and that is
 ;; deliberate: the two vocabularies genuinely disagree (see `alternative`), so a

@@ -10,7 +10,10 @@ Milestone: 5, Gate 0 (milestone-5-design.md §4.3, §4.8)
 > - **2026-09-04 (Milestone 5, Slice ①a planning)** — **amends point 4**: its
 >   handoff says the position-axis drift row derives `position-table`'s names
 >   "from the IR". Measured while writing the Slice ①a plan: there is nothing in
->   `ir.sls` to derive them from.
+>   `ir.sls` to derive them from. *(That note is itself annotated in place by the
+>   slice's final review: its "the mutant is self-consistent and the row stays
+>   green" does not follow, and its `cmake:1150` is now `:1157`. Per this
+>   directory's README, an annotation on a note rides that note's bullet.)*
 > - **2026-09-04 (Milestone 5, Slice ①a execution)** — **amends point 4**: its
 >   allocation of point 1's encoding shape to Slice ①a. There is no artifact move
 >   to pay, so the seam argument does not reach it; ①b lands the section with the
@@ -164,6 +167,14 @@ the four goldens (one each), `test/common/normal-ir-tests.sps` (4),
    4" and is spent with that milestone; this point is the Milestone 5 instance of
    the same discipline, not an extension of 0019's.)
 
+   > **Amended 2026-09-04 (Milestone 5, Slice ①a planning)** — this point's
+   > position-axis handoff names a derivation that does not exist; `ir.sls` has
+   > no position vocabulary.
+
+   > **Amended 2026-09-04 (Milestone 5, Slice ①a execution)** — point 1's
+   > encoding shape is Slice ①b's work, not ①a's: a trailing section moves no
+   > artifact, so the seam argument does not reach it.
+
 ## Consequences
 
 **The oracle is two-sided, and the two sides fail for different reasons.**
@@ -250,6 +261,17 @@ And because the census reads the **staged** tree
 "${STAGE_DIR}/src")`), a mutation that removes a position removes it from both
 the code and the derived set: the mutant is self-consistent and the row stays
 green.
+
+> **Annotated 2026-09-04, later the same day, by the slice's own final review.**
+> The paragraph immediately above is **wrong in its conclusion**, and the row is
+> better than it says. The derived set is compared against a mapping that is
+> **declared in the test file**, not derived — so a mutation whose `FILE` is
+> `verify.sls` stages a mutated `verify.sls` beside an unmutated copy of the
+> test, the two sides disagree, and the row goes **red**. It is a mutation
+> witness. Also: the env line is `SchemeMutationSuite.cmake:**1157**`, not 1150 —
+> the citation was correct when measured and this branch's own edits moved it.
+> Left standing rather than rewritten, because what was believed when point 4 was
+> re-allocated is the evidence.
 
 **Nothing above this note is rewritten, and point 4's allocation stands** — the
 row is still Slice ①a's. What changes is what the row can be. The Slice ①a plan's
