@@ -6,9 +6,13 @@ Milestone: 5, Gate 0 (milestone-5-design.md §4.7)
 
 ## Context
 
-Decided against the tree at `cc66302`. The parent plan describes the span
-restriction three times, in three vocabularies, and never maps one onto another.
-Measured 2026-09-04, verbatim:
+Decided against the tree at `cc66302`. The parent plan enumerates what the
+verifier rejects about spans three times, in three vocabularies, and never maps
+one onto another. (The restriction itself is stated three times more — `§2:36`,
+approved decision 14, "At most one span may be active at a time in v0.1.";
+`§4:81-82`, the non-goals; and `§29:1752`, "- multiple concurrent or nested
+spans;", among the deferred extensions — but none of the three names a check or a
+rejection, so none adds a vocabulary to map.) Measured 2026-09-04, verbatim:
 
 - **`§16.2:899`** — "span re-entry, overlap, wrong end, unmatched end, and
   inconsistent successful exits;". Five rejections, named as a list of nouns.
@@ -29,7 +33,7 @@ The word that carries the open question appears once. `rg -nw "inconsistent"`
 over the parent plan returns exactly one line, `§16.2:899`; the adverb form
 `inconsistently` appears once more, at `§10.4:519`. Nothing defines either, and
 whether "inconsistent" is a fifth property or a restatement of `§14:843`'s
-fourth decides the *shape* of the check, not only its wording.
+fourth decides the *domain* the check runs over, not only its wording.
 
 Nothing is implemented yet, so nothing here is a fix. `rg -n "define \(pass-"
 src/byte-machine/verify.sls` returns eleven passes and none of them is the span
@@ -56,34 +60,46 @@ and the analysis terminates because a value can rise at most twice.
 **2. Disagreement at any merge point — not only at an exit — is itself a
 diagnostic.** A join yielding `⊤` is reported at the node where it arises.
 
-Two arguments, and **the second is the decisive one**.
+Two arguments were offered for items 1 and 2 together. They do not divide
+evenly: **only the first reaches item 2.**
 
-*(a) From interpretation, and this one alone would not settle it.* Under the
-path-existential reading, "inconsistent successful exits" means *some path
-reaches a successful exit with a span active* — which is exactly `§14:843`'s
-fourth property, "reaches successful stop/finish with a span active", and whose
-EOF half `§16.2:907` states a second time. That reading buys the spec no
-rejection it does not already make, and leaves one of five normative bullets as a
-paraphrase of a sentence in another section; the lattice reading gives the bullet
-a referent — merge-point disagreement — that no other sentence in the plan names.
-Be precise about the strength of this: it says one reading is more plausible than
-the other. **It does not force anything**, and on its own the path-existential
-reading would remain available.
+*(a) From interpretation.* Under the path-existential reading, "inconsistent
+successful exits" means *some path reaches a successful exit with a span active*
+— which is exactly `§14:843`'s fourth property, "reaches successful stop/finish
+with a span active", and whose EOF half `§16.2:907` states a second time. That
+reading buys the spec no rejection it does not already make, and leaves one of
+`§16.2:899`'s five named rejections as a paraphrase of a sentence in another
+section; the lattice reading gives that name a referent — merge-point
+disagreement — that no other sentence in the plan names. Be precise about the
+strength of this: it says one reading of an undefined word is more plausible than
+the other. **It does not force anything**, and it is the whole of the
+interpretive case.
 
-*(b) From the graph, and it forces the shape.* `§16.2:913` reads "Normal
-consuming cycles, including the main HTTP message loop, are valid." The verifier
-may therefore not reject a cyclic machine, and the set of reachable paths through
-a cycle is infinite — so a check that literally enumerates the paths `§14:843`
-quantifies over does not terminate on the very machine the plan names as the
-motivating example. A join over a finite lattice does. Any terminating
-path-shaped check is this fixpoint wearing different words, so it is written as
-the fixpoint.
+*(b) From the graph — it forces item 1, and stops there.* `§16.2:913` reads
+"Normal consuming cycles, including the main HTTP message loop, are valid." The
+verifier may therefore not reject a cyclic machine, and the set of reachable
+paths through a cycle is infinite — so a check that literally enumerates the
+paths `§14:843` quantifies over does not terminate on the very machine the plan
+names as the motivating example. A fixpoint over a finite domain does. That
+settles analysis rather than enumeration, and nothing more. It is **not** an
+argument for item 2: the path-existential reading has its own terminating form —
+the same walk over the powerset of `{none, (active s), …}`, joined by union — and
+that one is finite, terminates on cycles, forms no `⊤`, raises nothing at a
+merge, and decides `§14:843`'s four properties exactly. The two analyses are not
+one check wearing different words; they part on a constructible machine. Two
+branches, one starting span `s` and one not, merge into a node whose only
+continuation is an *error* terminal: this record reports that merge, and the
+powerset analysis accepts the machine — as does `§14:843`, because an error
+terminal is not a successful stop/finish, and `§14:839` contemplates a span still
+open at one.
 
-*Supporting, not evidence.* Reporting at the merge is also what keeps the
-transfer functions total. If `⊤` were allowed to flow onward, every transfer
-would need an answer for "what does a span end do on `⊤`?" — and both answers are
-bad: reporting downstream blames a node that is innocent, and falling silent is
-unsound.
+*The other half of the warrant, once `⊤` is in the domain.* Reporting at the
+merge is what keeps the transfer functions total. If `⊤` were allowed to flow
+onward, every transfer would need an answer for "what does a span end do on
+`⊤`?" — and both answers are bad: reporting downstream blames a node that is
+innocent, and falling silent is unsound. Item 2 — and with it the choice of the
+flat lattice over the powerset domain in item 1 — rests on (a) and on this, and
+on nothing about cycles.
 
 **3. The quantifier "reachable path" is decision 0027's relation**, byte
 reachability plus the EOF walk, not `pass-reachability`'s `all-out-targets`. The
@@ -91,8 +107,17 @@ analysis runs over the nodes that relation admits: a node no execution can occup
 contributes no state to a join and receives none, so it can neither raise a
 diagnostic nor push a live node to `⊤`. Taking the relation from
 [decision 0027](./0027-reachable-path-for-callbacks-and-spans.md) rather than
-choosing one here is the point, and 0027 states why: a second relation chosen for
-no recorded reason is how `§16.2:898`'s missing gate came about.
+choosing one here is the point: 0027 carries two relations deliberately and names
+the check that uses each, so a third, minted here for this pass alone, would be a
+relation with no recorded reason. What 0027 measured at `§16.2:898` is the
+neighbouring failure and not this one — `pass-zero-progress` applies **no**
+relation where that bullet says *reachable*: "neither `reached` nor
+`byte-reached` occurs as an identifier anywhere in the pass"
+([0027](./0027-reachable-path-for-callbacks-and-spans.md):59-60 — **as an
+identifier** is load-bearing, because `reached` appears in a comment at
+`verify.sls:530` and `reaches-self?` is defined at `:610`, both inside the pass)
+— and 0027 item 3 answers it with the `byte-reached`
+gate.
 
 **4. A successful exit requires `none`.** `(active s)` surviving to a stop node
 (`§10.6:612`, "Enters a successful sticky one-shot terminal and returns
@@ -107,9 +132,9 @@ open are consistent and still wrong.
   an immutable value and returns diagnostics plus any derived immutable analysis."
   — makes the fixpoint map a first-class output, not a local variable.
 
-- **`§16.2:899`'s five bullets map onto the analysis explicitly.** This mapping
-  is the record's product; three vocabularies with no mapping is what the Context
-  describes.
+- **`§16.2:899`'s five named rejections map onto the analysis explicitly.** This
+  mapping is the record's product; three vocabularies with no mapping is what the
+  Context describes.
 
   | `§16.2:899` | where it arises |
   | --- | --- |

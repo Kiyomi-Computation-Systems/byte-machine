@@ -102,9 +102,12 @@ the four goldens (one each), `test/common/normal-ir-tests.sps` (4),
    feature does not touch. Decision 0019 struck exactly that bargain once, for
    the field table: its item 3(a) reserved the count, and its item 5 turned the
    resulting byte-identity into a STOP condition for every later slice —
-   `test/common/normal-ir-tests.sps:206-207` is the test that holds it, "Decision
-   0019 item 5, asserted rather than assumed: ①a reserved the count slot so that
-   a zero-field machine encodes IDENTICALLY once ①b fills it." Restating that
+   `test/common/normal-ir-tests.sps:223-226` is the test that holds it, "filling
+   the reservation does not move a zero-field fingerprint", checking
+   `(normalize (one-byte/fields '()))` against `14095574568398596535`; the
+   comment at `:206-207` in the same block names what it is for, "Decision 0019
+   item 5, asserted rather than assumed: ①a reserved the count slot so that a
+   zero-field machine encodes IDENTICALLY once ①b fills it." Restating that
    bargain for the slot tables is consistent, not novel.
 
 2. **`current-abi-version` goes 3→4 in Slice ①a, and the ABI payload gains a
@@ -139,13 +142,15 @@ the four goldens (one each), `test/common/normal-ir-tests.sps` (4),
    callback arm exists to need it.
 
 4. **All of this lands in Slice ①a, before any semantics.** ①a makes points 1-3
-   real and nothing else. Every later Milestone 5 slice then gets "no fingerprint
-   moved" as a **gate** rather than a hope, and a golden that moves in a later
-   slice is evidence that a slot was added late — decision 0019 item 5's
-   discipline, restated for this milestone. (0019 item 5's own guarantee was
-   scoped "for the rest of Milestone 4" and is spent with that milestone; this
-   point is the Milestone 5 instance of the same discipline, not an extension of
-   0019's.)
+   real and adds no semantics. It carries one further task this record does not
+   settle: the position-axis drift row of milestone-5-design.md §5:641-646 (the "Add a position-axis drift row" bullet), which
+   derives `position-table`'s names from the IR rather than hand-writing them.
+   Every later Milestone 5 slice then gets "no fingerprint moved" as a **gate**
+   rather than a hope, and a golden that moves in a later slice is evidence that a
+   slot was added late — decision 0019 item 5's discipline, restated for this
+   milestone. (0019 item 5's own guarantee was scoped "for the rest of Milestone
+   4" and is spent with that milestone; this point is the Milestone 5 instance of
+   the same discipline, not an extension of 0019's.)
 
 ## Consequences
 
@@ -186,11 +191,12 @@ is recorded as one.**
 
 **What this hands the slices, and what it removes from them.**
 
-- **Slice ①a** gets its entire work list from points 1-3 and the two-sided oracle
-  above. It re-baselines the goldens exactly once, before any behaviour exists to
-  argue about, and it owns no semantics: the slot tables it encodes are empty in
-  every shipped fixture, the ABI member is empty, and both new `exec` parameters
-  are unused.
+- **Slice ①a** gets its *seam* work list from points 1-3 and the two-sided oracle
+  above; milestone-5-design.md §5:641-646 (the "Add a position-axis drift row" bullet)'s position-axis drift row is the
+  slice's one other task and is outside this record. It re-baselines the goldens
+  exactly once, before any behaviour exists to argue about, and it owns no
+  semantics: the slot tables it encodes are empty in every shipped fixture, the
+  ABI member is empty, and both new `exec` parameters are unused.
 - **Slice ①b lands on ABI 4 rather than bumping it again.** Point 2 pays the
   version bump once, in ①a, so ①b's callback-slot and accessor work —
   [decision 0028](./0028-callback-slots-and-visible-state.md) — arrives *after*

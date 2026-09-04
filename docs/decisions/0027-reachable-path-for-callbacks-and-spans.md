@@ -13,11 +13,11 @@ Milestone 5 Gate 0 branch point. Every line number below was read on that day.
 Three normative sentences restrict spans and callbacks along a *reachable path*,
 and none of them says which reachability relation that is:
 
-- `§10.4:519` — "An explicit pause node or event/decision callback invocation is
-  invalid on any reachable path where a span is active."
-- `§13:826` — "Only one span may be active on any reachable execution path in
+- `§10.4:519` — "Only one span may be active on any reachable execution path in
   v0.1." (This one says *reachable execution path*; the other two say *reachable
   path*. Nothing anywhere defines either.)
+- `§13:826` — "An explicit pause node or event/decision callback invocation is
+  invalid on any reachable path where a span is active."
 - `§14:843` — "The verifier proves that no reachable path starts a second span
   while one is active, ends the wrong span, ends with no active span, or reaches
   successful stop/finish with a span active."
@@ -56,10 +56,12 @@ the two describes no execution.
 **And a third check applies no relation at all.** `pass-zero-progress`
 (`:508-634`) reports `zero-progress-cycle` over `(machine-nodes m)` with no gate,
 though `§16.2:898` reads "reachable zero-progress cycles". Measured by reading
-`:508-634` in full: no `reached` or `byte-reached` term occurs anywhere in the
-pass. The word *reachable* does occur in its comments, at `:540-542` and `:551`,
-and it is a **different** notion — whether any byte can take the arm that closes a
-cycle, which the comment calls a "KNOWN, DELIBERATE OVER-REJECTION, inherited not
+`:508-634` in full: neither `reached` nor `byte-reached` occurs as an identifier
+anywhere in the pass. Reachability words do occur in its comments — `reached` and
+`reach` at `:530` and `:536`, of a trie position and not of a node, and
+`reachable`/`reachability` at `:542` and `:551`. The latter pair is a
+**different** notion — whether any byte can take the arm that closes a cycle,
+which the comment calls a "KNOWN, DELIBERATE OVER-REJECTION, inherited not
 introduced". Node reachability from the entry is named nowhere in the pass, in
 code or in comment.
 

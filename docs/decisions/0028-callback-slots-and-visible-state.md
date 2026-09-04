@@ -69,9 +69,14 @@ than inside the slice that builds them.
 **1. "Parser operations are rejected" (`§13:821`) scopes to the four mutating
 operations. Every read accessor answers normally while lifecycle is `busy`.**
 
-The scope is read off `§12.2:699`, the only place in the plan that says what
-rejection *is*: one `busy` row, four cells, "Raise reentrancy condition" in each.
-There is no fifth column to extend the rule to.
+The scope is read off `§12.2:699`, the only place in the plan that says *which*
+operations the `busy` rejection covers: one `busy` row, four cells, "Raise
+reentrancy condition" in each. There is no fifth column to extend the rule to.
+`§12.6:747` carries the same unscoped word — "Prohibited lifecycle operations and
+reentrant parser operations raise API-contract conditions before further
+mutation" — and is settled the same way: it names no operation of its own, and
+its "before further mutation" clause has nothing to say about a call that mutates
+nothing.
 
 The direction is forced, bullet by bullet, by the committed-state list `§13:816`
 addresses *to a callback*. Each bullet commits the runtime to exposing something
@@ -82,9 +87,12 @@ inconvenient:
 - `§13:818` — "fields include every operation completed before the callback and
   are read-only through public accessors" — names its accessor outright, and
   `parser-field-ref` is the only one there is.
-- `§13:819` commits stream offset and cursor; `parser-stream-offset` is their
-  public form. `§13:820` commits the public parser state name;
-  `parser-state-name` is its public form.
+- `§13:819` commits stream offset and cursor; `parser-stream-offset` is the
+  public form of the first, and the cursor has none — `§9.3:407-411` lists no
+  cursor accessor, and `§10.2:495` keeps the cursor in parser bookkeeping — so
+  the bullet is satisfiable at all only if `parser-stream-offset` answers.
+  `§13:820` commits the public parser state name; `parser-state-name` is its
+  public form.
 - `§13:821` is the self-referential case: `parser-lifecycle` refusing to answer
   during `busy` would make the sentence being interpreted unobservable from the
   only situation in which it is true.
@@ -116,8 +124,12 @@ Two alternatives were rejected, each for a reason that survives a check:
   advanced to the fragment end") and `§13:823` ("a span-complete callback sees
   that span inactive") with no observable form at all. `§22.4:1267` compares
   "final state and fields" across lanes — exactly the two surfaces the span would
-  then sit outside — so the cross-lane oracle would be blind to "one active named
-  span" (`§25:1581`), the construct this milestone introduces.
+  then sit outside. The oracle would not go wholly blind: `:1269` still compares
+  "exact span fragment ranges/content" and `:1268` the callback order, so every
+  fragment "one active named span" (`§25:1581`) emits is checked either way. What
+  nothing in `:1264`-`:1272` compares is whether the span is *active* — which is
+  the whole of what `§13:822` and `§13:823` fix, and the half where the two lanes
+  can diverge in silence.
 
 `§9.3` is a **normative list**, so this is a plan change and not a silent
 addition. It landed 2026-09-04 as an appended disposition in
@@ -154,16 +166,22 @@ the reason to prefer it: a divergence here would be invisible to the differentia
 - **Slice ①b implements `parser-active-span`** and takes it from this record and
   the appended disposition, not from `§9.3`'s body, which is unchanged. The same
   slice owns the three accessors measured absent above — `parser-state-name`,
-  `parser-stream-offset`, `parser-user-context` — so item 1's rule is written for
-  five accessors of which two ship, and becomes testable on all five in one
-  slice rather than in three.
-- **Slice ② owes the slot resolution `§9.3:419` describes and `make-parser` does
-  not perform**, the sentinel for the unbound optional case, and the `busy` guard
-  on exactly the four mutating operations and no more. The callback error channel
-  those slots report through is
-  [decision 0024](./0024-callback-error-vocabulary.md); the reserved slot vector
-  the emitted `exec` receives is
-  [decision 0025](./0025-milestone-5-seam-encoding-abi-exec.md) item 3.
+  `parser-stream-offset`, `parser-user-context` — and `parser-active-span`
+  besides, so item 1's rule is written for five accessors of which two ship,
+  item 2 makes it six, and all six become testable in one slice rather than in
+  three.
+- **Slice ①b owes the slot resolution `§9.3:419` describes and `make-parser` does
+  not perform.** `milestone-5-design.md`:715 (the `make-parser` bullet) puts "`make-parser`'s `§9.3:419`
+  binding resolution" in that slice and drives each of its rejections from a
+  positive test, and
+  [decision 0025](./0025-milestone-5-seam-encoding-abi-exec.md) calls the same
+  work "①b's callback-slot and accessor work" — so the sentinel that occupies an
+  unbound optional slot is installed there. **Slice ② owes the other half**: the
+  short-circuit that reads it, which cannot be written before the
+  callback-invocation node exists, and the `busy` guard on exactly the four
+  mutating operations and no more. The callback error channel those slots report
+  through is [decision 0024](./0024-callback-error-vocabulary.md); the reserved
+  slot vector the emitted `exec` receives is decision 0025's item 3.
 - **Item 1 is testable before spans exist.** Any read accessor called from inside
   an event or decision callback witnesses it, in both lanes, with no span
   machinery — so it is not blocked behind

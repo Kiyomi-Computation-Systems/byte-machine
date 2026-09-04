@@ -53,22 +53,26 @@ and only if the right sentences are read.
 
 1. **A callback-contract error is a stored parser error in the `callback`
    domain, delivered through the ordinary error-result path, and sticky.**
-   `§12.3:719` already puts this family on that channel by name — "a declared
-   machine error **or callback application error**" is what the `error` feed
-   status means, and "The status is sticky until reset. Repeated feed attempts
-   return the same error without consuming input." `§12.1:671` gives `error` as
-   a feed outcome and `§12.2:696` gives the sticky row's behaviour. `§13:824`
-   supplies the verb: "no error is installed until a callback returns failure" —
-   *installed*, which is what a stored error is. The record it is stored in is
-   0022's; this record adds no member and changes no shape.
+   Under the Context's binding, `§12.3:719` puts this family on that channel by
+   name — "a declared machine error **or callback application error**" is what
+   the `error` feed status means, and "The status is sticky until reset.
+   Repeated feed attempts return the same error without consuming input."
+   `§12.1:671` gives `error` as a feed outcome and `§12.2:696` gives the sticky
+   row's behaviour. `§13:824` supplies the verb: "no error is installed until a
+   callback returns failure" — *installed*, which is what a stored error is. The
+   record it is stored in is 0022's; this record adds no member and changes no
+   shape.
 
 2. **It does not poison.** `§12.6:749` is the only sentence in the plan that says
    what poisons a parser. Measured today, `rg -n "poison"` over the parent plan
-   returns six lines and the other five are downstream of the state, not
-   triggers for it: `§9.4:438` (the `poisoned parser` condition code),
-   `§12.2:698` (the `poisoned` lifecycle row), `§12.5:739` (reset "clears … poison
-   state"), `§19.3:1025` ("poison cleanup") and `§25:1579`, whose Milestone 5
-   scope bullet reads "unexpected escape poisoning" and names nothing wider.
+   returns **eight** lines. Two of them are section headings and state nothing —
+   `§12.6:745` ("### 12.6 Misuse and poisoning") and `§25:1572` ("### Milestone
+   5: Callbacks, poisoning, and spans"). The five that remain beside `§12.6:749`
+   are downstream of the state, not triggers for it: `§9.4:438` (the `poisoned
+   parser` condition code), `§12.2:698` (the `poisoned` lifecycle row),
+   `§12.5:739` (reset "clears … poison state"), `§19.3:1025` ("poison cleanup")
+   and `§25:1579`, whose Milestone 5 scope bullet reads "unexpected escape
+   poisoning" and names nothing wider.
 
    `§12.6:749` reads: "If a callback raises an unexpected condition or performs a
    nonlocal escape, the condition/escape propagates and `dynamic-wind` marks the
@@ -100,7 +104,10 @@ and only if the right sentences are read.
    not proof, and this record declines to lean on it.** That sentence opens
    "Codes include", so the list is not closed and nothing can be ruled out by
    absence from it alone. What settles the channel is `§12.3:719` in item 1,
-   positively.
+   positively — but positively *given the Context's binding*: on the plan's text
+   alone `§12.3:719` names a callback *application* error, and it reaches this
+   error because this record binds that phrase to `§10.6:586`'s
+   callback-contract error.
 
 4. **The explicit `make-callback-failure` outcome and an out-of-contract return
    share the domain and are distinguished by code.** They are not the same event
@@ -159,15 +166,17 @@ and only if the right sentences are read.
   position kind the values the interpreted and generated lanes must agree on, so
   each of item 4's two paths has to be exercised in both lanes rather than in one.
 
-- **Two of those five cannot diverge, and the fixtures should not be written as
-  though they can.** This record prescribes 0022 item 1's construction
-  (`src/byte-machine/runtime.sls:161-163`): `domain` and `reason` are fixed
-  inside the one shared constructor both lanes call rather than passed from a
-  call site, so no emitted site and no interpreter site can write them
-  differently — exactly as `machine` and `#f` are fixed there today. The
-  differential's teeth for these errors are on **code, source-node name, offset
-  and position kind**; a check that only compares domain across lanes passes
-  vacuously by construction.
+- **One of those five cannot diverge, and the fixtures should not be written as
+  though it can.** This record prescribes 0022 item 1's construction
+  (`src/byte-machine/runtime.sls:161-163`): `domain` is fixed inside the one
+  shared constructor both lanes call rather than passed from a call site, so no
+  emitted site and no interpreter site can write it differently — exactly as
+  `machine` and `#f` are fixed there today. Item 5's `reason` is fixed by the
+  same construction, but it is not one of the five: neither `§12.7:777` nor
+  `§22.4:1271` compares reason across lanes, so no differential check is lost by
+  fixing it. The differential's teeth for these errors are on **code,
+  source-node name, offset and position kind**; a check that only compares
+  domain across lanes passes vacuously by construction.
 
 - **The position members need no new decision.** `§12.7:770` already assigns
   "Zero-width machine action or callback failure" a `boundary` at the current
@@ -194,7 +203,7 @@ and only if the right sentences are read.
   retention oracle must exclude the error-detail slot alongside user context**;
   an oracle that excludes only user context reports a false violation the first
   time a fixture callback fails with a detail holding its own slice.
-  (`milestone-5-design.md`:850-855 states the same boundary as the oracle's third
+  (`milestone-5-design.md`:876-881 (the retention oracle's third layer, "The exemption boundary") states the same boundary as the oracle's third
   layer. This bullet is the deferral's second end.)
 
 - **What this hands to Slice ②.** The `callback` domain, item 4's two codes, item

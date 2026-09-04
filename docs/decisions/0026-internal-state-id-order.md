@@ -16,8 +16,11 @@ are *assigned* — `§17:955`. Measured two ways on 2026-09-04, because a
 load-bearing negative deserves a second method: a case-insensitive search for
 "internal state" over the whole plan returns seven lines — `§9.3:403`,
 `§12.7:758`, `§12.7:777`, `§17:955`, `§17:959`, `§20:1036`, `§25:1530` — and a
-search for `internal` intersected with `id|ID|number|index` adds none of its own.
-Only `:955` states an assignment rule:
+second search, for lines carrying `internal` together with a word-bounded
+`id`/`ID`/`number`/`index`, returns `:403`, `:758`, `:777` and `:955` — four of
+those same seven, adding nothing. Dropping the word boundaries pulls in `:366`,
+`:931`, `:1040` and `:1189` as well, none of them about assignment. Only `:955`
+states an assignment rule:
 
 > resolve symbolic names to stable numeric IDs (declared nodes keep their declaration index; internal states append after them — decision 0016);
 
@@ -39,10 +42,14 @@ the shipped normalizer already spells 0016 item 1 out.** `normal-ir.sls:293`'s
 `prefix-blocks` walks the declared node list in order and allocates ids upward
 from `declared-count` (`:273`) for sequence-dispatch nodes only; `:427`'s
 `internal` flattens those blocks in the same order; `:433` builds the states
-vector as `(append declared internal)`. The kinds that allocate no internal state
-say so at their own sites (`:382-386`, `:400-403`). So the rule below is **inert
-until Slice ③ lands** — which is why it can be settled by argument now rather
-than discovered by a moved golden later.
+vector as `(append declared internal)`. Of the repertoire's nine node kinds
+(`:342-425`) eight allocate no internal state, and three of the eight say so at
+their own sites — `:382-386` for field action and field branch, `:400-403` for
+integer accumulate. Byte dispatch, stop, error, finish and pause carry no such
+note; what makes them internal-state-free is `prefix-blocks`'s
+`sequence-dispatch-node?` test (`:297`), not anything at their own sites. So the
+rule below is **inert until Slice ③ lands** — which is why it can be settled by
+argument now rather than discovered by a moved golden later.
 
 **The choice is not free.** 0016's Context:
 
@@ -58,7 +65,8 @@ an executor-local debugging aid: generated IDs are deterministic for a given
 normalized graph, but an independently interpreted machine need not report the
 same ID. Differential tests do not compare that accessor across executor kinds."
 It puts the *reported id value* outside the cross-lane contract. It leaves the IR
-fingerprint and the emitted text inside it, and `§20:1036` still requires the
+fingerprint or the emitted text — both exist only in the generated lane, since
+`§18:970` keeps the interpreter out of normalized IR — and `§20:1036` still requires the
 numbering to be deterministic within the generated lane. What this record pins is
 therefore the allocation order, not any id's value.
 
@@ -93,11 +101,17 @@ rejected.
 
 This extends 0016's own ordering principle rather than adding a precedence rule
 beside it: item 1 already orders internal states by declaring-node order, and this
-rule says only that "declaring node" keeps its meaning when one node declares two
-kinds of internal state. The alternative — the two families in sequence within
-phase two, all prefix states and then all span continuations — requires an
-arbitrary choice about which family comes first, and leaves the third family,
-whenever it arrives, asking the same question again.
+rule says only that the same key applies to the union of both families. No single
+node declares two kinds of internal state — `normal-ir.sls:342-425` is one
+kind-disjoint `cond`, and only its sequence-dispatch arm has a prefix block
+(`:370`) — so the work this rule does is **between** nodes: a span-end node's
+continuations sit at that node's position, ahead of a later sequence node's
+prefix states, rather than in a family block of their own.
+
+The alternative — the two families in sequence within phase two, all prefix
+states and then all span continuations — requires an arbitrary choice about which
+family comes first, and leaves the third family, whenever it arrives, asking the
+same question again.
 
 "Declaring node" is well defined for the second family, and the parent plan
 requires it to be: `§17:963` keeps a "state-ID-to-source-name debug map", which the

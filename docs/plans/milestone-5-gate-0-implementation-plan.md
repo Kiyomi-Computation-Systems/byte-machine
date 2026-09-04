@@ -38,7 +38,7 @@
 
 | File | Change | Task |
 | --- | --- | --- |
-| `docs/decisions/0019-encoding-format-2-pre-provisioned.md` | Dated note — its three reserved slots are now all spent, and `0025` is what spends the last of them. A record, **annotated**: nothing 0019 says becomes false | 2 |
+| `docs/decisions/0019-encoding-format-2-pre-provisioned.md` | Dated note — its three reserved slots were **all spent inside Milestone 4**, and `0025` reserves *again* on this item's precedent rather than drawing on it. A record, **annotated**: nothing 0019 says becomes false | 2 |
 | `docs/decisions/0023-eof-walk-starts-and-finish-reachability.md` | Dated note — `0027` generalizes its reachability answer from the EOF checks to the span and callback restrictions. A record, **annotated** | 4 |
 | `docs/plans/byte-machine-implementation-plan.md` | One appended disposition: `§9.3`'s normative accessor list gains `parser-active-span`. **Appended to `## Dated dispositions`, never inlined** — an insertion into the body re-numbers every `§section:line` citation below it (`§Dated:1804-1810`) | 5 |
 | `docs/plans/milestone-5-design.md` | §4's Gate-0-discharged mapping; §11's first bullet gains the discharge note | 7 |
@@ -55,7 +55,7 @@
 
 **Interfaces:**
 - Consumes: nothing — first record of the milestone.
-- Produces: the `callback` error domain, two minted codes (an explicit `make-callback-failure` outcome and an out-of-contract return), and the fixed static reason. Slice ② implements it; Slice ④'s retention oracle depends on the detail slot it creates.
+- Produces: the `callback` error domain, **one minted code** (for an out-of-contract return) plus the **pass-through** of the application's own code from `make-callback-failure`, and the fixed static reason. `§13:808` gives the explicit failure "an application code and optional detail" and `§9.3:423` requires a symbolic code, so discarding it would make a required constructor parameter unobservable. Slice ② implements it; Slice ④'s retention oracle depends on the detail slot it creates.
 
 - [ ] **Step 1: Confirm the number is free and re-read the source sections**
 
@@ -78,8 +78,8 @@ Create `docs/decisions/0024-callback-error-vocabulary.md`, following the house s
 
 1. A callback-contract error is a **stored parser error in a `callback` domain**, reported through the ordinary error-result path.
 2. It **does not poison**. `§12.6:749`'s triggers are a closed pair — a raise and a nonlocal escape — and a wrong return value is neither. Extending poisoning to cover it would widen a closed enumeration by inference.
-3. It is **not** an API condition. `§9.4:438`'s list is the API-condition list and has no callback-contract entry, so that channel was not left open for this.
-4. An explicit `make-callback-failure` outcome and an out-of-contract return share the domain and take **different codes**.
+3. It is **not** an API condition — but **do not argue this from absence.** `§9.4:438` opens with the words "Codes include", an explicitly open enumeration, so nothing can be ruled out by not appearing in it. Argue it positively from `§12.3:719`: "The machine entered a declared machine error or callback application error. The status is sticky until reset." That sentence already puts this family on the sticky error *result* channel by name. The `§9.4:438` absence may be cited as corroboration, labelled as corroboration. **Note also** that `:438`'s nearest-looking entry, "callback binding error", is construction-time (`§9.3:419`) and a reviewer will otherwise raise it against a bare "no entry" claim.
+4. An explicit `make-callback-failure` outcome and an out-of-contract return share the domain and take **different codes** — the application's, passed through, and a minted one respectively. State the limit honestly: nothing in `§9.3:423`'s grammar reserves the minted symbol, so an application that deliberately returns it is indistinguishable, and no check can see that.
 5. The `reason` is **one fixed printable-ASCII constant**, identical in both lanes. `§12.7:757` calls reason *static*, which rules out `#f`; rendering the code's printed form would put a symbol's external representation into a behavioural contract.
 
 `## Consequences` must state: both codes are differential fixtures, not unit tests, because `§12.7:777` compares five values across lanes — source-node name, domain, code, offset, position kind. And it must state what the record **hands to Slice ④**: the detail slot this creates is application data that `§13:799` explicitly permits to retain the input bytevector, so the retention oracle must exclude it alongside user context. That sentence is the deferral's second end.
@@ -105,7 +105,7 @@ Conventional Commits, `docs:`. The message states what was decided and the one t
 - Modify: `docs/decisions/0019-encoding-format-2-pre-provisioned.md` (top bullet **and** foot note)
 
 **Interfaces:**
-- Consumes: `0019`, whose three reserved slots this record spends the last of.
+- Consumes: `0019`, **as precedent, not as a slot**. Measured: all three of its reserved slots were filled inside Milestone 4, and three in-tree comments name the slice that filled each (`normal-ir.sls:474`, `compile.sls:504`, `compile.sls:63-64`). This record reserves again and pays its own re-baseline.
 - Produces: Slice ①a's entire work list and its two-sided oracle.
 
 - [ ] **Step 1: Confirm the number and re-read both sources**
@@ -124,7 +124,7 @@ sed -n '61p;79p;84p' src/byte-machine/runtime.sls
 rg -n "define \(exec " src/byte-machine/compile.sls
 grep -n "byte-machine-make-compiled-machine" test/fixtures/*.golden.sls
 ```
-Expected: the header layout comment; `current-abi-version` 3, the strict `(= abi-version current-abi-version)` guard, and the metadata `>= 1` **length** check one line below it; the six-parameter `exec` template; and four goldens each carrying a literal ABI `3`. Record the numbers you measure, not the ones written here.
+Expected: the header layout comment; `current-abi-version` 3, the strict `(= abi-version current-abi-version)` guard at `:79`, and the metadata `>= 1` **length** check at `:84`; the **seven**-parameter `exec` template (six plus `fieldv`, which decision 0019 item 3(c) added); and four goldens each carrying a literal ABI `3`. **Record the numbers you measure, not the ones written here** — two of the values in this very sentence were wrong on first writing.
 
 - [ ] **Step 3: Write the record**
 
@@ -141,12 +141,13 @@ Argue point 1 from precedent and **say it is precedent, not proof**: `test/commo
 
 - [ ] **Step 4: Annotate 0019 — top bullet first, then the foot note**
 
-Add the blockquote bullet after `0019`'s `Status:` block (create the blockquote if absent), then the foot note. Verb: **annotates** — nothing 0019 says becomes false; its three slots were reserved to be spent and this spends them.
+Add the blockquote bullet after `0019`'s `Status:` block (create the blockquote if absent), then the foot note. Verb: **annotates** — nothing 0019 says becomes false. Its item 3 named where each slot would be filled and each *was* filled as named, inside Milestone 4. The note records that the slots are exhausted and that `0025` reserves again on the precedent.
 
 ```markdown
 > - **2026-09-04 (Milestone 5)** — **annotates item 3**: all three reserved slots
->   are now spent, and [decision 0025](./0025-milestone-5-seam-encoding-abi-exec.md)
->   spends the last of them.
+>   are spent, and Milestone 4 spent them.
+>   [Decision 0025](./0025-milestone-5-seam-encoding-abi-exec.md) reserves again
+>   on this item's precedent rather than drawing on it.
 ```
 
 - [ ] **Step 5: Verify and self-review**
