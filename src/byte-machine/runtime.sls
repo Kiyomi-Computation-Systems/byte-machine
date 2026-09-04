@@ -127,6 +127,12 @@
   ;; call site passes it since Slice ② gave the generated lane the parser's own
   ;; vector. Deleting it would take that pin with it.
   (define empty-fields (vector))
+  ;; Milestone 5 Slice ①a (decision 0025 point 3): the resolved callback slot
+  ;; vector emitted `exec` receives as `cbv`. Empty until Slice ①b resolves
+  ;; bindings into it. Unlike `empty-fields` -- whose sharing became a defect the
+  ;; moment Slice ② wrote through it -- nothing writes through this one, and the
+  ;; slice that gives it contents owns replacing the sentinel.
+  (define empty-callbacks (vector))
 
   ;; --- feed outcome (the runtime<-generated seam; accessors private) ---
   (define feed-outcome-tag (tag 'byte-machine-feed-outcome))
@@ -386,7 +392,7 @@
            ;; would make every generated field machine index out of bounds --
            ;; measured, before this line changed.
            (o (exec (parser-current parser) (parser-offset parser) bv start end #f
-                    (parser-field-values parser))))
+                    (parser-field-values parser) parser empty-callbacks)))
       (parser-set-current! parser (feed-outcome-next-state o))
       (parser-set-offset! parser (feed-outcome-offset o))
       (make-parser-result (feed-outcome-status o) (feed-outcome-next o)
@@ -433,7 +439,7 @@
   (define (parser-finish-v2! parser)
     (let* ((exec (parser-executor parser))
            (o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t
-                    (parser-field-values parser))))
+                    (parser-field-values parser) parser empty-callbacks)))
       (parser-set-current! parser (feed-outcome-next-state o))
       (parser-set-offset! parser (feed-outcome-offset o))
       (case (feed-outcome-status o)

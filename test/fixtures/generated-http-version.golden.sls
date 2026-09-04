@@ -2,7 +2,7 @@
   (export http-version-parser)
   (import (rnrs) (byte-machine runtime))
   (define errs (quote #(#(eof "unexpected end of input") #(unexpected-byte "unexpected byte"))))
-  (define (exec state offset bv start end finish? fieldv)
+  (define (exec state offset bv start end finish? fieldv psr cbv)
     (let loop ((pos start) (st state) (off offset) (pk (quote boundary)))
       (case st
       ((0)
@@ -83,4 +83,4 @@
                (else (loop pos 3 off (quote byte)))))))
       (else (assertion-violation (quote exec) "unknown state" st)))))
   (define http-version-parser
-    (byte-machine-make-compiled-machine 3 16999772257989587335 0 exec (quote #(#())))))
+    (byte-machine-make-compiled-machine 4 16999772257989587335 0 exec (quote #(#() #())))))

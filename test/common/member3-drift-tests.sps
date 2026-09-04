@@ -140,13 +140,16 @@
         ;; later edit could have dropped either. ③ adds `d` and names all six,
         ;; and the case is renamed so the next slice inherits the obligation
         ;; rather than a claim about one slice.
+        ;; Milestone 5 Slice ①a adds `psr` and `cbv`, emitted `exec`'s eighth and
+        ;; ninth parameters (decision 0025 point 3), and inherits that obligation
+        ;; as intended: eight names, and the sentinel counts what it iterates.
         (let ((seen 'seed) (n 0))
           (set! seen '())
           (for-each (lambda (s)
                       (set! n (+ n 1))
                       (when (memq s observed) (set! seen (cons s seen))))
-                    '(fieldv errs pk v r d))
-          (check-equal "six checked" n 6)
-          (check-equal "all six emitted" (length seen) 6))))))
+                    '(fieldv errs pk v r d psr cbv))
+          (check-equal "eight checked" n 8)
+          (check-equal "all eight emitted" (length seen) 8))))))
 
 (harness-finish)

@@ -3024,10 +3024,13 @@ byte_machine_mutation(
   # Re-anchored by Slice ② task 8: the seventh argument stopped being the shared
   # `empty-fields` sentinel and became the parser's own vector, which is what
   # the reservation was FOR. The `finish?` flag this pin names is unchanged.
+  # Re-anchored by Milestone 5 Slice ①a task 2: both call sites gained `psr` and
+  # `cbv` (decision 0025 point 3). The `finish?` flag is STILL what this pin
+  # names, and it is still the fifth argument -- only the tail grew.
   FIND [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t
-                    (parser-field-values parser))))]]
+                    (parser-field-values parser) parser empty-callbacks)))]]
   REPLACE [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #f
-                    (parser-field-values parser))))]]
+                    (parser-field-values parser) parser empty-callbacks)))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish with no input routes to the default-eof error: default-eof code")
 
 # Second: the /v2 TOMBSTONE. Milestone 4 Slice ①a task 3 rewrote both retired
@@ -6797,8 +6800,15 @@ byte_machine_mutation(
   # it names -- the tail is where every payload change lands, and any pin
   # anchored there will keep moving. Its REPLACE and its expectation are
   # unchanged; only the text it sits on moved.
-  FIND [[" exec (quote #(#(" fields "))))))\n"))))]]
-  REPLACE [[" exec (quote #(#(" fields "))))))\r\n"))))]]
+  # Re-anchored by Milestone 5 Slice ①a task 3, and MOVED OFF THE TAIL for good.
+  # This pin has now been broken by three consecutive slices without any of them
+  # touching the decision it names, and the comment above predicted this one.
+  # The library line is the new anchor: no payload change reaches it, every
+  # machine renders it, and a CRLF injected there satisfies the same expectation
+  # ("no carriage return byte appears and the last byte is LF"). Do not move it
+  # back to the tail -- the tail is where every payload change lands.
+  FIND [["(library (generated " mname ")\n"]]
+  REPLACE [["(library (generated " mname ")\r\n"]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "no carriage return byte appears and the last byte is LF: carriage return present")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
@@ -8444,10 +8454,16 @@ byte_machine_mutation(
   # still the edit -- the same decision, the same expectation.
   # Re-anchored by Slice ③ task 4: the list gained `d`, the emitted accumulate
   # arm's digit local. Dropping `pk` is still the edit.
+  # Re-anchored by Milestone 5 Slice ①a task 2: the list gained `psr` and `cbv`,
+  # emitted `exec`'s eighth and ninth parameters (decision 0025 point 3).
+  # Dropping `pk` is STILL the edit -- the same decision, the same expectation,
+  # the fourth re-anchor. This pin moves whenever the list does, by design: it
+  # anchors on the whole list precisely so that a name added without a matching
+  # guard entry is what breaks it.
   FIND [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs pk
-      v r d))]]
+      v r d psr cbv))]]
   REPLACE [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs
-      v r d))]]
+      v r d psr cbv))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(pk\\)")
 
@@ -8459,8 +8475,13 @@ byte_machine_mutation(
   # and `r`, reopened by ③'s own addition. Dropping it is what the guard is for:
   # the emitted body binds a local the list does not reserve, and a caller may
   # legitimately bind the same name.
-  FIND [[      v r d))]]
-  REPLACE [[      v r))]]
+  # Re-anchored by Milestone 5 Slice ①a task 2: the continuation line gained
+  # `psr cbv`. Dropping `d` is still the edit. Measured after the edit: this FIND
+  # and the whole-list FIND above remain textually distinct and each occurs
+  # exactly once, which the suite asserts in both directions (no SITES is
+  # declared anywhere in this file, so every FIND is pinned at one occurrence).
+  FIND [[      v r d psr cbv))]]
+  REPLACE [[      v r psr cbv))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(d\\)")
 

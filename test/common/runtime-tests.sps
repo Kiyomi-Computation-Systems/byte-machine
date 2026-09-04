@@ -229,7 +229,12 @@
 ;; (stop) -- mirroring D5's unconditional generated pause arm and letting
 ;; v2-pause-machine below witness parser-finish-v2!'s own paused arm, which no
 ;; other /v2 fixture reaches.
-(define (stub-exec state offset bv start end finish? fieldv)
+;; Milestone 5 Slice ①a: `psr` and `cbv` are emitted `exec`'s eighth and ninth
+;; parameters (decision 0025 point 3), reserved and ignored. This stub stands in
+;; for generated code, so its arity must track the emitted one -- and nothing
+;; but a call checks that: the arity mismatch surfaced as "incorrect number of
+;; arguments 9" from every /v2 group at once, not as a signature assertion.
+(define (stub-exec state offset bv start end finish? fieldv psr cbv)
   (let loop ((pos start) (st state) (off offset))
     (case st
       ((1) (byte-machine-make-feed-outcome/v1 'stopped pos #f 1 off))

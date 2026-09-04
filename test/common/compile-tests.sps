@@ -181,7 +181,7 @@
         ;; member 0 -- ①b would have to add one, moving every golden in the
         ;; slice whose headline invariant is that none moves.
         (check "unversioned call"
-               (has? "(byte-machine-make-compiled-machine 3 14095574568398596535 0 exec (quote #(#())))"))
+               (has? "(byte-machine-make-compiled-machine 4 14095574568398596535 0 exec (quote #(#() #())))"))
         (check "no versioned name survives"
                (not (has? "byte-machine-make-compiled-machine/v")))))
     ;; Milestone 4 Slice ①b task 6 (decision 0019 item 3(b)). Member 0 stops
@@ -202,14 +202,23 @@
                (harness-string-contains?
                 (utf8->string (render-machine (compile-machine with-fields '())
                                               'field-parser))
-                "exec (quote #(#((count . 0) (limit . 65535)))))"))))
-    (harness-case "exec carries the reserved seventh parameter"
+                "exec (quote #(#((count . 0) (limit . 65535)) #()))"))))
+    (harness-case "exec carries its three reserved parameters"
       (lambda ()
-        ;; Reserved empty by decision 0019 item 3(c) and filled in Slice ②. The
-        ;; parameter lands NOW so that ②'s field store changes no emitted text
-        ;; for a zero-field machine.
-        (check "seventh parameter"
-               (has? "(define (exec state offset bv start end finish? fieldv)"))))
+        ;; `fieldv` was reserved empty by decision 0019 item 3(c) and filled in
+        ;; Milestone 4 Slice ②. `psr` and `cbv` are Milestone 5 Slice ①a's, by
+        ;; decision 0025 point 3, and are reserved the same way and for the same
+        ;; reason: a parameter added LATER changes the emitted text of every
+        ;; machine, including the ones the feature never touches, so the
+        ;; widening is paid once before any arm needs it.
+        ;;
+        ;; This case is the ONLY witness to the emitted signature anywhere in the
+        ;; tree. Measured for the Slice ①a plan across all 366 mutation
+        ;; declarations: no FIND anchors on this line, so a mutation to the
+        ;; parameter list is invisible to the mutation suite and this assertion
+        ;; is what stands between it and silence.
+        (check "the full parameter list"
+               (has? "(define (exec state offset bv start end finish? fieldv psr cbv)"))))
     (harness-case "the accepted byte advances and the fallback reexecutes"
       (lambda ()
         (check "advance arm" (has? "((0) (loop (+ pos 1) 1 (+ off 1) (quote boundary)))"))
