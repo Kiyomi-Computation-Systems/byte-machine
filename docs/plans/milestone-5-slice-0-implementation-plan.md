@@ -1,6 +1,14 @@
 # Milestone 5 Slice ⓪ — the kind × position matrix and the diagnostic-code census
 
-**Status:** planned, not started. Written 2026-09-03 against `main` at `bafdbe1` (Milestone 4
+**Status:** Tasks 1 and 6 done; 2–5 and 7 pending Slice ⓪b's plan.
+
+*Citations corrected 2026-09-03.* Every `verify.sls:NNN` below was measured against the tree as
+it stands. The first set was **stale on arrival**, by four lines: they were taken from a design
+pass run against a worktree predating the commit that expanded a comment in that same file, and
+the plan was written after that commit merged. Most consequentially, D-2's site was cited as
+`:831`, which is the **live** `eof-reachable-stop` half of that `case`; the dead clause was
+`:834`. This is the "citations into files you edit" trap — no grep or link check can see it,
+because every cited line exists and holds plausible code. Written 2026-09-03 against `main` at `bafdbe1` (Milestone 4
 closed). Every number below is **measured**, and the measurement is named beside it; where an
 agent's figure disagreed with the tree, the tree won and the disagreement is recorded.
 
@@ -36,7 +44,7 @@ regression, and both are this slice's opening charter.
 
 ### D-1 `machine-entry`'s own EOF path is never classified
 
-`eof-terminal` is called from exactly two sites (`verify.sls:773`, `:826`); `machine-entry` is
+`eof-terminal` is called from exactly two sites (`verify.sls:777`, `:830`); `machine-entry` is
 neither, while `parser-finish!` on a fresh or reset parser starts precisely there
 (`runtime.sls:212`, `:226`, `:548`). Measured, through both executors:
 
@@ -58,7 +66,7 @@ and **changes 85 of 230 cells**, most of it double-reporting — `BASE p4 stop` 
 hole is real; the fix's shape is a separate decision, and this slice's job is to make it
 *visible and recorded*, not to take it.
 
-### D-2 `verify.sls:831` is dead in the tree
+### D-2 `verify.sls:834` is dead in the tree
 
 `pass-eof-execution`'s last arm walks each byte-reachable pause's continuation and reports two
 verdicts. Its `eof-reachable-stop` half is covered; its **`eof-zero-progress-cycle` half is
@@ -122,8 +130,8 @@ and one byte returns `finished` without being examined. :908 says "into a finish
 hops is a real question, not an implementation edge.
 
 **OQ-3 — the two halves of §16.2:908 contradict each other, and nothing witnesses it.** The check
-exists at three sites under two gating rules: `verify.sls:744-757` is unconditional; `:792-801`
-and `:809-822` are gated on byte-reachability. Measured on six machines whose offending node is
+exists at three sites under two gating rules: the diagnostic at `verify.sls:756` is
+unconditional; those at `:801` and `:821` are gated on byte-reachability. Measured on six machines whose offending node is
 EOF-only-reachable: pause / field-action / field-branch → ACCEPTED, dispatch-case / seq-case /
 accumulate-digit → REJECTED. Whichever half is right, the other is wrong.
 
@@ -135,7 +143,7 @@ the :908 sites do not. **Consequence: the per-cell oracle is a sorted multiset, 
 never a boolean.**
 
 **OQ-5 — four of the six EOF verdicts carry no observable consequence.** `eof-verdict-ranking` is
-a 6-element list (`verify.sls:654`) and decision 0021 item 1 pins only `cycle > eof-reachable-
+a 6-element list (`verify.sls:658`) and decision 0021 item 1 pins only `cycle > eof-reachable-
 stop`. Four independent mutations survive all 230 cells: permute the low four ranks; `classify`
 finish→error; `classify` error→finish; `dispatch-arm` `#f`→`'unresolved`. Record as a spec
 finding; **do not** write a sentinel pretending the ranking has six decisions.
@@ -166,7 +174,7 @@ which exists and means §12.7's parser-error position kinds — an unrelated thi
   **S1+S2 land here, not later** — the sentinel is what makes a Milestone 5 callback kind fail
   before it fails a fixture.
 - [ ] **Task 3 — the self axis (19).** Including the 4 `reexecute` rows; *not* the base matrix's
-  36 mode rows. This is the commit that covers `verify.sls:831` a **second** way (`SELF p8`).
+  36 mode rows. This is the commit that covers `verify.sls:834` a **second** way (`SELF p8`).
 - [ ] **Task 4 — the dangling axis (16) and the absence census (16).** The only place a
   `byte-machine-contract-violation` can be cited, and `P10`'s gated existence.
 - [ ] **Task 5 — the EOF-chain axis (24), the verdict lattice (25), the two separators (2).**
@@ -256,9 +264,9 @@ text, and the texts are not unique anyway (775/828 share one, 778/831 share one,
 where the hole is). Use the diagnostic's **node slot** plus fixture shape.
 
 **The operand-table drift row.** Extract `field-operations` (7) + `field-predicates` (7) from
-`ir.sls:305-306` and `field-operand-schemas`' keys from `verify.sls:273-280`, assert set equality.
+`ir.sls:305-306` and `field-operand-schemas`' keys from `verify.sls:277-284`, assert set equality.
 Measured: the sets match (14 = 14) and **nothing pins that**. This converts `verify.sls:301`'s
-"unreachable through the public API" comment — verbatim the shape of Slice ③'s defect #1 — into a
+"Unreachable through the public API" comment — verbatim the shape of Slice ③'s defect #1 — into a
 checked invariant.
 
 ## §8 Sentinels — each reading an observed value
@@ -302,7 +310,7 @@ literal.
 **H3 — scoping will cut the wrong axis.** The base 144 is 63% of the cells and the least
 informative per cell: two rules, 16 rejections. Nine mutations are distinguished by a **single**
 cell, and those cells live in axes **B, C, E, F** — the four a budget cut reaches for first.
-**Cutting axis B alone loses the only coverage of `verify.sls:831` in the entire tree.**
+**Cutting axis B alone loses the only coverage of that site in the entire tree** — it is the site Task 1 closed, and axis B is its *second*, independent witness.
 **Mitigation:** §6's axis column exists so a scoper can see the cost.
 
 **H4 — "census clean" will be read as "the Slice ③ shape is closed".** Measured decisively:
