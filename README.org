@@ -24,12 +24,14 @@ parser-error seam), Slice ①b (field declaration, slot assignment and
 =parser-field-ref=), and Slice ② (field action and field branch). A machine can
 now declare unsigned integer fields, write them with zero-width actions and
 branches, and read them from the input stream with a checked
-integer-accumulate node. Milestone 5's own scope has not begun: two hardening
-slices ran first and closed 2026-09-04 — Slice ⓪ (the verifier's kind ×
-position matrix and a diagnostic-code census derived from the source) and
-Slice ⓪b (the EOF walk cluster), which closed two holes in the verifier: a
-machine whose /entry/ is a =finish= terminal, and a machine whose entry's own
-EOF path reaches a =stop=, both verified clean before and are now rejected.
+integer-accumulate node. Milestone 5 (callbacks, poisoning, and spans) is in
+progress. Two hardening slices ran first and closed 2026-09-04 — Slice ⓪ (the
+verifier's kind × position matrix and a diagnostic-code census derived from the
+source) and Slice ⓪b (the EOF walk cluster), which closed two holes in the
+verifier: a machine whose /entry/ is a =finish= terminal, and a machine whose
+entry's own EOF path reaches a =stop=, both verified clean before and are now
+rejected. Gate 0 then discharged 2026-09-04 as decisions 0024-0029, and Slice
+①a — the seam, carrying the generated ABI to version 4 — landed the same day.
 =src/byte-machine/= holds the construction API, the verifier, the normalizer and
 emitter, the reference interpreter, and the runtime, each exercised in both the
 source and ahead-of-time execution lanes. See

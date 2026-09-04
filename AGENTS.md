@@ -79,6 +79,35 @@
   opposite constant — slice 4's `(if #t` left the predicate's own case passing
   and made a later case error, where `(if #f` fails that case's `check-equal`
   outright and tests the same decision.
+* **An argument that a test CANNOT catch something must name both operands of
+  its comparison.**
+  Milestone 5 Slice ①a's position drift row shipped with a comment arguing it was
+  blind under the mutation suite: the census reads the staged tree, so a mutation
+  deleting an edge role deletes it from the code *and* from the set the test
+  derives. The premise is true and the conclusion is backwards — the derived set
+  is compared against a mapping **declared in the test file**, and a mutation
+  rewrites only the file its own `FILE` names, so the mutated verifier meets an
+  unmutated mapping and the row goes red. The slice had argued a real gap into
+  existence and documented it as unclosable; the review closed it with a one-line
+  pin. Before writing that a check is blind, name what it compares against and
+  say which side the mutation reaches.
+* **A scope claim inherits the scope of the measurement behind it.**
+  The same slice wrote "the ONLY witness to the emitted signature anywhere in the
+  tree" in three places. The measurement behind it had searched the **mutation
+  declarations** only; the four committed goldens carry the same line and the
+  determinism lanes compare them byte for byte. This is the novelty rule with the
+  failure named: the widening happens in the retelling, not in the measuring.
+  Carry the search's own boundary into the sentence — "the only assertion naming
+  it as text", "the only witness in this SPEC lane" — and a later reader can
+  check the claim against the search that produced it.
+* **A plan that schedules a red intermediate commit is the thing that is wrong.**
+  Slice ①a's plan split the ABI version bump, the `exec` widening and the payload
+  growth into three tasks, then told Task 1 the tree would be "deliberately
+  inconsistent" until Task 3 while Task 2 required the full suite green. Both
+  cannot hold: the goldens regenerate once, so the lanes stay red until every
+  half of the change has landed. The standing rule is that tests pass before every
+  commit — when a plan conflicts with it, the plan is what gets corrected, and
+  the tasks ship as one commit.
 * **Count how many cases a mutant fails, and how differently — a mutant that
   crashes on unrelated inputs pins nothing.**
   A pin is attributable only if the cases that fail are the ones its decision
@@ -529,6 +558,18 @@
   kind's answer there explicitly — including the sites where the answer is "not
   this kind". A loud `else` protects only the sites that reach it.
 
+* **"Pay it once" only applies to a change that costs something.**
+  A seam slice exists so that a change moving a committed artifact is paid before
+  any semantics, letting every later slice assert "no golden moved" as a gate.
+  Milestone 5's decision 0025 scheduled its trailing slot-table section that way
+  and it did not belong: a section writing zero bytes for a machine that declares
+  nothing leaves the byte stream — and so the fingerprint — identical whether the
+  code exists or not, so landing it later costs exactly what landing it early
+  costs. That is the whole difference from decision 0019's header slot, which sat
+  inside bytes every machine writes and therefore *had* to be claimed a slice
+  ahead. Before assigning work to a seam slice, name the artifact it moves; if
+  there is none, the seam argument does not reach it, and scheduling it there buys
+  only a guard over always-empty inputs.
 * **A comment that enumerates a closed set is a census, and it goes stale in silence.**
   `compile.sls` carried "this case already covers every kind `normal-state-kind`
   can produce (dispatch/stop/error/finish/pause)" through two slices that widened

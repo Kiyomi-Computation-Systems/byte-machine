@@ -1,6 +1,8 @@
 # Milestone 5 Design — Callbacks, poisoning, and spans
 
-**Status: not started.** Milestone 4 closed 2026-09-03 (its close note is a dated
+**Status: in progress.** Gate 0 discharged 2026-09-04 (decisions 0024-0029, PR #56); Slice ①a landed 2026-09-04 (PR #58 = `87a99c9`). Slices ①b, ②, ③ and ④ remain.
+
+**Originally written when nothing had started:** Milestone 4 closed 2026-09-03 (its close note is a dated
 disposition in the parent plan, `§25:1568-1570`, written 2026-09-04). Milestone 5's two
 hardening slices closed 2026-09-04 — Slice ⓪ (PR #52 = `5aa99a1`) and Slice ⓪b, in the same
 merge — and their standards landed as PR #53 = `db86ab6`. Milestone 5's own scope has not
