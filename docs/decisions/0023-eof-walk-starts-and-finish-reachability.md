@@ -4,6 +4,16 @@ Date: 2026-09-03
 Status: accepted
 Milestone: 5, Slice ⓪b (milestone-5-slice-0b-implementation-plan.md)
 
+> **Amendments** — a later note at the foot of this file reaches back into the
+> text above it. Nothing above a note is rewritten: the tree each decision was
+> taken against is its evidence.
+>
+> - **2026-09-04 (Milestone 5)** — **annotates items 1 and 3**:
+>   [decision 0027](./0027-reachable-path-for-callbacks-and-spans.md) carries the
+>   reachability answer those items fixed for the EOF checks to the span and
+>   callback restrictions and to `pass-zero-progress`. Nothing above it became
+>   false. See the note below.
+
 ## Context
 
 Decided against the tree at `bafdbe1` (Milestone 4 close) plus Slice ⓪'s tasks 1
@@ -98,3 +108,29 @@ loud raise.
 - Decision **0021 is annotated, not corrected** — two of its sentences were never
   true, which `AGENTS.md` sends to annotation. Decision **0011 needs no
   amendment**; item 4(b) already states the rule this record implements.
+
+## 2026-09-04 (Milestone 5) — the same answer, carried to spans, callbacks and zero-progress
+
+Milestone 5 Gate 0 (decision 0027, `milestone-5-design.md` §4.5) takes the pair of
+relations items 1 and 3 fixed for the EOF checks — `byte-reached` for §16.2:908,
+and the EOF walk from the byte-reachable parked set for §16.2:909 — and makes them
+the meaning of "reachable path" in §10.4:519, §13:826 and §14:843, three normative
+sentences that each name a reachable path and define none. Item 3's sentence, "a
+graph node no execution can occupy is not a state that originates a traversal", is
+0027's stated reason, transferred rather than re-derived. 0027 also gives
+`pass-zero-progress` the `byte-reached` gate §16.2:898's "reachable zero-progress
+cycles" asks for; Slice ③ owns that edit.
+
+**What this note does not reach.** The third Consequences bullet's open question
+stays open. `pass-reachability` still walks `all-out-targets`, 0027 does not
+narrow it, and 0027 is explicit that it "must not be read as closed" remains the
+standing instruction.
+
+**One thing 0027 measured that this record did not, recorded here because a reader
+arriving at the third Consequences bullet should know it.** Because
+`all-out-targets` is wider than the relation items 1 and 3 use, the two do not
+agree on every machine: a byte-dispatch node reachable only as `E` →(eof) `T`
+→(byte) `Z` is in `pass-reachability`'s reached set and in no execution's state
+set. Nothing above this note is wrong about that — this record raised the
+over-approximation and declined to fix it — but 0027 is where the first check
+whose verdict depends on the difference is named.

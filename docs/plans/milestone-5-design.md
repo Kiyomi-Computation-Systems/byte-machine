@@ -38,6 +38,14 @@ the line wrong can still find the thing.
 > actually support (§4.3, §4.6, §4.12 item 4); in each case the resolution was right and the
 > stated reason was not.
 >
+> **2026-09-04, Gate 0's execution and review** — **amends §4.1 and §4.7**, two more arguments
+> that did not carry. §4.1 argued the condition channel "was not left open" from the absence of a
+> callback-contract entry in `§9.4:438`; that list opens "Codes include" and rules nothing out by
+> absence. Replaced with `§12.3:719`, which names callback application error on the error result
+> channel positively. §4.7 called its graph argument decisive for both halves of the resolution;
+> it forces the *shape* (fixpoint, not enumeration) and says nothing about reporting at merge
+> points, which rests on interpretation alone and now says so.
+>
 > **2026-09-04, writing the Gate 0 plan** — **amends §4.4**: its resolution as first written
 > ("one merged pre-order over declared nodes … at its own position in declaration order") reads
 > as interleaving internal states with declared ones, which contradicts decision 0016 item 1's
@@ -288,8 +296,30 @@ should confirm the split below — several of these merge naturally and a record
 the goal.
 
 §4.1-§4.10 are destined for records. §4.11 collects resolutions that stay in this design with
-no record. §4.12 collects scope additions the parent plan does not name; **each is a proposal
-awaiting the owner's approval on a stated date**, and none is in scope until it has one.
+no record. §4.12 collects scope additions the parent plan does not name.
+
+> **Gate 0 discharged 2026-09-04**, as six records, exactly the merges §11 named.
+>
+> | Record | Carries | Merge |
+> | --- | --- | --- |
+> | [0024](../decisions/0024-callback-error-vocabulary.md) | §4.1, §4.2 | the callback-error vocabulary as one |
+> | [0025](../decisions/0025-milestone-5-seam-encoding-abi-exec.md) | §4.3, §4.8 | the seam as one bargain, decision 0019's shape |
+> | [0026](../decisions/0026-internal-state-id-order.md) | §4.4 | — |
+> | [0027](../decisions/0027-reachable-path-for-callbacks-and-spans.md) | §4.5 | absorbs the `pass-zero-progress` gate |
+> | [0028](../decisions/0028-callback-slots-and-visible-state.md) | §4.6, §4.9, §4.10 | the callback's runtime surface |
+> | [0029](../decisions/0029-span-state-is-a-lattice.md) | §4.7 | — |
+>
+> **The gate did not just transcribe this section — it corrected it.** §4.1's and §4.7's
+> arguments were both refuted while the records were being written, and both are amended above.
+> §4.4's contradiction with decision 0016 was found earlier, while the Gate 0 plan was written.
+> **Three of ten resolutions reached a record with a different stated reason than this document
+> first gave them**, every conclusion intact. A design section is a draft argument until
+> something checks it against the artifacts.
+>
+> Two records reach back: `0025` annotates decision 0019, and `0027` annotates decision 0023.
+> One appended disposition adds `parser-active-span` to `§9.3`'s normative list — appended to
+> the parent plan's `## Dated dispositions`, measured as 37 insertions and zero deletions, so no
+> `§section:line` citation moved.
 
 ### 4.1 The callback-contract error: a `callback`-domain parser error, not a raise and not poison
 
@@ -302,8 +332,13 @@ reported through the ordinary error result path. It does not poison.**
 
 Three constraints force it. `§12.7:775` puts data errors in results rather than conditions, and
 a callback returning the wrong kind of value is a data error about the machine's environment,
-not a misuse of the API by the caller. `§9.4:438`'s code list is the *API-condition* list and
-contains no callback-contract entry, so the condition channel was not left open for this.
+not a misuse of the API by the caller. `§12.3:719` — "The machine entered a declared machine error or
+**callback application error**. The status is sticky until reset." — already puts this family on
+the sticky error *result* channel by name. **That positive citation is the argument.** An
+earlier draft argued instead that `§9.4:438`'s code list contains no callback-contract entry, so
+the channel "was not left open"; that does not follow, because `:438` opens with the words
+"Codes include" — an open enumeration, from which nothing can be ruled out by absence. The
+absence is corroboration and the record labels it as such.
 `§12.6:749`'s poisoning triggers are a closed pair — "If a callback raises an unexpected
 condition or performs a nonlocal escape" — and a wrong *return value* is neither; extending
 poisoning to cover it would widen a closed enumeration by inference.
@@ -443,12 +478,23 @@ properties; `§10.4:519` names four rejections. Three vocabularies, no mapping, 
 **Resolved: the span pass is a dataflow analysis over an abstract span state, and disagreement
 at any merge point — not only at an exit — is itself a diagnostic.**
 
-Two arguments, the second decisive. First, under the path-existential reading "inconsistent
-successful exits" adds nothing beyond `§14:843`'s fourth property, and a reading that makes one
-of five normative bullets vacuous is the weaker reading. Second and structurally:
-**`§16.2:913` declares normal consuming cycles valid — "including the main HTTP message loop" —
-so a check by path enumeration does not terminate.** A lattice join over an abstract state does.
-The shape of the check is forced by the graph, not chosen for elegance.
+**Two arguments, and they reach different halves of this resolution.** An earlier draft ran them
+together and called the second decisive for both; it is not, and Gate 0's own review is what
+separated them.
+
+*The shape* is forced by the graph. **`§16.2:913` declares normal consuming cycles valid —
+"including the main HTTP message loop" — so a check by path enumeration does not terminate.**
+A fixpoint over a finite abstract domain does. That settles *analysis rather than enumeration*,
+and nothing more.
+
+*The merge-point rule* rests on interpretation alone, and this document says so rather than
+borrowing the graph argument's force. Under the path-existential reading, "inconsistent
+successful exits" means only that some path reaches a successful exit with a span active —
+exactly `§14:843`'s fourth property — leaving one of `§16.2:899`'s five bullets a restatement of
+another document's sentence. A reading that makes a normative bullet redundant is the weaker
+reading. **That is the whole case for reporting at merge points, and it is weaker than the case
+for the shape.** A reviewer who disagrees is disagreeing with something the plan genuinely
+underdetermines, which is what a Gate 0 record is for.
 
 ### 4.8 The seam reserves the exec parameters and the ABI member, empty
 
@@ -597,7 +643,9 @@ approval was of a fact rather than a feeling.
 **Scope, as an allocation.** This slice discharges **no `§25` scope bullet and no exit
 criterion.** It exists to move every committed artifact once, before any behaviour exists, so
 that each later slice can assert "no golden moved" as a gate. Its work is Gate 0's §4.3
-(encoding shape) and §4.8 (exec signature and ABI member) made real, and nothing else.
+(encoding shape) and §4.8 (exec signature and ABI member) made real, plus one task Gate 0 does
+not settle: the position-axis drift row below. **No semantics** — that is the boundary, and
+"nothing else" would have been wrong, since the drift row is neither §4.3's nor §4.8's.
 
 **Citation staleness policy, declared before any `file:line` appears.** Every citation in this
 section was measured pre-slice at `db86ab6`. Each names the *construct* as well as the line.
@@ -890,7 +938,8 @@ oracle must *fail* on, designed alongside the oracle rather than added after it 
 
 ## 11. Handed to writing-plans
 
-- **The Gate 0 split is settled: six records, 0024-0029.** Ten resolutions, merged as follows,
+- **DISCHARGED 2026-09-04. The Gate 0 split was six records, 0024-0029**, exactly as planned;
+  the mapping is the blockquote under §4. Ten resolutions, merged as follows,
   each merge for a stated reason. `0024` = §4.1 + §4.2, one callback-error vocabulary. `0025` =
   §4.3 + §4.8, the seam — encoding shape, ABI payload and `exec` signature in one record, which
   is exactly the shape decision 0019 took for Milestone 4 and the reason its reservations read
