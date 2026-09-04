@@ -468,6 +468,69 @@
   thing, state both with their questions attached; when you restate someone
   else's number, carry its scope with it or do not carry the number.
 
+* **Teaching a lookup a new node kind does not teach the filters that consume it.**
+  A new node kind arrives through one or two shared accessors — `node-eof-target`,
+  `node-out-targets` — and it is tempting to believe that is the whole seam. It is
+  not. Elsewhere the verifier enumerates kinds *by hand*, in filters written as
+  `(or (byte-dispatch-node? n) (sequence-dispatch-node? n))` and in `cond`s with
+  one arm per kind, and a kind missing from one of those is **silent**: the filter
+  yields `'()` and the pass simply has nothing to say. Milestone 4 Slice ③ taught
+  both accessors about `integer-accumulate-node?` and left three such sites
+  unchanged; two were Critical. `eof-terminal`'s `classify` fell into its residual
+  `else` and **raised out of verification**, so a legal machine got no verdict at
+  all rather than a wrong one — under a comment asserting that `else` was
+  unreachable because "every kind `ir.sls` can construct has its own arm".
+  `pass-eof-execution`'s §16.2:909 walk never started from the new kind, so a node
+  naming itself as its own eof-target verified with **zero diagnostics** and then
+  looped forever in both executors — while `parser-finish-op!` states in its own
+  comment that it carries no local cycle guard *because* it relies on that check.
+  Every fixture missed all three by construction. When you add a node kind, grep
+  for every predicate of every existing kind, visit each site, and decide the new
+  kind's answer there explicitly — including the sites where the answer is "not
+  this kind". A loud `else` protects only the sites that reach it.
+
+* **A comment that enumerates a closed set is a census, and it goes stale in silence.**
+  `compile.sls` carried "this case already covers every kind `normal-state-kind`
+  can produce (dispatch/stop/error/finish/pause)" through two slices that widened
+  the set to eight — including one whose new arm sat eleven lines above the
+  comment. Nothing failed, because prose is not checked. The same milestone shipped
+  a `FORTY-EIGHT PASSES` banner against forty-nine, a "six state literals" census
+  that was eight, and a sweep census that read 31 pins for a 32-pin pass because
+  the tool matched `EXPECT_SURVIVES` as a substring and two blocks *discussed* it.
+  Prefer deriving the set from the artifact — `member3-drift-tests.sps` walks the
+  emitted library as a read datum and compares it against a declared list, which
+  is a census with a test. Where prose must state a count, state where it was
+  measured, and re-measure it when the thing it counts changes.
+
+* **Re-sweep every count after a fix wave, not just the tests.**
+  A review's fix commits move counts, and the prose that quotes them is not part of
+  the suite. Milestone 4 Slice ③ closed with a status block reading "358 mutations"
+  and "78 verify.sls pins" against a tree at 368 and 81 — both true when written,
+  both stale two commits later — while the census table three lines above them had
+  been re-measured. The document disagreed with itself and with the CHANGELOG. A
+  count restated in two places is a count that will disagree with itself: keep one
+  authority, and after a fix wave re-read the fix's own commits for every number
+  they moved.
+
+* **Do not anchor a mutation on prose.**
+  A `FIND` that includes a comment line breaks every time that comment is
+  corrected, which inverts what an anchor is for. One Slice ③ pin was re-anchored
+  three times for this reason — it sat on a comment because the code it named
+  occurs three times in the file — and the third break came from correcting that
+  very comment's stale claim. Anchor on code. When the code alone is not unique,
+  extend into the *following* construct rather than the preceding comment: the
+  paragraph above a clause is the part most likely to be edited.
+
+* **Run review and audit fan-outs in an isolated worktree.**
+  Subagents told they may edit files to test a hypothesis will do so in whatever
+  tree you point them at, and their edits are real between edit and restore. A
+  `ctest` run alongside a Slice ③ audit reported 16/94, then 1/94, then 94/94 with
+  `git status` clean each time; a detached worktree at the same commit settled it
+  at 94/94. The mutation suite is worst affected — it stages the tree, so an
+  outside edit inside that window produces bogus UNCAUGHT and caught-survivor
+  verdicts that look exactly like real breakage. Use `isolation: "worktree"`, and
+  never quote a suite result taken while such a workflow is live.
+
 ## Closing ritual
 
 Run this when a branch's work is complete and reviewed. It is a ritual because
