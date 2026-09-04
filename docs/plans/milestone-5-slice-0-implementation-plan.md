@@ -1,6 +1,8 @@
 # Milestone 5 Slice ⓪ — the kind × position matrix and the diagnostic-code census
 
-**Status:** Tasks 1 and 6 done; 2–5 and 7 pending Slice ⓪b's plan.
+**Status:** Tasks 1 and 6 done. **Tasks 2-5 and 7 now run AFTER Slice ⓪b** (reordered
+2026-09-03 — see §2). Task 1's fixture is measured byte-identical under ⓪b's new verifier, and
+Task 6's census is expected to move from 31 sites to 28, which is its ratchet working.
 
 *Citations corrected 2026-09-03.* Every `verify.sls:NNN` below was measured against the tree as
 it stands. The first set was **stale on arrival**, by four lines: they were taken from a design
@@ -60,11 +62,26 @@ dispatch eof-target = stop          verify (eof-reachable-stop)
 
 §16.2:909 forbids the first four by name.
 
-***Do not fix this in Slice ⓪.*** The one-line fix (a walk start at the entry) was prototyped
-and **changes 85 of 230 cells**, most of it double-reporting — `BASE p4 stop` goes from one
-`eof-reachable-stop` to two, which collides with §16.4:937-943's one-finding-per-decision. The
-hole is real; the fix's shape is a separate decision, and this slice's job is to make it
-*visible and recorded*, not to take it.
+***Superseded 2026-09-03 — Slice ⓪b takes this fix, and runs BEFORE Slice ⓪'s Tasks 2-5.***
+This paragraph read: *"Do not fix this in Slice ⓪. The one-line fix (a walk start at the entry)
+was prototyped and changes 85 of 230 cells, most of it double-reporting — `BASE p4 stop` goes
+from one `eof-reachable-stop` to two, which collides with §16.4:937-943's
+one-finding-per-decision."* Both of its load-bearing claims are false:
+
+- **§16.4:937-943 has no one-finding-per-decision rule.** It is a *contents* list. The gloss
+  entered at `milestone-3-slice-1-implementation-plan.md:139` and propagated to fourteen citing
+  sites until it read like spec. It was the stated reason for deferring this fix.
+- **The 85-of-230 figure is skeleton-dependent and not reproducible.** The identical prototype
+  measures **51/144** under one skeleton and **4/144** under another; a figure of this kind must
+  name its skeleton. And "most of it double-reporting" is not corroborated — a third of the
+  changed cells are duplicates, two thirds are new coverage. *The **recommended** shape (the
+  parked set, derived) measures **zero** duplicates.*
+
+The hole is real and Slice ⓪b closes it. **Tasks 2-5 now follow ⓪b**, because building 230
+expected verdicts against a verifier about to change would derive a third of them twice, snap
+eleven mutation anchors and move this slice's own site census from 31 to 28. The matrix was
+supposed to justify the wait by measuring ⓪b's blast radius — measured, it **cannot see ⓪b's
+central decision at all** (the gate change moves 0 of 144 cells).
 
 ### D-2 `verify.sls:834` is dead in the tree
 
@@ -345,8 +362,10 @@ it does.
 
 ## §10 Explicitly out of scope
 
-- **The D-1 fix** (a walk start at `machine-entry`). Measured to change 85 of 230 cells, mostly
-  double-reporting. Its shape is a decision this slice records, not takes.
+- **The D-1 fix.** Still out of *this* slice's scope, but no longer deferred: it is Slice ⓪b's
+  T4, which now runs **before** Tasks 2-5. See §2's superseded note — the "85 of 230, mostly
+  double-reporting" characterisation does not survive re-measurement, and the recommended shape
+  produces zero duplicates.
 - **Tier 2a — the corruption catalogue**, and **Tier 2b — free draws plus an independent
   acyclicity walk.** Both are Milestone 7's, which names *bounded invalid-machine generator*
   already. Building 2a now would build it twice: M5 and M6 each add codes. The **ratchet** (S3+S4)
