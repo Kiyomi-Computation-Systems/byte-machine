@@ -1955,4 +1955,71 @@
           (check-equal "both controls driven" seen 2)
           (check-equal "each reports once, not twice" bad '()))))))
 
+;; Milestone 5 Slice ⓪b task 5: §16.4:940's edge/source label (OQ-4).
+;;
+;; §16.4:937-943 lists what a diagnostic CONTAINS -- code, severity, machine
+;; name, "node and edge/source label where applicable", message, declaration
+;; names, graph path. *** It carries NO cardinality rule. *** The
+;; "one finding per decision" gloss that has been cited against these checks
+;; entered at a Milestone 3 plan and propagated; it is not in the spec. So the
+;; problem was never too many findings -- it is that two findings from one node
+;; were the IDENTICAL record.
+;;
+;; The label half was implemented nowhere: three arguments at every call site.
+;; Now a :908 finding carries the edge ROLE that produced it, and the two
+;; machines below are what makes that observable: each has a node with two byte
+;; edges into the same finish terminal, differing only in role.
+;;
+;; A ROLE, not an index. verify.sls declines elsewhere to promise the order of
+;; two diagnostics from one node, and an index would newly promise it.
+(harness-group "a :908 finding carries the edge role that produced it (Slice ⓪b)"
+  (lambda ()
+    (harness-case "a byte-dispatch's case and fallback into one finish are two distinguishable findings"
+      (lambda ()
+        ;; Before the label, both were `(non-eof-into-finish . d)` -- same code,
+        ;; same node, indistinguishable. The count was already 2; what was
+        ;; missing was being able to tell WHICH edge each one is about.
+        (let ((ds (map (lambda (x) (list (diagnostic-code x) (diagnostic-node x)
+                                         (diagnostic-edge x)))
+                       (verification-diagnostics
+                        (verify-machine
+                         (make-machine 'roles 'd '() '() '() (list eof-decl rej-decl)
+                           (list (make-byte-dispatch-node 'd
+                                   (list (make-byte-case (make-exact-byte-matcher 65)
+                                                         (make-edge 'stop 'advance) #f)
+                                         (make-byte-case (make-exact-byte-matcher 66)
+                                                         (make-edge 'fin 'advance) #f))
+                                   (make-edge 'fin 'reexecute) #f #f)
+                                 (make-finish-node 'fin #f)
+                                 (make-stop-node 'stop #f))
+                           'default-eof #f))))))
+          (check-equal "two findings, one per offending edge, each labelled"
+                       ds '((non-eof-into-finish d case)
+                            (non-eof-into-finish d fallback))))))
+    (harness-case "a sequence node's alternative and mismatch are likewise distinguishable"
+      (lambda ()
+        (let ((ds (map (lambda (x) (list (diagnostic-code x) (diagnostic-node x)
+                                         (diagnostic-edge x)))
+                       (verification-diagnostics
+                        (verify-machine
+                         (make-machine 'roles2 's '() '() '() (list eof-decl rej-decl)
+                           (list (make-sequence-dispatch-node 's
+                                   (list (make-sequence-case '(1) 'fin #f))
+                                   (make-edge 'fin 'reexecute) #f #f)
+                                 (make-finish-node 'fin #f))
+                           'default-eof #f))))))
+          (check-equal "alternative and mismatch, labelled"
+                       ds '((non-eof-into-finish s alternative)
+                            (non-eof-into-finish s mismatch))))))
+    (harness-case "a diagnostic with no applicable edge carries #f"
+      (lambda ()
+        ;; "Where applicable" is half the requirement. A finding that is about a
+        ;; NODE rather than an edge must not invent a label.
+        (let ((ds (verification-diagnostics
+                   (verify-machine
+                    (make-machine 'noedge 'fin '() '() '() (list eof-decl rej-decl)
+                                  (list (make-finish-node 'fin #f)) 'default-eof #f)))))
+          (check-equal "one finding" (length ds) 1)
+          (check-equal "and it carries no edge label" (diagnostic-edge (car ds)) #f))))))
+
 (harness-finish)

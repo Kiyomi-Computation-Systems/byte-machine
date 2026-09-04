@@ -184,9 +184,23 @@ as "any state an execution can occupy", or a later slice will re-derive it wrong
   under the new walk, only the code moved. The census pin from Task 6a also needed re-anchoring
   onto the surviving `eof-reachable-stop` site. Census **30 → 28**, its third re-baseline in
   three commits.
-- [ ] **T5 — the edge/source label (§16.4:940, OQ-4).** Two isolating fixtures no axis of the
-  230-cell matrix builds: `case 65 → stop, case 66 → finish, fallback → stop`, and its sequence
-  twin.
+- [x] **T5 — the edge/source label (§16.4:940, OQ-4).** Done. The diagnostic record gained a
+  fifth slot; `make-diagnostic` keeps its three-argument form (label `#f`), `make-diagnostic/edge`
+  carries a **role**, and `diagnostic-edge` is exported. Three fixtures: a dispatch's `case` and
+  `fallback` into one finish, a sequence node's `alternative` and `mismatch`, and a node-level
+  finding that must carry `#f` — "where applicable" is half the requirement.
+
+  **One census, two views — twice over.** `node-out-edges` is the census and `node-out-targets`
+  is `(map cdr …)` of it. A first attempt attached roles by inlining the field-action and
+  field-branch arms, which recomputed `zero-width-successors`' fact in a second place — exactly
+  the duplication that function's own comment forbids. Corrected: `zero-width-edges` is the
+  role-carrying census and *both* `zero-width-successors` and `node-out-edges` derive from it.
+
+  **Nine anchors re-anchored, none deleted** — every decision survived the refactor, only its
+  code moved. Two of them ended up sharing a `FIND` (the SITES-fails-both-directions trap); one
+  was moved onto `node-out-edges`' delegation arm so each owns a distinct anchor. The census
+  learned both emission forms, and its header subtraction is now **two** definition headers,
+  counted by name.
 - [ ] **T6 — the verdict tiers (OQ-5).** Three failing fixtures, using the **stop** variant not
   the cycle variant: the cycle variant's join is still `cycle` under a tier-1 promotion, so it
   kills only half the mutants.

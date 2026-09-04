@@ -20,18 +20,27 @@
 (library (byte-machine verify)
   (export verify-machine verification-ok? verification-diagnostics
           verification-machine
-          diagnostic? diagnostic-code diagnostic-node diagnostic-message)
+          diagnostic? diagnostic-code diagnostic-node diagnostic-message
+          diagnostic-edge)
   (import (rnrs)
           (byte-machine private ir))
 
   ;; --- diagnostics ---
   (define diagnostic-tag (vector 'byte-machine-diagnostic))
-  (define (make-diagnostic code node message) (vector diagnostic-tag code node message))
+  ;; §16.4:940 asks for "node and edge/source label where applicable". The label
+  ;; half was implemented nowhere: three arguments at every call site. The record
+  ;; now carries it, `#f` when it does not apply, so two findings from one node --
+  ;; a `case` edge and a `fallback` edge into the same finish terminal -- stop
+  ;; being the identical record.
+  (define (make-diagnostic code node message) (vector diagnostic-tag code node message #f))
+  (define (make-diagnostic/edge code node message edge)
+    (vector diagnostic-tag code node message edge))
   (define (diagnostic? x)
     (and (vector? x) (> (vector-length x) 0) (eq? (vector-ref x 0) diagnostic-tag)))
   (define (diagnostic-code d) (vector-ref d 1))
   (define (diagnostic-node d) (vector-ref d 2))
   (define (diagnostic-message d) (vector-ref d 3))
+  (define (diagnostic-edge d) (vector-ref d 4))
 
   ;; --- name grammar [a-z][a-z0-9-]* and reserved-set member 1 ---
   (define reserved-member-1
@@ -80,55 +89,68 @@
   ;; each caller's arm -- whether it consults this at all -- stays its own
   ;; mutable line, and only the shared fact, "what does a zero-width node
   ;; continue to", lives here.
-  (define (zero-width-successors n)
-    (cond ((pause-node? n) (list (pause-node-continuation n)))
+  ;; Slice ⓪b task 5 carries §16.4:940's edge ROLE alongside each target. The
+  ;; census stays here, singular: `zero-width-edges` is the fact, and both
+  ;; `zero-width-successors` and `node-out-edges` are views of it. Attaching the
+  ;; roles in `node-out-edges` instead would have recomputed a field action's
+  ;; successors in a second place -- the duplication this comment already forbids.
+  (define (zero-width-edges n)
+    (cond ((pause-node? n) (list (cons 'continuation (pause-node-continuation n))))
           ;; A field action's `error` is a successor exactly when it has one:
           ;; the constructor makes it #f precisely when the operation cannot
           ;; fail, so this never yields a node no failure can reach.
           ((field-action-node? n)
            (let ((e (field-action-node-error n)))
              (if (symbol? e)
-                 (list (field-action-node-next n) e)
-                 (list (field-action-node-next n)))))
+                 (list (cons 'next (field-action-node-next n)) (cons 'error e))
+                 (list (cons 'next (field-action-node-next n))))))
           ((field-branch-node? n)
-           (list (field-branch-node-true-target n)
-                 (field-branch-node-false-target n)))
+           (list (cons 'true (field-branch-node-true-target n))
+                 (cons 'false (field-branch-node-false-target n))))
           (else '())))
 
-  (define (node-out-targets n)
+  (define (zero-width-successors n) (map cdr (zero-width-edges n)))
+
+  ;; *** ONE census, two views (Slice ⓪b task 5). *** `node-out-edges` is the
+  ;; census -- every byte out-edge as a `(role . target)` pair -- and
+  ;; `node-out-targets` is a derived view of it. Duplicating the cond to attach
+  ;; roles would have made a second census of exactly the kind this slice spent
+  ;; two tasks removing.
+  ;;
+  ;; The role is §16.4:940's "edge/source label where applicable", which
+  ;; `make-diagnostic`'s three arguments implemented nowhere. It is a ROLE, not
+  ;; an index: verify.sls declines elsewhere to promise the order of two
+  ;; diagnostics from one node, and an index would newly promise it.
+  (define (node-out-edges n)
     (cond ((byte-dispatch-node? n)
-           (append (map (lambda (c) (edge-target (byte-case-edge c)))
+           (append (map (lambda (c) (cons 'case (edge-target (byte-case-edge c))))
                         (byte-dispatch-node-cases n))
-                   (list (edge-target (byte-dispatch-node-fallback n)))))
+                   (list (cons 'fallback (edge-target (byte-dispatch-node-fallback n))))))
           ;; A pause's single zero-width out-edge (§10.6): resolution-checked by
           ;; PASS 2 (a malformed continuation is 'missing-target, §16.2:905) and
-          ;; walked by reachability. The §16.2:908 check below filters on
-          ;; byte-dispatch-node?, sequence-dispatch-node? AND
-          ;; integer-accumulate-node?; a pause is in none of them, so this arm
-          ;; does not feed it. (The conclusion has always held. The stated REASON
-          ;; named one predicate and went stale twice -- most recently when this
-          ;; slice's own fix widened that filter, eight hundred lines below.)
-          ((pause-node? n) (list (pause-node-continuation n)))
-          ;; A sequence node's byte out-edges: every alternative's target plus
-          ;; the mismatch edge's. Feeding this arm also repairs pass-names'
-          ;; target resolution and byte-reached, which both walk this function.
+          ;; walked by reachability. Since Slice ⓪b the §16.2:908 check is gated
+          ;; on byte-reachability rather than on a source-kind filter, so this arm
+          ;; DOES feed it -- a byte-reachable pause continuing into a finish is
+          ;; rejected, and an EOF-only one is not.
+          ((pause-node? n) (zero-width-edges n))
           ((sequence-dispatch-node? n)
-           (append (map sequence-case-target (sequence-dispatch-node-cases n))
-                   (list (edge-target (sequence-dispatch-node-mismatch n)))))
-          ;; The two zero-width kinds (Slice ②), which feed name resolution,
-          ;; reachability and the :908 check below.
+           (append (map (lambda (c) (cons 'alternative (sequence-case-target c)))
+                        (sequence-dispatch-node-cases n))
+                   (list (cons 'mismatch
+                               (edge-target (sequence-dispatch-node-mismatch n))))))
           ((or (field-action-node? n) (field-branch-node? n))
-           (zero-width-successors n))
+           (zero-width-edges n))
           ;; Integer accumulate (Slice ③). Three of its four explicit targets are
           ;; BYTE out-targets; the fourth, `eof-target`, is not -- it belongs to
-          ;; node-eof-target below, exactly as a dispatch node's does, so that
-          ;; `all-out-targets` adds it for reachability and the :908 filter does
-          ;; not see it.
+          ;; node-eof-target below.
           ((integer-accumulate-node? n)
-           (list (integer-accumulate-node-digit-target n)
-                 (edge-target (integer-accumulate-node-nondigit-edge n))
-                 (integer-accumulate-node-overflow-error n)))
+           (list (cons 'digit (integer-accumulate-node-digit-target n))
+                 (cons 'nondigit
+                       (edge-target (integer-accumulate-node-nondigit-edge n)))
+                 (cons 'overflow (integer-accumulate-node-overflow-error n))))
           (else '())))
+
+  (define (node-out-targets n) (map cdr (node-out-edges n)))
   ;; A dispatch/sequence node's stored eof-target (a symbol, or #f meaning
   ;; "the machine default eof error"), or #f for any other node kind. Fix
   ;; wave 1 (Important 3): the single source of "node kind -> eof-target
@@ -794,13 +816,15 @@
                 (map (lambda (n)
                        (if (memq (node-name n) br908)
                            (filter values
-                                   (map (lambda (t)
-                                          (let ((tn (lookup nodes t)))
+                                   (map (lambda (re)
+                                          (let ((tn (lookup nodes (cdr re))))
                                             (if (and tn (finish-node? tn))
-                                                (make-diagnostic 'non-eof-into-finish (node-name n)
-                                                                 "a byte edge targets a finish terminal")
+                                                (make-diagnostic/edge
+                                                 'non-eof-into-finish (node-name n)
+                                                 "a byte edge targets a finish terminal"
+                                                 (car re))
                                                 #f)))
-                                        (node-out-targets n)))
+                                        (node-out-edges n)))
                            '()))
                      nodes)))
        ;; :909 + the EOF-cycle check — walk each INPUT-READING node's eof-target

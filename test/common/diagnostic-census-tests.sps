@@ -55,9 +55,14 @@
 ;; node message) ...)` header -- and that one is subtracted BY NAME below rather
 ;; than by hoping the arithmetic works out.
 (define (walk-diagnostics x)
+  ;; Both constructors count. `make-diagnostic/edge` (Slice ⓪b task 5) carries
+  ;; §16.4:940's edge label; it is an emission site exactly as much as the
+  ;; three-argument form, and a census that missed it would under-count the
+  ;; moment the tree started using it -- which is the failure this file exists
+  ;; to prevent, one level up.
   (let loop ((x x) (codes '()) (total 0))
     (cond ((pair? x)
-           (if (eq? (car x) 'make-diagnostic)
+           (if (memq (car x) '(make-diagnostic make-diagnostic/edge))
                (let* ((a (and (pair? (cdr x)) (cadr x)))
                       (q (and (pair? a) (eq? (car a) 'quote) (cadr a))))
                  (let-values (((c t) (loop (cdr x) codes (+ total 1))))
@@ -121,12 +126,13 @@
         (check "the walk found emission sites" (> (census-total the-census) 20))))
     (harness-case "every emitted code is a quoted symbol"
       (lambda ()
-        ;; The one form whose code is not quoted is `make-diagnostic`'s own
-        ;; definition header. Subtracted BY NAME: if a future site computes its
-        ;; code dynamically, this goes red rather than the site slipping out of
-        ;; the census unnoticed.
-        (check-equal "quoted sites plus the definition header"
-                     (+ (length (census-codes the-census)) 1)
+        ;; The forms whose code is not quoted are the two constructors' own
+        ;; definition headers -- `make-diagnostic` and, since Slice ⓪b task 5,
+        ;; `make-diagnostic/edge`. Subtracted BY NAME and BY COUNT: if a future
+        ;; site computes its code dynamically, this goes red rather than the site
+        ;; slipping out of the census unnoticed.
+        (check-equal "quoted sites plus the two definition headers"
+                     (+ (length (census-codes the-census)) 2)
                      (census-total the-census))))
     (harness-case "the code set and the per-site counts match the pinned table"
       (lambda ()

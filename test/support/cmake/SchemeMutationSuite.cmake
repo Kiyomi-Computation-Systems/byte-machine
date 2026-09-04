@@ -837,6 +837,8 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Milestone 5 Slice ⓪b task 5: §16.4:940's edge label. Mutations 368 + 2 = 370.
+#
 # Milestone 5 Slice ⓪b task 4: §16.2:909 walks the PARKED set. FIVE removed
 # (per-kind sites that no longer exist; residue at the site), FOUR added --
 # one of them Slice ⓪ task 1's pin re-anchored. Mutations 369 - 5 + 4 = 368.
@@ -988,7 +990,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 51)
-set(EXPECTED_MUTATIONS 368)
+set(EXPECTED_MUTATIONS 370)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -4106,10 +4108,10 @@ byte_machine_mutation(
   # line: measured unique (1 occurrence, against 3 for the bare arm), code-side,
   # and insensitive to edits of the paragraph above it -- which is the paragraph
   # that keeps needing them.
-  FIND [[          ((pause-node? n) (list (pause-node-continuation n)))
-          ;; A sequence node's byte out-edges]]
-  REPLACE [[          ((pause-node? n) '())
-          ;; A sequence node's byte out-edges]]
+  # Re-anchored at Slice ⓪b task 5: node-out-targets is now a derived view of
+  # node-out-edges, whose arms yield (role . target) pairs.
+  FIND [[          ((pause-node? n) (zero-width-edges n))]]
+  REPLACE [[          ((pause-node? n) '())]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "a well-formed pause machine verifies: no unreachable-node")
 
@@ -4137,7 +4139,7 @@ byte_machine_mutation(
   # own cond into `eof-successors`, which is where every multi-successor kind's
   # continuation set is now computed. A pause contributes exactly one successor,
   # which is what this mutation removes.
-  FIND [[    (cond ((pause-node? n) (list (pause-node-continuation n)))]]
+  FIND [[    (cond ((pause-node? n) (list (cons 'continuation (pause-node-continuation n))))]]
   REPLACE [[    (cond ((pause-node? n) '())]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "both EOF terminals reported -- expected 2, got 0")
@@ -4327,11 +4329,14 @@ byte_machine_mutation(
   # Re-anchored by Slice ② task 3: the arm no longer abuts `(else '())`, because
   # the two zero-width kinds' arms were added between them. Anchored on the arm
   # itself now, which is what the LABEL names, rather than on its neighbour.
+  # Re-anchored at Slice ⓪b task 5: node-out-targets is now a derived view of
+  # node-out-edges, whose arms yield (role . target) pairs.
   FIND [[          ((sequence-dispatch-node? n)
-           (append (map sequence-case-target (sequence-dispatch-node-cases n))
-                   (list (edge-target (sequence-dispatch-node-mismatch n)))))
-]]
-  REPLACE [[          ]]
+           (append (map (lambda (c) (cons 'alternative (sequence-case-target c)))
+                        (sequence-dispatch-node-cases n))
+                   (list (cons 'mismatch
+                               (edge-target (sequence-dispatch-node-mismatch n))))))]]
+  REPLACE [[          ((sequence-dispatch-node? n) '())]]
   # Comparison-caught: with the arm removed, the well-formed fixture's
   # sequence case and mismatch edge targets ('stop and 'reject) are never fed
   # to node-out-targets, so pass-reachability treats both as unreached and the
@@ -4800,10 +4805,10 @@ byte_machine_mutation(
   # consumers share -- factored in task 3 when the triplicated arms took every
   # pin on them to SITES 3.
   FIND [[          ((field-branch-node? n)
-           (list (field-branch-node-true-target n)
-                 (field-branch-node-false-target n)))]]
+           (list (cons 'true (field-branch-node-true-target n))
+                 (cons 'false (field-branch-node-false-target n))))]]
   REPLACE [[          ((field-branch-node? n)
-           (list (field-branch-node-true-target n)))]]
+           (list (cons 'true (field-branch-node-true-target n))))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "one arm cycling is a cycle even though the other finishes: cycle -- expected a true value")
@@ -4813,10 +4818,10 @@ byte_machine_mutation(
   LABEL "verify: a field action's error target is not an EOF successor"
   # The other half of the union, and the reason a field ACTION is multi-successor
   # too: a walk following only `next` misses a stop sitting behind a failure.
-  FIND [[                 (list (field-action-node-next n) e)
-                 (list (field-action-node-next n)))))]]
-  REPLACE [[                 (list (field-action-node-next n))
-                 (list (field-action-node-next n)))))]]
+  FIND [[                 (list (cons 'next (field-action-node-next n)) (cons 'error e))
+                 (list (cons 'next (field-action-node-next n))))))]]
+  REPLACE [[                 (list (cons 'next (field-action-node-next n)))
+                 (list (cons 'next (field-action-node-next n))))))]]
   EXPECT_STATUS 1
   # A CONJUNCTION, tightened by task 4's whole-pass sweep. Extracting
   # `zero-width-successors` made this arm feed THREE consumers, so each of its
@@ -4926,10 +4931,12 @@ byte_machine_mutation(
   # Three of its four explicit targets are byte out-targets; the fourth,
   # eof-target, belongs to node-eof-target so that all-out-targets adds it for
   # reachability and the :908 filter does not see it.
+  # Re-anchored at Slice ⓪b task 5: node-out-targets is now a derived view of
+  # node-out-edges, whose arms yield (role . target) pairs.
   FIND [[          ((integer-accumulate-node? n)
-           (list (integer-accumulate-node-digit-target n)]]
-  REPLACE [[          ((and #f (integer-accumulate-node? n))
-           (list (integer-accumulate-node-digit-target n)]]
+           (list (cons 'digit (integer-accumulate-node-digit-target n))]]
+  REPLACE [[          ((integer-accumulate-node? n)
+           (list]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the input-reading kind in the verifier census \\(Slice ③\\).an accumulate's three byte targets are out-targets, so they are reachable: nothing unreachable")
@@ -4953,10 +4960,12 @@ byte_machine_mutation(
   # node-out-targets feeds name resolution, reachability AND the :908 check, so
   # this one arm missing makes a well-formed machine report defects it does not
   # have and hides one it does.
+  # Re-anchored at Slice ⓪b task 5: node-out-targets is now a derived view of
+  # node-out-edges, whose arms yield (role . target) pairs.
   FIND [[          ((or (field-action-node? n) (field-branch-node? n))
-           (zero-width-successors n))
-]]
-  REPLACE [[          ]]
+           (zero-width-edges n))]]
+  REPLACE [[          ((or (field-action-node? n) (field-branch-node? n))
+           '())]]
   EXPECT_STATUS 1
   # A CONJUNCTION, for the mirror of the reason above: the reachability record
   # is shared with the helper-arm mutation and the :908 record with ":908 never
@@ -5289,10 +5298,12 @@ byte_machine_mutation(
   # `node-out-targets` is now the single census this rule consults. Reading one
   # element of it is the shape that survives a per-node dedup and still misses a
   # real violation -- a dispatch whose SECOND case targets a finish.
-  FIND [[                                        (node-out-targets n)))
+  # Re-anchored at Slice ⓪b task 5: node-out-targets is now a derived view of
+  # node-out-edges, whose arms yield (role . target) pairs.
+  FIND [[                                        (node-out-edges n)))
                            '()))
                      nodes)))]]
-  REPLACE [[                                        (list (car (node-out-targets n)))))
+  REPLACE [[                                        (list (car (node-out-edges n)))))
                            '()))
                      nodes)))]]
   EXPECT_STATUS 1
@@ -5382,6 +5393,33 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "an eof-zero-progress-cycle is reported AT A PAUSE NODE: at least one, at a pause")
+
+# --- Milestone 5 Slice ⓪b task 5: §16.4:940's edge/source label --------------
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: every :908 finding is labelled `case` regardless of which edge produced it"
+  # A constant label is the failure mode a label invites: present, plausible, and
+  # carrying no information. It passes any check that merely asserts the slot is
+  # non-#f, which is why the fixtures assert the whole (code node edge) triple.
+  FIND [[                                                 (car re))]]
+  REPLACE [[                                                 'case)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a byte-dispatch's case and fallback into one finish are two distinguishable findings")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: node-out-targets returns the roles instead of the targets"
+  # The census and its derived view must not drift apart. `node-out-edges` is the
+  # one census; `node-out-targets` is `(map cdr ...)` of it. Taking `car` instead
+  # is the shape a hand-written second census would have had to get right, and it
+  # breaks reachability and :908 together -- which is the argument for deriving
+  # the view rather than writing it twice.
+  FIND [[  (define (node-out-targets n) (map cdr (node-out-edges n)))]]
+  REPLACE [[  (define (node-out-targets n) (map car (node-out-edges n)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a finish node reachable only via an eof-target verifies")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
