@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FIFTY-ONE PASSES, BECAUSE FIFTY-ONE DIFFERENT WITNESSES ARE NEEDED
+# FIFTY-TWO PASSES, BECAUSE FIFTY-TWO DIFFERENT WITNESSES ARE NEEDED
 # (46 through Milestone 3; Milestone 4 Slice ①a adds the member-3 drift
 # guard and the position-kind lane, and Slice ①b the field-access lane -- since
 # renamed byte-machine.differential.field, the only lane in which the field
@@ -161,7 +161,7 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "FIFTY-ONE PASSES..." above. Declared here, rather than only in prose,
+# See "FIFTY-TWO PASSES..." above. Declared here, rather than only in prose,
 # so the count enforced at the bottom of this file is the same text a reader
 # checks by eye at the top -- one number to keep in sync, not two that can
 # quietly disagree. 25 passes / 60 mutations before the aot task; pass 26 adds
@@ -837,6 +837,9 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Milestone 5 Slice ⓪ task 2: a NEW pass (52) for the kind x position matrix,
+# carrying the closed-set ratchet. Passes 51 + 1 = 52; mutations 372 + 1 = 373.
+#
 # Milestone 5 Slice ⓪b task 6: the EOF verdict tiers. Mutations 370 + 2 = 372.
 #
 # Milestone 5 Slice ⓪b task 5: §16.4:940's edge label. Mutations 368 + 2 = 370.
@@ -991,8 +994,8 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-set(EXPECTED_PASSES 51)
-set(EXPECTED_MUTATIONS 372)
+set(EXPECTED_PASSES 52)
+set(EXPECTED_MUTATIONS 373)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -9291,9 +9294,47 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
+# --- Milestone 5 Slice ⓪ task 2: the kind x position matrix (pass 52) --------
+#
+# The matrix's value is BREADTH, not unique catches on today's tree: it drives
+# every node kind through every structural position, so a kind added tomorrow is
+# exercised in all sixteen positions without anyone writing sixteen fixtures.
+# Most single-kind omissions it would catch are also caught by some existing
+# lane -- measured, and said plainly rather than dressed up.
+#
+# What it catches ALONE is the ratchet below, and that is the point.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/kind-position-census-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls
+  SPEC byte-machine.unit.kind-position-census.chez.source
+  LABEL "ir: node? admits a kind the matrix's table does not cover"
+  # THE RATCHET. `node?`'s disjunct list IS the closed set of node kinds, and S2
+  # derives the matrix's coverage from it rather than from a list in the test --
+  # a list in the test would be one more census that goes stale, which this
+  # project has now paid for five times. When Milestone 5 adds a callback node
+  # kind, this row goes red BEFORE any fixture does, and the sixteen positions
+  # are then exercised for it by construction.
+  #
+  # Measured caught by the matrix ALONE: no other lane in the tree notices.
+  FIND [[        (integer-accumulate-node? x)))]]
+  REPLACE [[        (integer-accumulate-node? x) (stop-node? x)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the same nine kinds -- expected")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FIFTY-ONE PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FIFTY-TWO PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

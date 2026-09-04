@@ -1438,6 +1438,30 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/reserved-drift-tests.sps"
   TIMEOUT 120)
 
+# --- Milestone 5 Slice ⓪ task 2: the kind x position matrix ------------------
+# Reads ir.sls as data for its closed-set drift row (S2), so it needs the same
+# BYTE_MACHINE_SOURCE_ROOT the diagnostic census does, and for the same reason:
+# under the mutation suite it must read the STAGED tree.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.kind-position-census.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/kind-position-census-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_VERIFY}
+          "${CMAKE_SOURCE_DIR}/test/common/kind-position-census-tests.sps"
+  TIMEOUT 180
+  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.kind-position-census.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/kind-position-census-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_VERIFY}
+          "${CMAKE_SOURCE_DIR}/test/common/kind-position-census-tests.sps"
+  TIMEOUT 180
+  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src")
+
 # --- Milestone 5 Slice ⓪ task 6: the verifier's diagnostic census ------------
 # The program READS `verify.sls` and `ir.sls` as data, so it needs a path to the
 # source tree -- and it must be the tree that is actually RUNNING. Under the

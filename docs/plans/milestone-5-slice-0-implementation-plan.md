@@ -186,7 +186,23 @@ which exists and means §12.7's parser-error position kinds — an unrelated thi
   one-finding-per-decision is Slice ⓪b's OQ-4 and the count may legitimately drop; the pair
   survives any de-duplication. One mutation, measured caught by this group alone.
   `release` 94/94, 50 passes / **369** mutations.
-- [ ] **Task 2 — the tables, axis A, and the sentinels.** The 16 position builders and 9 kind
+- [x] **Task 2 — the tables, axis A, and the sentinels.** Done, and **after ⓪b**, which is why
+  all 144 cells matched their §16.2-derived expectations on the first clean run. Built before
+  ⓪b, the four entry-column cells would have been red on day one — H1's mandate was to record
+  that as a finding, and the reorder made the finding a fix instead.
+
+  Nine kinds and sixteen positions **as data**, so the product is a derivation rather than a
+  literal. Expected verdicts derived from the two rules that are actually kind-sensitive
+  (§16.2:908's finish, §16.2:909's stop), never observed.
+
+  **The skeleton is pruned using the verifier's own answer** — building the cell with the shared
+  sink, and rebuilding without it when the verifier calls it unreachable. Computing reachability
+  in the test would have meant re-implementing `node-out-targets`: a second census, the exact
+  thing this instrument exists to catch.
+
+  **S2 is the ratchet, and its mutation is caught by the matrix ALONE** — `node?`'s disjunct list
+  *is* the closed set, and the table's coverage is derived from it. When M5 adds a callback kind
+  this row goes red before any fixture does. `release` 98/98, 52 passes / 373 mutations. The 16 position builders and 9 kind
   builders as **data** (two association lists), the pruning closure, §3.1's record shape, and
   **S1+S2 land here, not later** — the sentinel is what makes a Milestone 5 callback kind fail
   before it fails a fixture.
