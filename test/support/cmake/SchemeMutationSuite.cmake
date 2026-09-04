@@ -837,6 +837,13 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Milestone 5 Slice ①a: ONE, on the emitted `exec` parameter list. The slice's
+# own planning measured that no FIND anywhere anchored on that line, so widening
+# the signature was invisible here; the pin drops the last reserved parameter and
+# is caught by compile-tests.sps's signature assertion, the only witness to that
+# line in the tree. Mutations 376 + 1 = 377. Passes unchanged at 52: the compile
+# unit pass already existed.
+#
 # Whole-branch review: the verify pass gains TWO -- `unresolved`'s tier, which
 # was load-bearing and unwitnessed, and the zero-width kinds' edge roles, nine
 # of thirteen of which had no witness. Mutations 374 + 2 = 376.
@@ -1002,7 +1009,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 52)
-set(EXPECTED_MUTATIONS 376)
+set(EXPECTED_MUTATIONS 377)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -6572,6 +6579,28 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--library-root" "${STAGE_DIR}/src"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/common/compile-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: emitted exec loses a Milestone 5 reserved parameter"
+  # Milestone 5 Slice ①a task 6, closing a gap the slice's own planning MEASURED:
+  # across all 366 declarations, no FIND anchored on the emitted `exec` parameter
+  # list, so a change to the emitted signature was invisible to this suite. The
+  # plan proposed carrying that to Slice ②, on the ground that a pin belongs with
+  # the slice that gives the parameters meaning. It is closed HERE instead,
+  # because a demonstrated gap gets closed rather than documented, and the
+  # witness already exists: compile-tests.sps's "exec carries its three reserved
+  # parameters" is the only assertion over that line in the tree, which is
+  # exactly what the measured absence made it.
+  #
+  # Dropping `cbv` -- the last parameter -- rather than mangling the whole list:
+  # a caught-by-COMPARISON failure of the signature assertion, not a raise from
+  # some later arity mismatch, which is what AGENTS.md prefers and what makes the
+  # record name this decision.
+  FIND [["  (define (exec state offset bv start end finish? fieldv psr cbv)\n"]]
+  REPLACE [["  (define (exec state offset bv start end finish? fieldv psr)\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "exec carries its three reserved parameters: the full parameter list")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source

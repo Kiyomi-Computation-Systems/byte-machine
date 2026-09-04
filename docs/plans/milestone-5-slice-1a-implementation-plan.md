@@ -278,9 +278,11 @@ rg -n "14095574568398596535|17903327606435836645|15997144668070819532|1699977225
 ```
 Expected: 98/98 and the mutation suite at its new declared totals; four goldens changed, **two lines each and no more**; every fingerprint literal still present and unchanged.
 
-- [ ] **Step 4: Record the unwitnessed signature**
+- [ ] **Step 4: Close the unwitnessed signature — corrected during execution**
 
-Task 2 measured that **no mutation anywhere anchors on the emitted `exec` parameter list.** Widening it is invisible to the suite. That is not this slice's to fix — a pin belongs with the slice that gives the parameters meaning — but it is a real gap and must be carried into Slice ②'s plan rather than noticed again from scratch. `AGENTS.md`: a deferral needs both ends.
+Task 2 measured that **no mutation anywhere anchors on the emitted `exec` parameter list.** This step as first written deferred a pin to Slice ②, "because a pin belongs with the slice that gives the parameters meaning".
+
+**That was wrong and the gap is closed here.** `AGENTS.md`: a guard shown not to guard gets closed, not documented. And the witness already exists — Task 2 added `compile-tests.sps`'s "exec carries its three reserved parameters", which the same measurement makes *the only assertion over that line in the tree*. The mutation drops the last reserved parameter, so it is caught by a failed comparison in that assertion rather than by a raise from a later arity mismatch.
 
 - [ ] **Step 5: Commit**
 
