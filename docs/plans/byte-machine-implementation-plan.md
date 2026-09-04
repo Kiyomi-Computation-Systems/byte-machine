@@ -1823,3 +1823,57 @@ source-node name, absolute position and position kind, compared across
 executors in `test/common/position-kind-tests.sps` and in the sixteen
 differential lanes through `(byte-machine test error-projection)`. The
 `fields` clause (§22.4:1267) is Slices ①b, ② and ③.
+
+### §25:1572 / §25:1611 — Milestone 5 Slice ⓪, a hardening slice before Milestone 5
+
+**2026-09-03, after Milestone 4 closed.** Neither milestone's scope above is reworded; this
+records a slice inserted *before* Milestone 5's work begins, and why it is not simply Milestone
+7's.
+
+Milestone 4 Slice ③ shipped **three verifier defects** — two Critical — that 368 mutations, a
+50-pass suite, a clean whole-pass pin sweep and ten per-task gates all missed. All three are one
+shape: a new node kind reached the shared accessors (`node-eof-target`, `node-out-targets`) and
+not the **hand-written per-kind filters** that consume them, where a missing kind is silent. One
+raised out of verification on a legal machine; one accepted a machine that then looped forever in
+both executors, under a runtime comment stating it relies on that very check for termination.
+Every fixture missed all three *by construction*.
+
+**Milestone 7 (§25:1611) keeps its scope unchanged** — it already names *bounded invalid-machine
+generator*, *differential property suite* and *deterministic failure seed reporting*, and those
+stay there. Slice ⓪ is the part M7 does not own: a **deterministic kind × position matrix** over
+the verifier, plus the **diagnostic-code coverage ratchet**. The ratchet comes forward because
+Milestones 5 and 6 each add diagnostic codes, and a sentinel that fails until a new code has
+fixtures must precede them; the generator does not, and building its corruption catalogue now
+would build it twice.
+
+Measured before planning: **230 cells over six axes**; only **two** rules in the whole verifier
+are sensitive to a target's kind; "impossible by construction" is **empty** on the kind axis,
+because no node constructor can see a target's kind. Instrument validated by injecting 38
+single-kind omissions into a copy of `verify.sls` — **34 distinguished, including all three
+shipped Slice ③ defects**.
+
+The design found **two live, pre-existing verifier holes**, both reproduced byte-identically on
+`main` and so not Slice ③ regressions:
+
+1. **`machine-entry`'s own EOF path is never classified.** `eof-terminal` is called from exactly
+   two sites and `machine-entry` is neither, though `parser-finish!` starts precisely there.
+   `entry = a stop node` verifies with zero diagnostics and returns `stopped`, while the same
+   property one hop away is correctly rejected with `eof-reachable-stop`. §16.2:909 forbids it by
+   name. **The fix is deliberately out of Slice ⓪'s scope**: prototyped, it changes 85 of 230
+   cells, mostly double-reporting, which collides with §16.4:937-943's one-finding-per-decision.
+2. **`verify.sls`'s `eof-zero-progress-cycle` site for pause continuations is dead in the tree.**
+   Deleting it leaves all 26 runnable programs byte-identical. It is the only site that can see a
+   cycle beginning at a pause continuation with no dispatch eof-target involved, and the runtime
+   relies on it for termination. Slice ⓪ Task 1 closes it.
+
+Five open questions are recorded rather than guessed, two of them about this document's own
+sections: whether §16.2:908 forbids *starting at* a finish terminal (`entry = finish` verifies
+clean today), and that **the two halves of §16.2:908 contradict each other** — the check is
+unconditional at one site and byte-reachability-gated at two others, so an EOF-only-reachable
+pause is accepted where an EOF-only-reachable dispatch case is rejected. Whichever half is right,
+the other is wrong. Also recorded: diagnostic multiplicity is **not** one per decision (a
+field-branch with both arms on one finish node emits `non-eof-into-finish` twice), and **four of
+the six EOF verdicts carry no observable consequence** — four independent mutations of the
+ranking survive all 230 cells.
+
+Full plan: `docs/plans/milestone-5-slice-0-implementation-plan.md`.
