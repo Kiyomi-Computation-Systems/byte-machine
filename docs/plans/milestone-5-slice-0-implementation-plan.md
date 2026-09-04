@@ -185,10 +185,17 @@ which exists and means §12.7's parser-error position kinds — an unrelated thi
   beside where `STAGE_DIR` is defined — every `execute_process` in that script inherits it, so
   all 51 passes are covered by a single line rather than per-pass plumbing. Unset raises.
 
-- [ ] **Task 6b — fixture coverage (layer 3 of §7).** One machine per code, iterated over the
-  **source-derived** key set with S4 counting rows asserted inside the loop. The discriminator is
-  the diagnostic's node slot plus fixture shape — **never** message text (§16.4 and `verify.sls`
-  forbid comparing rendered text, and the texts are not unique: two pairs of sites share one).
+- [x] **Task 6b — fixture coverage (layer 3 of §7).** One machine per code — sixteen, each
+  built and measured to emit its own code — iterated over the **source-derived** key set, with S4
+  counting rows asserted inside the loop and comparing against the source-derived total rather
+  than the fixture table's own length, so a missing row and a missing code cannot cancel. The
+  discriminator is the code plus the machine's shape, **never** message text.
+
+  **The ratchet is pinned by its own mutation.** Renaming one emitted code makes a code appear in
+  the source with no fixture and no pinned row; measured, *both* layers fire — the derived code
+  set stops matching the pinned table, and the source-derived loop finds a code nothing emits.
+  Both are deliberate: the pinned table alone would let a code be accounted for on paper without
+  ever being produced. `release` 96/96, 51 passes / **372** mutations.
 - [ ] **Task 7 — the dispositions append and the mutation registrations.** Append under
   `## Dated dispositions` at `byte-machine-implementation-plan.md:1802` (file is 1825 lines;
   **never insert above** — AGENTS.md:324). Record OQ-1…OQ-5, the skeleton decision, that the

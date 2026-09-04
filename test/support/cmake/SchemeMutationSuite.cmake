@@ -837,9 +837,9 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
-# Milestone 5 Slice ⓪ task 6: a NEW pass (51) for the diagnostic census --
-# the operand-table drift row and the per-code site counts. Passes become
-# 50 + 1 = 51; mutations 369 + 2 = 371.
+# Milestone 5 Slice ⓪ task 6: a NEW pass (51) for the diagnostic census -- the
+# operand-table drift row, the per-code site counts, and the ratchet itself.
+# Passes become 50 + 1 = 51; mutations 369 + 3 = 372.
 #
 # Milestone 5 Slice ⓪ task 1: the verify pass gains ONE for the pause-continuation
 # EOF cycle site, which was live code with no witness. Mutations become
@@ -977,7 +977,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 51)
-set(EXPECTED_MUTATIONS 371)
+set(EXPECTED_MUTATIONS 372)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -9422,6 +9422,20 @@ byte_machine_mutation(
                                                       "an EOF path reaches a stop terminal")))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the code set and the per-site counts match the pinned table")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.unit.diagnostic-census.chez.source
+  LABEL "verify: a new diagnostic code appears with no fixture and no pinned row"
+  # The RATCHET itself, which is the census's whole reason to exist. This is what
+  # a Milestone 5 or 6 slice adding a code looks like to the suite: the code set
+  # derived from the source no longer matches the pinned table, AND the
+  # source-derived loop finds a code with no machine that emits it. Both layers
+  # fire, which is deliberate -- the pinned table alone would let a code be
+  # accounted for on paper without ever being produced.
+  FIND [[(make-diagnostic 'unreachable-node (node-name n) "node is unreachable")]]
+  REPLACE [[(make-diagnostic 'unreachable-nodes (node-name n) "node is unreachable")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "no source code lacks a fixture")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

@@ -173,4 +173,136 @@
           ;; would still agree with each other.
           (check-equal "and there are fourteen of them" (length schema) 14))))))
 
+;; --- layer 3: fixture coverage ---------------------------------------------
+;; One machine per code. The loop is over the SOURCE-DERIVED key set, not over
+;; this table's own keys -- that is the whole ratchet. A code added to verify.sls
+;; with no row here fails "no code lacks a fixture" by name; a row here for a
+;; code the source no longer emits is caught by the count row in layer 2.
+;;
+;; The discriminator is the CODE plus the machine's shape, never the diagnostic's
+;; message text: §16.4 and verify.sls's own header forbid comparing rendered
+;; text, and the texts are not unique anyway -- two pairs of sites share one, and
+;; one of those pairs is where a hole was found.
+(define ed (make-error-declaration 'default-eof 'eof "unexpected end of input" #f))
+(define rd (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))
+(define (an-error n) (make-error-node n 'rejected #f))
+(define (one-case-dispatch name target mode eof-target)
+  (make-byte-dispatch-node name
+    (list (make-byte-case (make-exact-byte-matcher 0) (make-edge target mode) #f))
+    (make-edge 'rej 'reexecute) eof-target #f))
+(define (mach name entry fields errs nodes default-eof)
+  (make-machine name entry fields '() '() errs nodes default-eof #f))
+(define (verify-of m) (lambda () (verify-machine m)))
+
+(define code-fixtures
+  (list
+   ;; pass-schema's first half: the argument is not a machine at all.
+   (cons 'invalid-shape (lambda () (verify-machine 'not-a-machine)))
+   (cons 'duplicate-name
+         (verify-of (mach 'a 'start '() (list ed rd)
+                          (list (one-case-dispatch 'start 'stop 'advance #f)
+                                (make-stop-node 'stop #f) (make-stop-node 'stop #f)
+                                (an-error 'rej)) 'default-eof)))
+   (cons 'duplicate-error-declaration
+         (verify-of (mach 'a 'start '() (list ed rd rd)
+                          (list (one-case-dispatch 'start 'stop 'advance #f)
+                                (make-stop-node 'stop #f) (an-error 'rej)) 'default-eof)))
+   (cons 'missing-target
+         (verify-of (mach 'a 'start '() (list ed rd)
+                          (list (one-case-dispatch 'start 'nowhere 'advance #f)
+                                (an-error 'rej)) 'default-eof)))
+   (cons 'missing-error-declaration
+         (verify-of (mach 'a 'start '() (list ed)
+                          (list (one-case-dispatch 'start 'stop 'advance #f)
+                                (make-stop-node 'stop #f)
+                                (make-error-node 'rej 'undeclared #f)) 'default-eof)))
+   (cons 'invalid-field-declaration
+         (verify-of (mach 'a 'start (list (make-uint-field 'n 8 0 #f)
+                                          (make-uint-field 'n 8 0 #f))
+                          (list ed rd)
+                          (list (one-case-dispatch 'start 'stop 'advance #f)
+                                (make-stop-node 'stop #f) (an-error 'rej)) 'default-eof)))
+   ;; A `range` operand wider than the field it names.
+   (cons 'invalid-field-operand
+         (verify-of (mach 'a 'start (list (make-uint-field 'n 8 0 #f)) (list ed rd)
+                          (list (one-case-dispatch 'start 'br 'advance #f)
+                                (make-field-branch-node 'br 'equal '(n 9999) 'stop 'stop #f)
+                                (make-stop-node 'stop #f) (an-error 'rej)) 'default-eof)))
+   (cons 'overlapping-cases
+         (verify-of (mach 'a 'start '() (list ed rd)
+                          (list (make-byte-dispatch-node 'start
+                                  (list (make-byte-case (make-byte-range-matcher 0 10)
+                                                        (make-edge 'stop 'advance) #f)
+                                        (make-byte-case (make-byte-range-matcher 5 20)
+                                                        (make-edge 'stop 'advance) #f))
+                                  (make-edge 'rej 'reexecute) #f #f)
+                                (make-stop-node 'stop #f) (an-error 'rej)) 'default-eof)))
+   ;; One alternative is a proper prefix of another.
+   (cons 'ambiguous-sequence-prefix
+         (verify-of (mach 'a 'start '() (list ed rd)
+                          (list (make-sequence-dispatch-node 'start
+                                  (list (make-sequence-case '(1 2) 'stop #f)
+                                        (make-sequence-case '(1 2 3) 'stop #f))
+                                  (make-edge 'rej 'reexecute) #f #f)
+                                (make-stop-node 'stop #f) (an-error 'rej)) 'default-eof)))
+   (cons 'unreachable-node
+         (verify-of (mach 'a 'start '() (list ed rd)
+                          (list (one-case-dispatch 'start 'stop 'advance #f)
+                                (make-stop-node 'stop #f) (make-stop-node 'orphan #f)
+                                (an-error 'rej)) 'default-eof)))
+   (cons 'zero-progress-cycle
+         (verify-of (mach 'a 'start '() (list ed rd)
+                          (list (one-case-dispatch 'start 'start 'reexecute #f)
+                                (an-error 'rej)) 'default-eof)))
+   ;; The machine default names no declared error.
+   (cons 'invalid-eof-target
+         (verify-of (mach 'a 'start '() (list ed rd)
+                          (list (one-case-dispatch 'start 'stop 'advance #f)
+                                (make-stop-node 'stop #f) (an-error 'rej)) 'nosuch)))
+   (cons 'non-eof-into-finish
+         (verify-of (mach 'a 'start '() (list ed rd)
+                          (list (one-case-dispatch 'start 'fin 'advance #f)
+                                (make-finish-node 'fin #f) (an-error 'rej)) 'default-eof)))
+   (cons 'eof-reachable-stop
+         (verify-of (mach 'a 'start '() (list ed rd)
+                          (list (one-case-dispatch 'start 'stop 'advance 'stop)
+                                (make-stop-node 'stop #f) (an-error 'rej)) 'default-eof)))
+   ;; Task 1's shape: the cycle begins at a pause continuation and the entry's
+   ;; own EOF route is a finish, so the dispatch site cannot be its source.
+   (cons 'eof-zero-progress-cycle
+         (verify-of (mach 'pcyc 'start '() (list ed rd)
+                          (list (one-case-dispatch 'start 'p 'advance 'fin)
+                                (make-pause-node 'p 'q #f) (make-pause-node 'q 'p #f)
+                                (make-finish-node 'fin #f) (an-error 'rej)) 'default-eof)))
+   ;; A machine name outside the portable repertoire.
+   (cons 'invalid-name
+         (verify-of (mach 'BadName 'start '() (list ed rd)
+                          (list (one-case-dispatch 'start 'stop 'advance #f)
+                                (make-stop-node 'stop #f) (an-error 'rej)) 'default-eof)))))
+
+(harness-group "every code the source can emit is produced by a fixture"
+  (lambda ()
+    (harness-case "each source-derived code has a machine that emits it"
+      (lambda ()
+        ;; S4: `driven` counts rows asserted INSIDE the loop and is compared
+        ;; against the SOURCE-DERIVED total -- never against code-fixtures'
+        ;; own length, which would let a missing row and a missing code cancel.
+        (let ((driven 0) (missing '()))
+          (for-each
+           (lambda (code)
+             (let ((row (assq code code-fixtures)))
+               (if (not row)
+                   (set! missing (cons code missing))
+                   (begin
+                     (set! driven (+ driven 1))
+                     (check (string-append (symbol->string code) " is emitted")
+                            (and (memq code
+                                       (map diagnostic-code
+                                            (verification-diagnostics ((cdr row)))))
+                                 #t))))))
+           (distinct (census-codes the-census)))
+          (check-equal "no source code lacks a fixture" missing '())
+          (check-equal "and every source code was driven"
+                       driven (length (distinct (census-codes the-census)))))))))
+
 (harness-finish)
