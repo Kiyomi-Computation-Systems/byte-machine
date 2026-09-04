@@ -4,6 +4,14 @@ Date: 2026-09-04
 Status: accepted
 Milestone: 5, Gate 0 (milestone-5-design.md §4.3, §4.8)
 
+> **Amendments** — later notes at the foot of this file reach back into the text
+> above them. Nothing above a note is rewritten.
+>
+> - **2026-09-04 (Milestone 5, Slice ①a planning)** — **amends point 4**: its
+>   handoff says the position-axis drift row derives `position-table`'s names
+>   "from the IR". Measured while writing the Slice ①a plan: there is nothing in
+>   `ir.sls` to derive them from.
+
 ## Context
 
 Measured against the branch head `cc66302` — Milestone 4 closed, plus Milestone
@@ -216,3 +224,36 @@ would be filled and all three were filled as named. What a reader arriving at
 item 3 by citation cannot see is that the reserve is now empty, which is the one
 fact this record needs from it. That is an **annotates**, and it carries a site
 marker at item 3 as well as a dated note at the foot of that file.
+
+## 2026-09-04 (Milestone 5, Slice ①a planning) — point 4's handoff names a derivation that does not exist
+
+Point 4 hands Slice ①a "the position-axis drift row of milestone-5-design.md
+§5", which at the time instructed an implementer to "derive the position names
+from the IR the way `kind-predicates-in-source` derives the kinds".
+
+**Measured at `79c18c7`, while writing the Slice ①a plan:**
+`rg -n 'position' src/byte-machine/private/ir.sls` returns two comment lines about
+the field schema. `ir.sls` carries no position vocabulary of any kind. The only
+enumeration with the right cardinality lives in `verify.sls` — **the file the
+census exists to test.**
+
+That asymmetry is exactly what makes the *kind* row strong and it does not
+transfer. The kind row derives its set from `ir.sls` and tests `verify.sls`: two
+independent files, so a mutation to one is caught by the other. A position row
+can only derive from `verify.sls` and therefore tests that file against itself.
+And because the census reads the **staged** tree
+(`SchemeMutationSuite.cmake:1150`, `set(ENV{BYTE_MACHINE_SOURCE_ROOT}
+"${STAGE_DIR}/src")`), a mutation that removes a position removes it from both
+the code and the derived set: the mutant is self-consistent and the row stays
+green.
+
+**Nothing above this note is rewritten, and point 4's allocation stands** — the
+row is still Slice ①a's. What changes is what the row can be. The Slice ①a plan's
+Task 5 resolves it: derive from `verify.sls`, and require the row's own comment to
+state that it is structurally weaker than the kind row and why. It still catches
+what nothing catches today — a hand-edit adding a position to the verifier without
+adding a matrix cell, `position-table` (`kind-position-census-tests.sps:93`) being
+hand-written data that no assertion reads.
+
+The design's `§5` bullet, being an **instruction** rather than a record, was
+corrected in place on the same date.

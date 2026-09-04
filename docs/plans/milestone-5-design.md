@@ -38,7 +38,12 @@ the line wrong can still find the thing.
 > actually support (§4.3, §4.6, §4.12 item 4); in each case the resolution was right and the
 > stated reason was not.
 >
-> **2026-09-04, Gate 0's execution and review** — **amends §4.1 and §4.7**, two more arguments
+> **2026-09-04, the Slice ①a plan's measurements** — **amends §5**: its position-axis bullet
+> told an implementer to derive the position names "from the IR", and there is nothing in
+> `ir.sls` to derive them from. Corrected in place with what the row can actually be and what it
+> is worth. Decision 0025 point 4 repeats the same instruction and carries a dated note.
+>
+> > **2026-09-04, Gate 0's execution and review** — **amends §4.1 and §4.7**, two more arguments
 > that did not carry. §4.1 argued the condition channel "was not left open" from the absence of a
 > callback-contract entry in `§9.4:438`; that list opens "Codes include" and rules nothing out by
 > absence. Replaced with `§12.3:719`, which names callback application error on the error result
@@ -664,8 +669,15 @@ moved the line — that class is caught by review or not at all.
   `position-table` (`:93`) is hand-written data that nothing checks, while the kind axis beside
   it derives its set from `ir.sls` at run time and three consumers pin literals against it. A
   milestone adding three node kinds with new edge positions is the moment that asymmetry costs
-  something. Derive the position names from the IR the way `kind-predicates-in-source` derives
-  the kinds.
+  something. **Corrected 2026-09-04, while measuring for the Slice ①a plan: this cannot derive
+  from the IR.** `ir.sls` has no position vocabulary at all — the only enumeration with the right
+  cardinality is in `verify.sls`, the file the census exists to test. So the row derives from
+  `verify.sls` and is **structurally weaker than the kind row**, which derives from `ir.sls` and
+  tests `verify.sls` — two independent files. It catches a hand-edit that adds a position to the
+  verifier without adding a matrix cell, which is what nothing checks today; it does *not* catch
+  a mutation, because the census reads the staged tree
+  (`SchemeMutationSuite.cmake:1150`) and a mutant is self-consistent. The row's own comment must
+  say so.
 
 **Oracle — two-sided, and both sides are commands with falsifiable results.**
 
