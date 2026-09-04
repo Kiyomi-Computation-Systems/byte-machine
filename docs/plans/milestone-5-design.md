@@ -37,6 +37,18 @@ the line wrong can still find the thing.
 > makes them checkable. Three arguments were also weakened from "decisive" to what the artifacts
 > actually support (§4.3, §4.6, §4.12 item 4); in each case the resolution was right and the
 > stated reason was not.
+>
+> **2026-09-04, writing the Gate 0 plan** — **amends §4.4**: its resolution as first written
+> ("one merged pre-order over declared nodes … at its own position in declaration order") reads
+> as interleaving internal states with declared ones, which contradicts decision 0016 item 1's
+> **two-phase append**. Found while verifying the Gate 0 plan's citations, not by the design
+> review. Corrected in place as an instruction; 0016's phase boundary stands and the merged
+> pre-order operates inside phase two.
+>
+> **2026-09-04, the owner's decision on §4.12** — **annotates §4.12 and §10**: items 1, 2 and 3
+> approved and in scope; item 4 declined and moved to §10's exclusions. §4.12's heading and
+> preamble are corrected in place as instructions; the decision and its date are recorded on
+> each item.
 
 **Governing plan.** The parent plan's `§25` "Milestone 5" subsection is authoritative. Its
 Scope list is `§25:1576-1584` and its Exit criteria are `§25:1588-1591`. **This document
@@ -358,13 +370,23 @@ order, then prefix-structure pre-order, children ascending by byte). No clause c
 family or its interleaving with the first. `§20:1036` requires determinism without saying what
 the order is.
 
-**Resolved: one merged pre-order over declared nodes. A declared node contributes all of its
-internal states — prefix states or span continuations — at its own position in declaration
-order.**
+**Resolved: decision 0016's two-phase append is unchanged, and the second phase gains one
+merged pre-order. All declared nodes keep their declaration indices; every internal state — of
+either family — is assigned an id after the entire declared block; and within that block a
+declaring node contributes all of its internal states, prefix states and span continuations
+alike, at its own position in declaring-node order.**
 
-This extends decision 0016's own principle rather than adding a precedence rule beside it. The
-alternative, two families in sequence, requires an arbitrary choice about which family comes
-first and leaves the next family with the same question again. The order is externally
+**Read 0016 item 1 before implementing this, because a shorter statement of it is wrong.** Its
+text is "Internal prefix states are assigned ids after the entire declared block, ordered by
+(declaring-node order, then prefix-structure pre-order, taking each prefix state's children in
+ascending byte order)". So the merged pre-order operates *inside* the second phase; it does not
+interleave internal states with declared ones, and an earlier draft of this document was
+ambiguous enough to be read that way.
+
+This extends 0016's own ordering principle rather than adding a precedence rule beside it. The
+alternative — the two families in sequence within phase two, all prefix states then all span
+continuations — requires an arbitrary choice about which family comes first and leaves the
+third family, whenever it arrives, asking the same question again. The order is externally
 observable through the IR fingerprint and the order of emitted `case` arms — decision 0016's
 Context is what makes that observable — so it must be pinned by a record.
 
@@ -522,19 +544,21 @@ construct with its cross-lane oracle deliberately blinded.
   and nothing claims it. Not Milestone 5's work. Recorded here as an orphan so it stops looking
   covered.
 
-### 4.12 Proposed scope additions — each awaits the owner's approval on a stated date
+### 4.12 Scope additions — settled by the owner 2026-09-04
 
-**None of these is in scope.** Each is a demonstrated gap in code Milestone 5 already edits;
-each is stated with what was measured, so the owner is approving a fact rather than a feeling.
+**Items 1, 2 and 3 are approved and in scope. Item 4 is declined** and moves to §10. Each was a
+demonstrated gap in code Milestone 5 already edits, stated with what was measured, so the
+approval was of a fact rather than a feeling.
 
-1. **`make-machine` has no `for-all` guard for the callback or span collections.** Measured:
+1. **APPROVED 2026-09-04. `make-machine` has no `for-all` guard for the callback or span
+   collections.** Measured:
    the fields collection is guarded (`ir.sls:559-560`) and the collection loop at `ir.sls:548-551`
    is where the others would go. Adding `make-callback-declaration` and `make-span-declaration`
    without the matching guards reopens, for two collections Milestone 5 is about to make
    load-bearing, exactly the hole `ir.sls`'s own comment records closing for fields. **Cost:
    small, and it is in a file Slice ①b edits anyway.**
-2. **`§16.2:886`'s "labels" clause has never been implemented, for any of the nine shipped
-   kinds.** Measured: `rg -n 'source-label|label' src/byte-machine/verify.sls` returns two hits,
+2. **APPROVED 2026-09-04, scoped to Milestone 5's two new declaration families. `§16.2:886`'s
+   "labels" clause has never been implemented, for any of the nine shipped kinds.** Measured: `rg -n 'source-label|label' src/byte-machine/verify.sls` returns two hits,
    both comments about `§16.4:940`'s diagnostic edge label; nothing in the tree checks any
    declaration's label against any grammar. `§10.3:506` and `§10.4:517` give callbacks and spans
    an optional diagnostic label, and `§10.1:480` puts labels under a *different* grammar from
@@ -542,14 +566,15 @@ each is stated with what was measured, so the owner is approving a fact rather t
    keys. So Milestone 5 adds two label-bearing families to a check that does not exist. **The
    proposal is the check for M5's two families only**; retrofitting the other nine is a separate
    question and is not proposed here.
-3. **`§27:1694`'s "callback/span lifetime reference" has no owner.** `§28:1725` lists explicit
+3. **APPROVED 2026-09-04, for Slice ④. `§27:1694`'s "callback/span lifetime reference" has no
+   owner.** `§28:1725` lists explicit
    consumer documentation as one of four mitigations for the retention risk. The other three —
    the dynamic-extent contract, no bytevector field in parser storage, retention tests — are
    squarely Milestone 5's. This is the only one that can silently ship as nothing, because
    `§25:1591` does not name it. **Proposed for Slice ④.**
 
-4. **The `graph.sls` export convention is stated for the first time, and applied forward
-   only.** Measured against the full file: Milestone 3's sequence-dispatch exports its
+4. **DECLINED 2026-09-04 — moved to §10.** The `graph.sls` export convention, stated for the
+   first time and applied forward only. Measured against the full file: Milestone 3's sequence-dispatch exports its
    predicate, four accessors, `sequence-case?` and two case accessors; **Milestone 4's three
    node kinds export constructors only** (`graph.sls:22-23`) — no `field-action-node?`, no
    `field-branch-node?`, no `integer-accumulate-node?`. **The header does not contradict this**,
@@ -854,16 +879,26 @@ oracle must *fail* on, designed alongside the oracle rather than added after it 
   the check for Milestone 5's two new declaration families only.
 - **`§16.2:911`** ("backend limits that would make emission incorrect") — recorded in §4.11 as
   an orphan with no owner in any milestone. Naming it is not claiming it.
+- **Stating the `graph.sls` export convention.** §4.12 item 4, declined by the owner
+  2026-09-04. Milestone 5's declaration families and node kinds follow the existing precedents
+  — `uint-field`'s for declarations, Milestone 4's constructor-only shape for node kinds — and
+  the header gains nothing. Nothing in the milestone depends on it, which is why it was the one
+  of four proposals worth dropping.
 - **A field-mutating accessor for callbacks.** `§13:801` forbids it and states why.
 
 ---
 
 ## 11. Handed to writing-plans
 
-- Confirm the Gate 0 split: ten resolutions destined for records is more than Milestone 4's
-  five, and several merge naturally (§4.1 with §4.2; §4.5 with the `pass-zero-progress` gate;
-  §4.9 with §4.10 as one "callback-visible state" record).
-- Take the owner's decision on each §4.12 proposal, with the date, before any slice plans them.
+- **The Gate 0 split is settled: six records, 0024-0029.** Ten resolutions, merged as follows,
+  each merge for a stated reason. `0024` = §4.1 + §4.2, one callback-error vocabulary. `0025` =
+  §4.3 + §4.8, the seam — encoding shape, ABI payload and `exec` signature in one record, which
+  is exactly the shape decision 0019 took for Milestone 4 and the reason its reservations read
+  as one bargain. `0026` = §4.4. `0027` = §4.5, absorbing the `pass-zero-progress` gate. `0028`
+  = §4.6 + §4.9 + §4.10, the callback's runtime surface: what occupies a slot, what answers
+  during `busy`, and what is observable. `0029` = §4.7.
+- **§4.12 is settled** (owner, 2026-09-04): items 1-3 approved, item 4 declined. Slice plans may
+  proceed on that basis.
 - Re-measure every `file:line` in §5-§9 at plan-writing time. They were measured at `db86ab6`
   and each slice moves the lines below its own edits.
 - **Re-measure the diagnostic-code and emission-site counts before quoting them.** Sixteen codes
