@@ -217,8 +217,19 @@ which exists and means §12.7's parser-error position kinds — an unrelated thi
   EOF-cycle site's **second, independent** coverage — the site that was dead in the suite until
   Task 1. Including the 4 `reexecute` rows; *not* the base matrix's
   36 mode rows. This is the commit that covers `verify.sls:834` a **second** way (`SELF p8`).
-- [ ] **Task 4 — the dangling axis (16) and the absence census (16).** The only place a
-  `byte-machine-contract-violation` can be cited, and `P10`'s gated existence.
+- [x] **Task 4 — the dangling axis and the absence census.** Done. Fifteen dangling cells (the
+  entry's host list is empty, so it has none to build), each deriving its fault from the route:
+  §16.2:905's `missing-target` for a byte edge, `invalid-eof-target` for the three EOF routes —
+  a different fault, because `#f` there is *legal* and means the machine default, so a symbol
+  resolving to nothing is a distinct mistake.
+
+  The absence census is where "impossible by construction" actually lives. The **kind** axis has
+  no constructor refusals at all — every target slot is a bare symbol and a node constructor
+  cannot see the machine's node list, which is *why* every kind restriction is necessarily a
+  verifier check and there are exactly two. The absence axis has eight refusals, three legal
+  absences, and **one conditional position**: a field action's `error`, gated on the operation's
+  fallibility, asserted all four ways because it is the only cell in the matrix whose *existence*
+  is conditional.
 - [ ] **Task 5 — the EOF-chain axis (24), the verdict lattice (25), the two separators (2).**
   The task that converts all three shipped Slice ③ defects from raise-caught to
   **comparison-caught**.

@@ -377,4 +377,107 @@
                        driven (+ 15 4))
           (check-equal "each matches its derivation" bad '()))))))
 
+
+;; --- axis C: the dangling name, and the absence census -----------------------
+;; A target naming no node at all. This is the shape of Slice ③'s second
+;; Critical one level up -- an accessor taught a kind, a consumer not taught it --
+;; and it is where `missing-target` and `invalid-eof-target` become
+;; matrix-shaped rather than hand-written.
+;;
+;; DERIVED: §16.2:905 makes an unresolvable target `missing-target`; the three
+;; EOF routes carry `invalid-eof-target` instead, because a #f there is legal and
+;; means "the machine default", so a SYMBOL that resolves to nothing is a
+;; different fault from a missing edge.
+(define eof-positions '(dispatch-eof-target sequence-eof-target accumulate-eof-target))
+
+;; Rebuilt directly rather than reusing axis A's builder: a dangling cell has no
+;; `t` node at all, and threading "omit t" through the shared builder would make
+;; that builder answer two questions.
+(define (dangle pos)
+  (let* ((p (assq pos (map (lambda (q) (cons (position-name q) q)) position-table)))
+         (built (position-build (cdr p)))
+         (entry (car built))
+         (host (cdr built)))
+    (make-machine 'dangle entry (list (make-uint-field 'n 8 0 #f)) '() '()
+                  (list eof-decl rej-decl)
+                  (append host (sinks)) 'default-eof #f)))
+
+(harness-group "a target naming no node (axis C)"
+  (lambda ()
+    (harness-case "every position reports the resolution fault its route calls for"
+      (lambda ()
+        ;; machine-entry is excluded: an entry naming no node is `missing-target`
+        ;; too, but its host list is empty so there is nothing to build.
+        (let ((driven 0) (bad '()))
+          (for-each
+           (lambda (q)
+             (let ((pos (position-name q)))
+               (unless (eq? pos 'machine-entry)
+                 (set! driven (+ driven 1))
+                 (let ((want (if (memq pos eof-positions)
+                                 '(invalid-eof-target)
+                                 '(missing-target)))
+                       (got (codes-of (dangle pos))))
+                   (unless (equal? want got)
+                     (set! bad (cons (list pos 'want want 'got got) bad)))))))
+           position-table)
+          (check-equal "fifteen dangling cells driven" driven 15)
+          (check-equal "each reports its derived fault" bad '()))))))
+
+;; --- the absence census ------------------------------------------------------
+;; Where "impossible by construction" actually lives. The KIND axis has no
+;; constructor refusals at all -- every target slot is a bare symbol and a node
+;; constructor cannot see the machine's node list -- but the ABSENCE axis does:
+;; twelve positions reject #f outright, three accept it (the EOF routes, where #f
+;; means the machine default), and one is CONDITIONAL.
+(define (raises? thunk)
+  (call/cc (lambda (k)
+             (with-exception-handler (lambda (e) (k #t))
+               (lambda () (thunk) #f)))))
+
+(harness-group "which positions may be absent (the absence census)"
+  (lambda ()
+    (harness-case "the three EOF routes accept #f and the rest refuse it"
+      (lambda ()
+        (let ((refused 0) (accepted 0))
+          ;; A representative of each refusing family, by constructor.
+          (for-each (lambda (th) (when (raises? th) (set! refused (+ refused 1))))
+                    (list (lambda () (make-edge #f 'advance))
+                          (lambda () (make-sequence-case '(1) #f #f))
+                          (lambda () (make-pause-node 'p #f #f))
+                          (lambda () (make-field-action-node 'fa 'clear '(n) #f #f #f))
+                          (lambda () (make-field-branch-node 'fb 'zero '(n) #f 'ee #f))
+                          (lambda () (make-field-branch-node 'fb 'zero '(n) 'ee #f #f))
+                          (lambda () (make-integer-accumulate-node 'ac 'n 10 #f
+                                       (make-edge 'ee 'advance) 'ee #f #f))
+                          (lambda () (make-integer-accumulate-node 'ac 'n 10 'ee
+                                       (make-edge 'ee 'advance) #f #f #f))))
+          (check-equal "eight constructor refusals" refused 8)
+          ;; The three EOF routes, built rather than refused.
+          (for-each (lambda (th) (unless (raises? th) (set! accepted (+ accepted 1))))
+                    (list (lambda () (make-byte-dispatch-node 'h
+                                       (list (make-byte-case (make-exact-byte-matcher 0)
+                                                             (make-edge 'ee 'advance) #f))
+                                       (make-edge 'ee 'reexecute) #f #f))
+                          (lambda () (make-sequence-dispatch-node 'h
+                                       (list (make-sequence-case '(1) 'ee #f))
+                                       (make-edge 'ee 'reexecute) #f #f))
+                          (lambda () (make-integer-accumulate-node 'ac 'n 10 'ee
+                                       (make-edge 'ee 'advance) 'ee #f #f))))
+          (check-equal "three legally-absent EOF routes" accepted 3))))
+    (harness-case "the field action's error slot is the one CONDITIONAL position"
+      (lambda ()
+        ;; Its existence is gated on the operation's fallibility (ir.sls's
+        ;; `infallible-field-operations`): mandatory exactly when the operation
+        ;; can fail, forbidden exactly when it cannot. The only cell in the whole
+        ;; matrix whose EXISTENCE is conditional, so it is asserted all four ways.
+        (check "an infallible op with an error target is refused"
+               (raises? (lambda () (make-field-action-node 'fa 'clear '(n) 'ee 'ee #f))))
+        (check "a fallible op with no error target is refused"
+               (raises? (lambda () (make-field-action-node 'fa 'increment '(n) 'ee #f #f))))
+        (check "an infallible op with no error target builds"
+               (not (raises? (lambda () (make-field-action-node 'fa 'clear '(n) 'ee #f #f)))))
+        (check "a fallible op with an error target builds"
+               (not (raises? (lambda () (make-field-action-node 'fa 'increment '(n) 'ee 'ee #f)))))))))
+
 (harness-finish)
