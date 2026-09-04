@@ -18,7 +18,11 @@ declaration, slots, and `parser-field-ref`), and Slice ② **2026-09-03** (field
 action and field branch). See
 [the implementation plan](docs/plans/byte-machine-implementation-plan.md) §25
 for overall scope; the entries below record what each milestone actually
-delivered. No versioned release exists yet.
+delivered. Milestone 5's own scope has not begun: two hardening slices ran
+first and closed **2026-09-04** — Slice ⓪ (the verifier's kind × position
+matrix and a diagnostic-code census derived from the source rather than
+declared) and Slice ⓪b (the EOF walk cluster). No versioned release exists
+yet.
 
 ### Added
 
@@ -752,6 +756,26 @@ delivered. No versioned release exists yet.
 
 ### Changed
 
+- **The verifier rejects two machine shapes it previously accepted.** A machine
+  whose entry node *is* a `finish` terminal now reports `non-eof-into-finish`
+  (§16.2:908) — before, one byte returned `finished` without ever being
+  examined. And the entry node's own EOF path is now classified like every
+  other, so an entry that reaches a `stop` reports `eof-reachable-stop`
+  (§16.2:909) and one that cycles reports `eof-zero-progress-cycle`; before,
+  `entry = a stop node` verified with zero diagnostics while the identical
+  property one hop away was correctly rejected. Both holes were pre-existing,
+  not regressions, and both were found by Milestone 5 Slice ⓪'s kind × position
+  matrix before any code was written. See
+  [decision 0023](docs/decisions/0023-eof-walk-starts-and-finish-reachability.md).
+- The §16.2:908 check is derived from byte-reachability over every node's
+  out-edges rather than written out per node kind. The three hand-written sites
+  it replaces each had to be extended by hand when a node kind was added, which
+  is the shape of all three verifier defects Milestone 4 Slice ③ shipped; the
+  derived form covers kinds that do not exist yet.
+- Diagnostics gain an `edge` field, exported as `diagnostic-edge`, carrying the
+  edge role that produced a finding where one applies (§16.4:940's "node and
+  edge/source label where applicable"). It is `#f` for node-level findings, so
+  existing `diagnostic-code`/`-node`/`-message` readers are unaffected.
 - Decision records now say **at the top** when a later decision reached back
   into them, and **at the site** on the item a later note makes false. Five
   records carried dated amendment notes with nothing above the fold pointing at
