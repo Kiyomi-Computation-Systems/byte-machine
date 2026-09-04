@@ -14,8 +14,8 @@ project will use it to define and generate one.
 
 *Status: pre-release.* No versioned release exists yet — the target is =0.1.0=,
 and the API is not yet stable. Milestones 0 (portability and harness spike), 1
-(minimal executable machine), 2 (incremental execution and lifecycle), and 3
-(byte classes and sequences), and 4 (fields, actions, and branches) have closed.
+(minimal executable machine), 2 (incremental execution and lifecycle), 3
+(byte classes and sequences) and 4 (fields, actions, and branches) have closed.
 Milestone 3 closed 2026-08-30 with Slice ③ (multiple alternatives, ambiguity,
 and cycle analysis), after Slices ① (byte classes) and ② (sequence dispatch and
 prefix lowering). Milestone 4 closed 2026-09-03 with Slice ③ (integer
@@ -24,7 +24,12 @@ parser-error seam), Slice ①b (field declaration, slot assignment and
 =parser-field-ref=), and Slice ② (field action and field branch). A machine can
 now declare unsigned integer fields, write them with zero-width actions and
 branches, and read them from the input stream with a checked
-integer-accumulate node.
+integer-accumulate node. Milestone 5's own scope has not begun: two hardening
+slices ran first and closed 2026-09-04 — Slice ⓪ (the verifier's kind ×
+position matrix and a diagnostic-code census derived from the source) and
+Slice ⓪b (the EOF walk cluster), which closed two holes in the verifier: a
+machine whose /entry/ is a =finish= terminal, and a machine whose entry's own
+EOF path reaches a =stop=, both verified clean before and are now rejected.
 =src/byte-machine/= holds the construction API, the verifier, the normalizer and
 emitter, the reference interpreter, and the runtime, each exercised in both the
 source and ahead-of-time execution lanes. See

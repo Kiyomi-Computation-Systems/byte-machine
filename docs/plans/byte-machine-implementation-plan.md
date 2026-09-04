@@ -1,6 +1,6 @@
 # Byte Machine Implementation Plan
 
-Status: milestones 0, 1, 2, and 3 are closed — 0 on 2026-08-22 ([the spike](./milestone-0-portability-spike.md), [the close-out](./milestone-0-close-out.md), [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md)), 1 on 2026-08-23 ([milestone-1-design.md](./milestone-1-design.md)), 2 on 2026-08-29 ([milestone-2-design.md](./milestone-2-design.md)), and 3 on 2026-08-30 ([milestone-3-design.md](./milestone-3-design.md)); each carries a dated close note under its own §25 subsection below, and each of those cites where its exit criteria are dispositioned. Milestone 3 was delivered as a Gate 0 plus three slices: Slice ① (byte classes) closed 2026-08-29, Slice ② (sequence dispatch and prefix lowering) closed 2026-08-30, and Slice ③ (multiple alternatives, ambiguity, and cycle analysis) closed 2026-08-30 with the milestone. Milestone 4 (fields, actions, and branches) is in progress: Gate 0 discharged 2026-08-31 (decisions 0018-0022) and Slice ①a — the unversioned generated-ABI constructor, normalized encoding format 2, and the `parser-error` family — landed 2026-09-02; Slices ①b, ② and ③ remain. Decisions amended by 0005 (Chez-only) via [chez-only-simplification.md](./chez-only-simplification.md) §2, and by 0006 (inline libraries)
+Status: milestones 0, 1, 2, 3, and 4 are closed — 0 on 2026-08-22 ([the spike](./milestone-0-portability-spike.md), [the close-out](./milestone-0-close-out.md), [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md)), 1 on 2026-08-23 ([milestone-1-design.md](./milestone-1-design.md)), 2 on 2026-08-29 ([milestone-2-design.md](./milestone-2-design.md)), and 3 on 2026-08-30 ([milestone-3-design.md](./milestone-3-design.md)); each of those four carries a dated close note under its own §25 subsection below, and each of those cites where its exit criteria are dispositioned. Milestone 3 was delivered as a Gate 0 plus three slices: Slice ① (byte classes) closed 2026-08-29, Slice ② (sequence dispatch and prefix lowering) closed 2026-08-30, and Slice ③ (multiple alternatives, ambiguity, and cycle analysis) closed 2026-08-30 with the milestone. Milestone 4 (fields, actions, and branches) closed 2026-09-03, delivered as a Gate 0 plus four slices: Gate 0 discharged 2026-08-31 (decisions 0018-0022), Slice ①a — the unversioned generated-ABI constructor, normalized encoding format 2, and the `parser-error` family — 2026-09-02, Slice ①b (field declarations, storage, and `parser-field-ref`) 2026-09-02, Slice ② (field action and field branch) 2026-09-03, and Slice ③ (integer accumulation) 2026-09-03 with the milestone; its close note is a dated disposition, not a §25 subsection. Milestone 5's own scope has not begun: two hardening slices ran first — Slice ⓪ (the verifier's kind × position matrix and the diagnostic-code census) and Slice ⓪b (the EOF walk cluster), both closed 2026-09-04 and both dispositioned below. Decisions amended by 0005 (Chez-only) via [chez-only-simplification.md](./chez-only-simplification.md) §2, and by 0006 (inline libraries)
 
 Date: 2026-08-15
 
@@ -1981,3 +1981,49 @@ their purpose was converting Slice ③'s defects from raise-caught to comparison
 removed those raises at the source.
 
 Plan: `docs/plans/milestone-5-slice-0-implementation-plan.md`.
+
+### §25:1568-1570 — Milestone 4's close note, written 2026-09-04, two days late
+
+**Milestone 4 (fields, actions, and branches) closed 2026-09-03** with Slice ③
+(integer accumulation), after Gate 0 (2026-08-31, decisions 0018-0022), Slice ①a
+(2026-09-02), Slice ①b (2026-09-02) and Slice ② (2026-09-03).
+
+**It closed without a close note, and nothing noticed for two days.** Milestones 0
+through 3 each carry one as a §25 blockquote; Milestone 4 has none, and the top
+`Status:` line went on describing it as *in progress with Slices ①b, ② and ③
+remaining* through four merged PRs. This is the same gap the Milestone 1
+blockquote already records ("Milestone 1 closed without a note here, and the
+Milestone 2 close-out found the gap") — found the second time by a *slice's*
+closing ritual rather than the next milestone's, because Milestone 5 has not
+started. The note is written here rather than as a §25 blockquote for the reason
+this whole section exists: an insertion at §25 re-numbers every `§section:line`
+citation below it.
+
+The three exit criteria, dispositioned against the tree rather than against the
+slice plans:
+
+- **:1568 — boundary, overflow, and underflow tests for every width.** Discharged
+  by `test/common/field-access-tests.sps`'s operation matrix, which builds one
+  machine per width from `matrix-widths '(8 16 32 64)` with `hi` seeded at
+  `2^w - 1` and `lo` at `0`, and drives increment-at-max, add-at-max and
+  decrement-at-zero through both executors. Its sentinels read observed counts
+  (4 widths, 16 schedules). A separate case asserts the u64 maximum exceeds
+  `greatest-fixnum`, so that row cannot silently degrade to a fixnum row on a
+  host with a wider fixnum (§15:856).
+- **:1569 — failed operations leave prior values unchanged.** Discharged by the
+  same group: each overflow and underflow row asserts the field's value *and*
+  that the lifecycle routed to the error target, with a success control (`lo`
+  becomes 1) without which every bound row would pass on a machine that never
+  writes.
+- **:1570 — interpreter/generated fields and traces match.** Already dispositioned
+  above: the trace half is unspecifiable (§18:974-985 makes the hook
+  interpreter-only), so the criterion is discharged through §22.4:1262-1272's
+  comparison list — the error clause (:1271) by Slice ①a, the `final state and
+  fields` clause (:1267) extended by Slices ①b, ② and ③ in turn. The per-slice
+  accounting is in `docs/plans/milestone-4-design.md`.
+
+**What Milestone 4 shipped that its criteria do not mention.** Slice ③ shipped
+three verifier defects — two Critical — past 368 mutations, a 50-pass suite and
+ten per-task gates, all one shape: a new node kind reached the shared accessors
+and missed a hand-written per-kind filter. That is why Milestone 5 opened with
+two hardening slices rather than with its own scope, dispositioned above.

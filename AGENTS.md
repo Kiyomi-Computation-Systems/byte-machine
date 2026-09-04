@@ -19,6 +19,16 @@
   no shared include bodies (docs/decisions/0006-inline-libraries.md). R6RS
   forbids assigning an exported variable — reach mutable state through
   procedures.
+* **A test needing a narrow public surface widened imports from the private
+  library instead.** `graph.sls`'s header states that reading a built machine
+  back is deliberately not part of the construction surface. Slice ⓪'s kind ×
+  position matrix needed the nine node-kind predicates to assert each table row
+  is the kind it is keyed by, and the cheap move was to export them from
+  `graph.sls` — trading a documented contract for a test's convenience, where
+  the export then reads to the next author as a supported API. It imports from
+  `(byte-machine private ir)` instead: the test reaches inside knowingly, and
+  the public narrowness stays true. Widen a public surface when a *user* needs
+  it, never when only a test does.
 
 ### Testing & mutation discipline
 
@@ -69,6 +79,20 @@
   opposite constant — slice 4's `(if #t` left the predicate's own case passing
   and made a later case error, where `(if #f` fails that case's `check-equal`
   outright and tests the same decision.
+* **Count how many cases a mutant fails, and how differently — a mutant that
+  crashes on unrelated inputs pins nothing.**
+  A pin is attributable only if the cases that fail are the ones its decision
+  reaches. Slice ⓪b's "reads only the first out-target" mutation was written as
+  `(car (node-out-edges n))`, which raises on every node with *no* out-edges:
+  109 of 116 cases failed with the identical `Exception in car`, including the
+  one the pin's `EXPECT_OUTPUT_MATCHES` regex anchored on. The pin was green
+  and measured nothing — the decision it names (first target versus all of
+  them) was never exercised by the record that satisfied it. Re-shaped to guard
+  the empty case (`(if (null? es) '() (list (car es)))`) so the mutant runs
+  everywhere the baseline does, then re-pinned on a comparison record. After
+  writing any mutation, read how many cases it fails and whether they fail
+  *identically*: a uniform failure across most of the suite is a crash, not a
+  discrimination.
 * **Before deleting a mutation, ask what its REPLACE still changes and whether any input can reach it.**
   A mutation is not dead just because its witnesses are. The Chez-only cut first
   deleted "a refused search list does not stop registration" as unwitnessable
@@ -294,6 +318,22 @@
   shrunk two groups and left the lane green. Assert the collection's own length
   where you iterate one. Note what found the vacuous sentinel: a mutation pin
   that never fired. Mutation testing catching a bad test is the argument for it.
+* **A table keyed by K must assert that its rows are K.**
+  A data-driven matrix selects a builder by key and then tests whatever the
+  builder returns — the key itself is never checked. Slice ⓪'s kind × position
+  matrix had nine rows keyed by node kind; swapping one row's builder for
+  another kind's would have left sixteen cells silently testing the wrong kind
+  with the suite green, and the verdicts still matched because only two rules in
+  the whole verifier are kind-sensitive. Every row now runs its kind's predicate
+  over what it built. Wherever a table's key is used to *dispatch*, assert the
+  key against the thing dispatched to; the key is data like any other and
+  nothing else reads it.
+* **A value computed for a comment is a value not asserted.**
+  The same matrix computed the pruned skeleton's sink set under a comment saying
+  it was part of each cell's recorded value, then discarded it — a description of
+  work rather than the work. It is now an observed count (`exactly three cells
+  prune the sink`), which fails if the pruning changes. If a computation's only
+  consumer is a sentence, either assert it or delete it.
 * **A measurement that cannot fail visibly needs a control, not a re-read.**
   Slice ③'s close-out produced two plausible-and-wrong counts from two different
   methods, each returning a number that gave no reason to distrust it. Reading
@@ -502,6 +542,18 @@
   is a census with a test. Where prose must state a count, state where it was
   measured, and re-measure it when the thing it counts changes.
 
+* **A derived census still declares the thing that finds it.**
+  Deriving the set from the artifact moves the staleness one level up, it does
+  not remove it. Slice ⓪'s diagnostic census walks `verify.sls` as a datum and
+  derives all sixteen codes from the source rather than listing them — but it
+  recognised emission sites by two hardcoded constructor names, so a third
+  constructor, and every code emitted through it, would have shipped unpinned
+  while the census stayed green and looked derived. The constructor set is now
+  derived too (from the `define`s whose names start `make-diagnostic`), which
+  also puts each new constructor's own header into the subtraction
+  automatically. When you write a census, ask what set the *recogniser* is: if
+  it is a literal, it is the census you actually shipped.
+
 * **Re-sweep every count after a fix wave, not just the tests.**
   A review's fix commits move counts, and the prose that quotes them is not part of
   the suite. Milestone 4 Slice ③ closed with a status block reading "358 mutations"
@@ -511,6 +563,20 @@
   count restated in two places is a count that will disagree with itself: keep one
   authority, and after a fix wave re-read the fix's own commits for every number
   they moved.
+
+* **Making one site loud is a fact about that site, not about the family.**
+  `verify.sls` grew a loud `assertion-violation` on `join-over`'s *empty*
+  zero-width join; the comment written beside it then claimed the `unresolved`
+  verdict is unproducible altogether. Two different sites: `classify`'s
+  `((not n) 'unresolved)` arm still answers it for any EOF successor naming no
+  node, reached by two routes today. The false claim made the verdict's *tier*
+  load-bearing and unwitnessed — a machine whose EOF chain reaches both a
+  dangling name and a `stop` reports the stop only because `unresolved` loses
+  the join — while the paragraph above it asserted that tiers make every
+  assignment a one-token caught mutation, false for one of six. When a fix
+  closes one producer of a value, name the site in the comment and go look for
+  the others; "X can no longer happen" is a whole-tree claim and needs a
+  whole-tree search. A load-bearing negative earns a second search method.
 
 * **Do not anchor a mutation on prose.**
   A `FIND` that includes a comment line breaks every time that comment is
