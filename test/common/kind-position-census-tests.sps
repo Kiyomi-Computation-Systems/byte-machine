@@ -268,4 +268,113 @@
                               (map car kind-table))))
               (check-equal "the same nine kinds" from-source from-table))))))))
 
+
+;; --- axis B: self-reference --------------------------------------------------
+;; The target IS the owning node. This is where the zero-progress rules live, and
+;; it is the axis a scoping cut would reach for first -- wrongly: it is the only
+;; coverage in the tree of the site that reports an EOF cycle at a PAUSE, and it
+;; is where four of the sixteen positions behave differently under `reexecute`.
+;;
+;; `machine-entry` has no self variant: the machine is not a node. Recorded as
+;; not-driven rather than as a verdict.
+;;
+;; Each expectation is DERIVED and its derivation stated, not observed:
+;;   §16.2 zero-progress -- a cycle of steps that consume no input
+;;   §16.2:909           -- an EOF path that never reaches a terminal
+;; A byte edge that ADVANCES makes progress, so a self-loop through it is legal;
+;; the same edge under `reexecute` is not. A sequence case always consumes its
+;; bytes (§10.6:546) and an accumulate digit edge advances (§10.6:566), so both
+;; are legal self-loops by design.
+(define self-expectations
+  ;; (position mode . expected-codes)
+  '(((dispatch-case         advance)   . ())
+    ((dispatch-case         reexecute) . (zero-progress-cycle))
+    ((dispatch-fallback     advance)   . ())
+    ((dispatch-fallback     reexecute) . (zero-progress-cycle))
+    ((dispatch-eof-target   advance)   . (eof-zero-progress-cycle))
+    ((sequence-case         advance)   . ())
+    ((sequence-mismatch     advance)   . ())
+    ((sequence-mismatch     reexecute) . (zero-progress-cycle))
+    ((sequence-eof-target   advance)   . (eof-zero-progress-cycle))
+    ((pause-continuation    advance)   . (eof-zero-progress-cycle zero-progress-cycle))
+    ((field-action-next     advance)   . (zero-progress-cycle))
+    ((field-action-error    advance)   . (zero-progress-cycle))
+    ((field-branch-true     advance)   . (zero-progress-cycle))
+    ((field-branch-false    advance)   . (zero-progress-cycle))
+    ((accumulate-digit      advance)   . ())
+    ((accumulate-nondigit   advance)   . ())
+    ((accumulate-nondigit   reexecute) . (zero-progress-cycle))
+    ((accumulate-overflow   advance)   . (zero-progress-cycle))
+    ((accumulate-eof-target advance)   . (eof-zero-progress-cycle))))
+
+;; The self machine: the host points the position under test at ITSELF.
+(define (self-machine pos mode)
+  (define (dsp cases fb eof) (make-byte-dispatch-node 'h cases fb eof #f))
+  (define (one-case tgt m) (list (make-byte-case (make-exact-byte-matcher 0)
+                                                 (make-edge tgt m) #f)))
+  (define nodes
+    (case pos
+      ((dispatch-case)     (list (dsp (one-case 'h mode) (make-edge 'ee 'reexecute) #f)))
+      ((dispatch-fallback) (list (dsp (one-case 'ee 'advance) (make-edge 'h mode) #f)))
+      ((dispatch-eof-target) (list (dsp (one-case 'ee 'advance) (make-edge 'ee 'reexecute) 'h)))
+      ((sequence-case)     (list (make-sequence-dispatch-node 'h
+                                   (list (make-sequence-case '(1) 'h #f))
+                                   (make-edge 'ee 'reexecute) #f #f)))
+      ((sequence-mismatch) (list (make-sequence-dispatch-node 'h
+                                   (list (make-sequence-case '(1) 'ee #f))
+                                   (make-edge 'h mode) #f #f)))
+      ((sequence-eof-target) (list (make-sequence-dispatch-node 'h
+                                     (list (make-sequence-case '(1) 'ee #f))
+                                     (make-edge 'ee 'reexecute) 'h #f)))
+      ((pause-continuation) (list (dsp (one-case 'p 'advance) (make-edge 'ee 'reexecute) #f)
+                                  (make-pause-node 'p 'p #f)))
+      ((field-action-next) (list (dsp (one-case 'fa 'advance) (make-edge 'ee 'reexecute) #f)
+                                 (make-field-action-node 'fa 'clear '(n) 'fa #f #f)))
+      ((field-action-error) (list (dsp (one-case 'fa 'advance) (make-edge 'ee 'reexecute) #f)
+                                  (make-field-action-node 'fa 'increment '(n) 'ee 'fa #f)))
+      ((field-branch-true) (list (dsp (one-case 'fb 'advance) (make-edge 'ee 'reexecute) #f)
+                                 (make-field-branch-node 'fb 'zero '(n) 'fb 'ee #f)))
+      ((field-branch-false) (list (dsp (one-case 'fb 'advance) (make-edge 'ee 'reexecute) #f)
+                                  (make-field-branch-node 'fb 'zero '(n) 'ee 'fb #f)))
+      ((accumulate-digit) (list (dsp (one-case 'ac 'advance) (make-edge 'ee 'reexecute) #f)
+                                (make-integer-accumulate-node 'ac 'n 10 'ac
+                                  (make-edge 'ee 'advance) 'ee #f #f)))
+      ((accumulate-nondigit) (list (dsp (one-case 'ac 'advance) (make-edge 'ee 'reexecute) #f)
+                                   (make-integer-accumulate-node 'ac 'n 10 'ee
+                                     (make-edge 'ac mode) 'ee #f #f)))
+      ((accumulate-overflow) (list (dsp (one-case 'ac 'advance) (make-edge 'ee 'reexecute) #f)
+                                   (make-integer-accumulate-node 'ac 'n 10 'ee
+                                     (make-edge 'ee 'advance) 'ac #f #f)))
+      ((accumulate-eof-target) (list (dsp (one-case 'ac 'advance) (make-edge 'ee 'reexecute) #f)
+                                     (make-integer-accumulate-node 'ac 'n 10 'ee
+                                       (make-edge 'ee 'advance) 'ee 'ac #f)))
+      (else (assertion-violation 'self-machine "no such position" pos))))
+  (make-machine 'self 'h (list (make-uint-field 'n 8 0 #f)) '() '()
+                (list eof-decl rej-decl)
+                (append nodes (sinks)) 'default-eof #f))
+
+(harness-group "every position pointed at itself (axis B)"
+  (lambda ()
+    (harness-case "each self-reference matches its derived verdict"
+      (lambda ()
+        ;; A sentinel over the rows DRIVEN, compared against the table's length
+        ;; computed separately -- and, separately again, against the count of
+        ;; positions that can have a self variant at all (all but the entry).
+        (let ((driven 0) (bad '()))
+          (for-each
+           (lambda (row)
+             (set! driven (+ driven 1))
+             (let* ((pos (caar row)) (mode (cadar row))
+                    (want (list-sort (lambda (a b) (string<? (symbol->string a)
+                                                             (symbol->string b)))
+                                     (cdr row)))
+                    (got (codes-of (self-machine pos mode))))
+               (unless (equal? want got)
+                 (set! bad (cons (list pos mode 'want want 'got got) bad)))))
+           self-expectations)
+          (check-equal "every self row was driven" driven (length self-expectations))
+          (check-equal "and fifteen positions have one, four of them twice"
+                       driven (+ 15 4))
+          (check-equal "each matches its derivation" bad '()))))))
+
 (harness-finish)

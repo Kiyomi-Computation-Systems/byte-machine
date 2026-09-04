@@ -206,7 +206,16 @@ which exists and means §12.7's parser-error position kinds — an unrelated thi
   builders as **data** (two association lists), the pruning closure, §3.1's record shape, and
   **S1+S2 land here, not later** — the sentinel is what makes a Milestone 5 callback kind fail
   before it fails a fixture.
-- [ ] **Task 3 — the self axis (19).** Including the 4 `reexecute` rows; *not* the base matrix's
+- [x] **Task 3 — the self axis (19).** Done. Fifteen positions with a self variant (the entry
+  has none — a machine is not a node), four of them twice because they carry a mode and flip
+  under `reexecute`. **Every cell matched its derived verdict on the first run**, deriving from
+  the progress rules rather than from observation: a byte edge that advances makes progress, so a
+  self-loop through it is legal; a sequence case always consumes (§10.6:546) and an accumulate
+  digit edge advances (§10.6:566), so both are legal self-loops by design.
+
+  This is the axis a scoping cut would reach for first, and it is the one carrying the pause
+  EOF-cycle site's **second, independent** coverage — the site that was dead in the suite until
+  Task 1. Including the 4 `reexecute` rows; *not* the base matrix's
   36 mode rows. This is the commit that covers `verify.sls:834` a **second** way (`SELF p8`).
 - [ ] **Task 4 — the dangling axis (16) and the absence census (16).** The only place a
   `byte-machine-contract-violation` can be cited, and `P10`'s gated existence.
