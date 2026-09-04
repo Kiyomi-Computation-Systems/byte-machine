@@ -677,13 +677,34 @@
   ;; reintroduce one"). Every kind `ir.sls` can construct has its own arm, so the
   ;; residual `else` is unreachable and raises, matching the loud-else convention
   ;; in normal-ir.sls, compile.sls and runtime.sls.
-  (define eof-verdict-ranking
-    '(finish unresolved error default-error eof-reachable-stop cycle))
+  ;; *** THREE TIERS, not a flat six (Slice ⓪b, OQ-5). ***
+  ;;
+  ;; The join takes the max, so the order decides which sibling verdict survives.
+  ;; A flat list of six has 720 orderings; measured, only THREE equivalence
+  ;; classes are observable, and 24 of the orderings are indistinguishable by any
+  ;; machine. Under this project's rules an unwitnessable ordering is not a
+  ;; decision -- and worse, four of the six undecidable pairs are ACCEPTANCE
+  ;; HOLES: with `default-error` ranked above `cycle`, a field-branch machine
+  ;; verifies with zero diagnostics and `parser-finish!` never returns.
+  ;;
+  ;; Tiers make the 24-permutation survivor unwritable rather than something to
+  ;; declare EXPECT_SURVIVES, and turn each tier assignment into a single-token
+  ;; mutation caught by a failed comparison rather than by a raise.
+  ;;
+  ;; All six symbols are KEPT. Milestone 5's span check needs `finish`
+  ;; distinguished from `error` at `classify`, and 0021 item 3's loud-else
+  ;; discipline forbids merging arms. `unresolved` is currently UNPRODUCIBLE --
+  ;; the only site that answered it is now a loud raise, below -- and stays
+  ;; listed so that a future producer is ranked rather than raising here.
+  (define eof-verdict-tiers
+    '((finish unresolved error default-error)   ; the chain terminates
+      (eof-reachable-stop)                      ; §16.2:909
+      (cycle)))                                 ; 0021 item 1
   (define (eof-verdict-rank v)
-    (let loop ((vs eof-verdict-ranking) (i 0))
-      (cond ((null? vs) (assertion-violation 'eof-terminal "unranked verdict" v))
-            ((eq? (car vs) v) i)
-            (else (loop (cdr vs) (+ i 1))))))
+    (let loop ((ts eof-verdict-tiers) (i 0))
+      (cond ((null? ts) (assertion-violation 'eof-terminal "unranked verdict" v))
+            ((memq v (car ts)) i)
+            (else (loop (cdr ts) (+ i 1))))))
   ;; Sibling answers join by max. 0021 item 1 pins only `cycle >
   ;; eof-reachable-stop` -- a cycle is the non-termination neither runtime loop
   ;; guards against, so it must survive a join -- and leaves the rest unfixed;
@@ -713,10 +734,15 @@
         (let loop ((ns names) (acc #f))
           (if (null? ns)
               ;; A zero-width node with no successors cannot occur -- both kinds
-              ;; have mandatory targets -- so this is the same unreachable shape
-              ;; as the else below, answered rather than raised because an empty
-              ;; join has an obvious identity and a missing kind does not.
-              (or acc 'unresolved)
+              ;; have mandatory targets. This was answered with `'unresolved`
+              ;; rather than raised, on the reasoning that an empty join has an
+              ;; obvious identity. *** Slice ⓪b makes it LOUD: measured, the arm
+              ;; is dead, and answering an impossible input quietly is how a
+              ;; verdict nothing produces stayed in a six-element ranking that
+              ;; four mutations could permute undetected. *** An impossible input
+              ;; made loud is not a gap being closed; it is a gap being refused.
+              (or acc (assertion-violation 'eof-terminal
+                                           "empty zero-width join" names))
               (loop (cdr ns)
                     (let ((v (walk (car ns) path)))
                       (if acc (eof-verdict-join acc v) v))))))

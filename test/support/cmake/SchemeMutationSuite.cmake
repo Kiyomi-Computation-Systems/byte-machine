@@ -837,6 +837,8 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Milestone 5 Slice ⓪b task 6: the EOF verdict tiers. Mutations 370 + 2 = 372.
+#
 # Milestone 5 Slice ⓪b task 5: §16.4:940's edge label. Mutations 368 + 2 = 370.
 #
 # Milestone 5 Slice ⓪b task 4: §16.2:909 walks the PARKED set. FIVE removed
@@ -990,7 +992,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 51)
-set(EXPECTED_MUTATIONS 370)
+set(EXPECTED_MUTATIONS 372)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -4142,7 +4144,13 @@ byte_machine_mutation(
   FIND [[    (cond ((pause-node? n) (list (cons 'continuation (pause-node-continuation n))))]]
   REPLACE [[    (cond ((pause-node? n) '())]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "both EOF terminals reported -- expected 2, got 0")
+  # Re-measured at Slice ⓪b task 6. This mutant used to report "expected 2, got
+  # 0" because an empty zero-width join answered `'unresolved`; that arm is now a
+  # loud raise, so the same mutation is caught at the same site by the raise the
+  # arm exists to make. AGENTS.md prefers a comparison to a raise because a raise
+  # usually depends on where the mutant happens to crash -- here it crashes at
+  # exactly the decision's own site, which is the case that preference exempts.
+  EXPECT_OUTPUT_MATCHES "case raised -- Exception in eof-terminal: empty zero-width join")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -4840,8 +4848,14 @@ byte_machine_mutation(
   # join. Pinned on the MIRRORED arm order, which is the record that separates it
   # from "the false target is not walked" -- a mutant that walks only the true
   # arm answers this fixture correctly and the other one wrongly.
-  FIND [[    '(finish unresolved error default-error eof-reachable-stop cycle))]]
-  REPLACE [[    '(finish unresolved error default-error cycle eof-reachable-stop))]]
+  # Re-anchored at Slice ⓪b task 6: the flat six-element ranking became three
+  # tiers, so the decision this pins -- `cycle` outranking `eof-reachable-stop` --
+  # is now a tier assignment. Swapping the two tiers is the same decision
+  # inverted, in one token rather than two list positions.
+  FIND [[      (eof-reachable-stop)                      ; §16.2:909
+      (cycle)))]]
+  REPLACE [[      (cycle)
+      (eof-reachable-stop)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "cycle outranks eof-reachable-stop in the OTHER arm order too: cycle -- expected a true value")
@@ -5420,6 +5434,40 @@ byte_machine_mutation(
   REPLACE [[  (define (node-out-targets n) (map car (node-out-edges n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "a finish node reachable only via an eof-target verifies")
+
+# --- Milestone 5 Slice ⓪b task 6: the EOF verdict tiers ----------------------
+#
+# A flat six-element ranking has 720 orderings, of which 24 are observationally
+# identical -- four mutations permuted it undetected. Three tiers make those 24
+# UNWRITABLE rather than something to declare EXPECT_SURVIVES, and each tier
+# assignment becomes a single-token mutation caught by a failed comparison.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: eof-reachable-stop is promoted into the benign tier"
+  # §16.2:909's whole verdict, demoted to tie with the verdicts that mean "the
+  # chain terminates". Every join then masks it -- three fixtures redden.
+  FIND [[    '((finish unresolved error default-error)   ; the chain terminates
+      (eof-reachable-stop)                      ; §16.2:909]]
+  REPLACE [[    '((finish unresolved error default-error eof-reachable-stop)   ; terminates
+      ()                                        ; §16.2:909]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "an `error` sibling does not mask the stop")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: default-error is promoted out of the benign tier"
+  # The acceptance hole, as a pin. Promoting `default-error` above the benign
+  # tier is one step from promoting it above `cycle`, which was MEASURED to make
+  # a field-branch machine verify with zero diagnostics while `parser-finish!`
+  # never returns. One token, and the only fixture that moves is the one whose
+  # sibling verdict is `default-error` -- which is what makes it this pin's own.
+  FIND [[    '((finish unresolved error default-error)   ; the chain terminates
+      (eof-reachable-stop)                      ; §16.2:909]]
+  REPLACE [[    '((finish unresolved error)                 ; the chain terminates
+      (eof-reachable-stop default-error)        ; §16.2:909]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a `default-error` sibling does not mask the stop")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

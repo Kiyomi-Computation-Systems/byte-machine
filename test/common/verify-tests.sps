@@ -2022,4 +2022,73 @@
           (check-equal "one finding" (length ds) 1)
           (check-equal "and it carries no edge label" (diagnostic-edge (car ds)) #f))))))
 
+;; Milestone 5 Slice ⓪b task 6: the EOF verdict order is THREE TIERS, not a flat
+;; six (OQ-5).
+;;
+;; `eof-verdict-join` takes the max, so the ORDER decides which of two sibling
+;; verdicts survives a join. Decision 0021 item 1 pins only `cycle >
+;; eof-reachable-stop` and calls the rest "this slice's call" -- but the rest is
+;; not free. Measured: six of the fifteen verdict pairs are undecidable by any
+;; machine, and all six sit inside {finish, unresolved, error, default-error}.
+;;
+;; *** Four of those six are ACCEPTANCE HOLES. *** With `default-error` ranked
+;; above `cycle`, a field-branch machine verifies ok=#t with ZERO diagnostics and
+;; `parser-finish!` never returns. So a flat ranking has 720 orderings of which
+;; 24 are observationally identical and some of the rest silently accept
+;; non-terminating machines -- and an unwitnessable ordering cannot be a
+;; decision under this project's own rules.
+;;
+;; Three tiers make the 24-permutation survivor UNWRITABLE rather than an
+;; EXPECT_SURVIVES, and turn each tier assignment into a single-token mutation
+;; caught by a failed comparison. All six symbols are KEPT: Milestone 5's span
+;; check needs `finish` distinguished from `error` at `classify`, and 0021 item
+;; 3's loud-else discipline forbids merging arms.
+(define (t6-join-machine x-nodes x-name)
+  ;; The entry is a field-branch, the only shape whose join is observable: one
+  ;; arm reaches X, the other a stop. Whatever X's own verdict, the join must be
+  ;; the stop -- `eof-reachable-stop` is tier 1 and every benign verdict tier 0.
+  (make-machine 'j 'br (list (make-uint-field 'n 8 0 #f)) '() '()
+                (list eof-decl rej-decl)
+                (append (list (make-field-branch-node 'br 'zero '(n) x-name 'stop #f)
+                              (make-stop-node 'stop #f))
+                        x-nodes)
+                'default-eof #f))
+
+(harness-group "a benign EOF verdict never outranks a stop in a join (Slice ⓪b)"
+  (lambda ()
+    (harness-case "an `error` sibling does not mask the stop"
+      (lambda ()
+        (check-equal "eof-reachable-stop survives the join"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine
+                            (t6-join-machine (list (make-error-node 'x 'rejected #f)) 'x))))
+                     '((eof-reachable-stop . br)))))
+    (harness-case "a `default-error` sibling does not mask the stop"
+      (lambda ()
+        ;; X is a dispatch with NO eof-target, so `dispatch-arm` answers
+        ;; `default-error` -- the verdict whose promotion above `cycle` was
+        ;; measured to accept a machine that never terminates.
+        (check-equal "eof-reachable-stop survives the join"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine
+                            (t6-join-machine
+                             (list (make-byte-dispatch-node 'x '()
+                                     (make-edge 'rj 'reexecute) #f #f)
+                                   (make-error-node 'rj 'rejected #f))
+                             'x))))
+                     '((eof-reachable-stop . br)))))
+    (harness-case "a `finish` sibling does not mask the stop either"
+      (lambda ()
+        ;; A field-branch arm is a BYTE out-target, so a finish there is also a
+        ;; §16.2:908 violation. Both findings are asserted: the point is that the
+        ;; stop is still reported, not that it is reported alone.
+        (check-equal "both findings, stop included"
+                     (map diagnostic-code
+                          (verification-diagnostics
+                           (verify-machine
+                            (t6-join-machine (list (make-finish-node 'x #f)) 'x))))
+                     '(non-eof-into-finish eof-reachable-stop))))))
+
 (harness-finish)

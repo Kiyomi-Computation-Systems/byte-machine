@@ -201,9 +201,17 @@ as "any state an execution can occupy", or a later slice will re-derive it wrong
   was moved onto `node-out-edges`' delegation arm so each owns a distinct anchor. The census
   learned both emission forms, and its header subtraction is now **two** definition headers,
   counted by name.
-- [ ] **T6 — the verdict tiers (OQ-5).** Three failing fixtures, using the **stop** variant not
-  the cycle variant: the cycle variant's join is still `cycle` under a tier-1 promotion, so it
-  kills only half the mutants.
+- [x] **T6 — the verdict tiers (OQ-5).** Done. The flat six-element ranking became three tiers
+  — benign / `eof-reachable-stop` / `cycle` — which makes the 24-permutation survivor
+  **unwritable** rather than something to declare `EXPECT_SURVIVES`, and turns each tier
+  assignment into a one-token mutation caught by a failed comparison. All six symbols kept.
+
+  Three join fixtures over a field-branch, the only shape whose join is observable. `unresolved`
+  could not be one of them: it is **unproducible**, and its only producer — an empty zero-width
+  join — is now a **loud raise**. That change moved one incumbent pin from a comparison-catch to
+  a raise-catch, re-measured and re-pinned; AGENTS.md prefers comparisons because a raise usually
+  depends on where the mutant happens to crash, and here it crashes at the decision's own site,
+  which is the case that preference exempts.
 - [ ] **T7 — records and the whole-branch sweep.** Decision 0023; 0021's annotations; the dated
   disposition appended at `byte-machine-implementation-plan.md:1802` (**file is 1879 lines;
   append, never insert**). Re-run the `verify.sls` sweep in **both** directions and confirm the
