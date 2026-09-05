@@ -42,8 +42,16 @@ the line wrong can still find the thing.
 >
 > **2026-09-04, the Slice ② plan's measurements** — **amends §7 and the Appendix**: §7's first
 > oracle named a closure shape that cannot be compared, and its divergence list assigned Slice
-> ③'s `pass-zero-progress` gate to ②. The Appendix is superseded by the ② plan's §1, whose
+> ③'s `pass-zero-progress` gate to ②. The Appendix was superseded by the ② plan's §1, whose
 > re-measurement found its stated recogniser cannot find two rows the Appendix itself lists.
+>
+> **2026-09-05, Slice ② Task 9** — **the Appendix is REWRITTEN in place**, not
+> annotated: a table a later slice works as a checklist is an instruction, and an
+> instruction that cannot be followed gets corrected. It now states three
+> recognisers (the third for wire-kind dispatch), counts export and import lists
+> as rows, and carries the `test/` censuses the shipped `src/`-only scope hid —
+> one of which, `verify-tests.sps`'s §16.2:908 kind list, Slice ② found late
+> because of exactly that scope.
 >
 > > **2026-09-04, the Slice ①a plan's measurements** — **amends §5**: its position-axis bullet
 > told an implementer to derive the position names "from the IR", and there is nothing in
@@ -1000,59 +1008,94 @@ oracle must *fail* on, designed alongside the oracle rather than added after it 
 
 ## Appendix — per-kind site census
 
-> **SUPERSEDED for Slice ② by `milestone-5-slice-2-implementation-plan.md` §1**, which
-> re-measured this table at `317b89c`. Eight rows' line numbers moved under Slices ①a and ①b,
-> at least five rows are missing, and — the finding that matters — **the recogniser stated below
-> cannot find two rows this table itself lists**: `runtime.sls`'s two sites dispatch on the wire
-> kind symbol, which neither `rg` pattern sees. A third recogniser is required, and the rule
-> excluding import/export lists writes out a surface Slice ①b shipped a titled task about.
-> Slice ②'s Task 9 rewrites this table.
+> **REWRITTEN 2026-09-05 by Milestone 5 Slice ② Task 9, and this is a CORRECTION
+> IN PLACE, not a dated note: an appendix a later slice works as a checklist is an
+> INSTRUCTION.** The table shipped with this design was measured at `db86ab6` by
+> two `rg` patterns, and Slice ②'s plan found that **the stated recogniser could
+> not find two rows the table itself listed** — `runtime.sls`'s two sites dispatch
+> on the *wire kind symbol*, which neither pattern sees. Eight rows' line numbers
+> had also moved under Slices ①a and ①b, and five rows were missing. Slice ②
+> re-measured the whole thing and added the tenth kind's own sites; what follows
+> is measured at Slice ②'s head, with the recogniser corrected so a later slice's
+> reconciliation can succeed.
 
-Every site a new node kind must reach, measured at `db86ab6` by `rg -n -- '-node\?'` and
-`rg -n 'normal-state-kind'` over `src/byte-machine/`, dropping comment-only lines and
-import/export lists, grouped by enclosing construct. **The recogniser is stated so that the
-table's completeness is checkable rather than asserted** — an earlier draft of this document
-claimed completeness without one and was missing six rows.
+**Three recognisers, not two**, over `src/byte-machine/`:
 
-Slice ② and Slice ③ each work this table as a checklist, one row per site, each row stating the
-new arm **or** that the site is deliberately not extended and why. This table is the instrument
-that would have caught all three of Milestone 4 Slice ③'s defects — and row `compile.sls:422` is
-literally where one of them was.
+```bash
+rg -n -- "-node\?" src/byte-machine/                    # per-kind predicate dispatch
+rg -n "normal-state-kind" src/byte-machine/              # normalized-kind dispatch
+rg -n "\(op 'kind" src/byte-machine/                     # WIRE-kind dispatch -- the missing one
+```
+
+**Export and import lists ARE rows**, and the shipped rule dropping them was
+wrong. Slice ①b's own title is "…and five missing exports": an unexported
+accessor is an unbound identifier at the *importing library's* import, not at its
+call site, so the failure names the wrong file. `graph.sls` is nothing but two
+such lists and had no row at all.
+
+**`test/` holds per-kind censuses too**, and the shipped table's `src/`-only
+scope is why Slice ② found one late. They are listed below the source rows.
+
+Slice ③ works this table as a checklist, one row per site, each row stating the
+new arm **or** that the site is deliberately not extended and why. This table is
+the instrument that would have caught all three of Milestone 4 Slice ③'s defects
+— and the `compile.sls` reached-declaration row is literally where one of them
+was.
 
 | File | Site | Construct |
 |---|---|---|
-| `private/ir.sls` | `:484-488` | `node?` — the closed-set disjunct list; a census test reads it |
-| `private/ir.sls` | `:489-499` | `node-name` — nine-arm `cond` directly below `node?`; **no census test reads it**, and a missing arm falls to a raising `else` |
-| `verify.sls` | `:97` | `zero-width-edges` |
-| `verify.sls` | `:124` | `node-out-edges` |
-| `verify.sls` | `:161` | `node-eof-target` |
-| `verify.sls` | `:232` | pass-names error-reference filter |
-| `verify.sls` | `:381` | `pass-field-operands` |
-| `verify.sls` | `:434` | `pass-overlap` |
-| `verify.sls` | `:495` | `pass-sequence-ambiguity` |
-| `verify.sls` | `:510` | `reexec-targets` |
-| `verify.sls` | `:626` | zero-progress report set |
-| `verify.sls` | `:761` | `classify` |
-| `verify.sls` | `:848` | `§16.2:908` zero-hop entry clause |
-| `verify.sls` | `:859` | `§16.2:908` per-edge target |
-| `verify.sls` | `:908` | `§16.2:909` parked-set gate |
-| `interpret.sls` | `:84-92` | kind dispatch |
-| `interpret.sls` | `:98` | sequence-dispatch special case |
-| `interpret.sls` | `:158-160` | `eof-target-of` |
-| `interpret.sls` | `:293` | field-action special case |
-| `private/normal-ir.sls` | `:342-425` | `lower-machine` cond |
-| `private/normal-ir.sls` | `:494-547` | `encode-normal` wire tags (0-7 taken) |
-| `private/normal-ir.sls` | `:547` | the `normal-state-kind` else that closes the encoder |
-| `compile.sls` | `:247-357` | `render-state-arm` case |
-| `compile.sls` | `:390` | error reason/code selection on `normal-state-kind` |
-| `compile.sls` | `:422` | reached-declaration walk, `'(dispatch accumulate)` — **the Slice ③ defect site** |
-| `runtime.sls` | `:323` | feed kind case |
-| `runtime.sls` | `:459` | finish kind case |
+| `private/ir.sls` | `:10-66` | the library export list — a kind's predicate and accessors must join it |
+| `private/ir.sls` | `:545-549` | `node?` — the closed-set disjunct list; a census test reads it |
+| `private/ir.sls` | `:550-561` | `node-name` — one arm per kind, **raising `else`**, and nothing derives it |
+| `private/ir.sls` | ten sites | the per-kind predicate/accessor blocks themselves |
+| `graph.sls` | export + import lists | the public construction façade |
+| `verify.sls` | `:97` | `zero-width-edges` — the ONE census the next two are views of |
+| `verify.sls` | `:143` | `node-out-edges` |
+| `verify.sls` | `:181` | `node-eof-target` |
+| `verify.sls` | `:252` | pass-names error-reference filter |
+| `verify.sls` | `:401` | `pass-field-operands` |
+| `verify.sls` | `:454` | `pass-overlap` |
+| `verify.sls` | `:515` | `pass-sequence-ambiguity` |
+| `verify.sls` | `:530` | `reexec-targets` |
+| `verify.sls` | `:652` | zero-progress REPORT set — moves with `reexec-targets`, never after it |
+| `verify.sls` | `:788` | `classify` |
+| `verify.sls` | `:852` | `parked-eof-start` — **new in Slice ②**; where "a state an execution can be parked on" and "the name the EOF walk starts at" come apart |
+| `verify.sls` | `:907` | `§16.2:908` zero-hop entry clause |
+| `verify.sls` | `:918` | `§16.2:908` per-edge target |
+| `verify.sls` | `:967` | `§16.2:909` parked-set gate |
+| `verify.sls` | `:1213` | `callback-node-diagnostics` — §16.2:901's node half |
+| `interpret.sls` | `:84-94` | kind dispatch |
+| `interpret.sls` | `:99` | sequence-dispatch special case |
+| `interpret.sls` | `:157-162` | `eof-target-of` |
+| `interpret.sls` | `:341` | field-action special case |
+| `interpret.sls` | `:298-378` | **the executor-op message table** — a kind needing data from the source IR adds a message here |
+| `private/normal-ir.sls` | `:18-47` | the `(only …)` import list from `private ir` |
+| `private/normal-ir.sls` | `:133` | `normal-state-kind` |
+| `private/normal-ir.sls` | `:366-380` | `prefix-blocks` / `block-of` — **raises on a miss** |
+| `private/normal-ir.sls` | `:410-520` | `lower-machine` cond, with a raising `else` |
+| `private/normal-ir.sls` | `:625-700` | `encode-normal` state arms — **wire tags 0-7 and 10 taken; 8 and 9 are the trailing SECTION tags, so the next kind's is 11** |
+| `compile.sls` | `:47-100` | `reserved-member-2` and `reserved-member-3` — a new runtime export or emitted local joins them, and both have drift guards |
+| `compile.sls` | `:272-435` | `render-state-arm` case |
+| `compile.sls` | `:465` | error reason/code selection on `normal-state-kind` |
+| `compile.sls` | `:497` | reached-declaration walk, `'(dispatch accumulate)` — **the Milestone 4 Slice ③ defect site** |
+| `runtime.sls` | `:665` | feed **wire-kind** case — invisible to the two older recognisers |
+| `runtime.sls` | `:875` | finish **wire-kind** case — likewise |
 
-**Not a node-kind filter, and listed to stop it being counted as one:** `verify.sls:711-714`'s
-`eof-verdict-tiers` is a verdict-symbol table. It is a real Milestone 5 concern — three new
-kinds change which verdicts are producible — but it is a different concern, and one research
-pass did count it as a fourteenth per-kind site.
+Test-side censuses, none of which is derived from anything:
+
+| File | Site | Construct |
+|---|---|---|
+| `test/common/kind-position-census-tests.sps` | `kind-table`, `kind-predicates` | the matrix's own kind axis; `S2` derives its key set from `ir.sls` and reddens first |
+| `test/common/kind-position-census-tests.sps` | `position-table`, `role->positions` | the position axis and the edge-role map — **hand-written, and no assertion can say the rows are the right rows** |
+| `test/common/verify-tests.sps` | `t2-kinds` / `t2-hop` | §16.2:908's per-kind byte-reachability rows — **found late by Slice ②'s reconciliation, because the shipped table's scope was `src/` only** |
+| `test/common/diagnostic-census-tests.sps` | `pinned-sites`, `code-fixtures` | one row and one fixture per diagnostic code |
+| `test/common/member3-drift-tests.sps` | the fixture machine | must render every emitted arm, or a `reserved-member-3` entry is declared and never exercised |
+
+**Not a node-kind filter, and listed to stop it being counted as one:**
+`verify.sls`'s `eof-verdict-tiers` is a verdict-symbol table. It is a real
+Milestone 5 concern — the new kinds change which verdicts are producible — but it
+is a different concern, and one research pass did count it as an extra per-kind
+site.
 
 ---
 
