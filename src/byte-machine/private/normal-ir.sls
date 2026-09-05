@@ -12,6 +12,7 @@
           normal-dispatch-transitions normal-dispatch-fallback
           normal-error-code normal-error-reason normal-dispatch-eof normal-pause-target
           normal-machine-debug-map normal-machine-fields
+          normal-machine-callbacks normal-machine-spans
           normal-field-selector normal-field-arguments normal-field-targets)
   (import (rnrs)
           (only (byte-machine private ir)
@@ -27,6 +28,8 @@
                 sequence-dispatch-node-mismatch sequence-dispatch-node-eof-target
                 sequence-case-bytes sequence-case-target
                 machine-fields uint-field-name uint-field-width uint-field-initial
+                machine-callbacks machine-spans
+                callback-declaration-name span-declaration-name
                 integer-accumulate-node? integer-accumulate-node-name
                 integer-accumulate-node-field integer-accumulate-node-base
                 integer-accumulate-node-digit-target integer-accumulate-node-nondigit-edge
@@ -42,8 +45,8 @@
   ;; normal-machine-fingerprint is slot 3 and the emitter reads it, so putting the
   ;; map ahead of fp would silently renumber that slot and render a debug map
   ;; where the IR fingerprint belongs in the emitted constructor call.
-  (define (make-normal-machine entry states fp debug-map fields)
-    (vector nm-tag entry states fp debug-map fields))
+  (define (make-normal-machine entry states fp debug-map fields callbacks spans)
+    (vector nm-tag entry states fp debug-map fields callbacks spans))
   (define (normal-machine? x) (and (vector? x) (> (vector-length x) 0) (eq? (vector-ref x 0) nm-tag)))
   (define (normal-machine-entry m) (vector-ref m 1))
   (define (normal-machine-states m) (vector-ref m 2))
@@ -75,6 +78,14 @@
   ;; An earlier version of this comment claimed "every consumer downstream indexes
   ;; BY SLOT"; none does yet.
   (define (normal-machine-fields m) (vector-ref m 5))
+  ;; §17:962's callback and span slot assignment, Milestone 5 Slice ①b, appended
+  ;; after fields for the same reason fields were appended after the debug map:
+  ;; normal-machine-fingerprint is slot 3 and the emitter reads it by index, so
+  ;; nothing may be inserted ahead of it. Each is a list of (name slot) with slot
+  ;; ascending from 0 and equal to the list position -- redundant by
+  ;; construction, and carried for the same reason the field table carries it.
+  (define (normal-machine-callbacks m) (vector-ref m 6))
+  (define (normal-machine-spans m) (vector-ref m 7))
 
   (define ns-tag (vector 'byte-machine-normal-state))
   ;; (vector ns-tag kind id transitions fallback code eof reason
@@ -459,7 +470,7 @@
         (begin (put-u8 p 1) (put-symbol p (cdr eof))
                (put-reason p reason))))
 
-  (define (encode-normal entry states fields)
+  (define (encode-normal entry states fields callbacks spans)
     (call-with-bytevector-output-port
      (lambda (p)
        ;; Format version 2 (decision 0019). Header layout:
@@ -567,7 +578,46 @@
                 (put-u32be p (cdr (normal-field-targets s))))
                (else (assertion-violation 'normalize-machine "unknown state kind"
                                           (normal-state-kind s)))))
-           (loop (+ i 1)))))))
+           (loop (+ i 1))))
+       ;; --- the optional trailing slot-table sections (Slice ①b) --------------
+       ;; Decision 0025 point 1, whose SHAPE Slice ①a recorded at the head of
+       ;; this procedure and whose ambiguity its ①b-planning note corrected.
+       ;;
+       ;; *** EVERY BYTE BELOW IS INSIDE A GUARD, THE COUNT AND THE TAG
+       ;; INCLUDED. *** A machine declaring neither a callback nor a span writes
+       ;; ZERO bytes here and therefore encodes byte-identically to Milestone 5
+       ;; Slice ①a's, which is what keeps all four committed goldens and every
+       ;; pinned fingerprint still. An unconditional count would be two bytes on
+       ;; every machine in the tree and would move all of them -- that is NOT the
+       ;; field table's precedent, which reached byte-identity the opposite way,
+       ;; by writing a count that already existed with value 0 and paying for it
+       ;; with a format-version bump a slice earlier.
+       ;;
+       ;; THE TAG IS WHY THERE IS A TAG. Two guarded tables with no discriminator
+       ;; are ambiguous: one callback and no spans, versus no callbacks and one
+       ;; span, both emit [count][one record]. Both record kinds are
+       ;; symbol-shaped, so they can collide, and a collision would falsify the
+       ;; claim decision 0025 point 1 rests its rejected alternative on -- that
+       ;; declaration identity is fingerprint-visible.
+       ;;
+       ;; Tags 8 and 9: the state-kind tags run 0-7 and 8 was unused.
+       ;;
+       ;; *** DO NOT WRITE A STATE-KIND TAG LITERAL IN A COMMENT IN THIS FILE. ***
+       ;; The mutation pinning the pause tag FINDs that one-line form as TEXT, at
+       ;; exactly one site, and `FIND` does not know a comment from code. This
+       ;; very paragraph originally spelled the pause tag out while warning
+       ;; against duplicating it, which took the pin to two occurrences and
+       ;; failed the suite at declaration -- the same shape as a textual
+       ;; `(cons '` count that answers 15 because two of them are in the comment
+       ;; forbidding them. Name the tag in words, as here.
+       (unless (null? callbacks)
+         (put-u8 p 8)
+         (put-u16be p (length callbacks))
+         (for-each (lambda (c) (put-symbol p (car c))) callbacks))
+       (unless (null? spans)
+         (put-u8 p 9)
+         (put-u16be p (length spans))
+         (for-each (lambda (sp) (put-symbol p (car sp))) spans)))))
 
   ;; Slot = declaration index (design §6 task 5). `machine-fields` is the
   ;; declaration list in declaration order, so the slot is the position and this
@@ -582,9 +632,22 @@
                             slot)
                       out)))))
 
+  ;; §17:962, the callback and span halves. Slot IS the position, so these are
+  ;; the declaration names in declaration order; §10.1:482 makes declaration
+  ;; order carry no semantic priority and exist precisely to give stable ids.
+  (define (name-table decls name-of)
+    (let tloop ((ds decls) (slot 0) (out '()))
+      (if (null? ds) (reverse out)
+          (tloop (cdr ds) (+ slot 1)
+                 (cons (list (name-of (car ds)) slot) out)))))
+
   (define (normalize-machine machine)
     (let-values (((entry states debug-map) (lower-machine machine)))
-      (let ((fields (field-table machine)))
+      (let ((fields (field-table machine))
+            (callbacks (name-table (machine-callbacks machine)
+                                   callback-declaration-name))
+            (spans (name-table (machine-spans machine) span-declaration-name)))
         (make-normal-machine entry states
-                             (fnv1a-64 (encode-normal entry states fields))
-                             debug-map fields)))))
+                             (fnv1a-64 (encode-normal entry states fields
+                                                      callbacks spans))
+                             debug-map fields callbacks spans)))))
