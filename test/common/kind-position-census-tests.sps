@@ -19,10 +19,15 @@
 ;;; in the entry column contradicted §16.2:909 until Slice ⓪b fixed them. A cell
 ;;; whose observation differs from its derivation is a FINDING, not a baseline.
 ;;;
-;;; Only TWO rules in the whole verifier are sensitive to a target's KIND, and
-;;; both are derived here from the spec rather than from the code:
+;;; THREE families of rule in the verifier are sensitive to a target's KIND, and
+;;; all three are derived here from the spec rather than from the code:
 ;;;   §16.2:908  a finish terminal must not be BYTE-REACHABLE
 ;;;   §16.2:909  an EOF path must not reach a stop terminal
+;;;   §16.2:899/:900/:907  the span-state lattice (Milestone 5 Slice ③,
+;;;              decision 0029) -- see `expected-codes`, which states what this
+;;;              skeleton does with a span and derives each verdict from it.
+;;; The third arrived with the eleventh and twelfth kinds; before them this
+;;; header said there were only two, and it was true when written.
 ;;; Everything else accepts. "Impossible by construction" is EMPTY on the kind
 ;;; axis, structurally: every target slot is a bare symbol and a node constructor
 ;;; cannot see the machine's node list, so every kind restriction is necessarily
@@ -40,7 +45,8 @@
         (only (byte-machine private ir)
               byte-dispatch-node? sequence-dispatch-node? stop-node? error-node?
               finish-node? pause-node? field-action-node? field-branch-node?
-              integer-accumulate-node? callback-node?)
+              integer-accumulate-node? callback-node?
+              span-start-node? span-end-node?)
         (byte-machine verify))
 
 (harness-begin "unit.kind-position-census")
@@ -55,13 +61,19 @@
 ;; purpose: a declaration present in some and absent in others is exactly the
 ;; divergence this instrument exists to make visible.
 (define cb-decl (make-callback-declaration 'cb 'decision #t '(yes) #f #f))
+;; Slice ③: the same reasoning one kind later. A span node names a span, a span
+;; names a span-data callback, and §16.2:890/:892 resolve both -- so the cell
+;; machines declare the whole chain or every span cell reports a fixture defect
+;; instead of a position.
+(define sd-decl (make-callback-declaration 'on-data 'span-data #t '() #f #f))
+(define sp-decl (make-span-declaration 'sp 'on-data #f #f))
 
 ;; The shared sinks every placed node's own out-edges land on. Never the host,
 ;; so a cell's record is about the placed node's POSITION and not about a cycle
 ;; the skeleton happened to create.
 (define (sinks) (list (make-error-node 'ee 'rejected #f)))
 
-;; --- the ten kinds, as data -------------------------------------------------
+;; --- the twelve kinds, as data ----------------------------------------------
 ;; Each builder returns the node named `t`. Its own out-edges go to the sinks.
 (define kind-table
   (list
@@ -91,9 +103,13 @@
    ;; callback name and branch key are `cb-decl`'s, so §16.2:901's
    ;; cross-reference resolves and the cell keeps measuring position.
    (cons 'callback
-         (lambda (nm) (make-callback-node nm 'cb 'ee '((yes ee)) 'ee #f)))))
+         (lambda (nm) (make-callback-node nm 'cb 'ee '((yes ee)) 'ee #f)))
+   ;; The eleventh and twelfth (Milestone 5 Slice ③). One successor each, on the
+   ;; shared sink, so the cell records the placed node's POSITION.
+   (cons 'span-start (lambda (nm) (make-span-start-node nm 'sp 'ee #f)))
+   (cons 'span-end (lambda (nm) (make-span-end-node nm 'sp 'ee #f)))))
 
-;; --- the nineteen positions, as data ----------------------------------------
+;; --- the twenty-one positions, as data --------------------------------------
 ;; Each builder returns (entry . host-nodes) with the placed node `t` wired into
 ;; that one position. Every host is byte-reachable from the entry, so no cell
 ;; carries an incidental unreachable-node and the byte-reachability gate that
@@ -178,7 +194,26 @@
                                    (make-callback-node 'cn 'cb 'ee '((yes t)) 'ee #f)))))
    (list 'callback-pause-continuation #t  #t
          (lambda () (cons 'h (list (dispatch-to 'cn)
-                                   (make-callback-node 'cn 'cb 'ee '((yes ee)) 't #f)))))))
+                                   (make-callback-node 'cn 'cb 'ee '((yes ee)) 't #f)))))
+   ;; --- the span kinds' single successors (Milestone 5 Slice ③) ---
+   ;; BYTE routes, like a field action's `next`: both kinds are zero-width, so
+   ;; whatever byte edge reaches the host reaches them. NOT eof routes -- the
+   ;; host's #f eof-target means the EOF walk never flows through the host.
+   ;;
+   ;; *** A SPAN END IS A PARKED STATE, and this comment said the opposite until
+   ;; the final review. *** The claim was that "§14:837-838 park on the
+   ;; CALLBACK", and a span-data callback has no callback node: its pause parks
+   ;; the parser on the span end's own completion substep. That is why
+   ;; `span-end-next` is the one non-EOF position whose `stop` cell reports
+   ;; `eof-reachable-stop` and whose self-loop reports `eof-zero-progress-cycle`
+   ;; -- both derived in `expected-codes` and `self-expectations` below. A span
+   ;; START is still not parked: it calls nothing.
+   (list 'span-start-next           #t   #f
+         (lambda () (cons 'h (list (dispatch-to 'ss)
+                                   (make-span-start-node 'ss 'sp 't #f)))))
+   (list 'span-end-next             #t   #f
+         (lambda () (cons 'h (list (dispatch-to 'se)
+                                   (make-span-end-node 'se 'sp 't #f)))))))
 
 ;; *** Every row must BUILD the kind it is keyed by. *** Found by the
 ;; whole-branch review: without this, swapping one builder for another kind's
@@ -195,7 +230,9 @@
         (cons 'field-action field-action-node?)
         (cons 'field-branch field-branch-node?)
         (cons 'integer-accumulate integer-accumulate-node?)
-        (cons 'callback callback-node?)))
+        (cons 'callback callback-node?)
+        (cons 'span-start span-start-node?)
+        (cons 'span-end span-end-node?)))
 
 (define (position-name p) (car p))
 (define (position-byte? p) (cadr p))
@@ -204,17 +241,61 @@
 
 ;; The DERIVED expectation. Two rules, both from §16.2, applied before the
 ;; machine is run. Everything else accepts.
+;; *** Milestone 5 Slice ③ adds a THIRD kind-sensitive family, and the header's
+;; claim that there are only two is corrected there rather than here. *** Pass 7
+;; (decision 0029) makes span state a dataflow over the whole graph, so a placed
+;; span node's verdict depends on the SKELETON and not only on the position. The
+;; skeleton is fixed, so the derivation is still a derivation -- it is written
+;; out below rather than observed, and every cell that disagrees is a FINDING.
+;;
+;; What the skeleton does with a span, stated once:
+;;   - NOTHING in it opens a span except a placed span-start or the host of the
+;;     two span POSITIONS, so a placed span-end is normally `unmatched end`.
+;;   - a placed span-start leaves the span open on its own out-edge, which lands
+;;     on the SHARED SINK -- which the host also reaches with no span open. Two
+;;     disagreeing edges is `top`, reported at the sink. `machine-entry` has no
+;;     host, so nothing disagrees there.
+;;   - the three TERMINAL kinds have no out-edges, so they never carry a span to
+;;     the sink and never produce that disagreement.
+;;   - at `span-start-next` the host opens the span, so the placed node is
+;;     reached WITH it active: a pause or callback is §16.2:900, a stop or finish
+;;     is §16.2:907, a second start is re-entry, and a span-end closes it.
+;;   - at `span-end-next` the host's own span-end is unmatched, so every cell
+;;     there carries that one finding and the placed node still sees `none`.
+;;   - and `span-end-next` is the one non-EOF position that STARTS an EOF walk.
+;;     A span end is a parked state (§16.2:909): its data callback's pause parks
+;;     the parser on that node's completion substep, so the walk begins at the
+;;     node's successor -- which at this position is the placed node. A stop
+;;     there is `eof-reachable-stop`, exactly as it is at a real EOF position.
+;;     Slice ③ shipped without this and the matrix is what found it.
+(define terminal-kinds '(stop error finish))
 (define (expected-codes p kind)
-  (cond ((and (eq? kind 'finish) (position-byte? p)) '(non-eof-into-finish))
-        ((and (eq? kind 'stop) (position-eof? p)) '(eof-reachable-stop))
-        (else '())))
+  (let* ((pos (position-name p))
+         (host-opens? (eq? pos 'span-start-next))
+         (host-unmatched? (eq? pos 'span-end-next))
+         (entry? (eq? pos 'machine-entry)))
+    (append
+     (if (and (eq? kind 'finish) (position-byte? p)) '(non-eof-into-finish) '())
+     (if (and (eq? kind 'stop) (or (position-eof? p) host-unmatched?))
+         '(eof-reachable-stop) '())
+     (if host-unmatched? '(invalid-span-state) '())
+     (cond
+       ((eq? kind 'span-end) (if host-opens? '() '(invalid-span-state)))
+       ((eq? kind 'span-start)
+        (append (if host-opens? '(invalid-span-state) '())
+                (if entry? '() '(inconsistent-span-state))))
+       (host-opens?
+        (append (if (memq kind '(pause callback)) '(span-active-at-pause) '())
+                (if (memq kind '(stop finish)) '(span-active-at-exit) '())
+                (if (memq kind terminal-kinds) '() '(inconsistent-span-state))))
+       (else '())))))
 
 (define (cell-machine p kind)
   (let* ((built (position-build p))
          (entry (car built))
          (host (cdr built))
          (t ((cdr (assq kind kind-table)) 't)))
-    (make-machine 'cell entry (list (make-uint-field 'n 8 0 #f)) (list cb-decl) '()
+    (make-machine 'cell entry (list (make-uint-field 'n 8 0 #f)) (list cb-decl sd-decl) (list sp-decl)
                   (list eof-decl rej-decl)
                   (append host (list t) (sinks))
                   'default-eof #f)))
@@ -234,7 +315,7 @@
          (entry (car built))
          (host (cdr built))
          (t ((cdr (assq kind kind-table)) 't)))
-    (make-machine 'cell entry (list (make-uint-field 'n 8 0 #f)) (list cb-decl) '()
+    (make-machine 'cell entry (list (make-uint-field 'n 8 0 #f)) (list cb-decl sd-decl) (list sp-decl)
                   (list eof-decl rej-decl)
                   (append host (list t) (if with-sink? (sinks) '()))
                   'default-eof #f)))
@@ -356,7 +437,7 @@
                   (from-table
                    (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b)))
                               (map car kind-table))))
-              (check-equal "the same ten kinds" from-source from-table))))))))
+              (check-equal "the same twelve kinds" from-source from-table))))))))
 
 
 ;; --- axis A': the POSITION drift row (Milestone 5 Slice ①a task 5) -----------
@@ -425,7 +506,10 @@
     (alternative   sequence-case)
     (mismatch      sequence-mismatch)
     (continuation  pause-continuation)
-    (next          field-action-next)
+    ;; Slice ③ adds two positions under the SAME role: both span kinds have one
+    ;; successor and reuse `next` rather than minting roles that would say the
+    ;; same thing. The mapping's value is a LIST for exactly this case.
+    (next          field-action-next span-start-next span-end-next)
     (error         field-action-error)
     (true          field-branch-true)
     (false         field-branch-false)
@@ -466,20 +550,20 @@
                            (set! missing (cons pos missing))))
                        (cdr entry)))
            role->positions)
-          (check-equal "every mapped position was looked up" checked 15)
+          (check-equal "every mapped position was looked up" checked 17)
           (check-equal "and each one exists" missing '()))))
     (harness-case "the four EOF and entry positions are accounted for outside the role map"
       (lambda ()
         ;; `node-eof-target` and the machine entry carry no `(cons 'role ...)`
         ;; label, so they cannot appear in the derived set. They are named here so
-        ;; that position-table's 19 rows are 15 mapped + these 4, and a row added
+        ;; that position-table's 21 rows are 17 mapped + these 4, and a row added
         ;; with neither a role nor a place here reddens the count below.
         (let ((names (map car position-table)))
           (for-each (lambda (p) (check (symbol->string p) (memq p names)))
                     '(machine-entry dispatch-eof-target sequence-eof-target
                       accumulate-eof-target))
-          (check-equal "position-table is exactly 15 role-carrying + 4 unlabelled"
-                       (length position-table) 19))))))
+          (check-equal "position-table is exactly 17 role-carrying + 4 unlabelled"
+                       (length position-table) 21))))))
 
 
 ;; --- axis B: self-reference --------------------------------------------------
@@ -529,7 +613,24 @@
     ((callback-continue     advance)   . (zero-progress-cycle))
     ((callback-branch       advance)   . (zero-progress-cycle))
     ((callback-pause-continuation advance)
-                                       . (eof-zero-progress-cycle zero-progress-cycle))))
+                                       . (eof-zero-progress-cycle zero-progress-cycle))
+    ;; Slice ③. Both kinds are zero-width, so a self-targeting `next` is a
+    ;; feed-time hang. They DIVIDE on the EOF cycle, and Slice ③ first recorded
+    ;; here that neither is a parked state -- which was true of the span start
+    ;; and false of the span end. A span end's data callback pause parks the
+    ;; parser on that node's completion substep (§16.2:909, `parked-eof-start`),
+    ;; so the walk starts at its successor, which here is itself: an EOF cycle as
+    ;; well as a feed-time one, exactly like the callback pause continuation
+    ;; above. A span start calls nothing and nothing can pause there.
+    ;;
+    ;; The span state at a SELF-loop, derived: `ss` opens and flows to itself,
+    ;; so its own in-state joins `none` (from the host) with `(active sp)` (from
+    ;; itself) -- `top`, reported at `ss`, and `top` does not flow onward, so no
+    ;; re-entry check runs. `se` closes on `none`, which is unmatched, and its
+    ;; out-state stays `none`, so the loop agrees with itself.
+    ((span-start-next       advance)   . (inconsistent-span-state zero-progress-cycle))
+    ((span-end-next         advance)   . (eof-zero-progress-cycle invalid-span-state
+                                          zero-progress-cycle))))
 
 ;; The self machine: the host points the position under test at ITSELF.
 (define (self-machine pos mode)
@@ -579,8 +680,12 @@
       ((callback-pause-continuation)
        (list (dsp (one-case 'cn 'advance) (make-edge 'ee 'reexecute) #f)
              (make-callback-node 'cn 'cb 'ee '((yes ee)) 'cn #f)))
+      ((span-start-next) (list (dsp (one-case 'ss 'advance) (make-edge 'ee 'reexecute) #f)
+                               (make-span-start-node 'ss 'sp 'ss #f)))
+      ((span-end-next) (list (dsp (one-case 'se 'advance) (make-edge 'ee 'reexecute) #f)
+                             (make-span-end-node 'se 'sp 'se #f)))
       (else (assertion-violation 'self-machine "no such position" pos))))
-  (make-machine 'self 'h (list (make-uint-field 'n 8 0 #f)) (list cb-decl) '()
+  (make-machine 'self 'h (list (make-uint-field 'n 8 0 #f)) (list cb-decl sd-decl) (list sp-decl)
                 (list eof-decl rej-decl)
                 (append nodes (sinks)) 'default-eof #f))
 
@@ -604,8 +709,8 @@
                  (set! bad (cons (list pos mode 'want want 'got got) bad)))))
            self-expectations)
           (check-equal "every self row was driven" driven (length self-expectations))
-          (check-equal "and eighteen positions have one, four of them twice"
-                       driven (+ 18 4))
+          (check-equal "and twenty positions have one, four of them twice"
+                       driven (+ 20 4))
           (check-equal "each matches its derivation" bad '()))))))
 
 
@@ -629,7 +734,7 @@
          (built (position-build (cdr p)))
          (entry (car built))
          (host (cdr built)))
-    (make-machine 'dangle entry (list (make-uint-field 'n 8 0 #f)) (list cb-decl) '()
+    (make-machine 'dangle entry (list (make-uint-field 'n 8 0 #f)) (list cb-decl sd-decl) (list sp-decl)
                   (list eof-decl rej-decl)
                   (append host (sinks)) 'default-eof #f)))
 
@@ -645,22 +750,29 @@
              (let ((pos (position-name q)))
                (unless (eq? pos 'machine-entry)
                  (set! driven (+ driven 1))
-                 (let ((want (if (memq pos eof-positions)
-                                 '(invalid-eof-target)
-                                 '(missing-target)))
+                 ;; Slice ③: `span-end-next`'s host is an unmatched span end
+                 ;; whatever the placed node is, and a dangling cell has no
+                 ;; placed node at all -- so that one finding rides along. Its
+                 ;; sibling `span-start-next` does not: the host opens a span
+                 ;; that reaches only the sink, which nothing else reaches with
+                 ;; a different state once the placed node is gone.
+                 (let ((want (cond ((memq pos eof-positions) '(invalid-eof-target))
+                                   ((eq? pos 'span-end-next)
+                                    '(invalid-span-state missing-target))
+                                   (else '(missing-target))))
                        (got (codes-of (dangle pos))))
                    (unless (equal? want got)
                      (set! bad (cons (list pos 'want want 'got got) bad)))))))
            position-table)
-          (check-equal "eighteen dangling cells driven" driven 18)
+          (check-equal "twenty dangling cells driven" driven 20)
           (check-equal "each reports its derived fault" bad '()))))))
 
 ;; --- the absence census ------------------------------------------------------
 ;; Where "impossible by construction" actually lives. The KIND axis has no
 ;; constructor refusals at all -- every target slot is a bare symbol and a node
 ;; constructor cannot see the machine's node list -- but the ABSENCE axis does:
-;; fifteen positions reject #f outright, three accept it (the EOF routes, where
-;; #f means the machine default), and one is CONDITIONAL.
+;; seventeen positions reject #f outright, three accept it (the EOF routes,
+;; where #f means the machine default), and one is CONDITIONAL.
 (define (raises? thunk)
   (call/cc (lambda (k)
              (with-exception-handler (lambda (e) (k #t))
@@ -690,8 +802,13 @@
                           ;; construction refusal, not a verifier diagnostic.
                           (lambda () (make-callback-node 'cn 'cb #f '((yes ee)) 'ee #f))
                           (lambda () (make-callback-node 'cn 'cb 'ee '((yes ee)) #f #f))
-                          (lambda () (make-callback-node 'cn 'cb 'ee '((yes #f)) 'ee #f))))
-          (check-equal "eleven constructor refusals" refused 11)
+                          (lambda () (make-callback-node 'cn 'cb 'ee '((yes #f)) 'ee #f))
+                          ;; Slice ③. §10.6:590 and :594 give each span kind one
+                          ;; successor and no route of its own, so #f there is a
+                          ;; construction refusal on the field-action precedent.
+                          (lambda () (make-span-start-node 'ss 'sp #f #f))
+                          (lambda () (make-span-end-node 'se 'sp #f #f))))
+          (check-equal "thirteen constructor refusals" refused 13)
           ;; The three EOF routes, built rather than refused.
           (for-each (lambda (th) (unless (raises? th) (set! accepted (+ accepted 1))))
                     (list (lambda () (make-byte-dispatch-node 'h
@@ -750,7 +867,7 @@
 (define (producer-nodes v) ((cdr (cdr (assq v verdict-producers)))))
 
 (define (lattice-machine a b)
-  (make-machine 'lat 's0 (list (make-uint-field 'n 8 0 #f)) (list cb-decl) '()
+  (make-machine 'lat 's0 (list (make-uint-field 'n 8 0 #f)) (list cb-decl sd-decl) (list sp-decl)
                 (list eof-decl rej-decl)
                 (append (list (make-byte-dispatch-node 's0
                                 (list (make-byte-case (make-exact-byte-matcher 0)

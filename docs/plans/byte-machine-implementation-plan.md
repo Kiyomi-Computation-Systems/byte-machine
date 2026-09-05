@@ -2124,3 +2124,78 @@ close-out is to be checked against. Slices ③ and ④ do not qualify by default
 changes the result record.
 
 Slice: `docs/plans/milestone-5-slice-2-implementation-plan.md`, Task 9.
+
+### §12.7:770 and §16.2:899/:901 — Milestone 5 Slice ③'s census reconciliation, two readings recorded so they are not re-derived wrongly
+
+Both came out of Slice ③ Task 8, and in both the PLAN was right and the tree was
+wrong. Recorded here rather than only in a commit message because each is a
+reading of a sentence whose other reading is plausible, and a later slice reading
+only the code would take the other one.
+
+**1. `§12.7:770` is unconditional, `§12.7:773` does not reach it, and ONLY HALF
+OF THE ROW IS FIXED.** The table reads "Zero-width machine action or callback
+failure | `boundary` at the current stream offset." The tree instead carried the
+executor loop's own position kind into the error, which reports `byte` whenever
+the node was entered over a REEXECUTE edge. The tempting defence is `§12.7:773` —
+"Error nodes reached through other byte edges retain the author's explicit
+advance/reexecute choice" — and it does not apply: a callback failure is not an
+error node, has no author-chosen edge, and `§12.7`'s table is total over error
+SOURCES with exactly one row for this one. `§12.7:768`'s row is "reexecute
+mismatch or rejected current digit", which a callback failure is neither. (The
+first version of this disposition cited that sentence as `:774`, twice, and
+`:774` is a blank line.)
+
+**What is fixed: the CALLBACK-FAILURE half.** Six runtime sites now read a named
+constant and three emitted arms render the literal, with a fixture per emitted
+arm, each reached over a reexecute edge — because over an advance the correct and
+incorrect answers coincide and the fixture would prove nothing.
+
+**What is NOT fixed: the ZERO-WIDTH MACHINE ACTION half**, and the first version
+of this disposition claimed the whole row and was wrong. Measured 2026-09-05 on a
+machine whose second byte reexecutes into a `field-action` increment on a `u8`
+already holding 255: `parser-feed!` answers `(kind byte offset 1 domain machine)`
+where the row says `boundary`. The mechanism is the same one — `zero-width-jump`
+renders `(loop pos T off pk)` and the interpreted arms carry `pk` likewise — but
+the code is Milestone 4 Slice ②'s, the fixtures and pins that would move are
+Milestone 4's, and a slice about spans is not where that re-baselining belongs.
+
+**Measured, and this is why nothing caught either half for a slice and a half:**
+BOTH LANES report the same wrong value, so the `§12.7:777` cross-lane comparison —
+all that read position kind here — is satisfied throughout. A lane-to-lane
+projection cannot see an agreed error, which is the general lesson and not a fact
+about spans.
+
+**2. `§16.2:899`'s five nouns do not include a span node naming an undeclared
+span, and `§16.2:901`'s "undeclared" does.** `§16.2:899` reads "span re-entry,
+overlap, wrong end, unmatched end, and inconsistent successful exits" — five
+faults about the STATE a span node is reached in, all decidable by decision
+`0029`'s lattice. Naming a declaration that does not exist is not one of them, and
+the lattice provably cannot decide it: the lattice is well defined over any
+symbol, which is what makes it a lattice.
+
+The obligation had an owner in prose and none in code. `make-span-start-node`'s
+comment assigned the cross-reference to "§16.2:899 and pass 7's lattice (decision
+0029)"; pass 7 treats the name opaquely. Measured: a machine whose span nodes
+named an undeclared span verified CLEAN and then raised `assertion-violation` out
+of `normalize-machine` — a verified machine crashing the normalizer, which
+`§9.2:368` forbids in as many words. It is now `pass-declarations`'
+`missing-span-declaration`, beside the callback half, which is where a NAME
+cross-reference belongs.
+
+**Receiver.** Neither reading changes a sentence of the plan. Two things are
+owed, and they have different owners.
+
+**Owed by whoever next touches the field/accumulate emitted arms, and failing
+that by Milestone 5's close-out:** `§12.7:770`'s zero-width-machine-action half,
+with the reproduction above. It is a one-line change per arm in each lane; what
+makes it a separate piece of work is the fixtures — `position-kind-tests.sps`
+would gain a row per producer, and every pin anchored on a `byte` verdict from a
+failed zero-width action has to be re-measured. Deferring it is a choice, and this
+paragraph is what the close-out is to be checked against.
+
+**Owed by Milestone 6's counted consume**, which `§10.6:604` says obeys "normal
+span fragment rules" when enclosed in a span: its arm, if it can fail a callback,
+owes `§12.7:770`'s constant rather than the loop's `pk`, and any declaration it
+names owes a `pass-declarations` arm.
+
+Slice: `docs/plans/milestone-5-slice-3-implementation-plan.md`, Task 8.

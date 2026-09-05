@@ -975,4 +975,122 @@
                     (state-lengths (cbm-base)))
           (check-equal "all eleven" bad '()))))))
 
+;; --- Milestone 5 Slice ③: the span states' encoding ---------------------------
+;;
+;; Decision 0019 item 2, one kind family later, and the group's shape is copied
+;; from Slice ②'s callback separability group because that slice shipped the
+;; converse first: a datum "must enter the *encoding*, not merely be read from
+;; the source machine".
+;;
+;; What makes this family different: a span END lowers to TWO states, so the
+;; state count itself moves, and the golden below is what pins the wire tags --
+;; every pairwise inequality survives a tag change, because a tag change moves
+;; all of them together.
+(define (span-fp-machine span-of-start span-of-end start-next end-next)
+  (make-machine 'spm 'start '()
+    (list (make-callback-declaration 'on-data 'span-data #t '() #f #f))
+    (list (make-span-declaration 'body 'on-data #f #f)
+          (make-span-declaration 'other 'on-data #f #f))
+    (list eof-decl rej-decl)
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 0)
+                                  (make-edge 'op 'advance) #f)
+                  (make-byte-case (make-exact-byte-matcher 1)
+                                  (make-edge 'other-stop 'advance) #f))
+            (make-edge 'reject 'reexecute) #f #f)
+          (make-span-start-node 'op span-of-start start-next #f)
+          (make-span-end-node 'cl span-of-end end-next #f)
+          ;; *** `done` IS A DISPATCH, and it was a stop until Slice ③'s census
+          ;; reconciliation. *** A span end is a parked state (§16.2:909, and
+          ;; `parked-eof-start`'s own note), so a span end continuing straight
+          ;; into a stop is a machine `parser-finish!` can answer `stopped` from
+          ;; after a span-data pause. The base machine has to VERIFY for the
+          ;; fingerprint below to mean anything, so the stop moved behind a
+          ;; dispatch whose EOF route is the error terminal. Six nodes still, and
+          ;; still one internal state.
+          (make-byte-dispatch-node 'done
+            (list (make-byte-case (make-exact-byte-matcher 2)
+                                  (make-edge 'other-stop 'advance) #f))
+            (make-edge 'reject 'reexecute) 'reject #f)
+          (make-stop-node 'other-stop #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+(define (span-fp-base) (span-fp-machine 'body 'body 'cl 'done))
+
+(harness-group "every part of a span state reaches the encoding (0019 item 2)"
+  (lambda ()
+    (harness-case "the base machine verifies and normalizes"
+      (lambda ()
+        ;; Stated first: every inequality below is true for the wrong reason on a
+        ;; machine the verifier rejects.
+        (check-equal "no diagnostics"
+                     (map diagnostic-code
+                          (verification-diagnostics (verify-machine (span-fp-base))))
+                     '())
+        ;; A GOLDEN, RE-MEASURED 2026-09-05 when the tail above changed. It is
+        ;; what pins the three wire tags and the field order; the inequalities
+        ;; below cannot, because a tag change moves every span fingerprint
+        ;; together. The previous value was 346240202880439782, against the base
+        ;; machine whose span end continued straight into a stop -- a machine the
+        ;; verifier now rejects, so the number was pinning a shape this fixture
+        ;; may not build.
+        (check-equal "fingerprint" (s2-fp (span-fp-base)) 8308402030897048213)))
+    (harness-case "each part varied alone moves the fingerprint"
+      (lambda ()
+        ;; A sentinel over the variations DRIVEN and a record of which part
+        ;; failed to move -- a bare boolean would say "something is unencoded"
+        ;; and not which, which is the whole finding.
+        (let ((base (s2-fp (span-fp-base))) (driven 0) (same '()))
+          (for-each
+           (lambda (row)
+             (set! driven (+ driven 1))
+             (when (= base (s2-fp ((cadr row))))
+               (set! same (cons (car row) same))))
+           (list
+            ;; The SPAN SLOT. Both declarations stay in the table and only which
+            ;; one the nodes name moves, so nothing but the state's own slot can
+            ;; account for it -- the isolation Slice ② had to find twice for the
+            ;; callback slot, where adding a declaration moved the trailing
+            ;; declaration section too.
+            (list 'span-slot (lambda () (span-fp-machine 'other 'other 'cl 'done)))
+            (list 'start-next (lambda () (span-fp-machine 'body 'body 'reject 'done)))
+            (list 'end-next (lambda () (span-fp-machine 'body 'body 'cl 'other-stop)))))
+          (check-equal "three variations driven" driven 3)
+          (check-equal "and every one moved the fingerprint" same '()))))
+    (harness-case "a span end lowers to TWO states and a span start to one"
+      (lambda ()
+        ;; Decision 0026 item 2: one internal state per resumable substep, not a
+        ;; fused state, because §14:838 resumes "at the next undelivered
+        ;; substep". The declared block is six nodes, so a seventh state is the
+        ;; span end's own continuation and nothing else.
+        (check-equal "seven states for six nodes"
+                     (vector-length (normal-machine-states (normalize (span-fp-base))))
+                     7)
+        (check-equal "and the seventh is the completion continuation"
+                     (normal-state-kind
+                      (vector-ref (normal-machine-states (normalize (span-fp-base))) 6))
+                     'span-completion)))
+    (harness-case "the debug map stays total over the new family"
+      (lambda ()
+        ;; §17:963, and §13:820 requires the public parser state to name the
+        ;; SOURCE span node rather than a generated internal continuation. Slice
+        ;; ② made an incomplete map an index error in the generated lane, not a
+        ;; missing debug string.
+        (let* ((n (normalize (span-fp-base)))
+               (m (normal-machine-debug-map n))
+               (missing '()))
+          (let loop ((i 0))
+            (when (< i (vector-length (normal-machine-states n)))
+              (unless (assv i m) (set! missing (cons i missing)))
+              (loop (+ i 1))))
+          (check-equal "every state id has a source name" missing '())
+          (check-equal "and the continuation answers with its span-end node"
+                       (cdr (assv 6 m)) 'cl))))
+    (harness-case "the span states have the declared layout length"
+      (lambda ()
+        (let ((bad '()))
+          (for-each (lambda (len) (unless (= len 11) (set! bad (cons len bad))))
+                    (state-lengths (span-fp-base)))
+          (check-equal "all eleven" bad '()))))))
+
 (harness-finish)

@@ -1030,6 +1030,53 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-callback-tests.sps"
   TIMEOUT 120)
 
+# --- Milestone 5 Slice ③ task 7: Slice ④'s liveness probe, measured early ---
+# It tests an INSTRUMENT, not the parser: design §9's retention oracle rests on
+# a weak reference reading `bwp` once the test drops its own, and §9 says in its
+# own words that the measurement behind that "was taken in a throwaway scratch
+# driver and does not count". Both lanes, because AOT compilation is where a
+# probe like this is most likely to stop discriminating -- and learning that
+# while ③ is in flight is much cheaper than learning it inside ④.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.liveness-probe.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/liveness-probe-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${CMAKE_SOURCE_DIR}/test/common/liveness-probe-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.liveness-probe.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/liveness-probe-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${CMAKE_SOURCE_DIR}/test/common/liveness-probe-tests.sps"
+  TIMEOUT 120)
+
+# --- Milestone 5 Slice ③: the two span kinds --------------------------------
+# What is compared here is not a parser result but the FRAGMENT TRACE: two lanes
+# can agree on every tuple while handing the application different bytes, because
+# the range a data callback receives is chosen by §14:832, §14:834 and §14:835
+# and appears in no result. Six rules, one group each, plus the substep pause
+# §14:838 resumes into and the reset §12.5:739 requires.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.span.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-span-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/differential-span-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.span.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-span-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/differential-span-tests.sps"
+  TIMEOUT 120)
+
 byte_machine_add_scheme_lane(
   NAME byte-machine.example.one-byte.chez.source
   BACKEND chez

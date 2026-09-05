@@ -82,7 +82,13 @@
       byte-machine-callback-step/v1 byte-machine-make-callback-error/v1
       ;; And `parser-state-name`, the sixth §9.3 accessor: ①b deferred it whole
       ;; and ② carries the table it needs as ABI payload member 2.
-      parser-state-name))
+      parser-state-name
+      ;; Slice ③'s three, on the same rule: the span arms CALL all three from
+      ;; emitted code. The boundary flush is not among them -- §19.3:1024 makes
+      ;; it runtime work and it runs at the `parser-feed!` seam, where no emitted
+      ;; text can reach it.
+      byte-machine-span-open/v1 byte-machine-span-fragment-step/v1
+      byte-machine-span-close/v1))
   ;; Every identifier the emitted body binds, so a caller-chosen output binding
   ;; cannot collide with one. `fieldv` is emitted `exec`'s seventh parameter,
   ;; reserved empty by Milestone 4 Slice ①a and filled by its Slice ② (decision
@@ -269,7 +275,13 @@
                                           (normal-error-reason s) index-of) "\n"
      "               (byte-machine-make-feed-outcome/v1 (quote need-input) pos #f " id " off))\n"))
 
-  (define (render-state-arm s names index-of fields)
+  ;; `spans` is threaded in for the same reason `fields` above it is, and for one
+  ;; more: a lowered span state carries the SPAN slot (§17:962), but the arm it
+  ;; renders indexes `cbv`. The normalizer publishes the crossing as
+  ;; `normal-machine-span-decls` -- (name data-slot complete-slot) in span-slot
+  ;; order -- rather than leaving the emitter to re-walk the declarations, which
+  ;; would put a second copy of that resolution in the lane being checked.
+  (define (render-state-arm s names index-of fields spans)
     (let ((id (number->string (normal-state-id s)))
           ;; Total by construction: the debug map and the internal state list
           ;; are built from the same prefix-block id alists, so every id in
@@ -373,8 +385,14 @@
             "         (if " (render-predicate (normal-field-selector s) a b) "\n"
             "             " (zero-width-jump (car tg)) "\n"
             "             " (zero-width-jump (cdr tg)) ")))\n")))
-        ;; *** The tenth kind, and the only emitted arm that calls APPLICATION
-        ;; code. *** The invocation and §13:803-812's outcome vocabulary are the
+        ;; *** The tenth kind, and the FIRST emitted arm that calls APPLICATION
+        ;; code -- it was "the only" until Slice ③, and this file's own rule
+        ;; twelve lines below the `else` is why that had to be corrected rather
+        ;; than left: a comment enumerating a closed set is a census. Three arms
+        ;; call out now. The span-completion arm renders this very procedure, and
+        ;; the span-end arm renders `byte-machine-span-fragment-step/v1`, which
+        ;; applies the caller's data callback. *** The invocation and
+        ;; §13:803-812's outcome vocabulary are the
         ;; RUNTIME's -- `byte-machine-callback-step/v1`, the same procedure
         ;; `parser-feed-op!` calls -- so this arm renders only the literals the
         ;; node carries and the routing they select. A lane-local classifier
@@ -388,6 +406,14 @@
         ;;
         ;; Zero-width (§11.4:652), so the `goto` arm is `zero-width-jump`'s rule
         ;; with a computed target -- same `pos`, same `off`, same `pk`.
+        ;;
+        ;; *** The error arm renders the LITERAL `boundary`, not `pk`, and the
+        ;; emitted text is where that difference is visible. *** §12.7:770 puts a
+        ;; callback failure on the `boundary at the current stream offset` row
+        ;; unconditionally; rendering `pk` gave `byte` whenever the invoking node
+        ;; was reached over a reexecute edge, in BOTH lanes, so the differential
+        ;; agreed on the wrong value. The runtime's own arms carry the same
+        ;; correction under the name `callback-failure-position`.
         ((callback)
          (let ((tg (normal-field-targets s)))
            (string-append
@@ -408,7 +434,70 @@
             (num (cadr tg)) " off))\n"
             "           (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
             "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
-            (nm (normal-state-id s)) ") " id " off pk) " id " off)))))\n")))
+            (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off)))))\n")))
+        ;; --- Slice ③'s three span arms -------------------------------------
+        ;; All three are ZERO-WIDTH (§10.6:590) and end in `zero-width-jump`'s
+        ;; rule -- same `pos`, same `off`, same `pk` -- literally so where the
+        ;; target is static and inline where it comes from `(cadr o)`, exactly
+        ;; as the callback arm above does.
+        ;;
+        ;; None of them binds a local beyond `o`, and that is deliberate: the
+        ;; mark lives in the parser and `byte-machine-span-fragment-step/v1`
+        ;; reads it, so no rendered `let` introduces a name `reserved-member-3`
+        ;; would have to grow to cover.
+        ((span-start)
+         ;; §14:831's "records the current cursor" -- `pos`, the slice index.
+         (let ((d (list-ref spans (normal-field-selector s))))
+           (string-append
+            "      ((" id ")\n"
+            "       (begin (byte-machine-span-open/v1 psr (quote "
+            (symbol->string (car d)) ") pos " (num (cadr d)) ")\n"
+            "              " (zero-width-jump (normal-field-targets s)) "))\n")))
+        ;; The FIRST of §14:841's two substeps: the remaining fragment. Its
+        ;; continuation is the substep state -- `arguments`, which no other span
+        ;; kind uses -- and never the node's own successor, because §14:838
+        ;; resumes "at the next undelivered substep".
+        ((span-end)
+         (let ((d (list-ref spans (normal-field-selector s)))
+               (cid (num (normal-field-arguments s))))
+           (string-append
+            "      ((" id ")\n"
+            "       (let ((o (byte-machine-span-fragment-step/v1 psr " id
+            " off (vector-ref cbv " (num (cadr d)) ") bv pos " cid ")))\n"
+            "         (case (car o)\n"
+            "           ((goto) (loop pos (cadr o) off pk))\n"
+            "           ((pause) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
+            cid " off))\n"
+            "           (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
+            "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
+            (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off)))))\n")))
+        ;; The SECOND substep. §14:842 puts the close BEFORE the invocation, so
+        ;; it is the first thing rendered here in both shapes -- a completion
+        ;; callback that asks `parser-active-span` must see #f.
+        ((span-completion)
+         (let* ((d (list-ref spans (normal-field-selector s)))
+                (c (caddr d))
+                (tgt (num (normal-field-targets s))))
+           (if (not c)
+               ;; §10.4:516's optional completion callback, absent: the substep
+               ;; still exists -- it is what makes the span inactive -- and is
+               ;; simply not an invocation.
+               (string-append
+                "      ((" id ")\n"
+                "       (begin (byte-machine-span-close/v1 psr)\n"
+                "              " (zero-width-jump (normal-field-targets s)) "))\n")
+               (string-append
+                "      ((" id ")\n"
+                "       (begin (byte-machine-span-close/v1 psr)\n"
+                "         (let ((o (byte-machine-callback-step/v1 psr " id
+                " off (vector-ref cbv " (num c) ") (quote ()) " tgt " " tgt ")))\n"
+                "           (case (car o)\n"
+                "             ((goto) (loop pos (cadr o) off pk))\n"
+                "             ((pause) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
+                tgt " off))\n"
+                "             (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
+                "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
+                (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off))))))\n"))))
         ((dispatch)
          (let ((fb (normal-dispatch-fallback s)))
            (string-append
@@ -420,7 +509,8 @@
         ;; Unreachable today -- this case already covers every kind
         ;; normal-state-kind can produce: dispatch, stop, error, finish, pause,
         ;; field-action, field-branch (Milestone 4 Slice ②), accumulate
-        ;; (Milestone 4 Slice ③) and callback (Milestone 5 Slice ②).
+        ;; (Milestone 4 Slice ③), callback (Milestone 5 Slice ②) and span-start,
+        ;; span-end and span-completion (Milestone 5 Slice ③) -- TWELVE.
         ;; *** The parenthetical here listed only the first five until
         ;; 2026-09-03, having survived both slices that widened the set --
         ;; including the one eleven lines above this comment. A comment that
@@ -668,7 +758,8 @@
           (if (>= i (vector-length states)) acc
               (loop (+ i 1) (string-append acc (render-state-arm (vector-ref states i)
                                                                  names index-of
-                                                                 (normal-machine-fields normal))))))
+                                                                 (normal-machine-fields normal)
+                                                                 (normal-machine-span-decls normal))))))
         "      (else (assertion-violation (quote exec) \"unknown state\" st)))))\n"
         "  (define " bstr "\n"
         "    (byte-machine-make-compiled-machine 5 " (number->string fp) " "

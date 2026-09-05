@@ -172,10 +172,12 @@ a span's data callback is a callback invocation, and `§16.2:900` has no meaning
 nodes exist.
 
 **Why retention is its own slice rather than a task inside ③.** The criterion at `§25:1591`
-is *vacuously true today*: the parser is a ten-slot vector — measured, `tag variant executor
-entry current offset lifecycle stored-error field-values field-decls`
-(`src/byte-machine/runtime.sls:183-184`) — in which no slot can hold a bytevector, so a retention test written now passes without the span
-path ever running. That is the exact failure mode `AGENTS.md` calls a vacuous test, and the
+is *vacuously true today*: the parser was a ten-slot vector when this was written — `tag
+variant executor entry current offset lifecycle stored-error field-values field-decls`, measured
+at the Gate 0 branch point — in which no slot could hold a bytevector, so a retention test
+written then passed without the span path ever running. **Re-measured at Slice ③: sixteen slots,
+three of which CAN hold one, and the conclusion still stands** — see §9's corrected paragraph,
+which carries the derivation rather than repeating the count. That is the exact failure mode `AGENTS.md` calls a vacuous test, and the
 only defence is a **negative control** — a deliberately retaining fixture the oracle must
 *fail* on. A negative control is a designed artifact, not a bolt-on, and folding ④ into ③ is
 where it gets bolted on. The owner may still choose to fold; the cost is stated here so the
@@ -888,10 +890,14 @@ and saying so is how the milestone avoids each believing the other covered a leg
 - `§16.3:925`'s pass 7, implementing §4.7's lattice, covering `§16.2:899`, `:900` and `:907`'s
   span half. `§16.2:900` lands here and can land nowhere else: it needs both the span dataflow
   and Slice ②'s callback node.
-- **Reset clears span state.** `§12.5:739`. Note `runtime.sls:532-535`'s comment that reset
-  clears the pause continuation only as a side effect of `current := entry` — reasoning that
-  stops holding the moment resume state is no longer a single node name, which is exactly what
-  this slice makes true.
+- **Reset clears span state.** `§12.5:739`. The citation here read `runtime.sls:532-535`, which
+  by Slice ②'s head was inside the callback classifier; the comment meant is the one above
+  `parser-reset!` — find it by that name, not by a line. Its observation still holds and is
+  still the right one: reset has no separate saved-continuation field, so `current := entry`
+  clears the pause continuation as a side effect. **This slice is what stops that reasoning
+  being sufficient**, because span state is not restored by `current := entry` — and the
+  comment itself said, through Slice ②, that "span and poisoned/busy state still do not exist",
+  which was false of `poisoned`, of `busy`, and of the active-span slot ①b shipped.
 - `pass-zero-progress`'s reachability gate, per §4.5.
 
 **Oracle.**
@@ -929,20 +935,47 @@ reset legs of `:1589` that no earlier slice naturally reaches, and — pending �
 appended disposition.
 
 **Why this cannot be folded in without redesigning it.** `§25:1591` is **vacuously true
-today**: measured, the parser is a ten-slot vector (`runtime.sls:183-184`) with no slot that can
-hold a bytevector. A retention test written against the current tree passes whether or not the
-span path runs. The defence is a **negative control**: a deliberately retaining fixture the
-oracle must *fail* on, designed alongside the oracle rather than added after it goes green.
+today**, and the measurement behind that sentence has been re-taken twice. It first read "the
+parser is a ten-slot vector with no slot that can hold a bytevector". The parser is now
+**SIXTEEN slots** — ①b added callbacks (10), user-context (11) and active-span (12); ② added the
+state-name table (13); ③ added the span mark (14) and the span data-callback slot (15) — and
+**three of them can hold a bytevector**: `user-context`, any callback closure in slot 10, and
+`parser-error-detail` inside the stored error.
+
+The CONCLUSION survives, and it survives for a reason worth stating rather than by luck. All
+three are exactly `§13:799`'s exempt carriers, which is what layer 3 below turns on. The
+non-exempt surface still cannot hold one: field values are integers, the active span is a
+NAME, `current` is a node name or a state id, the state-name table is symbols — and Slice ③'s
+two slots are both integers, the mark being a **slice offset** re-anchored at every feed
+boundary (`§14:833`) precisely so that nothing has to be retained to interpret it. So the
+sentence was false as written and is corrected here; what it concluded is not.
+
+A retention test written against this tree still passes whether or not the span path runs. The
+defence is a **negative control**: a deliberately retaining fixture the oracle must *fail* on,
+designed alongside the oracle rather than added after it goes green.
 
 **The retention oracle, in three layers.**
 
 1. **Liveness.** A weak reference to a freshly allocated fed bytevector is `bwp` after the test
    drops its own strong reference and collects. Research measured under Chez 10.4.1 that
    `weak-cons`, `bwp-object?`, `collect` and `make-guardian` are all bound and that the probe
-   discriminates. **That measurement was taken in a throwaway scratch driver and does not
-   count.** It must be re-measured through the real harness and in the AOT lane before it enters
-   an implementation plan — this repository has a standing rule about exactly this
-   (`AGENTS.md`, and the "scratch-fixture measurements" finding).
+   discriminates. That measurement was taken in a throwaway scratch driver and did not count; it
+   has since been **re-measured through the real harness, in both lanes** — Slice ③ task 7,
+   `test/common/liveness-probe-tests.sps`, registered as
+   `byte-machine.unit.liveness-probe.chez.{source,aot}`. **The probe discriminates in both:** a
+   dropped bytevector reads `bwp` and a retained one does not, repeatably rather than only on a
+   process's first collection, and a guardian agrees with the weak pair on both arms. Slice ④
+   may build on it.
+
+   Three things that lane found, and Slice ④ inherits all three. **The allocation must happen
+   inside a procedure that returns only the weak pair** — a `let`-bound temporary in the same
+   frame as the `collect` call can still be live at the collection point, which a scratch driver
+   would not have surfaced. **The strong reference the negative control holds must live at
+   module level and be cleared by assignment**, because a `harness-case` thunk closing over the
+   bytevector keeps it alive whatever the runtime does, and the case then reports "retained"
+   about its own closure. And **the lane is not mutation-pinned, because it imports no
+   `byte-machine` source**: its control is the two-directional assertion, not a mutant — a probe
+   answering a constant fails one arm or the other.
 2. **The negative control**, above — without which layer 1 asserts nothing.
 3. **The exemption boundary.** `§13:799` names **three** application-owned carriers outside the
    guarantee: callback closures, user context, and **callback error detail**. Once §4.1 gives a
@@ -1008,94 +1041,191 @@ oracle must *fail* on, designed alongside the oracle rather than added after it 
 
 ## Appendix — per-kind site census
 
-> **REWRITTEN 2026-09-05 by Milestone 5 Slice ② Task 9, and this is a CORRECTION
-> IN PLACE, not a dated note: an appendix a later slice works as a checklist is an
-> INSTRUCTION.** The table shipped with this design was measured at `db86ab6` by
-> two `rg` patterns, and Slice ②'s plan found that **the stated recogniser could
-> not find two rows the table itself listed** — `runtime.sls`'s two sites dispatch
-> on the *wire kind symbol*, which neither pattern sees. Eight rows' line numbers
-> had also moved under Slices ①a and ①b, and five rows were missing. Slice ②
-> re-measured the whole thing and added the tenth kind's own sites; what follows
-> is measured at Slice ②'s head, with the recogniser corrected so a later slice's
-> reconciliation can succeed.
+> **REWRITTEN A SECOND TIME, 2026-09-05, by Milestone 5 Slice ③ Task 8, and this
+> is again a CORRECTION IN PLACE: an appendix a later slice works as a checklist
+> is an INSTRUCTION.** Slice ② rewrote the table and fixed its recognisers;
+> Slice ③ ran it as a checklist and found the table wanting — and then this
+> paragraph got the diagnosis wrong, which the slice's own final review caught.
+> Corrected, and the corrected version is worse for the checklist than the first
+> one was for the table.
+>
+> **(1) Every line number in it had moved** — all fifteen `verify.sls` rows, all
+> five `interpret.sls` rows, all five `normal-ir.sls` rows, both `runtime.sls`
+> rows (which were also off by one *at the head they were measured on*), and four
+> of the `compile.sls` rows.
+>
+> **(2) Rows were missing, but NOT for the two defects.** The table did lack rows
+> for sites no recogniser finds — `normal-ir.sls`'s internal-state builder and its
+> debug-map walk, both extended by Slice ③ blind. But **recogniser 1 finds both
+> defect sites**: `pass-declarations`' filter is `(if (callback-node? n) …)` and
+> the `§16.2:909` membership is a disjunction of `-node?` predicates. And the
+> table **already carried a row** for the `§16.2:909` gate. So the recognisers
+> worked and one of the two rows existed; **what failed was the checklist pass**,
+> which walked the table and did not ask, of the row in front of it, whether a
+> span end can be parked on.
+>
+> **(3) One row's stated obligation was not met** — the member-3 drift fixture,
+> which rendered SEVEN of `render-state-arm`'s twelve arms. The row said what was
+> owed; nobody checked it. It is twelve of twelve now.
+>
+> The lesson the table can carry is (2)'s: **a row is not a check.** Reading a row
+> tells you a site exists; only asking the row's question of the new kind tells
+> you whether it owes an arm.
+>
+> **So the table no longer carries line numbers.** They are the part that goes
+> stale silently, nothing checks them, and `docs/decisions/README.md` already
+> says the repair is "replacing the line number with a quoted sentence or an item
+> name, which cannot go stale again". Every row below names a CONSTRUCT that `rg`
+> finds by name. A row whose name no longer resolves is a finding about the
+> table; a row that resolves is where the reader looks.
 
-**Three recognisers, not two**, over `src/byte-machine/`:
+**Three recognisers, and they must be run over `test/` as well as `src/`:**
 
 ```bash
-rg -n -- "-node\?" src/byte-machine/                    # per-kind predicate dispatch
-rg -n "normal-state-kind" src/byte-machine/              # normalized-kind dispatch
-rg -n "\(op 'kind" src/byte-machine/                     # WIRE-kind dispatch -- the missing one
+rg -n -- "-node\?" src/byte-machine/ test/common/        # per-kind predicate dispatch
+rg -n "normal-state-kind" src/byte-machine/ test/common/  # normalized-kind dispatch
+rg -n "\(op 'kind" src/byte-machine/ test/common/         # WIRE-kind dispatch
 ```
 
-**Export and import lists ARE rows**, and the shipped rule dropping them was
-wrong. Slice ①b's own title is "…and five missing exports": an unexported
-accessor is an unbound identifier at the *importing library's* import, not at its
-call site, so the failure names the wrong file. `graph.sls` is nothing but two
-such lists and had no row at all.
+Slice ② added the third recogniser and scoped all three to `src/`; the same
+`src/`-only mistake it had just corrected for the *table*.
 
-**`test/` holds per-kind censuses too**, and the shipped table's `src/`-only
-scope is why Slice ② found one late. They are listed below the source rows.
+**Recogniser 3 as printed finds nothing under `test/`, and that is a finding about
+the recogniser rather than about `test/`.** `test/common/runtime-tests.sps` holds
+six stub executor tables answering the same wire-kind message, but written from
+the CALLEE's side — `((kind) (case (car args) …))` inside the op closure — not the
+caller's. So a fourth form is needed, and `rg -n "\(\(kind\)" test/common/` finds
+exactly those six. The first version of this Appendix said recogniser 3 matched
+them; run as printed it returns zero hits anywhere under `test/`.
 
-Slice ③ works this table as a checklist, one row per site, each row stating the
-new arm **or** that the site is deliberately not extended and why. This table is
-the instrument that would have caught all three of Milestone 4 Slice ③'s defects
-— and the `compile.sls` reached-declaration row is literally where one of them
-was.
+**Three rules the table itself carries, because no recogniser expresses them:**
 
-| File | Site | Construct |
+1. **Export and import lists ARE rows.** An unexported accessor is an unbound
+   identifier at the *importing* library's import, so the failure names the wrong
+   file. Every library gets a row.
+2. **Some census sites are invisible to all three recognisers.** They dispatch on
+   something else — a block tag, a normalized state's own field, a vector slot
+   number. `normal-ir.sls`'s internal-state builder and its debug-map walk are
+   both of these, and both were extended by Slice ③ with no row to work from.
+3. **A row may be DERIVED**, meaning a new kind owes it nothing because it reads
+   a census listed elsewhere. `make-machine`'s `(for-all node? nodes)` gate is the
+   example: extending `node?` extends it. Saying so is the point — it tells a
+   later slice not to look for an arm.
+
+Slice ③ shipped **twelve** of `§10.6`'s thirteen node kinds and **twelve**
+normalized state kinds (the same twelve less `sequence`, which lowers to ordinary
+dispatch states, plus `span-completion`, which has no source node). Wire tags
+**0-13 are all taken**; the next kind's is **14**.
+
+### `src/byte-machine/private/ir.sls`
+
+| Construct | What a new kind owes it |
+|---|---|
+| the library `export` list | the kind's constructor, predicate and every accessor |
+| `node?` | one disjunct — **twelve** now, and a census test reads the count |
+| `node-name` | one arm, above a **raising `else`**; nothing derives it from `node?` |
+| the per-kind tag/constructor/predicate/accessor blocks | one block — **TWELVE**, not the "ten sites" the shipped table said |
+| `make-machine`'s `(for-all node? nodes)` | **DERIVED** from `node?`. No arm owed. |
+| `matcher?`, `matcher-bytes`, the edge-`mode` set, `field-operations`, `field-predicates`, `accumulate-bases`, `make-callback-declaration`'s kind set | **NOT node-kind censuses.** Listed so they are not counted as ones: each is a closed set over a different vocabulary, and no node kind reaches any of them. |
+
+### `src/byte-machine/graph.sls`
+
+| Construct | What a new kind owes it |
+|---|---|
+| the `export` list and the `(only (byte-machine private ir) …)` import | the CONSTRUCTOR only. The façade carries no predicate and no accessor, deliberately: `§9.1:280-316`'s normative list has none. |
+
+### `src/byte-machine/verify.sls`
+
+| Construct | What a new kind owes it |
+|---|---|
+| `zero-width-edges` | the kind's zero-width out-edges, each with a ROLE symbol — the ONE census the next two are views of |
+| `node-out-edges` | a view; check it does not need widening |
+| `node-eof-target` | an arm iff the kind declares an EOF route |
+| `pass-names`' error-reference filter | an arm iff the kind names an error declaration |
+| `pass-field-operands` | an arm iff the kind carries a field operand |
+| `pass-overlap` | an arm iff the kind has byte cases |
+| `pass-sequence-ambiguity` | an arm iff the kind has a prefix trie |
+| `reexec-targets` | an arm iff the kind can be entered by a reexecute edge |
+| the zero-progress REPORT set | **moves with `reexec-targets`, never after it** |
+| `classify` | an arm — this is the EOF walk's flow-through |
+| `parked-eof-start` | an arm iff the kind's resume point differs from its own name. **A span end needs none: it is flow-through, so `classify` already joins over its `next`.** |
+| `pass-eof-execution`'s **parked-set membership** | **A SEPARATE SITE from `parked-eof-start`, and the table listed only the other one.** A kind belongs here iff a parser can be parked on it. Slice ③ shipped without the span end and the machine it let through answered `stopped` from `parser-finish!`. |
+| `§16.2:908`'s zero-hop entry clause and per-edge target | check both |
+| `pass-declarations`' **per-kind node walk** | **THE ROW THE TABLE LACKED, and the second Slice ③ hole.** Any kind that names a DECLARATION — a callback, a span, a field — needs an arm here, because a constructor cannot see the machine's tables. |
+| `callback-node-diagnostics` | `§16.2:901`'s node half for callbacks |
+| `span-node-declaration-diagnostics` | its span half |
+| pass 7: `eof-step`, `parked?`, `span-flow`, `span-transfer`, `span-node-diagnostics` | **`parked?` is a SECOND hand-written copy of the parked-set disjunction.** A kind added to one and not the other makes the two disagree. |
+| `byte-reached`'s kind list | an arm iff the kind can carry byte-reachability onward |
+| `eof-verdict-tiers` | **NOT a node-kind census** — a verdict-symbol table. One research pass counted it as one. |
+
+### `src/byte-machine/interpret.sls`
+
+| Construct | What a new kind owes it |
+|---|---|
+| the `export`/`import` lists | nothing today: the import is bare, not `(only …)` |
+| `kind` | an arm |
+| `completion-state` / `completion?` | **the SHAPE census for what `current` may be**, and `§18:972`-load-bearing. A mid-sequence compound has a byte-list cdr; a span end's substep has a symbol cdr. A third shape must be told apart from both. |
+| `dispatch`'s sequence special case | check |
+| `eof-target-of` | an arm iff the kind declares an EOF route |
+| the field-action special case | check |
+| the executor-op **message table** | one message per kind that needs data from the source IR |
+
+### `src/byte-machine/private/normal-ir.sls`
+
+| Construct | What a new kind owes it |
+|---|---|
+| the `export` list | any new accessor the emitter reads |
+| the `(only (byte-machine private ir) …)` import | the kind's predicate and accessors |
+| the normal-MACHINE vector's slot layout | **APPEND-ONLY** — `compile.sls` reads slot 3 by index. Three slices have extended it. |
+| the normal-STATE vector's slot layout and its accessors | where a kind either fits the existing slots or forces a widening |
+| `normal-state-kind` | the kind symbol |
+| `internal-blocks` / `prefix-blocks` / `span-end-blocks` / `completion-id-of` / `block-of` | a family iff the kind lowers to internal states |
+| the slot resolvers (`callback-slot-of`, `callback-decl-of`, `callback-default-of`, `span-slot-of`, and `normalize-machine`'s `cb-slot`) | one per declaration the kind names |
+| `lower-machine`'s declared `cond` | an arm, above a **raising `else`** |
+| the **internal-state builder** (phase two) | **INVISIBLE TO ALL THREE RECOGNISERS** — it dispatches on a block tag |
+| the **debug-map walk** | **INVISIBLE TO ALL THREE**, and its totality is load-bearing across the ABI seam: an incomplete map is an INDEX ERROR in the generated lane, not a missing string |
+| `encode-normal`'s state arms | a wire tag. **0-13 taken; the next is 14.** |
+
+### `src/byte-machine/compile.sls`
+
+| Construct | What a new kind owes it |
+|---|---|
+| the `export` list and the `(only …)` import | check |
+| `reserved-member-2` | **SET EQUALITY with `(byte-machine runtime)`'s exports** — it moves in the same commit the exports do, in both directions |
+| `reserved-member-3` | every identifier the emitted body binds. A new emitted local moves this list, both of its mutation `FIND`s, and `member3-drift-tests.sps`'s twice-asserted nine. |
+| `render-state-arm`'s `case` | an arm, above a raising `else` whose comment enumerates the covered kinds — **that comment is a census and has drifted twice** |
+| the error reason/code selection on `normal-state-kind` | check |
+| the reached-declaration walk, `'(dispatch accumulate)` | **the Milestone 4 Slice ③ defect site** |
+| `snames` (ABI payload member 2) | total over every normalized state, with a raising miss — where an unmapped internal state aborts emission |
+| the callback arm's "calls APPLICATION code" note | **THREE arms do now.** It said "the only" through Slice ③. |
+
+### `src/byte-machine/runtime.sls`
+
+| Construct | What a new kind owes it |
+|---|---|
+| the `export` list | the SET-EQUALITY partner of `reserved-member-2` |
+| the feed **wire-kind** `case` | an arm — invisible to recognisers 1 and 2 |
+| the finish **wire-kind** `case` | an arm, and **check the two agree** |
+| `callback-failure-position` | `§12.7:770` as a constant, read by every arm that builds a callback-domain error |
+
+### Test-side censuses, none of which is derived from anything
+
+| File | Construct | What a new kind owes it |
 |---|---|---|
-| `private/ir.sls` | `:10-66` | the library export list — a kind's predicate and accessors must join it |
-| `private/ir.sls` | `:545-549` | `node?` — the closed-set disjunct list; a census test reads it |
-| `private/ir.sls` | `:550-561` | `node-name` — one arm per kind, **raising `else`**, and nothing derives it |
-| `private/ir.sls` | ten sites | the per-kind predicate/accessor blocks themselves |
-| `graph.sls` | export + import lists | the public construction façade |
-| `verify.sls` | `:97` | `zero-width-edges` — the ONE census the next two are views of |
-| `verify.sls` | `:143` | `node-out-edges` |
-| `verify.sls` | `:181` | `node-eof-target` |
-| `verify.sls` | `:252` | pass-names error-reference filter |
-| `verify.sls` | `:401` | `pass-field-operands` |
-| `verify.sls` | `:454` | `pass-overlap` |
-| `verify.sls` | `:515` | `pass-sequence-ambiguity` |
-| `verify.sls` | `:530` | `reexec-targets` |
-| `verify.sls` | `:652` | zero-progress REPORT set — moves with `reexec-targets`, never after it |
-| `verify.sls` | `:788` | `classify` |
-| `verify.sls` | `:852` | `parked-eof-start` — **new in Slice ②**; where "a state an execution can be parked on" and "the name the EOF walk starts at" come apart |
-| `verify.sls` | `:907` | `§16.2:908` zero-hop entry clause |
-| `verify.sls` | `:918` | `§16.2:908` per-edge target |
-| `verify.sls` | `:967` | `§16.2:909` parked-set gate |
-| `verify.sls` | `:1213` | `callback-node-diagnostics` — §16.2:901's node half |
-| `interpret.sls` | `:84-94` | kind dispatch |
-| `interpret.sls` | `:99` | sequence-dispatch special case |
-| `interpret.sls` | `:157-162` | `eof-target-of` |
-| `interpret.sls` | `:341` | field-action special case |
-| `interpret.sls` | `:298-378` | **the executor-op message table** — a kind needing data from the source IR adds a message here |
-| `private/normal-ir.sls` | `:18-47` | the `(only …)` import list from `private ir` |
-| `private/normal-ir.sls` | `:133` | `normal-state-kind` |
-| `private/normal-ir.sls` | `:366-380` | `prefix-blocks` / `block-of` — **raises on a miss** |
-| `private/normal-ir.sls` | `:410-520` | `lower-machine` cond, with a raising `else` |
-| `private/normal-ir.sls` | `:625-700` | `encode-normal` state arms — **wire tags 0-7 and 10 taken; 8 and 9 are the trailing SECTION tags, so the next kind's is 11** |
-| `compile.sls` | `:47-100` | `reserved-member-2` and `reserved-member-3` — a new runtime export or emitted local joins them, and both have drift guards |
-| `compile.sls` | `:272-435` | `render-state-arm` case |
-| `compile.sls` | `:465` | error reason/code selection on `normal-state-kind` |
-| `compile.sls` | `:497` | reached-declaration walk, `'(dispatch accumulate)` — **the Milestone 4 Slice ③ defect site** |
-| `runtime.sls` | `:665` | feed **wire-kind** case — invisible to the two older recognisers |
-| `runtime.sls` | `:875` | finish **wire-kind** case — likewise |
-
-Test-side censuses, none of which is derived from anything:
-
-| File | Site | Construct |
-|---|---|---|
-| `test/common/kind-position-census-tests.sps` | `kind-table`, `kind-predicates` | the matrix's own kind axis; `S2` derives its key set from `ir.sls` and reddens first |
-| `test/common/kind-position-census-tests.sps` | `position-table`, `role->positions` | the position axis and the edge-role map — **hand-written, and no assertion can say the rows are the right rows** |
-| `test/common/verify-tests.sps` | `t2-kinds` / `t2-hop` | §16.2:908's per-kind byte-reachability rows — **found late by Slice ②'s reconciliation, because the shipped table's scope was `src/` only** |
-| `test/common/diagnostic-census-tests.sps` | `pinned-sites`, `code-fixtures` | one row and one fixture per diagnostic code |
-| `test/common/member3-drift-tests.sps` | the fixture machine | must render every emitted arm, or a `reserved-member-3` entry is declared and never exercised |
-
-**Not a node-kind filter, and listed to stop it being counted as one:**
-`verify.sls`'s `eof-verdict-tiers` is a verdict-symbol table. It is a real
-Milestone 5 concern — the new kinds change which verdicts are producible — but it
-is a different concern, and one research pass did count it as an extra per-kind
-site.
+| `kind-position-census-tests.sps` | `kind-table`, `kind-predicates` | the kind axis; `S2` derives its key set from `ir.sls` and reddens first |
+| | `position-table`, `role->positions` | the position axis and the edge-role map — **hand-written, and no assertion can say the rows are the right rows** |
+| | `expected-codes`, `self-expectations`, the dangling-cell derivation, the absence census | **four more hand-written tables inside the same file**, each needing the new kind's derived verdict |
+| `verify-tests.sps` | `t2-kinds` / `t2-hop` | `§16.2:908`'s per-kind byte-reachability rows |
+| | the **edge-ROLE label census** | **THE ONLY census of `diagnostic-edge` in the tree.** It stopped at four kinds for two slices while `zero-width-edges` grew seven more edges. |
+| | the span-lattice group and its two tails | a fixture that CLOSES a span must route its span end through a dispatch, not into a stop: a span end is a parked state |
+| `diagnostic-census-tests.sps` | `pinned-sites`, `code-fixtures` | one row and one fixture per diagnostic code |
+| `member3-drift-tests.sps` | the fixture machine | **must render EVERY emitted arm.** It rendered SEVEN of twelve before Slice ③ extended it — the first correction here said nine, and the final review re-measured — and TWELVE of twelve after. The last to arrive was `pause`, which binds nothing, and that is exactly why nobody noticed it. |
+| | the hard-coded exercised-name list and its literal count | a second edit for any new `reserved-member-3` entry |
+| `ir-tests.sps` | the per-kind constructor/accessor group | one group per kind — the census for `ir.sls`'s own blocks |
+| `normal-ir-tests.sps` | the layout-length lists and the wire-tag golden | the only test-side pin on the encoding tags |
+| `position-kind-tests.sps` | the `§12.7` producer table | a row per PRODUCER, not per kind — and its rows must be reached over the edge mode that makes the value differ |
+| `runtime-tests.sps` | six stub `(op 'kind …)` tables | recogniser 3 matches them; check each |
+| `graph-tests.sps` | the façade's own test | it has no span case and no callback case — the mirror is witnessed only indirectly |
 
 ---
 

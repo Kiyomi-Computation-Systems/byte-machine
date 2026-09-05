@@ -452,9 +452,19 @@
           (check "eof-zero-progress-cycle diagnostic"
                  (exists (lambda (d) (eq? (diagnostic-code d) 'eof-zero-progress-cycle))
                          (verification-diagnostics v)))
-          (check "zero-progress-cycle diagnostic"
-                 (exists (lambda (d) (eq? (diagnostic-code d) 'zero-progress-cycle))
-                         (verification-diagnostics v)))
+          (check "and NOT zero-progress-cycle: :898's gate excludes them"
+                 ;; *** THE OPPOSITE OF WHAT THIS ASSERTED BEFORE Slice ③. ***
+                 ;; `pa` and `pb` are reachable only through `e0`'s eof-target,
+                 ;; so they are not byte-reachable and §16.2:898's gate
+                 ;; (decision 0027 item 3) excludes them. The machine is still
+                 ;; rejected -- by `eof-zero-progress-cycle`, whose bullet
+                 ;; `:908` is and whose owner is `eof-terminal`. That NON-OVERLAP
+                 ;; is what 0027 item 3 argues for when it gates on
+                 ;; `byte-reached` alone rather than on item 1's composite, so
+                 ;; this line is now the assertion that the two checks do not
+                 ;; both fire on the machine `:908` was written for.
+                 (not (exists (lambda (d) (eq? (diagnostic-code d) 'zero-progress-cycle))
+                              (verification-diagnostics v))))
           ;; Attribution, not just verdict: the eof-zero-progress-cycle above is
           ;; the entry dispatch node e0's own :909 eof-target-chain walk (its
           ;; target is 'pa, which cycles). It must NOT also be raised on 'pa
@@ -960,9 +970,17 @@
                      (length (filter (lambda (c) (eq? c 'zero-progress-cycle))
                                      (codes
                                       (make-machine 'combined3 'x '() '() '() errs
+                                        ;; Byte 1 ADVANCES into 'start, added by
+                                        ;; Slice ③: §16.2:898's gate reports a
+                                        ;; cycle only on a BYTE-REACHABLE node,
+                                        ;; and before this edge 'start and 'seq
+                                        ;; were reachable from nowhere. The
+                                        ;; count was 3 for the wrong reason.
                                         (list (make-byte-dispatch-node 'x
                                                 (list (make-byte-case (make-exact-byte-matcher 0)
-                                                                      (make-edge 'x 'reexecute) #f))
+                                                                      (make-edge 'x 'reexecute) #f)
+                                                      (make-byte-case (make-exact-byte-matcher 1)
+                                                                      (make-edge 'start 'advance) #f))
                                                 (make-edge 'x 'reexecute) #f #f)
                                               (dispatch (list (make-byte-case (make-exact-byte-matcher 0)
                                                                               (make-edge 'seq 'reexecute) #f))
@@ -1804,6 +1822,24 @@
   '(byte-dispatch sequence-dispatch integer-accumulate pause field-action
     field-branch callback))
 
+;; *** THE TWO SPAN KINDS ARE EXCLUDED, and the reason is a property rather than
+;; a fixture problem. *** This row isolates §16.2:908 -- a byte edge into a
+;; finish terminal -- by placing one node of each kind with such an edge and
+;; asserting the verdict is that finding and nothing else. Neither span kind can
+;; sit here without a SECOND finding that is not §16.2:908's:
+;;
+;;   - a span START whose byte edge reaches `fin` carries the span it just
+;;     opened into a successful terminal, which is §16.2:907 and decision 0029
+;;     item 4. There is nowhere to close it: the edge under test is the one that
+;;     reaches `fin`, so any closing node would have to sit on it.
+;;   - a span END reached with nothing open is `unmatched end`, §16.2:899's
+;;     fourth rejection, whatever its successor is.
+;;
+;; So the exclusion is derived, not convenient, and the §16.2:908 verdict for
+;; both kinds is asserted where it CAN be isolated: the kind x position matrix's
+;; `finish` column, where every position is driven for every kind and the
+;; expectation carries the span rules explicitly.
+
 (harness-group "§16.2:908 is gated on byte-reachability, for every kind (Slice ⓪b)"
   (lambda ()
     (harness-case "an EOF-only-reachable byte edge into a finish is accepted"
@@ -2027,7 +2063,7 @@
           (check-equal "alternative and mismatch, labelled"
                        ds '((non-eof-into-finish s alternative)
                             (non-eof-into-finish s mismatch))))))
-    (harness-case "the other four kinds label their edges too"
+    (harness-case "every other kind labels its edges too"
       (lambda ()
         ;; *** Added by the whole-branch review: nine of the thirteen role labels
         ;; had no test and no pin. *** The dispatch and sequence cases above
@@ -2035,20 +2071,33 @@
         ;; wired to the wrong accessor, or to a constant, without anything
         ;; failing -- which is the same shape as a label that is always present.
         ;;
+        ;; *** AND IT STOPPED AT FOUR KINDS FOR TWO SLICES. *** Slice ③'s census
+        ;; reconciliation found this table with no callback row and no span row,
+        ;; while `zero-width-edges` labels seven more edges across those three
+        ;; kinds. This is the ONLY census of `diagnostic-edge` in the tree, so a
+        ;; span arm wired to an existing role -- `case` instead of `next` -- would
+        ;; ship a wrong §16.4:940 label with nothing red.
+        ;;
         ;; Each machine points EVERY byte out-edge of one kind at a finish
         ;; terminal, so the full role set for that kind is asserted at once, as a
-        ;; multiset rather than a membership test.
+        ;; multiset rather than a membership test. The span and callback rows
+        ;; carry their DECLARATIONS too, and their expected lists carry the
+        ;; findings that come with pointing a span at a finish -- §14:843's
+        ;; successful-exit rule fires as well, and a row hiding that would be
+        ;; asserting a subset.
         (let ((seen 0) (bad '()))
           (for-each
            (lambda (row)
              (set! seen (+ seen 1))
              (let* ((nm (car row)) (nodes (cadr row)) (want (caddr row))
+                    (cbs (if (> (length row) 3) (list-ref row 3) '()))
+                    (sps (if (> (length row) 4) (list-ref row 4) '()))
                     (got (map (lambda (d) (list (diagnostic-code d) (diagnostic-node d)
                                                 (diagnostic-edge d)))
                               (verification-diagnostics
                                (verify-machine
                                 (make-machine 'roles3 'd (list (make-uint-field 'n 8 0 #f))
-                                              '() '() (list eof-decl rej-decl)
+                                              cbs sps (list eof-decl rej-decl)
                                               (append
                                                (list (make-byte-dispatch-node 'd
                                                        (list (make-byte-case
@@ -2073,8 +2122,41 @@
                   '((non-eof-into-finish fb true)
                     (non-eof-into-finish fb false)))
             (list 'p (list (make-pause-node 'p 'fin #f))
-                  '((non-eof-into-finish p continuation)))))
-          (check-equal "four kinds driven" seen 4)
+                  '((non-eof-into-finish p continuation)))
+            ;; Slice ②'s kind, unlisted until Slice ③'s reconciliation. A
+            ;; DECISION callback so the branch-key roles are reachable at all --
+            ;; an event callback declares none, and the two branch edges are two
+            ;; of the four labels this row exists for.
+            (list 'cb (list (make-callback-node 'cb 'pick 'fin
+                                                '((keep fin) (skip fin)) 'fin #f))
+                  ;; Measured: BOTH branch edges carry the bare role `branch`,
+                  ;; not the key. §16.4:940 asks for "the edge role where
+                  ;; applicable" and a role is what this answers; the KEY is in
+                  ;; the node's own declaration, and two findings differing only
+                  ;; by a key are told apart by nothing here. Recorded rather
+                  ;; than silently expected, because it is the one place in this
+                  ;; table where the label is not injective over the edges.
+                  '((non-eof-into-finish cb continue)
+                    (non-eof-into-finish cb branch)
+                    (non-eof-into-finish cb branch)
+                    (non-eof-into-finish cb pause))
+                  (list (make-callback-declaration 'pick 'decision #t '(keep skip) #f #f)))
+            ;; Slice ③'s two. Both reuse `next` rather than minting a role, which
+            ;; is the thing this row pins: a span arm wired to `case` or to a
+            ;; constant would still produce a finding and still be caught only
+            ;; here. §14:843 fires alongside, because a span open at a finish is
+            ;; a successful exit with a span active.
+            (list 'ss (list (make-span-start-node 'ss 'body 'fin #f))
+                  '((span-active-at-exit fin #f)
+                    (non-eof-into-finish ss next))
+                  (list (make-callback-declaration 'on-data 'span-data #t '() #f #f))
+                  (list (make-span-declaration 'body 'on-data #f #f)))
+            (list 'se (list (make-span-end-node 'se 'body 'fin #f))
+                  '((invalid-span-state se #f)
+                    (non-eof-into-finish se next))
+                  (list (make-callback-declaration 'on-data 'span-data #t '() #f #f))
+                  (list (make-span-declaration 'body 'on-data #f #f)))))
+          (check-equal "seven kinds driven" seen 7)
           (check-equal "every role label is the accessor's own" bad '()))))
     (harness-case "a diagnostic with no applicable edge carries #f"
       (lambda ()
@@ -2334,5 +2416,411 @@
                                                                    '(keep skip) 'skip #f)
                                         '((keep stop)) 'decide))
                      '(invalid-callback-invocation))))))
+
+;; --- PASS 7: the span-state lattice (Milestone 5 Slice ③, decision 0029) -----
+;;
+;; The five rejections §16.2:899 names, §16.2:900's pause/callback rule and
+;; §16.2:907's span half, each driven from one machine that is otherwise valid --
+;; so the codes asserted are the WHOLE verification result and not a subset of a
+;; machine that was broken three ways.
+(define sd-decl (make-callback-declaration 'on-data 'span-data #t '() #f #f))
+(define (span-machine nodes)
+  (make-machine 'spanm 'start '()
+                (list sd-decl)
+                (list (make-span-declaration 'body 'on-data #f #f)
+                      (make-span-declaration 'other 'on-data #f #f))
+                errs nodes 'default-eof #f))
+(define (case-to target) (make-byte-case (make-exact-byte-matcher 0)
+                                         (make-edge target 'advance) #f))
+(define (entry-to target . eof)
+  (make-byte-dispatch-node 'start (list (case-to target))
+                           (make-edge 'reject 'reexecute)
+                           (if (null? eof) #f (car eof)) #f))
+(define (span-tail) (list (make-stop-node 'done #f)
+                          (make-error-node 'reject 'rejected #f)))
+;; *** THE TAIL A CLOSING SPAN NEEDS, and Slice ③ shipped without it. *** A span
+;; end is a PARKED state: its data callback's pause parks the parser on that
+;; node's completion substep, so §16.2:909's EOF walk starts at the node's
+;; SUCCESSOR. With `cl` continuing straight into a stop, every fixture that
+;; closed a span was a machine `parser-finish!` could answer `stopped` from after
+;; a span-data pause -- which is exactly what :909 forbids, and the verifier now
+;; says so. The stop keeps its place behind a dispatch whose own EOF route
+;; reaches a finish, which is also where §16.2:908 wants a finish.
+;;
+;; Kept SEPARATE from `span-tail` rather than replacing it: a fixture whose span
+;; path never reaches `exit` would report `unreachable-node` for it and for the
+;; finish, and the case would then be measuring the tail instead of its own span
+;; shape.
+(define (span-tail/exit) (list (make-byte-dispatch-node 'exit (list (case-to 'done))
+                                                        (make-edge 'reject 'reexecute) 'fin #f)
+                               (make-stop-node 'done #f)
+                               (make-finish-node 'fin #f)
+                               (make-error-node 'reject 'rejected #f)))
+;; A second entry shape and a second error sink, for the fixtures whose span
+;; path must reach a node NOTHING ELSE reaches: the shared `reject` is also the
+;; entry's fallback, so a span arriving there would join with `none` and the
+;; case would be measuring a merge it did not mean to build.
+(define (entry-fork a b)
+  (make-byte-dispatch-node 'start
+    (list (case-to a) (make-byte-case (make-exact-byte-matcher 1)
+                                      (make-edge b 'advance) #f))
+    (make-edge 'rej2 'reexecute) #f #f))
+(define (span-tail2) (list (make-stop-node 'done #f)
+                           (make-error-node 'reject 'rejected #f)
+                           (make-error-node 'rej2 'rejected #f)))
+
+
+(harness-group "the span-state lattice (§16.2:899, :900, :907)"
+  (lambda ()
+    (harness-case "a machine that opens and closes one span verifies clean"
+      (lambda ()
+        ;; Stated first: every rejection below is satisfiable by a pass that
+        ;; rejects every machine containing a span node.
+        (check-equal "no diagnostics"
+                     (codes (span-machine
+                             (append (list (entry-to 'op)
+                                           (make-span-start-node 'op 'body 'cl #f)
+                                           (make-span-end-node 'cl 'body 'exit #f))
+                                     (span-tail/exit))))
+                     '())))
+    ;; --- the two holes Slice ③'s own census reconciliation found -------------
+    (harness-case "a span end continuing into a STOP is rejected (§16.2:909)"
+      (lambda ()
+        ;; *** THE REASON `span-tail/exit` EXISTS, stated as a rejection so the
+        ;; tail change above cannot be mistaken for cosmetics. *** A span end is
+        ;; a PARKED state: its data callback's pause parks the parser on that
+        ;; node's completion substep, and a `parser-finish!` from there resumes
+        ;; past the span end. Reaching a stop that way is what §16.2:909 forbids,
+        ;; and it is reachable -- measured before the fix, this machine verified
+        ;; CLEAN and then answered `stopped` from `parser-finish!`.
+        ;;
+        ;; The diagnostic is reported at `cl`, not at `done`: the parked node is
+        ;; what a caller can be sitting on, and `parked-eof-start` is where its
+        ;; start differs from its name.
+        (check-equal "one finding, at the span end"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine
+                            (span-machine
+                             (append (list (entry-to 'op)
+                                           (make-span-start-node 'op 'body 'cl #f)
+                                           (make-span-end-node 'cl 'body 'done #f))
+                                     (span-tail))))))
+                     ;; *** AND EXACTLY ONE FINDING, which is the other half of
+                     ;; the edit. *** A span START is not a parked state: it
+                     ;; calls nothing, so nothing can pause there, and it stays
+                     ;; flow-through like a field action. `op` reaches the same
+                     ;; stop, so a parked set widened to BOTH span kinds would
+                     ;; report `(eof-reachable-stop . op)` here too -- the list,
+                     ;; not the membership, is what says which half moved.
+                     '((eof-reachable-stop . cl)))))
+    (harness-case "a span node naming an UNDECLARED span is rejected (§16.2:901)"
+      (lambda ()
+        ;; The second hole. `make-span-start-node` stores its span as a bare
+        ;; symbol and its own comment assigns the cross-reference to the
+        ;; verifier; nothing did it. Measured before the fix: this machine
+        ;; verified CLEAN and then raised `assertion-violation` out of
+        ;; `normalize-machine` -- a verified machine crashing the normalizer,
+        ;; which §9.2:368 forbids.
+        ;;
+        ;; BOTH kinds, because each carries its own accessor and a fix reaching
+        ;; only one would be invisible to a single-node fixture.
+        (check-equal "one finding per node"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine
+                            (span-machine
+                             (append (list (entry-to 'op)
+                                           (make-span-start-node 'op 'nosuch 'cl #f)
+                                           (make-span-end-node 'cl 'nosuch 'exit #f))
+                                     (span-tail/exit))))))
+                     '((missing-span-declaration . op) (missing-span-declaration . cl)))))
+    (harness-case "and a span node naming a DECLARED span is not"
+      (lambda ()
+        ;; The negative control: the check must not reject every span node.
+        ;; `other` is declared and never opened, which is legal -- only the
+        ;; cross-reference is checked here.
+        (check-equal "no diagnostics"
+                     (codes (span-machine
+                             (append (list (entry-to 'op)
+                                           (make-span-start-node 'op 'other 'cl #f)
+                                           (make-span-end-node 'cl 'other 'exit #f))
+                                     (span-tail/exit))))
+                     '())))
+    (harness-case "span RE-ENTRY: a second start for the same span"
+      (lambda ()
+        (check-equal "one finding, at the second start"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine
+                            (span-machine
+                             (append (list (entry-to 'op)
+                                           (make-span-start-node 'op 'body 'op2 #f)
+                                           (make-span-start-node 'op2 'body 'cl #f)
+                                           (make-span-end-node 'cl 'body 'exit #f))
+                                     (span-tail/exit))))))
+                     '((invalid-span-state . op2)))))
+    (harness-case "span OVERLAP: a start for a different span while one is open"
+      (lambda ()
+        ;; §10.4:519's *nested* gets no row of its own in decision 0029's table:
+        ;; with one span permitted active, nesting IS a start on (active t).
+        (check-equal "one finding, at the second start"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine
+                            (span-machine
+                             (append (list (entry-to 'op)
+                                           (make-span-start-node 'op 'body 'op2 #f)
+                                           (make-span-start-node 'op2 'other 'cl #f)
+                                           (make-span-end-node 'cl 'other 'exit #f))
+                                     (span-tail/exit))))))
+                     '((invalid-span-state . op2)))))
+    (harness-case "WRONG END: closing a span that is not the one open"
+      (lambda ()
+        (check-equal "one finding, at the end"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine
+                            (span-machine
+                             (append (list (entry-to 'op)
+                                           (make-span-start-node 'op 'body 'cl #f)
+                                           (make-span-end-node 'cl 'other 'exit #f))
+                                     (span-tail/exit))))))
+                     '((invalid-span-state . cl)))))
+    (harness-case "UNMATCHED END: closing with nothing open"
+      (lambda ()
+        (check-equal "one finding, at the end"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine
+                            (span-machine
+                             (append (list (entry-to 'cl)
+                                           (make-span-end-node 'cl 'body 'exit #f))
+                                     (span-tail/exit))))))
+                     '((invalid-span-state . cl)))))
+    (harness-case "INCONSISTENT: two branches disagree at a merge"
+      (lambda ()
+        ;; Decision 0029 item 2, and the row that makes the flat lattice the
+        ;; right domain rather than the powerset: the two branches AGREE that
+        ;; the machine is well formed under a path-existential reading, and
+        ;; disagree about the state at `mrg`. Reported where it arises.
+        (check-equal "one finding, at the merge"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine
+                            (span-machine
+                             (append (list (entry-fork 'op 'mrg)
+                                           (make-span-start-node 'op 'body 'mrg #f)
+                                           (make-byte-dispatch-node 'mrg
+                                             (list (case-to 'done))
+                                             (make-edge 'reject 'reexecute) #f #f))
+                                     (span-tail2))))))
+                     '((inconsistent-span-state . mrg)))))
+    (harness-case "a span open at an ERROR terminal is ACCEPTED"
+      (lambda ()
+        ;; Decision 0029's own worked example, and §14:839 contemplates it in
+        ;; words -- errors do not flush a final fragment or synthesize a
+        ;; completion. Only the SUCCESSFUL terminals are rejected, which is why
+        ;; decision 0023 item 5 kept `finish` distinguished from `error`.
+        (check-equal "no diagnostics"
+                     (codes (span-machine
+                             (append (list (entry-fork 'op 'done)
+                                           (make-span-start-node 'op 'body 'reject #f))
+                                     (span-tail2))))
+                     '())))
+    (harness-case "a span open at a STOP terminal is rejected (§16.2:907)"
+      (lambda ()
+        (check-equal "one finding, at the terminal"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine
+                            (span-machine
+                             (append (list (entry-to 'op)
+                                           (make-span-start-node 'op 'body 'done #f))
+                                     (span-tail))))))
+                     '((span-active-at-exit . done)))))
+    (harness-case "a span open at an EOF-ONLY finish is rejected too"
+      (lambda ()
+        ;; *** THE ROW DECISION 0029 COULD NOT REACH. *** Its item 3 fixes the
+        ;; pass's NODE DOMAIN and says nothing about its EDGE set; a dataflow
+        ;; over `node-out-targets` alone never arrives at a finish node that is
+        ;; only EOF-reachable, because that accessor excludes eof-targets by
+        ;; construction. This machine has no byte path to `fin` at all.
+        (check-equal "one finding, at the finish"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine
+                            (span-machine
+                             (append (list (entry-to 'done 'op)
+                                           (make-span-start-node 'op 'body 'fin #f)
+                                           (make-finish-node 'fin #f))
+                                     (span-tail))))))
+                     '((span-active-at-exit . fin)))))
+    (harness-case "a PAUSE reachable with a span active is rejected (§16.2:900)"
+      (lambda ()
+        (check-equal "one finding, at the pause"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine
+                            (span-machine
+                             ;; `cl` continues to the ERROR node and not the
+                             ;; stop: a byte-reachable pause is a parked state,
+                             ;; so its own EOF walk runs, and a stop on that
+                             ;; chain is §16.2:909 -- a second finding this case
+                             ;; is not about. Found by building it.
+                             (append (list (entry-fork 'op 'done)
+                                           (make-span-start-node 'op 'body 'p #f)
+                                           (make-pause-node 'p 'cl #f)
+                                           (make-span-end-node 'cl 'body 'reject #f))
+                                     (span-tail2))))))
+                     '((span-active-at-pause . p)))))
+    (harness-case "a CALLBACK invocation reachable with a span active is the same finding"
+      (lambda ()
+        ;; §13:826's exception -- "Only the active span's own data callback may
+        ;; pause before the span closes" -- cannot apply to a NODE: §16.2:901's
+        ;; node half admits only `event` and `decision` callbacks there, and a
+        ;; span-data callback is reached through a span declaration and the
+        ;; runtime's flush, never through a callback node.
+        (check-equal "one finding, at the invocation"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine
+                            (make-machine 'spanm 'start '()
+                                          (list sd-decl
+                                                (make-callback-declaration 'note 'event #t
+                                                                           '() #f #f))
+                                          (list (make-span-declaration 'body 'on-data #f #f))
+                                          errs
+                                          (append (list (entry-fork 'op 'done)
+                                                        (make-span-start-node 'op 'body 'inv #f)
+                                                        (make-callback-node 'inv 'note 'cl
+                                                                            '() 'cl #f)
+                                                        (make-span-end-node 'cl 'body 'reject #f))
+                                                  (span-tail2))
+                                          'default-eof #f))))
+                     '((span-active-at-pause . inv)))))
+    (harness-case "a node no execution can occupy contributes no state (0029 item 3)"
+      (lambda ()
+        ;; *** THE MACHINE DECISION 0027's CONTEXT DERIVES, and it is the only
+        ;; shape that separates the two relations. *** The entry's byte edges go
+        ;; to the error node and its EOF route goes to `t`; `t` is reachable ONLY
+        ;; that way, and `cl` -- an unmatched span end -- hangs off `t`'s BYTE
+        ;; edge. `pass-reachability` walks `all-out-targets`, so it crosses the
+        ;; eof-target and then keeps taking byte edges and calls `cl` reached.
+        ;; No execution can: once an execution takes an eof-target it can never
+        ;; feed again (§12.2's finish-ready row), so `cl`'s byte edge is
+        ;; untakeable and pass 7 must not report its unmatched end.
+        ;;
+        ;; An orphan with no in-edges at all does NOT test this -- it receives
+        ;; no state under either relation -- which is what the first draft of
+        ;; this case used, and its mutation shipped UNCAUGHT and said so.
+        (check-equal "the span end on the untakeable byte edge is not reported"
+                     (codes (span-machine
+                             (append (list (make-byte-dispatch-node 'start
+                                             (list (case-to 'reject))
+                                             (make-edge 'reject 'reexecute) 't #f)
+                                           (make-byte-dispatch-node 't
+                                             (list (case-to 'cl))
+                                             (make-edge 'reject 'reexecute) 'reject #f)
+                                           (make-span-end-node 'cl 'body 'exit #f))
+                                     (span-tail/exit))))
+                     '())))))
+
+;; --- §16.2:898's reachability gate (Milestone 5 Slice ③, decision 0027 item 3)
+;;
+;; The bullet reads "reachable zero-progress cycles" and the pass applied NO
+;; relation: measured by 0027 against the shipped file, neither `reached` nor
+;; `byte-reached` occurred as an identifier anywhere in it.
+;;
+;; *** THIS IS A RELAXATION, and the ground the design gave for calling it
+;; benign does not hold. *** Design §3.2 item 4 said such a machine "is rejected
+;; by `unreachable-node` regardless". It is not: `pass-reachability` walks
+;; `all-out-targets`, which crosses an eof-target and then keeps taking byte
+;; edges, so it calls `t` reached. The machine below is 0027's own, and it is
+;; asserted BOTH ways -- the cycle is real, and no execution can enter it.
+(harness-group "zero-progress cycles are gated on byte-reachability (§16.2:898)"
+  (lambda ()
+    (harness-case "a BYTE-reachable pause cycle is still a zero-progress cycle"
+      (lambda ()
+        ;; *** The witness the gate MOVED, and moving it is a strict
+        ;; improvement. *** The REPORT set's pause clause was witnessed by an
+        ;; EOF-ONLY pause cycle, which §16.2:898's gate now excludes on purpose
+        ;; -- so the clause needed a byte-reachable cycle to be witnessed at
+        ;; all, which is what a check about byte reachability should always have
+        ;; had. `pa` and `pb` are entered by a byte edge and cycle through each
+        ;; other's continuations.
+        (check "zero-progress-cycle is reported"
+               (memq 'zero-progress-cycle
+                     (codes (machine*
+                             'bpause
+                             (list (make-byte-dispatch-node 'start
+                                     (list (make-byte-case (make-exact-byte-matcher 0)
+                                                           (make-edge 'pa 'advance) #f))
+                                     (make-edge 'reject 'reexecute) #f #f)
+                                   (make-pause-node 'pa 'pb #f)
+                                   (make-pause-node 'pb 'pa #f)
+                                   (make-error-node 'reject 'rejected #f))
+                             'default-eof))))))
+    (harness-case "an unoccupiable zero-progress cycle is accepted"
+      (lambda ()
+        ;; `e`'s byte edges all reach the error node and its EOF route reaches
+        ;; `t`; `t` is a byte-dispatch reachable only that way, holding a
+        ;; reexecute self-loop. Once an execution takes an eof-target it can
+        ;; never feed again (§12.2's finish-ready row), so `t`'s self-loop is
+        ;; untakeable.
+        (check-equal "no diagnostics at all"
+                     (codes (machine*
+                             'gated
+                             (list (make-byte-dispatch-node 'start
+                                     (list (make-byte-case (make-exact-byte-matcher 0)
+                                                           (make-edge 'reject 'advance) #f))
+                                     (make-edge 'reject 'reexecute) 't #f)
+                                   (make-byte-dispatch-node 't
+                                     (list (make-byte-case (make-exact-byte-matcher 0)
+                                                           (make-edge 't 'reexecute) #f))
+                                     (make-edge 'reject 'reexecute) 'reject #f)
+                                   (make-error-node 'reject 'rejected #f))
+                             'default-eof))
+                     '())))
+    (harness-case "and `unreachable-node` does NOT catch it, which is why the gate is not benign"
+      (lambda ()
+        ;; The half design §3.2 item 4 got wrong, asserted rather than argued:
+        ;; the very same machine passes `pass-reachability` too, so before this
+        ;; gate the ONLY thing rejecting it was the ungated cycle check.
+        (check "t is not reported unreachable"
+               (not (memq 'unreachable-node
+                          (codes (machine*
+                                  'gated
+                                  (list (make-byte-dispatch-node 'start
+                                          (list (make-byte-case (make-exact-byte-matcher 0)
+                                                                (make-edge 'reject 'advance) #f))
+                                          (make-edge 'reject 'reexecute) 't #f)
+                                        (make-byte-dispatch-node 't
+                                          (list (make-byte-case (make-exact-byte-matcher 0)
+                                                                (make-edge 't 'reexecute) #f))
+                                          (make-edge 'reject 'reexecute) 'reject #f)
+                                        (make-error-node 'reject 'rejected #f))
+                                  'default-eof)))))))
+    (harness-case "the SAME cycle on a byte-reachable node is still rejected"
+      (lambda ()
+        ;; The reverse direction, without which the gate could be vacuous: one
+        ;; byte edge from the entry into `t` and the finding comes back.
+        (check-equal "zero-progress-cycle, at t"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine
+                            (machine*
+                             'gated
+                             (list (make-byte-dispatch-node 'start
+                                     (list (make-byte-case (make-exact-byte-matcher 0)
+                                                           (make-edge 't 'advance) #f))
+                                     (make-edge 'reject 'reexecute) 't #f)
+                                   (make-byte-dispatch-node 't
+                                     (list (make-byte-case (make-exact-byte-matcher 0)
+                                                           (make-edge 't 'reexecute) #f))
+                                     (make-edge 'reject 'reexecute) 'reject #f)
+                                   (make-error-node 'reject 'rejected #f))
+                             'default-eof))))
+                     '((zero-progress-cycle . t)))))))
 
 (harness-finish)

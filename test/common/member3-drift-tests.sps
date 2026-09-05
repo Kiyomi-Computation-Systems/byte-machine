@@ -53,7 +53,31 @@
     ;; declaration and the node below `o` would sit in reserved-member-3 as a
     ;; reservation nothing exercises -- the gap ② closed for `v` and `r`, and ③
     ;; for `d`, reopened by this slice's own addition to the list.
-    (list (make-callback-declaration 'note 'event #t '() #f #f)) '()
+    ;; *** AND SLICE ③ EXTENDS IT A SECOND TIME, with a span and a pause. ***
+    ;; Its census reconciliation found the fixture rendering only part of
+    ;; `render-state-arm`, and the FINAL REVIEW corrected the number: SEVEN of
+    ;; the twelve arms, not the nine first written here. Measured both ways by
+    ;; rendering this fixture and probing the emitted text -- stop, error,
+    ;; accumulate, field-action, field-branch, callback and dispatch were
+    ;; rendered; finish, pause, span-start, span-end and span-completion were
+    ;; not. All five are added here, so the row the design Appendix carries for
+    ;; this fixture -- "must render EVERY emitted arm" -- is literally true at
+    ;; twelve of twelve rather than nearly true.
+    ;;
+    ;; The span arms are not inert: two render a `let` binding `o`, and
+    ;; compile.sls's stated property that none of them binds a local beyond `o`
+    ;; was prose in the file under test rather than a check here. The pause arm
+    ;; binds nothing at all, which is exactly why it went unnoticed -- and is
+    ;; also why it is worth rendering: an arm that binds nothing TODAY is one
+    ;; nobody re-checks when it starts to.
+    (list (make-callback-declaration 'note 'event #t '() #f #f)
+          (make-callback-declaration 'on-data 'span-data #t '() #f #f)
+          (make-callback-declaration 'on-done 'span-complete #t '() #f #f))
+    ;; The completion callback is DECLARED, so the span-completion arm renders
+    ;; its calling shape. The other shape -- the substep with no callback -- is
+    ;; witnessed by differential-span-tests.sps's second machine; this fixture
+    ;; can only render one of the two, and the calling one is the one that binds.
+    (list (make-span-declaration 'body 'on-data 'on-done #f))
     (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
           (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))
     (list (make-byte-dispatch-node 'start
@@ -79,9 +103,34 @@
           ;; the fixture keeps a single entry; base 16 because that arm renders
           ;; the three-range `cond`, which is where `d` is bound.
           (make-integer-accumulate-node 'acc 'count 16 'acc
-                                        (make-edge 'done 'advance) 'reject #f #f)
+                                        (make-edge 'done 'advance) 'sopen #f #f)
+          ;; The span sits on the accumulate's overflow leg, which is the only
+          ;; edge in this fixture with nothing else on it. `sread` consumes so
+          ;; the span has a nonempty payload to close over; `send`'s successor is
+          ;; a DISPATCH and not the stop, because a span end is a parked state
+          ;; (§16.2:909) and continuing it straight into a stop is exactly the
+          ;; shape this slice taught the verifier to reject.
+          (make-span-start-node 'sopen 'body 'sread #f)
+          (make-byte-dispatch-node 'sread
+            (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'send 'reexecute) #f))
+            ;; Its OWN error terminal. The shared `reject` is reached from
+            ;; outside the span with no span open, so routing this EOF there
+            ;; joins `(active body)` with `none` and the machine is rejected for
+            ;; an inconsistent merge -- found by building it.
+            (make-edge 'sread 'advance) 'rej2 #f)
+          (make-span-end-node 'send 'body 'sdone #f)
+          ;; The twelfth arm, on `sdone`'s fallback. Its continuation is the
+          ;; ERROR node and not the stop, for the reason the callback node above
+          ;; records: a parser parked at a pause resumes on that one edge, so a
+          ;; stop there is an EOF path reaching a stop terminal (§16.2:909).
+          (make-byte-dispatch-node 'sdone
+            (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'done 'advance) #f))
+            (make-edge 'pz 'reexecute) 'fin #f)
+          (make-pause-node 'pz 'reject #f)
+          (make-finish-node 'fin #f)
           (make-stop-node 'done #f)
-          (make-error-node 'reject 'rejected #f))
+          (make-error-node 'reject 'rejected #f)
+          (make-error-node 'rej2 'rejected #f))
     'default-eof #f))
 (define rendered (utf8->string (render-machine (compile-machine (make-field-drift-machine) '())
                                                binding)))

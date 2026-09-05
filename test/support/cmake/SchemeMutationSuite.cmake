@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FIFTY-THREE PASSES, BECAUSE FIFTY-THREE DIFFERENT WITNESSES ARE NEEDED
+# FIFTY-FOUR PASSES, BECAUSE FIFTY-FOUR DIFFERENT WITNESSES ARE NEEDED
 # (46 through Milestone 3; Milestone 4 Slice ①a adds the member-3 drift
 # guard and the position-kind lane, and Slice ①b the field-access lane -- since
 # renamed byte-machine.differential.field, the only lane in which the field
@@ -21,7 +21,14 @@
 # Slice ② task 10, which found it by running the check the commit claimed to
 # have run. Milestone 5 Slice ② adds the FIFTY-THIRD: the differential lane over
 # the callback node, which is the only program in the tree that loads a
-# generated library containing a callback state.)
+# generated library containing a callback state. Slice ③ adds the FIFTY-FOURTH
+# on the same argument one kind later -- the differential lane over the two span
+# kinds, the only program that loads a generated library containing a span
+# state, and the only one that can see a span FRAGMENT at all, since no parser
+# result carries one. It is NOT a fifty-fifth: Slice ③'s verifier mutations run
+# against that same lane, because its topology table is where §25:1590's set is
+# written down -- one witness read two ways, and a pass count that called it two
+# would be the banner claiming a witness the tree does not have.)
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -163,7 +170,7 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "FIFTY-THREE PASSES..." above. Declared here, rather than only in prose,
+# See "FIFTY-FOUR PASSES..." above. Declared here, rather than only in prose,
 # so the count enforced at the bottom of this file is the same text a reader
 # checks by eye at the top -- one number to keep in sync, not two that can
 # quietly disagree. 25 passes / 60 mutations before the aot task; pass 26 adds
@@ -913,6 +920,121 @@ cmake_minimum_required(VERSION 3.26)
 # necessary rather than one: a lane that agreed with a mutated sibling would be
 # the defect neither alone can show.
 #
+# Milestone 5 Slice ③ task 1, the ELEVENTH and TWELFTH node kinds: NINE more,
+# 418 + 9 = 427, in two existing passes. SIX in `unit.ir` -- `node?` per kind
+# (separable, because the case names the kind that failed), `node-name` for the
+# pair (NOT separable: its else raises, so dropping either arm stops the
+# table-driven case at the same point, and the pair is one decision anyway), the
+# mandatory `next` per kind, and the shared-tag mutation that is the only thing
+# a predicate-driven table cannot see. THREE in the kind x position matrix, one
+# per span arm of `zero-width-edges` plus the zero-progress REPORT set.
+#
+# Milestone 5 Slice ③ task 2, PASS 7 (the span-state lattice): ELEVEN more,
+# 427 + 11 = 438. One per rejection §16.2:899 names, one for :900's callback
+# half, one for the pass never running, and THREE structural -- `top` not
+# flowing onward, the EOF half of the edge relation, and the error-versus-
+# successful terminal split that consumes decision 0023 item 5.
+#
+# *** ONE OF THEM SHIPPED UNCAUGHT AND WAS RE-TARGETED RATHER THAN WEAKENED. ***
+# "pass 7 runs over every node, not the occupiable ones" removed a `(memq to
+# live)` filter, and the filter turned out to be VACUOUS: `live` is the closure
+# of the pass's own edge relation, so every edge's target is in it by
+# construction. The filter was deleted rather than documented, and the decision
+# it was meant to witness -- 0029 item 3's relation, which is 0027's -- is now
+# witnessed where the two relations actually differ: an eof half that keeps
+# taking byte edges, against the machine 0027's Context derives.
+#
+# Milestone 5 Slice ③ task 3, §16.2:898's gate: ONE more, 438 + 1 = 439. It is a
+# RELAXATION, so its fixture asserts both directions and the second half is the
+# one that matters -- `unreachable-node` does NOT catch the machine the gate now
+# accepts, which is the ground design §3.2 item 4 gave for calling the gate
+# benign and which decision 0027 records as false. Two shipped fixtures moved
+# with it, and one of them now asserts the OPPOSITE of what it did: an EOF-only
+# pause cycle is `eof-zero-progress-cycle` and NOT `zero-progress-cycle`, which
+# is the non-overlap 0027 item 3 gates on `byte-reached` alone to get.
+#
+# Milestone 5 Slice ③ task 4, lowering and encoding: FOUR more, 439 + 4 = 443.
+# The wire tag (pinned on a golden, because a tag change moves every span
+# fingerprint together), the slot RESOLUTION (anchored there rather than on one
+# arm's write, so it stays distinguishable from the tag), the fused-state
+# rejection decision 0026 item 2 makes -- caught by a raise that is the
+# decision's own consequence, since a span end with no allocated continuation
+# cannot answer -- and the debug map's totality over the SECOND internal family,
+# which Slice ② turned from a missing debug string into an index error in the
+# generated lane.
+#
+# Milestone 5 Slice ③ task 5, execution in both lanes: TWELVE more in a NEW pass
+# (54), 443 + 12 = 455. The differential lane over the span kinds, and the first
+# pass in the tree whose pins are anchored on something no parser result carries
+# -- a span FRAGMENT. Two lanes can agree on every §22.4 tuple while handing the
+# application different bytes, so SIX of the twelve edit shared code and are
+# pinned on recorded values rather than on agreement, and THREE of the emitter's
+# would otherwise resolve to the same "the lanes agree" line. The fixture asserts
+# the GENERATED lane's trace and active span as values for exactly that reason.
+#
+# *** TWO SHIPPED LINES WERE DELETED HERE, both measured rather than argued. ***
+# The mark advance inside the fragment step (§14:842) SURVIVED its mutation:
+# every path out of a delivery either closes the span or crosses a feed boundary,
+# where §14:834's re-anchor overwrites the mark, and no public accessor reads a
+# mark -- a nesting by construction, not a coverage gap. The finish path's
+# re-anchor to 0 was inert for a different reason: an EOF-side fragment is
+# `[mark,0)` and `from >= to` holds for every mark, so §14:835 suppresses it
+# whatever the mark says. Both rules now live in one place each.
+#
+# FOUR shipped pins moved. Two because the F1 split re-indented the classifier
+# and relocated the `busy` write, and TWO because a span arm became a second site
+# for a line the callback arm owned -- both `goto` arms are zero-width, which is
+# the point, so the FIND now carries the invocation above it.
+#
+# Milestone 5 Slice ③ task 6, the oracle: FOUR more, 455 + 4 = 459, in pass 54
+# rather than a new one. They break one arm of `span-node-diagnostics` each and
+# every one turns a REJECTED row of the topology table green rather than a green
+# row red -- a direction the verify-lane passes cannot reach, since those drive
+# machines that verify CLEAN. They run against the SAME lane as task 5's, and a
+# pass count calling that two witnesses would be the banner claiming a witness
+# the tree does not have.
+#
+# Milestone 5 Slice ③ task 8, the census reconciliation's own findings: THREE
+# more, 459 + 3 = 462, in the verify-rejections pass. Both holes were Slice ③'s
+# -- it made a span end a PARKED state and a span node a DECLARATION-REFERENCING
+# one, and shipped neither check -- and both were REACHABLE: one machine verified
+# clean and then answered `stopped` from `parser-finish!`, the other verified
+# clean and then raised out of `normalize-machine`, which §9.2:368 forbids.
+#
+# *** A THIRD LINE WAS WRITTEN AND DELETED, the third this slice. *** An arm in
+# `parked-eof-start` answering `(span-end-node-next n)` SURVIVED its mutation: a
+# span end is pure flow-through, so `classify` joins over its `next` and starting
+# the walk at the node gives the same verdict as starting at the successor. The
+# whole of that fix is the parked-set MEMBERSHIP.
+#
+# One shipped pin was RE-MEASURED rather than re-anchored, and the difference
+# matters: "a span-end node's successor is not an edge" used to lose two findings
+# from an axis-C cell, and now RAISES out of `eof-terminal` -- the span end is a
+# walk start with no out-edge, so the zero-width join is empty. Its span-start
+# sibling raises too, but only on axis A, so the axis-C raise is what still
+# separates them. The span fixture's golden fingerprint moved for the same
+# reason: its tail had to route through a dispatch, because its span end
+# continued straight into a stop.
+#
+# Milestone 5 Slice ③ task 8, §12.7:770's row: FOUR more, 462 + 4 = 466, in the
+# position-kind pass. THE TREE DID NOT IMPLEMENT THAT ROW. "Zero-width machine
+# action or callback failure | `boundary` at the current stream offset" -- every
+# site building a callback-domain error passed the loop's `pk`, and Slice ②'s own
+# comment said the carried-through `pk` "is the rule the carried-through `pk`
+# already implements", which is true only over an ADVANCE edge. Over a REEXECUTE
+# edge `pk` is `byte`, and BOTH LANES REPORTED IT -- so the differential could
+# not see it, a lane-to-lane projection being satisfied by two lanes agreeing on
+# a wrong value. Found by adding the row §12.7:770 had never had.
+#
+# Four sites, four mutations: one named constant serving the runtime's six arms,
+# and three rendered literals, one per emitted arm that calls out. Two of the
+# lane's fixtures had to change shape for the defect to be reachable at all --
+# the callback row's node is now reached by a REEXECUTE edge, because over an
+# advance the literal and the variable agree and the row proves nothing.
+#
+# One shipped pin was re-anchored: the edge-role census case is "every other
+# kind" now, the table having grown a callback row and two span rows.
+#
 # Milestone 5 Slice ①b: TWO. `pass-declarations` never run -- eight census
 # fixtures then find nothing, caught by a comparison naming a missing code. And
 # the span section reusing the callback section's tag, which pins the section
@@ -1097,8 +1219,8 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-set(EXPECTED_PASSES 53)
-set(EXPECTED_MUTATIONS 418)
+set(EXPECTED_PASSES 54)
+set(EXPECTED_MUTATIONS 466)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -4013,11 +4135,13 @@ byte_machine_mutation(
   # zero-width kinds and reflowed onto three lines. Third re-anchor of the same
   # decision; the REPLACE and the pin are still unchanged, which is what says the
   # decision has not moved even though its text keeps doing so.
-  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
+  FIND [[(if (and (memq (node-name n) br898)
+                              (or (byte-dispatch-node? n) (pause-node? n)
                                   (sequence-dispatch-node? n)
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
-                                  (callback-node? n))
+                                  (callback-node? n)
+                                  (span-start-node? n) (span-end-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[(if #f]]
   EXPECT_STATUS 1
@@ -4487,19 +4611,27 @@ byte_machine_mutation(
   # as the two sibling pins: the guard gained the two zero-width kinds. The edit
   # this LABEL claims is unchanged -- drop only the pause clause -- and so is the
   # nesting it records.
-  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
+  FIND [[(if (and (memq (node-name n) br898)
+                              (or (byte-dispatch-node? n) (pause-node? n)
                                   (sequence-dispatch-node? n)
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
-                                  (callback-node? n))
+                                  (callback-node? n)
+                                  (span-start-node? n) (span-end-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[(if (and (or (byte-dispatch-node? n)
                                   (sequence-dispatch-node? n)
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
-                                  (callback-node? n))
+                                  (callback-node? n)
+                                  (span-start-node? n) (span-end-node? n))
                               (reaches-self? (node-name n)))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "chain of pauses that cycles is a zero-progress EOF cycle: zero-progress-cycle diagnostic")
+    # Re-pinned by Milestone 5 Slice ③. Its witness was an EOF-ONLY pause cycle,
+  # which §16.2:898's new gate (decision 0027 item 3) excludes on purpose -- so
+  # the clause is now witnessed by a BYTE-reachable pause cycle, which is what a
+  # check about byte reachability should always have used. The edit this LABEL
+  # names is unchanged.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "a BYTE-reachable pause cycle is still a zero-progress cycle")
 
 # Milestone 3 Slice ② Task 1: the sixth node kind, sequence-dispatch, at all
 # seven of verify.sls's permissive fall-throughs (§0 D2). Adds seven mutations
@@ -4740,15 +4872,19 @@ byte_machine_mutation(
   # measured, none predicted. Comparison-caught: the count check fails outright
   # rather than depending on where a mutant happens to crash.
   # RE-ANCHORED by Slice ② task 2's census, same reflow as the sibling pin.
-  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
+  FIND [[(if (and (memq (node-name n) br898)
+                              (or (byte-dispatch-node? n) (pause-node? n)
                                   (sequence-dispatch-node? n)
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
-                                  (callback-node? n))]]
-  REPLACE [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
+                                  (callback-node? n)
+                                  (span-start-node? n) (span-end-node? n))]]
+  REPLACE [[(if (and (memq (node-name n) br898)
+                              (or (byte-dispatch-node? n) (pause-node? n)
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
-                                  (callback-node? n))]]
+                                  (callback-node? n)
+                                  (span-start-node? n) (span-end-node? n))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "and the sequence node itself are three zero-progress cycles: zero-progress-cycle count -- expected 3, got 2")
@@ -5129,7 +5265,8 @@ byte_machine_mutation(
   # whose cycle runs through one. Kept because shipping one without the other is
   # the half-fix this pass exists to prevent.
   FIND [[                                  (integer-accumulate-node? n)
-                                  (callback-node? n))
+                                  (callback-node? n)
+                                  (span-start-node? n) (span-end-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[                                  (callback-node? n))
                               (reaches-self? (node-name n)))]]
@@ -5178,10 +5315,12 @@ byte_machine_mutation(
   # callback kind, and the REPLACE keeps the disjunct list intact so the mutant
   # still differs from the baseline in ONE thing -- the arm's answer.
   FIND [[          ((or (field-action-node? n) (field-branch-node? n)
-               (callback-node? n))
+               (callback-node? n)
+               (span-start-node? n) (span-end-node? n))
            (zero-width-edges n))]]
   REPLACE [[          ((or (field-action-node? n) (field-branch-node? n)
-               (callback-node? n))
+               (callback-node? n)
+               (span-start-node? n) (span-end-node? n))
            '())]]
   EXPECT_STATUS 1
   # A CONJUNCTION, for the mirror of the reason above: the reachability record
@@ -5204,7 +5343,8 @@ byte_machine_mutation(
   # names -- the walk stops following a zero-width node, now for three kinds
   # rather than two.
   FIND [[              ((or (field-action-node? n) (field-branch-node? n)
-                   (callback-node? n))
+                   (callback-node? n)
+                   (span-start-node? n) (span-end-node? n))
                (zero-width-successors n))
 ]]
   REPLACE [[              ]]
@@ -5225,10 +5365,12 @@ byte_machine_mutation(
   # Re-anchored by Slice ③ task 2: the guard gained its sixth disjunct.
   FIND [[                                  (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
-                                  (callback-node? n))
+                                  (callback-node? n)
+                                  (span-start-node? n) (span-end-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[                                  (integer-accumulate-node? n)
-                                  (callback-node? n))
+                                  (callback-node? n)
+                                  (span-start-node? n) (span-end-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
@@ -5720,13 +5862,17 @@ byte_machine_mutation(
   # differs from the baseline in ONE thing -- the labels -- which is what this
   # LABEL claims and what its pin can prove.
   FIND [[          ((or (field-action-node? n) (field-branch-node? n)
-               (callback-node? n))
+               (callback-node? n)
+               (span-start-node? n) (span-end-node? n))
            (zero-width-edges n))]]
   REPLACE [[          ((or (field-action-node? n) (field-branch-node? n)
-               (callback-node? n))
+               (callback-node? n)
+               (span-start-node? n) (span-end-node? n))
            (map (lambda (re) (cons 'next (cdr re))) (zero-width-edges n)))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the other four kinds label their edges too")
+  # Re-anchored at Slice ③ task 8: the case is "every other kind" now, the
+  # census having grown a callback row and two span rows.
+  EXPECT_OUTPUT_MATCHES "every other kind labels its edges too")
 
 # Milestone 5 Slice ②: §16.2:901's NODE half. Four faults, three codes, and one
 # arm ORDER that is load-bearing -- the duplicate check runs first, so a key
@@ -5803,7 +5949,204 @@ byte_machine_mutation(
   EXPECT_OUTPUT_MATCHES
     "the resolution arm answers ALONE: case raised")
 
+# Milestone 5 Slice ③: pass 7, the span-state lattice (decision 0029). One
+# mutation per decision the pass makes, and the two structural ones -- the edge
+# set and the node domain -- are the two 0029 does NOT settle between them.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: span RE-ENTRY is accepted"
+  FIND [[               ((and (pair? state) (eq? (cadr state) s))
+                (list (make-diagnostic 'invalid-span-state (node-name n)
+                                       "span re-entry: this span is already open")))]]
+  REPLACE [[               ((and (pair? state) (eq? (cadr state) s)) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "span RE-ENTRY: a second start for the same span")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: span OVERLAP is accepted"
+  FIND [[               ((pair? state)
+                (list (make-diagnostic 'invalid-span-state (node-name n)
+                                       "span overlap: another span is already open")))]]
+  REPLACE [[               ((pair? state) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "span OVERLAP: a start for a different span while one is open")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a WRONG END is accepted"
+  FIND [[               ((pair? state)
+                (list (make-diagnostic 'invalid-span-state (node-name n)
+                                       "wrong end: a different span is open")))]]
+  REPLACE [[               ((pair? state) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "WRONG END: closing a span that is not the one open")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an UNMATCHED END is accepted"
+  FIND [[               ((eq? state 'none)
+                (list (make-diagnostic 'invalid-span-state (node-name n)
+                                       "unmatched end: no span is open")))]]
+  REPLACE [[               ((eq? state 'none) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "UNMATCHED END: closing with nothing open")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a merge disagreement is not reported"
+  # Decision 0029 item 2, whose whole Context is the argument that this is a
+  # rejection of its own and not a paraphrase of §14:843's fourth property.
+  FIND [[                                    ((eq? st 'top)
+                                     (list (make-diagnostic 'inconsistent-span-state]]
+  REPLACE [[                                    ((and #f (eq? st 'top))
+                                     (list (make-diagnostic 'inconsistent-span-state]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "INCONSISTENT: two branches disagree at a merge")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: top flows onward instead of stopping at the merge"
+  # The other half of decision 0029 item 2, and the half that keeps the transfer
+  # functions TOTAL: with `top` flowing, a span end downstream of the merge is
+  # asked what it does on `top`, answers `unmatched end`, and blames a node that
+  # is innocent.
+  # Re-anchored at the final review, which deleted the `(not fn)` disjunct that
+  # used to ride along here: `fn` is `(lookup nodes from)` and every edge's
+  # `from` is a node's own name, so it could never be #f. The mutant is the same.
+  FIND [[                             (if (or (not fs) (eq? fs 'top))]]
+  REPLACE [[                             (if (not fs)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "INCONSISTENT: two branches disagree at a merge")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: pass 7's edge set omits the EOF routes"
+  # *** THE ROW DECISION 0029 COULD NOT REACH. *** Its item 3 fixes the pass's
+  # node domain and says nothing about its edges; without the eof half the
+  # dataflow never arrives at a finish node that is only EOF-reachable, and
+  # §16.2:907 -- "successful EOF with an active span" -- becomes unreachable.
+  FIND [[      (append byte-edges eof-edges)))]]
+  REPLACE [[      byte-edges))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a span open at an EOF-ONLY finish is rejected too")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: pass 7's EOF half keeps taking byte edges"
+  # Decision 0029 item 3 takes 0027's relation rather than minting a third, and
+  # 0027 rejects `all-out-targets` BY NAME: that walk crosses an eof-target and
+  # then keeps taking byte edges, which describes no execution. This mutant is
+  # that walk, and the fixture is the machine 0027's own Context derives.
+  #
+  # *** ITS FIRST FORM SHIPPED UNCAUGHT AND THE SUITE SAID SO. *** It removed a
+  # `(memq to live)` filter -- which turned out to be vacuous, because `live` is
+  # the CLOSURE of the edge relation and every edge's target is in it by
+  # construction. The filter was deleted rather than documented, and the
+  # decision it was meant to witness is witnessed here, where the two relations
+  # actually differ.
+  FIND [[                              (map (lambda (t) (cons (node-name n) t)) (eof-step n))]]
+  REPLACE [[                              (map (lambda (t) (cons (node-name n) t)) (all-out-targets n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the span end on the untakeable byte edge is not reported")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the zero-progress report is not gated on byte-reachability"
+  # §16.2:898's gate, decision 0027 item 3 (Milestone 5 Slice ③). Its own
+  # fixture asserts BOTH directions, so this mutant is caught by the accepting
+  # half -- the machine 0027's Context derives, which `unreachable-node` does
+  # NOT catch either, which is why the gate is not the benign no-op design §3.2
+  # item 4 called it.
+  FIND [[                     (if (and (memq (node-name n) br898)]]
+  REPLACE [[                     (if (and #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "an unoccupiable zero-progress cycle is accepted")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a span open at an ERROR terminal is rejected too"
+  # Decision 0029 item 4 is about the SUCCESSFUL terminals only, and §14:839
+  # contemplates a span still open at an error one. This is the mutation that
+  # consumes decision 0023 item 5's kept `finish`-versus-`error` distinction:
+  # widen the check and the accepted machine is rejected.
+  FIND [[      ((and (pair? state) (or (stop-node? n) (finish-node? n)))]]
+  REPLACE [[      ((and (pair? state) (or (stop-node? n) (finish-node? n) (error-node? n)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a span open at an ERROR terminal is ACCEPTED")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: §16.2:900 does not see callback invocations"
+  # The bullet names "explicit pauses OR event/decision callback invocations",
+  # and the two halves are one arm here -- so dropping either is its own
+  # mutation and its own case.
+  FIND [[      ((and (pair? state) (or (pause-node? n) (callback-node? n)))]]
+  REPLACE [[      ((and (pair? state) (pause-node? n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a CALLBACK invocation reachable with a span active is the same finding")
+
+# --- Slice ③ task 8: the two holes the census reconciliation found -----------
+#
+# Both are Slice ③'s own: it made a span end a PARKED state and a span node a
+# DECLARATION-REFERENCING one, and shipped neither check. Both were reachable
+# rather than theoretical -- one machine verified clean and then answered
+# `stopped` from `parser-finish!`, the other verified clean and then raised out
+# of `normalize-machine`.
+#
+# A THIRD line was written and deleted here: an arm in `parked-eof-start`
+# answering `(span-end-node-next n)`. Its mutation SURVIVED, because a span end
+# is pure flow-through and `classify` joins over its `next` anyway, so starting
+# the walk at the node and at its successor give the same verdict. Only the
+# membership below does anything.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a span end is not treated as a parked state"
+  # §16.2:909 and §14:838. Without the disjunct, a machine whose span end
+  # continues into a stop verifies clean -- and `parser-finish!` after a
+  # span-data pause answers `stopped` from it, which is the outcome the whole
+  # check exists to forbid.
+  FIND [[                                    (span-end-node? n)
+                                    (symbol? (node-eof-target n))))]]
+  REPLACE [[                                    (symbol? (node-eof-target n))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a span end continuing into a STOP is rejected .*one finding, at the span end -- expected ..eof-reachable-stop . cl.., got .."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a span node's declaration cross-reference is not checked"
+  # §16.2:901's span half. `make-span-start-node` stores its span as a bare
+  # symbol and its own comment assigns this to the verifier; pass 7 cannot do it,
+  # because the lattice is well defined over any symbol and treats the name
+  # opaquely. Without the arm the machine verifies CLEAN and `normalize-machine`
+  # raises `assertion-violation` -- a verified machine crashing the normalizer,
+  # which §9.2:368 forbids in as many words.
+  FIND [[                           ((or (span-start-node? n) (span-end-node? n))
+                            (span-node-declaration-diagnostics sps n))]]
+  REPLACE [[                           ((or (span-start-node? n) (span-end-node? n)) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an UNDECLARED span is rejected .*one finding per node -- expected ..missing-span-declaration . op. .missing-span-declaration . cl.., got .."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: only a span START's declaration is checked, not a span end's"
+  # The accessor split, which one node cannot witness: each kind carries its own
+  # `-span` accessor and a fix reaching only one of them leaves the other
+  # unchecked. The fixture places both and the pin names the SURVIVING half.
+  FIND [[    (let ((s (if (span-start-node? n) (span-start-node-span n) (span-end-node-span n))))]]
+  REPLACE [[    (let ((s (if (span-start-node? n) (span-start-node-span n) 'body)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an UNDECLARED span is rejected .*got ..missing-span-declaration . op.."
+)
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 
 # --- Pass 34: the reference interpreter (Milestone 1 Phase 2) ----------------
 #
@@ -5880,8 +6223,12 @@ byte_machine_mutation(
   # that check on the very same call that just built the compound (a
   # single-byte slice hits end-of-slice exactly there), so every multi-byte
   # sequence stops dead after its first byte. Comparison-caught.
-  FIND [[            'dispatch                   ; mid-sequence: always reading a byte]]
-  REPLACE [[            'stop                   ; mid-sequence: always reading a byte]]
+  # Re-anchored in Slice ③: `kind`'s compound branch now has to separate TWO
+  # compounds -- a mid-sequence (name . byte-list) from a span end's
+  # (name . completion-pending) -- so the bare `'dispatch` line became an inner
+  # `if`. The mutant is the same one: the mid-sequence compound stops reading.
+  FIND [[            (if (completion? name) 'span-completion 'dispatch)]]
+  REPLACE [[            (if (completion? name) 'span-completion 'stop)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
     "the full sequence stops after four bytes: stopped -- expected \\(stopped 1 1 4 #f\\), got \\(stopped 0 0 1 #f\\)")
 
@@ -6828,8 +7175,10 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: an internal prefix state's own id field is wrong"
-  FIND [[(map (lambda (kv) (seq-state n (car kv) ids (cdr kv))) ids)))]]
-  REPLACE [[(map (lambda (kv) (seq-state n (car kv) ids 0)) ids)))]]
+  # Re-anchored by Slice ③: `internal` now walks TWO families, so the prefix arm
+  # sits inside an `if` on the block's kind and its tail moved.
+  FIND [[(map (lambda (kv) (seq-state n (car kv) ids (cdr kv))) ids)]]
+  REPLACE [[(map (lambda (kv) (seq-state n (car kv) ids 0)) ids)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
     "internal prefix states carry their own id, not a placeholder: id 4 -- expected 4, got 0")
 
@@ -6897,6 +7246,69 @@ byte_machine_mutation(
   REPLACE [[                              (put-u32be p (cdr b)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "each part varied alone moves the fingerprint: and every one moved the fingerprint -- expected \\(\\), got \\(branch-key\\)")
+
+# Milestone 5 Slice ③ task 4: the span states' encoding, and the SECOND family of
+# internal states -- the one that makes decision 0026 item 1 non-inert.
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the span-end encode tag collides with span-start"
+  # Pinned on the GOLDEN, for the reason the callback tag's own mutation states:
+  # a tag change moves every span fingerprint together, so every pairwise
+  # inequality in that group survives it and only a fixed value can see it.
+  FIND [[               ((span-end)
+                (put-u8 p 12)]]
+  REPLACE [[               ((span-end)
+                (put-u8 p 11)]]
+  EXPECT_STATUS 1
+  # RE-MEASURED at task 8: the golden moved when the span fixture's tail had to
+  # route through a dispatch -- its span end continued straight into a stop, and
+  # a span end is a parked state, so §16.2:909 now rejects that shape.
+  EXPECT_OUTPUT_MATCHES "the base machine verifies and normalizes: fingerprint -- expected 8308402030897048213")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a span node's slot is not resolved against the declarations"
+  # The slot is what the ABI carries, so two machines whose nodes name different
+  # spans would share a fingerprint and open different spans.
+  #
+  # Anchored on the RESOLUTION rather than on one arm's `put-u16be`: dropping the
+  # span-start arm's write alone leaves the span-end's, so the `span-slot` row --
+  # which moves BOTH nodes -- still separates and only the golden would notice,
+  # which is the tag mutation's pin. Collapsing the resolution moves the row
+  # itself, and the two mutations stay distinguishable.
+  FIND [[                      ((eq? (span-declaration-name (car sp)) nm) i)]]
+  REPLACE [[                      ((eq? (span-declaration-name (car sp)) nm) 0)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "and every one moved the fingerprint -- expected \\(\\), got \\(span-slot\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a span end lowers to a fused state instead of two"
+  # Decision 0026 item 2: §14:838 resumes "at the next undelivered substep",
+  # which a fused state cannot express because it has ONE resume point. Caught
+  # by the state count, which is what makes the claim checkable rather than
+  # asserted.
+  FIND [[                      ((span-end-node? n)
+                       (loop (cdr ns) (+ next 1) (cons (list n 'span-end #f next) acc)))]]
+  REPLACE [[                      ((and #f (span-end-node? n))
+                       (loop (cdr ns) (+ next 1) (cons (list n 'span-end #f next) acc)))]]
+  EXPECT_STATUS 1
+  # A RAISE, and it is the decision's own consequence rather than an incidental
+  # crash: with no block allocated, `completion-id-of` cannot answer and says so
+  # by name. There is no opposite constant to try.
+  EXPECT_OUTPUT_MATCHES "span end has no continuation state")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the debug map skips the second internal family"
+  # §17:963's map must stay TOTAL, and §13:820 requires the public parser state
+  # to name the source span node rather than a generated continuation. Slice ②
+  # raised the stakes: the map crosses the seam as ABI payload member 2, so an
+  # incomplete one is an index error in the generated lane.
+  FIND [[                                        (list (cons ids (node-name n))))))]]
+  REPLACE [[                                        '())))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "every state id has a source name -- expected \\(\\), got \\(6\\)")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -7907,8 +8319,10 @@ byte_machine_mutation(
   LABEL "ir: node? does not admit an integer-accumulate node"
   # The two census sites every new kind must join. One mutation per site, so a
   # half-taught pair cannot pass.
-  FIND [[        (integer-accumulate-node? x) (callback-node? x)))]]
-  REPLACE [[        (callback-node? x)))]]
+  FIND [[        (integer-accumulate-node? x) (callback-node? x)
+        (span-start-node? x) (span-end-node? x)))]]
+  REPLACE [[        (callback-node? x)
+        (span-start-node? x) (span-end-node? x)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "integer-accumulate nodes.it is a node and answers node-name: node\\? -- expected a true value")
@@ -8013,9 +8427,11 @@ byte_machine_mutation(
   # the disjunction reflowed onto three lines. The decision and the pin are
   # unchanged -- this still drops the field-action disjunct.
   FIND [[        (field-action-node? x) (field-branch-node? x)
-        (integer-accumulate-node? x) (callback-node? x)))]]
+        (integer-accumulate-node? x) (callback-node? x)
+        (span-start-node? x) (span-end-node? x)))]]
   REPLACE [[        (field-branch-node? x)
-        (integer-accumulate-node? x) (callback-node? x)))]]
+        (integer-accumulate-node? x) (callback-node? x)
+        (span-start-node? x) (span-end-node? x)))]]
   EXPECT_STATUS 1
   # `?` is a regex metacharacter -- unescaped, `node? --` matches "nod --",
   # which no output contains, and the runner reports a wrong-reason catch.
@@ -8041,8 +8457,10 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
   LABEL "ir: node? does not admit a callback node"
-  FIND [[        (integer-accumulate-node? x) (callback-node? x)))]]
-  REPLACE [[        (integer-accumulate-node? x)))]]
+  FIND [[        (integer-accumulate-node? x) (callback-node? x)
+        (span-start-node? x) (span-end-node? x)))]]
+  REPLACE [[        (integer-accumulate-node? x)
+        (span-start-node? x) (span-end-node? x)))]]
   EXPECT_STATUS 1
   # `?` is a regex metacharacter -- unescaped, `node? --` matches "nod --", which
   # no output contains, and the runner reports a wrong-reason catch.
@@ -8108,6 +8526,72 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the branch list is copied at construction: a fresh spine -- expected a true value")
+
+# Milestone 5 Slice ③ task 1: the ELEVENTH and TWELFTH node kinds. `node?` and
+# `node-name` are the two census sites every kind must join; the mandatory `next`
+# is the only local-shape decision either constructor owns.
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node? does not admit a span-start node"
+  FIND [[        (span-start-node? x) (span-end-node? x)))]]
+  REPLACE [[        (span-end-node? x)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "and each carries all four parts -- expected .., got .span-start.")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node? does not admit a span-end node"
+  FIND [[        (span-start-node? x) (span-end-node? x)))]]
+  REPLACE [[        (span-start-node? x)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "and each carries all four parts -- expected .., got .span-end.")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node-name answers for neither span kind"
+  # BOTH arms in one mutation, and the reason is recorded rather than left to a
+  # reader: `node-name`'s else RAISES, so dropping either arm alone stops the
+  # table-driven case at the same point with the same record. Two mutations
+  # would be indistinguishable; the pair is one decision -- the kinds joined the
+  # cond -- and it gets one mutation.
+  FIND [[          ((span-start-node? x) (span-start-node-name x))
+          ((span-end-node? x) (span-end-node-name x))
+]]
+  REPLACE [[          ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "span nodes.each carries its four parts and is a node: case raised")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: a span-start node's next may be absent"
+  # §10.6:590 gives the kind no route of its own, so there is no #f arm to
+  # defend. Its sibling below is the same decision for the other kind, and they
+  # are separable because the case names the kind that failed.
+  FIND [[    (require-symbol 'make-span-start-node 'next next)]]
+  REPLACE [[    (require-symbol 'make-span-start-node 'span span)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "start next -- expected a raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: a span-end node's next may be absent"
+  FIND [[    (require-symbol 'make-span-end-node 'next next)]]
+  REPLACE [[    (require-symbol 'make-span-end-node 'span span)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "end next -- expected a raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: the two span kinds share one tag"
+  # The defect a table driven by predicates cannot see: if both builders make
+  # the same thing and both predicates answer for it, every part-by-part row
+  # passes. Only the distinguishability case notices.
+  FIND [[  (define span-end-node-tag (tag 'byte-machine-span-end-node))]]
+  REPLACE [[  (define span-end-node-tag span-start-node-tag)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the two kinds are distinguishable")
 
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
@@ -9148,6 +9632,88 @@ byte_machine_mutation(
   EXPECT_OUTPUT_MATCHES
     "an accumulate overflow reports byte at the unconsumed digit: offset -- expected 2, got 3")
 
+# --- Slice ③ task 8: §12.7:770's row, which the tree did not implement -------
+#
+# "Zero-width machine action or callback failure | `boundary` at the current
+# stream offset." Every site building a callback-domain error passed the loop's
+# `pk` instead, and Slice ②'s own comment claimed the carried-through `pk` "is
+# the rule the carried-through `pk` already implements" -- true only where the
+# invoking node was reached by an ADVANCE edge. Over a REEXECUTE edge `pk` is
+# `byte`, and BOTH LANES REPORTED IT, so no differential could see it: the
+# lane-to-lane projection is satisfied by two lanes agreeing on a wrong value,
+# which is why the fix's rows assert the VALUE and not only the agreement.
+#
+# FOUR mutations, because the correction has four independent sites: one named
+# constant serving the runtime's six arms, and three rendered literals. Every
+# fixture that reaches one does so over a reexecute edge, which is what makes
+# the literal and the variable differ at all.
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "runtime: a callback failure reports the loop's position kind"
+  # The interpreted half, over all three of its arms at once -- the constant is
+  # one decision and the six sites read it.
+  #
+  # *** RE-PINNED AT THE FINAL REVIEW. *** The pin read `kind -- expected
+  # boundary, got byte`, which the emitted-callback-arm mutation below prints
+  # byte for byte: both make that row's kind check fail, and the comment here
+  # claimed the emitted ones "do not move" it. What separates them is the
+  # PROJECTION's direction -- the harness prints the second `check-equal`
+  # argument as "expected", which is the GENERATED lane, so a mutation of the
+  # interpreted lane reads `expected …boundary, got …byte` and its emitted
+  # sibling reads the mirror. Measured.
+  FIND [[  (define callback-failure-position 'boundary)]]
+  REPLACE [[  (define callback-failure-position 'byte)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the lanes agree on the projection -- expected .callback said-no .callback failure. inv 1 boundary., got .callback said-no .callback failure. inv 1 byte."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "compile: the emitted callback arm reports the loop's position kind"
+  # The generated half, one arm at a time. Each is pinned on its own row's
+  # PROJECTION, whose "expected" is the generated lane's value -- the harness
+  # prints the second `check-equal` argument as expected -- so the three read as
+  # mirror images of each other and no two collide.
+  FIND [[            (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off)))))\n")))
+        ;; --- Slice ③'s three span arms]]
+  REPLACE [[            (nm (normal-state-id s)) ") " id " off pk) " id " off)))))\n")))
+        ;; --- Slice ③'s three span arms]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a callback failure reports boundary at the committed offset: the lanes agree on the projection -- expected .callback said-no .callback failure. inv 1 byte."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "compile: the emitted span-end arm reports the loop's position kind"
+  # Its own site and its own row: a span end is always reached by a reexecute
+  # edge in practice -- the delimiter must not be consumed into the payload --
+  # so this arm is the one where the defect was easiest to reach and hardest to
+  # see, both lanes having agreed on `byte`.
+  FIND [[            (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off)))))\n")))
+        ;; The SECOND substep.]]
+  REPLACE [[            (nm (normal-state-id s)) ") " id " off pk) " id " off)))))\n")))
+        ;; The SECOND substep.]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a span data callback failure reports boundary at the committed offset: the lanes agree on the projection -- expected .callback said-no .callback failure. cl 2 byte."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "compile: the emitted span-completion arm reports the loop's position kind"
+  # The third, and the reason the lane builds a THIRD machine: a span whose
+  # completion callback is declared and fails. Neither row above reaches this
+  # arm, and its projection differs from the span end's only by the check label.
+  FIND [[                (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off))))))\n"))))]]
+  REPLACE [[                (nm (normal-state-id s)) ") " id " off pk) " id " off))))))\n"))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a span completion callback failure reports boundary too: the lanes agree on the projection -- expected .callback said-no .callback failure. cl 2 byte."
+)
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 49: parser-field-ref, across BOTH executors (Slice ①b tasks 6+7) ----
@@ -9852,11 +10418,31 @@ byte_machine_mutation(
   # The following line rides along in both halves: the runner refuses an empty
   # REPLACE, so the pass is dropped by rewriting the pair rather than by deleting
   # a line.
+  # Re-anchored by Slice ③: `pass-spans` (§16.3:925's pass 7) sits between them
+  # in `verify-machine`'s append. The edit -- drop pass-declarations -- is
+  # unchanged, and its sibling below now pins pass 7 the same way.
   FIND [[                                  (pass-declarations machine)
+                                  (pass-spans machine)]]
+  REPLACE [[                                  (pass-spans machine)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "duplicate-callback-declaration is emitted")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.unit.diagnostic-census.chez.source
+  LABEL "verify: pass-spans is never run"
+  # Milestone 5 Slice ③, and the same shape as its sibling above: the whole pass
+  # dropped from verify-machine's append. All four span fixtures then find no
+  # diagnostic at all, so this is caught by a COMPARISON naming missing codes
+  # rather than by a raise from wherever the walk happens to stop. The following
+  # line rides along in both halves; the runner refuses an empty REPLACE.
+  FIND [[                                  (pass-spans machine)
                                   (pass-overlap machine)]]
   REPLACE [[                                  (pass-overlap machine)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "duplicate-callback-declaration is emitted")
+  # Measured: each of the four span codes has a fixture, so the per-code loop
+  # fails four times by name before the summary row does. Pinned on one of them,
+  # which is what attributes this to the PASS rather than to a fixture.
+  EXPECT_OUTPUT_MATCHES "inconsistent-span-state is emitted -- expected a true value")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.unit.diagnostic-census.chez.source
@@ -9922,10 +10508,12 @@ byte_machine_mutation(
   # are then exercised for it by construction.
   #
   # Measured caught by the matrix ALONE: no other lane in the tree notices.
-  FIND [[        (integer-accumulate-node? x) (callback-node? x)))]]
-  REPLACE [[        (integer-accumulate-node? x) (callback-node? x) (stop-node? x)))]]
+  FIND [[        (integer-accumulate-node? x) (callback-node? x)
+        (span-start-node? x) (span-end-node? x)))]]
+  REPLACE [[        (integer-accumulate-node? x) (callback-node? x)
+        (span-start-node? x) (span-end-node? x) (stop-node? x)))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the same ten kinds -- expected")
+  EXPECT_OUTPUT_MATCHES "the same twelve kinds -- expected")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls
@@ -10033,12 +10621,59 @@ byte_machine_mutation(
   # lanes. Its own record is the pause-continuation cell, where the mutant keeps
   # the EOF cycle and loses the feed one -- a record no other mutant here emits.
   FIND [[                                  (integer-accumulate-node? n)
-                                  (callback-node? n))
+                                  (callback-node? n)
+                                  (span-start-node? n) (span-end-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[                                  (integer-accumulate-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "callback-pause-continuation advance want")
+
+# Milestone 5 Slice ③ task 1: the span kinds' single successors. Each arm is its
+# own mutation because axis C names the position that failed.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls
+  SPEC byte-machine.unit.kind-position-census.chez.source
+  LABEL "verify: a span-start node's successor is not an edge"
+  FIND [[          ((span-start-node? n) (list (cons 'next (span-start-node-next n))))]]
+  REPLACE [[          ((span-start-node? n) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "each reports its derived fault -- expected .*span-start-next want .missing-target")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls
+  SPEC byte-machine.unit.kind-position-census.chez.source
+  LABEL "verify: a span-end node's successor is not an edge"
+  FIND [[          ((span-end-node? n) (list (cons 'next (span-end-node-next n))))]]
+  REPLACE [[          ((span-end-node? n) '())]]
+  EXPECT_STATUS 1
+  # RE-MEASURED at task 8, when the span end joined §16.2:909's parked set. The
+  # mutant used to lose two findings from the axis-C cell; now the span end is a
+  # walk START with no out-edge, so `eof-terminal`'s zero-width join is empty and
+  # RAISES before any verdict is compared -- a stronger consequence than the one
+  # first recorded, and the pin has to name it or it is a stale expectation.
+  #
+  # Its span-start sibling above ALSO raises, but only on axis A: at
+  # `span-start-next` the span start is not a walk start, so axis C still reaches
+  # its value comparison. The axis-C RAISE is therefore this mutant's alone, and
+  # that is the line pinned.
+  EXPECT_OUTPUT_MATCHES
+    "a target naming no node .axis C..every position reports the resolution fault its route calls for: case raised")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls
+  SPEC byte-machine.unit.kind-position-census.chez.source
+  LABEL "verify: the zero-progress REPORT set excludes the span kinds"
+  # The half-fix Milestone 3 Slice ② shipped, two kinds later: the WALK finds
+  # the cycle and nothing reports it, so a span node whose successor is itself
+  # verifies clean and then hangs in both lanes.
+  FIND [[                                  (span-start-node? n) (span-end-node? n))
+                              (reaches-self? (node-name n)))]]
+  REPLACE [[                                  )
+                              (reaches-self? (node-name n)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "span-start-next advance want")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -10095,8 +10730,11 @@ byte_machine_mutation(
   # cross-lane comparison stays green. Caught by the by-value case that asserts
   # the four outcomes are four DISTINCT tuples -- without which a lane pair
   # agreeing on one wrong answer for every outcome would pass.
-  FIND [[                ((eq? r callback-pause) (list 'pause))]]
-  REPLACE [[                ((eq? r callback-pause) (list 'goto continue))]]
+  # Re-anchored in Slice ③: the classifier moved into `classify-callback-result`
+  # (one `cond` serving both arities), so this arm lost six leading spaces. The
+  # mutant and its verdict are unchanged.
+  FIND [[          ((eq? r callback-pause) (list 'pause))]]
+  REPLACE [[          ((eq? r callback-pause) (list 'goto continue))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "and the pause is neither -- expected a true value")
 
@@ -10198,19 +10836,13 @@ byte_machine_mutation(
   # what a callback observes.
   # The following line rides along in both halves; the runner refuses an empty
   # REPLACE.
+  # Re-anchored in Slice ③: §14:834's mark re-anchor now sits between the `busy`
+  # write and the wind. The FIND had to carry the following lines only because
+  # the runner refuses an empty REPLACE, so it carries the new ones instead --
+  # the mutant, and its verdict, are unchanged.
   FIND [[       (parser-set-lifecycle! parser 'busy)
-       (let ((completed #f))
-         (dynamic-wind
-           (lambda () #t)
-           (lambda ()
-             (let ((r (case (parser-variant parser)
-                        ((op) (parser-feed-op! parser bv start end))]]
-  REPLACE [[       (let ((completed #f))
-         (dynamic-wind
-           (lambda () #t)
-           (lambda ()
-             (let ((r (case (parser-variant parser)
-                        ((op) (parser-feed-op! parser bv start end))]]
+       ;; §14:834: an open span "begins its next possible fragment at the next]]
+  REPLACE [[       ;; §14:834: an open span "begins its next possible fragment at the next]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "all six answered -- expected .busy inv 1 7")
 
@@ -10275,10 +10907,17 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.callback.chez.source
   LABEL "runtime: a callback invocation consumes a byte"
-  FIND [[                 ((goto)
+  # Re-anchored in Slice ③: the span-end arm's `goto` is textually identical to
+  # this one -- both are zero-width, which is the point -- so the FIND now
+  # carries the invocation above it, which names the kind it belongs to.
+  FIND [[                        (caddr parts) (cadr parts) (list-ref parts 4))))
+               (case (car o)
+                 ((goto)
                   (parser-set-current! parser (cadr o))
                   (loop pos pk))]]
-  REPLACE [[                 ((goto)
+  REPLACE [[                        (caddr parts) (cadr parts) (list-ref parts 4))))
+               (case (car o)
+                 ((goto)
                   (parser-set-current! parser (cadr o))
                   (loop (+ pos 1) pk))]]
   EXPECT_STATUS 1
@@ -10288,17 +10927,296 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.callback.chez.source
   LABEL "compile: the emitted callback jump consumes a byte"
-  FIND [[            "           ((goto) (loop pos (cadr o) off pk))\n"]]
-  REPLACE [[            "           ((goto) (loop (+ pos 1) (cadr o) off pk))\n"]]
+  # Re-anchored in Slice ③, for the same reason its interpreted sibling above
+  # was: the emitted span-end arm renders the identical `goto` line. The FIND
+  # carries the invocation line above it, which is this arm's alone.
+  FIND [[            (let ((d (caddr tg))) (if d (num d) "#f")) ")))\n"
+            "         (case (car o)\n"
+            "           ((goto) (loop pos (cadr o) off pk))\n"]]
+  REPLACE [[            (let ((d (caddr tg))) (if d (num d) "#f")) ")))\n"
+            "         (case (car o)\n"
+            "           ((goto) (loop (+ pos 1) (cadr o) off pk))\n"]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the lanes agree -- expected .stopped 2 2 1 #f stopped., got .stopped 1 1 1")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
+# --- Milestone 5 Slice ③: the span kinds execute (pass 54) -------------------
+#
+# The differential lane is the SPEC for the same reason Slice ②'s was: no other
+# program in the tree loads a generated library containing a span state. What is
+# different here is what the lane can SEE. A callback outcome shows up in a
+# parser result; a span fragment does not -- two lanes can agree on every tuple
+# in §22.4 while handing the application different bytes. So the pins below are
+# anchored on the FRAGMENT TRACE, and three of them (the emitted span start, the
+# emitted span end, and the emitted completion substep) would otherwise resolve
+# to the same "the lanes agree" line. The fixture asserts the GENERATED lane's
+# trace and active span as values for exactly that reason, and each pin names
+# the wrong value rather than the disagreement.
+#
+# Six mutations edit code SHARED by both lanes -- the fragment step's empty
+# check, the boundary flush, the feed's mark re-anchor, reset's span clear -- so
+# both lanes move together and a cross-lane comparison cannot see them at all.
+# Those are pinned on recorded VALUES, never on agreement.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/differential-span-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "runtime: an empty span fragment is delivered instead of suppressed"
+  # §14:835. SHARED, so both lanes deliver the empty fragment and agree about
+  # it; only a test that says what the trace IS can notice. `AZ` opens and
+  # closes with nothing between, and the EOF-chain span is the same shape.
+  FIND [[      (if (or (>= from to) (unbound-callback? f))]]
+  REPLACE [[      (if (or (> from to) (unbound-callback? f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "completion only -- expected .complete., got .#vu8.. complete."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "runtime: the feed-boundary flush never runs"
+  # §14:833-834 and §19.3:1024. The status guard is what selects the boundary:
+  # `error` is forbidden a final fragment (§14:839), `stopped`/`finished` with a
+  # span active are verifier-rejected, and `paused` cannot produce a nonempty
+  # one. Pointing it at `paused` disables the flush without deleting it.
+  FIND [[    (if (and (eq? (parser-result-status r) 'need-input)]]
+  REPLACE [[    (if (and (eq? (parser-result-status r) 'paused)]]
+  EXPECT_STATUS 1
+  # Its half of the pair the flush-pause mutation below also names: this mutant
+  # delivers NO fragment, and the pin says so rather than resting on the status
+  # line the two used to share.
+  EXPECT_OUTPUT_MATCHES
+    "separates two mutants: delivered, and reported as a pause -- expected ..#vu8.98 99.. .paused 3 3 3 #f paused-feed.., got ... .need-input 3 3 3 #f ready.."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "runtime: an open span's mark is not re-anchored at the next feed"
+  # *** THE ONE PLACE §14:834's RE-ANCHOR LIVES, and since the mark advance was
+  # measured subsumed and deleted, the only place a mark ever moves after a span
+  # opens. *** With it gone the mark keeps the coordinates it had in the slice
+  # the span STARTED in, so the second feed's span end slices `[1,2)` of the new
+  # bytevector -- one wrong byte, not none, which is why the pin names the
+  # sequence rather than a count.
+  #
+  # Measured, not derived: the sub-slice case below does NOT fail under this
+  # mutant, because there the stale mark happens to land on the right byte. Two
+  # mutations, two cases, and neither case covers both.
+  FIND [[       (when (parser-active-span parser)
+         (parser-set-span-mark! parser start))
+       (let ((completed #f))]]
+  REPLACE [[       (let ((completed #f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "bc then de, never bc twice -- expected .#vu8.98 99. #vu8.100 101. complete., got .#vu8.98 99. #vu8.101. complete."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "runtime: the mark is re-anchored to 0 rather than to the slice start"
+  # §14:833 makes the mark a SLICE offset and §14:834 anchors it at "the next
+  # feed's `start`". Every other case in the lane feeds a whole bytevector,
+  # where `start` and `0` are the same program -- so this mutant is invisible to
+  # all of them, and the sub-slice case exists only to separate the two.
+  FIND [[         (parser-set-span-mark! parser start))]]
+  REPLACE [[         (parser-set-span-mark! parser 0))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the padding is in neither fragment -- expected .#vu8.98 99. #vu8.100. complete., got .#vu8.98 99. #vu8.7 7 100. complete."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "runtime: a full reset leaves the span state behind"
+  # §12.5:739 lists span state FIRST among what a reset clears, and F2 found the
+  # comment above `parser-reset!` still saying it "does not exist". Both lanes
+  # move, so the pin names the accessor's value in each.
+  FIND [[    (byte-machine-span-close/v1 parser)
+    (vector-set! parser 8]]
+  REPLACE [[    (vector-set! parser 8]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "inactive after -- expected .#f #f., got .payload payload."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "interpret loop: the span is not made inactive before the completion callback"
+  # §14:842: "Before invoking the completion callback, execution makes the span
+  # inactive." One lane only, so the cross-lane comparison catches it too -- but
+  # the pin is on the VALUE, because the emitted mutation two below shares that
+  # line and only the value separates them.
+  FIND [[             (let ((parts (op 'span-completion-parts node)))
+               (byte-machine-span-close/v1 parser)]]
+  REPLACE [[             (let ((parts (op 'span-completion-parts node)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "and the span is inactive afterwards -- expected #f, got payload"
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "interpret loop: a span start records the mark at 0 instead of the cursor"
+  # §14:831: "Starting a span records the current cursor." The interpreted arm's
+  # `pos` against the finish arm's literal 0 -- which is correct THERE, since the
+  # finish path has no cursor, and is what makes this FIND one site.
+  FIND [[               (byte-machine-span-open/v1 parser (car parts) pos (cadr parts))]]
+  REPLACE [[               (byte-machine-span-open/v1 parser (car parts) 0 (cadr parts))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "one fragment then one completion -- expected .#vu8.98 99 100. complete., got .#vu8.65 98 99 100. complete."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "runtime: a pause during the flush is reported as need-input"
+  # §14:837 makes the flush's pause the FEED's pause: the fragment is committed
+  # and the caller must resume. Reported as `need-input` the parser stays ready,
+  # so the caller's `parser-resume!` raises a lifecycle violation three steps
+  # later -- which the harness shows as a bare raise.
+  #
+  # *** RE-PINNED AT THE FINAL REVIEW: the STATUS alone was printed BYTE FOR BYTE
+  # by "the feed-boundary flush never runs" above. *** Two mutants, one output
+  # line, and the pin attributed the catch to neither. They part on the FRAGMENT
+  # -- a flush that ran and mis-reported its status still delivered `bc`, one
+  # that never ran delivered nothing -- so the lane grew a case asserting the
+  # PAIR, and each mutation now names its own half of it. Measured both ways.
+  FIND [[            ((pause) (make-parser-result 'paused (parser-result-next r)]]
+  REPLACE [[            ((pause) (make-parser-result 'need-input (parser-result-next r)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "separates two mutants: delivered, and reported as a pause -- expected ..#vu8.98 99.. .paused 3 3 3 #f paused-feed.., got ..#vu8.98 99.. .need-input 3 3 3 #f ready.."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "compile: the emitted span start records the mark at 0"
+  # The generated half of the interpreted mutation above. Both are needed: each
+  # edits one lane, and a lane agreeing with a mutated sibling is the defect
+  # neither alone can show.
+  FIND [[            (symbol->string (car d)) ") pos " (num (cadr d)) ")\n"]]
+  REPLACE [[            (symbol->string (car d)) ") 0 " (num (cadr d)) ")\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the generated lane's own fragment -- expected .#vu8.98 99 100. complete., got .#vu8.65 98 99 100. complete."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "compile: the emitted span end slices to the end of the feed"
+  # §14:832 emits `[mark,cursor)`, and `cursor` is `pos` -- not `end`. The
+  # difference is exactly the delimiter the span end reexecutes onto, so this
+  # mutant produces a fragment one byte too long and nothing else moves.
+  FIND [[" off (vector-ref cbv " (num (cadr d)) ") bv pos " cid ")))\n"]]
+  REPLACE [[" off (vector-ref cbv " (num (cadr d)) ") bv end " cid ")))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the generated lane's own fragment -- expected .#vu8.98 99 100. complete., got .#vu8.98 99 100 90. complete."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "compile: the emitted completion substep does not close the span"
+  # §14:842's generated half. TWO shapes are rendered here -- with and without a
+  # declared completion callback (§10.4:516) -- and this is the one that calls;
+  # its sibling below is the one that does not, and each needs its own witness
+  # because a single machine renders only one of them.
+  FIND [[                "       (begin (byte-machine-span-close/v1 psr)\n"
+                "         (let ((o (byte-machine-callback-step/v1 psr " id]]
+  REPLACE [[                "       (begin #t\n"
+                "         (let ((o (byte-machine-callback-step/v1 psr " id]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "and its span is inactive too -- expected #f, got payload"
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "compile: the emitted completion substep for a span with no callback does not close"
+  # The OTHER rendered shape, and the reason the lane builds a second machine at
+  # all: a span declaring no completion callback still needs the substep, whose
+  # only job is then to make the span inactive. Nothing else in the tree renders
+  # this arm, so without the second machine it would ship unexecuted.
+  FIND [[                "       (begin (byte-machine-span-close/v1 psr)\n"
+                "              " (zero-width-jump (normal-field-targets s)) "))\n")]]
+  REPLACE [[                "       (begin #t\n"
+                "              " (zero-width-jump (normal-field-targets s)) "))\n")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "#vu8.98 99 100.. payload., got "
+)
+
+# --- Task 6's oracle: §25:1590's universal, made a table ---------------------
+#
+# "Every invalid span topology is rejected" is a universal over a set the parent
+# plan never writes down, so the lane writes it down: eleven rows, each with the
+# verdict DERIVED from §14:843 or §16.2:899 before it was run, and the count as
+# the sentinel. These four break one arm of `span-node-diagnostics` each, and
+# every one of them turns a rejected row green rather than turning a green row
+# red -- which is the direction a census can otherwise miss entirely.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "verify: a span re-entering itself is not rejected"
+  FIND [[               ((and (pair? state) (eq? (cadr state) s))
+                (list (make-diagnostic 'invalid-span-state (node-name n)
+                                       "span re-entry: this span is already open")))]]
+  REPLACE [[               ((and (pair? state) (eq? (cadr state) s)) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "reentry want .invalid-span-state. got .."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "verify: ending the wrong span is not rejected"
+  FIND [[               ((pair? state)
+                (list (make-diagnostic 'invalid-span-state (node-name n)
+                                       "wrong end: a different span is open")))]]
+  REPLACE [[               ((pair? state) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "wrong-end want .invalid-span-state. got .."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "verify: a finish reachable with a span active is admitted"
+  # Decision 0023 item 5 kept `finish` distinguished from `error` precisely so
+  # this arm could name one and not the other, and the table's `error-inside`
+  # row is what proves the distinction still costs something: with `finish`
+  # dropped the row below goes green while `error-inside` stays green, so only
+  # the FINISH row moves.
+  FIND [[      ((and (pair? state) (or (stop-node? n) (finish-node? n)))]]
+  REPLACE [[      ((and (pair? state) (stop-node? n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "finish-inside want .span-active-at-exit. got .."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "verify: a callback invocation inside a span is admitted"
+  # §13:826 names "an explicit pause node or event/decision callback
+  # invocation" as one rule, and this arm is where the two halves are one `or`.
+  # Replacing the callback half with a kind that can never carry the state --
+  # a span END sets the state to `none` on the way out -- keeps the arm shaped
+  # like itself and makes the callback row green.
+  FIND [[      ((and (pair? state) (or (pause-node? n) (callback-node? n)))]]
+  REPLACE [[      ((and (pair? state) (or (pause-node? n) (span-end-node? n)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "callback-inside want .span-active-at-pause. got .."
+)
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FIFTY-THREE PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FIFTY-FOUR PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

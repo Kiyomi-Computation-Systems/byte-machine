@@ -4,6 +4,14 @@ Date: 2026-09-04
 Status: accepted
 Milestone: 5, Gate 0 (milestone-5-design.md §4.4)
 
+> **Amendments** — later notes at the foot of this file reach back into the text
+> above them. Nothing above a note is rewritten.
+>
+> - **2026-09-05 (Milestone 5 Slice ③)** — **annotates**: both items shipped, and
+>   the second family this record was written for now exists. Nothing above became
+>   false; the note records what was measured and one thing the record left open
+>   that the lowering answered.
+
 ## Context
 
 Decided 2026-09-04 against branch `feat/milestone-5-gate-0` (base `cc66302`) plus
@@ -182,3 +190,38 @@ one-per-substep. Rule 9 does.
   parent plan names two deliverable events at `§10.6:594`, but the count belongs to
   the lowering — and nothing about slot numbering, which `§17:962` keeps as its
   own responsibility: "assign field, callback, and span slots".
+
+## 2026-09-05 (Milestone 5 Slice ③): both items shipped, and the rule stopped being inert
+
+Item 1's merged pre-order and item 2's one-state-per-substep are both implemented
+in `normalize-machine` (`private/normal-ir.sls`, the `internal-blocks` binding and
+the `internal` list built from it), and `test/common/normal-ir-tests.sps`'s span
+group asserts the shape.
+
+**What was inert and no longer is.** This record's own Consequences said the rule
+"does work only BETWEEN nodes", and until this slice there was one family, so
+there was nothing to order against. There are two now: `internal-blocks` is a
+single walk that allocates prefix ids and span-end continuations in one pass over
+`machine-nodes`, so a span end's continuation sits at that node's position rather
+than in a family block of its own. That is item 1 executed literally, and it is
+what the phrase "declaring-node order across both families" now denotes.
+
+**Item 1's premise held.** The record asserted that "no single node declares two
+kinds of internal state", measured against a kind-disjoint `cond`. Still true: a
+span end contributes exactly one continuation and no prefix block, and the walk
+is one `cond` with one arm per family.
+
+**What the record left open, and what the lowering answered.** Its final
+Consequence says the record "does not decide how many substeps a span end has —
+the parent plan names two deliverable events at `§10.6:594`, but the count belongs
+to the lowering." The lowering chose **two**, and only one of them is an internal
+state: the DECLARED span-end node is the first substep (the remaining fragment)
+and `§14:841`'s `completion-pending` is the second. That is the smallest split
+item 2 permits, and `§14:838`'s "next undelivered substep" is satisfied by the
+declared node and its one continuation rather than by two continuations.
+
+**And the debug map stayed total**, which item 1 required of this slice in as
+many words: every `span-completion` state answers with its declaring span-end
+node's public name, which is also what `§13:820` requires of `parser-state-name`.
+`normal-ir-tests.sps` asserts the totality over the whole states vector, not only
+over the new family.

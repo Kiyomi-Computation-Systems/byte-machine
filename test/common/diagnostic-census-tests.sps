@@ -136,7 +136,26 @@
     ;; 1 -> 2 in the same move: a callback node naming no declaration is the
     ;; same fault a span naming no declaration reports, and a key listed twice
     ;; is the same fault whether the list is a declaration's or a node's.
-    (invalid-callback-invocation 3)))
+    (invalid-callback-invocation 3)
+    ;; Milestone 5 Slice ③: pass 7, the span-state lattice. FOUR codes over
+    ;; SEVEN sites, and the split follows §16.2's own bullets rather than the
+    ;; pass's internals: `:899`'s four TRANSFER faults share one code because
+    ;; they are one question -- the state at this node is wrong for what the
+    ;; node does -- while its fifth, the merge disagreement, gets its own,
+    ;; because decision 0029 spends its entire argument establishing that it is
+    ;; a different thing and not a paraphrase. `:900` and `:907`'s span half are
+    ;; one bullet each.
+    (invalid-span-state 4) (inconsistent-span-state 1)
+    (span-active-at-pause 1) (span-active-at-exit 1)
+    ;; And ONE more code from Slice ③'s own census reconciliation, in
+    ;; `pass-declarations` rather than pass 7: a span NODE naming a span the
+    ;; machine never declared. §16.2:901's "undeclared" for the span kinds, and
+    ;; the mirror of `missing-callback-declaration`, which is why it does not
+    ;; reuse it -- that code's subject is a CALLBACK name, and a reader tracing
+    ;; a report back would look in the callback table for a name that is not in
+    ;; it. Measured before the fix: such a machine verified clean and then raised
+    ;; out of `normalize-machine`, which §9.2:368 forbids.
+    (missing-span-declaration 1)))
 
 ;; *** RE-MEASURED 2026-09-03, Slice ⓪b task 2: `non-eof-into-finish` went 3 -> 1
 ;; and the total 31 -> 29. *** This is the ratchet FIRING, not a regression: ⓪b
@@ -281,6 +300,19 @@
   (make-callback-declaration name kind req keys default #f))
 (define (sp name data complete) (make-span-declaration name data complete #f))
 (define (verify-of m) (lambda () (verify-machine m)))
+;; Milestone 5 Slice ③: a machine carrying the span declaration chain, so a
+;; span-node fixture drives pass 7 rather than §16.2:890's resolution.
+(define (span-entry target)
+  (make-byte-dispatch-node 'start
+    (list (make-byte-case (make-exact-byte-matcher 0) (make-edge target 'advance) #f))
+    (make-edge 'rej 'reexecute) #f #f))
+(define (span-fixture nodes)
+  (make-machine 'a 'start '()
+                (list (cb 'on-data 'span-data #t '() #f))
+                (list (sp 'body 'on-data #f))
+                (list ed rd)
+                (append nodes (list (make-stop-node 'stop #f) (an-error 'rej)))
+                'default-eof #f))
 
 (define code-fixtures
   (list
@@ -416,6 +448,48 @@
                                 (list (one-case-dispatch 'start 'inv 'advance #f)
                                       (make-callback-node 'inv 'on-x 'stop
                                                           '((nosuch stop)) 'rej #f)
+                                      (make-stop-node 'stop #f) (an-error 'rej))
+                                'default-eof)))
+   ;; --- Milestone 5 Slice ③: pass 7 --------------------------------------
+   ;; One fixture per code. The four transfer faults share a code, so one of
+   ;; them stands for the row here; verify-tests drives all four separately and
+   ;; asserts the NODE each is reported at, which this census does not.
+   (cons 'invalid-span-state
+         (verify-of (span-fixture (list (span-entry 'cl)
+                                        (make-span-end-node 'cl 'body 'stop #f)))))
+   (cons 'inconsistent-span-state
+         (verify-of (span-fixture
+                     (list (make-byte-dispatch-node 'start
+                             (list (make-byte-case (make-exact-byte-matcher 0)
+                                                   (make-edge 'op 'advance) #f)
+                                   (make-byte-case (make-exact-byte-matcher 1)
+                                                   (make-edge 'mrg 'advance) #f))
+                             (make-edge 'rej 'reexecute) #f #f)
+                           (make-span-start-node 'op 'body 'mrg #f)
+                           (make-byte-dispatch-node 'mrg
+                             (list (make-byte-case (make-exact-byte-matcher 0)
+                                                   (make-edge 'stop 'advance) #f))
+                             (make-edge 'rej 'reexecute) #f #f)))))
+   (cons 'span-active-at-exit
+         (verify-of (span-fixture (list (span-entry 'op)
+                                        (make-span-start-node 'op 'body 'stop #f)))))
+   (cons 'span-active-at-pause
+         (verify-of (span-fixture (list (span-entry 'op)
+                                        (make-span-start-node 'op 'body 'p #f)
+                                        (make-pause-node 'p 'cl #f)
+                                        (make-span-end-node 'cl 'body 'rej #f)))))
+   ;; The undeclared-span cross-reference, which is `pass-declarations`' and not
+   ;; pass 7's: the lattice is well defined over ANY symbol, so it treats the
+   ;; name opaquely and can never notice. Built on `mach/decls` rather than
+   ;; `span-fixture` because the point is a machine whose span table does NOT
+   ;; contain the name the node uses.
+   (cons 'missing-span-declaration
+         (verify-of (mach/decls 'a (list (cb 'on-data 'span-data #t '() #f))
+                                (list (sp 'body 'on-data #f))
+                                (list ed rd)
+                                (list (span-entry 'op)
+                                      (make-span-start-node 'op 'nosuch 'cl #f)
+                                      (make-span-end-node 'cl 'nosuch 'stop #f)
                                       (make-stop-node 'stop #f) (an-error 'rej))
                                 'default-eof)))
    ;; A machine name outside the portable repertoire.

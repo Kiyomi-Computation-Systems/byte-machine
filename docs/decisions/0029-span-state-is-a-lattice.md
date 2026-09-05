@@ -4,6 +4,14 @@ Date: 2026-09-04
 Status: accepted
 Milestone: 5, Gate 0 (milestone-5-design.md §4.7)
 
+> **Amendments** — later notes at the foot of this file reach back into the text
+> above them. Nothing above a note is rewritten.
+>
+> - **2026-09-05 (Milestone 5 Slice ③)** — **annotates**: the pass shipped. Nothing
+>   above became false; the note records the edge set item 3 does not fix, one
+>   Consequence the shipped verifier does not implement for ANY pass, and the
+>   `§16.2:899` rejection this record's mapping does not cover.
+
 ## Context
 
 Decided against the tree at `cc66302`. The parent plan enumerates what the
@@ -183,3 +191,53 @@ open are consistent and still wrong.
 - **This record adds no third reachability relation.** 0027 records the two the
   verifier deliberately carries and says which passes use which; pass 7 consumes
   one of them and defines none of its own.
+
+## 2026-09-05 (Milestone 5 Slice ③): the pass shipped, and three things the record left to it
+
+`pass-spans` implements items 1, 2 and 4 as written: the flat lattice, the
+fixpoint, `top` reported where it arises, and the successful-exit check kept
+separate from it. The `§16.2:899` mapping in the Consequences is the table the
+verify fixtures are organised by, and `differential-span-tests.sps` enumerates
+eleven span topologies with each verdict derived from `§14:843` or `§16.2:899`
+before it was run — which is what `§25:1590`'s universal now rests on.
+
+**1. Item 3 fixes the NODE domain and says nothing about the EDGE SET, and the
+two are different questions.** The record takes 0027's reachability relation and
+concludes which nodes carry state; a dataflow also needs to know which edges the
+transfer function follows. It is load-bearing: `§16.2:907` is *successful EOF with
+an active span*, and a dataflow over byte out-edges alone never reaches a finish
+node that is only EOF-reachable. The pass's edge relation is therefore byte edges
+plus EOF routes, and a fixture whose only route to a finish is an eof-target,
+with a span left open, is what proves it. This is a gap in the record, filled by
+the implementation, not a contradiction of it.
+
+**2. Item 3's "a node no execution can occupy contributes no state to a join and
+receives none" is satisfied BY THE RELATION, not by a guard.** A `(memq to live)`
+filter was written first and its mutation shipped UNCAUGHT: `live` is the closure
+of the pass's own edge relation, so every edge's target is in it by construction
+and the filter could never fire. It was deleted rather than documented, and the
+decision it was meant to witness is now witnessed where the two relations
+actually differ — an EOF half that keeps taking byte edges.
+
+**3. One Consequence describes something the shipped verifier does not do for ANY
+pass.** It reads: `§16.3:929` "makes the fixpoint map a first-class output, not a
+local variable". Every pass in `verify.sls` returns diagnostics and nothing else,
+and `verify-machine` appends their lists; there is no channel for a derived
+analysis and `pass-spans` inventing one would have been the only pass with an
+unused second return. `§16.3:929`'s "plus any derived immutable analysis" is
+permissive, so nothing is violated — but the Consequence reads as a requirement
+this pass failed to meet, and it is not: it is a requirement the ARCHITECTURE has
+never met, and whoever wants the map (an emitter consuming span state, say) is
+changing `verify-machine`, not `pass-spans`.
+
+**4. The mapping table does not cover `§16.2:901`'s span half, and nothing else
+did either.** The five rejections `§16.2:899` names all map onto the lattice, and
+a sixth fault does not: a span node naming a span the machine never DECLARED. The
+lattice is well defined over any symbol, so it treats the name opaquely and can
+never notice — which is correct for a lattice and wrong for a verifier.
+`make-span-start-node`'s own comment had assigned the cross-reference to
+"`§16.2:899` and pass 7's lattice (decision 0029)", so the obligation was recorded
+against this record and discharged by nothing. Measured before the fix: such a
+machine verified CLEAN and then raised out of `normalize-machine`. It is now
+`pass-declarations`' `missing-span-declaration`, beside the callback half — where
+a NAME cross-reference belongs, and where this record never put it.
