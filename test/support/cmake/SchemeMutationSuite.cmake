@@ -866,6 +866,25 @@ cmake_minimum_required(VERSION 3.26)
 # comparison cannot see them and the program's by-value assertions are what
 # catch them.
 #
+# Milestone 5 Slice ② task 4, `parser-state-name` and the ABI bump 4 -> 5: FIVE
+# more, 406 + 5 = 411, in two existing passes. THREE in the sequence-node
+# differential, whose lowered prefix states are the one shape where the two
+# lanes hold structurally different things at a parked position -- the compound
+# and an integer id -- which is exactly why Slice ①b could not ship the
+# accessor. TWO in the callback pass, for §13:819-820's committed state, and
+# each is false in ONE lane only: the interpreted arm is already parked where
+# the callback should see it, and the emitted `exec` owns its own locals until
+# it returns.
+#
+# *** One mutation was RETIRED here rather than re-anchored, and the reason
+# generalises. *** "an ABI 4 payload with no member 1 is accepted" went UNCAUGHT
+# the moment member 2's guard landed: the payload length guards were a CHAIN,
+# one minimum per ABI version, and a later minimum subsumes every earlier one --
+# so the ①b guard's removal changed nothing any input could observe. The three
+# guards collapsed into one reading `current-abi-members`, and the mutation was
+# re-anchored onto it under a version-free LABEL. Only the LAST guard in a
+# chain of widening minimums discriminates anything.
+#
 # Milestone 5 Slice ①b: TWO. `pass-declarations` never run -- eight census
 # fixtures then find nothing, caught by a comparison naming a missing code. And
 # the span section reusing the callback section's tag, which pins the section
@@ -1051,7 +1070,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 53)
-set(EXPECTED_MUTATIONS 406)
+set(EXPECTED_MUTATIONS 411)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3067,15 +3086,25 @@ byte_machine_mutation(
 # exec with `bv start end #f`).
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
-  LABEL "runtime: an ABI 4 payload with no member 1 is accepted"
+  LABEL "runtime: a payload short of the current ABI's members is accepted"
   # Milestone 5 Slice ①b's final review: the guard shipped with no test and no
-  # pin. Without it a version-4 runtime reads member 1 out of a one-member
-  # payload and fails with an index error deep in make-parser instead of a named
+  # pin. Without it the runtime reads a member out of a payload that has none
+  # and fails with an index error deep in make-parser instead of a named
   # refusal at construction.
-  FIND [[    (unless (>= (vector-length metadata) 2)]]
-  REPLACE [[    (unless #t]]
+  #
+  # *** RE-ANCHORED and RE-LABELLED by Milestone 5 Slice ②, which found the
+  # guard chain undiscriminating. *** The shipped shape was two length guards,
+  # one per ABI version; adding member 2's made it three and the ①b guard's
+  # mutation went UNCAUGHT, because a later minimum subsumes every earlier one
+  # and the mutant simply fell through to the next guard. The three collapsed
+  # into one guard reading `current-abi-members`, which is what this now
+  # witnesses -- deleting it exposes `(vector-ref metadata 2)`, whose `who` is
+  # not the constructor's.
+  FIND [[    (unless (and (vector? metadata)
+                 (>= (vector-length metadata) current-abi-members))]]
+  REPLACE [[    (unless (vector? metadata)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "a one-member payload is refused at the current version")
+  EXPECT_OUTPUT_MATCHES "a payload short of the current minimum is refused")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -8383,6 +8412,51 @@ byte_machine_mutation(
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
     "a nonzero-start trailing empty feed separates next from start, zero, and offset: interpreter after completion -- expected \\(stopped 5 0 4 #f\\), got \\(stopped 0 0 4 #f\\)")
 
+# Milestone 5 Slice ② task 4: `parser-state-name`, the accessor Slice ①b
+# deferred whole. This lane is its SPEC because a lowered sequence is the one
+# shape in the tree where the two lanes hold structurally different things at a
+# parked position -- the compound `(seq . bytes)` and an integer id naming no
+# source node -- which is exactly why ①b could not ship it.
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.sequence-node.chez.source
+  LABEL "compile: the emitted state-name table is rendered empty"
+  # ABI payload member 2. Empty, the generated lane has nothing to answer from
+  # and `parser-state-name` fails on the index -- so the caught record is a
+  # raise, and it is the decision's own consequence rather than an incidental
+  # crash: the table's whole purpose is to be indexed by the current state.
+  FIND [[           (snames (let sloop ((i 0) (acc ""))
+                     (if (>= i (vector-length states)) acc]]
+  REPLACE [[           (snames (let sloop ((i 0) (acc ""))
+                     (if #t acc]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "both lanes answer the declaring node at every prefix depth: case raised")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.sequence-node.chez.source
+  LABEL "interpret: parser-state-name answers the compound mid-sequence"
+  # §13:820 requires "the source callback/span node, not a generated internal
+  # continuation". Unwrapping the compound is the whole of this lane's half of
+  # that sentence, and the mutant answers `(seq 1)` where the generated lane
+  # answers `seq` -- a failed COMPARISON naming both sides.
+  FIND [[           ((state-name) (let ((c (car args))) (if (pair? c) (car c) c)))]]
+  REPLACE [[           ((state-name) (car args))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "both lanes answer the declaring node at every prefix depth: and each names the sequence node")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.sequence-node.chez.source
+  LABEL "runtime: parser-state-name reads the entry rather than the current state"
+  # The accessor is about WHERE THE PARSER IS. Reading the entry answers
+  # correctly for a fresh parser -- which is why the bookend case checks a
+  # stopped one too -- and wrongly everywhere else.
+  FIND [[      ((v2) (vector-ref (parser-state-names parser) (parser-current parser)))]]
+  REPLACE [[      ((v2) (vector-ref (parser-state-names parser) (parser-entry parser)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a fresh parser names the entry, and a finished one its terminal: stopped, both lanes")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 47: the multi-alternative absolute lane is non-vacuous (M3 Slice ③ --
@@ -9048,8 +9122,13 @@ byte_machine_mutation(
   # list -- survives untouched if ①b leaves the constructor reading member 0
   # only, dies if it does not -- and it did not. The decision this pin names is
   # unchanged: member 0 is the field table and dropping it must be caught.
-  FIND [[            (vector-ref metadata 0) (vector-ref metadata 1)))]]
-  REPLACE [[            (vector) (vector-ref metadata 1)))]]
+  # Re-anchored again by Milestone 5 Slice ②, which added member 2 (§17:963's
+  # state-name table) and so a third `vector-ref` on the same line. The decision
+  # is still member 0's.
+  FIND [[            (vector-ref metadata 0) (vector-ref metadata 1)
+            (vector-ref metadata 2)))]]
+  REPLACE [[            (vector) (vector-ref metadata 1)
+            (vector-ref metadata 2)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "parser-field-ref \\(generated\\).a fresh parser reads the declared initial at every width: case raised")
@@ -10002,6 +10081,38 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "all six outcomes produce the identical tuple in both lanes: and every one agrees")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.callback.chez.source
+  LABEL "runtime: a callback invocation does not commit `current` first"
+  # §13:820, and it is only false in ONE lane: the interpreted arm passes the
+  # node it is already parked on, so this write is a no-op there and the
+  # generated arm passes its own `st`. Without it the emitted lane's callback
+  # sees the state the FEED started in -- `start`, not `inv`.
+  # The following line rides along in both halves; the runner refuses an empty
+  # REPLACE.
+  FIND [[    (parser-set-current! parser state)
+    (parser-set-offset! parser offset)]]
+  REPLACE [[    (parser-set-offset! parser offset)]]
+  EXPECT_STATUS 1
+  # Pinned on the generated lane's OWN wrong value, not on the bare check label:
+  # its sibling below shares that label, and only the recorded tuple separates
+  # them. Measured, and the harness prints the SECOND argument as "expected" --
+  # here the generated lane, which reports the state the feed started in.
+  EXPECT_OUTPUT_MATCHES "committed value -- expected .start 1.*got .inv 1")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.callback.chez.source
+  LABEL "runtime: a callback invocation does not commit the offset first"
+  # §13:819's half of the same sentence, and the same one-lane asymmetry: the
+  # emitted `exec` owns `off` and writes the parser's slot only on return, so
+  # without this the callback sees the offset the feed began at.
+  FIND [[    (parser-set-current! parser state)
+    (parser-set-offset! parser offset)]]
+  REPLACE [[    (parser-set-current! parser state)]]
+  EXPECT_STATUS 1
+  # Its sibling's mirror: same check label, different recorded tuple.
+  EXPECT_OUTPUT_MATCHES "committed value -- expected .inv 0.*got .inv 1")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

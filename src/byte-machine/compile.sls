@@ -79,7 +79,10 @@
       ;; EMITTED code -- the callback arm's invocation and its error record -- so
       ;; a machine or node named after either would shadow the thing its own
       ;; emitted body calls.
-      byte-machine-callback-step/v1 byte-machine-make-callback-error/v1))
+      byte-machine-callback-step/v1 byte-machine-make-callback-error/v1
+      ;; And `parser-state-name`, the sixth §9.3 accessor: ①b deferred it whole
+      ;; and ② carries the table it needs as ABI payload member 2.
+      parser-state-name))
   ;; Every identifier the emitted body binds, so a caller-chosen output binding
   ;; cannot collide with one. `fieldv` is emitted `exec`'s seventh parameter,
   ;; reserved empty by Milestone 4 Slice ①a and filled by its Slice ② (decision
@@ -389,7 +392,7 @@
          (let ((tg (normal-field-targets s)))
            (string-append
             "      ((" id ")\n"
-            "       (let ((o (byte-machine-callback-step/v1 psr (vector-ref cbv "
+            "       (let ((o (byte-machine-callback-step/v1 psr " id " off (vector-ref cbv "
             (num (normal-field-selector s)) ") (quote ("
             (let join ((bs (normal-field-arguments s)) (acc ""))
               (if (null? bs) acc
@@ -615,6 +618,34 @@
                                 acc (if (string=? acc "") "" " ")
                                 "(" (symbol->string (car (car fs)))
                                 " . " (number->string (caddr (car fs))) ")")))))
+           ;; ABI payload member 2, Milestone 5 Slice ②: §17:963's state-id to
+           ;; SOURCE-NAME table, as a vector indexed by state id. It is what
+           ;; makes `parser-state-name` answerable in the generated lane, which
+           ;; is why Slice ①b deferred that accessor whole rather than shipping
+           ;; it answering in one lane -- the debug map was read at exactly one
+           ;; site, at emission time, and never crossed the seam.
+           ;;
+           ;; Rendered here rather than as a separate top-level `define`: the
+           ;; emitted library exports ONE name and the compiled-machine
+           ;; constructor's five arguments are the only channel to the runtime,
+           ;; so a top-level definition would still have to be passed in. It is a
+           ;; rendering choice, not a third transport, and the payload grows
+           ;; either way -- which §9.5:444 makes an ABI bump, 4 -> 5.
+           ;;
+           ;; Total over internal prefix states, so a lowered sequence position
+           ;; answers with its DECLARING node's public name.
+           (snames (let sloop ((i 0) (acc ""))
+                     (if (>= i (vector-length states)) acc
+                         (sloop (+ i 1)
+                                (string-append
+                                 acc (if (string=? acc "") "" " ")
+                                 (symbol->string
+                                  (let ((hit (assv i names)))
+                                    (unless hit
+                                      (assertion-violation
+                                       'render-machine
+                                       "no source name for normalized state" i))
+                                    (cdr hit))))))))
            (bstr (symbol->string binding)))
       (string->utf8
        (string-append
@@ -640,8 +671,9 @@
                                                                  (normal-machine-fields normal))))))
         "      (else (assertion-violation (quote exec) \"unknown state\" st)))))\n"
         "  (define " bstr "\n"
-        "    (byte-machine-make-compiled-machine 4 " (number->string fp) " "
-        (number->string entry) " exec (quote #(#(" fields ") #(" cbs "))))))\n"))))
+        "    (byte-machine-make-compiled-machine 5 " (number->string fp) " "
+        (number->string entry) " exec (quote #(#(" fields ") #(" cbs ") #("
+        snames "))))))\n"))))
 
   (define (emit-machine compilation binding port)
     (let ((bytes (render-machine compilation binding)))

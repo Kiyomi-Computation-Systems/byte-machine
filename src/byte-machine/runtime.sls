@@ -23,13 +23,15 @@
           parser-error-offset parser-error-position-kind
           parser-field-ref
           callback-continue callback-pause
-          ;; Milestone 5 Slice ①b. `parser-state-name` is NOT here: it must name
-          ;; a source node (§13:820) and the generated lane holds an integer
-          ;; state id with no id->name table, so shipping it would answer in one
+          ;; Milestone 5 Slice ①b. `parser-state-name` was NOT here: it must name
+          ;; a source node (§13:820) and the generated lane held an integer state
+          ;; id with no id->name table, so shipping it would have answered in one
           ;; lane and not the other. Deferred whole to Slice ② by the owner,
-          ;; 2026-09-04 -- ② is the first slice with a caller that can witness it
-          ;; and must carry the table regardless.
+          ;; 2026-09-04 -- and ② carries the table, as ABI payload member 2.
           parser-stream-offset parser-user-context parser-active-span
+          ;; Milestone 5 Slice ②: the sixth accessor decision 0028 item 1 is
+          ;; written for, and the one ①b could not build.
+          parser-state-name
           make-callback-failure callback-failure?
           callback-failure-code callback-failure-detail
           ;; Milestone 5 Slice ②. Both are called from EMITTED code, which is
@@ -79,11 +81,26 @@
   ;; `>= 1` metadata check further down is a LENGTH minimum and enforces nothing
   ;; about the version: a two-member payload satisfies it unchanged, which is
   ;; the freedom the quoted vector was chosen for.
-  (define current-abi-version 4)
+  ;;
+  ;; Bumped to 5 by Milestone 5 Slice ② (§9.5:444), which grew the payload with
+  ;; member 2: §17:963's state-id to source-name table. That table is what makes
+  ;; `parser-state-name` answerable in the generated lane at all -- Slice ①b
+  ;; deferred the accessor whole rather than ship it answering in one lane -- and
+  ;; there is no third transport to put it on: the emitted library exports one
+  ;; name and the constructor's five arguments are the only channel.
+  (define current-abi-version 5)
+  ;; How many payload members ABI 5 defines: field declarations, the callback
+  ;; declaration table, and the state-id to source-name table. Named beside the
+  ;; version because the two move together -- §9.5:444 makes growing the payload
+  ;; a version bump -- and read by the single length guard below.
+  (define current-abi-members 3)
   ;; ABI payload member 1, Milestone 5 Slice ①b: the callback declaration table
   ;; the generated lane resolves bindings against. `#()` for a machine declaring
   ;; none, which is every committed golden.
   (define (compiled-machine-v2-callbacks cm) (vector-ref cm 6))
+  ;; ABI payload member 2, Milestone 5 Slice ②: a vector of SOURCE node names
+  ;; indexed by state id, total over internal prefix states.
+  (define (compiled-machine-v2-state-names cm) (vector-ref cm 7))
 
   ;; The one unversioned constructor. Its FIRST action is the version check, so a
   ;; mismatch is reported before any part of the payload is interpreted -- which
@@ -106,14 +123,25 @@
                            "generated-runtime ABI mismatch" abi-version))
     (unless (procedure? exec)
       (assertion-violation 'byte-machine-make-compiled-machine "exec must be a procedure" exec))
-    (unless (and (vector? metadata) (>= (vector-length metadata) 1))
+    ;; *** ONE length guard, and Milestone 5 Slice ② collapsed two into it. ***
+    ;; The shipped shape was a chain -- at least one member, then at least two
+    ;; at ABI 4 -- on the reading that each should name the member a short
+    ;; payload is missing. Adding member 2's guard made the defect visible: a
+    ;; later minimum SUBSUMES every earlier one, so the earlier guard's removal
+    ;; changes nothing any input can observe, and its mutation went UNCAUGHT the
+    ;; moment the third guard landed. Only the LAST guard in such a chain is
+    ;; discriminating; the rest are prose with a raise attached.
+    ;;
+    ;; `vector?` is NOT subsumed and stays in the same guard: it must be refused
+    ;; before `vector-length` is applied at all.
+    (unless (and (vector? metadata)
+                 (>= (vector-length metadata) current-abi-members))
       (assertion-violation 'byte-machine-make-compiled-machine
-                           "metadata must be a vector with at least one member" metadata))
-    (unless (>= (vector-length metadata) 2)
-      (assertion-violation 'byte-machine-make-compiled-machine
-                           "metadata must carry member 1 at ABI 4" metadata))
+                           "metadata must carry every member this ABI defines"
+                           metadata))
     (vector compiled-machine-tag 'v2 exec entry-state ir-fingerprint
-            (vector-ref metadata 0) (vector-ref metadata 1)))
+            (vector-ref metadata 0) (vector-ref metadata 1)
+            (vector-ref metadata 2)))
 
   ;; Tombstones. /v1 and /v2 stay exported so a stale generated file fails with a
   ;; clean ABI-mismatch assertion instead of an unbound-identifier import error,
@@ -361,7 +389,7 @@
          (vector parser-tag 'op op entry entry 0 'ready #f
                  (initial-values decls) decls
                  (resolve-callbacks (op 'callback-decls) callback-bindings)
-                 user-context #f)))
+                 user-context #f #f)))
       ((eq? (compiled-machine-variant compiled-machine) 'v2)
        (let ((exec (compiled-machine-v2-exec compiled-machine))
              (entry-state (compiled-machine-v2-entry-state compiled-machine))
@@ -370,7 +398,8 @@
                  (initial-values decls) decls
                  (resolve-callbacks (compiled-machine-v2-callbacks compiled-machine)
                                     callback-bindings)
-                 user-context #f)))
+                 user-context #f
+                 (compiled-machine-v2-state-names compiled-machine))))
       ;; Unreachable through the public API: the only two constructors build 'op
       ;; and 'v2. Kept LOUD rather than deleted, the same convention as
       ;; compile.sls's and normal-ir.sls's own unreachable else arms.
@@ -395,16 +424,41 @@
   ;; mutable, so the runtime neither copies nor interprets it), and the active
   ;; span's name or #f. `parser-active-span` answers in BOTH lanes because a span
   ;; is bookkeeping the runtime owns (§10.2:495), not a generated state -- which
-  ;; is exactly why `parser-state-name` is NOT here: it must name a source node,
-  ;; and the generated lane holds an integer state id with no id->name table.
-  ;; Deferred whole to Slice ② by the owner, 2026-09-04.
+  ;; is why `parser-state-name` was NOT here: it must name a source node, and the
+  ;; generated lane held an integer state id with no id->name table. Slice ②
+  ;; carries that table across the seam and slot 13 below holds it.
   (define (parser-callbacks p) (vector-ref p 10))
   (define (parser-user-context p) (vector-ref p 11))
   (define (parser-active-span p) (vector-ref p 12))
+  ;; Slot 13, Milestone 5 Slice ②: ABI payload member 2's state-id to
+  ;; source-name vector, or #f in the interpreted lane, which is ASKED instead.
+  ;; The same per-lane asymmetry the field table and the callback declarations
+  ;; established -- the interpreter holds the verified source machine, the
+  ;; generated lane holds only what the payload carried.
+  (define (parser-state-names p) (vector-ref p 13))
   ;; §9.3:409. The absolute offset, which the parser already tracks; this is the
   ;; public name for it, and §13:819 makes it one of the values committed before
   ;; a callback sees the parser.
   (define (parser-stream-offset p) (parser-offset p))
+  ;; §9.3:408, and the accessor Slice ①b deferred whole rather than ship
+  ;; answering in one lane. §13:820 requires the SOURCE node name, "not a
+  ;; generated internal continuation", so the generated lane reads member 2's
+  ;; table -- which is total over internal prefix states, each answering with its
+  ;; declaring node's public name.
+  ;;
+  ;; A bare symbol, always: decision 0028 item 2 rejected widening this to a
+  ;; compound for the feed-boundary case, and the parent plan's dated
+  ;; disposition gives the reason -- "no caller can predict which calls return
+  ;; the compound". The active span is `parser-active-span`, shipped in ①b.
+  (define (parser-state-name parser)
+    (unless (parser? parser)
+      (byte-machine-contract-violation 'parser-state-name 'invalid-argument parser))
+    (case (parser-variant parser)
+      ((op) ((parser-executor parser) 'state-name (parser-current parser)))
+      ((v2) (vector-ref (parser-state-names parser) (parser-current parser)))
+      ;; Unreachable for the same reason make-parser's own else arm is.
+      (else (assertion-violation 'parser-state-name "unknown parser variant"
+                                 (parser-variant parser)))))
 
   ;; --- callback failure (§13:808, §9.3:415-416, decision 0024) ---------------
   ;; "an explicit callback failure containing an application code and optional
@@ -457,7 +511,22 @@
   ;;   (goto TARGET)          -- continue, a declared branch, or the default
   ;;   (pause)                -- park on the node's pause continuation
   ;;   (failure CODE DETAIL)  -- decision 0024's stored callback-domain error
-  (define (byte-machine-callback-step/v1 parser f branches continue default)
+  ;;
+  ;; *** IT COMMITS `current` AND THE OFFSET BEFORE INVOKING, and that is not
+  ;; bookkeeping -- it is §13:816-821. *** "At callback entry, the interpreter
+  ;; and generated executor expose identical committed parser state": the stream
+  ;; offset "includes every byte committed before the callback" (§13:819) and
+  ;; the public parser state "names the source callback/span node" (§13:820).
+  ;; In the interpreted lane both are already true when this is called. In the
+  ;; GENERATED lane neither is: `exec` owns its own `pos`/`off`/`st` locals and
+  ;; the parser's slots are only written when `exec` RETURNS, so without these
+  ;; two lines `parser-stream-offset` answers the offset at the start of the
+  ;; feed and `parser-state-name` answers the state the feed started in. The
+  ;; emitted arm passes its own `st` and `off`; the interpreted arm passes the
+  ;; values already there, so the writes are no-ops on that side.
+  (define (byte-machine-callback-step/v1 parser state offset f branches continue default)
+    (parser-set-current! parser state)
+    (parser-set-offset! parser offset)
     (if (unbound-callback? f)
         ;; §9.3:419: "An optional decision callback must declare
         ;; `default-branch`; other optional callbacks default to `continue`."
@@ -590,7 +659,7 @@
             ((callback)
              (let* ((parts (op 'callback-parts node))
                     (o (byte-machine-callback-step/v1
-                        parser
+                        parser node (parser-offset parser)
                         (vector-ref (parser-callbacks parser) (car parts))
                         (caddr parts) (cadr parts) (list-ref parts 4))))
                (case (car o)
@@ -759,7 +828,7 @@
           ((callback)
            (let* ((parts (op 'callback-parts node))
                   (o (byte-machine-callback-step/v1
-                      parser
+                      parser node (parser-offset parser)
                       (vector-ref (parser-callbacks parser) (car parts))
                       (caddr parts) (cadr parts) (list-ref parts 4))))
              (case (car o)

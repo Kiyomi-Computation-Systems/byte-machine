@@ -306,4 +306,88 @@
                        (list-ref (car (go cm-ref callback-pause)) 5)
                        'paused-finish))))))
 
+;; --- Milestone 5 Slice ②: §13:816-821's committed state, from inside --------
+;;
+;; "At callback entry, the interpreter and generated executor expose identical
+;; committed parser state." This is the first slice in which anything can be
+;; INSIDE a callback, so it is the first that can check it -- and the generated
+;; lane needed work to make it true: `exec` owns its own pos/off/st locals and
+;; writes the parser's slots only on RETURN, so without a commit before the
+;; invocation `parser-stream-offset` answers the offset the feed started at and
+;; `parser-state-name` answers the state it started in.
+(harness-group "what a callback sees is committed, and identical in both lanes"
+  (lambda ()
+    (harness-case "the accessors answer the same values from inside both lanes"
+      (lambda ()
+        ;; The whole §13:816-821 tuple, recorded FROM INSIDE the callback rather
+        ;; than after it: only a recording closure can see the state at entry,
+        ;; and only comparing the two recordings can show the lanes agree there.
+        (let ((seen-in
+               (lambda (cm)
+                 (let* ((seen '())
+                        (p (make-parser cm
+                                        (list (list 'decide
+                                                    (lambda (ps ux)
+                                                      (set! seen
+                                                            (list (parser-state-name ps)
+                                                                  (parser-stream-offset ps)
+                                                                  (parser-lifecycle ps)
+                                                                  (parser-active-span ps)
+                                                                  ux))
+                                                      callback-continue)))
+                                        'the-context)))
+                   (parser-feed! p (bv1 65) 0 1)
+                   seen))))
+          (let ((a (seen-in cm-ref)) (b (seen-in cm-gen)))
+            (check-equal "the two lanes agree on every committed value" a b)
+            ;; And by VALUE, not only by agreement: two lanes agreeing on the
+            ;; wrong offset would satisfy the comparison above.
+            (check-equal "the state name is the callback NODE's" (car a) 'inv)
+            ;; §13:819: "stream offset and cursor include every byte committed
+            ;; before the callback." One byte was consumed reaching `inv`.
+            (check-equal "the offset includes the consumed byte" (cadr a) 1)
+            (check-equal "no span is active" (cadddr a) #f)
+            (check-equal "and the user context is the one make-parser was given"
+                         (list-ref a 4) 'the-context)))))
+    (harness-case "the offset a callback sees is not the offset the feed began at"
+      (lambda ()
+        ;; The check that makes the case above non-vacuous: a lane that never
+        ;; committed would report 0, which is also a plausible answer, so the
+        ;; assertion is only meaningful because the two differ.
+        (let ((p (make-parser cm-ref
+                              (list (list 'decide (lambda (ps ux) callback-continue)))
+                              'the-context)))
+          (check-equal "before the feed" (parser-stream-offset p) 0))))
+    (harness-case "parser-state-name agrees at every position outside a callback too"
+      (lambda ()
+        ;; The accessor Slice ①b deferred, at the positions a caller can reach
+        ;; without a callback: fresh, stopped, errored, and parked on a callback
+        ;; pause continuation.
+        (let ((walk
+               (lambda (cm outcome bytes)
+                 (let ((p (make-parser cm
+                                       (list (list 'decide (lambda (ps ux) outcome)))
+                                       'the-context)))
+                   (let ((before (parser-state-name p)))
+                     (parser-feed! p bytes 0 (bytevector-length bytes))
+                     (list before (parser-state-name p) (parser-lifecycle p)))))))
+          (check-equal "fresh then stopped"
+                       (walk cm-ref callback-continue (bv1 65))
+                       (walk cm-gen callback-continue (bv1 65)))
+          (check-equal "and it is entry then the continue target"
+                       (walk cm-ref callback-continue (bv1 65))
+                       '(start done stopped))
+          (check-equal "fresh then parked on the pause continuation"
+                       (walk cm-ref callback-pause (bv1 65))
+                       (walk cm-gen callback-pause (bv1 65)))
+          (check-equal "and it is entry then `after`"
+                       (walk cm-ref callback-pause (bv1 65))
+                       '(start after paused-feed))
+          (check-equal "fresh then the error node"
+                       (walk cm-ref 'skip (bv1 65))
+                       (walk cm-gen 'skip (bv1 65)))
+          (check-equal "and it is entry then the error node"
+                       (walk cm-ref 'skip (bv1 65))
+                       '(start reject error)))))))
+
 (harness-finish)

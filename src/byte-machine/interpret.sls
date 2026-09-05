@@ -366,6 +366,13 @@
            ;; `byte-machine-callback-step/v1`, so the OUTCOME vocabulary is
            ;; identical in both lanes while the targets stay each lane's own.
            ((callback-parts) (callback-parts (lookup nodes (car args))))
+           ;; §9.3:408 / §13:820, Milestone 5 Slice ②. A bare SOURCE node name,
+           ;; always: `current` is a declared node name, or the compound
+           ;; (name . consumed-bytes) inside a lowered sequence, and §13:820
+           ;; wants "the current source input node" in both cases. The generated
+           ;; lane answers from ABI payload member 2's table, which is total over
+           ;; its internal prefix states for exactly this reason.
+           ((state-name) (let ((c (car args))) (if (pair? c) (car c) c)))
            ((kind) (kind (car args)))
            ((dispatch) (dispatch (car args) (cadr args)))
            ((error-value) (error-parts (car args)))
