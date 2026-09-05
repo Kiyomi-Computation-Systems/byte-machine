@@ -25,7 +25,10 @@
 # on the same argument one kind later -- the differential lane over the two span
 # kinds, the only program that loads a generated library containing a span
 # state, and the only one that can see a span FRAGMENT at all, since no parser
-# result carries one.)
+# result carries one. It is NOT a fifty-fifth: Slice ③'s verifier mutations run
+# against that same lane, because its topology table is where §25:1590's set is
+# written down -- one witness read two ways, and a pass count that called it two
+# would be the banner claiming a witness the tree does not have.)
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -1145,7 +1148,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 54)
-set(EXPECTED_MUTATIONS 455)
+set(EXPECTED_MUTATIONS 459)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -10911,7 +10914,68 @@ byte_machine_mutation(
   EXPECT_OUTPUT_MATCHES "#vu8.98 99 100.. payload., got "
 )
 
+# --- Task 6's oracle: §25:1590's universal, made a table ---------------------
+#
+# "Every invalid span topology is rejected" is a universal over a set the parent
+# plan never writes down, so the lane writes it down: eleven rows, each with the
+# verdict DERIVED from §14:843 or §16.2:899 before it was run, and the count as
+# the sentinel. These four break one arm of `span-node-diagnostics` each, and
+# every one of them turns a rejected row green rather than turning a green row
+# red -- which is the direction a census can otherwise miss entirely.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "verify: a span re-entering itself is not rejected"
+  FIND [[               ((and (pair? state) (eq? (cadr state) s))
+                (list (make-diagnostic 'invalid-span-state (node-name n)
+                                       "span re-entry: this span is already open")))]]
+  REPLACE [[               ((and (pair? state) (eq? (cadr state) s)) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "reentry want .invalid-span-state. got .."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "verify: ending the wrong span is not rejected"
+  FIND [[               ((pair? state)
+                (list (make-diagnostic 'invalid-span-state (node-name n)
+                                       "wrong end: a different span is open")))]]
+  REPLACE [[               ((pair? state) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "wrong-end want .invalid-span-state. got .."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "verify: a finish reachable with a span active is admitted"
+  # Decision 0023 item 5 kept `finish` distinguished from `error` precisely so
+  # this arm could name one and not the other, and the table's `error-inside`
+  # row is what proves the distinction still costs something: with `finish`
+  # dropped the row below goes green while `error-inside` stays green, so only
+  # the FINISH row moves.
+  FIND [[      ((and (pair? state) (or (stop-node? n) (finish-node? n)))]]
+  REPLACE [[      ((and (pair? state) (stop-node? n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "finish-inside want .span-active-at-exit. got .."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "verify: a callback invocation inside a span is admitted"
+  # §13:826 names "an explicit pause node or event/decision callback
+  # invocation" as one rule, and this arm is where the two halves are one `or`.
+  # Replacing the callback half with a kind that can never carry the state --
+  # a span END sets the state to `none` on the way out -- keeps the arm shaped
+  # like itself and makes the callback row green.
+  FIND [[      ((and (pair? state) (or (pause-node? n) (callback-node? n)))]]
+  REPLACE [[      ((and (pair? state) (or (pause-node? n) (span-end-node? n)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "callback-inside want .span-active-at-pause. got .."
+)
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+
 
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --

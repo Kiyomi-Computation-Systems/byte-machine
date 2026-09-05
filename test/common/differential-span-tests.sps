@@ -472,4 +472,451 @@
                          (list-tail (cadr a2) 1)
                          (list (bytes 98 99 100) 'complete))))))))
 
+
+
+;; --- Task 6: the oracle (§22.4:1269, §22.5:1286-1289, §25:1590) -------------
+;;
+;; The groups above assert what ONE schedule does. §22.5 asks two further
+;; questions, and they pull in opposite directions:
+;;
+;;   - for the SAME schedule, the two lanes must have identical fragment
+;;     boundaries (§22.5:1285) -- exact ranges and contents (§22.4:1269);
+;;   - ACROSS schedules, they must not. §22.5:1287 calls fragment boundaries
+;;     "intentionally schedule-dependent" and §14:836 tells consumers not to read
+;;     meaning into them. What is invariant is the trace COALESCED per logical
+;;     span.
+;;
+;; So a test that pinned raw boundaries across schedules would assert the
+;; opposite of the contract. This file asserts the coalesced trace is invariant
+;; AND that the raw one is not -- the second is what keeps the first from being
+;; a statement about a constant.
+
+(define pay (bytes 65 98 99 100 90))
+(define padded (bytes 200 201 65 98 99 100 90 202))
+(define nothing (make-bytevector 0))
+
+;; §22.5's list, over the same five logical bytes. The shape is Slice ②'s, which
+;; is deliberate: a second, differently-written schedule table would be a second
+;; thing to keep in step with §22.5 rather than one.
+(define (span-splits)
+  (let loop ((k 0) (acc '()))
+    (if (> k 5) (reverse acc)
+        (loop (+ k 1) (cons (list (list pay 0 k) (list pay k 5)) acc)))))
+(define (span-pairs)
+  (let outer ((i 0) (acc '()))
+    (if (> i 5) (reverse acc)
+        (outer (+ i 1)
+               (let inner ((j i) (a acc))
+                 (if (> j 5) a
+                     (inner (+ j 1)
+                            (cons (list (list pay 0 i) (list pay i j) (list pay j 5)) a))))))))
+(define span-others
+  (list
+   (list (list pay 0 5))
+   ;; leading, intermediate and trailing EMPTY feeds
+   (list (list nothing 0 0) (list pay 0 5))
+   (list (list pay 0 2) (list nothing 0 0) (list pay 2 5))
+   (list (list pay 0 5) (list nothing 0 0))
+   ;; an empty slice from the MIDDLE of the real bytevector -- a different shape
+   ;; from a zero-length one, and the one that lands a flush on `[k,k)`
+   (list (list pay 0 3) (list pay 3 3) (list pay 3 5))
+   ;; nonzero start/end into a bytevector carrying unrelated prefix and suffix
+   ;; bytes: §22.5's fourth bullet, and the schedule that catches a lane reading
+   ;; from index 0 regardless of `start`
+   (list (list padded 2 7))
+   (list (list padded 2 4) (list padded 4 7))
+   (list (list padded 2 3) (list padded 3 5) (list padded 5 7))
+   ;; deterministic multi-split schedules, written out: §22.5's "deterministic
+   ;; random" bullet is about reproducibility, and a literal is the most
+   ;; reproducible form there is.
+   (list (list pay 0 1) (list pay 1 2) (list pay 2 3) (list pay 3 4) (list pay 4 5))
+   (list (list pay 0 0) (list pay 0 2) (list nothing 0 0) (list pay 2 2) (list pay 2 5))))
+(define (all-schedules) (append (span-splits) (span-pairs) span-others))
+
+;; One recording closure per lane, each with its own accumulator -- Slice ②'s
+;; correction, which is not optional here: the drivers below alternate the two
+;; parsers, so a shared accumulator would interleave them and a lane-swap defect
+;; would be invisible.
+(define (record-span cm slices answers done-answer)
+  (let* ((lane (make-lane cm answers done-answer #t))
+         (p (car lane)))
+    (for-each (lambda (sl) (parser-feed! p (car sl) (cadr sl) (caddr sl))) slices)
+    (let ((r (parser-finish! p)))
+      (list ((cadr lane))
+            (parser-result-status r)
+            (parser-result-stream-offset r)
+            (and (parser-result-error r) (parser-error-code (parser-result-error r)))))))
+
+;; §22.5:1286's "normalized semantic trace that coalesces fragments belonging to
+;; the same logical span". One concatenation per logical span, emitted even when
+;; it is empty -- the normalized form has to be TOTAL, or a span that produced
+;; no fragment in one schedule and one empty fragment in another would normalize
+;; to two different shapes and the invariance below would be about nothing.
+(define (concat bs)
+  (let* ((n (let add ((l bs) (k 0)) (if (null? l) k (add (cdr l) (+ k (bytevector-length (car l)))))))
+         (out (make-bytevector n)))
+    (let put ((l bs) (at 0))
+      (if (null? l) out
+          (let copy ((i 0))
+            (if (>= i (bytevector-length (car l)))
+                (put (cdr l) (+ at (bytevector-length (car l))))
+                (begin (bytevector-u8-set! out (+ at i) (bytevector-u8-ref (car l) i))
+                       (copy (+ i 1)))))))))
+(define (coalesce trace)
+  (let loop ((t trace) (cur '()) (out '()))
+    (cond ((null? t)
+           (reverse (if (null? cur) out (cons (concat (reverse cur)) out))))
+          ((eq? (car t) 'complete)
+           (loop (cdr t) '() (cons 'complete (cons (concat (reverse cur)) out))))
+          (else (loop (cdr t) (cons (car t) cur) out)))))
+
+(harness-group "same schedule: the two lanes agree exactly (§22.4:1269, §22.5:1285)"
+  (lambda ()
+    (harness-case "every schedule produces the identical fragment trace in both lanes"
+      (lambda ()
+        ;; A sentinel over the schedules DRIVEN, read from the loop, and the
+        ;; disagreeing schedule recorded rather than a bare boolean.
+        (let ((driven 0) (bad '()))
+          (for-each
+           (lambda (sl)
+             (set! driven (+ driven 1))
+             (let ((a (record-span cm-full-ref sl '() callback-continue))
+                   (b (record-span cm-full-gen sl '() callback-continue)))
+               (unless (equal? a b) (set! bad (cons (list driven a b) bad)))))
+           (all-schedules))
+          ;; 6 single splits + 21 pairs + 10 others. Counted from the loop AND
+          ;; compared against a separately computed total: the literal catches a
+          ;; schedule list that silently shrank, the derived total catches a loop
+          ;; that stopped early, and neither catches the other.
+          (check-equal "thirty-seven schedules driven" driven 37)
+          (check-equal "and the length agrees" driven (length (all-schedules)))
+          (check-equal "every schedule agrees across the lanes" bad '()))))))
+
+(harness-group "across schedules: coalesced is invariant, raw is not (§22.5:1287)"
+  (lambda ()
+    (harness-case "the coalesced trace is the same under every schedule"
+      (lambda ()
+        (let ((baseline (coalesce (car (record-span cm-full-ref (list (list pay 0 5))
+                                                    '() callback-continue))))
+              (differing '()) (driven 0))
+          (for-each
+           (lambda (sl)
+             (set! driven (+ driven 1))
+             (for-each
+              (lambda (cm)
+                (let ((c (coalesce (car (record-span cm sl '() callback-continue)))))
+                  (unless (equal? c baseline) (set! differing (cons (list driven c) differing)))))
+              (list cm-full-ref cm-full-gen)))
+           (all-schedules))
+          (check-equal "thirty-seven schedules driven" driven 37)
+          (check-equal "no schedule changes the coalesced trace" differing '())
+          ;; And by VALUE, so the invariance is not invariance around the wrong
+          ;; sequence: the payload, whole, then exactly one completion.
+          (check-equal "and it is the payload followed by one completion"
+                       baseline (list (bytes 98 99 100) 'complete)))))
+    (harness-case "the RAW trace is schedule-dependent, which is the contract"
+      (lambda ()
+        ;; §22.5:1287 and §14:836. Without this, "coalesced is invariant" would
+        ;; also hold of an implementation that never split a fragment at all --
+        ;; and a test asserting raw boundaries across schedules would be
+        ;; asserting the opposite of what the spec says.
+        (let ((raws '()))
+          (for-each
+           (lambda (sl)
+             (let ((t (car (record-span cm-full-ref sl '() callback-continue))))
+               (unless (member t raws) (set! raws (cons t raws)))))
+           (all-schedules))
+          (check "the schedules do not all produce one raw trace" (> (length raws) 1))
+          (check-equal "one feed gives one fragment"
+                       (car (record-span cm-full-ref (list (list pay 0 5))
+                                         '() callback-continue))
+                       (list (bytes 98 99 100) 'complete))
+          (check-equal "and a split mid-payload gives two"
+                       (car (record-span cm-full-ref (list (list pay 0 3) (list pay 3 5))
+                                         '() callback-continue))
+                       (list (bytes 98 99) (bytes 100) 'complete)))))))
+
+
+;; --- Task 6 step 3: every invalid span topology, enumerated as data ---------
+;;
+;; §25:1590's exit criterion is "every invalid span topology is rejected" -- a
+;; UNIVERSAL over a set the parent plan never enumerates. Slice ⓪'s matrix is
+;; the honest shape for that: write the set down, DERIVE each verdict from
+;; §14:843 and §16.2:899 before running, and let the count be the sentinel. The
+;; bounded invalid-machine generator is Milestone 7's, and this must not quietly
+;; become it.
+;;
+;; Every row shares one skeleton so the graph plumbing cannot differ between
+;; them: a one-byte dispatch consuming `A` into the row's head, a reject
+;; terminal, and an `exit` dispatch whose EOF route is the finish -- which is
+;; where §16.2:908 wants a finish, and keeps the rows differing only in their
+;; span shape.
+(define (d1 name target eof-target)
+  (make-byte-dispatch-node name
+    (list (make-byte-case (make-exact-byte-matcher 65) (make-edge target 'advance) #f))
+    (make-edge 'reject 'reexecute) eof-target #f))
+(define (topo-machine spans nodes)
+  (make-machine 'topom 'start '()
+    (list (make-callback-declaration 'ondata 'span-data #t '() #f #f)
+          (make-callback-declaration 'note 'event #t '() #f #f))
+    spans (list eof-decl rej-decl)
+    ;; Only the two TERMINALS are shared. `exit` -- the dispatch whose EOF route
+    ;; reaches the finish -- is per row: a row whose span ends at a stop or an
+    ;; error never routes through it, and appending it anyway made those rows
+    ;; report `unreachable-node` on top of the span verdict they were written to
+    ;; check. Measured, then narrowed.
+    (append nodes (list (make-finish-node 'fin #f)
+                        (make-error-node 'reject 'rejected #f)))
+    'default-eof #f))
+(define one-span (list (make-span-declaration 'payload 'ondata #f #f)))
+(define two-spans (list (make-span-declaration 'payload 'ondata #f #f)
+                        (make-span-declaration 'other 'ondata #f #f)))
+(define (topo-codes spans nodes)
+  (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b)))
+             (map diagnostic-code
+                  (verification-diagnostics (verify-machine (topo-machine spans nodes))))))
+
+;; Each row is (NAME SPANS NODES EXPECTED-CODES DERIVATION). The expectation is
+;; written from the section named in the derivation, not from a run.
+(define topologies
+  (list
+   (list 'reentry one-span
+         (list (d1 'start 'op1 'fin)
+               (make-span-start-node 'op1 'payload 'op2 #f)
+               (make-span-start-node 'op2 'payload 'cl #f)
+               (make-span-end-node 'cl 'payload 'exit #f)
+               (d1 'exit 'exit 'fin))
+         '(invalid-span-state)
+         "§14:843: no reachable path starts a second span while one is active.")
+   (list 'overlap two-spans
+         (list (d1 'start 'op1 'fin)
+               (make-span-start-node 'op1 'payload 'op2 #f)
+               (make-span-start-node 'op2 'other 'cl2 #f)
+               (make-span-end-node 'cl2 'other 'cl1 #f)
+               (make-span-end-node 'cl1 'payload 'exit #f)
+               (d1 'exit 'exit 'fin))
+         ;; TWO: the overlapping start, and then `cl1` -- the state after `cl2`
+         ;; is `none`, so closing `payload` there is an unmatched end. One
+         ;; malformed shape, two rejections, and the row says so rather than
+         ;; expecting the first and being surprised by the second.
+         '(invalid-span-state invalid-span-state)
+         "§14:843: a second span starts while one is active, and the outer end is then unmatched.")
+   (list 'wrong-end two-spans
+         (list (d1 'start 'op1 'fin)
+               (make-span-start-node 'op1 'payload 'cl #f)
+               (make-span-end-node 'cl 'other 'exit #f)
+               (d1 'exit 'exit 'fin))
+         '(invalid-span-state)
+         "§14:843: ends the wrong span.")
+   (list 'unmatched-end one-span
+         (list (d1 'start 'cl 'fin)
+               (make-span-end-node 'cl 'payload 'exit #f)
+               (d1 'exit 'exit 'fin))
+         '(invalid-span-state)
+         "§14:843: ends with no active span.")
+   (list 'pause-inside one-span
+         (list (d1 'start 'op1 'fin)
+               (make-span-start-node 'op1 'payload 'pz #f)
+               (make-pause-node 'pz 'cl #f)
+               (make-span-end-node 'cl 'payload 'exit #f)
+               (d1 'exit 'exit 'fin))
+         '(span-active-at-pause)
+         "§13:826: an explicit pause node is invalid where a span is active.")
+   (list 'callback-inside one-span
+         (list (d1 'start 'op1 'fin)
+               (make-span-start-node 'op1 'payload 'cb #f)
+               (make-callback-node 'cb 'note 'cl '() 'cl #f)
+               (make-span-end-node 'cl 'payload 'exit #f)
+               (d1 'exit 'exit 'fin))
+         '(span-active-at-pause)
+         "§13:826: an event or decision callback invocation is invalid where a span is active.")
+   (list 'stop-inside one-span
+         (list (d1 'start 'op1 'fin)
+               (make-span-start-node 'op1 'payload 'st #f)
+               (make-stop-node 'st #f))
+         '(span-active-at-exit)
+         "§14:843: no reachable path reaches a successful stop with a span active.")
+   (list 'finish-inside one-span
+         ;; The one row whose plumbing had to be written out, and both
+         ;; departures are the lattice's doing rather than taste. `start`'s EOF
+         ;; route is the ERROR terminal, because with both routes reaching `fin`
+         ;; the join sees `none` from one and `(active payload)` from the other
+         ;; and answers `top`. And the in-span dispatch swallows every byte
+         ;; rather than falling back to the shared `reject`, for the same reason
+         ;; one edge later. One rule per row is the whole point of the table, and
+         ;; a row reporting two is a row that checks neither.
+         (list (d1 'start 'op1 'reject)
+               (make-span-start-node 'op1 'payload 'spin #f)
+               (make-byte-dispatch-node 'spin
+                 (list (make-byte-case (make-exact-byte-matcher 65)
+                                       (make-edge 'spin 'advance) #f))
+                 (make-edge 'spin 'advance) 'fin #f))
+         '(span-active-at-exit)
+         "§14:843: no reachable path reaches a successful finish with a span active.")
+   (list 'join-disagree one-span
+         ;; Two byte edges into `mrg`: one through the span, one around it. The
+         ;; lattice joins `(active payload)` with `none` and answers `top`,
+         ;; which decision 0029 item 2 makes a diagnostic at the join itself.
+         (list (make-byte-dispatch-node 'start
+                 (list (make-byte-case (make-exact-byte-matcher 65)
+                                       (make-edge 'op1 'advance) #f)
+                       (make-byte-case (make-exact-byte-matcher 66)
+                                       (make-edge 'mrg 'advance) #f))
+                 (make-edge 'reject 'reexecute) 'fin #f)
+               (make-span-start-node 'op1 'payload 'mrg #f)
+               (d1 'mrg 'cl 'fin)
+               (make-span-end-node 'cl 'payload 'exit #f)
+               (d1 'exit 'exit 'fin))
+         '(inconsistent-span-state)
+         "0029 item 2: incoming edges disagree, the join is `top`, and `top` is reported where it arises.")
+   ;; --- the two VALID rows, and they are what keep the table from being a
+   ;; list of things that happen to be rejected ---
+   (list 'error-inside one-span
+         (list (d1 'start 'op1 'fin)
+               (make-span-start-node 'op1 'payload 'err #f)
+               (make-error-node 'err 'rejected #f))
+         '()
+         "§14:839 contemplates a span open at an ERROR terminal, which is why decision 0023 item 5 kept finish distinguished from error.")
+   (list 'well-formed one-span
+         (list (d1 'start 'op1 'fin)
+               (make-span-start-node 'op1 'payload 'cl #f)
+               (make-span-end-node 'cl 'payload 'exit #f)
+               (d1 'exit 'exit 'fin))
+         '()
+         "The shape every rejected row above is a perturbation of.")))
+
+(harness-group "every invalid span topology is rejected, and only those (§25:1590)"
+  (lambda ()
+    (harness-case "the enumerated table, row by row"
+      (lambda ()
+        ;; The count is the sentinel: a row silently dropped from the list would
+        ;; otherwise leave this case green while covering less.
+        (let ((driven 0) (bad '()))
+          (for-each
+           (lambda (row)
+             (set! driven (+ driven 1))
+             (let ((got (topo-codes (cadr row) (caddr row))))
+               (unless (equal? got (list-sort (lambda (a b) (string<? (symbol->string a)
+                                                                     (symbol->string b)))
+                                              (cadddr row)))
+                 (set! bad (cons (list (car row) 'want (cadddr row) 'got got) bad)))))
+           topologies)
+          (check-equal "eleven topologies driven" driven 11)
+          (check-equal "and the table's own length agrees" driven (length topologies))
+          (check-equal "every row's verdict is the derived one" bad '()))))
+    (harness-case "the table is not all-reject or all-accept"
+      (lambda ()
+        ;; Without this the row loop would pass on a verifier that rejected
+        ;; everything, and on one that rejected nothing.
+        (let ((verdicts (map (lambda (r) (null? (cadddr r))) topologies)))
+          (check "some rows are expected to verify" (memq #t verdicts))
+          (check "and some are expected to be rejected" (memq #f verdicts)))))
+    (harness-case "all four span codes appear, and each is derived from its own rule"
+      (lambda ()
+        ;; §16.2:899's four codes as a set. A table exercising three of them
+        ;; would satisfy every check above.
+        (let ((codes '()))
+          (for-each (lambda (r)
+                      (for-each (lambda (c) (unless (memq c codes) (set! codes (cons c codes))))
+                                (cadddr r)))
+                    topologies)
+          (check-equal "three distinct rejection codes"
+                       (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b)))
+                                  codes)
+                       '(inconsistent-span-state invalid-span-state span-active-at-exit
+                         span-active-at-pause)))))))
+
+;; --- Task 6 step 4: the error path (§14:839, §22.5:1289) --------------------
+
+(harness-group "the error path, per lane and across schedules (§14:839, §22.5:1289)"
+  (lambda ()
+    (harness-case "a truncated span delivers no completion, under every schedule"
+      (lambda ()
+        ;; §14:839's second clause. The COMPLETION is the thing that must not
+        ;; appear -- fragments flushed at earlier boundaries stay observable, and
+        ;; how many of them there are is schedule-dependent, so counting them
+        ;; across schedules would assert the opposite of §22.5:1287.
+        (let ((driven 0) (bad '()))
+          (for-each
+           (lambda (sl)
+             (set! driven (+ driven 1))
+             (for-each
+              (lambda (cm)
+                (let ((r (record-span cm sl '() callback-continue)))
+                  (when (memq 'complete (car r))
+                    (set! bad (cons (list driven (car r)) bad)))))
+              (list cm-full-ref cm-full-gen)))
+           ;; The same schedule shapes, over a payload with NO delimiter, so
+           ;; every one of them ends at `body`'s EOF route.
+           (let ((t (bytes 65 98 99 100)))
+             (list (list (list t 0 4))
+                   (list (list t 0 1) (list t 1 4))
+                   (list (list t 0 2) (list t 2 4))
+                   (list (list t 0 3) (list t 3 4))
+                   (list (list t 0 1) (list t 1 2) (list t 2 3) (list t 3 4))
+                   (list (list t 0 2) (list nothing 0 0) (list t 2 4))
+                   (list (list padded 2 6)))))
+          (check-equal "seven schedules driven" driven 7)
+          (check-equal "no schedule synthesizes a completion" bad '()))))
+    (harness-case "acceptance, error category and absolute position agree across schedules"
+      (lambda ()
+        ;; §22.5:1289 exactly: for malformed inputs these THREE are compared
+        ;; across schedules, and the callback prefix is not -- a partial span may
+        ;; have been flushed at a boundary in one schedule and not another.
+        (let ((seen '()) (driven 0))
+          (for-each
+           (lambda (sl)
+             (set! driven (+ driven 1))
+             (for-each
+              (lambda (cm)
+                (let ((r (record-span cm sl '() callback-continue)))
+                  ;; status, absolute offset, error code -- the trace omitted
+                  (let ((k (list (cadr r) (caddr r) (cadddr r))))
+                    (unless (member k seen) (set! seen (cons k seen))))))
+              (list cm-full-ref cm-full-gen)))
+           (let ((t (bytes 65 98 99 100)))
+             (list (list (list t 0 4))
+                   (list (list t 0 1) (list t 1 4))
+                   (list (list t 0 2) (list t 2 4))
+                   (list (list t 0 1) (list t 1 2) (list t 2 3) (list t 3 4))
+                   (list (list padded 2 6)))))
+          (check-equal "five schedules driven" driven 5)
+          (check-equal "one acceptance/category/position triple across all of them"
+                       ;; `truncated` is the DECLARATION's name; the code a
+                       ;; parser error carries is its §9.4 CATEGORY, which is
+                       ;; what §22.5:1289 calls the error category.
+                       seen '((error 4 eof))))))
+    (harness-case "and the callback PREFIX is schedule-dependent, which is why it is not compared"
+      (lambda ()
+        ;; The sentinel for the case above: if the fragment prefixes happened to
+        ;; be schedule-independent too, comparing only three fields would be a
+        ;; restriction that costs nothing and proves nothing.
+        (let ((t (bytes 65 98 99 100)))
+          (check-equal "one feed flushes once"
+                       (car (record-span cm-full-ref (list (list t 0 4)) '() callback-continue))
+                       (list (bytes 98 99 100)))
+          (check-equal "three feeds flush three times"
+                       (car (record-span cm-full-ref
+                                         (list (list t 0 2) (list t 2 3) (list t 3 4))
+                                         '() callback-continue))
+                       (list (bytes 98) (bytes 99) (bytes 100))))))
+    (harness-case "the success path delivers exactly one completion (§14:835)"
+      (lambda ()
+        ;; The positive half of §14:839's first two clauses: what the error path
+        ;; must NOT do, the success path must do exactly once, under every
+        ;; schedule.
+        (let ((driven 0) (bad '()))
+          (for-each
+           (lambda (sl)
+             (set! driven (+ driven 1))
+             (for-each
+              (lambda (cm)
+                (let* ((tr (car (record-span cm sl '() callback-continue)))
+                       (n (length (filter (lambda (x) (eq? x 'complete)) tr))))
+                  (unless (= n 1) (set! bad (cons (list driven n tr) bad)))))
+              (list cm-full-ref cm-full-gen)))
+           (all-schedules))
+          (check-equal "thirty-seven schedules driven" driven 37)
+          (check-equal "exactly one completion in every one" bad '()))))))
+
 (harness-finish)
