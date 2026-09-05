@@ -984,6 +984,29 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/field-access-tests.sps"
   TIMEOUT 120)
 
+# --- Milestone 5 Slice ①b: declarations are separable from nodes -------------
+# The slice's oracle, and the one property NO LATER SLICE CAN ESTABLISH: once a
+# callback-invocation node exists, "declared but unused" stops being the only
+# thing a declaration can be. Both lanes, because the claim is that they agree
+# AND that the shipped value tuple did not move.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.declaration-separability.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/declaration-separability-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/declaration-separability-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.declaration-separability.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/declaration-separability-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/declaration-separability-tests.sps"
+  TIMEOUT 120)
+
 byte_machine_add_scheme_lane(
   NAME byte-machine.example.one-byte.chez.source
   BACKEND chez
