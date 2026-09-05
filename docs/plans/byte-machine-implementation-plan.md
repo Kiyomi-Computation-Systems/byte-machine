@@ -2124,3 +2124,54 @@ close-out is to be checked against. Slices ③ and ④ do not qualify by default
 changes the result record.
 
 Slice: `docs/plans/milestone-5-slice-2-implementation-plan.md`, Task 9.
+
+### §12.7:770 and §16.2:899/:901 — Milestone 5 Slice ③'s census reconciliation, two readings recorded so they are not re-derived wrongly
+
+Both came out of Slice ③ Task 8, and in both the PLAN was right and the tree was
+wrong. Recorded here rather than only in a commit message because each is a
+reading of a sentence whose other reading is plausible, and a later slice reading
+only the code would take the other one.
+
+**1. `§12.7:770` is unconditional, and `§12.7:774` does not reach it.** The table
+reads "Zero-width machine action or callback failure | `boundary` at the current
+stream offset." The tree instead carried the executor loop's own position kind
+into every callback-domain error, which reports `byte` whenever the invoking node
+was entered over a REEXECUTE edge. The tempting defence is `§12.7:774` — "Error
+nodes reached through other byte edges retain the author's explicit
+advance/reexecute choice" — and it does not apply: a callback failure is not an
+error node, has no author-chosen edge, and `§12.7`'s table is total over error
+SOURCES with exactly one row for this one. `§12.7:768`'s row is "reexecute
+mismatch or rejected current digit", which a callback failure is neither.
+
+Measured, and this is why nothing caught it for a slice and a half: BOTH LANES
+reported the same wrong value, so the `§12.7:777` cross-lane comparison — which
+is all that read position kind for a callback failure — was satisfied throughout.
+A lane-to-lane projection cannot see an agreed error. The fixtures added for it
+assert the VALUE, and each is reached over a reexecute edge, because over an
+advance the correct and incorrect answers coincide.
+
+**2. `§16.2:899`'s five nouns do not include a span node naming an undeclared
+span, and `§16.2:901`'s "undeclared" does.** `§16.2:899` reads "span re-entry,
+overlap, wrong end, unmatched end, and inconsistent successful exits" — five
+faults about the STATE a span node is reached in, all decidable by decision
+`0029`'s lattice. Naming a declaration that does not exist is not one of them, and
+the lattice provably cannot decide it: the lattice is well defined over any
+symbol, which is what makes it a lattice.
+
+The obligation had an owner in prose and none in code. `make-span-start-node`'s
+comment assigned the cross-reference to "§16.2:899 and pass 7's lattice (decision
+0029)"; pass 7 treats the name opaquely. Measured: a machine whose span nodes
+named an undeclared span verified CLEAN and then raised `assertion-violation` out
+of `normalize-machine` — a verified machine crashing the normalizer, which
+`§9.2:368` forbids in as many words. It is now `pass-declarations`'
+`missing-span-declaration`, beside the callback half, which is where a NAME
+cross-reference belongs.
+
+**Receiver.** Neither reading changes a sentence of the plan; both change what
+the tree does, and both are shipped. What is owed is that Milestone 6's counted
+consume, which `§10.6:604` says obeys "normal span fragment rules" when enclosed
+in a span, checks the same two: its arm, if it can fail a callback, owes
+`§12.7:770`'s constant rather than the loop's `pk`, and any declaration it names
+owes a `pass-declarations` arm.
+
+Slice: `docs/plans/milestone-5-slice-3-implementation-plan.md`, Task 8.

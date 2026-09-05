@@ -4,6 +4,14 @@ Date: 2026-09-04
 Status: accepted
 Milestone: 5, Gate 0 (milestone-5-design.md §4.5)
 
+> **Amendments** — later notes at the foot of this file reach back into the text
+> above them. Nothing above a note is rewritten.
+>
+> - **2026-09-05 (Milestone 5 Slice ③)** — **annotates**: item 3's edit shipped
+>   and item 1's relation is now consumed by a second pass. Nothing above became
+>   false; the note records the measurement item 3 predicted and one thing it did
+>   not predict.
+
 ## Context
 
 Measured against `src/byte-machine/verify.sls` and
@@ -178,3 +186,33 @@ measurement of a run. Slice ③ owes it a fixture with an asserted verdict.
 - **This disposes of design §3.2's fourth divergence** — `pass-zero-progress`'s
   missing gate — in the direction §3.2 asked for ("Resolve it with §4.5"), but
   not on §3.2's stated reason. The record above replaces that reason.
+
+## 2026-09-05 (Milestone 5 Slice ③): item 3 discharged, and item 1 got its second consumer
+
+**Item 3 shipped.** `pass-zero-progress` now gates its REPORT set on
+`byte-reached` alone, as this record specified and for the reason it gave rather
+than design §3.2's. The relaxation has an observable direction and the fixture
+asserts BOTH halves, the second being the one that matters: a machine holding an
+unreachable zero-progress cycle is now accepted, and `unreachable-node` does NOT
+catch it — which is exactly the ground §3.2 item 4 offered for calling the gate
+benign, and which this record recorded as false. Two shipped fixtures moved with
+it, and one now asserts the opposite of what it did: an EOF-only pause cycle is
+`eof-zero-progress-cycle` and not `zero-progress-cycle`, which is the non-overlap
+the `byte-reached`-alone gate exists to get.
+
+**Item 1 now has a second consumer**, which is what makes it a relation rather
+than a local choice: pass 7's dataflow runs over it. Its edge relation is byte
+out-edges plus EOF routes and its `parked?` predicate is byte-reachability plus
+the parked set — the pair this record named, taken from here rather than minted.
+
+**One thing this record did not predict, and it cost a defect.** Item 1 settles
+which nodes are OCCUPIABLE. It says nothing about which nodes are PARKABLE, and
+those are different questions with different consumers: `§16.2:909`'s walk starts
+from a parked set, and Slice ③ made a span end parkable — a span-data callback's
+pause parks the parser on that node's completion substep — without adding it to
+that set. Measured before the fix: a machine whose span end continued into a stop
+verified clean and answered `stopped` from `parser-finish!`. The record's own
+warning about the parked-set SHAPE ("what does not transfer is the parked-set
+shape … and is not a definition of reachability") is the sentence that was
+right; what was missing is that the shape has to be re-derived for every kind
+that can pause, and nothing in the tree derives it from anything.
