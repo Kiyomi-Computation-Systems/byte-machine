@@ -10,6 +10,13 @@
 /build/
 /build-*/
 
+# CTest's cost cache, written into the SOURCE tree by any `ctest` run whose
+# working directory is the repository root rather than a build tree -- which is
+# what a bare `ctest -R ...` typed at the top level does. It reached a merged
+# commit once (Milestone 5 Slice ②) because `git add -A` sweeps it up and it is
+# neither under /build/ nor obviously a build artifact from its name.
+/Testing/
+
 # Developer-local preset overrides
 CMakeUserPresets.json
 

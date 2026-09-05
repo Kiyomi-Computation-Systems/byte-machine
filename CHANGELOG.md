@@ -25,7 +25,14 @@ rather than declared) and Slice ⓪b (the EOF walk cluster). Gate 0 discharged
 **2026-09-04** as decisions 0024-0029; Slice ①a — the seam — landed the same day,
 taking the generated ABI to version 4; and Slice ①b landed with it, adding
 callback and span declarations, indexed binding resolution and five public
-accessors. Nothing invokes a callback yet — that is Slice ②. No versioned release exists
+accessors. Slice ② landed **2026-09-05**: the machine calls out. The
+callback-invocation node is the tenth node kind; its four outcomes route
+identically in both lanes through one shared classifier; an out-of-contract
+return is a `callback`-domain parser error and not a raise; a callback that
+raises or escapes marks the parser `poisoned` through `dynamic-wind`; and
+`parser-state-name` answers in both lanes, which took the generated ABI to
+version 5 to carry a state-id to source-name table. Slices ③ (spans) and ④ (the
+reference fixture and the retention oracle) remain. No versioned release exists
 yet.
 
 ### Added
