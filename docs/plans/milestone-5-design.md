@@ -40,7 +40,12 @@ the line wrong can still find the thing.
 > actually support (§4.3, §4.6, §4.12 item 4); in each case the resolution was right and the
 > stated reason was not.
 >
-> **2026-09-04, the Slice ①a plan's measurements** — **amends §5**: its position-axis bullet
+> **2026-09-04, the Slice ② plan's measurements** — **amends §7 and the Appendix**: §7's first
+> oracle named a closure shape that cannot be compared, and its divergence list assigned Slice
+> ③'s `pass-zero-progress` gate to ②. The Appendix is superseded by the ② plan's §1, whose
+> re-measurement found its stated recogniser cannot find two rows the Appendix itself lists.
+>
+> > **2026-09-04, the Slice ①a plan's measurements** — **amends §5**: its position-axis bullet
 > told an implementer to derive the position names "from the IR", and there is nothing in
 > `ir.sls` to derive them from. Corrected in place with what the row can actually be and what it
 > is worth. Decision 0025 point 4 repeats the same instruction and carries a dated note.
@@ -814,13 +819,24 @@ checked.
   reason.
 - **Disposition `§12.3:711`'s paused-finish divergence** (§3.2 item 3) rather than inherit it:
   `§12.4:729` lets EOF processing invoke callbacks and pause, so this slice turns one shipped
-  paused-finish path into many.
+  paused-finish path into many. **Measured while planning ②: it has no authority** — neither §4
+  nor any of `0024`-`0029` resolves it — **and the tree pins the current behaviour twice**
+  (`runtime-tests.sps:227-235` and a mutation on that exact FAIL line). So ② decides and records
+  it; it does not quietly change behaviour a pin asserts.
+- **THREE of §3.2's four divergences are ②'s, not four.** The `pass-zero-progress` reachability
+  gate is **Slice ③'s** — decision `0027` item 3 says so in one sentence ("Slice ③ owns the
+  edit; this record owns the reason") and §4.5 repeats it. Scheduling it here would change a
+  verdict on a machine family ③ owes a fixture for, and break ③'s stated commit-coupling.
 
 **Oracle — four things, and none of them is "the tests pass".**
 
-1. **Cross-lane callback order.** One recording closure passed as the binding to *both*
-   parsers, appending an entry per invocation, compared exactly per schedule over `§22.5:1278-1283`'s
-   schedule list. This is `§22.4:1268`'s first-ever exercise. It is also the *only* available
+1. **Cross-lane callback order.** **Corrected 2026-09-04 while planning ②: one closure per
+   LANE, each with its own accumulator**, compared per schedule over `§22.5:1278-1283`'s
+   schedule list. This bullet first said "one recording closure passed as the binding to *both*
+   parsers" — one closure with one accumulator produces one list and there is nothing to compare
+   it to, and the shipped both-lanes driver alternates the two parsers inside a single
+   expression, so a shared accumulator yields an interleaved sequence in which a lane-swap
+   defect is invisible. This is `§22.4:1268`'s first-ever exercise. It is also the *only* available
    oracle: `§18:974`'s trace hook does not exist in the tree, and `§Dated:1814-1819` already
    ruled a literal cross-lane trace comparison unspecifiable.
 2. **The commit point.** The same recording closure captures, *from inside the callback*,
@@ -983,6 +999,14 @@ oracle must *fail* on, designed alongside the oracle rather than added after it 
 ---
 
 ## Appendix — per-kind site census
+
+> **SUPERSEDED for Slice ② by `milestone-5-slice-2-implementation-plan.md` §1**, which
+> re-measured this table at `317b89c`. Eight rows' line numbers moved under Slices ①a and ①b,
+> at least five rows are missing, and — the finding that matters — **the recogniser stated below
+> cannot find two rows this table itself lists**: `runtime.sls`'s two sites dispatch on the wire
+> kind symbol, which neither `rg` pattern sees. A third recogniser is required, and the rule
+> excluding import/export lists writes out a surface Slice ①b shipped a titled task about.
+> Slice ②'s Task 9 rewrites this table.
 
 Every site a new node kind must reach, measured at `db86ab6` by `rg -n -- '-node\?'` and
 `rg -n 'normal-state-kind'` over `src/byte-machine/`, dropping comment-only lines and
