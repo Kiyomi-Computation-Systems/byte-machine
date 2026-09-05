@@ -2172,4 +2172,151 @@
                             (t6-join-machine (list (make-finish-node 'x #f)) 'x))))
                      '((eof-reachable-stop . s0)))))))
 
+;; --- §16.2:901's NODE half (Milestone 5 Slice ②) -----------------------------
+;; "callback decision branches that are missing, duplicated, or undeclared."
+;; Slice ①b shipped the declaration share and left this, which needed a node
+;; kind that did not exist. Every fixture below is otherwise valid, so the codes
+;; asserted are the whole verification result rather than a subset of it -- and
+;; the `node` slot is asserted with them, because each of these findings is
+;; about the INVOKING NODE and not about the declaration it names.
+(define (cb-machine decl node-branches node-callback)
+  (make-machine 'cbm 'start '()
+                (if decl (list decl) '()) '()
+                errs
+                (list (make-byte-dispatch-node 'start
+                        (list (make-byte-case (make-exact-byte-matcher 0)
+                                              (make-edge 'inv 'advance) #f))
+                        (make-edge 'reject 'reexecute) #f #f)
+                      ;; The pause continuation is the ERROR node, never the
+                      ;; stop: a parser parked at a callback resumes on that one
+                      ;; edge, so a stop there is an EOF path reaching a stop
+                      ;; terminal and §16.2:909 would report that instead.
+                      (make-callback-node 'inv node-callback 'stop
+                                          node-branches 'reject #f)
+                      (make-stop-node 'stop #f)
+                      (make-error-node 'reject 'rejected #f))
+                'default-eof #f))
+(define (decided keys) (make-callback-declaration 'decide 'decision #t keys #f #f))
+
+(harness-group "a callback node's branches against its declaration (§16.2:901)"
+  (lambda ()
+    (harness-case "a node whose keys match its declaration verifies clean"
+      (lambda ()
+        ;; The positive case first: without it every rejection below could be
+        ;; satisfied by a verifier that rejects every callback node.
+        (check-equal "no diagnostics"
+                     (codes (cb-machine (decided '(keep skip))
+                                        '((keep stop) (skip reject)) 'decide))
+                     '())))
+    (harness-case "an event callback's node may declare no branches at all"
+      (lambda ()
+        (check-equal "no diagnostics"
+                     (codes (cb-machine (make-callback-declaration 'note 'event #t
+                                                                   '() #f #f)
+                                        '() 'note))
+                     '())))
+    (harness-case "a node naming no declaration reports missing-callback-declaration"
+      (lambda ()
+        ;; The SAME code a span naming no declaration reports (§16.2:890), reused
+        ;; rather than minted: the fault is identical and only the subject moves.
+        (check-equal "one finding, at the node"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine (cb-machine (decided '(keep)) '((keep stop))
+                                                       'nosuch))))
+                     '((missing-callback-declaration . inv)))))
+    (harness-case "the resolution arm answers ALONE"
+      (lambda ()
+        ;; Asserted, not assumed: with the name unresolved there is nothing to
+        ;; judge the keys against, so a machine whose keys are also wrong must
+        ;; still report exactly one finding. Without the short circuit this
+        ;; would raise inside the key arms rather than report.
+        (check-equal "still one finding"
+                     (length (verification-diagnostics
+                              (verify-machine (cb-machine (decided '(keep))
+                                                          '((nosuch stop) (nosuch reject))
+                                                          'nosuch))))
+                     1)))
+    (harness-case "a node invoking a span-kind callback is an invalid invocation"
+      (lambda ()
+        ;; §10.6:584 invokes "one named event or decision callback"; a span
+        ;; callback is reached only through a span declaration (§10.4:515-516).
+        ;; The span declaration this needs to exist is what keeps
+        ;; `unreferenced-callback-declaration` out of the result.
+        (check-equal "the invocation, and nothing about keys"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine
+                            (make-machine 'cbm 'start '()
+                                          (list (make-callback-declaration 'on-d 'span-data
+                                                                           #t '() #f #f))
+                                          (list (make-span-declaration 'body 'on-d #f #f))
+                                          errs
+                                          (list (make-byte-dispatch-node 'start
+                                                  (list (make-byte-case
+                                                         (make-exact-byte-matcher 0)
+                                                         (make-edge 'inv 'advance) #f))
+                                                  (make-edge 'reject 'reexecute) #f #f)
+                                                (make-callback-node 'inv 'on-d 'stop
+                                                                    '() 'reject #f)
+                                                (make-stop-node 'stop #f)
+                                                (make-error-node 'reject 'rejected #f))
+                                          'default-eof #f))))
+                     '((invalid-callback-invocation . inv)))))
+    (harness-case "a key the declaration never declared is UNDECLARED"
+      (lambda ()
+        (check-equal "one finding, at the node"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine (cb-machine (decided '(keep))
+                                                       '((keep stop) (nosuch reject))
+                                                       'decide))))
+                     '((invalid-callback-invocation . inv)))))
+    (harness-case "an EVENT callback's node declaring a branch is the same fault"
+      (lambda ()
+        ;; §13:812's first sentence, enforced statically: an event callback
+        ;; declares no keys, so every key on its node is undeclared. This is why
+        ;; the rule needs no arm of its own.
+        (check-equal "one finding"
+                     (codes (cb-machine (make-callback-declaration 'note 'event #t
+                                                                   '() #f #f)
+                                        '((keep stop)) 'note))
+                     '(invalid-callback-invocation))))
+    (harness-case "a declared key the node gives no target for is MISSING"
+      (lambda ()
+        ;; §10.6:585 lets a decision "select only among statically declared
+        ;; branch keys", so a declared key with no target is a result the
+        ;; machine cannot route.
+        (check-equal "one finding, at the node"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine (cb-machine (decided '(keep skip))
+                                                       '((keep stop)) 'decide))))
+                     '((invalid-callback-invocation . inv)))))
+    (harness-case "a key listed twice is DUPLICATED, and reports once"
+      (lambda ()
+        ;; `duplicate-branch-key` reused from the declaration half for the same
+        ;; reason `missing-callback-declaration` is: same fault, different
+        ;; subject. It is reported BEFORE the undeclared/missing arms so a key
+        ;; listed twice reports once as a duplicate rather than twice as
+        ;; whatever else it is -- asserted here, since the arm order is the only
+        ;; thing that makes it true.
+        (check-equal "exactly one finding, and it is the duplicate"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine (cb-machine (decided '(keep))
+                                                       '((keep stop) (keep reject))
+                                                       'decide))))
+                     '((duplicate-branch-key . inv)))))
+    (harness-case "an optional decision callback's node must give the default branch a target"
+      (lambda ()
+        ;; The check that makes `normalize-machine`'s own raise unreachable:
+        ;; §9.3:419 takes the default branch with no callback to ask, so a node
+        ;; with no target for it has nothing to lower.
+        (check-equal "the missing key is reported"
+                     (codes (cb-machine (make-callback-declaration 'decide 'decision #f
+                                                                   '(keep skip) 'skip #f)
+                                        '((keep stop)) 'decide))
+                     '(invalid-callback-invocation))))))
+
 (harness-finish)

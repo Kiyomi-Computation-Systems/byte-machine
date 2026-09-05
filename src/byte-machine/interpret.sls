@@ -90,6 +90,7 @@
                     ((field-action-node? n) 'field-action)
                     ((field-branch-node? n) 'field-branch)
                     ((integer-accumulate-node? n) 'accumulate)
+                    ((callback-node? n) 'callback)
                     (else (byte-machine-contract-violation 'interpret 'internal name))))))
       (define (dispatch name byte)
         (if (pair? name)
@@ -160,6 +161,53 @@
                 ((integer-accumulate-node? n) (integer-accumulate-node-eof-target n))
                 (else (byte-machine-contract-violation 'interpret 'internal
                                                        (node-name n))))))
+      ;; --- Milestone 5 Slice ②: the callback node, interpreter side ---------
+      ;; The slot IS the declaration position (§17:962, §10.3:508), which is what
+      ;; the normalizer's own `callback-slot-of` resolves in the other lane --
+      ;; the two are separate walks over the same list by decision 0015 point 3,
+      ;; not a shared helper.
+      (define (callback-slot nm)
+        (let walk ((cs (machine-callbacks m)) (i 0))
+          (cond ((null? cs) (byte-machine-contract-violation 'interpret 'internal nm))
+                ((eq? (callback-declaration-name (car cs)) nm) i)
+                (else (walk (cdr cs) (+ i 1))))))
+      (define (callback-decl nm)
+        (let walk ((cs (machine-callbacks m)))
+          (cond ((null? cs) (byte-machine-contract-violation 'interpret 'internal nm))
+                ((eq? (callback-declaration-name (car cs)) nm) (car cs))
+                (else (walk (cdr cs))))))
+      ;; §9.3:419: "An optional decision callback must declare `default-branch`;
+      ;; other optional callbacks default to `continue`." Resolved to a TARGET
+      ;; here so the invocation site is one jump and carries no rule -- decision
+      ;; 0028 item 3's short circuit reads it and never calls a closure.
+      ;;
+      ;; #f for a REQUIRED callback: its slot can never hold the sentinel, so
+      ;; there is no default to take, and #f is what says so rather than a
+      ;; plausible target no execution reaches.
+      (define (callback-default n)
+        (let ((d (callback-decl (callback-node-callback n))))
+          (cond ((callback-declaration-required? d) #f)
+                ((eq? (callback-declaration-kind d) 'decision)
+                 (let ((hit (assq (callback-declaration-default-branch d)
+                                  (map (lambda (b) (cons (car b) (cadr b)))
+                                       (callback-node-branch-targets n)))))
+                   ;; Unreachable once §16.2:901's node half runs: it requires an
+                   ;; optional decision callback's node to declare a target for
+                   ;; the default branch. Loud rather than #f, which would look
+                   ;; like a required callback here.
+                   (unless hit
+                     (byte-machine-contract-violation 'interpret 'internal
+                                                      (callback-node-name n)))
+                   (cdr hit)))
+                (else (callback-node-continue-target n)))))
+      (define (callback-parts n)
+        (list (callback-slot (callback-node-callback n))
+              (callback-node-continue-target n)
+              (map (lambda (b) (cons (car b) (cadr b)))
+                   (callback-node-branch-targets n))
+              (callback-node-pause-continuation n)
+              (callback-default n)
+              (declaration-index (callback-node-name n))))
       ;; --- Slice ②'s field semantics, interpreter side ---
       ;; Slot = declaration index (§17:962), so the slot and the width come from
       ;; the same walk over machine-fields and cannot disagree.
@@ -311,6 +359,13 @@
                                       (callback-declaration-required? c)
                                       (callback-declaration-default-branch c)))
                   (machine-callbacks m))))
+           ;; Milestone 5 Slice ②. Six parts -- slot, continue target, branch
+           ;; map, pause continuation, default target, declaration index -- and
+           ;; the generated lane renders the same six as literals into its own
+           ;; arm. The runtime routes them through one shared
+           ;; `byte-machine-callback-step/v1`, so the OUTCOME vocabulary is
+           ;; identical in both lanes while the targets stay each lane's own.
+           ((callback-parts) (callback-parts (lookup nodes (car args))))
            ((kind) (kind (car args)))
            ((dispatch) (dispatch (car args) (cadr args)))
            ((error-value) (error-parts (car args)))

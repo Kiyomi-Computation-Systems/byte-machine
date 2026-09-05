@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FIFTY-TWO PASSES, BECAUSE FIFTY-TWO DIFFERENT WITNESSES ARE NEEDED
+# FIFTY-THREE PASSES, BECAUSE FIFTY-THREE DIFFERENT WITNESSES ARE NEEDED
 # (46 through Milestone 3; Milestone 4 Slice ①a adds the member-3 drift
 # guard and the position-kind lane, and Slice ①b the field-access lane -- since
 # renamed byte-machine.differential.field, the only lane in which the field
@@ -19,7 +19,9 @@
 # aborted on an earlier assertion, and nothing failed, because nothing can. The
 # claim sat in a merged commit message for a slice and a half. Corrected by
 # Slice ② task 10, which found it by running the check the commit claimed to
-# have run.)
+# have run. Milestone 5 Slice ② adds the FIFTY-THIRD: the differential lane over
+# the callback node, which is the only program in the tree that loads a
+# generated library containing a callback state.)
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -161,7 +163,7 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "FIFTY-TWO PASSES..." above. Declared here, rather than only in prose,
+# See "FIFTY-THREE PASSES..." above. Declared here, rather than only in prose,
 # so the count enforced at the bottom of this file is the same text a reader
 # checks by eye at the top -- one number to keep in sync, not two that can
 # quietly disagree. 25 passes / 60 mutations before the aot task; pass 26 adds
@@ -851,6 +853,19 @@ cmake_minimum_required(VERSION 3.26)
 # project that "a state an execution can be parked on" and "the name the EOF walk
 # starts at" have been different questions.
 #
+# Milestone 5 Slice ② tasks 3+5, the callback node EXECUTING: FIFTEEN more,
+# 391 + 15 = 406, and one new pass (52 -> 53). THREE in the normal-ir pass, for
+# decision 0019 item 2 over the callback state's encoding -- the wire tag,
+# pinned on a golden because a tag change moves every callback fingerprint
+# together, and the two parts whose loss the separability group can name. FIVE
+# in the verify pass, one per arm of §16.2:901's node half including the
+# resolution short circuit, whose absence makes the verifier RAISE on a machine
+# it is meant to reject with one finding. SEVEN in the new pass, whose SPEC is
+# the differential lane because the emitted callback arm exists nowhere else --
+# and two of those seven edit code BOTH lanes share, so the cross-lane
+# comparison cannot see them and the program's by-value assertions are what
+# catch them.
+#
 # Milestone 5 Slice ①b: TWO. `pass-declarations` never run -- eight census
 # fixtures then find nothing, caught by a comparison naming a missing code. And
 # the span section reusing the callback section's tag, which pins the section
@@ -1035,8 +1050,8 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-set(EXPECTED_PASSES 52)
-set(EXPECTED_MUTATIONS 391)
+set(EXPECTED_PASSES 53)
+set(EXPECTED_MUTATIONS 406)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3074,10 +3089,16 @@ byte_machine_mutation(
   # `cbv` (decision 0025 point 3). The `finish?` flag is STILL what this pin
   # names, and it is still the sixth argument -- only the tail grew. (Counted:
   # current-state, offset, empty-bv, 0, 0, #t.)
+  # Re-anchored AGAIN by Milestone 5 Slice ② task 3: the ninth argument stopped
+  # being the shared `empty-callbacks` sentinel and became the parser's own slot
+  # vector, which is what ①a reserved it for -- the same correction Milestone 4
+  # Slice ② made to `empty-fields` one parameter earlier. FIND and REPLACE move
+  # together; the flag this pin names is still the sixth argument and still the
+  # only difference between them.
   FIND [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t
-                    (parser-field-values parser) parser empty-callbacks)))]]
+                    (parser-field-values parser) parser (parser-callbacks parser))))]]
   REPLACE [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #f
-                    (parser-field-values parser) parser empty-callbacks)))]]
+                    (parser-field-values parser) parser (parser-callbacks parser))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish with no input routes to the default-eof error: default-eof code")
 
 # Second: the /v2 TOMBSTONE. Milestone 4 Slice ①a task 3 rewrote both retired
@@ -3498,8 +3519,18 @@ byte_machine_mutation(
   # only write site for parser-offset). No pin can separate them -- the
   # SUBSUMED pattern this file's pin re-audit already documents for ten
   # other pairs above.
-  FIND [[(make-parser-result 'paused off 0 off #f))]]
-  REPLACE [[(make-parser-result 'paused 0 0 0 #f))]]
+  # Re-anchored by Milestone 5 Slice ②: `parser-finish-op!` gained a callback
+  # arm whose pause branch parks and reports identically, so the bare result
+  # form now occurs twice. Widened to include the PAUSE NODE's own
+  # `pause-target` line, which is what makes this the pause node's decision and
+  # not the callback node's; the callback arm's copy has its own mutation in
+  # Slice ②'s pass at the foot of this file.
+  FIND [[(parser-set-current! parser (op 'pause-target node))
+           (parser-set-lifecycle! parser 'paused-finish)
+           (make-parser-result 'paused off 0 off #f))]]
+  REPLACE [[(parser-set-current! parser (op 'pause-target node))
+           (parser-set-lifecycle! parser 'paused-finish)
+           (make-parser-result 'paused 0 0 0 #f))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the persisted offset, not zero: next -- expected 1, got 0")
 
@@ -5042,10 +5073,14 @@ byte_machine_mutation(
   # have and hides one it does.
   # Re-anchored at Slice ⓪b task 5: node-out-targets is now a derived view of
   # node-out-edges, whose arms yield (role . target) pairs.
+  # Re-anchored by Milestone 5 Slice ②, FIND *and* REPLACE: the arm gained the
+  # callback kind, and the REPLACE keeps the disjunct list intact so the mutant
+  # still differs from the baseline in ONE thing -- the arm's answer.
   FIND [[          ((or (field-action-node? n) (field-branch-node? n)
                (callback-node? n))
            (zero-width-edges n))]]
-  REPLACE [[          ((or (field-action-node? n) (field-branch-node? n))
+  REPLACE [[          ((or (field-action-node? n) (field-branch-node? n)
+               (callback-node? n))
            '())]]
   EXPECT_STATUS 1
   # A CONJUNCTION, for the mirror of the reason above: the reachability record
@@ -5063,6 +5098,10 @@ byte_machine_mutation(
   # the report leaves that diagnostic standing while narrowing the walk removes
   # it. That fixture was added FOR this separation -- without it the two mutants
   # emit identical records, which is exactly the half-fix M3 Slice ② shipped.
+  # Re-anchored by Milestone 5 Slice ②: the arm gained the callback kind, which
+  # is zero-width too, so deleting the arm is still exactly the edit this LABEL
+  # names -- the walk stops following a zero-width node, now for three kinds
+  # rather than two.
   FIND [[              ((or (field-action-node? n) (field-branch-node? n)
                    (callback-node? n))
                (zero-width-successors n))
@@ -5575,13 +5614,93 @@ byte_machine_mutation(
   # accessor, or to a constant, for four of the six kinds without anything
   # failing. That is the same shape as a label that is always present: there,
   # carrying no information; here, carrying the wrong one.
+  # Re-anchored by Milestone 5 Slice ②, FIND *and* REPLACE: the arm gained the
+  # callback kind. The REPLACE keeps all three disjuncts, so the mutant still
+  # differs from the baseline in ONE thing -- the labels -- which is what this
+  # LABEL claims and what its pin can prove.
   FIND [[          ((or (field-action-node? n) (field-branch-node? n)
                (callback-node? n))
            (zero-width-edges n))]]
-  REPLACE [[          ((or (field-action-node? n) (field-branch-node? n))
+  REPLACE [[          ((or (field-action-node? n) (field-branch-node? n)
+               (callback-node? n))
            (map (lambda (re) (cons 'next (cdr re))) (zero-width-edges n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the other four kinds label their edges too")
+
+# Milestone 5 Slice ②: §16.2:901's NODE half. Four faults, three codes, and one
+# arm ORDER that is load-bearing -- the duplicate check runs first, so a key
+# listed twice reports once as a duplicate rather than twice as whatever else it
+# is. Each mutation below removes exactly one arm.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a callback node may invoke a span callback"
+  # §10.6:584 invokes "one named event or decision callback". Without this arm
+  # a node naming a span-data callback verifies clean and then invokes, at run
+  # time, a procedure whose signature takes four arguments and not two.
+  FIND [[        ((not (memq (callback-declaration-kind cd) '(event decision)))]]
+  REPLACE [[        ((and #f (not (memq (callback-declaration-kind cd) '(event decision))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a node invoking a span-kind callback is an invalid invocation: the invocation, and nothing about keys")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a callback node's UNDECLARED branch key is accepted"
+  # This arm is also §13:812's first sentence enforced statically: an event
+  # callback declares no keys, so every key on its node is undeclared.
+  FIND [[                         (if (memq k (callback-declaration-branch-keys cd)) #f]]
+  REPLACE [[                         (if #t #f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a key the declaration never declared is UNDECLARED: one finding, at the node")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a declared branch key with no target on the node is accepted"
+  # The arm that makes `normalize-machine`'s own "no target for the default
+  # branch" raise unreachable: §9.3:419 takes an optional decision callback's
+  # default branch with no callback to ask, so a node with no target for it has
+  # nothing to lower.
+  FIND [[                         (if (memq k keys) #f]]
+  REPLACE [[                         (if #t #f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a declared key the node gives no target for is MISSING: one finding, at the node")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a branch key listed twice on one node is not reported"
+  # Dropping the duplicate arm does not make the machine verify: the key is
+  # declared and has a target, so nothing else objects to it. The pin is the
+  # duplicate case's whole result, which is the only thing that can tell "not
+  # reported" from "reported under another code".
+  FIND [[                           (cons (make-diagnostic 'duplicate-branch-key nm
+                                                  "branch key listed twice on one node")
+                                 kout)]]
+  REPLACE [[                           kout]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a key listed twice is DUPLICATED, and reports once: exactly one finding, and it is the duplicate")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a callback node naming no declaration falls through to the key arms"
+  # The RESOLUTION short circuit. Without it the key arms run against `cd` = #f
+  # and `callback-declaration-branch-keys` reads slot 4 of a boolean, so the
+  # verifier RAISES on a machine it is supposed to reject with one finding.
+  #
+  # Pinned on the RAISE, deliberately, and this is the case AGENTS.md's "prefer
+  # a comparison" rule makes room for rather than the case it warns about: the
+  # raise IS the decision's consequence, not where the mutant happens to crash,
+  # and there is no opposite constant to try -- `(and #t (not cd))` is the
+  # baseline. Measured: `Exception in vector-ref: #f is not a vector`.
+  FIND [[        ((not cd)
+         (list (make-diagnostic 'missing-callback-declaration nm]]
+  REPLACE [[        ((and #f (not cd))
+         (list (make-diagnostic 'missing-callback-declaration nm]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the resolution arm answers ALONE: case raised")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -6633,6 +6752,51 @@ byte_machine_mutation(
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
     "an ambiguous terminal prefix inserted in reverse order is also caught: ABC\\|AB -- expected a raise, but the thunk returned")
 
+# Milestone 5 Slice ② tasks 3+5: the callback state's encoding. Decision 0019
+# item 2 is what these witness, and Slice ①b shipped its converse -- a callback
+# declaration encoded by NAME alone, so two machines differing in `required?`
+# shared a fingerprint and emitted different libraries. The separability group
+# in normal-ir-tests.sps varies one encoded part at a time; these three prove
+# that group is not vacuous.
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the callback encode tag collides with field-action"
+  # Pinned on the GOLDEN, not on a pairwise inequality: a tag change moves every
+  # callback fingerprint together, so every inequality in that group survives it
+  # and only a fixed value can see it. The same argument the accumulate tag's
+  # own mutation makes one kind earlier.
+  FIND [[               ((callback)
+                (put-u8 p 10)]]
+  REPLACE [[               ((callback)
+                (put-u8 p 5)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the base machine verifies and normalizes: fingerprint -- expected 4714737223744993991")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a callback node's resolved slot is dropped from the encoding"
+  # The slot is what the ABI carries -- the emitted arm indexes `cbv` with it --
+  # so two machines whose nodes invoke different declarations would share a
+  # fingerprint and call different procedures. The following line rides along in
+  # both halves because the runner refuses an empty REPLACE.
+  FIND [[                (put-u16be p (normal-field-selector s))
+                (let ((tg (normal-field-targets s)))]]
+  REPLACE [[                (let ((tg (normal-field-targets s)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "each part varied alone moves the fingerprint: and every one moved the fingerprint -- expected \\(\\), got \\(slot\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a callback branch's KEY is dropped from the encoding"
+  # Only the targets would remain, so a machine whose declaration renames a key
+  # -- and whose emitted arm therefore matches a different returned symbol --
+  # would share a fingerprint with the original.
+  FIND [[                              (put-symbol p (car b))
+                              (put-u32be p (cdr b)))]]
+  REPLACE [[                              (put-u32be p (cdr b)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "each part varied alone moves the fingerprint: and every one moved the fingerprint -- expected \\(\\), got \\(branch-key\\)")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 36: the emitter (Milestone 1 Phase 3 Slice A) ----------------------
@@ -6821,8 +6985,12 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: the pause arm emits paused"
-  FIND [[(quote paused) pos #f "]]
-  REPLACE [[(quote stopped) pos #f "]]
+  # Re-anchored by Milestone 5 Slice ②: the callback arm's own pause branch
+  # renders the same outcome constructor, so the bare form now occurs twice.
+  # Anchored on the PAUSE ARM's `") (` prefix, which the callback arm -- whose
+  # branch opens `((pause) (` inside a `case` -- does not share.
+  FIND [[") (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "]]
+  REPLACE [[") (byte-machine-make-feed-outcome/v1 (quote stopped) pos #f "]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "pause arm p1 -- expected \"paused 2\", got \"stopped 2\"")
 
@@ -8641,10 +8809,12 @@ byte_machine_mutation(
   # the fourth re-anchor. This pin moves whenever the list does, by design: it
   # anchors on the whole list precisely so that a name added without a matching
   # guard entry is what breaks it.
+  # Re-anchored by Milestone 5 Slice ②: the list gained `o`, the callback arm's
+  # outcome binding. Dropping `pk` is still the edit.
   FIND [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs pk
-      v r d psr cbv))]]
+      v r d o psr cbv))]]
   REPLACE [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs
-      v r d psr cbv))]]
+      v r d o psr cbv))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(pk\\)")
 
@@ -8661,8 +8831,10 @@ byte_machine_mutation(
   # and the whole-list FIND above remain textually distinct and each occurs
   # exactly once, which the suite asserts in both directions (no SITES is
   # declared anywhere in this file, so every FIND is pinned at one occurrence).
-  FIND [[      v r d psr cbv))]]
-  REPLACE [[      v r psr cbv))]]
+  # Re-anchored by Milestone 5 Slice ②: the tail gained `o`. Dropping `d` is
+  # still the edit, and the two FINDs in this pair stay textually distinct.
+  FIND [[      v r d o psr cbv))]]
+  REPLACE [[      v r o psr cbv))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(d\\)")
 
@@ -9719,9 +9891,123 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
+# --- Milestone 5 Slice ②: the callback node executes (pass 53) ---------------
+#
+# The differential lane is the SPEC because the emitted arm exists nowhere else:
+# no other program in the tree loads a generated library containing a callback
+# state. Two of the seven mutations below edit code SHARED by both lanes --
+# `byte-machine-callback-step/v1`'s vocabulary and the callback-domain error
+# record -- so the cross-lane comparison cannot see them at all: both lanes move
+# together and agree. They are caught by that program's BY-VALUE assertions,
+# which is the "agreement must stay observable" rule with a mutation behind it
+# rather than a paragraph.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/differential-callback-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.callback.chez.source
+  LABEL "runtime: a callback pause parks on the continue target"
+  # §13:814 parks `current` PAST the invocation on the DECLARED pause
+  # continuation. The two arms are textually distinct by indentation alone --
+  # `parser-feed-op!`'s sits two spaces deeper than `parser-finish-op!`'s -- so
+  # each is its own one-site FIND and each is its own decision.
+  FIND [[                  (parser-set-current! parser (cadddr parts))]]
+  REPLACE [[                  (parser-set-current! parser (cadr parts))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "resume then feed agrees, and the callback is not re-delivered: the two lanes agree on the whole walk")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.callback.chez.source
+  LABEL "runtime: an EOF callback pause records the FEED pause lifecycle"
+  # §12.4:729: "A pause during EOF produces `paused-finish`." Only the
+  # interpreted lane is edited, so the differential sees the disagreement.
+  FIND [[                (parser-set-current! parser (cadddr parts))
+                (parser-set-lifecycle! parser 'paused-finish)]]
+  REPLACE [[                (parser-set-current! parser (cadddr parts))
+                (parser-set-lifecycle! parser 'paused-feed)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "finish reaching a callback agrees across the lanes: and every one agrees")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.callback.chez.source
+  LABEL "runtime: a callback pause is routed as a continue"
+  # SHARED CODE: both lanes call this classifier, so both move together and the
+  # cross-lane comparison stays green. Caught by the by-value case that asserts
+  # the four outcomes are four DISTINCT tuples -- without which a lane pair
+  # agreeing on one wrong answer for every outcome would pass.
+  FIND [[                ((eq? r callback-pause) (list 'pause))]]
+  REPLACE [[                ((eq? r callback-pause) (list 'goto continue))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "and the pause is neither -- expected a true value")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.callback.chez.source
+  LABEL "runtime: a callback error is recorded in the machine domain"
+  # SHARED CODE again, and decision 0024's Consequences predicted exactly this:
+  # `domain` is fixed inside one constructor, so "a check that only compares
+  # domain across lanes passes vacuously by construction". The by-value
+  # assertion on the whole projected record is what has teeth here.
+  FIND [[    (vector parser-error-tag 'callback code callback-error-reason detail]]
+  REPLACE [[    (vector parser-error-tag 'machine code callback-error-reason detail]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the callback-domain error carries decision 0024's two codes: the explicit failure's application code")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.callback.chez.source
+  LABEL "interpret: an unbound optional callback defaults to the pause continuation"
+  # §9.3:419: "other optional callbacks default to `continue`." Decision 0028
+  # item 3 resolves that to a TARGET at lowering time, in two independent walks
+  # -- this one and `normalize-machine`'s -- so editing either is visible to the
+  # differential, which is the whole reason they are not a shared helper
+  # (decision 0015 point 3).
+  FIND [[                (else (callback-node-continue-target n)))))]]
+  REPLACE [[                (else (callback-node-pause-continuation n)))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "both lanes take the default with no closure called: the lanes agree")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.callback.chez.source
+  LABEL "compile: the emitted callback pause resumes at the continue target"
+  # The generated half of the first mutation in this pass. Both are needed: each
+  # edits one lane, and a lane that agreed with a mutated sibling would be the
+  # defect neither alone can show.
+  FIND [[            "           ((pause) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
+            (num (cadr tg)) " off))\n"]]
+  REPLACE [[            "           ((pause) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
+            (num (car tg)) " off))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "resume then feed agrees, and the callback is not re-delivered: the two lanes agree on the whole walk")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.callback.chez.source
+  LABEL "compile: the emitted callback arm renders an empty branch map"
+  # The branch map is what §13:812's decision half is decided by: with it empty,
+  # every returned key falls to the out-of-contract path and the generated lane
+  # reports decision 0024's minted code where the interpreted one takes a
+  # branch.
+  FIND [[            (let join ((bs (normal-field-arguments s)) (acc ""))]]
+  REPLACE [[            (let join ((bs '()) (acc ""))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "all six outcomes produce the identical tuple in both lanes: and every one agrees")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FIFTY-TWO PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FIFTY-THREE PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

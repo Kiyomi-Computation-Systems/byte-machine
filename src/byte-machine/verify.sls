@@ -1028,8 +1028,10 @@
   ;; declared mapping. A `(cons 'callback name)` here would add a thirteenth
   ;; "role", fail `derived roles equal the mapped roles`, and take that pass's
   ;; BASELINE red. Measured: 13 occurrences in CODE before this pass and 13
-  ;; after. Count with `read`, or exclude comment lines -- the two mentions in
-  ;; this very comment are why a bare textual count answers 15 and is the same
+  ;; after -- and 16 from Milestone 5 Slice ②, whose callback node adds three
+  ;; genuine edge roles, all three mapped in the matrix in the same commit.
+  ;; Count with `read`, or exclude comment lines -- the two mentions in this
+  ;; very comment are why a bare textual count answers more and is the same
   ;; class of mistake as the substring sweep that once undercounted a pin.
   ;;
   ;; Every loop variable is named apart from `pass-names`' and `pass-fields`'.
@@ -1182,7 +1184,88 @@
                                            (callback-declaration-name cd)
                                            "span callback is named by no span")
                           #f))
-                    cbs)))))
+                    cbs))
+       ;; *** §16.2:901's NODE half (Milestone 5 Slice ②). *** ①b shipped the
+       ;; declaration share -- "callback decision keys that collide with
+       ;; reserved control outcomes" (:902) and the declaration's own shape --
+       ;; and left this, which needs a node kind that did not exist.
+       ;;
+       ;; ONE code for the four faults, on §4.6's budget and on the precedent
+       ;; `invalid-callback-declaration` set one slice earlier by covering two.
+       ;; The MESSAGE separates them; diagnostics are compared by code, and a
+       ;; code per fault would spend four on one plan bullet. The two faults
+       ;; that already have codes reuse them: a node naming no declaration is
+       ;; `missing-callback-declaration`, the code a SPAN naming no declaration
+       ;; already reports, and a key listed twice is `duplicate-branch-key`.
+       ;;
+       ;; Decision 0020 item 1 is why all of this is here: every one of these
+       ;; judgements needs the machine's callback table beside the node, and
+       ;; `make-callback-node` cannot see it.
+       (apply append
+              (map (lambda (n)
+                     (if (callback-node? n) (callback-node-diagnostics cbs n) '()))
+                   (machine-nodes m))))))
+
+  ;; The four faults, in the order §16.2:901 names them plus the invocation's
+  ;; own precondition. Split out of `pass-declarations` rather than inlined
+  ;; because it is the only block there that walks NODES, and because its five
+  ;; arms would otherwise make one `map` body longer than the whole pass.
+  (define (callback-node-diagnostics cbs n)
+    (let* ((nm (callback-node-name n))
+           (cn (callback-node-callback n))
+           (cd (find-callback cbs cn))
+           (keys (map car (callback-node-branch-targets n))))
+      (cond
+        ;; UNDECLARED, the resolution case: nothing else can be judged without
+        ;; the declaration, so this arm answers alone rather than reporting four
+        ;; findings about a name that resolves to nothing.
+        ((not cd)
+         (list (make-diagnostic 'missing-callback-declaration nm
+                                "callback node names no declaration")))
+        ;; §10.6:584 invokes "one named event or decision callback". A span
+        ;; callback is reached only through a span declaration (§10.4:515-516),
+        ;; never through a node, so naming one here is an invocation that can
+        ;; never be what it says.
+        ((not (memq (callback-declaration-kind cd) '(event decision)))
+         (list (make-diagnostic 'invalid-callback-invocation nm
+                                "callback node invokes a span callback")))
+        (else
+         (append
+          ;; DUPLICATED. Before the undeclared/missing arms below, so a key
+          ;; listed twice reports once as a duplicate rather than twice as
+          ;; whatever else it is.
+          (let kloop ((ks keys) (kseen '()) (kout '()))
+            (if (null? ks) (reverse kout)
+                (kloop (cdr ks) (cons (car ks) kseen)
+                       (if (memq (car ks) kseen)
+                           (cons (make-diagnostic 'duplicate-branch-key nm
+                                                  "branch key listed twice on one node")
+                                 kout)
+                           kout))))
+          ;; UNDECLARED keys. An EVENT callback declares none, so every key on
+          ;; an event node lands here -- which is §13:812's first sentence
+          ;; ("Event and span callbacks accept only continue, pause, or
+          ;; failure") enforced statically rather than left to the runtime's
+          ;; out-of-contract path.
+          (filter values
+                  (map (lambda (k)
+                         (if (memq k (callback-declaration-branch-keys cd)) #f
+                             (make-diagnostic 'invalid-callback-invocation nm
+                                              "branch key is not declared by the callback")))
+                       keys))
+          ;; MISSING. §10.6:585 lets a decision "select only among statically
+          ;; declared branch keys", so a declared key with no target on this
+          ;; node is a result the machine cannot route -- and for an OPTIONAL
+          ;; decision callback it is worse than that: §9.3:419's default branch
+          ;; is taken with no callback to ask, so `normalize-machine` has
+          ;; nothing to lower and raises. This check is what makes that raise
+          ;; unreachable.
+          (filter values
+                  (map (lambda (k)
+                         (if (memq k keys) #f
+                             (make-diagnostic 'invalid-callback-invocation nm
+                                              "callback declares a branch key this node gives no target")))
+                       (callback-declaration-branch-keys cd))))))))
 
   ;; Helpers, deliberately not named `lookup`: that one is over NODES and is
   ;; itself pin-visible.

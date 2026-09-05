@@ -119,6 +119,16 @@ Adding the tenth disjunct to `node?` **fires the S2 ratchet** (`kind-position-ce
 - [ ] **Step 2: Verify** — every existing fingerprint **unchanged**; the four goldens move only if the emitted text of a machine *without* a callback node changes, which it must not.
 - [ ] **Step 3: Commit**
 
+> **CORRECTED IN EXECUTION (2026-09-05): Tasks 3 and 5 ship as ONE commit.** Task 3
+> ends at "`render-state-arm`", but an emitted arm is a call to something: rendering
+> it without Task 5's invocation ships either a call to an unbound identifier (a
+> generated library that fails at *load*, which no test in the tree would run) or a
+> reachable `assertion-violation` that Task 5 then deletes. Task 3's own stated
+> verification — "every existing fingerprint unchanged" — cannot see either, because
+> no shipped machine has a callback node. The two land together with a both-lanes
+> fixture, which is what makes the emitted text *witnessed* rather than merely
+> rendered. Same rule as Tasks 1–2, and the same rule Slice ①a's Tasks 1–3 established.
+
 ---
 
 ## Task 4: `parser-state-name`, and the id→name table

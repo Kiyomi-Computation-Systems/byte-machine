@@ -1007,6 +1007,29 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/declaration-separability-tests.sps"
   TIMEOUT 120)
 
+# --- Milestone 5 Slice ②: the callback-invocation node ------------------------
+# The first fixture whose machine CALLS OUT, so the first place the two lanes can
+# disagree about something the APPLICATION supplied rather than something the IR
+# fixed. Both lanes, over every one of §13:803-808's outcomes plus the resumed
+# pause, the unbound-optional short circuit and a callback on the EOF chain.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.callback.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-callback-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/differential-callback-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.callback.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-callback-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/differential-callback-tests.sps"
+  TIMEOUT 120)
+
 byte_machine_add_scheme_lane(
   NAME byte-machine.example.one-byte.chez.source
   BACKEND chez

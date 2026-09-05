@@ -31,7 +31,12 @@
           ;; and must carry the table regardless.
           parser-stream-offset parser-user-context parser-active-span
           make-callback-failure callback-failure?
-          callback-failure-code callback-failure-detail)
+          callback-failure-code callback-failure-detail
+          ;; Milestone 5 Slice ②. Both are called from EMITTED code, which is
+          ;; why they carry the /v1 seam suffix and why they are exported at all
+          ;; -- the generated library imports (byte-machine runtime) and nothing
+          ;; else (decision 0025).
+          byte-machine-callback-step/v1 byte-machine-make-callback-error/v1)
   (import (rnrs)
           (byte-machine private conditions))
 
@@ -153,13 +158,14 @@
   ;; the milestone's boundary is stated. What is corrected is the REASON: it is
   ;; dead weight with no pin depending on it, and the slice that next touches
   ;; this region should remove it.
-  (define empty-fields (vector))
-  ;; Milestone 5 Slice ①a (decision 0025 point 3): the resolved callback slot
-  ;; vector emitted `exec` receives as `cbv`. Empty until Slice ①b resolves
-  ;; bindings into it. Unlike `empty-fields` -- whose sharing became a defect the
-  ;; moment Slice ② wrote through it -- nothing writes through this one, and the
-  ;; slice that gives it contents owns replacing the sentinel.
-  (define empty-callbacks (vector))
+  ;; *** BOTH SENTINELS ARE GONE (Milestone 5 Slice ②). *** The paragraph above
+  ;; said the slice that next touches this region should remove `empty-fields`,
+  ;; and the `empty-callbacks` note below it said the slice that gives the
+  ;; callback vector contents owns replacing the sentinel. This is that slice
+  ;; for both: `parser-feed-v2!` and `parser-finish-v2!` now pass the parser's
+  ;; own field vector and its own callback slot vector, and nothing else in the
+  ;; tree named either binding -- measured, including the mutation suite, whose
+  ;; one pin on the `empty-callbacks` call site moved with it.
 
   ;; --- feed outcome (the runtime<-generated seam; accessors private) ---
   (define feed-outcome-tag (tag 'byte-machine-feed-outcome))
@@ -200,6 +206,31 @@
   ;; one producer in the plan, §13:808's callback failure, which is Milestone 5.
   (define (byte-machine-make-parser-error/v1 entry node-name state-id offset position-kind)
     (vector parser-error-tag 'machine (vector-ref entry 0) (vector-ref entry 1) #f
+            node-name state-id offset position-kind))
+  ;; --- the callback domain (decision 0024, Milestone 5 Slice ②) -------------
+  ;; The two producers 0024 item 4 names: §13:808's explicit callback failure,
+  ;; whose code and detail are the APPLICATION's and pass through, and a return
+  ;; outside the declared outcomes, for which the runtime mints the code below
+  ;; and whose detail is #f -- no make-callback-failure call happened on that
+  ;; path, so nothing was application-provided (§12.7:757 calls the member
+  ;; "optional callback-provided detail").
+  ;;
+  ;; `domain` is fixed HERE, exactly as `machine` is fixed in the constructor
+  ;; above, and for the reason 0024's Consequences give: no emitted site and no
+  ;; interpreter site writes it, so the two lanes cannot disagree by
+  ;; construction -- and a differential that only compared domain would pass
+  ;; vacuously. The teeth are on code, node name, offset and position kind.
+  ;;
+  ;; The REASON is one fixed printable-ASCII constant (0024 item 5), identical
+  ;; in both lanes. It is not derived from the code: on one of the two paths the
+  ;; code is the application's, so a derived reason would stop being static in
+  ;; §12.7:757's sense and would put a symbol's external representation into a
+  ;; behavioural contract.
+  (define callback-error-reason "callback failure")
+  (define callback-contract-code 'callback-contract-violation)
+  (define (byte-machine-make-callback-error/v1 code detail node-name state-id
+                                               offset position-kind)
+    (vector parser-error-tag 'callback code callback-error-reason detail
             node-name state-id offset position-kind))
   (define (parser-error? x) (tagged? parser-error-tag x))
   ;; The interpreter's executor hands back (code reason node-name state-id); the
@@ -401,6 +432,48 @@
   (define (callback-failure? x) (tagged? callback-failure-tag x))
   (define (callback-failure-code f) (vector-ref f 1))
   (define (callback-failure-detail f) (vector-ref f 2))
+
+  ;; --- the ONE callback invocation, shared by both lanes (Slice ②) -----------
+  ;; §13:803-808's outcomes, classified in one place. The emitted arm and
+  ;; `parser-feed-op!`'s arm both call this, so neither lane can invent its own
+  ;; vocabulary -- which §22.4:1268 compares and decision 0024's Consequences
+  ;; require be produced "by both lanes from the same construction". The lanes
+  ;; differ only in what a TARGET is (a node name here, a state id there), and
+  ;; this procedure never looks inside one.
+  ;;
+  ;; *** §13:812's two sentences are ONE test, deliberately. *** "Event and span
+  ;; callbacks accept only continue, pause, or failure. Decision callbacks may
+  ;; additionally return their declared branch keys." An event node declares no
+  ;; branch targets at all, and a decision node declares exactly the keys
+  ;; §16.2:901's node half admits -- so "does the returned symbol name a
+  ;; declared branch of THIS node" answers both, out of data both lanes already
+  ;; carry, and no callback KIND has to cross the seam.
+  ;;
+  ;; The unbound-optional short circuit is decision 0028 item 3's other end:
+  ;; ①b installed the sentinel, this reads it, and the closure is NEVER called
+  ;; -- which is what keeps 0028's constraint on §18:981's trace true.
+  ;;
+  ;; Answers one of:
+  ;;   (goto TARGET)          -- continue, a declared branch, or the default
+  ;;   (pause)                -- park on the node's pause continuation
+  ;;   (failure CODE DETAIL)  -- decision 0024's stored callback-domain error
+  (define (byte-machine-callback-step/v1 parser f branches continue default)
+    (if (unbound-callback? f)
+        ;; §9.3:419: "An optional decision callback must declare
+        ;; `default-branch`; other optional callbacks default to `continue`."
+        ;; Both are resolved to a TARGET at lowering time, so this arm is one
+        ;; jump and carries no rule of its own.
+        (list 'goto default)
+        (let ((r (f parser (parser-user-context parser))))
+          (cond ((eq? r callback-continue) (list 'goto continue))
+                ((eq? r callback-pause) (list 'pause))
+                ((callback-failure? r)
+                 (list 'failure (callback-failure-code r)
+                       (callback-failure-detail r)))
+                ((and (symbol? r) (assq r branches))
+                 => (lambda (hit) (list 'goto (cdr hit))))
+                (else (list 'failure callback-contract-code #f))))))
+
   ;; A FRESH vector every call, never a shared one: two parsers from one compiled
   ;; machine must not share storage, and parser-reset! must not hand back a
   ;; vector an earlier reset also handed out.
@@ -504,6 +577,41 @@
              (let ((t (op 'field-step node (parser-field-values parser))))
                (parser-set-current! parser t)
                (loop pos pk)))
+            ;; *** The tenth kind, and the first arm in this loop that runs
+            ;; APPLICATION code. *** Zero-width like the two above (§11.4:652),
+            ;; so `pos`, the offset and `pk` are all carried through unchanged;
+            ;; §12.7:770 puts a "callback failure" on the same `boundary at the
+            ;; current stream offset` row as a zero-width machine action, which
+            ;; is the rule the carried-through `pk` already implements.
+            ;;
+            ;; The parts are (slot continue branches pause default state-id) and
+            ;; the vocabulary lives in `byte-machine-callback-step/v1`, which
+            ;; the emitted arm calls too.
+            ((callback)
+             (let* ((parts (op 'callback-parts node))
+                    (o (byte-machine-callback-step/v1
+                        parser
+                        (vector-ref (parser-callbacks parser) (car parts))
+                        (caddr parts) (cadr parts) (list-ref parts 4))))
+               (case (car o)
+                 ((goto)
+                  (parser-set-current! parser (cadr o))
+                  (loop pos pk))
+                 ;; §13:814: "A callback-requested pause occurs after the
+                 ;; callback's delivered event has been committed. Resume
+                 ;; continues after that event; it is never delivered twice." So
+                 ;; `current` is parked PAST the invocation, on the declared
+                 ;; pause continuation -- the pause node's own arm above, one
+                 ;; kind later.
+                 ((pause)
+                  (parser-set-current! parser (cadddr parts))
+                  (make-parser-result 'paused pos (- pos start)
+                                      (parser-offset parser) #f))
+                 (else
+                  (make-parser-result 'error pos (- pos start) (parser-offset parser)
+                                      (byte-machine-make-callback-error/v1
+                                       (cadr o) (caddr o) node (list-ref parts 5)
+                                       (parser-offset parser) pk))))))
             ;; Slice ③'s INPUT-READING kind. It needs a byte, so it yields
             ;; `need-input` at the end of a slice and resumes at the same node on
             ;; the next feed -- its whole split-point behaviour, inherited from
@@ -532,8 +640,14 @@
            ;; ② emits arms that write through it, and a shared empty vector
            ;; would make every generated field machine index out of bounds --
            ;; measured, before this line changed.
+           ;; The PARSER's own callback slot vector, not the shared sentinel.
+           ;; Slice ①a reserved this parameter, ①b filled the slots and nothing
+           ;; read them, and Slice ② emits an arm that indexes it -- so a shared
+           ;; empty vector would make every generated callback machine index out
+           ;; of bounds. The same correction Slice ② of the last milestone made
+           ;; to `empty-fields`, one parameter later.
            (o (exec (parser-current parser) (parser-offset parser) bv start end #f
-                    (parser-field-values parser) parser empty-callbacks)))
+                    (parser-field-values parser) parser (parser-callbacks parser))))
       (parser-set-current! parser (feed-outcome-next-state o))
       (parser-set-offset! parser (feed-outcome-offset o))
       (make-parser-result (feed-outcome-status o) (feed-outcome-next o)
@@ -580,7 +694,7 @@
   (define (parser-finish-v2! parser)
     (let* ((exec (parser-executor parser))
            (o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #t
-                    (parser-field-values parser) parser empty-callbacks)))
+                    (parser-field-values parser) parser (parser-callbacks parser))))
       (parser-set-current! parser (feed-outcome-next-state o))
       (parser-set-offset! parser (feed-outcome-offset o))
       (case (feed-outcome-status o)
@@ -636,6 +750,33 @@
            (let ((t (op 'field-step node (parser-field-values parser))))
              (parser-set-current! parser t)
              (loop t pk)))
+          ;; §12.4:729: "EOF processing may invoke callbacks and may pause. A
+          ;; pause during EOF produces `paused-finish`." The same invocation as
+          ;; the feed loop's, deliberately written out rather than shared with
+          ;; it: the two arms differ in what they build and in the lifecycle
+          ;; they record, and this file's own comment above `parser-feed!`
+          ;; states why near-identical arms here stay separate.
+          ((callback)
+           (let* ((parts (op 'callback-parts node))
+                  (o (byte-machine-callback-step/v1
+                      parser
+                      (vector-ref (parser-callbacks parser) (car parts))
+                      (caddr parts) (cadr parts) (list-ref parts 4))))
+             (case (car o)
+               ((goto)
+                (parser-set-current! parser (cadr o))
+                (loop (cadr o) pk))
+               ((pause)
+                (parser-set-current! parser (cadddr parts))
+                (parser-set-lifecycle! parser 'paused-finish)
+                (make-parser-result 'paused off 0 off #f))
+               (else
+                (parser-set-current! parser node)
+                (parser-set-lifecycle! parser 'error)
+                (let ((e (byte-machine-make-callback-error/v1
+                          (cadr o) (caddr o) node (list-ref parts 5) off pk)))
+                  (parser-set-stored-error! parser e)
+                  (make-parser-result 'error off 0 off e))))))
           ;; At finish there is no input, so an accumulate node takes its own
           ;; declared EOF edge exactly as a dispatch node does (§10.6:569).
           ((accumulate dispatch)

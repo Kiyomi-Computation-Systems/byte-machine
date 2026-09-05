@@ -73,7 +73,13 @@
       ;; obligation Slice ①a recorded for exactly this moment.
       parser-stream-offset parser-user-context parser-active-span
       make-callback-failure callback-failure?
-      callback-failure-code callback-failure-detail))
+      callback-failure-code callback-failure-detail
+      ;; Milestone 5 Slice ②'s two, and the set-equality guard is what made them
+      ;; land here in the same commit as the exports: both are called from
+      ;; EMITTED code -- the callback arm's invocation and its error record -- so
+      ;; a machine or node named after either would shadow the thing its own
+      ;; emitted body calls.
+      byte-machine-callback-step/v1 byte-machine-make-callback-error/v1))
   ;; Every identifier the emitted body binds, so a caller-chosen output binding
   ;; cannot collide with one. `fieldv` is emitted `exec`'s seventh parameter,
   ;; reserved empty by Milestone 4 Slice ①a and filled by its Slice ② (decision
@@ -87,10 +93,16 @@
   ;; callback receives as its first argument (§13:784) and BOTH call sites
   ;; already pass the real one -- there is no sentinel, because the value exists
   ;; and passing it now spares ② a second call-site edit. `cbv` is the resolved
-  ;; callback slot vector and passes `empty-callbacks` until ①b binds one.
+  ;; callback slot vector.
+  ;;
+  ;; *** Both are READ from Milestone 5 Slice ② on: the callback arm indexes
+  ;; `cbv` with a literal slot and hands `psr` to the invocation. *** That slice
+  ;; also retired the `empty-callbacks` sentinel this paragraph used to name --
+  ;; both /v2 call sites now pass the parser's own slot vector -- and adds `o`
+  ;; below, the arm's outcome binding.
   (define reserved-member-3
     '(exec loop pos st off b bv start end state offset finish? fieldv errs pk
-      v r d psr cbv))
+      v r d o psr cbv))
   (define (lower-alpha? c) (and (char>=? c #\a) (char<=? c #\z)))
   (define (name-char? c)
     (or (lower-alpha? c) (and (char>=? c #\0) (char<=? c #\9)) (char=? c #\-)))
@@ -358,6 +370,42 @@
             "         (if " (render-predicate (normal-field-selector s) a b) "\n"
             "             " (zero-width-jump (car tg)) "\n"
             "             " (zero-width-jump (cdr tg)) ")))\n")))
+        ;; *** The tenth kind, and the only emitted arm that calls APPLICATION
+        ;; code. *** The invocation and §13:803-812's outcome vocabulary are the
+        ;; RUNTIME's -- `byte-machine-callback-step/v1`, the same procedure
+        ;; `parser-feed-op!` calls -- so this arm renders only the literals the
+        ;; node carries and the routing they select. A lane-local classifier
+        ;; here is precisely what §22.4:1268 compares and what decision 0024's
+        ;; Consequences require be produced "by both lanes from the same
+        ;; construction".
+        ;;
+        ;; `cbv` is read here for the first time since decision 0025 point 3
+        ;; reserved it: the slot is a literal, so the hot path is one
+        ;; `vector-ref` and never a symbolic lookup (§10.3:508).
+        ;;
+        ;; Zero-width (§11.4:652), so the `goto` arm is `zero-width-jump`'s rule
+        ;; with a computed target -- same `pos`, same `off`, same `pk`.
+        ((callback)
+         (let ((tg (normal-field-targets s)))
+           (string-append
+            "      ((" id ")\n"
+            "       (let ((o (byte-machine-callback-step/v1 psr (vector-ref cbv "
+            (num (normal-field-selector s)) ") (quote ("
+            (let join ((bs (normal-field-arguments s)) (acc ""))
+              (if (null? bs) acc
+                  (join (cdr bs)
+                        (string-append acc (if (string=? acc "") "" " ")
+                                       "(" (symbol->string (car (car bs)))
+                                       " . " (num (cdr (car bs))) ")"))))
+            ")) " (num (car tg)) " "
+            (let ((d (caddr tg))) (if d (num d) "#f")) ")))\n"
+            "         (case (car o)\n"
+            "           ((goto) (loop pos (cadr o) off pk))\n"
+            "           ((pause) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
+            (num (cadr tg)) " off))\n"
+            "           (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
+            "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
+            (nm (normal-state-id s)) ") " id " off pk) " id " off)))))\n")))
         ((dispatch)
          (let ((fb (normal-dispatch-fallback s)))
            (string-append
@@ -368,7 +416,8 @@
             "               (else " (loop-tail (car fb) (cdr fb)) ")))))\n")))
         ;; Unreachable today -- this case already covers every kind
         ;; normal-state-kind can produce: dispatch, stop, error, finish, pause,
-        ;; field-action, field-branch (Slice ②) and accumulate (Slice ③).
+        ;; field-action, field-branch (Milestone 4 Slice ②), accumulate
+        ;; (Milestone 4 Slice ③) and callback (Milestone 5 Slice ②).
         ;; *** The parenthetical here listed only the first five until
         ;; 2026-09-03, having survived both slices that widened the set --
         ;; including the one eleven lines above this comment. A comment that

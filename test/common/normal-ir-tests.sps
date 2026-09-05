@@ -838,4 +838,141 @@
                     (state-lengths (acc-machine 10 #f)))
           (check-equal "all eleven" bad '()))))))
 
+;; --- Milestone 5 Slice ②: the callback state's encoding ----------------------
+;;
+;; *** THIS GROUP IS DECISION 0019 ITEM 2, and Slice ①b shipped its converse.
+;; *** That slice encoded a callback declaration's NAME and nothing else, so two
+;; machines differing only in `required?` shared one fingerprint and emitted
+;; different libraries. The rule is that a datum "must enter the *encoding*, not
+;; merely be read from the source machine", so every part the callback state
+;; carries is varied here ONE AT A TIME and the fingerprints must differ.
+;;
+;; The pairs are built from one parameterised machine, so a variation cannot
+;; move something else by accident: exactly one argument changes per case.
+(define (cbm-machine cb-name keys node-branches continue pause req default)
+  (make-machine 'cbm 'start '()
+    (list (make-callback-declaration cb-name 'decision req keys default #f))
+    '()
+    (list eof-decl rej-decl)
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 0)
+                                  (make-edge 'inv 'advance) #f))
+            (make-edge 'reject 'reexecute) #f #f)
+          (make-callback-node 'inv cb-name continue node-branches pause #f)
+          (make-stop-node 'stop #f)
+          (make-stop-node 'other #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+(define (cbm-base) (cbm-machine 'decide '(keep skip)
+                                '((keep stop) (skip other)) 'stop 'reject #t #f))
+;; Two IDENTICAL declarations differing only in name, so the trailing
+;; declaration section is fixed and only the node's resolved slot moves.
+(define (two-callback-machine invoked)
+  (make-machine 'cbm2 'start '()
+    (list (make-callback-declaration 'alpha 'decision #t '(keep skip) #f #f)
+          (make-callback-declaration 'beta 'decision #t '(keep skip) #f #f))
+    '()
+    (list eof-decl rej-decl)
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 0)
+                                  (make-edge 'inv 'advance) #f))
+            (make-edge 'reject 'reexecute) #f #f)
+          (make-callback-node 'inv invoked 'stop
+                              '((keep stop) (skip other)) 'reject #f)
+          (make-stop-node 'stop #f)
+          (make-stop-node 'other #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+
+(harness-group "every part of a callback state reaches the encoding (0019 item 2)"
+  (lambda ()
+    (harness-case "the base machine verifies and normalizes"
+      (lambda ()
+        ;; Stated first: a machine the verifier rejects would make every
+        ;; inequality below true for the wrong reason.
+        (check-equal "no diagnostics"
+                     (map diagnostic-code (verification-diagnostics
+                                           (verify-machine (cbm-base))))
+                     '())
+        ;; A GOLDEN, measured 2026-09-05. It is what pins the wire TAG and the
+        ;; field order: every pairwise inequality below survives a tag change,
+        ;; because a tag change moves all of them together.
+        (check-equal "fingerprint" (s2-fp (cbm-base)) 4714737223744993991)))
+    (harness-case "each part varied alone moves the fingerprint"
+      (lambda ()
+        ;; A sentinel over the variations DRIVEN and a record of which one
+        ;; failed to move -- a bare boolean here would say "something is wrong"
+        ;; and not which part is unencoded, which is the whole finding.
+        (let ((base (s2-fp (cbm-base))) (driven 0) (same '()))
+          ;; *** The SLOT has its own base, and isolating it took a second
+          ;; attempt worth recording. *** Varying it by ADDING a declaration
+          ;; before the invoked one moves the fingerprint whatever the state
+          ;; encodes, because the trailing declaration SECTION grows with it --
+          ;; so that pair proved nothing about the state and its mutation was
+          ;; caught for the wrong reason. This pair holds the declaration table
+          ;; FIXED at two identical-but-for-name entries and moves only which
+          ;; one the node names, which nothing but the state's slot can account
+          ;; for. Counted into `driven` beside the rest.
+          (set! driven (+ driven 1))
+          (when (= (s2-fp (two-callback-machine 'alpha))
+                   (s2-fp (two-callback-machine 'beta)))
+            (set! same (cons 'slot same)))
+          (for-each
+           (lambda (row)
+             (set! driven (+ driven 1))
+             (when (= base (s2-fp ((cadr row))))
+               (set! same (cons (car row) same))))
+           (list
+            (list 'continue-target
+                  (lambda () (cbm-machine 'decide '(keep skip)
+                                          '((keep stop) (skip other)) 'other 'reject
+                                          #t #f)))
+            (list 'pause-continuation
+                  (lambda () (cbm-machine 'decide '(keep skip)
+                                          '((keep stop) (skip other)) 'stop 'stop
+                                          #t #f)))
+            (list 'branch-target
+                  (lambda () (cbm-machine 'decide '(keep skip)
+                                          '((keep other) (skip other)) 'stop 'reject
+                                          #t #f)))
+            (list 'branch-key
+                  (lambda () (cbm-machine 'decide '(keep drop)
+                                          '((keep stop) (drop other)) 'stop 'reject
+                                          #t #f)))
+            ;; §9.1:318 makes a branch map "a proper list in deterministic
+            ;; caller order", so two machines whose branches differ only in
+            ;; ORDER are two machines and must not share a fingerprint.
+            (list 'branch-order
+                  (lambda () (cbm-machine 'decide '(keep skip)
+                                          '((skip other) (keep stop)) 'stop 'reject
+                                          #t #f)))
+            ;; The DEFAULT TARGET, present only for an optional callback. It is
+            ;; written with a presence tag, so this pair also separates "no
+            ;; default" from "the default is state 0".
+            (list 'default-presence
+                  (lambda () (cbm-machine 'decide '(keep skip)
+                                          '((keep stop) (skip other)) 'stop 'reject
+                                          #f 'keep)))))
+          (check-equal "seven variations driven" driven 7)
+          (check-equal "and every one moved the fingerprint" same '()))))
+    (harness-case "the default TARGET is encoded, not merely its presence"
+      (lambda ()
+        ;; Two OPTIONAL machines, both carrying a default, differing only in
+        ;; which declared branch the default names -- so the presence tag is
+        ;; equal in both and only the target separates them.
+        (check "different"
+               (not (= (s2-fp (cbm-machine 'decide '(keep skip)
+                                           '((keep stop) (skip other)) 'stop 'reject
+                                           #f 'keep))
+                       (s2-fp (cbm-machine 'decide '(keep skip)
+                                           '((keep stop) (skip other)) 'stop 'reject
+                                           #f 'skip)))))))
+    (harness-case "the callback state has the declared layout length"
+      (lambda ()
+        ;; The same total Slice ②'s `seq-state` miss earned, one kind later.
+        (let ((bad '()))
+          (for-each (lambda (len) (unless (= len 11) (set! bad (cons len bad))))
+                    (state-lengths (cbm-base)))
+          (check-equal "all eleven" bad '()))))))
+
 (harness-finish)
