@@ -22,8 +22,10 @@ delivered. Milestone 5 (callbacks, poisoning, and spans) is in progress. Two
 hardening slices ran first and closed **2026-09-04** — Slice ⓪ (the verifier's
 kind × position matrix and a diagnostic-code census derived from the source
 rather than declared) and Slice ⓪b (the EOF walk cluster). Gate 0 discharged
-**2026-09-04** as decisions 0024-0029, and Slice ①a — the seam — landed the
-same day, taking the generated ABI to version 4. No versioned release exists
+**2026-09-04** as decisions 0024-0029; Slice ①a — the seam — landed the same day,
+taking the generated ABI to version 4; and Slice ①b landed with it, adding
+callback and span declarations, indexed binding resolution and five public
+accessors. Nothing invokes a callback yet — that is Slice ②. No versioned release exists
 yet.
 
 ### Added

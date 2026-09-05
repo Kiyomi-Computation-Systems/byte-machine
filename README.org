@@ -31,7 +31,11 @@ source) and Slice ⓪b (the EOF walk cluster), which closed two holes in the
 verifier: a machine whose /entry/ is a =finish= terminal, and a machine whose
 entry's own EOF path reaches a =stop=, both verified clean before and are now
 rejected. Gate 0 then discharged 2026-09-04 as decisions 0024-0029, and Slice
-①a — the seam, carrying the generated ABI to version 4 — landed the same day.
+①a — the seam, carrying the generated ABI to version 4 — and Slice ①b — callback
+and span declarations, indexed binding resolution, and five public accessors —
+landed the same day. A machine can now DECLARE callbacks and spans and have those
+declarations verified, encoded and resolved into parser slots; nothing invokes one
+yet, which is Slice ②.
 =src/byte-machine/= holds the construction API, the verifier, the normalizer and
 emitter, the reference interpreter, and the runtime, each exercised in both the
 source and ahead-of-time execution lanes. See

@@ -570,6 +570,37 @@
   ahead. Before assigning work to a seam slice, name the artifact it moves; if
   there is none, the seam argument does not reach it, and scheduling it there buys
   only a guard over always-empty inputs.
+* **A datum the ABI carries must be in the fingerprint, and "the encoding" is not
+  the same list as "what the emitter reads".**
+  Decision 0019 item 2 already said it — a datum "must enter the *encoding*, not
+  merely be read from the source machine" — and Milestone 5 Slice ①b broke it
+  anyway, in the file whose own comments record paying for it twice. The encoder
+  was handed the SLOT TABLES, which hold names and positions; the emitter built
+  a separate list carrying kind, `required?` and `default-branch` into the ABI
+  payload. Two machines differing only in `required?` then shared a fingerprint
+  and emitted different libraries, one of which refuses to construct a parser.
+  When one structure feeds the fingerprint and another feeds the emitter, they
+  are two censuses of the same thing (see the census rule below): derive both
+  from one source, or assert pairwise that every part which reaches the emitter
+  moves the fingerprint.
+* **A mutation whose decision a later fix SUBSUMES gets retired with the reason,
+  not weakened until it passes.**
+  Slice ①b pinned a section discriminator on the ground that two record kinds had
+  identical payloads, so only the tag separated them. The same slice's fix gave
+  the two records different shapes — and the pin went UNCAUGHT, the runner
+  reporting "that specification is not testing this behaviour". The temptation is
+  to loosen the pin's expectation until it is green again; the pin's decision no
+  longer exists, so what it would then measure is nothing. Delete it, say in its
+  place why, and pin the property the fix actually created.
+* **A guard that raises can be shadowed by a raise from the line after it.**
+  Slice ①b's ABI-payload length guard was pinned twice and read UNCAUGHT both
+  times: a one-member payload raises whether or not the guard is there, because
+  the very next line indexes past the end. `assertion-violation?` passed on both,
+  and so did a predicate matching the offending vector as an irritant — the
+  builtin's own error carries it too. Only `who` separated them. When a guard
+  precedes an operation that would fail anyway, the assertion must name what
+  distinguishes the guard's refusal, and the mutation suite is what proves it
+  does.
 * **A comment that enumerates a closed set is a census, and it goes stale in silence.**
   `compile.sls` carried "this case already covers every kind `normal-state-kind`
   can produce (dispatch/stop/error/finish/pause)" through two slices that widened
