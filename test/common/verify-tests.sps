@@ -452,9 +452,19 @@
           (check "eof-zero-progress-cycle diagnostic"
                  (exists (lambda (d) (eq? (diagnostic-code d) 'eof-zero-progress-cycle))
                          (verification-diagnostics v)))
-          (check "zero-progress-cycle diagnostic"
-                 (exists (lambda (d) (eq? (diagnostic-code d) 'zero-progress-cycle))
-                         (verification-diagnostics v)))
+          (check "and NOT zero-progress-cycle: :898's gate excludes them"
+                 ;; *** THE OPPOSITE OF WHAT THIS ASSERTED BEFORE Slice ③. ***
+                 ;; `pa` and `pb` are reachable only through `e0`'s eof-target,
+                 ;; so they are not byte-reachable and §16.2:898's gate
+                 ;; (decision 0027 item 3) excludes them. The machine is still
+                 ;; rejected -- by `eof-zero-progress-cycle`, whose bullet
+                 ;; `:908` is and whose owner is `eof-terminal`. That NON-OVERLAP
+                 ;; is what 0027 item 3 argues for when it gates on
+                 ;; `byte-reached` alone rather than on item 1's composite, so
+                 ;; this line is now the assertion that the two checks do not
+                 ;; both fire on the machine `:908` was written for.
+                 (not (exists (lambda (d) (eq? (diagnostic-code d) 'zero-progress-cycle))
+                              (verification-diagnostics v))))
           ;; Attribution, not just verdict: the eof-zero-progress-cycle above is
           ;; the entry dispatch node e0's own :909 eof-target-chain walk (its
           ;; target is 'pa, which cycles). It must NOT also be raised on 'pa
@@ -960,9 +970,17 @@
                      (length (filter (lambda (c) (eq? c 'zero-progress-cycle))
                                      (codes
                                       (make-machine 'combined3 'x '() '() '() errs
+                                        ;; Byte 1 ADVANCES into 'start, added by
+                                        ;; Slice ③: §16.2:898's gate reports a
+                                        ;; cycle only on a BYTE-REACHABLE node,
+                                        ;; and before this edge 'start and 'seq
+                                        ;; were reachable from nowhere. The
+                                        ;; count was 3 for the wrong reason.
                                         (list (make-byte-dispatch-node 'x
                                                 (list (make-byte-case (make-exact-byte-matcher 0)
-                                                                      (make-edge 'x 'reexecute) #f))
+                                                                      (make-edge 'x 'reexecute) #f)
+                                                      (make-byte-case (make-exact-byte-matcher 1)
+                                                                      (make-edge 'start 'advance) #f))
                                                 (make-edge 'x 'reexecute) #f #f)
                                               (dispatch (list (make-byte-case (make-exact-byte-matcher 0)
                                                                               (make-edge 'seq 'reexecute) #f))
@@ -2578,5 +2596,102 @@
                                            (make-span-end-node 'cl 'body 'done #f))
                                      (span-tail))))
                      '())))))
+
+;; --- §16.2:898's reachability gate (Milestone 5 Slice ③, decision 0027 item 3)
+;;
+;; The bullet reads "reachable zero-progress cycles" and the pass applied NO
+;; relation: measured by 0027 against the shipped file, neither `reached` nor
+;; `byte-reached` occurred as an identifier anywhere in it.
+;;
+;; *** THIS IS A RELAXATION, and the ground the design gave for calling it
+;; benign does not hold. *** Design §3.2 item 4 said such a machine "is rejected
+;; by `unreachable-node` regardless". It is not: `pass-reachability` walks
+;; `all-out-targets`, which crosses an eof-target and then keeps taking byte
+;; edges, so it calls `t` reached. The machine below is 0027's own, and it is
+;; asserted BOTH ways -- the cycle is real, and no execution can enter it.
+(harness-group "zero-progress cycles are gated on byte-reachability (§16.2:898)"
+  (lambda ()
+    (harness-case "a BYTE-reachable pause cycle is still a zero-progress cycle"
+      (lambda ()
+        ;; *** The witness the gate MOVED, and moving it is a strict
+        ;; improvement. *** The REPORT set's pause clause was witnessed by an
+        ;; EOF-ONLY pause cycle, which §16.2:898's gate now excludes on purpose
+        ;; -- so the clause needed a byte-reachable cycle to be witnessed at
+        ;; all, which is what a check about byte reachability should always have
+        ;; had. `pa` and `pb` are entered by a byte edge and cycle through each
+        ;; other's continuations.
+        (check "zero-progress-cycle is reported"
+               (memq 'zero-progress-cycle
+                     (codes (machine*
+                             'bpause
+                             (list (make-byte-dispatch-node 'start
+                                     (list (make-byte-case (make-exact-byte-matcher 0)
+                                                           (make-edge 'pa 'advance) #f))
+                                     (make-edge 'reject 'reexecute) #f #f)
+                                   (make-pause-node 'pa 'pb #f)
+                                   (make-pause-node 'pb 'pa #f)
+                                   (make-error-node 'reject 'rejected #f))
+                             'default-eof))))))
+    (harness-case "an unoccupiable zero-progress cycle is accepted"
+      (lambda ()
+        ;; `e`'s byte edges all reach the error node and its EOF route reaches
+        ;; `t`; `t` is a byte-dispatch reachable only that way, holding a
+        ;; reexecute self-loop. Once an execution takes an eof-target it can
+        ;; never feed again (§12.2's finish-ready row), so `t`'s self-loop is
+        ;; untakeable.
+        (check-equal "no diagnostics at all"
+                     (codes (machine*
+                             'gated
+                             (list (make-byte-dispatch-node 'start
+                                     (list (make-byte-case (make-exact-byte-matcher 0)
+                                                           (make-edge 'reject 'advance) #f))
+                                     (make-edge 'reject 'reexecute) 't #f)
+                                   (make-byte-dispatch-node 't
+                                     (list (make-byte-case (make-exact-byte-matcher 0)
+                                                           (make-edge 't 'reexecute) #f))
+                                     (make-edge 'reject 'reexecute) 'reject #f)
+                                   (make-error-node 'reject 'rejected #f))
+                             'default-eof))
+                     '())))
+    (harness-case "and `unreachable-node` does NOT catch it, which is why the gate is not benign"
+      (lambda ()
+        ;; The half design §3.2 item 4 got wrong, asserted rather than argued:
+        ;; the very same machine passes `pass-reachability` too, so before this
+        ;; gate the ONLY thing rejecting it was the ungated cycle check.
+        (check "t is not reported unreachable"
+               (not (memq 'unreachable-node
+                          (codes (machine*
+                                  'gated
+                                  (list (make-byte-dispatch-node 'start
+                                          (list (make-byte-case (make-exact-byte-matcher 0)
+                                                                (make-edge 'reject 'advance) #f))
+                                          (make-edge 'reject 'reexecute) 't #f)
+                                        (make-byte-dispatch-node 't
+                                          (list (make-byte-case (make-exact-byte-matcher 0)
+                                                                (make-edge 't 'reexecute) #f))
+                                          (make-edge 'reject 'reexecute) 'reject #f)
+                                        (make-error-node 'reject 'rejected #f))
+                                  'default-eof)))))))
+    (harness-case "the SAME cycle on a byte-reachable node is still rejected"
+      (lambda ()
+        ;; The reverse direction, without which the gate could be vacuous: one
+        ;; byte edge from the entry into `t` and the finding comes back.
+        (check-equal "zero-progress-cycle, at t"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine
+                            (machine*
+                             'gated
+                             (list (make-byte-dispatch-node 'start
+                                     (list (make-byte-case (make-exact-byte-matcher 0)
+                                                           (make-edge 't 'advance) #f))
+                                     (make-edge 'reject 'reexecute) 't #f)
+                                   (make-byte-dispatch-node 't
+                                     (list (make-byte-case (make-exact-byte-matcher 0)
+                                                           (make-edge 't 'reexecute) #f))
+                                     (make-edge 'reject 'reexecute) 'reject #f)
+                                   (make-error-node 'reject 'rejected #f))
+                             'default-eof))))
+                     '((zero-progress-cycle . t)))))))
 
 (harness-finish)

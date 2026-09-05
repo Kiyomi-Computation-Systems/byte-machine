@@ -937,6 +937,15 @@ cmake_minimum_required(VERSION 3.26)
 # witnessed where the two relations actually differ: an eof half that keeps
 # taking byte edges, against the machine 0027's Context derives.
 #
+# Milestone 5 Slice ③ task 3, §16.2:898's gate: ONE more, 438 + 1 = 439. It is a
+# RELAXATION, so its fixture asserts both directions and the second half is the
+# one that matters -- `unreachable-node` does NOT catch the machine the gate now
+# accepts, which is the ground design §3.2 item 4 gave for calling the gate
+# benign and which decision 0027 records as false. Two shipped fixtures moved
+# with it, and one of them now asserts the OPPOSITE of what it did: an EOF-only
+# pause cycle is `eof-zero-progress-cycle` and NOT `zero-progress-cycle`, which
+# is the non-overlap 0027 item 3 gates on `byte-reached` alone to get.
+#
 # Milestone 5 Slice ①b: TWO. `pass-declarations` never run -- eight census
 # fixtures then find nothing, caught by a comparison naming a missing code. And
 # the span section reusing the callback section's tag, which pins the section
@@ -1122,7 +1131,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 53)
-set(EXPECTED_MUTATIONS 438)
+set(EXPECTED_MUTATIONS 439)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -4037,7 +4046,8 @@ byte_machine_mutation(
   # zero-width kinds and reflowed onto three lines. Third re-anchor of the same
   # decision; the REPLACE and the pin are still unchanged, which is what says the
   # decision has not moved even though its text keeps doing so.
-  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
+  FIND [[(if (and (memq (node-name n) br898)
+                              (or (byte-dispatch-node? n) (pause-node? n)
                                   (sequence-dispatch-node? n)
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
@@ -4512,7 +4522,8 @@ byte_machine_mutation(
   # as the two sibling pins: the guard gained the two zero-width kinds. The edit
   # this LABEL claims is unchanged -- drop only the pause clause -- and so is the
   # nesting it records.
-  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
+  FIND [[(if (and (memq (node-name n) br898)
+                              (or (byte-dispatch-node? n) (pause-node? n)
                                   (sequence-dispatch-node? n)
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
@@ -4526,7 +4537,12 @@ byte_machine_mutation(
                                   (callback-node? n)
                                   (span-start-node? n) (span-end-node? n))
                               (reaches-self? (node-name n)))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "chain of pauses that cycles is a zero-progress EOF cycle: zero-progress-cycle diagnostic")
+    # Re-pinned by Milestone 5 Slice ③. Its witness was an EOF-ONLY pause cycle,
+  # which §16.2:898's new gate (decision 0027 item 3) excludes on purpose -- so
+  # the clause is now witnessed by a BYTE-reachable pause cycle, which is what a
+  # check about byte reachability should always have used. The edit this LABEL
+  # names is unchanged.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "a BYTE-reachable pause cycle is still a zero-progress cycle")
 
 # Milestone 3 Slice ② Task 1: the sixth node kind, sequence-dispatch, at all
 # seven of verify.sls's permissive fall-throughs (§0 D2). Adds seven mutations
@@ -4767,13 +4783,15 @@ byte_machine_mutation(
   # measured, none predicted. Comparison-caught: the count check fails outright
   # rather than depending on where a mutant happens to crash.
   # RE-ANCHORED by Slice ② task 2's census, same reflow as the sibling pin.
-  FIND [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
+  FIND [[(if (and (memq (node-name n) br898)
+                              (or (byte-dispatch-node? n) (pause-node? n)
                                   (sequence-dispatch-node? n)
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
                                   (callback-node? n)
                                   (span-start-node? n) (span-end-node? n))]]
-  REPLACE [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
+  REPLACE [[(if (and (memq (node-name n) br898)
+                              (or (byte-dispatch-node? n) (pause-node? n)
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
                                   (callback-node? n)
@@ -5937,6 +5955,19 @@ byte_machine_mutation(
   REPLACE [[                              (map (lambda (t) (cons (node-name n) t)) (all-out-targets n))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the span end on the untakeable byte edge is not reported")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the zero-progress report is not gated on byte-reachability"
+  # §16.2:898's gate, decision 0027 item 3 (Milestone 5 Slice ③). Its own
+  # fixture asserts BOTH directions, so this mutant is caught by the accepting
+  # half -- the machine 0027's Context derives, which `unreachable-node` does
+  # NOT catch either, which is why the gate is not the benign no-op design §3.2
+  # item 4 called it.
+  FIND [[                     (if (and (memq (node-name n) br898)]]
+  REPLACE [[                     (if (and #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "an unoccupiable zero-progress cycle is accepted")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source

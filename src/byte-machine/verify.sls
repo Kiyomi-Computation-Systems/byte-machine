@@ -535,8 +535,31 @@
                    nodes))))
 
   ;; PASS 5: zero-progress cycles — a reexecute-only cycle consumes no byte.
+  ;;
+  ;; *** THE GATE §16.2:898 ASKS FOR, added by Milestone 5 Slice ③ (decision
+  ;; 0027 item 3). *** The bullet reads "reachable zero-progress cycles" and
+  ;; this pass applied NO relation: measured by 0027 against the shipped file,
+  ;; neither `reached` nor `byte-reached` occurred as an identifier anywhere in
+  ;; it.
+  ;;
+  ;; The gate is `byte-reached` ALONE, not decision 0027 item 1's composite,
+  ;; because §16.2 states the two halves as two separate bullets: `:898`
+  ;; "reachable zero-progress cycles" and `:908` "EOF-only zero-progress cycles
+  ;; and non-EOF control flow into a finish terminal". The second half already
+  ;; has an owner -- `eof-terminal`'s `walk` answers `cycle` on `(memq name
+  ;; path)` and `pass-eof-execution` reports it as `eof-zero-progress-cycle` --
+  ;; so an EOF-only zero-progress cycle stays rejected after this gate, by the
+  ;; check whose bullet it is. Gating on the composite would make the two checks
+  ;; overlap on exactly the machines `:908` was written for.
+  ;;
+  ;; *** It is a RELAXATION, and the ground the design gave for calling it
+  ;; benign does not hold. *** Design §3.2 item 4 said such a machine "is
+  ;; rejected by `unreachable-node` regardless"; 0027 records that it is not,
+  ;; because `pass-reachability` walks `all-out-targets`, which crosses an
+  ;; eof-target and then keeps taking byte edges. The fixture in verify-tests
+  ;; asserts the machine both ways.
   (define (pass-zero-progress m)
-    (let ((nodes (machine-nodes m)))
+    (let ((nodes (machine-nodes m)) (br898 (byte-reached m)))
       (define (reexec-targets n)
         (cond ((byte-dispatch-node? n)
                (append (map (lambda (c) (edge-target (byte-case-edge c)))
@@ -660,7 +683,8 @@
                      ;; cycle, nothing reports it, verify returns ok with zero
                      ;; diagnostics, and the machine fails to terminate in both
                      ;; lanes.
-                     (if (and (or (byte-dispatch-node? n) (pause-node? n)
+                     (if (and (memq (node-name n) br898)
+                              (or (byte-dispatch-node? n) (pause-node? n)
                                   (sequence-dispatch-node? n)
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
