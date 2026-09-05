@@ -500,8 +500,13 @@
        ;; ①a's, which normal-ir-tests.sps asserts at ①a's own measured value
        ;; rather than leaving it to the goldens to notice.
        ;;
-       ;; *** THE CALLBACK AND SPAN SLOT TABLES ARE NOT HERE, AND MILESTONE 5
-       ;; SLICE ①a DELIBERATELY DID NOT ADD THEM. *** Decision 0025 point 1 fixes
+       ;; *** THE CALLBACK AND SPAN SECTIONS ARE AT THE FOOT OF THIS PROCEDURE,
+       ;; ADDED BY MILESTONE 5 SLICE ①b. *** The paragraph below is Slice ①a's,
+       ;; written when they were not here yet and kept because it records WHY the
+       ;; work moved; read it as history, and the sections themselves as the
+       ;; discharge of what it promised.
+       ;;
+       ;; ①a's note, as written: Decision 0025 point 1 fixes
        ;; their shape -- an OPTIONAL TRAILING SECTION, present only when
        ;; nonempty, with the header unchanged -- and its point 4 handed the shape
        ;; to ①a on the reasoning that the seam slice pays every artifact move

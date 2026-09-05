@@ -262,6 +262,10 @@
   (define unbound-callback (vector 'byte-machine-unbound-callback))
   (define (unbound-callback? x) (eq? x unbound-callback))
 
+  ;; §9.3:419, verbatim: "`callback-bindings` is a proper list of two-element
+  ;; lists `(name procedure)`." TWO-ELEMENT LISTS, not pairs -- the first version
+  ;; of this resolver took `(name . procedure)` and the slice's final review
+  ;; caught it against the sentence. `(cadr b)` is the procedure.
   (define (binding-for bindings nm)
     (let bloop ((bs bindings))
       (cond ((null? bs) #f)
@@ -279,7 +283,8 @@
     (let dloop ((bs bindings) (seen '()))
       (unless (null? bs)
         (let ((b (car bs)))
-          (unless (and (pair? b) (symbol? (car b)) (procedure? (cdr b)))
+          (unless (and (list? b) (= (length b) 2)
+                       (symbol? (car b)) (procedure? (cadr b)))
             (byte-machine-contract-violation 'make-parser 'invalid-argument
                                              'callback-bindings))
           (when (memq (car b) seen)
@@ -304,14 +309,12 @@
                    (nm (vector-ref d 0))
                    (required? (vector-ref d 2))
                    (b (binding-for bindings nm)))
-              (cond (b (vector-set! slots i (cdr b)))
+              (cond (b (vector-set! slots i (cadr b)))
                     (required?
                      (byte-machine-contract-violation 'make-parser 'invalid-argument
                                                       'missing-required-callback))
                     (else #t))
               (rloop (+ i 1)))))))
-
-  (define empty-callback-decls (vector))
 
   (define (make-parser compiled-machine callback-bindings user-context)
     (unless (compiled-machine? compiled-machine)
@@ -382,6 +385,15 @@
   ;; outcomes allocation-free singletons and says in the same breath that "error
   ;; detail allocation is allowed on the exceptional path".
   (define callback-failure-tag (tag 'byte-machine-callback-failure))
+  ;; TYPE ONLY HERE, AND THE GRAMMAR HALF IS ENFORCED NOWHERE. §9.3:423 requires
+  ;; the code to satisfy the portable ASCII name grammar; `symbol?` is the house
+  ;; constructor-side check and `valid-name?` lives in verify.sls, which this
+  ;; library does not import and must not -- the runtime is downstream of
+  ;; verification. An application's callback code is not a machine declaration
+  ;; and reaches no verifier pass, so nothing in the tree checks the grammar
+  ;; half. Recorded rather than silently narrowed: closing it means either
+  ;; duplicating the grammar here or routing application codes through a check
+  ;; that does not exist, and neither is this slice's to choose.
   (define (make-callback-failure code detail)
     (unless (symbol? code)
       (byte-machine-contract-violation 'make-callback-failure 'invalid-argument 'code))

@@ -837,6 +837,9 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Milestone 5 Slice ①b's final review: ONE more, on the ABI-4 metadata length
+# guard, which shipped with neither a test nor a pin. Mutations 380 + 1 = 381.
+#
 # Milestone 5 Slice ①b: TWO. `pass-declarations` never run -- eight census
 # fixtures then find nothing, caught by a comparison naming a missing code. And
 # the span section reusing the callback section's tag, which pins the section
@@ -1022,7 +1025,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 52)
-set(EXPECTED_MUTATIONS 380)
+set(EXPECTED_MUTATIONS 381)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3036,6 +3039,18 @@ byte_machine_mutation(
 # default-eof error, so the finish case's `default-eof code` check reddens. The
 # FIND's `empty-bv 0 0 #t` is unique to the finish driver (parser-feed-v2! calls
 # exec with `bv start end #f`).
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: an ABI 4 payload with no member 1 is accepted"
+  # Milestone 5 Slice ①b's final review: the guard shipped with no test and no
+  # pin. Without it a version-4 runtime reads member 1 out of a one-member
+  # payload and fails with an index error deep in make-parser instead of a named
+  # refusal at construction.
+  FIND [[    (unless (>= (vector-length metadata) 2)]]
+  REPLACE [[    (unless #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a one-member payload is refused at the current version")
+
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a /v2 finish does not drive exec with finish? true"

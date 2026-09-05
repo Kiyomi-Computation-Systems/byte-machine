@@ -163,6 +163,6 @@
           ;; And the same machine with the binding supplied builds, so the
           ;; refusal above is about the BINDING and not about the machine.
           (check "and builds once bound"
-                 (parser? (make-parser gen (list (cons 'must (lambda args 'ignored))) #f))))))))
+                 (parser? (make-parser gen (list (list 'must (lambda args 'ignored))) #f))))))))
 
 (harness-finish)

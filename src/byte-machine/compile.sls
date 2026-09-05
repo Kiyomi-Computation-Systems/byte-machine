@@ -59,7 +59,15 @@
       byte-machine-make-compiled-machine
       parser-field-ref
       callback-continue callback-pause
-      ;; Milestone 5 Slice ①b's six. This mirror is asserted by SET EQUALITY
+      ;; Milestone 5 Slice ①b's SEVEN new names: the five §9.3 owes -- design §6's
+      ;; six minus `parser-state-name`, deferred whole to Slice ② -- plus
+      ;; `callback-failure-code` and `callback-failure-detail`, which §9.3:415-416
+      ;; does not list. Those two are accessors for a record §13:808 defines and
+      ;; §9.3 gives a constructor and a predicate but no readers, so an
+      ;; application could build a failure and never read it back. Recorded here
+      ;; rather than exported silently; if the owner would rather §9.3 grow an
+      ;; appended disposition naming them, that is the alternative.
+      ;; This mirror is asserted by SET EQUALITY
       ;; against (byte-machine runtime)'s live exports, so it reddens in BOTH
       ;; directions and must move in the same commit the exports do -- the
       ;; obligation Slice ①a recorded for exactly this moment.

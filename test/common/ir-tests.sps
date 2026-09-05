@@ -421,8 +421,13 @@
         ;; constructor must not. ir.sls's own comment says why: a check here
         ;; makes the verifier arm unreachable through the public API, and its
         ;; permissive mutation then survives while the suite reports it caught.
-        ;; When pass 6a lands (task 2), these three become positive diagnostic
-        ;; fixtures; here they only prove construction succeeds.
+        ;; Task 2 landed `pass-declarations` and it rejects all FOUR: both
+        ;; decision shapes fire `invalid-callback-declaration`, the reserved key
+        ;; fires `reserved-branch-key`, and the nonportable name fires
+        ;; `invalid-name`. Two of the four are also the census's own fixtures for
+        ;; those codes; the other two are covered by the same arms through
+        ;; different machines. Here they only prove CONSTRUCTION succeeds, which
+        ;; is what keeps those verifier arms reachable through the public API.
         (check "an optional decision callback with NO default branch is built"
                (callback-declaration?
                 (make-callback-declaration 'c 'decision #f '(keep skip) #f #f)))

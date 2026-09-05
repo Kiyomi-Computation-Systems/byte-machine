@@ -347,9 +347,21 @@
     (define (noop . _) 'ignored)
     (harness-case "a bound callback lands in its declared slot"
       (lambda ()
-        (let* ((decls (vector (vector 'a 'event #t #f) (vector 'b 'event #t #f)))
-               (p (make-parser (cm decls) (list (cons 'a noop) (cons 'b noop)) 'ctx)))
+        ;; The slot VECTOR is what §9.3:419 resolves to, and the case must read
+        ;; it -- an earlier version checked only that a parser was built, which
+        ;; would pass with every slot left unbound. The parser is a plain vector
+        ;; and the slots are index 10, so the test reaches them without widening
+        ;; any export.
+        (let* ((one (lambda args 'one)) (two (lambda args 'two))
+               (decls (vector (vector 'a 'event #t #f) (vector 'b 'event #t #f)))
+               (p (make-parser (cm decls) (list (list 'b two) (list 'a one)) 'ctx))
+               (slots (vector-ref p 10)))
           (check "a parser was built" (parser? p))
+          ;; Bound in DECLARATION order, not binding order: the list above is
+          ;; reversed on purpose, so a resolver that indexed by binding position
+          ;; would swap these two.
+          (check-equal "slot 0 is the first DECLARED callback" (vector-ref slots 0) one)
+          (check-equal "slot 1 is the second" (vector-ref slots 1) two)
           (check-equal "and the context is held verbatim"
                        (parser-user-context p) 'ctx))))
     (harness-case "an unbound OPTIONAL callback is permitted"
@@ -372,7 +384,7 @@
           (check-raises "refused"
                         (contract-violation? 'make-parser 'duplicate-callback-binding)
                         (lambda () (make-parser (cm decls)
-                                                (list (cons 'a noop) (cons 'a noop)) #f))))))
+                                                (list (list 'a noop) (list 'a noop)) #f))))))
     (harness-case "a binding naming no declaration is refused, not ignored"
       (lambda ()
         ;; Silently ignoring it would let a typo disable a callback the machine
@@ -381,7 +393,7 @@
           (check-raises "refused"
                         (contract-violation? 'make-parser 'unknown-callback-binding)
                         (lambda () (make-parser (cm decls)
-                                                (list (cons 'a noop) (cons 'typo noop)) #f))))))
+                                                (list (list 'a noop) (list 'typo noop)) #f))))))
     (harness-case "a malformed binding list is refused"
       (lambda ()
         (let ((decls (vector)))
@@ -390,7 +402,7 @@
                         (lambda () (make-parser (cm decls) 'nope #f)))
           (check-raises "not a (name . procedure) pair"
                         (contract-violation? 'make-parser 'callback-bindings)
-                        (lambda () (make-parser (cm decls) (list (cons 'a 'not-a-proc)) #f))))))
+                        (lambda () (make-parser (cm decls) (list (list 'a 'not-a-proc)) #f))))))
     (harness-case "the active span is #f on a fresh parser, in both lanes"
       (lambda ()
         ;; `parser-active-span` ships in this slice and `parser-state-name` does
@@ -401,6 +413,33 @@
       (lambda ()
         (check-equal "starts at zero"
                      (parser-stream-offset (make-parser (cm (vector)) '() #f)) 0)))))
+
+(harness-group "the ABI 4 payload must carry member 1"
+  (lambda ()
+    (harness-case "a one-member payload is refused at the current version"
+      (lambda ()
+        ;; Slice ①b's final review found this guard shipped with NO witness --
+        ;; no test reached its raise and no mutation pinned it. It is the guard
+        ;; that keeps a version-4 runtime from reading member 1 out of a payload
+        ;; that has none, which would be an index error deep in make-parser
+        ;; rather than a named refusal at construction.
+        ;; Discriminated by WHO, and it took two tries to get right. A one-member
+        ;; payload raises either way: the guard names it, and without the guard
+        ;; `(vector-ref metadata 1)` raises an index error four lines later. A
+        ;; bare `assertion-violation?` passes on both -- and so does
+        ;; `irritant-is`, because vector-ref's own error carries the offending
+        ;; vector as an irritant too. Both readings left the guard's mutation
+        ;; UNCAUGHT and the suite said so, twice. Only `who` separates them.
+        (check-raises "refused BY THE CONSTRUCTOR, not by vector-ref"
+                      (lambda (e)
+                        (and (assertion-violation? e) (who-condition? e)
+                             (eq? (condition-who e)
+                                  'byte-machine-make-compiled-machine)))
+                      (lambda () (byte-machine-make-compiled-machine
+                                  4 99 0 stub-exec (vector (vector)))))
+        (check "and a two-member payload is accepted"
+               (compiled-machine? (byte-machine-make-compiled-machine
+                                   4 99 0 stub-exec (vector (vector) (vector)))))))))
 
 (harness-group "callback failure values (§13:808, decision 0024)"
   (lambda ()
