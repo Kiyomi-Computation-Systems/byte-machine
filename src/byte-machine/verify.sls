@@ -886,11 +886,32 @@
   ;; The entry is the exception to the exception: a fresh or reset parser is
   ;; parked at the entry WITHOUT having executed it, so `parser-finish!` runs an
   ;; entry callback and all three outcomes are live -- flow-through again.
-  ;; *** The span kinds are NOT parked states, and this says so rather than
-  ;; omitting them. *** Neither pauses itself: §14:837 and §14:838 park on the
-  ;; span-data or completion CALLBACK's own pause, whose continuation belongs to
-  ;; that callback node. A span node is therefore flow-through, like a field
-  ;; action, and `classify` answers for it above.
+  ;; *** A SPAN END IS A PARKED STATE, and Slice ③ said here that it was not.
+  ;; *** The claim was that "§14:837 and §14:838 park on the span-data or
+  ;; completion CALLBACK's own pause, whose continuation belongs to that callback
+  ;; node" -- and a span-data callback has no callback node. It is reached
+  ;; through a SPAN declaration and the span-end node itself, so its pause parks
+  ;; on that node's internal completion substep, whose source name (§13:820, the
+  ;; debug map) is the span-end node's own.
+  ;;
+  ;; Found by Slice ③'s own census reconciliation, and it was reachable: a
+  ;; machine whose span end continues to a stop verified clean and then answered
+  ;; `stopped` from `parser-finish!` after a span-data pause -- exactly what
+  ;; §16.2:909 exists to forbid, and what the pause-node control below is
+  ;; rejected for.
+  ;;
+  ;; *** AND IT NEEDS NO ARM HERE, which is measured rather than assumed. *** A
+  ;; span end's resume point is its SUCCESSOR -- by the time anything is parked
+  ;; there the fragment is delivered (§14:837) and only the completion callback
+  ;; and the jump remain -- but starting the walk at the node gives the same
+  ;; answer, because a span end is pure flow-through: it is no terminal, so
+  ;; `classify` above joins over its `next` and nothing else. An arm answering
+  ;; `(span-end-node-next n)` was written here first and its mutation SURVIVED,
+  ;; which is what a line that cannot change an outcome looks like. The whole of
+  ;; the change is the MEMBERSHIP below.
+  ;;
+  ;; A span START stays out of that membership: it calls nothing, so nothing can
+  ;; pause there, and it is flow-through like a field action.
   (define (parked-eof-start m n)
     (if (and (callback-node? n) (not (eq? (node-name n) (machine-entry m))))
         (callback-node-pause-continuation n)
@@ -1014,6 +1035,13 @@
                                     ;; does. `parked-eof-start` above is where
                                     ;; its start differs from its name.
                                     (callback-node? n)
+                                    ;; Slice ③, and NOT in its first shape: a
+                                    ;; span end's data callback parks the parser
+                                    ;; on that node's completion substep, so it
+                                    ;; belongs in this set for the same reason
+                                    ;; the callback node does. `parked-eof-start`
+                                    ;; carries the difference again.
+                                    (span-end-node? n)
                                     (symbol? (node-eof-target n))))
                            (case (eof-terminal m (parked-eof-start m n))
                              ((eof-reachable-stop)
@@ -1245,8 +1273,42 @@
        ;; `make-callback-node` cannot see it.
        (apply append
               (map (lambda (n)
-                     (if (callback-node? n) (callback-node-diagnostics cbs n) '()))
+                     (cond ((callback-node? n) (callback-node-diagnostics cbs n))
+                           ;; *** THE OTHER HALF OF THE SAME BOUNDARY, and it was
+                           ;; missing until Slice ③'s census reconciliation found
+                           ;; it. *** `make-span-start-node` stores its span as a
+                           ;; bare symbol and says so in its own comment --
+                           ;; "whether it names a DECLARED span ... needs the
+                           ;; machine's span table", assigned to §16.2:899 and
+                           ;; pass 7. Pass 7 does not do it: it treats the symbol
+                           ;; opaquely, because the LATTICE is well defined over
+                           ;; any symbol.
+                           ;;
+                           ;; It was reachable, not theoretical: a machine whose
+                           ;; span nodes named an undeclared span verified CLEAN
+                           ;; and then raised `assertion-violation` out of
+                           ;; `normalize-machine`'s `span-slot-of` -- a verified
+                           ;; machine crashing the normalizer, which §9.2:368
+                           ;; forbids in as many words.
+                           ((or (span-start-node? n) (span-end-node? n))
+                            (span-node-declaration-diagnostics sps n))
+                           (else '())))
                    (machine-nodes m))))))
+
+  ;; The span half of §16.2:901's "undeclared", written beside
+  ;; `callback-node-diagnostics` and answering the same shape of question. There
+  ;; is only ONE fault here where a callback node has four: a span node carries
+  ;; no branch keys, no kind and no arity, so naming a declaration it can find is
+  ;; the whole of its cross-reference.
+  (define (span-node-declaration-diagnostics sps n)
+    (let ((s (if (span-start-node? n) (span-start-node-span n) (span-end-node-span n))))
+      (if (find-span sps s) '()
+          (list (make-diagnostic 'missing-span-declaration (node-name n)
+                                 "span node names an undeclared span")))))
+  (define (find-span sps nm)
+    (cond ((null? sps) #f)
+          ((eq? (span-declaration-name (car sps)) nm) (car sps))
+          (else (find-span (cdr sps) nm))))
 
   ;; The four faults, in the order §16.2:901 names them plus the invocation's
   ;; own precondition. Split out of `pass-declarations` rather than inlined

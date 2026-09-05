@@ -170,7 +170,7 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-# See "FIFTY-THREE PASSES..." above. Declared here, rather than only in prose,
+# See "FIFTY-FOUR PASSES..." above. Declared here, rather than only in prose,
 # so the count enforced at the bottom of this file is the same text a reader
 # checks by eye at the top -- one number to keep in sync, not two that can
 # quietly disagree. 25 passes / 60 mutations before the aot task; pass 26 adds
@@ -963,6 +963,59 @@ cmake_minimum_required(VERSION 3.26)
 # which Slice ② turned from a missing debug string into an index error in the
 # generated lane.
 #
+# Milestone 5 Slice ③ task 5, execution in both lanes: TWELVE more in a NEW pass
+# (54), 443 + 12 = 455. The differential lane over the span kinds, and the first
+# pass in the tree whose pins are anchored on something no parser result carries
+# -- a span FRAGMENT. Two lanes can agree on every §22.4 tuple while handing the
+# application different bytes, so SIX of the twelve edit shared code and are
+# pinned on recorded values rather than on agreement, and THREE of the emitter's
+# would otherwise resolve to the same "the lanes agree" line. The fixture asserts
+# the GENERATED lane's trace and active span as values for exactly that reason.
+#
+# *** TWO SHIPPED LINES WERE DELETED HERE, both measured rather than argued. ***
+# The mark advance inside the fragment step (§14:842) SURVIVED its mutation:
+# every path out of a delivery either closes the span or crosses a feed boundary,
+# where §14:834's re-anchor overwrites the mark, and no public accessor reads a
+# mark -- a nesting by construction, not a coverage gap. The finish path's
+# re-anchor to 0 was inert for a different reason: an EOF-side fragment is
+# `[mark,0)` and `from >= to` holds for every mark, so §14:835 suppresses it
+# whatever the mark says. Both rules now live in one place each.
+#
+# FOUR shipped pins moved. Two because the F1 split re-indented the classifier
+# and relocated the `busy` write, and TWO because a span arm became a second site
+# for a line the callback arm owned -- both `goto` arms are zero-width, which is
+# the point, so the FIND now carries the invocation above it.
+#
+# Milestone 5 Slice ③ task 6, the oracle: FOUR more, 455 + 4 = 459, in pass 54
+# rather than a new one. They break one arm of `span-node-diagnostics` each and
+# every one turns a REJECTED row of the topology table green rather than a green
+# row red -- a direction the verify-lane passes cannot reach, since those drive
+# machines that verify CLEAN. They run against the SAME lane as task 5's, and a
+# pass count calling that two witnesses would be the banner claiming a witness
+# the tree does not have.
+#
+# Milestone 5 Slice ③ task 8, the census reconciliation's own findings: THREE
+# more, 459 + 3 = 462, in the verify-rejections pass. Both holes were Slice ③'s
+# -- it made a span end a PARKED state and a span node a DECLARATION-REFERENCING
+# one, and shipped neither check -- and both were REACHABLE: one machine verified
+# clean and then answered `stopped` from `parser-finish!`, the other verified
+# clean and then raised out of `normalize-machine`, which §9.2:368 forbids.
+#
+# *** A THIRD LINE WAS WRITTEN AND DELETED, the third this slice. *** An arm in
+# `parked-eof-start` answering `(span-end-node-next n)` SURVIVED its mutation: a
+# span end is pure flow-through, so `classify` joins over its `next` and starting
+# the walk at the node gives the same verdict as starting at the successor. The
+# whole of that fix is the parked-set MEMBERSHIP.
+#
+# One shipped pin was RE-MEASURED rather than re-anchored, and the difference
+# matters: "a span-end node's successor is not an edge" used to lose two findings
+# from an axis-C cell, and now RAISES out of `eof-terminal` -- the span end is a
+# walk start with no out-edge, so the zero-width join is empty. Its span-start
+# sibling raises too, but only on axis A, so the axis-C raise is what still
+# separates them. The span fixture's golden fingerprint moved for the same
+# reason: its tail had to route through a dispatch, because its span end
+# continued straight into a stop.
+#
 # Milestone 5 Slice ①b: TWO. `pass-declarations` never run -- eight census
 # fixtures then find nothing, caught by a comparison naming a missing code. And
 # the span section reusing the callback section's tag, which pins the section
@@ -1148,7 +1201,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 54)
-set(EXPECTED_MUTATIONS 459)
+set(EXPECTED_MUTATIONS 462)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -6009,7 +6062,67 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "a CALLBACK invocation reachable with a span active is the same finding")
 
+# --- Slice ③ task 8: the two holes the census reconciliation found -----------
+#
+# Both are Slice ③'s own: it made a span end a PARKED state and a span node a
+# DECLARATION-REFERENCING one, and shipped neither check. Both were reachable
+# rather than theoretical -- one machine verified clean and then answered
+# `stopped` from `parser-finish!`, the other verified clean and then raised out
+# of `normalize-machine`.
+#
+# A THIRD line was written and deleted here: an arm in `parked-eof-start`
+# answering `(span-end-node-next n)`. Its mutation SURVIVED, because a span end
+# is pure flow-through and `classify` joins over its `next` anyway, so starting
+# the walk at the node and at its successor give the same verdict. Only the
+# membership below does anything.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a span end is not treated as a parked state"
+  # §16.2:909 and §14:838. Without the disjunct, a machine whose span end
+  # continues into a stop verifies clean -- and `parser-finish!` after a
+  # span-data pause answers `stopped` from it, which is the outcome the whole
+  # check exists to forbid.
+  FIND [[                                    (span-end-node? n)
+                                    (symbol? (node-eof-target n))))]]
+  REPLACE [[                                    (symbol? (node-eof-target n))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a span end continuing into a STOP is rejected .*one finding, at the span end -- expected ..eof-reachable-stop . cl.., got .."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a span node's declaration cross-reference is not checked"
+  # §16.2:901's span half. `make-span-start-node` stores its span as a bare
+  # symbol and its own comment assigns this to the verifier; pass 7 cannot do it,
+  # because the lattice is well defined over any symbol and treats the name
+  # opaquely. Without the arm the machine verifies CLEAN and `normalize-machine`
+  # raises `assertion-violation` -- a verified machine crashing the normalizer,
+  # which §9.2:368 forbids in as many words.
+  FIND [[                           ((or (span-start-node? n) (span-end-node? n))
+                            (span-node-declaration-diagnostics sps n))]]
+  REPLACE [[                           ((or (span-start-node? n) (span-end-node? n)) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an UNDECLARED span is rejected .*one finding per node -- expected ..missing-span-declaration . op. .missing-span-declaration . cl.., got .."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: only a span START's declaration is checked, not a span end's"
+  # The accessor split, which one node cannot witness: each kind carries its own
+  # `-span` accessor and a fix reaching only one of them leaves the other
+  # unchecked. The fixture places both and the pin names the SURVIVING half.
+  FIND [[    (let ((s (if (span-start-node? n) (span-start-node-span n) (span-end-node-span n))))]]
+  REPLACE [[    (let ((s (if (span-start-node? n) (span-start-node-span n) 'body)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "an UNDECLARED span is rejected .*got ..missing-span-declaration . op.."
+)
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 
 # --- Pass 34: the reference interpreter (Milestone 1 Phase 2) ----------------
 #
@@ -7123,7 +7236,10 @@ byte_machine_mutation(
   REPLACE [[               ((span-end)
                 (put-u8 p 11)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the base machine verifies and normalizes: fingerprint -- expected 346240202880439782")
+  # RE-MEASURED at task 8: the golden moved when the span fixture's tail had to
+  # route through a dispatch -- its span end continued straight into a stop, and
+  # a span end is a parked state, so §16.2:909 now rejects that shape.
+  EXPECT_OUTPUT_MATCHES "the base machine verifies and normalizes: fingerprint -- expected 8308402030897048213")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
@@ -10426,12 +10542,18 @@ byte_machine_mutation(
   FIND [[          ((span-end-node? n) (list (cons 'next (span-end-node-next n))))]]
   REPLACE [[          ((span-end-node? n) '())]]
   EXPECT_STATUS 1
-  # Measured: with the arm gone the axis-C cell loses BOTH findings -- the
-  # dangling target and the host span-end's own unmatched-end, because the host
-  # no longer reaches anything and pass 7 never sees it. The pin names the pair,
-  # which is what separates this from its span-start sibling.
+  # RE-MEASURED at task 8, when the span end joined §16.2:909's parked set. The
+  # mutant used to lose two findings from the axis-C cell; now the span end is a
+  # walk START with no out-edge, so `eof-terminal`'s zero-width join is empty and
+  # RAISES before any verdict is compared -- a stronger consequence than the one
+  # first recorded, and the pin has to name it or it is a stale expectation.
+  #
+  # Its span-start sibling above ALSO raises, but only on axis A: at
+  # `span-start-next` the span start is not a walk start, so axis C still reaches
+  # its value comparison. The axis-C RAISE is therefore this mutant's alone, and
+  # that is the line pinned.
   EXPECT_OUTPUT_MATCHES
-    "each reports its derived fault -- expected .*span-end-next want .invalid-span-state missing-target")
+    "a target naming no node .axis C..every position reports the resolution fault its route calls for: case raised")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls

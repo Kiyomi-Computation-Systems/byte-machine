@@ -1000,7 +1000,18 @@
             (make-edge 'reject 'reexecute) #f #f)
           (make-span-start-node 'op span-of-start start-next #f)
           (make-span-end-node 'cl span-of-end end-next #f)
-          (make-stop-node 'done #f)
+          ;; *** `done` IS A DISPATCH, and it was a stop until Slice ③'s census
+          ;; reconciliation. *** A span end is a parked state (§16.2:909, and
+          ;; `parked-eof-start`'s own note), so a span end continuing straight
+          ;; into a stop is a machine `parser-finish!` can answer `stopped` from
+          ;; after a span-data pause. The base machine has to VERIFY for the
+          ;; fingerprint below to mean anything, so the stop moved behind a
+          ;; dispatch whose EOF route is the error terminal. Six nodes still, and
+          ;; still one internal state.
+          (make-byte-dispatch-node 'done
+            (list (make-byte-case (make-exact-byte-matcher 2)
+                                  (make-edge 'other-stop 'advance) #f))
+            (make-edge 'reject 'reexecute) 'reject #f)
           (make-stop-node 'other-stop #f)
           (make-error-node 'reject 'rejected #f))
     'default-eof #f))
@@ -1016,10 +1027,14 @@
                      (map diagnostic-code
                           (verification-diagnostics (verify-machine (span-fp-base))))
                      '())
-        ;; A GOLDEN, measured 2026-09-05. It is what pins the three wire tags and
-        ;; the field order; the inequalities below cannot, because a tag change
-        ;; moves every span fingerprint together.
-        (check-equal "fingerprint" (s2-fp (span-fp-base)) 346240202880439782)))
+        ;; A GOLDEN, RE-MEASURED 2026-09-05 when the tail above changed. It is
+        ;; what pins the three wire tags and the field order; the inequalities
+        ;; below cannot, because a tag change moves every span fingerprint
+        ;; together. The previous value was 346240202880439782, against the base
+        ;; machine whose span end continued straight into a stop -- a machine the
+        ;; verifier now rejects, so the number was pinning a shape this fixture
+        ;; may not build.
+        (check-equal "fingerprint" (s2-fp (span-fp-base)) 8308402030897048213)))
     (harness-case "each part varied alone moves the fingerprint"
       (lambda ()
         ;; A sentinel over the variations DRIVEN and a record of which part

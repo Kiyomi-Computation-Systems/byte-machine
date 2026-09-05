@@ -254,6 +254,12 @@
 ;;     is §16.2:907, a second start is re-entry, and a span-end closes it.
 ;;   - at `span-end-next` the host's own span-end is unmatched, so every cell
 ;;     there carries that one finding and the placed node still sees `none`.
+;;   - and `span-end-next` is the one non-EOF position that STARTS an EOF walk.
+;;     A span end is a parked state (§16.2:909): its data callback's pause parks
+;;     the parser on that node's completion substep, so the walk begins at the
+;;     node's successor -- which at this position is the placed node. A stop
+;;     there is `eof-reachable-stop`, exactly as it is at a real EOF position.
+;;     Slice ③ shipped without this and the matrix is what found it.
 (define terminal-kinds '(stop error finish))
 (define (expected-codes p kind)
   (let* ((pos (position-name p))
@@ -262,7 +268,8 @@
          (entry? (eq? pos 'machine-entry)))
     (append
      (if (and (eq? kind 'finish) (position-byte? p)) '(non-eof-into-finish) '())
-     (if (and (eq? kind 'stop) (position-eof? p)) '(eof-reachable-stop) '())
+     (if (and (eq? kind 'stop) (or (position-eof? p) host-unmatched?))
+         '(eof-reachable-stop) '())
      (if host-unmatched? '(invalid-span-state) '())
      (cond
        ((eq? kind 'span-end) (if host-opens? '() '(invalid-span-state)))
@@ -600,15 +607,22 @@
     ((callback-pause-continuation advance)
                                        . (eof-zero-progress-cycle zero-progress-cycle))
     ;; Slice ③. Both kinds are zero-width, so a self-targeting `next` is a
-    ;; feed-time hang. Neither is a parked state, so neither yields an EOF cycle
-    ;; -- which is the difference from the callback's pause continuation above.
+    ;; feed-time hang. They DIVIDE on the EOF cycle, and Slice ③ first recorded
+    ;; here that neither is a parked state -- which was true of the span start
+    ;; and false of the span end. A span end's data callback pause parks the
+    ;; parser on that node's completion substep (§16.2:909, `parked-eof-start`),
+    ;; so the walk starts at its successor, which here is itself: an EOF cycle as
+    ;; well as a feed-time one, exactly like the callback pause continuation
+    ;; above. A span start calls nothing and nothing can pause there.
+    ;;
     ;; The span state at a SELF-loop, derived: `ss` opens and flows to itself,
     ;; so its own in-state joins `none` (from the host) with `(active sp)` (from
     ;; itself) -- `top`, reported at `ss`, and `top` does not flow onward, so no
     ;; re-entry check runs. `se` closes on `none`, which is unmatched, and its
     ;; out-state stays `none`, so the loop agrees with itself.
     ((span-start-next       advance)   . (inconsistent-span-state zero-progress-cycle))
-    ((span-end-next         advance)   . (invalid-span-state zero-progress-cycle))))
+    ((span-end-next         advance)   . (eof-zero-progress-cycle invalid-span-state
+                                          zero-progress-cycle))))
 
 ;; The self machine: the host points the position under test at ITSELF.
 (define (self-machine pos mode)

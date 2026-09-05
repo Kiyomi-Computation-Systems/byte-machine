@@ -2392,6 +2392,24 @@
                            (if (null? eof) #f (car eof)) #f))
 (define (span-tail) (list (make-stop-node 'done #f)
                           (make-error-node 'reject 'rejected #f)))
+;; *** THE TAIL A CLOSING SPAN NEEDS, and Slice ③ shipped without it. *** A span
+;; end is a PARKED state: its data callback's pause parks the parser on that
+;; node's completion substep, so §16.2:909's EOF walk starts at the node's
+;; SUCCESSOR. With `cl` continuing straight into a stop, every fixture that
+;; closed a span was a machine `parser-finish!` could answer `stopped` from after
+;; a span-data pause -- which is exactly what :909 forbids, and the verifier now
+;; says so. The stop keeps its place behind a dispatch whose own EOF route
+;; reaches a finish, which is also where §16.2:908 wants a finish.
+;;
+;; Kept SEPARATE from `span-tail` rather than replacing it: a fixture whose span
+;; path never reaches `exit` would report `unreachable-node` for it and for the
+;; finish, and the case would then be measuring the tail instead of its own span
+;; shape.
+(define (span-tail/exit) (list (make-byte-dispatch-node 'exit (list (case-to 'done))
+                                                        (make-edge 'reject 'reexecute) 'fin #f)
+                               (make-stop-node 'done #f)
+                               (make-finish-node 'fin #f)
+                               (make-error-node 'reject 'rejected #f)))
 ;; A second entry shape and a second error sink, for the fixtures whose span
 ;; path must reach a node NOTHING ELSE reaches: the shared `reject` is also the
 ;; entry's fallback, so a span arriving there would join with `none` and the
@@ -2405,6 +2423,7 @@
                            (make-error-node 'reject 'rejected #f)
                            (make-error-node 'rej2 'rejected #f)))
 
+
 (harness-group "the span-state lattice (§16.2:899, :900, :907)"
   (lambda ()
     (harness-case "a machine that opens and closes one span verifies clean"
@@ -2415,8 +2434,72 @@
                      (codes (span-machine
                              (append (list (entry-to 'op)
                                            (make-span-start-node 'op 'body 'cl #f)
+                                           (make-span-end-node 'cl 'body 'exit #f))
+                                     (span-tail/exit))))
+                     '())))
+    ;; --- the two holes Slice ③'s own census reconciliation found -------------
+    (harness-case "a span end continuing into a STOP is rejected (§16.2:909)"
+      (lambda ()
+        ;; *** THE REASON `span-tail/exit` EXISTS, stated as a rejection so the
+        ;; tail change above cannot be mistaken for cosmetics. *** A span end is
+        ;; a PARKED state: its data callback's pause parks the parser on that
+        ;; node's completion substep, and a `parser-finish!` from there resumes
+        ;; past the span end. Reaching a stop that way is what §16.2:909 forbids,
+        ;; and it is reachable -- measured before the fix, this machine verified
+        ;; CLEAN and then answered `stopped` from `parser-finish!`.
+        ;;
+        ;; The diagnostic is reported at `cl`, not at `done`: the parked node is
+        ;; what a caller can be sitting on, and `parked-eof-start` is where its
+        ;; start differs from its name.
+        (check-equal "one finding, at the span end"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine
+                            (span-machine
+                             (append (list (entry-to 'op)
+                                           (make-span-start-node 'op 'body 'cl #f)
                                            (make-span-end-node 'cl 'body 'done #f))
-                                     (span-tail))))
+                                     (span-tail))))))
+                     ;; *** AND EXACTLY ONE FINDING, which is the other half of
+                     ;; the edit. *** A span START is not a parked state: it
+                     ;; calls nothing, so nothing can pause there, and it stays
+                     ;; flow-through like a field action. `op` reaches the same
+                     ;; stop, so a parked set widened to BOTH span kinds would
+                     ;; report `(eof-reachable-stop . op)` here too -- the list,
+                     ;; not the membership, is what says which half moved.
+                     '((eof-reachable-stop . cl)))))
+    (harness-case "a span node naming an UNDECLARED span is rejected (§16.2:901)"
+      (lambda ()
+        ;; The second hole. `make-span-start-node` stores its span as a bare
+        ;; symbol and its own comment assigns the cross-reference to the
+        ;; verifier; nothing did it. Measured before the fix: this machine
+        ;; verified CLEAN and then raised `assertion-violation` out of
+        ;; `normalize-machine` -- a verified machine crashing the normalizer,
+        ;; which §9.2:368 forbids.
+        ;;
+        ;; BOTH kinds, because each carries its own accessor and a fix reaching
+        ;; only one would be invisible to a single-node fixture.
+        (check-equal "one finding per node"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine
+                            (span-machine
+                             (append (list (entry-to 'op)
+                                           (make-span-start-node 'op 'nosuch 'cl #f)
+                                           (make-span-end-node 'cl 'nosuch 'exit #f))
+                                     (span-tail/exit))))))
+                     '((missing-span-declaration . op) (missing-span-declaration . cl)))))
+    (harness-case "and a span node naming a DECLARED span is not"
+      (lambda ()
+        ;; The negative control: the check must not reject every span node.
+        ;; `other` is declared and never opened, which is legal -- only the
+        ;; cross-reference is checked here.
+        (check-equal "no diagnostics"
+                     (codes (span-machine
+                             (append (list (entry-to 'op)
+                                           (make-span-start-node 'op 'other 'cl #f)
+                                           (make-span-end-node 'cl 'other 'exit #f))
+                                     (span-tail/exit))))
                      '())))
     (harness-case "span RE-ENTRY: a second start for the same span"
       (lambda ()
@@ -2428,8 +2511,8 @@
                              (append (list (entry-to 'op)
                                            (make-span-start-node 'op 'body 'op2 #f)
                                            (make-span-start-node 'op2 'body 'cl #f)
-                                           (make-span-end-node 'cl 'body 'done #f))
-                                     (span-tail))))))
+                                           (make-span-end-node 'cl 'body 'exit #f))
+                                     (span-tail/exit))))))
                      '((invalid-span-state . op2)))))
     (harness-case "span OVERLAP: a start for a different span while one is open"
       (lambda ()
@@ -2443,8 +2526,8 @@
                              (append (list (entry-to 'op)
                                            (make-span-start-node 'op 'body 'op2 #f)
                                            (make-span-start-node 'op2 'other 'cl #f)
-                                           (make-span-end-node 'cl 'other 'done #f))
-                                     (span-tail))))))
+                                           (make-span-end-node 'cl 'other 'exit #f))
+                                     (span-tail/exit))))))
                      '((invalid-span-state . op2)))))
     (harness-case "WRONG END: closing a span that is not the one open"
       (lambda ()
@@ -2455,8 +2538,8 @@
                             (span-machine
                              (append (list (entry-to 'op)
                                            (make-span-start-node 'op 'body 'cl #f)
-                                           (make-span-end-node 'cl 'other 'done #f))
-                                     (span-tail))))))
+                                           (make-span-end-node 'cl 'other 'exit #f))
+                                     (span-tail/exit))))))
                      '((invalid-span-state . cl)))))
     (harness-case "UNMATCHED END: closing with nothing open"
       (lambda ()
@@ -2466,8 +2549,8 @@
                            (verify-machine
                             (span-machine
                              (append (list (entry-to 'cl)
-                                           (make-span-end-node 'cl 'body 'done #f))
-                                     (span-tail))))))
+                                           (make-span-end-node 'cl 'body 'exit #f))
+                                     (span-tail/exit))))))
                      '((invalid-span-state . cl)))))
     (harness-case "INCONSISTENT: two branches disagree at a merge"
       (lambda ()
@@ -2593,8 +2676,8 @@
                                            (make-byte-dispatch-node 't
                                              (list (case-to 'cl))
                                              (make-edge 'reject 'reexecute) 'reject #f)
-                                           (make-span-end-node 'cl 'body 'done #f))
-                                     (span-tail))))
+                                           (make-span-end-node 'cl 'body 'exit #f))
+                                     (span-tail/exit))))
                      '())))))
 
 ;; --- §16.2:898's reachability gate (Milestone 5 Slice ③, decision 0027 item 3)

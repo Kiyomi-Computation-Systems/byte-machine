@@ -146,7 +146,16 @@
     ;; a different thing and not a paraphrase. `:900` and `:907`'s span half are
     ;; one bullet each.
     (invalid-span-state 4) (inconsistent-span-state 1)
-    (span-active-at-pause 1) (span-active-at-exit 1)))
+    (span-active-at-pause 1) (span-active-at-exit 1)
+    ;; And ONE more code from Slice ③'s own census reconciliation, in
+    ;; `pass-declarations` rather than pass 7: a span NODE naming a span the
+    ;; machine never declared. §16.2:901's "undeclared" for the span kinds, and
+    ;; the mirror of `missing-callback-declaration`, which is why it does not
+    ;; reuse it -- that code's subject is a CALLBACK name, and a reader tracing
+    ;; a report back would look in the callback table for a name that is not in
+    ;; it. Measured before the fix: such a machine verified clean and then raised
+    ;; out of `normalize-machine`, which §9.2:368 forbids.
+    (missing-span-declaration 1)))
 
 ;; *** RE-MEASURED 2026-09-03, Slice ⓪b task 2: `non-eof-into-finish` went 3 -> 1
 ;; and the total 31 -> 29. *** This is the ratchet FIRING, not a regression: ⓪b
@@ -469,6 +478,20 @@
                                         (make-span-start-node 'op 'body 'p #f)
                                         (make-pause-node 'p 'cl #f)
                                         (make-span-end-node 'cl 'body 'rej #f)))))
+   ;; The undeclared-span cross-reference, which is `pass-declarations`' and not
+   ;; pass 7's: the lattice is well defined over ANY symbol, so it treats the
+   ;; name opaquely and can never notice. Built on `mach/decls` rather than
+   ;; `span-fixture` because the point is a machine whose span table does NOT
+   ;; contain the name the node uses.
+   (cons 'missing-span-declaration
+         (verify-of (mach/decls 'a (list (cb 'on-data 'span-data #t '() #f))
+                                (list (sp 'body 'on-data #f))
+                                (list ed rd)
+                                (list (span-entry 'op)
+                                      (make-span-start-node 'op 'nosuch 'cl #f)
+                                      (make-span-end-node 'cl 'nosuch 'stop #f)
+                                      (make-stop-node 'stop #f) (an-error 'rej))
+                                'default-eof)))
    ;; A machine name outside the portable repertoire.
    (cons 'invalid-name
          (verify-of (mach 'BadName 'start '() (list ed rd)
