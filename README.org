@@ -33,9 +33,16 @@ entry's own EOF path reaches a =stop=, both verified clean before and are now
 rejected. Gate 0 then discharged 2026-09-04 as decisions 0024-0029, and Slice
 ①a — the seam, carrying the generated ABI to version 4 — and Slice ①b — callback
 and span declarations, indexed binding resolution, and five public accessors —
-landed the same day. A machine can now DECLARE callbacks and spans and have those
-declarations verified, encoded and resolved into parser slots; nothing invokes one
-yet, which is Slice ②.
+landed the same day. Slice ② landed 2026-09-05: the machine now /calls out/. A
+callback-invocation node is the tenth node kind, its four outcomes (continue, a
+declared decision branch, a pause, and an explicit failure) route identically in
+the interpreted and generated lanes through one shared classifier, an
+out-of-contract return is a =callback=-domain parser error rather than a raise, a
+callback that escapes marks the parser =poisoned= through =dynamic-wind=, and
+=parser-state-name= — the accessor Slice ①b deferred whole — answers in both
+lanes now that the generated ABI (version 5) carries a state-id to source-name
+table. Slices ③ (spans) and ④ (the reference fixture and the retention oracle)
+remain.
 =src/byte-machine/= holds the construction API, the verifier, the normalizer and
 emitter, the reference interpreter, and the runtime, each exercised in both the
 source and ahead-of-time execution lanes. See

@@ -601,6 +601,53 @@
   precedes an operation that would fail anyway, the assertion must name what
   distinguishes the guard's refusal, and the mutation suite is what proves it
   does.
+* **A permissive `else` that means "the normal case" swallows every value later
+  added to its vocabulary, and nothing can check it.**
+  `parser-feed!` dispatched on lifecycle with an `else` that meant `ready`, so
+  every value the `case` did not name EXECUTED INPUT. Milestone 5 Slice ② added
+  `busy` and `poisoned`; without arms for them a poisoned parser would have
+  silently re-executed, and no test could have noticed because nothing could
+  produce those states yet — the defect and its only witness arrive in the same
+  commit. Name the normal case as its own arm and make the `else` raise, in the
+  commit that adds the first value, not the one that adds the second. The
+  project's per-kind `cond`s already follow this rule; a `case` over a state
+  vocabulary is the same construct wearing different syntax.
+* **In a chain of widening minimums, only the LAST guard discriminates anything.**
+  The generated ABI payload had one length guard per version — at least one
+  member, then at least two at ABI 4 — on the reading that each should name the
+  member a short payload lacks. Slice ② added member 2's guard and the ①b guard's
+  mutation went UNCAUGHT: a later minimum subsumes every earlier one, so removing
+  an earlier guard changes nothing any input can observe. Three collapsed into
+  one reading a named constant. Before adding a guard whose condition implies an
+  existing one, ask what input can now distinguish them; if none can, the earlier
+  guard is prose with a raise attached.
+* **A declared survivor's reason is only as durable as the control-flow shape it
+  names, and closing a fall-through can close survivors elsewhere.**
+  The file already says to re-run the whole suite after adding an EXIT path,
+  because a new exit can disarm a mutation. The converse is just as real and cost
+  two re-measurements to keep honest: "parser-feed!'s finished sticky arm is
+  deleted outright" carried a twice-verified `EXPECT_SURVIVES` reason that rested
+  entirely on that `else` meaning "ready" — the deleted arm fell through and the
+  op path re-derived the identical tuple. Slice ② made the `else` loud for an
+  unrelated reason and the mutant became caught; the runner said so itself ("The
+  recorded limitation is stale"). Re-read every survivor whose reason names a
+  fall-through, a default, or a shared branch when you change one.
+* **A mutant can HANG the suite rather than fail it: the mutation runner has no
+  per-mutant timeout.**
+  Slice ②'s reentrancy probe called `parser-feed!` from inside a callback. Under
+  the mutant that stops marking the parser `busy`, the inner feed finds a `ready`
+  parser, runs the executor, reaches the same callback and feeds again — unbounded
+  recursion, and the suite sat until it was killed rather than reporting. Any test
+  that re-enters the code under test must bound itself (a one-shot flag is enough),
+  and the bound is what turns the mutant into a failed comparison — it records
+  `returned` where the baseline records `raised`.
+* **A per-kind census in `test/` is still a per-kind census.**
+  Milestone 5 Slice ②'s site table listed every place a new node kind must reach
+  in `src/` and missed `verify-tests.sps`'s `t2-kinds`, the hand-written kind list
+  behind §16.2:908's rows — because the table's scope was `src/` only. The
+  reconciliation found it; the design's appendix now carries the `test/` censuses
+  beside the source ones. When you write a "every site X must reach" table, say
+  which directories were searched, and search both.
 * **A comment that enumerates a closed set is a census, and it goes stale in silence.**
   `compile.sls` carried "this case already covers every kind `normal-state-kind`
   can produce (dispatch/stop/error/finish/pause)" through two slices that widened

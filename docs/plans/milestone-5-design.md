@@ -1,6 +1,6 @@
 # Milestone 5 Design — Callbacks, poisoning, and spans
 
-**Status: in progress.** Gate 0 discharged 2026-09-04 (decisions 0024-0029, PR #56); Slice ①a landed 2026-09-04 (PR #58 = `87a99c9`); Slice ①b landed 2026-09-04 (PR #61 = `c011e35`). Slices ②, ③ and ④ remain.
+**Status: in progress.** Gate 0 discharged 2026-09-04 (decisions 0024-0029, PR #56); Slice ①a landed 2026-09-04 (PR #58 = `87a99c9`); Slice ①b landed 2026-09-04 (PR #61 = `c011e35`); Slice ② landed 2026-09-05 (PR #65 = `0578bdf`), which also **rewrote this document's Appendix in place** — its stated recogniser could not find two rows the Appendix itself listed. Slices ③ and ④ remain.
 
 **Originally written when nothing had started:** Milestone 4 closed 2026-09-03 (its close note is a dated
 disposition in the parent plan, `§25:1568-1570`, written 2026-09-04). Milestone 5's two
