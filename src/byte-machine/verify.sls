@@ -947,11 +947,200 @@
                                          "error name, code or reason is not portable")))
                   (machine-errors m)))))
 
+  ;; --- PASS 6b: callback and span DECLARATIONS (Milestone 5 Slice ①b) ---------
+  ;;
+  ;; A PASS OF ITS OWN, and the reason is mechanical rather than aesthetic.
+  ;; `pass-fields`' tail line -- seven leading spaces, four trailing parens --
+  ;; is the verbatim FIND of the mutation that pins `pass-field-operands` being
+  ;; run at all, at exactly one site. Appending a declaration arm inside that
+  ;; `append` moves the line and takes the pin to zero occurrences, which fails
+  ;; at CMake CONFIGURE time and does not look like a test failure. Slice ③ paid
+  ;; for that lesson on `pass-names`; this pass avoids re-paying it.
+  ;;
+  ;; NO `(cons 'SYMBOL ...)` FORM APPEARS BELOW, and that is a constraint, not a
+  ;; coincidence. `edge-roles-in-source` in the kind x position census collects
+  ;; the quoted symbol from EVERY such form in this file -- not only edge-role
+  ;; ones, despite what its own comment says -- and compares the result against a
+  ;; declared mapping. A `(cons 'callback name)` here would add a thirteenth
+  ;; "role", fail `derived roles equal the mapped roles`, and take that pass's
+  ;; BASELINE red. Measured: 13 occurrences in CODE before this pass and 13
+  ;; after. Count with `read`, or exclude comment lines -- the two mentions in
+  ;; this very comment are why a bare textual count answers 15 and is the same
+  ;; class of mistake as the substring sweep that once undercounted a pin.
+  ;;
+  ;; Every loop variable is named apart from `pass-names`' and `pass-fields`'.
+  ;; Three of those loops' inner lines are each a one-site FIND, so a copied
+  ;; duplicate-scan would twin a pin and fail configure in the other direction.
+  ;; §9.3:421, quoted: "The symbols `continue` and `pause` are reserved and may
+  ;; not be callback decision branch keys." §16.2:902's content is fixed there,
+  ;; so this list is a transcription and not a decision of this slice's.
+  (define reserved-outcomes '(continue pause))
+
+  (define (pass-declarations m)
+    (let ((cbs (machine-callbacks m)) (sps (machine-spans m)))
+      (append
+       ;; §16.2:885, callbacks. `cseen`/`cout` rather than `seen`/`out`.
+       (let cloop ((cs cbs) (cseen '()) (cout '()))
+         (if (null? cs) (reverse cout)
+             (let ((cn (callback-declaration-name (car cs))))
+               (cloop (cdr cs) (cons cn cseen)
+                      (if (memq cn cseen)
+                          (cons (make-diagnostic 'duplicate-callback-declaration cn
+                                                 "duplicate callback declaration name")
+                                cout)
+                          cout)))))
+       ;; §16.2:885, spans. `pseen`/`pout`.
+       (let ploop ((ps sps) (pseen '()) (pout '()))
+         (if (null? ps) (reverse pout)
+             (let ((pn (span-declaration-name (car ps))))
+               (ploop (cdr ps) (cons pn pseen)
+                      (if (memq pn pseen)
+                          (cons (make-diagnostic 'duplicate-span-declaration pn
+                                                 "duplicate span declaration name")
+                                pout)
+                          pout)))))
+       ;; §16.2:886's name clause, both families. Before this slice, callback and
+       ;; span names sat outside every grammar check in the tree: `pass-names`
+       ;; and `pass-names-valid` read node names and error declarations only.
+       (filter values
+               (map (lambda (cd)
+                      (if (valid-name? (callback-declaration-name cd)) #f
+                          (make-diagnostic 'invalid-name (callback-declaration-name cd)
+                                           "callback declaration name is not portable")))
+                    cbs))
+       (filter values
+               (map (lambda (sd)
+                      (if (valid-name? (span-declaration-name sd)) #f
+                          (make-diagnostic 'invalid-name (span-declaration-name sd)
+                                           "span declaration name is not portable")))
+                    sps))
+       ;; §16.2:886's branch-key clause and §16.2:901's declaration share:
+       ;; a key that is not portable, or declared twice on one callback.
+       (apply append
+              (map (lambda (cd)
+                     (let kloop ((ks (callback-declaration-branch-keys cd))
+                                 (kseen '()) (kout '()))
+                       (if (null? ks) (reverse kout)
+                           (let ((k (car ks)))
+                             (kloop (cdr ks) (cons k kseen)
+                                    (cond
+                                     ((memq k kseen)
+                                      (cons (make-diagnostic 'duplicate-branch-key
+                                                             (callback-declaration-name cd)
+                                                             "branch key declared twice")
+                                            kout))
+                                     ((not (valid-name? k))
+                                      (cons (make-diagnostic 'invalid-name
+                                                             (callback-declaration-name cd)
+                                                             "branch key is not portable")
+                                            kout))
+                                     (else kout)))))))
+                   cbs))
+       ;; §16.2:902. Its content is §9.3:421's, transcribed above.
+       (apply append
+              (map (lambda (cd)
+                     (filter values
+                             (map (lambda (k)
+                                    (if (memq k reserved-outcomes)
+                                        (make-diagnostic 'reserved-branch-key
+                                                         (callback-declaration-name cd)
+                                                         "branch key collides with a reserved outcome")
+                                        #f))
+                                  (callback-declaration-branch-keys cd))))
+                   cbs))
+       ;; §16.2:891. Derived from §9.3:419, not invented here: "An optional
+       ;; decision callback must declare `default-branch`". A REQUIRED decision
+       ;; callback needs none -- it is always bound, so no default is reached.
+       (filter values
+               (map (lambda (cd)
+                      (let ((k (callback-declaration-kind cd))
+                            (req (callback-declaration-required? cd))
+                            (db (callback-declaration-default-branch cd)))
+                        (if (and (eq? k 'decision) (not req)
+                                 (not (and (symbol? db)
+                                           (memq db (callback-declaration-branch-keys cd)))))
+                            (make-diagnostic 'invalid-callback-declaration
+                                             (callback-declaration-name cd)
+                                             "optional decision callback has no valid default branch")
+                            #f)))
+                    cbs))
+       ;; A non-decision callback declaring branch keys or a default branch:
+       ;; §10.3:504 gives branch keys to DECISION callbacks only, so any key on
+       ;; another kind is undeclared by construction (§16.2:901's "undeclared").
+       (filter values
+               (map (lambda (cd)
+                      (if (and (not (eq? (callback-declaration-kind cd) 'decision))
+                               (or (pair? (callback-declaration-branch-keys cd))
+                                   (symbol? (callback-declaration-default-branch cd))))
+                          (make-diagnostic 'invalid-callback-declaration
+                                           (callback-declaration-name cd)
+                                           "only a decision callback may declare branch keys")
+                          #f))
+                    cbs))
+       ;; §16.2:890 and §16.2:892. A span names its two callbacks BY NAME, so
+       ;; resolution and kind are cross-references and therefore the verifier's
+       ;; (decision 0020 item 1) -- `make-span-declaration` cannot see this table.
+       ;; §10.4:515-516 fixes the two kinds; a span naming an event callback is
+       ;; what §16.2:892 calls an invalid span callback declaration.
+       (apply append
+              (map (lambda (sd)
+                     (let* ((dn (span-declaration-data-callback sd))
+                            (cn (span-declaration-complete-callback sd))
+                            (dd (find-callback cbs dn))
+                            (cc (if (symbol? cn) (find-callback cbs cn) #f)))
+                       (append
+                        (if dd '()
+                            (list (make-diagnostic 'missing-callback-declaration
+                                                   (span-declaration-name sd)
+                                                   "span data callback names no declaration")))
+                        (if (or (not dd) (eq? (callback-declaration-kind dd) 'span-data))
+                            '()
+                            (list (make-diagnostic 'invalid-span-callback
+                                                   (span-declaration-name sd)
+                                                   "span data callback is not of kind span-data")))
+                        (if (or (not (symbol? cn)) cc) '()
+                            (list (make-diagnostic 'missing-callback-declaration
+                                                   (span-declaration-name sd)
+                                                   "span completion callback names no declaration")))
+                        (if (or (not cc) (eq? (callback-declaration-kind cc) 'span-complete))
+                            '()
+                            (list (make-diagnostic 'invalid-span-callback
+                                                   (span-declaration-name sd)
+                                                   "span completion callback is not of kind span-complete"))))))
+                   sps))
+       ;; A callback of a span kind that no span names is unreachable: nothing
+       ;; can ever invoke it, because only a span declaration reaches one.
+       (filter values
+               (map (lambda (cd)
+                      (if (and (memq (callback-declaration-kind cd) '(span-data span-complete))
+                               (not (span-referencing sps (callback-declaration-name cd))))
+                          (make-diagnostic 'unreferenced-callback-declaration
+                                           (callback-declaration-name cd)
+                                           "span callback is named by no span")
+                          #f))
+                    cbs)))))
+
+  ;; Helpers, deliberately not named `lookup`: that one is over NODES and is
+  ;; itself pin-visible.
+  (define (find-callback cbs nm)
+    (let floop ((cs cbs))
+      (cond ((null? cs) #f)
+            ((eq? (callback-declaration-name (car cs)) nm) (car cs))
+            (else (floop (cdr cs))))))
+
+  (define (span-referencing sps nm)
+    (let sloop ((ps sps))
+      (cond ((null? ps) #f)
+            ((eq? (span-declaration-data-callback (car ps)) nm) #t)
+            ((eq? (span-declaration-complete-callback (car ps)) nm) #t)
+            (else (sloop (cdr ps))))))
+
   (define (verify-machine machine)
     (let ((ds (append (pass-schema machine)
                       (if (machine? machine)
                           (append (pass-names machine)
                                   (pass-fields machine)
+                                  (pass-declarations machine)
                                   (pass-overlap machine)
                                   (pass-sequence-ambiguity machine)
                                   (pass-reachability machine)

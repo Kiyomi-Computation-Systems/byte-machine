@@ -205,11 +205,13 @@ Measured absent from all of `src/`: `parser-stream-offset`, `parser-user-context
 - [ ] **Step 2: Assert the boundary**
 
 ```bash
-git diff --stat main..HEAD -- src/byte-machine/interpret.sls
+rg -n "define \(node\? " -A4 src/byte-machine/private/ir.sls
 ctest --test-dir build/dev -R "byte-machine.unit.kind-position-census" --output-on-failure
-rg -o "\\(cons '" src/byte-machine/verify.sls | wc -l
+rg -n "\(cons '" src/byte-machine/verify.sls | grep -v ";;" | wc -l
 ```
-Expected: `interpret.sls` untouched; "the same nine kinds" green; the `cons` occurrence count still **13**. **Note the test name is `unit.kind-position-census`** — `-R kind-position.chez.source` matches nothing and reports silence, which Slice ①a's own probe nearly mistook for proof.
+Expected: `node?` still lists **nine** disjuncts; "the same nine kinds" green; the `cons` count in CODE still **12 lines / 13 occurrences**.
+
+**Two corrections to this step, both made during execution.** It first asserted `interpret.sls` is untouched — too broad: the slice legitimately adds a `callback-decls` message to the op interface, which is not node dispatch. The boundary is *no node kind*, and `node?` is what states it. And the `cons` count must exclude comment lines: a bare textual count answers 15 because two of them are in the comment forbidding them, and the census reads the file with `read`, which strips comments. **Note the test name is `unit.kind-position-census`** — `-R kind-position.chez.source` matches nothing and reports silence, which Slice ①a's own probe nearly mistook for proof.
 
 - [ ] **Step 3: Record what ② inherits, in a place ② will read** — not only in a commit message. `AGENTS.md`: a deferral needs both ends.
   1. **`parser-state-name`, whole** (owner, 2026-09-04). Slice ② must carry an id→name table into the generated lane; `normal-machine-debug-map` (`normal-ir.sls:64`) is the map and `compile.sls:377` is the only place it is read today, at emission time.

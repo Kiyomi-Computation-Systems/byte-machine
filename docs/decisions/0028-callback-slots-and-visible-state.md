@@ -4,6 +4,13 @@ Date: 2026-09-04
 Status: accepted
 Milestone: 5, Gate 0 (milestone-5-design.md §4.6, §4.9, §4.10)
 
+> **Amendments** — later notes at the foot of this file reach back into the text
+> above them. Nothing above a note is rewritten.
+>
+> - **2026-09-04 (Milestone 5, Slice ①b)** — **amends the Consequences bullet on
+>   Slice ①b's accessors**: `parser-state-name` was deferred whole to Slice ② by
+>   the owner, so ①b ships five of the six, not all six.
+
 ## Context
 
 Decided 2026-09-04, after Milestone 5 Slices ⓪ and ⓪b closed, against the shipped
@@ -170,6 +177,9 @@ the reason to prefer it: a divergence here would be invisible to the differentia
   besides, so item 1's rule is written for five accessors of which two ship,
   item 2 makes it six, and all six become testable in one slice rather than in
   three.
+
+  > **Amended 2026-09-04 (Milestone 5, Slice ①b)** — `parser-state-name` is
+  > Slice ②'s, so five of the six ship here. See the note at the foot.
 - **Slice ①b owes the slot resolution `§9.3:419` describes and `make-parser` does
   not perform.** `milestone-5-design.md`:715 (the `make-parser` bullet) puts "`make-parser`'s `§9.3:419`
   binding resolution" in that slice and drives each of its rejections from a
@@ -199,3 +209,35 @@ the reason to prefer it: a divergence here would be invisible to the differentia
   operations, so a guard placed on a shared internal entry point that every
   accessor also passes through would be wrong even though every mutating test
   still passed.
+
+## 2026-09-04 (Milestone 5, Slice ①b) — one of the six accessors moved to Slice ②
+
+The Consequences bullet above says Slice ①b "owns the three accessors measured
+absent above — `parser-state-name`, `parser-stream-offset`, `parser-user-context`
+— and `parser-active-span` besides", and concludes that "all six become testable
+in one slice rather than in three."
+
+**Five became testable in ①b. `parser-state-name` did not, and the owner deferred
+it whole to Slice ② on 2026-09-04.**
+
+**Measured while planning ①b:** `§13:820` requires it to name "the source
+callback/span node, not a generated internal continuation". The `'v2` parser holds
+`current` as an integer state id, and `normal-machine-debug-map` — the id→name map
+— is read at exactly one site, at *emission* time, where it bakes names into
+emitted error constructors as literals. It never crosses into the emitted library.
+The interpreted lane can answer today; the generated lane cannot answer at all
+without a table that does not exist.
+
+The plan first proposed shipping it answering in the interpreted lane only. The
+owner took the stronger reading, and the reason is recorded because it generalises:
+**a public accessor that answers in one lane and not the other is worse than one
+that does not exist yet.** It would ship a `§9.3` name whose contract holds only
+where a caller happens to be, and the differential would compare an answer against
+a hole rather than failing.
+
+Slice ② is where it belongs: the first slice that invokes a callback, and so the
+first with a caller that can witness the value, and the first that must carry an
+id→name table into the generated lane regardless.
+
+**Nothing else in this record changes.** Item 1's `busy` rule is written for five
+accessors and still is; item 2's `parser-active-span` shipped in ①b as stated.

@@ -118,7 +118,15 @@
     (invalid-field-operand 6) (overlapping-cases 1) (ambiguous-sequence-prefix 1)
     (unreachable-node 1) (zero-progress-cycle 1) (invalid-eof-target 2)
     (non-eof-into-finish 2) (eof-reachable-stop 1) (eof-zero-progress-cycle 1)
-    (invalid-name 3)))
+    (invalid-name 6)
+    ;; Milestone 5 Slice ①b: `pass-declarations`. Eight new codes, and
+    ;; `invalid-name` goes 3 -> 6 because callback names, span names and branch
+    ;; keys are all new subjects of §16.2:886 -- before this slice they sat
+    ;; outside every grammar check in the tree.
+    (duplicate-callback-declaration 1) (duplicate-span-declaration 1)
+    (duplicate-branch-key 1) (reserved-branch-key 1)
+    (invalid-callback-declaration 2) (missing-callback-declaration 2)
+    (invalid-span-callback 2) (unreferenced-callback-declaration 1)))
 
 ;; *** RE-MEASURED 2026-09-03, Slice ⓪b task 2: `non-eof-into-finish` went 3 -> 1
 ;; and the total 31 -> 29. *** This is the ratchet FIRING, not a regression: ⓪b
@@ -131,6 +139,13 @@
 ;; Then 29 -> 30 at task 3, which ADDS a site: the zero-hop clause for an entry
 ;; that is itself a finish terminal. Two moves, two commits, two red runs -- the
 ;; table is doing its job in both directions.
+;;
+;; Then 28 -> 42 at Milestone 5 Slice ①b task 2, the largest single move this
+;; table has taken: `pass-declarations` lands eight new codes and three new
+;; `invalid-name` sites. Re-baselined in the commit that moved it, which is the
+;; rule -- a census re-baselined in a separate tidying commit is a census nobody
+;; checked. The site TOTAL is asserted separately from the rows precisely so a
+;; move this size cannot hide two rows cancelling.
 ;;
 ;; Then 30 -> 28 at task 4, which collapses the two §16.2:909 blocks into one
 ;; walk over the parked set: `eof-reachable-stop` and `eof-zero-progress-cycle`
@@ -245,6 +260,16 @@
     (make-edge 'rej 'reexecute) eof-target #f))
 (define (mach name entry fields errs nodes default-eof)
   (make-machine name entry fields '() '() errs nodes default-eof #f))
+;; Milestone 5 Slice ①b: the same machine with declaration tables. Every fixture
+;; below that exercises `pass-declarations` is otherwise VALID, so the code it
+;; drives is the only one its verification produces for a declaration reason.
+(define (mach/decls name cbs sps errs nodes default-eof)
+  (make-machine name 'start '() cbs sps errs nodes default-eof #f))
+(define (ok-nodes) (list (one-case-dispatch 'start 'stop 'advance #f)
+                         (make-stop-node 'stop #f) (an-error 'rej)))
+(define (cb name kind req keys default)
+  (make-callback-declaration name kind req keys default #f))
+(define (sp name data complete) (make-span-declaration name data complete #f))
 (define (verify-of m) (lambda () (verify-machine m)))
 
 (define code-fixtures
@@ -327,6 +352,47 @@
                           (list (one-case-dispatch 'start 'p 'advance 'fin)
                                 (make-pause-node 'p 'q #f) (make-pause-node 'q 'p #f)
                                 (make-finish-node 'fin #f) (an-error 'rej)) 'default-eof)))
+   ;; --- Milestone 5 Slice ①b: pass-declarations -------------------------------
+   ;; Each machine below is otherwise valid, so the declaration code it drives is
+   ;; the reason its verification fails. Task 1 left four of these shapes as
+   ;; positive CONSTRUCTION cases; here they become the rejections they were
+   ;; always meant to be.
+   (cons 'duplicate-callback-declaration
+         (verify-of (mach/decls 'a (list (cb 'on-x 'event #f '() #f)
+                                         (cb 'on-x 'event #f '() #f))
+                                '() (list ed rd) (ok-nodes) 'default-eof)))
+   (cons 'duplicate-span-declaration
+         (verify-of (mach/decls 'a (list (cb 'on-d 'span-data #f '() #f))
+                                (list (sp 'body 'on-d #f) (sp 'body 'on-d #f))
+                                (list ed rd) (ok-nodes) 'default-eof)))
+   (cons 'duplicate-branch-key
+         (verify-of (mach/decls 'a (list (cb 'on-x 'decision #t '(keep keep) #f))
+                                '() (list ed rd) (ok-nodes) 'default-eof)))
+   ;; §16.2:902, whose content §9.3:421 fixes: `continue` and `pause` are
+   ;; reserved and may not be branch keys.
+   (cons 'reserved-branch-key
+         (verify-of (mach/decls 'a (list (cb 'on-x 'decision #t '(continue) #f))
+                                '() (list ed rd) (ok-nodes) 'default-eof)))
+   ;; §16.2:891: optional + decision + no valid default branch.
+   (cons 'invalid-callback-declaration
+         (verify-of (mach/decls 'a (list (cb 'on-x 'decision #f '(keep skip) #f))
+                                '() (list ed rd) (ok-nodes) 'default-eof)))
+   ;; §16.2:890: a span names a callback that does not exist.
+   (cons 'missing-callback-declaration
+         (verify-of (mach/decls 'a '() (list (sp 'body 'nosuch #f))
+                                (list ed rd) (ok-nodes) 'default-eof)))
+   ;; §16.2:892: the named callback exists and is the wrong KIND. This is the
+   ;; cross-reference `make-span-declaration` structurally cannot check -- it
+   ;; never sees the callback table.
+   (cons 'invalid-span-callback
+         (verify-of (mach/decls 'a (list (cb 'on-d 'event #f '() #f))
+                                (list (sp 'body 'on-d #f))
+                                (list ed rd) (ok-nodes) 'default-eof)))
+   ;; A span-kind callback no span names: nothing can ever invoke it, because
+   ;; only a span declaration reaches one.
+   (cons 'unreferenced-callback-declaration
+         (verify-of (mach/decls 'a (list (cb 'on-d 'span-data #f '() #f))
+                                '() (list ed rd) (ok-nodes) 'default-eof)))
    ;; A machine name outside the portable repertoire.
    (cons 'invalid-name
          (verify-of (mach 'BadName 'start '() (list ed rd)

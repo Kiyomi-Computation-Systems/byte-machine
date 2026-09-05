@@ -16,6 +16,13 @@
 (library (byte-machine graph)
   (export make-uint-field uint-field? uint-field-name uint-field-width
           uint-field-initial uint-field-source-label
+          make-callback-declaration callback-declaration?
+          callback-declaration-name callback-declaration-kind
+          callback-declaration-required? callback-declaration-branch-keys
+          callback-declaration-default-branch callback-declaration-source-label
+          make-span-declaration span-declaration? span-declaration-name
+          span-declaration-data-callback span-declaration-complete-callback
+          span-declaration-source-label
           make-machine make-byte-dispatch-node make-byte-case
           make-exact-byte-matcher make-edge make-stop-node make-finish-node
           make-pause-node make-error-node make-error-declaration
@@ -35,6 +42,15 @@
   (import (only (byte-machine private ir)
                 make-uint-field uint-field? uint-field-name uint-field-width
                 uint-field-initial uint-field-source-label
+                make-callback-declaration callback-declaration?
+                callback-declaration-name callback-declaration-kind
+                callback-declaration-required? callback-declaration-branch-keys
+                callback-declaration-default-branch
+                callback-declaration-source-label
+                make-span-declaration span-declaration? span-declaration-name
+                span-declaration-data-callback
+                span-declaration-complete-callback
+                span-declaration-source-label
                 make-machine make-byte-dispatch-node make-byte-case
                 make-exact-byte-matcher make-edge make-stop-node make-finish-node
                 make-pause-node make-error-node make-error-declaration

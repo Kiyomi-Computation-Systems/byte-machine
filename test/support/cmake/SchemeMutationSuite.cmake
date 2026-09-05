@@ -837,6 +837,16 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Milestone 5 Slice ①b's final review: ONE more, on the ABI-4 metadata length
+# guard, which shipped with neither a test nor a pin. Mutations 380 + 1 = 381.
+#
+# Milestone 5 Slice ①b: TWO. `pass-declarations` never run -- eight census
+# fixtures then find nothing, caught by a comparison naming a missing code. And
+# the span section reusing the callback section's tag, which pins the section
+# discriminator decision 0025's ①b-planning note added, caught by the fixture
+# naming both declarations `x` so that only the tag separates them.
+# Mutations 378 + 2 = 380.
+#
 # Milestone 5 Slice ①a's final review: ONE more, on a zero-width edge role's
 # label. The position drift row's own comment claimed it was BLIND under this
 # suite; the review measured that backwards -- the derived set meets a mapping
@@ -1015,7 +1025,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 52)
-set(EXPECTED_MUTATIONS 378)
+set(EXPECTED_MUTATIONS 381)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3029,6 +3039,18 @@ byte_machine_mutation(
 # default-eof error, so the finish case's `default-eof code` check reddens. The
 # FIND's `empty-bv 0 0 #t` is unique to the finish driver (parser-feed-v2! calls
 # exec with `bv start end #f`).
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: an ABI 4 payload with no member 1 is accepted"
+  # Milestone 5 Slice ①b's final review: the guard shipped with no test and no
+  # pin. Without it a version-4 runtime reads member 1 out of a one-member
+  # payload and fails with an index error deep in make-parser instead of a named
+  # refusal at construction.
+  FIND [[    (unless (>= (vector-length metadata) 2)]]
+  REPLACE [[    (unless #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a one-member payload is refused at the current version")
+
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: a /v2 finish does not drive exec with finish? true"
@@ -5862,6 +5884,27 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--library-root" "${STAGE_DIR}/src"
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/common/normal-ir-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a callback's required? flag is left out of the encoding"
+  # Milestone 5 Slice ①b's FINAL REVIEW found this defect and this pins the fix.
+  # The section originally encoded only the NAME while the emitter rendered name,
+  # kind, required? and default-branch into ABI member 1 -- so two machines
+  # differing only in `required?` shared fingerprint 4858454120852933155 and
+  # emitted DIFFERENT libraries, one raising `missing-required-callback` from
+  # make-parser and the other building. Decision 0019 item 2: a datum "must enter
+  # the *encoding*, not merely be read from the source machine".
+  #
+  # A pin on the SECTION TAG was tried first and is deliberately not here: the
+  # fix made the tag redundant for discrimination, because a callback record and
+  # a span record no longer have the same shape, so collapsing the two tags is
+  # UNCAUGHT and the suite said so. A mutation whose decision has been subsumed
+  # gets retired, not weakened.
+  FIND [[                     (put-u8 p (if (callback-declaration-required? c) 1 0))]]
+  REPLACE [[                     (put-u8 p 1)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "EVERY part the ABI carries is in the fingerprint")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
@@ -8728,8 +8771,14 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
   LABEL "runtime: the v2 arm ignores the ABI payload's field member"
-  FIND [[            (vector-ref metadata 0)))]]
-  REPLACE [[            (vector)))]]
+  # Re-anchored by Milestone 5 Slice ①b task 4: the constructor now reads member
+  # 1 as well, so the line gained a second `vector-ref` and this FIND went to
+  # zero. The Slice ①b plan named this as the one CONDITIONAL break in its work
+  # list -- survives untouched if ①b leaves the constructor reading member 0
+  # only, dies if it does not -- and it did not. The decision this pin names is
+  # unchanged: member 0 is the field table and dropping it must be caught.
+  FIND [[            (vector-ref metadata 0) (vector-ref metadata 1)))]]
+  REPLACE [[            (vector) (vector-ref metadata 1)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "parser-field-ref \\(generated\\).a fresh parser reads the declared initial at every width: case raised")
@@ -9370,6 +9419,22 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the fourteen names agree across the two files: declared names equal tabulated names")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.unit.diagnostic-census.chez.source
+  LABEL "verify: pass-declarations is never run"
+  # Milestone 5 Slice ①b task 7. The whole pass, dropped from verify-machine's
+  # append. Eight of the census's twenty-four fixtures then find no diagnostic at
+  # all, so this is caught by a COMPARISON naming a missing code rather than by a
+  # raise from wherever the walk happens to stop.
+  # The following line rides along in both halves: the runner refuses an empty
+  # REPLACE, so the pass is dropped by rewriting the pair rather than by deleting
+  # a line.
+  FIND [[                                  (pass-declarations machine)
+                                  (pass-overlap machine)]]
+  REPLACE [[                                  (pass-overlap machine)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "duplicate-callback-declaration is emitted")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.unit.diagnostic-census.chez.source

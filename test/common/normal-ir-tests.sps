@@ -225,6 +225,112 @@
         (check-equal "unmoved" (normal-machine-fingerprint (normalize (one-byte/fields '())))
                      14095574568398596535)))))
 
+;; --- the trailing slot-table sections (Milestone 5 Slice ①b) -----------------
+(define (one-byte/decls cbs sps)
+  (make-machine 'one-byte 'start '() cbs sps (list eof-decl rej-decl)
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 0) (make-edge 'stop 'advance) #f))
+            (make-edge 'reject 'reexecute) #f #f)
+          (make-stop-node 'stop #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+(define (a-cb n k) (make-callback-declaration n k #f '() #f #f))
+(define (a-sp n d) (make-span-declaration n d #f #f))
+
+(harness-group "the optional trailing slot tables"
+  (lambda ()
+    (harness-case "a machine declaring neither is byte-identical to Slice ①a's"
+      (lambda ()
+        ;; Decision 0025 point 1's whole bargain, at ①a's own measured value.
+        ;; Every byte of both sections is inside a guard, so this machine writes
+        ;; none of them -- and if it wrote even one, all four committed goldens
+        ;; would move with this number.
+        (check-equal "unmoved" (normal-machine-fingerprint (normalize (one-byte/decls '() '())))
+                     14095574568398596535)))
+    (harness-case "declaring a callback moves the fingerprint"
+      (lambda ()
+        ;; Without this the guard could be permanently closed and the section
+        ;; dead, and the case above would still pass.
+        (check "moved"
+               (not (= (normal-machine-fingerprint
+                        (normalize (one-byte/decls (list (a-cb 'on-x 'event)) '())))
+                       14095574568398596535)))))
+    (harness-case "a callback and a span are not confusable"
+      (lambda ()
+        ;; The section tag is one of two things keeping these apart, and after
+        ;; the final review's encoding fix it is no longer the load-bearing one:
+        ;; a callback record now carries name + kind + required? + default while
+        ;; a span record carries name + data + complete, so the two shapes differ
+        ;; even with identical names. The tag remains for self-description and so
+        ;; that a THIRD section can be added without re-deriving this argument.
+        ;; Measured: a mutation collapsing the two tags is UNCAUGHT, and that is
+        ;; recorded rather than papered over -- see the retired pin's comment in
+        ;; SchemeMutationSuite.cmake.
+        (let ((cb-only (normal-machine-fingerprint
+                        (normalize (one-byte/decls (list (a-cb 'x 'span-data)) '()))))
+              (sp-only (normal-machine-fingerprint
+                        (normalize (one-byte/decls '() (list (a-sp 'x 'x)))))))
+          (check "distinct" (not (= cb-only sp-only))))))
+    (harness-case "the slot tables are the declaration names in declaration order"
+      (lambda ()
+        (let ((n (normalize (one-byte/decls (list (a-cb 'first 'event) (a-cb 'second 'event))
+                                            (list (a-sp 'only 'first))))))
+          (check-equal "callback slots" (normal-machine-callbacks n)
+                       '((first 0) (second 1)))
+          (check-equal "span slots" (normal-machine-spans n) '((only 0))))))
+    (harness-case "EVERY part the ABI carries is in the fingerprint"
+      (lambda ()
+        ;; *** THE FINAL REVIEW'S CRITICAL FINDING, and it was mine. *** The
+        ;; first version of the trailing sections encoded only the NAME, while
+        ;; the emitter rendered name, kind, required? and default-branch into ABI
+        ;; member 1. Measured then: two machines differing only in `required?`
+        ;; shared fingerprint 4858454120852933155 and emitted DIFFERENT
+        ;; libraries -- one raising `missing-required-callback` from make-parser,
+        ;; the other building. That is the converse of decision 0019 item 2's
+        ;; property, which this file's own comment at :64-70 states for fields.
+        ;;
+        ;; A sentinel over OBSERVED pairs, so a loop that never ran cannot pass.
+        (let ((checked 0) (same '()))
+          (for-each
+           (lambda (pair)
+             (set! checked (+ checked 1))
+             (let ((a (normal-machine-fingerprint (normalize (cadr pair))))
+                   (b (normal-machine-fingerprint (normalize (caddr pair)))))
+               (when (= a b) (set! same (cons (car pair) same)))))
+           (list
+            (list 'callback-kind
+                  (one-byte/decls (list (a-cb 'c 'event)) '())
+                  (one-byte/decls (list (a-cb 'c 'decision)) '()))
+            (list 'callback-required
+                  (one-byte/decls (list (make-callback-declaration 'c 'event #t '() #f #f)) '())
+                  (one-byte/decls (list (make-callback-declaration 'c 'event #f '() #f #f)) '()))
+            (list 'callback-default-branch
+                  (one-byte/decls
+                   (list (make-callback-declaration 'c 'decision #f '(k j) 'k #f)) '())
+                  (one-byte/decls
+                   (list (make-callback-declaration 'c 'decision #f '(k j) 'j #f)) '()))
+            (list 'span-data-callback
+                  (one-byte/decls (list (a-cb 'd1 'span-data) (a-cb 'd2 'span-data))
+                                  (list (a-sp 's 'd1)))
+                  (one-byte/decls (list (a-cb 'd1 'span-data) (a-cb 'd2 'span-data))
+                                  (list (a-sp 's 'd2))))
+            (list 'span-complete-callback
+                  (one-byte/decls (list (a-cb 'd 'span-data) (a-cb 'k 'span-complete))
+                                  (list (make-span-declaration 's 'd #f #f)))
+                  (one-byte/decls (list (a-cb 'd 'span-data) (a-cb 'k 'span-complete))
+                                  (list (make-span-declaration 's 'd 'k #f))))))
+          (check-equal "five pairs were compared" checked 5)
+          (check-equal "and none of them collided" same '()))))
+    (harness-case "declaration ORDER is observable, so two orders differ"
+      (lambda ()
+        ;; §10.1:482 gives declaration order no semantic priority and exists to
+        ;; provide stable ids -- which is exactly why the id must be visible.
+        (check "distinct"
+               (not (= (normal-machine-fingerprint
+                        (normalize (one-byte/decls (list (a-cb 'a 'event) (a-cb 'b 'event)) '())))
+                       (normal-machine-fingerprint
+                        (normalize (one-byte/decls (list (a-cb 'b 'event) (a-cb 'a 'event)) '()))))))))))
+
 ;; Entry is the second node; the dispatch node lists byte 5 before byte 2.
 (define two
   (make-machine 'two 'go '() '() '() (list eof-decl rej-decl)

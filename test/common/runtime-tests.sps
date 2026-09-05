@@ -33,6 +33,9 @@
     ;; declarations, so every hand-written stub answers it. These stubs declare
     ;; no fields, which is what keeps their parsers byte-for-byte what they were.
     ((field-initials) (vector))
+    ;; Slice ①b: the op interface gained `callback-decls`. A stub standing in
+    ;; for the interpreter must answer it, and a missing arm is LOUD by design.
+    ((callback-decls) (vector))
     ((entry) 'start)
     ((kind) (case (car args) ((start) 'dispatch) ((stop) 'stop) ((reject) 'error)))
     ((dispatch)
@@ -107,6 +110,9 @@
     ;; declarations, so every hand-written stub answers it. These stubs declare
     ;; no fields, which is what keeps their parsers byte-for-byte what they were.
     ((field-initials) (vector))
+    ;; Slice ①b: the op interface gained `callback-decls`. A stub standing in
+    ;; for the interpreter must answer it, and a missing arm is LOUD by design.
+    ((callback-decls) (vector))
     ((entry) 's0)
     ((kind) (case (car args) ((s0) 'dispatch) ((done) 'finish)
               (else (assertion-violation 'eof-target-op "bad node" (car args)))))
@@ -120,6 +126,9 @@
     ;; declarations, so every hand-written stub answers it. These stubs declare
     ;; no fields, which is what keeps their parsers byte-for-byte what they were.
     ((field-initials) (vector))
+    ;; Slice ①b: the op interface gained `callback-decls`. A stub standing in
+    ;; for the interpreter must answer it, and a missing arm is LOUD by design.
+    ((callback-decls) (vector))
     ((entry) 's0)
     ((kind) (case (car args) ((s0) 'dispatch)
               (else (assertion-violation 'default-eof-op "bad node" (car args)))))
@@ -133,6 +142,9 @@
     ;; declarations, so every hand-written stub answers it. These stubs declare
     ;; no fields, which is what keeps their parsers byte-for-byte what they were.
     ((field-initials) (vector))
+    ;; Slice ①b: the op interface gained `callback-decls`. A stub standing in
+    ;; for the interpreter must answer it, and a missing arm is LOUD by design.
+    ((callback-decls) (vector))
     ((entry) 'done)
     ((kind) (case (car args) ((done) 'finish)
               (else (assertion-violation 'finish-feed-op "bad node" (car args)))))
@@ -159,6 +171,9 @@
     ;; declarations, so every hand-written stub answers it. These stubs declare
     ;; no fields, which is what keeps their parsers byte-for-byte what they were.
     ((field-initials) (vector))
+    ;; Slice ①b: the op interface gained `callback-decls`. A stub standing in
+    ;; for the interpreter must answer it, and a missing arm is LOUD by design.
+    ((callback-decls) (vector))
     ((entry) 's0)
     ((kind) (case (car args)
               ((s0 s1) 'dispatch) ((fp p2) 'pause) ((done) 'finish) ((s2) 'stop)
@@ -260,9 +275,9 @@
            (let ((b (bytevector-u8-ref bv pos)))
              (if (= b 0) (loop (+ pos 1) 1 (+ off 1)) (loop pos 2 off))))))))
 (define (v2-machine)
-  (byte-machine-make-compiled-machine 4 99 0 stub-exec (vector (vector))))
+  (byte-machine-make-compiled-machine 4 99 0 stub-exec (vector (vector) (vector))))
 (define (v2-pause-machine)
-  (byte-machine-make-compiled-machine 4 99 3 stub-exec (vector (vector))))
+  (byte-machine-make-compiled-machine 4 99 3 stub-exec (vector (vector) (vector))))
 
 ;; Milestone 4 Slice ①a task 3 retired the whole 'v1 feed-only executor path.
 ;; Once /v1 refuses every version nothing can construct one, so make-parser's
@@ -307,16 +322,161 @@
         (check-raises "v2" assertion-violation?
                       (lambda () (byte-machine-make-compiled-machine/v2 3 99 0 stub-exec)))))))
 
+;; Slice ①b: the same three-field assertion ir-tests.sps uses -- who, code and
+;; detail -- because a check-raises stopping at the condition type alone would
+;; not notice a copy-pasted `who` or `detail`.
+(define (contract-violation? who detail)
+  (lambda (e)
+    (and (byte-machine-contract-condition? e)
+         (eq? (byte-machine-contract-condition-code e) 'invalid-argument)
+         (eq? (byte-machine-contract-condition-who e) who)
+         (eq? (byte-machine-contract-condition-detail e) detail))))
+
+(harness-group "callback binding resolution (§9.3:419, Slice ①b)"
+  (lambda ()
+    ;; A stub whose callback table is declared per case, so resolution is driven
+    ;; rather than read. Four parts per decl: name, kind, required?, default.
+    (define (cb-op decls)
+      (lambda (msg . args)
+        (case msg
+          ((entry) 'start)
+          ((field-initials) (vector))
+          ((callback-decls) decls)
+          (else (assertion-violation 'cb-op "bad message" msg)))))
+    (define (cm decls) (make-compiled-machine (cb-op decls)))
+    (define (noop . _) 'ignored)
+    (harness-case "a bound callback lands in its declared slot"
+      (lambda ()
+        ;; The slot VECTOR is what §9.3:419 resolves to, and the case must read
+        ;; it -- an earlier version checked only that a parser was built, which
+        ;; would pass with every slot left unbound. The parser is a plain vector
+        ;; and the slots are index 10, so the test reaches them without widening
+        ;; any export.
+        (let* ((one (lambda args 'one)) (two (lambda args 'two))
+               (decls (vector (vector 'a 'event #t #f) (vector 'b 'event #t #f)))
+               (p (make-parser (cm decls) (list (list 'b two) (list 'a one)) 'ctx))
+               (slots (vector-ref p 10)))
+          (check "a parser was built" (parser? p))
+          ;; Bound in DECLARATION order, not binding order: the list above is
+          ;; reversed on purpose, so a resolver that indexed by binding position
+          ;; would swap these two.
+          (check-equal "slot 0 is the first DECLARED callback" (vector-ref slots 0) one)
+          (check-equal "slot 1 is the second" (vector-ref slots 1) two)
+          (check-equal "and the context is held verbatim"
+                       (parser-user-context p) 'ctx))))
+    (harness-case "an unbound OPTIONAL callback is permitted"
+      (lambda ()
+        ;; §9.3:419: resolution installs default behaviour only where declared.
+        ;; Decision 0028 makes the slot a sentinel; nothing invokes it in this
+        ;; slice, so what is asserted is that construction SUCCEEDS.
+        (let ((decls (vector (vector 'opt 'event #f #f))))
+          (check "built with no binding at all"
+                 (parser? (make-parser (cm decls) '() #f))))))
+    (harness-case "a missing REQUIRED callback is refused"
+      (lambda ()
+        (let ((decls (vector (vector 'req 'event #t #f))))
+          (check-raises "refused"
+                        (contract-violation? 'make-parser 'missing-required-callback)
+                        (lambda () (make-parser (cm decls) '() #f))))))
+    (harness-case "a duplicate binding is refused, whichever slot would have won"
+      (lambda ()
+        (let ((decls (vector (vector 'a 'event #t #f))))
+          (check-raises "refused"
+                        (contract-violation? 'make-parser 'duplicate-callback-binding)
+                        (lambda () (make-parser (cm decls)
+                                                (list (list 'a noop) (list 'a noop)) #f))))))
+    (harness-case "a binding naming no declaration is refused, not ignored"
+      (lambda ()
+        ;; Silently ignoring it would let a typo disable a callback the machine
+        ;; requires, and the machine would run with the default instead.
+        (let ((decls (vector (vector 'a 'event #t #f))))
+          (check-raises "refused"
+                        (contract-violation? 'make-parser 'unknown-callback-binding)
+                        (lambda () (make-parser (cm decls)
+                                                (list (list 'a noop) (list 'typo noop)) #f))))))
+    (harness-case "a malformed binding list is refused"
+      (lambda ()
+        (let ((decls (vector)))
+          (check-raises "not a list"
+                        (contract-violation? 'make-parser 'callback-bindings)
+                        (lambda () (make-parser (cm decls) 'nope #f)))
+          (check-raises "not a (name . procedure) pair"
+                        (contract-violation? 'make-parser 'callback-bindings)
+                        (lambda () (make-parser (cm decls) (list (list 'a 'not-a-proc)) #f))))))
+    (harness-case "the active span is #f on a fresh parser, in both lanes"
+      (lambda ()
+        ;; `parser-active-span` ships in this slice and `parser-state-name` does
+        ;; not: a span is runtime bookkeeping (§10.2:495) and answers in either
+        ;; lane, where a source-node name cannot be answered by the generated one.
+        (check-equal "no span is active" (parser-active-span (make-parser (cm (vector)) '() #f)) #f)))
+    (harness-case "the stream offset is the public name for the tracked offset"
+      (lambda ()
+        (check-equal "starts at zero"
+                     (parser-stream-offset (make-parser (cm (vector)) '() #f)) 0)))))
+
+(harness-group "the ABI 4 payload must carry member 1"
+  (lambda ()
+    (harness-case "a one-member payload is refused at the current version"
+      (lambda ()
+        ;; Slice ①b's final review found this guard shipped with NO witness --
+        ;; no test reached its raise and no mutation pinned it. It is the guard
+        ;; that keeps a version-4 runtime from reading member 1 out of a payload
+        ;; that has none, which would be an index error deep in make-parser
+        ;; rather than a named refusal at construction.
+        ;; Discriminated by WHO, and it took two tries to get right. A one-member
+        ;; payload raises either way: the guard names it, and without the guard
+        ;; `(vector-ref metadata 1)` raises an index error four lines later. A
+        ;; bare `assertion-violation?` passes on both -- and so does
+        ;; `irritant-is`, because vector-ref's own error carries the offending
+        ;; vector as an irritant too. Both readings left the guard's mutation
+        ;; UNCAUGHT and the suite said so, twice. Only `who` separates them.
+        (check-raises "refused BY THE CONSTRUCTOR, not by vector-ref"
+                      (lambda (e)
+                        (and (assertion-violation? e) (who-condition? e)
+                             (eq? (condition-who e)
+                                  'byte-machine-make-compiled-machine)))
+                      (lambda () (byte-machine-make-compiled-machine
+                                  4 99 0 stub-exec (vector (vector)))))
+        (check "and a two-member payload is accepted"
+               (compiled-machine? (byte-machine-make-compiled-machine
+                                   4 99 0 stub-exec (vector (vector) (vector)))))))))
+
+(harness-group "callback failure values (§13:808, decision 0024)"
+  (lambda ()
+    (harness-case "a failure carries an application code and an optional detail"
+      (lambda ()
+        (let ((f (make-callback-failure 'too-long "128 bytes")))
+          (check "predicate" (callback-failure? f))
+          (check-equal "code" (callback-failure-code f) 'too-long)
+          (check-equal "detail" (callback-failure-detail f) "128 bytes"))))
+    (harness-case "the detail is optional and opaque"
+      (lambda ()
+        (check-equal "absent" (callback-failure-detail (make-callback-failure 'e #f)) #f)))
+    (harness-case "the code must be symbolic (§9.3:423)"
+      (lambda ()
+        (check-raises "refused" (contract-violation? 'make-callback-failure 'code)
+                      (lambda () (make-callback-failure "too-long" #f)))))
+    (harness-case "a failure is not one of the singletons, and they are not it"
+      (lambda ()
+        ;; §13:810 makes the successful outcomes allocation-free singletons and
+        ;; licenses allocation here; the three must stay distinguishable.
+        (let ((f (make-callback-failure 'e #f)))
+          (check "not continue" (not (eq? f callback-continue)))
+          (check "not pause" (not (eq? f callback-pause)))
+          (check "the singletons are not failures"
+                 (and (not (callback-failure? callback-continue))
+                      (not (callback-failure? callback-pause)))))))))
+
 (harness-group "the unversioned constructor checks the version first"
   (lambda ()
     (harness-case "the superseded version is refused and the current one accepted"
       (lambda ()
         (check-raises "abi 3 refused" assertion-violation?
                       (lambda () (byte-machine-make-compiled-machine
-                                  3 99 0 stub-exec (vector (vector)))))
+                                  3 99 0 stub-exec (vector (vector) (vector)))))
         (check "abi 4 accepted"
                (compiled-machine? (byte-machine-make-compiled-machine
-                                   4 99 0 stub-exec (vector (vector)))))))
+                                   4 99 0 stub-exec (vector (vector) (vector)))))))
     (harness-case "the version check precedes every other guard"
       (lambda ()
         ;; Decision 0018 item 1: the check is FIRST, so a mismatch is reported
@@ -372,7 +532,7 @@
         ;; refuses a number, they refuse every number.
         (check-raises "refused" (lambda (e) #t)
                       (lambda () (byte-machine-make-compiled-machine
-                                  1 99 0 stub-exec (vector (vector)))))))
+                                  1 99 0 stub-exec (vector (vector) (vector)))))))
     (harness-case "a /v2 finish error is stored and repeated on the next call"
       (lambda ()
         ;; Witnesses parser-finish-v2!'s own store -- a separate site from the
@@ -446,6 +606,9 @@
     ;; declarations, so every hand-written stub answers it. These stubs declare
     ;; no fields, which is what keeps their parsers byte-for-byte what they were.
     ((field-initials) (vector))
+    ;; Slice ①b: the op interface gained `callback-decls`. A stub standing in
+    ;; for the interpreter must answer it, and a missing arm is LOUD by design.
+    ((callback-decls) (vector))
     ((entry) 's0)
     ((kind) (case (car args)
               ((s0 s1) 'dispatch) ((p pe) 'pause) ((stop) 'stop)

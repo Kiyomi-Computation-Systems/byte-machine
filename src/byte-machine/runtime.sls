@@ -22,7 +22,16 @@
           parser-error-detail parser-error-node-name parser-error-state-id
           parser-error-offset parser-error-position-kind
           parser-field-ref
-          callback-continue callback-pause)
+          callback-continue callback-pause
+          ;; Milestone 5 Slice ①b. `parser-state-name` is NOT here: it must name
+          ;; a source node (§13:820) and the generated lane holds an integer
+          ;; state id with no id->name table, so shipping it would answer in one
+          ;; lane and not the other. Deferred whole to Slice ② by the owner,
+          ;; 2026-09-04 -- ② is the first slice with a caller that can witness it
+          ;; and must carry the table regardless.
+          parser-stream-offset parser-user-context parser-active-span
+          make-callback-failure callback-failure?
+          callback-failure-code callback-failure-detail)
   (import (rnrs)
           (byte-machine private conditions))
 
@@ -66,6 +75,10 @@
   ;; about the version: a two-member payload satisfies it unchanged, which is
   ;; the freedom the quoted vector was chosen for.
   (define current-abi-version 4)
+  ;; ABI payload member 1, Milestone 5 Slice ①b: the callback declaration table
+  ;; the generated lane resolves bindings against. `#()` for a machine declaring
+  ;; none, which is every committed golden.
+  (define (compiled-machine-v2-callbacks cm) (vector-ref cm 6))
 
   ;; The one unversioned constructor. Its FIRST action is the version check, so a
   ;; mismatch is reported before any part of the payload is interpreted -- which
@@ -91,8 +104,11 @@
     (unless (and (vector? metadata) (>= (vector-length metadata) 1))
       (assertion-violation 'byte-machine-make-compiled-machine
                            "metadata must be a vector with at least one member" metadata))
+    (unless (>= (vector-length metadata) 2)
+      (assertion-violation 'byte-machine-make-compiled-machine
+                           "metadata must carry member 1 at ABI 4" metadata))
     (vector compiled-machine-tag 'v2 exec entry-state ir-fingerprint
-            (vector-ref metadata 0)))
+            (vector-ref metadata 0) (vector-ref metadata 1)))
 
   ;; Tombstones. /v1 and /v2 stay exported so a stale generated file fails with a
   ;; clean ABI-mismatch assertion instead of an unbound-identifier import error,
@@ -233,6 +249,73 @@
   ;; 9 is where the initials RIDE, because once a parser is built it holds a
   ;; reference to nothing else.
   (define parser-tag (tag 'byte-machine-parser))
+  ;; --- callback binding resolution (§9.3:419, decision 0028) ----------------
+  ;; "Callbacks are resolved once into indexed slots when the parser is
+  ;; constructed. Generated hot paths never perform symbolic or alist lookup"
+  ;; (§10.3:508). The slot vector is built HERE, once, and indexed thereafter.
+  ;;
+  ;; An UNBOUND OPTIONAL callback's slot holds `unbound-callback`, a sentinel the
+  ;; invocation site short-circuits -- decision 0028, taken on cost rather than on
+  ;; observability, because no witness distinguishes it from an installed closure
+  ;; (an unbound callback has no application closure to record with). Nothing
+  ;; invokes anything in this slice; what ships is the table and its resolution.
+  (define unbound-callback (vector 'byte-machine-unbound-callback))
+  (define (unbound-callback? x) (eq? x unbound-callback))
+
+  ;; §9.3:419, verbatim: "`callback-bindings` is a proper list of two-element
+  ;; lists `(name procedure)`." TWO-ELEMENT LISTS, not pairs -- the first version
+  ;; of this resolver took `(name . procedure)` and the slice's final review
+  ;; caught it against the sentence. `(cadr b)` is the procedure.
+  (define (binding-for bindings nm)
+    (let bloop ((bs bindings))
+      (cond ((null? bs) #f)
+            ((eq? (car (car bs)) nm) (car bs))
+            (else (bloop (cdr bs))))))
+
+  ;; Each decl is #(name kind required? default-branch) in slot order -- the op
+  ;; lane answers it, the generated lane carries it in ABI payload member 1, and
+  ;; the two shapes are identical on purpose so this resolver is lane-blind.
+  (define (resolve-callbacks decls bindings)
+    (unless (list? bindings)
+      (byte-machine-contract-violation 'make-parser 'invalid-argument 'callback-bindings))
+    ;; §9.3:419's duplicate-binding rejection, before any resolution: a name bound
+    ;; twice is a caller error whichever slot would have won.
+    (let dloop ((bs bindings) (seen '()))
+      (unless (null? bs)
+        (let ((b (car bs)))
+          (unless (and (list? b) (= (length b) 2)
+                       (symbol? (car b)) (procedure? (cadr b)))
+            (byte-machine-contract-violation 'make-parser 'invalid-argument
+                                             'callback-bindings))
+          (when (memq (car b) seen)
+            (byte-machine-contract-violation 'make-parser 'invalid-argument
+                                             'duplicate-callback-binding))
+          (dloop (cdr bs) (cons (car b) seen)))))
+    ;; And a binding naming no declaration: silently ignoring it would let a
+    ;; typo disable a callback the machine requires.
+    (for-each (lambda (b)
+                (let ((nm (car b)))
+                  (let sloop ((i 0))
+                    (cond ((>= i (vector-length decls))
+                           (byte-machine-contract-violation 'make-parser 'invalid-argument
+                                                            'unknown-callback-binding))
+                          ((eq? (vector-ref (vector-ref decls i) 0) nm) #t)
+                          (else (sloop (+ i 1)))))))
+              bindings)
+    (let ((slots (make-vector (vector-length decls) unbound-callback)))
+      (let rloop ((i 0))
+        (if (>= i (vector-length decls)) slots
+            (let* ((d (vector-ref decls i))
+                   (nm (vector-ref d 0))
+                   (required? (vector-ref d 2))
+                   (b (binding-for bindings nm)))
+              (cond (b (vector-set! slots i (cadr b)))
+                    (required?
+                     (byte-machine-contract-violation 'make-parser 'invalid-argument
+                                                      'missing-required-callback))
+                    (else #t))
+              (rloop (+ i 1)))))))
+
   (define (make-parser compiled-machine callback-bindings user-context)
     (unless (compiled-machine? compiled-machine)
       (assertion-violation 'make-parser "not a compiled machine" compiled-machine))
@@ -245,13 +328,18 @@
        (let* ((op (vector-ref compiled-machine 2)) (entry (op 'entry))
               (decls (op 'field-initials)))
          (vector parser-tag 'op op entry entry 0 'ready #f
-                 (initial-values decls) decls)))
+                 (initial-values decls) decls
+                 (resolve-callbacks (op 'callback-decls) callback-bindings)
+                 user-context #f)))
       ((eq? (compiled-machine-variant compiled-machine) 'v2)
        (let ((exec (compiled-machine-v2-exec compiled-machine))
              (entry-state (compiled-machine-v2-entry-state compiled-machine))
              (decls (compiled-machine-v2-fields compiled-machine)))
          (vector parser-tag 'v2 exec entry-state entry-state 0 'ready #f
-                 (initial-values decls) decls)))
+                 (initial-values decls) decls
+                 (resolve-callbacks (compiled-machine-v2-callbacks compiled-machine)
+                                    callback-bindings)
+                 user-context #f)))
       ;; Unreachable through the public API: the only two constructors build 'op
       ;; and 'v2. Kept LOUD rather than deleted, the same convention as
       ;; compile.sls's and normal-ir.sls's own unreachable else arms.
@@ -271,6 +359,48 @@
   (define (parser-set-stored-error! p v) (vector-set! p 7 v))
   (define (parser-field-values p) (vector-ref p 8))
   (define (parser-field-decls p) (vector-ref p 9))
+  ;; Milestone 5 Slice ①b: slots 10-12. The callback slot vector (§9.3:419), the
+  ;; application's opaque context (§13:801 -- application-owned and may be
+  ;; mutable, so the runtime neither copies nor interprets it), and the active
+  ;; span's name or #f. `parser-active-span` answers in BOTH lanes because a span
+  ;; is bookkeeping the runtime owns (§10.2:495), not a generated state -- which
+  ;; is exactly why `parser-state-name` is NOT here: it must name a source node,
+  ;; and the generated lane holds an integer state id with no id->name table.
+  ;; Deferred whole to Slice ② by the owner, 2026-09-04.
+  (define (parser-callbacks p) (vector-ref p 10))
+  (define (parser-user-context p) (vector-ref p 11))
+  (define (parser-active-span p) (vector-ref p 12))
+  ;; §9.3:409. The absolute offset, which the parser already tracks; this is the
+  ;; public name for it, and §13:819 makes it one of the values committed before
+  ;; a callback sees the parser.
+  (define (parser-stream-offset p) (parser-offset p))
+
+  ;; --- callback failure (§13:808, §9.3:415-416, decision 0024) ---------------
+  ;; "an explicit callback failure containing an application code and optional
+  ;; detail". §9.3:423 requires the code to satisfy the same portable ASCII name
+  ;; grammar as everything else symbolic; the detail is opaque application data
+  ;; and is never emitted (§10.1:480's last sentence).
+  ;;
+  ;; Allocation here is deliberate and licensed: §13:810 makes the SUCCESSFUL
+  ;; outcomes allocation-free singletons and says in the same breath that "error
+  ;; detail allocation is allowed on the exceptional path".
+  (define callback-failure-tag (tag 'byte-machine-callback-failure))
+  ;; TYPE ONLY HERE, AND THE GRAMMAR HALF IS ENFORCED NOWHERE. §9.3:423 requires
+  ;; the code to satisfy the portable ASCII name grammar; `symbol?` is the house
+  ;; constructor-side check and `valid-name?` lives in verify.sls, which this
+  ;; library does not import and must not -- the runtime is downstream of
+  ;; verification. An application's callback code is not a machine declaration
+  ;; and reaches no verifier pass, so nothing in the tree checks the grammar
+  ;; half. Recorded rather than silently narrowed: closing it means either
+  ;; duplicating the grammar here or routing application codes through a check
+  ;; that does not exist, and neither is this slice's to choose.
+  (define (make-callback-failure code detail)
+    (unless (symbol? code)
+      (byte-machine-contract-violation 'make-callback-failure 'invalid-argument 'code))
+    (vector callback-failure-tag code detail))
+  (define (callback-failure? x) (tagged? callback-failure-tag x))
+  (define (callback-failure-code f) (vector-ref f 1))
+  (define (callback-failure-detail f) (vector-ref f 2))
   ;; A FRESH vector every call, never a shared one: two parsers from one compiled
   ;; machine must not share storage, and parser-reset! must not hand back a
   ;; vector an earlier reset also handed out.
