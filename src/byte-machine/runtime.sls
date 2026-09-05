@@ -569,19 +569,65 @@
       ((error) (make-parser-result 'error start 0 (parser-offset parser)
                                    (parser-stored-error parser)))
       ((finished) (make-parser-result 'finished start 0 (parser-offset parser) #f))
-      (else
-       (let ((r (case (parser-variant parser)
-                  ((op) (parser-feed-op! parser bv start end))
-                  ((v2) (parser-feed-v2! parser bv start end))
-                  (else (assertion-violation 'parser-feed! "unknown parser variant"
-                                             (parser-variant parser))))))
-         (case (parser-result-status r)
-           ((stopped) (parser-set-lifecycle! parser 'stopped))
-           ((error) (parser-set-lifecycle! parser 'error)
-                    (parser-set-stored-error! parser (parser-result-error r)))
-           ((finished) (parser-set-lifecycle! parser 'finished))
-           ((paused) (parser-set-lifecycle! parser 'paused-feed)))
-         r))))
+      ;; §12.2:698-699's two Milestone 5 rows. THREE distinct codes, because
+      ;; §9.4:438 lists "lifecycle violation, reentrancy, poisoned parser" as
+      ;; three: a caller who fed a paused parser made a sequencing mistake, a
+      ;; callback that fed the parser it is running inside made a reentrancy
+      ;; mistake, and a caller who fed a parser an escaped callback left behind
+      ;; is holding something only reset can reuse (§12.6:749).
+      ((busy)
+       (byte-machine-contract-violation 'parser-feed! 'reentrancy
+                                        (list (parser-lifecycle parser) 'feed)))
+      ((poisoned)
+       (byte-machine-contract-violation 'parser-feed! 'poisoned-parser
+                                        (list (parser-lifecycle parser) 'feed)))
+      ;; *** `ready` IS AN ARM NOW, AND THE ELSE IS LOUD. *** It was the `else`,
+      ;; which meant every lifecycle value this case did not name executed input
+      ;; -- so adding `busy` or `poisoned` to the lifecycle vocabulary without
+      ;; adding these arms would have made a poisoned parser silently RE-EXECUTE
+      ;; instead of raising, with no exhaustiveness check anywhere and no test
+      ;; able to notice, because nothing could produce those states yet.
+      ((ready)
+       ;; §12.1:679: "`busy` is an internal guard while feed, finish, or a
+       ;; callback is executing." Set BEFORE the executor runs, which is what
+       ;; makes the reentrancy arm above reachable at all -- a callback calling
+       ;; back into this parser meets it -- and what makes §13:821's "lifecycle
+       ;; is `busy`" true of what a callback observes.
+       (parser-set-lifecycle! parser 'busy)
+       (let ((completed #f))
+         (dynamic-wind
+           (lambda () #t)
+           (lambda ()
+             (let ((r (case (parser-variant parser)
+                        ((op) (parser-feed-op! parser bv start end))
+                        ((v2) (parser-feed-v2! parser bv start end))
+                        (else (assertion-violation 'parser-feed! "unknown parser variant"
+                                                   (parser-variant parser))))))
+               (case (parser-result-status r)
+                 ((stopped) (parser-set-lifecycle! parser 'stopped))
+                 ((error) (parser-set-lifecycle! parser 'error)
+                          (parser-set-stored-error! parser (parser-result-error r)))
+                 ((finished) (parser-set-lifecycle! parser 'finished))
+                 ((paused) (parser-set-lifecycle! parser 'paused-feed))
+                 ;; `need-input` returns the parser to `ready`, and it is its own
+                 ;; arm rather than a fall-through: before `busy` existed a
+                 ;; fall-through left the lifecycle alone and that was correct;
+                 ;; now it would leave the parser BUSY forever.
+                 ((need-input) (parser-set-lifecycle! parser 'ready))
+                 (else (assertion-violation 'parser-feed! "unknown result status"
+                                            (parser-result-status r))))
+               (set! completed #t)
+               r))
+           ;; §12.6:749: "If a callback raises an unexpected condition or
+           ;; performs a nonlocal escape, the condition/escape propagates and
+           ;; `dynamic-wind` marks the parser poisoned." The flag is what tells
+           ;; the two apart -- this thunk runs on BOTH exits, and only the
+           ;; abnormal one leaves it false. Nothing is caught here: the
+           ;; condition propagates, which is the sentence's first clause.
+           (lambda ()
+             (unless completed (parser-set-lifecycle! parser 'poisoned))))))
+      (else (assertion-violation 'parser-feed! "unknown lifecycle"
+                                 (parser-lifecycle parser)))))
 
   ;; The interpreter path. Sticky rows short-circuit one level up in
   ;; parser-feed! (D1), so this loop no longer serves repeat feeds on a
@@ -748,13 +794,46 @@
                                    (parser-offset parser) (parser-stored-error parser)))
       ((finished) (make-parser-result 'finished (parser-offset parser) 0
                                       (parser-offset parser) #f))
-      (else                             ; ready | finish-ready
-       (case (parser-variant parser)
-         ((op) (parser-finish-op! parser))
-         ((v2) (parser-finish-v2! parser))
-         ;; Unreachable for the same reason as make-parser's else above.
-         (else (assertion-violation 'parser-finish! "unknown parser variant"
-                                    (parser-variant parser)))))))
+      ;; §12.2:698-699, the same two rows and the same three codes as
+      ;; `parser-feed!`'s. Deliberately not shared with them: this file's own
+      ;; comment above `parser-feed!` records why near-identical arms here stay
+      ;; separate, and each of these is its own row of the operation matrix.
+      ((busy)
+       (byte-machine-contract-violation 'parser-finish! 'reentrancy
+                                        (list (parser-lifecycle parser) 'finish)))
+      ((poisoned)
+       (byte-machine-contract-violation 'parser-finish! 'poisoned-parser
+                                        (list (parser-lifecycle parser) 'finish)))
+      ;; The two states that RUN, named rather than left to an else, for the
+      ;; reason `parser-feed!`'s arm records: an else meaning "ready" swallows
+      ;; every lifecycle value added after it.
+      ((ready finish-ready)
+       (parser-set-lifecycle! parser 'busy)
+       (let ((completed #f))
+         (dynamic-wind
+           (lambda () #t)
+           (lambda ()
+             (let ((r (case (parser-variant parser)
+                        ((op) (parser-finish-op! parser))
+                        ((v2) (parser-finish-v2! parser))
+                        ;; Unreachable for the same reason as make-parser's else.
+                        (else (assertion-violation 'parser-finish! "unknown parser variant"
+                                                   (parser-variant parser))))))
+               ;; Unlike the feed path, BOTH finish paths record their own
+               ;; terminal lifecycle before returning -- and every EOF outcome is
+               ;; terminal or paused, so there is no `need-input` arm to restore.
+               ;; The `busy` written above is therefore always overwritten by the
+               ;; time this returns, which is asserted rather than assumed.
+               (when (eq? (parser-lifecycle parser) 'busy)
+                 (assertion-violation 'parser-finish!
+                                      "the finish path left the parser busy"
+                                      (parser-result-status r)))
+               (set! completed #t)
+               r))
+           (lambda ()
+             (unless completed (parser-set-lifecycle! parser 'poisoned))))))
+      (else (assertion-violation 'parser-finish! "unknown lifecycle"
+                                 (parser-lifecycle parser)))))
 
   ;; The generated /v2 finish path: run exec over the empty slice with finish? #t.
   ;; exec owns the eof-target chain internally (Task 2 lowers it); the runtime just
@@ -866,6 +945,18 @@
     (case (parser-lifecycle parser)
       ((paused-feed) (parser-set-lifecycle! parser 'ready) 'feed-ready)
       ((paused-finish) (parser-set-lifecycle! parser 'finish-ready) 'finish-ready)
+      ;; §12.2:698-699. The shipped else answered `lifecycle-violation` for
+      ;; every non-paused row, which was right while `poisoned` and `busy` did
+      ;; not exist and is wrong now: §12.2 gives the poisoned row `parser-poisoned`
+      ;; and the busy row the reentrancy condition, and §9.4:438 makes all three
+      ;; codes distinct. The else keeps its own row -- resuming a `ready` or
+      ;; terminal parser is still a sequencing mistake and nothing else.
+      ((busy)
+       (byte-machine-contract-violation 'parser-resume! 'reentrancy
+                                        (list (parser-lifecycle parser) 'resume)))
+      ((poisoned)
+       (byte-machine-contract-violation 'parser-resume! 'poisoned-parser
+                                        (list (parser-lifecycle parser) 'resume)))
       (else (byte-machine-contract-violation 'parser-resume! 'lifecycle-violation
                                              (list (parser-lifecycle parser) 'resume)))))
 
@@ -907,6 +998,18 @@
   ;; It writes slot 8 and never slot 9: the declarations belong to the compiled
   ;; machine and outlive every reset.
   (define (parser-reset! parser)
+    ;; *** THE ONLY OPERATION WHOSE `busy` CELL IS NOT ITS `poisoned` CELL. ***
+    ;; §12.2:699 raises reentrancy for reset while busy -- a callback may not
+    ;; reset the parser it is running inside -- and §12.2:698 RESETS a poisoned
+    ;; one, because §12.6:749 says "Only full reset may reuse it", which is a
+    ;; permission and not a prohibition. Before this the procedure had no
+    ;; lifecycle guard at all: five unconditional mutations.
+    ;;
+    ;; §12.6:747 puts the raise "before further mutation", so the guard is the
+    ;; first thing here and nothing above it can move.
+    (when (eq? (parser-lifecycle parser) 'busy)
+      (byte-machine-contract-violation 'parser-reset! 'reentrancy
+                                       (list (parser-lifecycle parser) 'reset)))
     (parser-set-current! parser (parser-entry parser))
     (parser-set-offset! parser 0)
     (parser-set-lifecycle! parser 'ready)

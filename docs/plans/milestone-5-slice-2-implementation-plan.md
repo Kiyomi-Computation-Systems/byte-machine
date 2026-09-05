@@ -177,6 +177,13 @@ Then the two shipped-behaviour changes of §2: `parser-reset!` gains its guard; 
 - [ ] **Step 3: Verify** — `§9.4:438`'s `reentrancy` and `poisoned parser` codes are distinct from `lifecycle-violation`; all five accessors answer during `busy` (decision `0028` item 1).
 - [ ] **Step 4: Commit**
 
+> **CORRECTED IN EXECUTION (2026-09-05): Tasks 6 and 7 ship as ONE commit.** Task 6
+> adds the `poisoned` lifecycle row; Task 7 is the only thing that can *produce*
+> `poisoned`. Landing 6 alone ships three arms — feed's, finish's and resume's —
+> that no input can reach, whose mutations would survive with nothing to write in
+> an `EXPECT_SURVIVES` reason except "the next task closes it". Same rule as
+> Tasks 1–2 and 3–5.
+
 ---
 
 ## Task 7: Poisoning, and the escape the differential cannot see

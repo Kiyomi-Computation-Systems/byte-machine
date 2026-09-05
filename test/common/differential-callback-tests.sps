@@ -22,6 +22,9 @@
 (import (rnrs) (rnrs eval) (only (chezscheme) load)
         (byte-machine test harness)
         (byte-machine test error-projection)
+        ;; The contract-condition accessors, to assert §9.4:438's three codes
+        ;; apart. The house convention is to compare who and code, never text.
+        (byte-machine private conditions)
         (byte-machine graph) (byte-machine verify)
         (byte-machine interpret) (byte-machine compile) (byte-machine runtime))
 
@@ -48,8 +51,11 @@
 ;;     (§16.2:908), so the finish terminal sits on the EOF side only. `eofcb` is
 ;;     reachable ONLY as the entry's eof-target, which is what lets its continue
 ;;     target be `fin`.
+;; One field, declared and never written: §12.6:747's ordering clause names
+;; "every field" among the values a refused operation must not move, and a
+;; machine with no fields cannot witness that half at all.
 (define (callback-machine)
-  (make-machine 'callbackm 'start '()
+  (make-machine 'callbackm 'start (list (make-uint-field 'n 8 7 #f))
     (list (make-callback-declaration 'decide 'decision #t '(keep skip) #f #f)
           (make-callback-declaration 'note 'event #f '() #f #f))
     '()
@@ -389,5 +395,221 @@
           (check-equal "and it is entry then the error node"
                        (walk cm-ref 'skip (bv1 65))
                        '(start reject error)))))))
+
+;; --- Milestone 5 Slice ② tasks 6 and 7: `busy`, `poisoned`, and the -----------
+;; ordering clause.
+;;
+;; §12.2:698-699's two rows, and the first slice in which either state can be
+;; REACHED: `busy` needs something running inside the parser, and `poisoned`
+;; needs a callback to escape from one. Before this, adding either value to the
+;; lifecycle vocabulary would have been unwitnessable -- which is exactly why
+;; `parser-feed!`'s `else` meaning "ready" was dangerous rather than merely
+;; untidy.
+(define (contract? who code)
+  (lambda (e)
+    (and (byte-machine-contract-condition? e)
+         (eq? (byte-machine-contract-condition-who e) who)
+         (eq? (byte-machine-contract-condition-code e) code))))
+
+;; The wrapper Task 7's oracle needs, and it is NOT "compare the two results":
+;; on an escape neither lane returns one. What is compared is that the SAME
+;; condition escaped `parser-feed!` in both lanes AND that both parsers are
+;; poisoned afterwards.
+(define (escaping thunk)
+  (call/cc (lambda (k)
+             (with-exception-handler (lambda (e) (k (list 'raised e)))
+               (lambda () (list 'returned (thunk)))))))
+
+(harness-group "a callback runs with the parser BUSY, and cannot re-enter it"
+  (lambda ()
+    (harness-case "all four mutating operations raise reentrancy from inside a callback"
+      (lambda ()
+        ;; §12.2:699's whole row -- feed, finish, resume AND reset, which is the
+        ;; one operation whose `busy` cell differs from its `poisoned` cell.
+        ;; Driven from inside the callback, which is the only place the state
+        ;; exists.
+        ;; *** The probe runs ONCE, and the guard is not tidiness. *** Under a
+        ;; mutant that stops marking the parser busy, the inner `parser-feed!`
+        ;; finds a `ready` parser, runs the executor, reaches this same callback
+        ;; and feeds again -- unbounded recursion, which the mutation runner has
+        ;; no timeout for and which would hang the whole suite rather than
+        ;; report. Measured: it did. With the guard the mutant records
+        ;; `returned` where the baseline records `raised`, which is a failed
+        ;; comparison and the catch this row is for.
+        (let ((from-inside
+               (lambda (cm)
+                 (let* ((seen '())
+                        (probed #f)
+                        (p (make-parser cm
+                                        (list (list 'decide
+                                                    (lambda (ps ux)
+                                                      (unless probed
+                                                        (set! probed #t)
+                                                        (set! seen
+                                                              (list
+                                                               (parser-lifecycle ps)
+                                                               (escaping (lambda () (parser-feed! ps (bv1 65) 0 1)))
+                                                               (escaping (lambda () (parser-finish! ps)))
+                                                               (escaping (lambda () (parser-resume! ps)))
+                                                               (escaping (lambda () (parser-reset! ps))))))
+                                                      callback-continue)))
+                                        'the-context)))
+                   (parser-feed! p (bv1 65) 0 1)
+                   ;; Only the OUTCOME KIND of each attempt is compared across
+                   ;; lanes -- `raised` or `returned`. The conditions themselves
+                   ;; are values with no cross-lane equality, and the case below
+                   ;; is what asserts which condition each one is.
+                   (list (car seen) (map car (cdr seen)))))))
+          (let ((a (from-inside cm-ref)) (b (from-inside cm-gen)))
+            (check-equal "the lanes agree" a b)
+            ;; §13:821: "lifecycle is `busy`, so parser operations are rejected."
+            (check-equal "the callback sees busy" (car a) 'busy)
+            (check-equal "and all four raised" (cadr a) '(raised raised raised raised))))))
+    (harness-case "each of the four raises the REENTRANCY code, not lifecycle-violation"
+      (lambda ()
+        ;; §9.4:438 lists "lifecycle violation, reentrancy, poisoned parser" as
+        ;; three distinct codes. Asserted per operation, by who AND code: a
+        ;; single predicate over the family would pass on all three.
+        ;; Probed once, for the reason the case above records: an unguarded
+        ;; inner feed recurses without bound under the busy-marking mutant.
+        (let ((codes '()) (probed #f))
+          (let ((p (make-parser cm-ref
+                                (list (list 'decide
+                                            (lambda (ps ux)
+                                              (unless probed
+                                               (set! probed #t)
+                                               (set! codes
+                                                    (map (lambda (pair)
+                                                           (let ((r (escaping (cdr pair))))
+                                                             (list (car pair)
+                                                                   (and (eq? (car r) 'raised)
+                                                                        ((contract? (car pair) 'reentrancy)
+                                                                         (cadr r))))))
+                                                         (list (cons 'parser-feed! (lambda () (parser-feed! ps (bv1 65) 0 1)))
+                                                               (cons 'parser-finish! (lambda () (parser-finish! ps)))
+                                                               (cons 'parser-resume! (lambda () (parser-resume! ps)))
+                                                               (cons 'parser-reset! (lambda () (parser-reset! ps)))))))
+                                              callback-continue)))
+                                'the-context)))
+            (parser-feed! p (bv1 65) 0 1))
+          (check-equal "four operations, each with its own who and the reentrancy code"
+                       codes
+                       '((parser-feed! #t) (parser-finish! #t)
+                         (parser-resume! #t) (parser-reset! #t))))))
+    (harness-case "every read accessor answers during busy (decision 0028 item 1)"
+      (lambda ()
+        ;; The record's item 1 in full: "parser operations are rejected" scopes
+        ;; to the four MUTATING operations, and every read accessor answers
+        ;; normally. Six of them, named individually -- a count would pass if
+        ;; one were swapped for another.
+        (let ((seen 'unset))
+          (let ((p (make-parser cm-ref
+                                (list (list 'decide
+                                            (lambda (ps ux)
+                                              (set! seen (list (parser-lifecycle ps)
+                                                               (parser-state-name ps)
+                                                               (parser-stream-offset ps)
+                                                               (parser-field-ref ps 'n)
+                                                               (parser-user-context ps)
+                                                               (parser-active-span ps)))
+                                              callback-continue)))
+                                'the-context)))
+            (parser-feed! p (bv1 65) 0 1))
+          (check-equal "all six answered" seen '(busy inv 1 7 the-context #f)))))))
+
+(harness-group "a callback that escapes poisons the parser (§12.6:749)"
+  (lambda ()
+    (harness-case "a raised condition propagates and both lanes end poisoned"
+      (lambda ()
+        ;; *** A differential written as "compare the two results" cannot see
+        ;; this case at all, because neither lane returns one. *** What is
+        ;; compared is that the same condition escaped `parser-feed!` and that
+        ;; both parsers are poisoned.
+        (let ((go (lambda (cm)
+                    (let ((p (make-parser cm
+                                          (list (list 'decide
+                                                      (lambda (ps ux) (raise 'boom))))
+                                          'the-context)))
+                      (list (escaping (lambda () (parser-feed! p (bv1 65) 0 1)))
+                            (parser-lifecycle p))))))
+          (check-equal "the lanes agree on the escape and the state"
+                       (go cm-ref) (go cm-gen))
+          (check-equal "and it is the callback's own condition, propagated"
+                       (go cm-ref) '((raised boom) poisoned)))))
+    (harness-case "a nonlocal escape poisons too, with nothing raised"
+      (lambda ()
+        ;; §12.6:749 names TWO antecedents -- "raises an unexpected condition or
+        ;; performs a nonlocal escape" -- and only the second has no condition to
+        ;; observe. `dynamic-wind`'s after thunk is what covers both.
+        (let ((go (lambda (cm)
+                    (let ((held #f))
+                      (let ((out (call/cc
+                                  (lambda (k)
+                                    (let ((p (make-parser cm
+                                                          (list (list 'decide
+                                                                      (lambda (ps ux) (k 'escaped))))
+                                                          'the-context)))
+                                      (set! held p)
+                                      (parser-feed! p (bv1 65) 0 1)
+                                      'no-escape)))))
+                        (list out (parser-lifecycle held)))))))
+          (check-equal "the lanes agree" (go cm-ref) (go cm-gen))
+          (check-equal "the escape reached the caller and the parser is poisoned"
+                       (go cm-ref) '(escaped poisoned)))))
+    (harness-case "a poisoned parser raises parser-poisoned, and only reset reuses it"
+      (lambda ()
+        ;; §12.2:698's row and §12.6:749's last sentence. The code is distinct
+        ;; from both `lifecycle-violation` and `reentrancy` (§9.4:438).
+        (let ((poisoned-parser
+               (lambda (cm)
+                 (let ((p (make-parser cm
+                                       (list (list 'decide (lambda (ps ux) (raise 'boom))))
+                                       'the-context)))
+                   (escaping (lambda () (parser-feed! p (bv1 65) 0 1)))
+                   p))))
+          (let ((p (poisoned-parser cm-ref)) (q (poisoned-parser cm-gen)))
+            (check-equal "poisoned in both lanes"
+                         (list (parser-lifecycle p)) (list (parser-lifecycle q)))
+            (check-raises "feed" (contract? 'parser-feed! 'poisoned-parser)
+                          (lambda () (parser-feed! p (bv1 65) 0 1)))
+            (check-raises "finish" (contract? 'parser-finish! 'poisoned-parser)
+                          (lambda () (parser-finish! p)))
+            (check-raises "resume" (contract? 'parser-resume! 'poisoned-parser)
+                          (lambda () (parser-resume! p)))
+            ;; §12.2:698 RESETS a poisoned parser -- "Only full reset may reuse
+            ;; it" is a permission, not a prohibition -- and the reset one runs.
+            (parser-reset! p)
+            (check-equal "reset returns it to ready" (parser-lifecycle p) 'ready)
+            (check-equal "and it parses again"
+                         (parser-result-status
+                          (parser-feed! (let ((r (make-parser cm-ref
+                                                              (list (list 'decide (lambda (ps ux) callback-continue)))
+                                                              'the-context)))
+                                          r)
+                                        (bv1 65) 0 1))
+                         'stopped)))))
+    (harness-case "a refused operation moves NOTHING (§12.6:747)"
+      (lambda ()
+        ;; "Prohibited lifecycle operations and reentrant parser operations
+        ;; raise API-contract conditions BEFORE further mutation." Testable and
+        ;; therefore tested: the whole observable state is sampled before and
+        ;; after each refusal and compared. A test that only checked the raise
+        ;; could not see a guard that mutates first -- which `parser-reset!`
+        ;; did, with five unconditional writes and no guard at all.
+        (let* ((snapshot (lambda (p)
+                           (list (parser-lifecycle p) (parser-stream-offset p)
+                                 (parser-field-ref p 'n) (parser-state-name p)
+                                 (parser-active-span p) (parser-user-context p))))
+               (p (make-parser cm-ref
+                               (list (list 'decide (lambda (ps ux) (raise 'boom))))
+                               'the-context)))
+          (escaping (lambda () (parser-feed! p (bv1 65) 0 1)))
+          (let ((before (snapshot p)))
+            (for-each (lambda (th) (escaping th))
+                      (list (lambda () (parser-feed! p (bv1 65) 0 1))
+                            (lambda () (parser-finish! p))
+                            (lambda () (parser-resume! p))))
+            (check-equal "nothing moved" (snapshot p) before)
+            (check-equal "and it is still poisoned" (car before) 'poisoned)))))))
 
 (harness-finish)

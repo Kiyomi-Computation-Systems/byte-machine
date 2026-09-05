@@ -885,6 +885,27 @@ cmake_minimum_required(VERSION 3.26)
 # re-anchored onto it under a version-free LABEL. Only the LAST guard in a
 # chain of widening minimums discriminates anything.
 #
+# Milestone 5 Slice ② tasks 6 and 7, `busy` and `poisoned`: FIVE more,
+# 411 + 5 = 416, all in the callback pass, because those are the first two
+# lifecycle states anything in the tree can REACH -- `busy` needs something
+# running inside the parser and `poisoned` needs a callback to escape from one.
+#
+# *** A SURVIVOR WAS CLOSED HERE WITHOUT ANYONE TRYING TO. *** "runtime:
+# parser-feed!'s finished sticky arm is deleted outright" had a written,
+# twice-re-measured reason that rested entirely on `parser-feed!`'s `else`
+# meaning "ready": the deleted arm fell through and the op path re-derived the
+# identical tuple. Slice ② had to make that else LOUD -- otherwise adding `busy`
+# and `poisoned` to the lifecycle vocabulary would have made a poisoned parser
+# silently re-execute -- and the mutant now raises. The suite said so itself
+# ("The recorded limitation is stale"). A survivor whose argument depends on a
+# permissive fall-through stops being a survivor when that fall-through closes;
+# a written reason is only as durable as the control-flow shape it names.
+#
+# Four other pins moved for the same reason and are re-anchored at their sites:
+# three that used to read "expected a raise, but the thunk returned" now read
+# "raised object did not satisfy the predicate", because the mutants raise the
+# wrong condition instead of executing.
+#
 # Milestone 5 Slice ①b: TWO. `pass-declarations` never run -- eight census
 # fixtures then find nothing, caught by a comparison naming a missing code. And
 # the span section reusing the callback section's tag, which pins the section
@@ -1070,7 +1091,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 53)
-set(EXPECTED_MUTATIONS 411)
+set(EXPECTED_MUTATIONS 416)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -2937,10 +2958,13 @@ byte_machine_mutation(
   # case-dispatch under a new `else` arm behind the lifecycle guard, so the
   # old FIND at the previous indentation no longer occurs. Same decision, same
   # reason -- only the surrounding indentation moved.
+  # Re-anchored again by Milestone 5 Slice ②: the result-status case is now
+  # inside `dynamic-wind`'s thunk (§12.6:749), so every line moved four columns
+  # right. Same decision, same reason -- only the indentation moved.
   FIND [[(case (parser-result-status r)
-           ((stopped) (parser-set-lifecycle! parser 'stopped))]]
+                 ((stopped) (parser-set-lifecycle! parser 'stopped))]]
   REPLACE [[(case (parser-result-status r)
-           ((stopped) (parser-set-lifecycle! parser 'ready))]]
+                 ((stopped) (parser-set-lifecycle! parser 'ready))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "stopped after accept")
 
 byte_machine_mutation(
@@ -2958,12 +2982,14 @@ byte_machine_mutation(
   # argument above stands on its own and does not depend on that sibling; the
   # reference is removed rather than left pointing at a mutation no maintainer
   # can find.
+  # Re-anchored again by Milestone 5 Slice ②: the same four-column shift, for
+  # the same reason as its sibling above.
   FIND [[((error) (parser-set-lifecycle! parser 'error)
-                    (parser-set-stored-error! parser (parser-result-error r)))
-           ((finished) (parser-set-lifecycle! parser 'finished))]]
+                          (parser-set-stored-error! parser (parser-result-error r)))
+                 ((finished) (parser-set-lifecycle! parser 'finished))]]
   REPLACE [[((error) (parser-set-lifecycle! parser 'ready)
-                    (parser-set-stored-error! parser (parser-result-error r)))
-           ((finished) (parser-set-lifecycle! parser 'finished))]]
+                          (parser-set-stored-error! parser (parser-result-error r)))
+                 ((finished) (parser-set-lifecycle! parser 'finished))]]
   # The detail is part of the pin: the v1-status mutation breaks this same
   # case and check, but reports "got stopped" where this one reports "got
   # ready". Measured from both.
@@ -3128,7 +3154,14 @@ byte_machine_mutation(
                     (parser-field-values parser) parser (parser-callbacks parser))))]]
   REPLACE [[(o (exec (parser-current parser) (parser-offset parser) empty-bv 0 0 #f
                     (parser-field-values parser) parser (parser-callbacks parser))))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish with no input routes to the default-eof error: default-eof code")
+  # Re-pinned by Milestone 5 Slice ②, onto a STRICTLY BETTER record. Driving
+  # `exec` with finish? #f makes it answer `need-input`, and the finish path's
+  # own invariant -- every EOF outcome is terminal or paused, so the `busy` it
+  # writes is always overwritten before it returns -- now catches that by name
+  # and irritant. The old pin was the default-eof code, which is a downstream
+  # consequence; this one names the thing the mutation actually breaks.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "the finish path left the parser busy with irritant need-input")
 
 # Second: the /v2 TOMBSTONE. Milestone 4 Slice ①a task 3 rewrote both retired
 # constructors to refuse EVERY version rather than the one they are named for,
@@ -3264,7 +3297,14 @@ byte_machine_mutation(
   # this mutation makes the prohibited call return a tuple, that one leaves
   # the refusal in place but raises with the wrong lifecycle in it.
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "feed on paused-feed -- expected a raise, but the thunk returned")
+  # Re-pinned by Milestone 5 Slice ②. The mutant used to fall into `parser-feed!`'s
+  # `else`, which meant "ready" and EXECUTED, so the case failed with "expected a
+  # raise, but the thunk returned". That else is now LOUD -- it had to be, or
+  # adding `busy` and `poisoned` to the lifecycle vocabulary would have made a
+  # poisoned parser re-execute -- so the mutant raises the wrong condition
+  # instead of none. Measured: the predicate rejects it by `who`/`code`.
+  EXPECT_OUTPUT_MATCHES
+    "feed on paused-feed -- raised object did not satisfy the predicate: Exception in parser-feed!: unknown lifecycle")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -3277,13 +3317,19 @@ byte_machine_mutation(
   # above -- the paused-feed/paused-finish mapping mutation breaks this check
   # too, but by raising with the wrong lifecycle rather than by returning.
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "finish on paused-feed -- expected a raise, but the thunk returned")
+  # Re-pinned by Milestone 5 Slice ② for the same reason as its feed sibling:
+  # `parser-finish!`'s else is loud now, so the mutant raises the wrong
+  # condition rather than executing.
+  EXPECT_OUTPUT_MATCHES
+    "finish on paused-feed -- raised object did not satisfy the predicate: Exception in parser-finish!: unknown lifecycle")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: the error row returns the STORED error"
+  # Re-anchored by Milestone 5 Slice ②: the arm moved four columns right under
+  # `dynamic-wind` (§12.6:749). The edit -- drop the store -- is unchanged.
   FIND [[((error) (parser-set-lifecycle! parser 'error)
-                    (parser-set-stored-error! parser (parser-result-error r)))]]
+                          (parser-set-stored-error! parser (parser-result-error r)))]]
   REPLACE [[((error) (parser-set-lifecycle! parser 'error))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "feed-stored error value")
 
@@ -3452,8 +3498,24 @@ byte_machine_mutation(
   # blank line it leaves between the preceding clause and `(else`.
   FIND [[((finished) (make-parser-result 'finished start 0 (parser-offset parser) #f))]]
   REPLACE [[ ]]
-  EXPECT_SURVIVES
-    "whole-arm deletion (as opposed to the field-value mutation above, which IS caught) falls through to parser-feed!'s shared `else` branch; for the 'op variant, parser-feed-op! run fresh from a `current` still parked on the same finish node reaches that loop's own `(finish)` case before advancing `pos`, producing the byte-identical result tuple this arm short-circuits to. The generated variant does not witness it either, for an EMPIRICAL reason rather than a structural one: parser-feed!'s inner case records lifecycle 'finished from ANY variant whose executor returns 'finished, but this file's stub-exec has no state that returns 'finished, so no generated fixture here ever parks a parser at lifecycle 'finished. RE-MEASURED 2026-09-02 after Milestone 4 Slice ①a deleted the 'v1 executor path entirely: the original reason turned on v1 and its stub-feed, neither of which exists now -- make-parser raises on an unknown variant, parser-feed-v1! is gone, and parser-finish!'s else arm no longer names v1 at all. The survivor's SUBSTANCE is unchanged and was re-measured on the post-slice tree: this mutant still passes the whole SPEC-lane suite unchanged")
+  # *** THE SURVIVOR IS CLOSED, and Milestone 5 Slice ② closed it without
+  # trying to. *** Its recorded reason -- twice re-measured, and true every
+  # time -- was that whole-arm deletion "falls through to parser-feed!'s shared
+  # `else` branch", where the op path re-derived the identical result tuple. So
+  # the survivor rested entirely on that else meaning "ready". Slice ② had to
+  # make the else LOUD: `busy` and `poisoned` joined the lifecycle vocabulary,
+  # and an else that executes every unnamed value would have made a poisoned
+  # parser silently re-execute. With the else loud, the deleted arm's lifecycle
+  # reaches it and raises, and the specification catches this mutant by name and
+  # irritant.
+  #
+  # The general point, recorded because it cost two re-measurements to keep the
+  # old reason honest: a survivor whose argument depends on a permissive
+  # fall-through stops being a survivor the moment that fall-through is closed.
+  # A written reason is only as durable as the control-flow shape it names.
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "re-feeds to finished, consuming zero .*: case raised -- Exception in parser-feed!: unknown lifecycle with irritant finished")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -3578,7 +3640,10 @@ byte_machine_mutation(
   REPLACE [[((paused-feed paused-finish)
        (byte-machine-contract-violation 'parser-feed! 'lifecycle-violation]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "feed on finish-ready -- expected a raise, but the thunk returned")
+  # Re-pinned by Milestone 5 Slice ②: `parser-feed!`'s else is loud now, so the
+  # mutant raises the wrong condition rather than executing. Same decision.
+  EXPECT_OUTPUT_MATCHES
+    "feed on finish-ready -- raised object did not satisfy the predicate: Exception in parser-feed!: unknown lifecycle")
 
 # Milestone 4 Slice ①a task 2: the parser-error record's two construction
 # decisions (decision 0022 items 1 and 2). Nothing outside runtime-tests.sps
@@ -10113,6 +10178,88 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   # Its sibling's mirror: same check label, different recorded tuple.
   EXPECT_OUTPUT_MATCHES "committed value -- expected .inv 0.*got .inv 1")
+
+# Milestone 5 Slice ② tasks 6 and 7: §12.2:698-699's two rows, and the first
+# slice in which either can be REACHED -- `busy` needs something running inside
+# the parser and `poisoned` needs a callback to escape from one.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.callback.chez.source
+  LABEL "runtime: a feed does not mark the parser busy while it runs"
+  # §12.1:679, and the line that makes the whole reentrancy row reachable: with
+  # it gone the parser is still `ready` inside the callback, so a callback may
+  # feed the parser it is running inside and §13:821's own sentence is false of
+  # what a callback observes.
+  # The following line rides along in both halves; the runner refuses an empty
+  # REPLACE.
+  FIND [[       (parser-set-lifecycle! parser 'busy)
+       (let ((completed #f))
+         (dynamic-wind
+           (lambda () #t)
+           (lambda ()
+             (let ((r (case (parser-variant parser)
+                        ((op) (parser-feed-op! parser bv start end))]]
+  REPLACE [[       (let ((completed #f))
+         (dynamic-wind
+           (lambda () #t)
+           (lambda ()
+             (let ((r (case (parser-variant parser)
+                        ((op) (parser-feed-op! parser bv start end))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "all six answered -- expected .busy inv 1 7")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.callback.chez.source
+  LABEL "runtime: a feed refuses a busy parser as a lifecycle violation"
+  # §9.4:438 makes "lifecycle violation, reentrancy, poisoned parser" three
+  # codes. The mutant still raises, and still raises from the right `who`, so
+  # only a pin that names the CODE can see it -- which is why the test asserts
+  # per operation by who AND code rather than through one family predicate.
+  FIND [[       (byte-machine-contract-violation 'parser-feed! 'reentrancy]]
+  REPLACE [[       (byte-machine-contract-violation 'parser-feed! 'lifecycle-violation]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the reentrancy code -- expected .*got ..parser-feed! #f")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.callback.chez.source
+  LABEL "runtime: reset has no busy guard"
+  # The row §12.2:699 gives reset, and the one operation whose `busy` cell is
+  # not its `poisoned` cell. Before Slice ② this procedure had no lifecycle
+  # guard at all: five unconditional mutations, so a callback could reset the
+  # parser it was running inside and the feed would continue from the entry.
+  FIND [[    (when (eq? (parser-lifecycle parser) 'busy)
+      (byte-machine-contract-violation 'parser-reset! 'reentrancy]]
+  REPLACE [[    (when #f
+      (byte-machine-contract-violation 'parser-reset! 'reentrancy]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the reentrancy code -- expected .*got .*.parser-reset! #f")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.callback.chez.source
+  LABEL "runtime: an escaping callback does not poison the parser"
+  # §12.6:749's consequent. `dynamic-wind`'s after thunk runs on BOTH exits, so
+  # the flag is the whole discrimination: without it the normal path poisons
+  # every parser, and without the thunk nothing poisons any.
+  FIND [[             (unless completed (parser-set-lifecycle! parser 'poisoned))))))
+      (else (assertion-violation 'parser-feed! "unknown lifecycle"]]
+  REPLACE [[             (unless #t (parser-set-lifecycle! parser 'poisoned))))))
+      (else (assertion-violation 'parser-feed! "unknown lifecycle"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "and it is the callback.s own condition, propagated -- expected ..raised boom. poisoned")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.callback.chez.source
+  LABEL "runtime: a poisoned parser is refused as a lifecycle violation"
+  # The third of §9.4:438's three codes, and the same argument as the
+  # reentrancy pin: the mutant raises, from the right `who`, with the wrong
+  # code.
+  FIND [[       (byte-machine-contract-violation 'parser-feed! 'poisoned-parser]]
+  REPLACE [[       (byte-machine-contract-violation 'parser-feed! 'lifecycle-violation]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a poisoned parser raises parser-poisoned, and only reset reuses it: feed -- raised object did not satisfy the predicate")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
