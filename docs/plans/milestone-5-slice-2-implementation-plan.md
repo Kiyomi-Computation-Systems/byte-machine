@@ -212,6 +212,23 @@ Then the two shipped-behaviour changes of §2: `parser-reset!` gains its guard; 
 - [ ] **Step 4: Poisoning propagates** — Task 7's wrapper.
 - [ ] **Step 5: Commit**
 
+> **AS EXECUTED (2026-09-05).** Steps 2, 3 and 4 landed with the tasks that made
+> them buildable — the committed-state capture with Task 4 (the accessor it reads
+> is Task 4's), exact-once with Tasks 3+5, and the escape wrapper with Task 7,
+> which is where it was needed rather than where it was listed. What remained for
+> this task was Step 1, and its correction held: one recording closure **per
+> lane**, each with its own accumulator, over thirty schedules from `§22.5`. The
+> plan's "one recording closure passed as the binding to both parsers" is
+> unbuildable for the reason it names — one accumulator yields one list, with
+> nothing to compare it to.
+>
+> One addition the plan did not ask for and `§22.5:1286` does: the callback trace
+> is also asserted **identical across every schedule**. A callback invocation has
+> no fragment to coalesce, so for this machine the normalized semantic trace *is*
+> the raw one, and it must be schedule-independent — which the per-schedule
+> cross-lane comparison alone would not catch, since both lanes could move
+> together.
+
 ---
 
 ## Task 9: Census reconciliation, totals, and the paused-finish disposition

@@ -612,4 +612,184 @@
             (check-equal "nothing moved" (snapshot p) before)
             (check-equal "and it is still poisoned" (car before) 'poisoned)))))))
 
+;; --- Milestone 5 Slice ② task 8: §22.4:1268's callback ORDER ----------------
+;;
+;; *** MEASURED: no test in this tree has ever compared a callback order. ***
+;; §22.4:1268 lists "callback order and results" among the values the two lanes
+;; must agree on, and until a callback-invocation node existed nothing could
+;; produce one. This is that comparison's first exercise, over §22.5's schedule
+;; list.
+;;
+;; *** ONE RECORDING CLOSURE PER LANE, and the plan's own instruction was
+;; unbuildable. *** It said "one recording closure passed as the binding to both
+;; parsers". One closure has one accumulator, so it produces ONE list -- and
+;; there is nothing to compare it to. Worse, the shipped both-lanes drivers
+;; alternate the two parsers inside a single expression, so a shared accumulator
+;; yields an interleaved sequence in which a lane-swap defect is invisible.
+;; Corrected here: one closure per lane, each with its own accumulator, compared
+;; per schedule.
+(define (order-machine)
+  (make-machine 'orderm 's0 '()
+    (list (make-callback-declaration 'note 'event #t '() #f #f)
+          (make-callback-declaration 'pick 'decision #t '(go halt) #f #f))
+    '()
+    (list eof-decl rej-decl)
+    (list (make-byte-dispatch-node 's0
+            (list (make-byte-case (make-exact-byte-matcher 97)
+                                  (make-edge 'n1 'advance) #f)
+                  (make-byte-case (make-exact-byte-matcher 98)
+                                  (make-edge 'n2 'advance) #f))
+            (make-edge 'reject 'reexecute) 'fin #f)
+          ;; Both callbacks continue back to the dispatch, so the invocation
+          ;; count is the byte count and the ORDER is what the input spells.
+          (make-callback-node 'n1 'note 's0 '() 's0 #f)
+          (make-callback-node 'n2 'pick 's0 '((go s0) (halt done)) 's0 #f)
+          (make-stop-node 'done #f)
+          (make-finish-node 'fin #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+
+(define om (order-machine))
+(define ov (verify-machine om))
+(define om-ref (make-interpreted-machine ov))
+(define orderfile (string-append tmpdir "/generated-order.sls"))
+(call-with-port (open-file-output-port orderfile (file-options no-fail))
+  (lambda (p) (emit-machine (compile-machine om '()) 'order-parser p)))
+(load orderfile)
+(define om-gen (eval 'order-parser (environment '(generated orderm))))
+
+;; The recorded entry is the callback's NAME and what it could see, so the
+;; comparison is §22.4:1268's "order AND results" rather than order alone.
+(define (record-order cm slices)
+  (let* ((trace '())
+         (note! (lambda (nm)
+                  (lambda (ps ux)
+                    (set! trace (cons (list nm (parser-state-name ps)
+                                            (parser-stream-offset ps))
+                                      trace))
+                    callback-continue)))
+         (p (make-parser cm (list (list 'note (note! 'note))
+                                  (list 'pick (note! 'pick)))
+                         'the-context)))
+    (for-each (lambda (sl) (parser-feed! p (car sl) (cadr sl) (caddr sl))) slices)
+    (let ((r (parser-finish! p)))
+      (list (reverse trace) (parser-result-status r) (parser-lifecycle p)))))
+
+(define order-bytes (u8-list->bytevector '(97 98 97 98)))
+(define padded-bytes (u8-list->bytevector '(200 201 97 98 97 98 202)))
+(define empty-bytes (make-bytevector 0))
+
+;; §22.5's list, each entry a slice schedule over the SAME four logical bytes.
+(define (split-schedules)
+  (let loop ((k 0) (acc '()))
+    (if (> k 4) (reverse acc)
+        (loop (+ k 1)
+              (cons (list (list order-bytes 0 k) (list order-bytes k 4)) acc)))))
+(define (pair-schedules)
+  (let outer ((i 0) (acc '()))
+    (if (> i 4) (reverse acc)
+        (outer (+ i 1)
+               (let inner ((j i) (a acc))
+                 (if (> j 4) a
+                     (inner (+ j 1)
+                            (cons (list (list order-bytes 0 i)
+                                        (list order-bytes i j)
+                                        (list order-bytes j 4))
+                                  a))))))))
+(define other-schedules
+  (list
+   ;; whole, in one feed
+   (list (list order-bytes 0 4))
+   ;; leading, intermediate and trailing EMPTY feeds
+   (list (list empty-bytes 0 0) (list order-bytes 0 4))
+   (list (list order-bytes 0 2) (list empty-bytes 0 0) (list order-bytes 2 4))
+   (list (list order-bytes 0 4) (list empty-bytes 0 0))
+   ;; an empty slice taken from the MIDDLE of the real bytevector, which is a
+   ;; different shape from a zero-length bytevector (§11.1:638)
+   (list (list order-bytes 0 2) (list order-bytes 2 2) (list order-bytes 2 4))
+   ;; nonzero start/end into a larger bytevector carrying unrelated prefix and
+   ;; suffix bytes -- §22.5's fourth bullet, and the one that would catch a lane
+   ;; reading from index 0 regardless of `start`
+   (list (list padded-bytes 2 6))
+   (list (list padded-bytes 2 4) (list padded-bytes 4 6))
+   ;; deterministic multi-split schedules, written out rather than generated:
+   ;; §22.5's "deterministic random" bullet is about reproducibility, and a
+   ;; literal list is the most reproducible form there is.
+   (list (list order-bytes 0 1) (list order-bytes 1 2)
+         (list order-bytes 2 3) (list order-bytes 3 4))
+   (list (list order-bytes 0 3) (list order-bytes 3 3) (list order-bytes 3 4))
+   (list (list order-bytes 0 0) (list order-bytes 0 2)
+         (list empty-bytes 0 0) (list order-bytes 2 2) (list order-bytes 2 4))))
+
+(harness-group "the callback order agrees across lanes, and across schedules"
+  (lambda ()
+    (harness-case "the order machine verifies clean"
+      (lambda ()
+        (check-equal "no diagnostics"
+                     (map diagnostic-code (verification-diagnostics ov)) '())))
+    (harness-case "every schedule produces the same order in both lanes"
+      (lambda ()
+        ;; A sentinel over the schedules DRIVEN, read from the loop, and the
+        ;; disagreeing schedule recorded rather than a bare boolean.
+        (let ((driven 0) (bad '())
+              (schedules (append (split-schedules) (pair-schedules) other-schedules)))
+          (for-each
+           (lambda (sl)
+             (set! driven (+ driven 1))
+             (let ((a (record-order om-ref sl)) (b (record-order om-gen sl)))
+               (unless (equal? a b) (set! bad (cons (list driven a b) bad)))))
+           schedules)
+          ;; 5 single splits + 15 pairs + 10 others. Counted from the loop and
+          ;; ALSO compared against a total computed separately: the literal
+          ;; catches a schedule list that silently shrank, the derived total
+          ;; catches a loop that stopped early, and neither catches the other.
+          (check-equal "thirty schedules driven" driven 30)
+          (check-equal "and the length agrees" driven (length (append (split-schedules)
+                                                                     (pair-schedules)
+                                                                     other-schedules)))
+          (check-equal "every schedule agrees across the lanes" bad '()))))
+    (harness-case "and the order is the same under EVERY schedule"
+      (lambda ()
+        ;; §22.5:1286: "Across different feed schedules, compare a normalized
+        ;; semantic trace." A callback invocation has no fragment to coalesce --
+        ;; that is Slice ④'s span problem -- so for this machine the normalized
+        ;; trace IS the raw one, and it must be schedule-independent.
+        (let ((baseline (record-order om-ref (list (list order-bytes 0 4))))
+              (differing '()))
+          (for-each
+           (lambda (sl)
+             (unless (equal? (record-order om-ref sl) baseline)
+               (set! differing (cons sl differing))))
+           (append (split-schedules) (pair-schedules) other-schedules))
+          (check-equal "no schedule changes the trace" differing '())
+          ;; And by VALUE, so the invariance above is not invariance around the
+          ;; wrong sequence: two `note`/`pick` pairs, each seeing its own node
+          ;; and the offset of the byte that reached it.
+          (check-equal "the trace is what the input spells"
+                       (car baseline)
+                       '((note n1 1) (pick n2 2) (note n1 3) (pick n2 4)))
+          (check-equal "and EOF finishes" (cdr baseline) '(finished finished)))))
+    (harness-case "a decision that halts is ordered and stops there"
+      (lambda ()
+        ;; The results half of §22.4:1268: the same input with a different
+        ;; RETURN produces a different trace, so the comparison above is not
+        ;; measuring a constant.
+        (let ((halting
+               (lambda (cm)
+                 (let* ((trace '())
+                        (p (make-parser cm
+                                        (list (list 'note (lambda (ps ux)
+                                                            (set! trace (cons 'note trace))
+                                                            callback-continue))
+                                              (list 'pick (lambda (ps ux)
+                                                            (set! trace (cons 'pick trace))
+                                                            'halt)))
+                                        'the-context))
+                        (r (parser-feed! p order-bytes 0 4)))
+                   (list (reverse trace) (parser-result-status r)
+                         (parser-result-consumed r))))))
+          (check-equal "the lanes agree" (halting om-ref) (halting om-gen))
+          (check-equal "and it halts at the first decision"
+                       (halting om-ref) '((note pick) stopped 2)))))))
+
 (harness-finish)

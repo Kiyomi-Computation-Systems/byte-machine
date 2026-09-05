@@ -906,6 +906,13 @@ cmake_minimum_required(VERSION 3.26)
 # "raised object did not satisfy the predicate", because the mutants raise the
 # wrong condition instead of executing.
 #
+# Milestone 5 Slice ② task 8, the callback-order oracle: TWO more,
+# 416 + 2 = 418, one per lane, for §11.4:652's "callback invocations ... do not
+# consume input". Their records are mirror images -- each mutant advances its
+# own lane and the other stands still -- which is what makes two mutations
+# necessary rather than one: a lane that agreed with a mutated sibling would be
+# the defect neither alone can show.
+#
 # Milestone 5 Slice ①b: TWO. `pass-declarations` never run -- eight census
 # fixtures then find nothing, caught by a comparison naming a missing code. And
 # the span section reusing the callback section's tag, which pins the section
@@ -1091,7 +1098,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 53)
-set(EXPECTED_MUTATIONS 416)
+set(EXPECTED_MUTATIONS 418)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -10260,6 +10267,32 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "a poisoned parser raises parser-poisoned, and only reset reuses it: feed -- raised object did not satisfy the predicate")
+
+# Milestone 5 Slice ② task 8: a callback CONSUMES NO INPUT (§11.4:652), one
+# mutation per lane. Their records are mirror images -- each mutant advances its
+# own lane's position and the other's stands still -- so the pins are the
+# unbound-optional tuple with the two lanes' values in opposite order.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.callback.chez.source
+  LABEL "runtime: a callback invocation consumes a byte"
+  FIND [[                 ((goto)
+                  (parser-set-current! parser (cadr o))
+                  (loop pos pk))]]
+  REPLACE [[                 ((goto)
+                  (parser-set-current! parser (cadr o))
+                  (loop (+ pos 1) pk))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the lanes agree -- expected .stopped 1 1 1 #f stopped., got .stopped 2 2 1")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.callback.chez.source
+  LABEL "compile: the emitted callback jump consumes a byte"
+  FIND [[            "           ((goto) (loop pos (cadr o) off pk))\n"]]
+  REPLACE [[            "           ((goto) (loop (+ pos 1) (cadr o) off pk))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the lanes agree -- expected .stopped 2 2 1 #f stopped., got .stopped 1 1 1")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
