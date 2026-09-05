@@ -8728,8 +8728,14 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
   LABEL "runtime: the v2 arm ignores the ABI payload's field member"
-  FIND [[            (vector-ref metadata 0)))]]
-  REPLACE [[            (vector)))]]
+  # Re-anchored by Milestone 5 Slice ①b task 4: the constructor now reads member
+  # 1 as well, so the line gained a second `vector-ref` and this FIND went to
+  # zero. The Slice ①b plan named this as the one CONDITIONAL break in its work
+  # list -- survives untouched if ①b leaves the constructor reading member 0
+  # only, dies if it does not -- and it did not. The decision this pin names is
+  # unchanged: member 0 is the field table and dropping it must be caught.
+  FIND [[            (vector-ref metadata 0) (vector-ref metadata 1)))]]
+  REPLACE [[            (vector) (vector-ref metadata 1)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "parser-field-ref \\(generated\\).a fresh parser reads the declared initial at every width: case raised")

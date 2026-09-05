@@ -58,7 +58,14 @@
       parser-error-offset parser-error-position-kind
       byte-machine-make-compiled-machine
       parser-field-ref
-      callback-continue callback-pause))
+      callback-continue callback-pause
+      ;; Milestone 5 Slice ①b's six. This mirror is asserted by SET EQUALITY
+      ;; against (byte-machine runtime)'s live exports, so it reddens in BOTH
+      ;; directions and must move in the same commit the exports do -- the
+      ;; obligation Slice ①a recorded for exactly this moment.
+      parser-stream-offset parser-user-context parser-active-span
+      make-callback-failure callback-failure?
+      callback-failure-code callback-failure-detail))
   ;; Every identifier the emitted body binds, so a caller-chosen output binding
   ;; cannot collide with one. `fieldv` is emitted `exec`'s seventh parameter,
   ;; reserved empty by Milestone 4 Slice ①a and filled by its Slice ② (decision
@@ -526,6 +533,24 @@
            ;; so the emitted slot order is the same object the IR fingerprint was
            ;; computed over. Reading the source machine again would let the two
            ;; disagree with nothing to notice.
+           ;; Member 1, Milestone 5 Slice ①b. Four parts per callback --
+           ;; name, kind, required?, default-branch -- which is everything
+           ;; §9.3:419's binding resolution needs and nothing more. Branch KEYS
+           ;; stay behind: §16.2:901 and :902 are pass-declarations' and are
+           ;; settled before a parser exists, so carrying them across the seam
+           ;; would ship data no runtime reads. Empty for a machine that
+           ;; declares no callback, which is what keeps every golden still.
+           (cbs (let cloop ((cs (normal-machine-callback-decls normal)) (acc ""))
+                  (if (null? cs) acc
+                      (cloop (cdr cs)
+                             (string-append
+                              acc (if (string=? acc "") "" " ")
+                              "#(" (symbol->string (car (car cs)))
+                              " " (symbol->string (cadr (car cs)))
+                              " " (if (caddr (car cs)) "#t" "#f")
+                              " " (let ((d (cadddr (car cs))))
+                                    (if (symbol? d) (symbol->string d) "#f"))
+                              ")")))))
            (fields (let loop ((fs (normal-machine-fields normal)) (acc ""))
                      (if (null? fs) acc
                          (loop (cdr fs)
@@ -559,7 +584,7 @@
         "      (else (assertion-violation (quote exec) \"unknown state\" st)))))\n"
         "  (define " bstr "\n"
         "    (byte-machine-make-compiled-machine 4 " (number->string fp) " "
-        (number->string entry) " exec (quote #(#(" fields ") #())))))\n"))))
+        (number->string entry) " exec (quote #(#(" fields ") #(" cbs "))))))\n"))))
 
   (define (emit-machine compilation binding port)
     (let ((bytes (render-machine compilation binding)))

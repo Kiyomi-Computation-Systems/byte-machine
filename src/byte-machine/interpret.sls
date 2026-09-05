@@ -297,6 +297,20 @@
             (list->vector (map (lambda (f) (cons (uint-field-name f)
                                                  (uint-field-initial f)))
                                (machine-fields m))))
+           ;; Milestone 5 Slice ①b. The same per-lane asymmetry the field table
+           ;; established: this lane holds the verified source machine and is
+           ;; asked, the generated lane reads the equivalent shape out of ABI
+           ;; payload member 1. Four parts per callback, which is everything
+           ;; §9.3:419's resolution needs and nothing more -- the branch KEYS are
+           ;; a verifier concern (§16.2:901/:902, pass-declarations) and are not
+           ;; carried across the seam.
+           ((callback-decls)
+            (list->vector
+             (map (lambda (c) (vector (callback-declaration-name c)
+                                      (callback-declaration-kind c)
+                                      (callback-declaration-required? c)
+                                      (callback-declaration-default-branch c)))
+                  (machine-callbacks m))))
            ((kind) (kind (car args)))
            ((dispatch) (dispatch (car args) (cadr args)))
            ((error-value) (error-parts (car args)))

@@ -13,6 +13,7 @@
           normal-error-code normal-error-reason normal-dispatch-eof normal-pause-target
           normal-machine-debug-map normal-machine-fields
           normal-machine-callbacks normal-machine-spans
+          normal-machine-callback-decls
           normal-field-selector normal-field-arguments normal-field-targets)
   (import (rnrs)
           (only (byte-machine private ir)
@@ -30,6 +31,8 @@
                 machine-fields uint-field-name uint-field-width uint-field-initial
                 machine-callbacks machine-spans
                 callback-declaration-name span-declaration-name
+                callback-declaration-kind callback-declaration-required?
+                callback-declaration-default-branch
                 integer-accumulate-node? integer-accumulate-node-name
                 integer-accumulate-node-field integer-accumulate-node-base
                 integer-accumulate-node-digit-target integer-accumulate-node-nondigit-edge
@@ -45,8 +48,9 @@
   ;; normal-machine-fingerprint is slot 3 and the emitter reads it, so putting the
   ;; map ahead of fp would silently renumber that slot and render a debug map
   ;; where the IR fingerprint belongs in the emitted constructor call.
-  (define (make-normal-machine entry states fp debug-map fields callbacks spans)
-    (vector nm-tag entry states fp debug-map fields callbacks spans))
+  (define (make-normal-machine entry states fp debug-map fields callbacks spans
+                               callback-decls)
+    (vector nm-tag entry states fp debug-map fields callbacks spans callback-decls))
   (define (normal-machine? x) (and (vector? x) (> (vector-length x) 0) (eq? (vector-ref x 0) nm-tag)))
   (define (normal-machine-entry m) (vector-ref m 1))
   (define (normal-machine-states m) (vector-ref m 2))
@@ -85,6 +89,10 @@
   ;; ascending from 0 and equal to the list position -- redundant by
   ;; construction, and carried for the same reason the field table carries it.
   (define (normal-machine-callbacks m) (vector-ref m 6))
+  ;; The four parts the generated lane's binding resolution needs, in slot order.
+  ;; Separate from the slot table above: that one is what the ENCODING walks and
+  ;; carries names only, this one is what the EMITTER renders into ABI member 1.
+  (define (normal-machine-callback-decls m) (vector-ref m 8))
   (define (normal-machine-spans m) (vector-ref m 7))
 
   (define ns-tag (vector 'byte-machine-normal-state))
@@ -650,4 +658,10 @@
         (make-normal-machine entry states
                              (fnv1a-64 (encode-normal entry states fields
                                                       callbacks spans))
-                             debug-map fields callbacks spans)))))
+                             debug-map fields callbacks spans
+                             (map (lambda (c)
+                                    (list (callback-declaration-name c)
+                                          (callback-declaration-kind c)
+                                          (callback-declaration-required? c)
+                                          (callback-declaration-default-branch c)))
+                                  (machine-callbacks machine)))))))
