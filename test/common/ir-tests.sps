@@ -904,4 +904,71 @@
                (callback-node? (make-callback-node 'inv 'cb 'onward
                                                    '((keep a) (keep b)) 'resume #f)))))))
 
+;; --- the span nodes (Milestone 5 Slice ③; §9.1:309-310, §10.6:588-594) -------
+;; The eleventh and twelfth kinds. Both are the same shape, so they are driven
+;; from one table rather than written twice: a copy-paste pair is how a
+;; constructor ends up asserted for one kind and not the other.
+(harness-group "span nodes"
+  (lambda ()
+    (harness-case "each carries its four parts and is a node"
+      (lambda ()
+        (let ((driven 0) (bad '()))
+          (for-each
+           (lambda (row)
+             (set! driven (+ driven 1))
+             (let* ((nm (car row)) (build (cadr row)) (pred (caddr row))
+                    (name-of (cadddr row)) (span-of (list-ref row 4))
+                    (next-of (list-ref row 5)) (label-of (list-ref row 6))
+                    (n (build 'sn 'body 'onward 'lbl)))
+               (unless (and (pred n) (node? n)
+                            (eq? (name-of n) 'sn) (eq? (span-of n) 'body)
+                            (eq? (next-of n) 'onward) (eq? (label-of n) 'lbl)
+                            (eq? (node-name n) 'sn))
+                 (set! bad (cons nm bad)))))
+           (list (list 'span-start make-span-start-node span-start-node?
+                       span-start-node-name span-start-node-span
+                       span-start-node-next span-start-node-source-label)
+                 (list 'span-end make-span-end-node span-end-node?
+                       span-end-node-name span-end-node-span
+                       span-end-node-next span-end-node-source-label)))
+          (check-equal "both kinds driven" driven 2)
+          (check-equal "and each carries all four parts" bad '()))))
+    (harness-case "the two kinds are distinguishable"
+      (lambda ()
+        ;; A table driven by predicates passes if both builders make the same
+        ;; thing and both predicates answer for it. This is what says they do
+        ;; not -- the tag is a freshly allocated vector per kind (ir.sls's own
+        ;; `tag`), so a copied tag binding would be caught here and nowhere else.
+        (let ((a (make-span-start-node 'a 'body 'onward #f))
+              (b (make-span-end-node 'b 'body 'onward #f)))
+          (check "a start is not an end" (not (span-end-node? a)))
+          (check "an end is not a start" (not (span-start-node? b))))))
+    (harness-case "name, span and next are mandatory symbols"
+      (lambda ()
+        ;; §10.6:590 and :594 give neither kind a route of its own, so there is
+        ;; no #f arm to defend -- the field-action precedent, not the
+        ;; byte-dispatch eof-target one.
+        (check-raises "start name" (contract-violation? 'make-span-start-node 'name)
+                      (lambda () (make-span-start-node "s" 'body 'onward #f)))
+        (check-raises "start span" (contract-violation? 'make-span-start-node 'span)
+                      (lambda () (make-span-start-node 's #f 'onward #f)))
+        (check-raises "start next" (contract-violation? 'make-span-start-node 'next)
+                      (lambda () (make-span-start-node 's 'body #f #f)))
+        (check-raises "end name" (contract-violation? 'make-span-end-node 'name)
+                      (lambda () (make-span-end-node "s" 'body 'onward #f)))
+        (check-raises "end span" (contract-violation? 'make-span-end-node 'span)
+                      (lambda () (make-span-end-node 's #f 'onward #f)))
+        (check-raises "end next" (contract-violation? 'make-span-end-node 'next)
+                      (lambda () (make-span-end-node 's 'body #f #f)))))
+    (harness-case "the cross-references are NOT checked here"
+      (lambda ()
+        ;; Asserted rather than merely absent, so the boundary is witnessed.
+        ;; Whether `span` names a declared span, whether that span is the one
+        ;; open, and whether any reachable path opens two at once all need the
+        ;; machine's span table and its whole graph (§16.2:899, decision 0029).
+        (check "an undeclared span name builds fine"
+               (span-start-node? (make-span-start-node 's 'nosuch 'onward #f)))
+        (check "and so does an end with no matching start anywhere"
+               (span-end-node? (make-span-end-node 's 'nosuch 'onward #f)))))))
+
 (harness-finish)

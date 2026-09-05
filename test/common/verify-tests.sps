@@ -1773,6 +1773,11 @@
     ;; EOF walk starts on that one edge, so a stop there is a §16.2:909 finding
     ;; and this row would stop being about §16.2:908. Found by building it.
     ((callback) (make-callback-node 'hop 'cb 'fin '() 'rej #f))
+    ;; Slice ③'s two, joined here because the reconciliation that found this
+    ;; census in the first place is the one that says a `test/` census is still
+    ;; a census. Both carry a byte edge into `fin`, which is the whole row.
+    ((span-start) (make-span-start-node 'hop 'sp 'fin #f))
+    ((span-end) (make-span-end-node 'hop 'sp 'fin #f))
     (else (assertion-violation 't2-hop "no such kind" kind))))
 
 (define (t2-machine kind eof-only?)
@@ -1783,7 +1788,9 @@
   ;; one is, §16.2's unreferenced clause), and a table that varied per kind
   ;; would make the six older rows compare against a different machine.
   (make-machine 'x 'start (list (make-uint-field 'n 8 0 #f))
-                (list (make-callback-declaration 'cb 'event #t '() #f #f)) '()
+                (list (make-callback-declaration 'cb 'event #t '() #f #f)
+                      (make-callback-declaration 'on-data 'span-data #t '() #f #f))
+                (list (make-span-declaration 'sp 'on-data #f #f))
                 (list eof-decl rej-decl)
                 (list (make-byte-dispatch-node 'start
                         (list (make-byte-case (make-exact-byte-matcher 0)
@@ -1802,7 +1809,7 @@
 ;; `test/`, which is why it was missed there and is recorded here.
 (define t2-kinds
   '(byte-dispatch sequence-dispatch integer-accumulate pause field-action
-    field-branch callback))
+    field-branch callback span-start span-end))
 
 (harness-group "§16.2:908 is gated on byte-reachability, for every kind (Slice ⓪b)"
   (lambda ()
@@ -1819,7 +1826,7 @@
                                       (verify-machine (t2-machine k #t))))))
                         (unless (null? ds) (set! bad (cons (cons k ds) bad)))))
                     t2-kinds)
-          (check-equal "all seven kinds driven" seen 7)
+          (check-equal "all nine kinds driven" seen 9)
           (check-equal "none rejected" bad '()))))
     (harness-case "a BYTE-reachable byte edge into a finish is rejected at its source node"
       (lambda ()
@@ -1836,7 +1843,7 @@
                         (unless (equal? ds '((non-eof-into-finish . hop)))
                           (set! bad (cons (cons k ds) bad)))))
                     t2-kinds)
-          (check-equal "all seven kinds driven" seen 7)
+          (check-equal "all nine kinds driven" seen 9)
           (check-equal "each rejected exactly once, at `hop`" bad '()))))))
 
 ;; Milestone 5 Slice ⓪b task 3: the ENTRY may not be a finish terminal (OQ-2).

@@ -57,6 +57,12 @@
           integer-accumulate-node-nondigit-edge integer-accumulate-node-overflow-error
           integer-accumulate-node-eof-target integer-accumulate-node-source-label
           accumulate-bases
+          make-span-start-node span-start-node?
+          span-start-node-name span-start-node-span
+          span-start-node-next span-start-node-source-label
+          make-span-end-node span-end-node?
+          span-end-node-name span-end-node-span
+          span-end-node-next span-end-node-source-label
           make-callback-node callback-node?
           callback-node-name callback-node-callback
           callback-node-continue-target callback-node-branch-targets
@@ -541,12 +547,58 @@
   (define (callback-node-pause-continuation n) (vector-ref n 5))
   (define (callback-node-source-label n) (vector-ref n 6))
 
+  ;; --- span nodes (§9.1:309-310, §10.6:588-594) ---
+  ;; The ELEVENTH and TWELFTH node kinds, and the pair that makes the machine
+  ;; hand out ranges of input it has already seen. Both are ZERO-WIDTH:
+  ;; §10.6:590 and §10.6:594 each say "without consuming input", so both join
+  ;; the verifier's `zero-width-edges` census and never the input-reading arms.
+  ;;
+  ;; Decision 0020's CONSTRUCTOR half only. `span` is a symbol and nothing more:
+  ;; whether it names a DECLARED span, whether that span is the one currently
+  ;; open, and whether any reachable path opens two at once are all judgements
+  ;; that need the machine's span table and its whole graph, which this
+  ;; constructor cannot see. §16.2:899 and pass 7's lattice own every one of
+  ;; them (decision 0029).
+  ;;
+  ;; One mandatory successor each, on the field-action precedent rather than the
+  ;; byte-dispatch eof-target one: neither §10.6:590 nor §10.6:594 gives these
+  ;; kinds a route of their own for anything, so there is no case for a #f arm.
+  (define span-start-node-tag (tag 'byte-machine-span-start-node))
+  (define (make-span-start-node name span next source-label)
+    (require-symbol 'make-span-start-node 'name name)
+    (require-symbol 'make-span-start-node 'span span)
+    (require-symbol 'make-span-start-node 'next next)
+    (vector span-start-node-tag name span next source-label))
+  (define (span-start-node? x) (tagged? span-start-node-tag x))
+  (define (span-start-node-name n) (vector-ref n 1))
+  (define (span-start-node-span n) (vector-ref n 2))
+  (define (span-start-node-next n) (vector-ref n 3))
+  (define (span-start-node-source-label n) (vector-ref n 4))
+
+  ;; A span END is one node HERE and several states after lowering: §14:838
+  ;; resumes "at the next undelivered substep", so decision 0026 item 2 gives it
+  ;; one internal state per substep. None of that is visible at construction --
+  ;; decision 0029's Consequences say the lattice runs over the declared graph,
+  ;; "a span end is one node to this analysis, whatever it lowers to afterwards".
+  (define span-end-node-tag (tag 'byte-machine-span-end-node))
+  (define (make-span-end-node name span next source-label)
+    (require-symbol 'make-span-end-node 'name name)
+    (require-symbol 'make-span-end-node 'span span)
+    (require-symbol 'make-span-end-node 'next next)
+    (vector span-end-node-tag name span next source-label))
+  (define (span-end-node? x) (tagged? span-end-node-tag x))
+  (define (span-end-node-name n) (vector-ref n 1))
+  (define (span-end-node-span n) (vector-ref n 2))
+  (define (span-end-node-next n) (vector-ref n 3))
+  (define (span-end-node-source-label n) (vector-ref n 4))
+
   ;; --- node dispatch ---
   (define (node? x)
     (or (byte-dispatch-node? x) (sequence-dispatch-node? x) (stop-node? x)
         (error-node? x) (finish-node? x) (pause-node? x)
         (field-action-node? x) (field-branch-node? x)
-        (integer-accumulate-node? x) (callback-node? x)))
+        (integer-accumulate-node? x) (callback-node? x)
+        (span-start-node? x) (span-end-node? x)))
   (define (node-name x)
     (cond ((byte-dispatch-node? x) (byte-dispatch-node-name x))
           ((sequence-dispatch-node? x) (sequence-dispatch-node-name x))
@@ -558,6 +610,8 @@
           ((field-branch-node? x) (field-branch-node-name x))
           ((integer-accumulate-node? x) (integer-accumulate-node-name x))
           ((callback-node? x) (callback-node-name x))
+          ((span-start-node? x) (span-start-node-name x))
+          ((span-end-node? x) (span-end-node-name x))
           (else (byte-machine-contract-violation 'node-name 'invalid-argument 'node))))
 
   ;; --- uint field descriptor (§9.1:283, §10.2:488-491) ---

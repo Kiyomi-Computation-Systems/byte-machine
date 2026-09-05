@@ -913,6 +913,15 @@ cmake_minimum_required(VERSION 3.26)
 # necessary rather than one: a lane that agreed with a mutated sibling would be
 # the defect neither alone can show.
 #
+# Milestone 5 Slice ③ task 1, the ELEVENTH and TWELFTH node kinds: NINE more,
+# 418 + 9 = 427, in two existing passes. SIX in `unit.ir` -- `node?` per kind
+# (separable, because the case names the kind that failed), `node-name` for the
+# pair (NOT separable: its else raises, so dropping either arm stops the
+# table-driven case at the same point, and the pair is one decision anyway), the
+# mandatory `next` per kind, and the shared-tag mutation that is the only thing
+# a predicate-driven table cannot see. THREE in the kind x position matrix, one
+# per span arm of `zero-width-edges` plus the zero-progress REPORT set.
+#
 # Milestone 5 Slice ①b: TWO. `pass-declarations` never run -- eight census
 # fixtures then find nothing, caught by a comparison naming a missing code. And
 # the span section reusing the callback section's tag, which pins the section
@@ -1098,7 +1107,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 53)
-set(EXPECTED_MUTATIONS 418)
+set(EXPECTED_MUTATIONS 427)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -4017,7 +4026,8 @@ byte_machine_mutation(
                                   (sequence-dispatch-node? n)
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
-                                  (callback-node? n))
+                                  (callback-node? n)
+                                  (span-start-node? n) (span-end-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[(if #f]]
   EXPECT_STATUS 1
@@ -4491,13 +4501,15 @@ byte_machine_mutation(
                                   (sequence-dispatch-node? n)
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
-                                  (callback-node? n))
+                                  (callback-node? n)
+                                  (span-start-node? n) (span-end-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[(if (and (or (byte-dispatch-node? n)
                                   (sequence-dispatch-node? n)
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
-                                  (callback-node? n))
+                                  (callback-node? n)
+                                  (span-start-node? n) (span-end-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "chain of pauses that cycles is a zero-progress EOF cycle: zero-progress-cycle diagnostic")
 
@@ -4744,11 +4756,13 @@ byte_machine_mutation(
                                   (sequence-dispatch-node? n)
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
-                                  (callback-node? n))]]
+                                  (callback-node? n)
+                                  (span-start-node? n) (span-end-node? n))]]
   REPLACE [[(if (and (or (byte-dispatch-node? n) (pause-node? n)
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
-                                  (callback-node? n))]]
+                                  (callback-node? n)
+                                  (span-start-node? n) (span-end-node? n))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "and the sequence node itself are three zero-progress cycles: zero-progress-cycle count -- expected 3, got 2")
@@ -5129,7 +5143,8 @@ byte_machine_mutation(
   # whose cycle runs through one. Kept because shipping one without the other is
   # the half-fix this pass exists to prevent.
   FIND [[                                  (integer-accumulate-node? n)
-                                  (callback-node? n))
+                                  (callback-node? n)
+                                  (span-start-node? n) (span-end-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[                                  (callback-node? n))
                               (reaches-self? (node-name n)))]]
@@ -5178,10 +5193,12 @@ byte_machine_mutation(
   # callback kind, and the REPLACE keeps the disjunct list intact so the mutant
   # still differs from the baseline in ONE thing -- the arm's answer.
   FIND [[          ((or (field-action-node? n) (field-branch-node? n)
-               (callback-node? n))
+               (callback-node? n)
+               (span-start-node? n) (span-end-node? n))
            (zero-width-edges n))]]
   REPLACE [[          ((or (field-action-node? n) (field-branch-node? n)
-               (callback-node? n))
+               (callback-node? n)
+               (span-start-node? n) (span-end-node? n))
            '())]]
   EXPECT_STATUS 1
   # A CONJUNCTION, for the mirror of the reason above: the reachability record
@@ -5204,7 +5221,8 @@ byte_machine_mutation(
   # names -- the walk stops following a zero-width node, now for three kinds
   # rather than two.
   FIND [[              ((or (field-action-node? n) (field-branch-node? n)
-                   (callback-node? n))
+                   (callback-node? n)
+                   (span-start-node? n) (span-end-node? n))
                (zero-width-successors n))
 ]]
   REPLACE [[              ]]
@@ -5225,10 +5243,12 @@ byte_machine_mutation(
   # Re-anchored by Slice ③ task 2: the guard gained its sixth disjunct.
   FIND [[                                  (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
-                                  (callback-node? n))
+                                  (callback-node? n)
+                                  (span-start-node? n) (span-end-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[                                  (integer-accumulate-node? n)
-                                  (callback-node? n))
+                                  (callback-node? n)
+                                  (span-start-node? n) (span-end-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
@@ -5720,10 +5740,12 @@ byte_machine_mutation(
   # differs from the baseline in ONE thing -- the labels -- which is what this
   # LABEL claims and what its pin can prove.
   FIND [[          ((or (field-action-node? n) (field-branch-node? n)
-               (callback-node? n))
+               (callback-node? n)
+               (span-start-node? n) (span-end-node? n))
            (zero-width-edges n))]]
   REPLACE [[          ((or (field-action-node? n) (field-branch-node? n)
-               (callback-node? n))
+               (callback-node? n)
+               (span-start-node? n) (span-end-node? n))
            (map (lambda (re) (cons 'next (cdr re))) (zero-width-edges n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the other four kinds label their edges too")
@@ -7907,8 +7929,10 @@ byte_machine_mutation(
   LABEL "ir: node? does not admit an integer-accumulate node"
   # The two census sites every new kind must join. One mutation per site, so a
   # half-taught pair cannot pass.
-  FIND [[        (integer-accumulate-node? x) (callback-node? x)))]]
-  REPLACE [[        (callback-node? x)))]]
+  FIND [[        (integer-accumulate-node? x) (callback-node? x)
+        (span-start-node? x) (span-end-node? x)))]]
+  REPLACE [[        (callback-node? x)
+        (span-start-node? x) (span-end-node? x)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "integer-accumulate nodes.it is a node and answers node-name: node\\? -- expected a true value")
@@ -8013,9 +8037,11 @@ byte_machine_mutation(
   # the disjunction reflowed onto three lines. The decision and the pin are
   # unchanged -- this still drops the field-action disjunct.
   FIND [[        (field-action-node? x) (field-branch-node? x)
-        (integer-accumulate-node? x) (callback-node? x)))]]
+        (integer-accumulate-node? x) (callback-node? x)
+        (span-start-node? x) (span-end-node? x)))]]
   REPLACE [[        (field-branch-node? x)
-        (integer-accumulate-node? x) (callback-node? x)))]]
+        (integer-accumulate-node? x) (callback-node? x)
+        (span-start-node? x) (span-end-node? x)))]]
   EXPECT_STATUS 1
   # `?` is a regex metacharacter -- unescaped, `node? --` matches "nod --",
   # which no output contains, and the runner reports a wrong-reason catch.
@@ -8041,8 +8067,10 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
   LABEL "ir: node? does not admit a callback node"
-  FIND [[        (integer-accumulate-node? x) (callback-node? x)))]]
-  REPLACE [[        (integer-accumulate-node? x)))]]
+  FIND [[        (integer-accumulate-node? x) (callback-node? x)
+        (span-start-node? x) (span-end-node? x)))]]
+  REPLACE [[        (integer-accumulate-node? x)
+        (span-start-node? x) (span-end-node? x)))]]
   EXPECT_STATUS 1
   # `?` is a regex metacharacter -- unescaped, `node? --` matches "nod --", which
   # no output contains, and the runner reports a wrong-reason catch.
@@ -8108,6 +8136,72 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the branch list is copied at construction: a fresh spine -- expected a true value")
+
+# Milestone 5 Slice ③ task 1: the ELEVENTH and TWELFTH node kinds. `node?` and
+# `node-name` are the two census sites every kind must join; the mandatory `next`
+# is the only local-shape decision either constructor owns.
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node? does not admit a span-start node"
+  FIND [[        (span-start-node? x) (span-end-node? x)))]]
+  REPLACE [[        (span-end-node? x)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "and each carries all four parts -- expected .., got .span-start.")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node? does not admit a span-end node"
+  FIND [[        (span-start-node? x) (span-end-node? x)))]]
+  REPLACE [[        (span-start-node? x)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "and each carries all four parts -- expected .., got .span-end.")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node-name answers for neither span kind"
+  # BOTH arms in one mutation, and the reason is recorded rather than left to a
+  # reader: `node-name`'s else RAISES, so dropping either arm alone stops the
+  # table-driven case at the same point with the same record. Two mutations
+  # would be indistinguishable; the pair is one decision -- the kinds joined the
+  # cond -- and it gets one mutation.
+  FIND [[          ((span-start-node? x) (span-start-node-name x))
+          ((span-end-node? x) (span-end-node-name x))
+]]
+  REPLACE [[          ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "span nodes.each carries its four parts and is a node: case raised")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: a span-start node's next may be absent"
+  # §10.6:590 gives the kind no route of its own, so there is no #f arm to
+  # defend. Its sibling below is the same decision for the other kind, and they
+  # are separable because the case names the kind that failed.
+  FIND [[    (require-symbol 'make-span-start-node 'next next)]]
+  REPLACE [[    (require-symbol 'make-span-start-node 'span span)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "start next -- expected a raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: a span-end node's next may be absent"
+  FIND [[    (require-symbol 'make-span-end-node 'next next)]]
+  REPLACE [[    (require-symbol 'make-span-end-node 'span span)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "end next -- expected a raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: the two span kinds share one tag"
+  # The defect a table driven by predicates cannot see: if both builders make
+  # the same thing and both predicates answer for it, every part-by-part row
+  # passes. Only the distinguishability case notices.
+  FIND [[  (define span-end-node-tag (tag 'byte-machine-span-end-node))]]
+  REPLACE [[  (define span-end-node-tag span-start-node-tag)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the two kinds are distinguishable")
 
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
@@ -9922,10 +10016,12 @@ byte_machine_mutation(
   # are then exercised for it by construction.
   #
   # Measured caught by the matrix ALONE: no other lane in the tree notices.
-  FIND [[        (integer-accumulate-node? x) (callback-node? x)))]]
-  REPLACE [[        (integer-accumulate-node? x) (callback-node? x) (stop-node? x)))]]
+  FIND [[        (integer-accumulate-node? x) (callback-node? x)
+        (span-start-node? x) (span-end-node? x)))]]
+  REPLACE [[        (integer-accumulate-node? x) (callback-node? x)
+        (span-start-node? x) (span-end-node? x) (stop-node? x)))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the same ten kinds -- expected")
+  EXPECT_OUTPUT_MATCHES "the same twelve kinds -- expected")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls
@@ -10033,12 +10129,49 @@ byte_machine_mutation(
   # lanes. Its own record is the pause-continuation cell, where the mutant keeps
   # the EOF cycle and loses the feed one -- a record no other mutant here emits.
   FIND [[                                  (integer-accumulate-node? n)
-                                  (callback-node? n))
+                                  (callback-node? n)
+                                  (span-start-node? n) (span-end-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[                                  (integer-accumulate-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "callback-pause-continuation advance want")
+
+# Milestone 5 Slice ③ task 1: the span kinds' single successors. Each arm is its
+# own mutation because axis C names the position that failed.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls
+  SPEC byte-machine.unit.kind-position-census.chez.source
+  LABEL "verify: a span-start node's successor is not an edge"
+  FIND [[          ((span-start-node? n) (list (cons 'next (span-start-node-next n))))]]
+  REPLACE [[          ((span-start-node? n) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "each reports its derived fault -- expected .*span-start-next want .missing-target")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls
+  SPEC byte-machine.unit.kind-position-census.chez.source
+  LABEL "verify: a span-end node's successor is not an edge"
+  FIND [[          ((span-end-node? n) (list (cons 'next (span-end-node-next n))))]]
+  REPLACE [[          ((span-end-node? n) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "each reports its derived fault -- expected .*span-end-next want .missing-target")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls
+  SPEC byte-machine.unit.kind-position-census.chez.source
+  LABEL "verify: the zero-progress REPORT set excludes the span kinds"
+  # The half-fix Milestone 3 Slice ② shipped, two kinds later: the WALK finds
+  # the cycle and nothing reports it, so a span node whose successor is itself
+  # verifies clean and then hangs in both lanes.
+  FIND [[                                  (span-start-node? n) (span-end-node? n))
+                              (reaches-self? (node-name n)))]]
+  REPLACE [[                                  )
+                              (reaches-self? (node-name n)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "span-start-next advance want")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

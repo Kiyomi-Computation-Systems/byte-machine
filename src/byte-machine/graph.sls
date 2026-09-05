@@ -16,7 +16,8 @@
 ;;;
 ;;; Milestone 5 Slice ② adds `make-callback-node` (§9.1:307-308) -- the
 ;;; constructor only, on the same rule: its six accessors and its predicate stay
-;;; in the private library, where every other node kind's do.
+;;; in the private library, where every other node kind's do. Slice ③ adds
+;;; `make-span-start-node` and `make-span-end-node` (§9.1:309-310) the same way.
 (library (byte-machine graph)
   (export make-uint-field uint-field? uint-field-name uint-field-width
           uint-field-initial uint-field-source-label
@@ -32,6 +33,7 @@
           make-pause-node make-error-node make-error-declaration
           make-field-action-node make-field-branch-node
           make-integer-accumulate-node make-callback-node
+          make-span-start-node make-span-end-node
           make-byte-set-matcher make-byte-range-matcher
           make-byte-complement-matcher ascii-bytes
           matcher? exact-byte-matcher? exact-byte-matcher-byte
@@ -60,6 +62,7 @@
                 make-pause-node make-error-node make-error-declaration
                 make-field-action-node make-field-branch-node
                 make-integer-accumulate-node make-callback-node
+                make-span-start-node make-span-end-node
                 make-byte-set-matcher make-byte-range-matcher
                 make-byte-complement-matcher ascii-bytes
                 matcher? exact-byte-matcher? exact-byte-matcher-byte
