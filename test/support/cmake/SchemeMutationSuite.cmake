@@ -5872,17 +5872,24 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
-  LABEL "normal-ir: the span section reuses the callback section's tag"
-  # Milestone 5 Slice ①b task 7, pinning the decision decision 0025's
-  # ①b-planning note added: two guarded tables with NO discriminator are
-  # ambiguous, so each present section carries its own tag. Collapsing them is
-  # exactly the shape that note describes, and the fixture naming both
-  # declarations `x` is what catches it -- with identical payloads, only the tag
-  # separates them.
-  FIND [[         (put-u8 p 9)]]
-  REPLACE [[         (put-u8 p 8)]]
+  LABEL "normal-ir: a callback's required? flag is left out of the encoding"
+  # Milestone 5 Slice ①b's FINAL REVIEW found this defect and this pins the fix.
+  # The section originally encoded only the NAME while the emitter rendered name,
+  # kind, required? and default-branch into ABI member 1 -- so two machines
+  # differing only in `required?` shared fingerprint 4858454120852933155 and
+  # emitted DIFFERENT libraries, one raising `missing-required-callback` from
+  # make-parser and the other building. Decision 0019 item 2: a datum "must enter
+  # the *encoding*, not merely be read from the source machine".
+  #
+  # A pin on the SECTION TAG was tried first and is deliberately not here: the
+  # fix made the tag redundant for discrimination, because a callback record and
+  # a span record no longer have the same shape, so collapsing the two tags is
+  # UNCAUGHT and the suite said so. A mutation whose decision has been subsumed
+  # gets retired, not weakened.
+  FIND [[                     (put-u8 p (if (callback-declaration-required? c) 1 0))]]
+  REPLACE [[                     (put-u8 p 1)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "a callback and a span are not confusable")
+  EXPECT_OUTPUT_MATCHES "EVERY part the ABI carries is in the fingerprint")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source

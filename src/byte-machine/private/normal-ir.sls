@@ -33,6 +33,7 @@
                 callback-declaration-name span-declaration-name
                 callback-declaration-kind callback-declaration-required?
                 callback-declaration-default-branch
+                span-declaration-data-callback span-declaration-complete-callback
                 integer-accumulate-node? integer-accumulate-node-name
                 integer-accumulate-node-field integer-accumulate-node-base
                 integer-accumulate-node-digit-target integer-accumulate-node-nondigit-edge
@@ -618,14 +619,48 @@
        ;; failed the suite at declaration -- the same shape as a textual
        ;; `(cons '` count that answers 15 because two of them are in the comment
        ;; forbidding them. Name the tag in words, as here.
+       ;; *** EVERY PART THAT REACHES THE ABI IS ENCODED, and the first version
+       ;; of this section encoded only the name. *** Decision 0019 item 2 is the
+       ;; rule: a datum "must enter the *encoding*, not merely be read from the
+       ;; source machine... Two machines differing only in a reason must
+       ;; therefore differ in fingerprint, or the fingerprint stops identifying
+       ;; what was emitted."
+       ;;
+       ;; MEASURED, before this was fixed: two machines differing only in a
+       ;; callback's `required?` shared fingerprint 4858454120852933155 while
+       ;; emitting different libraries -- one of which raises
+       ;; `missing-required-callback` from `make-parser` and the other builds.
+       ;; `kind` and `default-branch` gave two more such pairs, and a span's two
+       ;; callback NAMES were not encoded at all. That is the converse of the
+       ;; property 0019 item 2 states, and the same defect compile.sls records
+       ;; paying for twice in its own comments.
+       ;;
+       ;; The slot is still not written: it is the record's position, and writing
+       ;; it too would let the stream express a table whose slots disagree with
+       ;; their order -- the field table's rule, restated.
        (unless (null? callbacks)
          (put-u8 p 8)
          (put-u16be p (length callbacks))
-         (for-each (lambda (c) (put-symbol p (car c))) callbacks))
+         (for-each (lambda (c)
+                     (put-symbol p (callback-declaration-name c))
+                     (put-symbol p (callback-declaration-kind c))
+                     (put-u8 p (if (callback-declaration-required? c) 1 0))
+                     (let ((d (callback-declaration-default-branch c)))
+                       (if (symbol? d)
+                           (begin (put-u8 p 1) (put-symbol p d))
+                           (put-u8 p 0))))
+                   callbacks))
        (unless (null? spans)
          (put-u8 p 9)
          (put-u16be p (length spans))
-         (for-each (lambda (sp) (put-symbol p (car sp))) spans)))))
+         (for-each (lambda (sd)
+                     (put-symbol p (span-declaration-name sd))
+                     (put-symbol p (span-declaration-data-callback sd))
+                     (let ((c (span-declaration-complete-callback sd)))
+                       (if (symbol? c)
+                           (begin (put-u8 p 1) (put-symbol p c))
+                           (put-u8 p 0))))
+                   spans)))))
 
   ;; Slot = declaration index (design §6 task 5). `machine-fields` is the
   ;; declaration list in declaration order, so the slot is the position and this
@@ -656,8 +691,13 @@
                                    callback-declaration-name))
             (spans (name-table (machine-spans machine) span-declaration-name)))
         (make-normal-machine entry states
+                             ;; The DECLARATIONS reach the encoder, not the slot
+                             ;; tables: every part the ABI carries must be in the
+                             ;; fingerprint (0019 item 2), and a slot table holds
+                             ;; only names.
                              (fnv1a-64 (encode-normal entry states fields
-                                                      callbacks spans))
+                                                      (machine-callbacks machine)
+                                                      (machine-spans machine)))
                              debug-map fields callbacks spans
                              (map (lambda (c)
                                     (list (callback-declaration-name c)
