@@ -837,6 +837,13 @@ cmake_minimum_required(VERSION 3.26)
 # added is the shape to copy -- it asserts EXPECTED values per lane, and its two
 # pins do not collide.
 #
+# Milestone 5 Slice ①b: TWO. `pass-declarations` never run -- eight census
+# fixtures then find nothing, caught by a comparison naming a missing code. And
+# the span section reusing the callback section's tag, which pins the section
+# discriminator decision 0025's ①b-planning note added, caught by the fixture
+# naming both declarations `x` so that only the tag separates them.
+# Mutations 378 + 2 = 380.
+#
 # Milestone 5 Slice ①a's final review: ONE more, on a zero-width edge role's
 # label. The position drift row's own comment claimed it was BLIND under this
 # suite; the review measured that backwards -- the derived set meets a mapping
@@ -1015,7 +1022,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 52)
-set(EXPECTED_MUTATIONS 378)
+set(EXPECTED_MUTATIONS 380)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -5865,6 +5872,20 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the span section reuses the callback section's tag"
+  # Milestone 5 Slice ①b task 7, pinning the decision decision 0025's
+  # ①b-planning note added: two guarded tables with NO discriminator are
+  # ambiguous, so each present section carries its own tag. Collapsing them is
+  # exactly the shape that note describes, and the fixture naming both
+  # declarations `x` is what catches it -- with identical payloads, only the tag
+  # separates them.
+  FIND [[         (put-u8 p 9)]]
+  REPLACE [[         (put-u8 p 8)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a callback and a span are not confusable")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: the FNV offset basis is changed"
   FIND [[(define fnv-offset 14695981039346656037)]]
   REPLACE [[(define fnv-offset 14695981039346656038)]]
@@ -9376,6 +9397,22 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the fourteen names agree across the two files: declared names equal tabulated names")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.unit.diagnostic-census.chez.source
+  LABEL "verify: pass-declarations is never run"
+  # Milestone 5 Slice ①b task 7. The whole pass, dropped from verify-machine's
+  # append. Eight of the census's twenty-four fixtures then find no diagnostic at
+  # all, so this is caught by a COMPARISON naming a missing code rather than by a
+  # raise from wherever the walk happens to stop.
+  # The following line rides along in both halves: the runner refuses an empty
+  # REPLACE, so the pass is dropped by rewriting the pair rather than by deleting
+  # a line.
+  FIND [[                                  (pass-declarations machine)
+                                  (pass-overlap machine)]]
+  REPLACE [[                                  (pass-overlap machine)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "duplicate-callback-declaration is emitted")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.unit.diagnostic-census.chez.source
