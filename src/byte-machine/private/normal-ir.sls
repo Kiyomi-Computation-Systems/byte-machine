@@ -45,7 +45,9 @@
                 field-branch-node-false-target
                 callback-node? callback-node-name callback-node-callback
                 callback-node-continue-target callback-node-branch-targets
-                callback-node-pause-continuation))
+                callback-node-pause-continuation
+                span-start-node? span-start-node-span span-start-node-next
+                span-end-node? span-end-node-span span-end-node-next))
 
   (define nm-tag (vector 'byte-machine-normal-machine))
   ;; The debug map is APPENDED after fp, never inserted before it:
@@ -363,15 +365,57 @@
                          (let ((t (sequence-dispatch-node-eof-target n)))
                            (if (symbol? t) (cons 'node (id-of t))
                                (cons 'default default-eof-code)))))
-           (prefix-blocks
+           ;; *** THE WALK THAT MAKES DECISION 0026 ITEM 1 NON-INERT. *** Until
+           ;; Slice ③ there was exactly ONE family of internal states -- a
+           ;; sequence node's prefix states -- so the rule "a declaring node
+           ;; contributes ALL of its internal states at its own position in
+           ;; declaring-node order" had nothing to order against. A span END is
+           ;; the second family, and this loop is where the two interleave: it
+           ;; walks the declared nodes ONCE and allocates whatever the node in
+           ;; hand needs, so a span-end's continuation sits ahead of a LATER
+           ;; sequence node's prefix states rather than in a family block of its
+           ;; own.
+           ;;
+           ;; Phase one is untouched -- every declared node keeps its
+           ;; declaration index -- and this is phase two, which begins at
+           ;; `declared-count`. Internal states never interleave with declared
+           ;; ones; 0016's Consequences rejected that and 0026 restates the
+           ;; rejection because a shorter statement of this rule reads the other
+           ;; way.
+           ;;
+           ;; A block is `(node kind payload ids)`: for a sequence node the
+           ;; payload is its trie and `ids` the prefix-state alist; for a span
+           ;; end the payload is #f and `ids` is the one continuation id §14:841
+           ;; calls `completion-pending`.
+           (internal-blocks
             (let loop ((ns nodes) (next declared-count) (acc '()))
               (if (null? ns) (reverse acc)
                   (let ((n (car ns)))
-                    (if (sequence-dispatch-node? n)
-                        (let ((t (build-trie (sequence-dispatch-node-cases n))))
-                          (let-values (((ids next2) (allocate-prefix-ids t next)))
-                            (loop (cdr ns) next2 (cons (list n t ids) acc))))
-                        (loop (cdr ns) next acc))))))
+                    (cond
+                      ((sequence-dispatch-node? n)
+                       (let ((t (build-trie (sequence-dispatch-node-cases n))))
+                         (let-values (((ids next2) (allocate-prefix-ids t next)))
+                           (loop (cdr ns) next2 (cons (list n 'prefix t ids) acc)))))
+                      ;; ONE internal state per resumable substep, not a fused
+                      ;; state (0026 item 2): §14:838 resumes "at the next
+                      ;; undelivered substep", which a fused state cannot
+                      ;; express. A span end delivers two -- the remaining
+                      ;; fragment, then the completion callback -- so the
+                      ;; DECLARED node is the first substep and this is the
+                      ;; second, which §14:841 names.
+                      ((span-end-node? n)
+                       (loop (cdr ns) (+ next 1) (cons (list n 'span-end #f next) acc)))
+                      (else (loop (cdr ns) next acc)))))))
+           (prefix-blocks (filter (lambda (b) (eq? (cadr b) 'prefix)) internal-blocks))
+           (span-end-blocks (filter (lambda (b) (eq? (cadr b) 'span-end)) internal-blocks))
+           (completion-id-of
+            (lambda (n)
+              (let loop ((bs span-end-blocks))
+                (cond ((null? bs)
+                       (assertion-violation 'normalize-machine
+                                            "span end has no continuation state" n))
+                      ((eq? (car (car bs)) n) (cadddr (car bs)))
+                      (else (loop (cdr bs)))))))
            (block-of (lambda (n)
                        (let loop ((bs prefix-blocks))
                          (cond ((null? bs)
@@ -379,6 +423,18 @@
                                   "sequence node has no prefix block" n))
                                ((eq? (car (car bs)) n) (car bs))
                                (else (loop (cdr bs)))))))
+           ;; The declared span table's position, exactly as `callback-slot-of`
+           ;; resolves a callback's: the slot IS the declaration index (§17:962),
+           ;; and §10.1:482 makes declaration order carry no semantic priority
+           ;; precisely so it can give stable ids.
+           (span-slot-of
+            (lambda (nm)
+              (let loop ((sp (machine-spans machine)) (i 0))
+                (cond ((null? sp)
+                       (assertion-violation 'normalize-machine
+                                            "span node names no declaration" nm))
+                      ((eq? (span-declaration-name (car sp)) nm) i)
+                      (else (loop (cdr sp) (+ i 1)))))))
            (trie-transitions
             (lambda (t ids)
               (map (lambda (kv)
@@ -441,7 +497,7 @@
                                         #f #f #f)))
                              ((sequence-dispatch-node? n)
                               (let ((blk (block-of n)))
-                                (seq-state n (cadr blk) (caddr blk) i)))
+                                (seq-state n (caddr blk) (cadddr blk) i)))
                              ((stop-node? n) (vector ns-tag 'stop i #f #f #f #f #f #f #f #f))
                              ((error-node? n)
                               (vector ns-tag 'error i #f #f
@@ -523,17 +579,48 @@
                                       (list (id-of (callback-node-continue-target n))
                                             (id-of (callback-node-pause-continuation n))
                                             (callback-default-of n))))
-                             ;; The repertoire is now these TEN kinds. A future
+                             ;; The two span kinds (Slice ③). `selector` carries
+                             ;; the resolved span SLOT and `targets` the single
+                             ;; successor -- the same three payload slots the
+                             ;; other zero-width kinds ride, so the vector is not
+                             ;; widened again.
+                             ;;
+                             ;; A span END also carries its continuation id,
+                             ;; because the declared node is only the FIRST of
+                             ;; §14:841's two substeps. It rides `arguments`,
+                             ;; which no span kind otherwise uses.
+                             ((span-start-node? n)
+                              (vector ns-tag 'span-start i #f #f #f #f #f
+                                      (span-slot-of (span-start-node-span n))
+                                      #f
+                                      (id-of (span-start-node-next n))))
+                             ((span-end-node? n)
+                              (vector ns-tag 'span-end i #f #f #f #f #f
+                                      (span-slot-of (span-end-node-span n))
+                                      (completion-id-of n)
+                                      (id-of (span-end-node-next n))))
+                             ;; The repertoire is now these TWELVE kinds. A future
                              ;; kind reaching here must fail loudly, not lower to
                              ;; nothing.
                              (else (assertion-violation 'normalize-machine "unknown node kind" n)))
                            acc))))))
+           ;; Phase two's states, in `internal-blocks` order -- which IS
+           ;; declaring-node order across both families (0026 item 1).
            (internal
             (apply append
                    (map (lambda (blk)
-                          (let ((n (car blk)) (ids (caddr blk)))
-                            (map (lambda (kv) (seq-state n (car kv) ids (cdr kv))) ids)))
-                        prefix-blocks)))
+                          (let ((n (car blk)) (ids (cadddr blk)))
+                            (if (eq? (cadr blk) 'prefix)
+                                (map (lambda (kv) (seq-state n (car kv) ids (cdr kv))) ids)
+                                ;; §14:841's `completion-pending`: the span is
+                                ;; already inactive when this runs, so it carries
+                                ;; only the completion callback's slot and the
+                                ;; node's successor.
+                                (list (vector ns-tag 'span-completion ids #f #f #f #f #f
+                                              (span-slot-of (span-end-node-span n))
+                                              #f
+                                              (id-of (span-end-node-next n)))))))
+                        internal-blocks)))
            (states (list->vector (append declared internal)))
            ;; §17:963's debug map, built in its OWN walk rather than inside the
            ;; `internal` map above: that line is pinned verbatim by a mutation,
@@ -545,9 +632,21 @@
             (append (map (lambda (kv) (cons (cdr kv) (car kv))) name->id)
                     (apply append
                            (map (lambda (blk)
-                                  (let ((n (car blk)) (ids (caddr blk)))
-                                    (map (lambda (kv) (cons (cdr kv) (node-name n))) ids)))
-                                prefix-blocks)))))
+                                  (let ((n (car blk)) (ids (cadddr blk)))
+                                    (if (eq? (cadr blk) 'prefix)
+                                        (map (lambda (kv) (cons (cdr kv) (node-name n))) ids)
+                                        ;; §13:820 requires the public parser
+                                        ;; state to name "the source callback/
+                                        ;; span node, not a generated internal
+                                        ;; continuation", so a span end's
+                                        ;; continuation answers with the span-end
+                                        ;; node's own name. Slice ② made an
+                                        ;; incomplete map an INDEX ERROR in the
+                                        ;; generated lane rather than a missing
+                                        ;; debug string -- the map crosses the
+                                        ;; seam now, as ABI payload member 2.
+                                        (list (cons ids (node-name n))))))
+                                internal-blocks)))))
       (values entry states debug-map)))
 
   ;; Encoding: (entry, states) -> canonical bytes (decision 0009 layout).
@@ -710,6 +809,30 @@
                               (put-symbol p (car b))
                               (put-u32be p (cdr b)))
                             bs)))
+               ;; The two span kinds and the internal substep (Slice ③). Tags
+               ;; ELEVEN, TWELVE and THIRTEEN: the state-kind run holds 0-7 and
+               ;; 10, and 8 and 9 are the trailing slot-table SECTION
+               ;; discriminators Slice ①b spent, so a reader walking this stream
+               ;; linearly could not tell a state record from a section by
+               ;; position alone once a machine carried both.
+               ;;
+               ;; EVERY PART IS ENCODED (decision 0019 item 2): a different span
+               ;; slot is a different span, a different successor is a different
+               ;; machine, and a span end's continuation id is what the emitted
+               ;; lane resumes at, so all three enter the fingerprint.
+               ((span-start)
+                (put-u8 p 11)
+                (put-u16be p (normal-field-selector s))
+                (put-u32be p (normal-field-targets s)))
+               ((span-end)
+                (put-u8 p 12)
+                (put-u16be p (normal-field-selector s))
+                (put-u32be p (normal-field-arguments s))
+                (put-u32be p (normal-field-targets s)))
+               ((span-completion)
+                (put-u8 p 13)
+                (put-u16be p (normal-field-selector s))
+                (put-u32be p (normal-field-targets s)))
                (else (assertion-violation 'normalize-machine "unknown state kind"
                                           (normal-state-kind s)))))
            (loop (+ i 1))))

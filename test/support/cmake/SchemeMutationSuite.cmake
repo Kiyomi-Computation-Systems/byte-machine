@@ -946,6 +946,16 @@ cmake_minimum_required(VERSION 3.26)
 # pause cycle is `eof-zero-progress-cycle` and NOT `zero-progress-cycle`, which
 # is the non-overlap 0027 item 3 gates on `byte-reached` alone to get.
 #
+# Milestone 5 Slice ③ task 4, lowering and encoding: FOUR more, 439 + 4 = 443.
+# The wire tag (pinned on a golden, because a tag change moves every span
+# fingerprint together), the slot RESOLUTION (anchored there rather than on one
+# arm's write, so it stays distinguishable from the tag), the fused-state
+# rejection decision 0026 item 2 makes -- caught by a raise that is the
+# decision's own consequence, since a span end with no allocated continuation
+# cannot answer -- and the debug map's totality over the SECOND internal family,
+# which Slice ② turned from a missing debug string into an index error in the
+# generated lane.
+#
 # Milestone 5 Slice ①b: TWO. `pass-declarations` never run -- eight census
 # fixtures then find nothing, caught by a comparison naming a missing code. And
 # the span section reusing the callback section's tag, which pins the section
@@ -1131,7 +1141,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 53)
-set(EXPECTED_MUTATIONS 439)
+set(EXPECTED_MUTATIONS 443)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -7017,8 +7027,10 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: an internal prefix state's own id field is wrong"
-  FIND [[(map (lambda (kv) (seq-state n (car kv) ids (cdr kv))) ids)))]]
-  REPLACE [[(map (lambda (kv) (seq-state n (car kv) ids 0)) ids)))]]
+  # Re-anchored by Slice ③: `internal` now walks TWO families, so the prefix arm
+  # sits inside an `if` on the block's kind and its tail moved.
+  FIND [[(map (lambda (kv) (seq-state n (car kv) ids (cdr kv))) ids)]]
+  REPLACE [[(map (lambda (kv) (seq-state n (car kv) ids 0)) ids)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
     "internal prefix states carry their own id, not a placeholder: id 4 -- expected 4, got 0")
 
@@ -7086,6 +7098,66 @@ byte_machine_mutation(
   REPLACE [[                              (put-u32be p (cdr b)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "each part varied alone moves the fingerprint: and every one moved the fingerprint -- expected \\(\\), got \\(branch-key\\)")
+
+# Milestone 5 Slice ③ task 4: the span states' encoding, and the SECOND family of
+# internal states -- the one that makes decision 0026 item 1 non-inert.
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the span-end encode tag collides with span-start"
+  # Pinned on the GOLDEN, for the reason the callback tag's own mutation states:
+  # a tag change moves every span fingerprint together, so every pairwise
+  # inequality in that group survives it and only a fixed value can see it.
+  FIND [[               ((span-end)
+                (put-u8 p 12)]]
+  REPLACE [[               ((span-end)
+                (put-u8 p 11)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the base machine verifies and normalizes: fingerprint -- expected 346240202880439782")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a span node's slot is not resolved against the declarations"
+  # The slot is what the ABI carries, so two machines whose nodes name different
+  # spans would share a fingerprint and open different spans.
+  #
+  # Anchored on the RESOLUTION rather than on one arm's `put-u16be`: dropping the
+  # span-start arm's write alone leaves the span-end's, so the `span-slot` row --
+  # which moves BOTH nodes -- still separates and only the golden would notice,
+  # which is the tag mutation's pin. Collapsing the resolution moves the row
+  # itself, and the two mutations stay distinguishable.
+  FIND [[                      ((eq? (span-declaration-name (car sp)) nm) i)]]
+  REPLACE [[                      ((eq? (span-declaration-name (car sp)) nm) 0)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "and every one moved the fingerprint -- expected \\(\\), got \\(span-slot\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a span end lowers to a fused state instead of two"
+  # Decision 0026 item 2: §14:838 resumes "at the next undelivered substep",
+  # which a fused state cannot express because it has ONE resume point. Caught
+  # by the state count, which is what makes the claim checkable rather than
+  # asserted.
+  FIND [[                      ((span-end-node? n)
+                       (loop (cdr ns) (+ next 1) (cons (list n 'span-end #f next) acc)))]]
+  REPLACE [[                      ((and #f (span-end-node? n))
+                       (loop (cdr ns) (+ next 1) (cons (list n 'span-end #f next) acc)))]]
+  EXPECT_STATUS 1
+  # A RAISE, and it is the decision's own consequence rather than an incidental
+  # crash: with no block allocated, `completion-id-of` cannot answer and says so
+  # by name. There is no opposite constant to try.
+  EXPECT_OUTPUT_MATCHES "span end has no continuation state")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the debug map skips the second internal family"
+  # §17:963's map must stay TOTAL, and §13:820 requires the public parser state
+  # to name the source span node rather than a generated continuation. Slice ②
+  # raised the stakes: the map crosses the seam as ABI payload member 2, so an
+  # incomplete one is an index error in the generated lane.
+  FIND [[                                        (list (cons ids (node-name n))))))]]
+  REPLACE [[                                        '())))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "every state id has a source name -- expected \\(\\), got \\(6\\)")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
