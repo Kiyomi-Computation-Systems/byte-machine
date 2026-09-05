@@ -37,9 +37,16 @@
 ;;; this table is for and why the row belongs here rather than being called
 ;;; covered elsewhere.
 ;;;
-;;; One row of that table remains NOT producible here and this lane does not
-;;; pretend otherwise: :770's zero-width action is Slice ②, and its callback half
-;;; is Milestone 5 and never producible in Milestone 4 at all.
+;;; *** AND THAT PARAGRAPH WENT STALE TWICE BEFORE ANYTHING NOTICED. *** It said
+;;; ":770's zero-width action is Slice ②, and its callback half is Milestone 5
+;;; and never producible in Milestone 4 at all" -- true when written, falsified by
+;;; Slice ②'s callback node and compounded by Slice ③'s two span arms, which are
+;;; two more producers of the same half. Slice ③'s census reconciliation found it
+;;; and the rows are added below: a callback node's failure and a SPAN data
+;;; callback's, in both lanes. §12.7:777 makes position kind a value the two
+;;; lanes must agree on, and until now the only thing comparing it for a callback
+;;; failure was a lane-to-lane projection -- which two lanes reporting the same
+;;; wrong kind satisfy. This table asserts the VALUE.
 (import (rnrs)
         (rnrs eval)
         (only (chezscheme) load)
@@ -97,10 +104,112 @@
                         (make-error-node 'over 'too-big #f))
                   'default-eof #f)))
 
+;; §12.7:770's CALLBACK half, and the two producers of it that exist. Both
+;; machines are the smallest that reach one: a byte to commit, so the offset
+;; under test is not zero, and then the invocation.
+(define cb-errs (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
+                      (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f)))
+(define cbfail
+  (make-machine 'cbfail 'start '()
+    (list (make-callback-declaration 'decide 'event #t '() #f #f))
+    '() cb-errs
+    ;; *** THE CALLBACK IS REACHED BY A REEXECUTE EDGE, and that is the whole
+    ;; point of the row. *** Reached by an ADVANCE the loop's `pk` is already
+    ;; `boundary`, so the literal and the variable agree and the fixture proves
+    ;; nothing. Over a reexecute edge `pk` is `byte`, which is what the shipped
+    ;; arms reported and §12.7:770 forbids.
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 65)
+                                  (make-edge 'mid 'advance) #f))
+            (make-edge 'reject 'reexecute) 'fin #f)
+          (make-byte-dispatch-node 'mid
+            (list (make-byte-case (make-exact-byte-matcher 66)
+                                  (make-edge 'inv 'reexecute) #f))
+            (make-edge 'reject 'reexecute) 'fin #f)
+          (make-callback-node 'inv 'decide 'done '() 'after #f)
+          (make-byte-dispatch-node 'after
+            (list (make-byte-case (make-exact-byte-matcher 66)
+                                  (make-edge 'done 'advance) #f))
+            (make-edge 'reject 'reexecute) 'fin #f)
+          (make-stop-node 'done #f)
+          (make-finish-node 'fin #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+;; Slice ③'s producer. The span's DATA callback fails at the span end, which is
+;; a different emitted arm and a different runtime entry point from the callback
+;; node above -- so a lane getting one right and the other wrong is invisible to
+;; the row above it.
+(define spfail
+  (make-machine 'spfail 'start '()
+    (list (make-callback-declaration 'on-data 'span-data #t '() #f #f))
+    (list (make-span-declaration 'body 'on-data #f #f))
+    cb-errs
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 65)
+                                  (make-edge 'op 'advance) #f))
+            (make-edge 'reject 'reexecute) 'fin #f)
+          (make-span-start-node 'op 'body 'body-d #f)
+          (make-byte-dispatch-node 'body-d
+            (list (make-byte-case (make-exact-byte-matcher 90)
+                                  (make-edge 'cl 'reexecute) #f))
+            ;; Its OWN error terminal: the shared `reject` is reached from
+            ;; outside the span with nothing open, so routing this EOF there
+            ;; joins `(active body)` with `none` and pass 7 rejects the machine
+            ;; for a merge this fixture never meant to build.
+            (make-edge 'body-d 'advance) 'trunc #f)
+          (make-span-end-node 'cl 'body 'after #f)
+          (make-byte-dispatch-node 'after
+            (list (make-byte-case (make-exact-byte-matcher 90)
+                                  (make-edge 'done 'advance) #f))
+            (make-edge 'reject 'reexecute) 'fin #f)
+          (make-stop-node 'done #f)
+          (make-finish-node 'fin #f)
+          (make-error-node 'reject 'rejected #f)
+          (make-error-node 'trunc 'rejected #f))
+    'default-eof #f))
+
+;; The THIRD emitted arm that calls out, and the one neither row above reaches:
+;; a span end's COMPLETION callback. Its declaration is what separates this
+;; machine from `spfail`.
+(define spdone
+  (make-machine 'spdone 'start '()
+    (list (make-callback-declaration 'on-data 'span-data #t '() #f #f)
+          (make-callback-declaration 'on-done 'span-complete #t '() #f #f))
+    (list (make-span-declaration 'body 'on-data 'on-done #f))
+    cb-errs
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 65)
+                                  (make-edge 'op 'advance) #f))
+            (make-edge 'reject 'reexecute) 'fin #f)
+          (make-span-start-node 'op 'body 'body-d #f)
+          (make-byte-dispatch-node 'body-d
+            (list (make-byte-case (make-exact-byte-matcher 90)
+                                  (make-edge 'cl 'reexecute) #f))
+            (make-edge 'body-d 'advance) 'trunc #f)
+          (make-span-end-node 'cl 'body 'after #f)
+          (make-byte-dispatch-node 'after
+            (list (make-byte-case (make-exact-byte-matcher 90)
+                                  (make-edge 'done 'advance) #f))
+            (make-edge 'reject 'reexecute) 'fin #f)
+          (make-stop-node 'done #f)
+          (make-finish-node 'fin #f)
+          (make-error-node 'reject 'rejected #f)
+          (make-error-node 'trunc 'rejected #f))
+    'default-eof #f))
+
 (define (feed-then-error cm bytes)
   (let* ((p (make-parser cm '() #f))
          (r (parser-feed! p (u8-list->bytevector bytes) 0 (length bytes))))
     (parser-result-error r)))
+;; The same drive with BINDINGS, for the two callback-domain rows. A separate
+;; helper rather than a widened one: every other row here builds its parser with
+;; no bindings at all, and threading an always-empty list through them would put
+;; the callback vocabulary into rows that have none.
+(define (feed-then-callback-error cm bindings bytes)
+  (let* ((p (make-parser cm bindings 'ctx))
+         (r (parser-feed! p (u8-list->bytevector bytes) 0 (length bytes))))
+    (parser-result-error r)))
+(define (fails name) (list (list name (lambda args (make-callback-failure 'said-no #f)))))
 
 (define (finish-error cm bytes)
   (let ((p (make-parser cm '() #f)))
@@ -132,7 +241,40 @@
    (list "an accumulate overflow reports byte at the unconsumed digit"
          (lambda (cm) (feed-then-error cm '(57 57 57))) 'byte 2
          (lambda () (interpreted overflow))
-         (lambda () (generated overflow 'overflow-parser 'overflow "pk-over.sls")))))
+         (lambda () (generated overflow 'overflow-parser 'overflow "pk-over.sls")))
+   ;; §12.7:770's callback half. `boundary at the current stream offset`: the
+   ;; invocation is zero-width, so the offset is the one byte already committed
+   ;; and the position is a byte boundary -- which is why the offset assertion
+   ;; is 1 and not 0. Domain `callback`, which is what makes these two rows the
+   ;; first in this table not to be `machine`.
+   (list "a callback failure reports boundary at the committed offset"
+         (lambda (cm) (feed-then-callback-error cm (fails 'decide) '(65 66))) 'boundary 1
+         (lambda () (interpreted cbfail))
+         (lambda () (generated cbfail 'cbfail-parser 'cbfail "pk-cb.sls"))
+         'callback)
+   ;; The SPAN data callback's failure, at the span end: two bytes committed, so
+   ;; the discriminator is the offset 2. A lane that reported the span start's
+   ;; offset, or the slice position rather than the stream one, differs here and
+   ;; nowhere else in this file.
+   (list "a span data callback failure reports boundary at the committed offset"
+         (lambda (cm) (feed-then-callback-error cm (fails 'on-data) '(65 98 90))) 'boundary 2
+         (lambda () (interpreted spfail))
+         (lambda () (generated spfail 'spfail-parser 'spfail "pk-sp.sls"))
+         'callback)
+   ;; The completion substep's own failure. The data callback continues, so the
+   ;; fragment is delivered and the span is already inactive when this runs --
+   ;; and the offset is still 2, because §14:842's substeps consume nothing.
+   ;; This is the third emitted arm that calls out, and the only row that
+   ;; reaches it.
+   (list "a span completion callback failure reports boundary too"
+         (lambda (cm)
+           (feed-then-callback-error
+            cm (cons (list 'on-data (lambda args callback-continue)) (fails 'on-done))
+            '(65 98 90)))
+         'boundary 2
+         (lambda () (interpreted spdone))
+         (lambda () (generated spdone 'spdone-parser 'spdone "pk-spd.sls"))
+         'callback)))
 
 (harness-group "every position kind, in both executors"
   (lambda ()
@@ -153,6 +295,7 @@
              (set! cases-run (+ cases-run 1))
              (let* ((name (car c)) (drive (cadr c))
                     (kind (caddr c)) (offset (cadddr c))
+                    (domain (if (> (length c) 6) (list-ref c 6) 'machine))
                     (ie (drive ((list-ref c 4))))
                     (ge (drive ((list-ref c 5)))))
                (for-each (lambda (e)
@@ -163,13 +306,13 @@
                            (check-equal (string-append name ": offset")
                                         (parser-error-offset e) offset)
                            (check-equal (string-append name ": domain")
-                                        (parser-error-domain e) 'machine))
+                                        (parser-error-domain e) domain))
                          (list ie ge))
                (check-equal (string-append name ": the lanes agree on the projection")
                             (project-error ie) (project-error ge))))
            cases)
-          (check-equal "four cases ran" cases-run 4)
-          (check-equal "eight drives observed" drives 8))))))
+          (check-equal "seven cases ran" cases-run 7)
+          (check-equal "fourteen drives observed" drives 14))))))
 
 ;; A pause whose CONTINUATION is an error node. Feed to the pause, resume, then
 ;; finish!: the finish loop reaches that error state on its first dispatch, by no

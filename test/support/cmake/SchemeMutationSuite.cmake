@@ -1016,6 +1016,25 @@ cmake_minimum_required(VERSION 3.26)
 # reason: its tail had to route through a dispatch, because its span end
 # continued straight into a stop.
 #
+# Milestone 5 Slice ③ task 8, §12.7:770's row: FOUR more, 462 + 4 = 466, in the
+# position-kind pass. THE TREE DID NOT IMPLEMENT THAT ROW. "Zero-width machine
+# action or callback failure | `boundary` at the current stream offset" -- every
+# site building a callback-domain error passed the loop's `pk`, and Slice ②'s own
+# comment said the carried-through `pk` "is the rule the carried-through `pk`
+# already implements", which is true only over an ADVANCE edge. Over a REEXECUTE
+# edge `pk` is `byte`, and BOTH LANES REPORTED IT -- so the differential could
+# not see it, a lane-to-lane projection being satisfied by two lanes agreeing on
+# a wrong value. Found by adding the row §12.7:770 had never had.
+#
+# Four sites, four mutations: one named constant serving the runtime's six arms,
+# and three rendered literals, one per emitted arm that calls out. Two of the
+# lane's fixtures had to change shape for the defect to be reachable at all --
+# the callback row's node is now reached by a REEXECUTE edge, because over an
+# advance the literal and the variable agree and the row proves nothing.
+#
+# One shipped pin was re-anchored: the edge-role census case is "every other
+# kind" now, the table having grown a callback row and two span rows.
+#
 # Milestone 5 Slice ①b: TWO. `pass-declarations` never run -- eight census
 # fixtures then find nothing, caught by a comparison naming a missing code. And
 # the span section reusing the callback section's tag, which pins the section
@@ -1201,7 +1220,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 54)
-set(EXPECTED_MUTATIONS 462)
+set(EXPECTED_MUTATIONS 466)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -5851,7 +5870,9 @@ byte_machine_mutation(
                (span-start-node? n) (span-end-node? n))
            (map (lambda (re) (cons 'next (cdr re))) (zero-width-edges n)))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the other four kinds label their edges too")
+  # Re-anchored at Slice ③ task 8: the case is "every other kind" now, the
+  # census having grown a callback row and two span rows.
+  EXPECT_OUTPUT_MATCHES "every other kind labels its edges too")
 
 # Milestone 5 Slice ②: §16.2:901's NODE half. Four faults, three codes, and one
 # arm ORDER that is load-bearing -- the duplicate check runs first, so a key
@@ -9607,6 +9628,80 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "an accumulate overflow reports byte at the unconsumed digit: offset -- expected 2, got 3")
+
+# --- Slice ③ task 8: §12.7:770's row, which the tree did not implement -------
+#
+# "Zero-width machine action or callback failure | `boundary` at the current
+# stream offset." Every site building a callback-domain error passed the loop's
+# `pk` instead, and Slice ②'s own comment claimed the carried-through `pk` "is
+# the rule the carried-through `pk` already implements" -- true only where the
+# invoking node was reached by an ADVANCE edge. Over a REEXECUTE edge `pk` is
+# `byte`, and BOTH LANES REPORTED IT, so no differential could see it: the
+# lane-to-lane projection is satisfied by two lanes agreeing on a wrong value,
+# which is why the fix's rows assert the VALUE and not only the agreement.
+#
+# FOUR mutations, because the correction has four independent sites: one named
+# constant serving the runtime's six arms, and three rendered literals. Every
+# fixture that reaches one does so over a reexecute edge, which is what makes
+# the literal and the variable differ at all.
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "runtime: a callback failure reports the loop's position kind"
+  # The interpreted half, over all three of its arms at once -- the constant is
+  # one decision and the six sites read it. Caught in three rows, and the pin
+  # names the callback node's, which the emitted mutations below do not move.
+  FIND [[  (define callback-failure-position 'boundary)]]
+  REPLACE [[  (define callback-failure-position 'byte)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a callback failure reports boundary at the committed offset: kind -- expected boundary, got byte"
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "compile: the emitted callback arm reports the loop's position kind"
+  # The generated half, one arm at a time. Each is pinned on its own row's
+  # PROJECTION, whose "expected" is the generated lane's value -- the harness
+  # prints the second `check-equal` argument as expected -- so the three read as
+  # mirror images of each other and no two collide.
+  FIND [[            (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off)))))\n")))
+        ;; --- Slice ③'s three span arms]]
+  REPLACE [[            (nm (normal-state-id s)) ") " id " off pk) " id " off)))))\n")))
+        ;; --- Slice ③'s three span arms]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a callback failure reports boundary at the committed offset: the lanes agree on the projection -- expected .callback said-no .callback failure. inv 1 byte."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "compile: the emitted span-end arm reports the loop's position kind"
+  # Its own site and its own row: a span end is always reached by a reexecute
+  # edge in practice -- the delimiter must not be consumed into the payload --
+  # so this arm is the one where the defect was easiest to reach and hardest to
+  # see, both lanes having agreed on `byte`.
+  FIND [[            (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off)))))\n")))
+        ;; The SECOND substep.]]
+  REPLACE [[            (nm (normal-state-id s)) ") " id " off pk) " id " off)))))\n")))
+        ;; The SECOND substep.]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a span data callback failure reports boundary at the committed offset: the lanes agree on the projection -- expected .callback said-no .callback failure. cl 2 byte."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "compile: the emitted span-completion arm reports the loop's position kind"
+  # The third, and the reason the lane builds a THIRD machine: a span whose
+  # completion callback is declared and fails. Neither row above reaches this
+  # arm, and its projection differs from the span end's only by the check label.
+  FIND [[                (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off))))))\n"))))]]
+  REPLACE [[                (nm (normal-state-id s)) ") " id " off pk) " id " off))))))\n"))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a span completion callback failure reports boundary too: the lanes agree on the projection -- expected .callback said-no .callback failure. cl 2 byte."
+)
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

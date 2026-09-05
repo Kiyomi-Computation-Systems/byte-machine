@@ -385,8 +385,14 @@
             "         (if " (render-predicate (normal-field-selector s) a b) "\n"
             "             " (zero-width-jump (car tg)) "\n"
             "             " (zero-width-jump (cdr tg)) ")))\n")))
-        ;; *** The tenth kind, and the only emitted arm that calls APPLICATION
-        ;; code. *** The invocation and §13:803-812's outcome vocabulary are the
+        ;; *** The tenth kind, and the FIRST emitted arm that calls APPLICATION
+        ;; code -- it was "the only" until Slice ③, and this file's own rule
+        ;; twelve lines below the `else` is why that had to be corrected rather
+        ;; than left: a comment enumerating a closed set is a census. Three arms
+        ;; call out now. The span-completion arm renders this very procedure, and
+        ;; the span-end arm renders `byte-machine-span-fragment-step/v1`, which
+        ;; applies the caller's data callback. *** The invocation and
+        ;; §13:803-812's outcome vocabulary are the
         ;; RUNTIME's -- `byte-machine-callback-step/v1`, the same procedure
         ;; `parser-feed-op!` calls -- so this arm renders only the literals the
         ;; node carries and the routing they select. A lane-local classifier
@@ -400,6 +406,14 @@
         ;;
         ;; Zero-width (§11.4:652), so the `goto` arm is `zero-width-jump`'s rule
         ;; with a computed target -- same `pos`, same `off`, same `pk`.
+        ;;
+        ;; *** The error arm renders the LITERAL `boundary`, not `pk`, and the
+        ;; emitted text is where that difference is visible. *** §12.7:770 puts a
+        ;; callback failure on the `boundary at the current stream offset` row
+        ;; unconditionally; rendering `pk` gave `byte` whenever the invoking node
+        ;; was reached over a reexecute edge, in BOTH lanes, so the differential
+        ;; agreed on the wrong value. The runtime's own arms carry the same
+        ;; correction under the name `callback-failure-position`.
         ((callback)
          (let ((tg (normal-field-targets s)))
            (string-append
@@ -420,7 +434,7 @@
             (num (cadr tg)) " off))\n"
             "           (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
             "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
-            (nm (normal-state-id s)) ") " id " off pk) " id " off)))))\n")))
+            (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off)))))\n")))
         ;; --- Slice ③'s three span arms -------------------------------------
         ;; All three are ZERO-WIDTH (§10.6:590) and end in `zero-width-jump`'s
         ;; rule -- same `pos`, same `off`, same `pk` -- literally so where the
@@ -456,7 +470,7 @@
             cid " off))\n"
             "           (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
             "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
-            (nm (normal-state-id s)) ") " id " off pk) " id " off)))))\n")))
+            (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off)))))\n")))
         ;; The SECOND substep. §14:842 puts the close BEFORE the invocation, so
         ;; it is the first thing rendered here in both shapes -- a completion
         ;; callback that asks `parser-active-span` must see #f.
@@ -483,7 +497,7 @@
                 tgt " off))\n"
                 "             (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
                 "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
-                (nm (normal-state-id s)) ") " id " off pk) " id " off))))))\n"))))
+                (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off))))))\n"))))
         ((dispatch)
          (let ((fb (normal-dispatch-fallback s)))
            (string-append

@@ -1097,9 +1097,12 @@
   ;; ones, despite what its own comment says -- and compares the result against a
   ;; declared mapping. A `(cons 'callback name)` here would add a thirteenth
   ;; "role", fail `derived roles equal the mapped roles`, and take that pass's
-  ;; BASELINE red. Measured: 13 occurrences in CODE before this pass and 13
-  ;; after -- and 16 from Milestone 5 Slice ②, whose callback node adds three
-  ;; genuine edge roles, all three mapped in the matrix in the same commit.
+  ;; BASELINE red. RE-MEASURED at Slice ③ task 8: 18 occurrences in CODE and 22
+  ;; textual, the four extra being the two mentions in this comment and two in
+  ;; pass 7's own. It was 13 before Slice ②'s pass, 13 after, and 16 once the
+  ;; callback node's three genuine roles landed; Slice ③'s two span kinds reuse
+  ;; `next` rather than minting roles, so the two added occurrences are the span
+  ;; arms of `zero-width-edges` and its views, not two new roles.
   ;; Count with `read`, or exclude comment lines -- the two mentions in this
   ;; very comment are why a bare textual count answers more and is the same
   ;; class of mistake as the substring sweep that once undercounted a pin.

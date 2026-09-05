@@ -2063,7 +2063,7 @@
           (check-equal "alternative and mismatch, labelled"
                        ds '((non-eof-into-finish s alternative)
                             (non-eof-into-finish s mismatch))))))
-    (harness-case "the other four kinds label their edges too"
+    (harness-case "every other kind labels its edges too"
       (lambda ()
         ;; *** Added by the whole-branch review: nine of the thirteen role labels
         ;; had no test and no pin. *** The dispatch and sequence cases above
@@ -2071,20 +2071,33 @@
         ;; wired to the wrong accessor, or to a constant, without anything
         ;; failing -- which is the same shape as a label that is always present.
         ;;
+        ;; *** AND IT STOPPED AT FOUR KINDS FOR TWO SLICES. *** Slice ③'s census
+        ;; reconciliation found this table with no callback row and no span row,
+        ;; while `zero-width-edges` labels seven more edges across those three
+        ;; kinds. This is the ONLY census of `diagnostic-edge` in the tree, so a
+        ;; span arm wired to an existing role -- `case` instead of `next` -- would
+        ;; ship a wrong §16.4:940 label with nothing red.
+        ;;
         ;; Each machine points EVERY byte out-edge of one kind at a finish
         ;; terminal, so the full role set for that kind is asserted at once, as a
-        ;; multiset rather than a membership test.
+        ;; multiset rather than a membership test. The span and callback rows
+        ;; carry their DECLARATIONS too, and their expected lists carry the
+        ;; findings that come with pointing a span at a finish -- §14:843's
+        ;; successful-exit rule fires as well, and a row hiding that would be
+        ;; asserting a subset.
         (let ((seen 0) (bad '()))
           (for-each
            (lambda (row)
              (set! seen (+ seen 1))
              (let* ((nm (car row)) (nodes (cadr row)) (want (caddr row))
+                    (cbs (if (> (length row) 3) (list-ref row 3) '()))
+                    (sps (if (> (length row) 4) (list-ref row 4) '()))
                     (got (map (lambda (d) (list (diagnostic-code d) (diagnostic-node d)
                                                 (diagnostic-edge d)))
                               (verification-diagnostics
                                (verify-machine
                                 (make-machine 'roles3 'd (list (make-uint-field 'n 8 0 #f))
-                                              '() '() (list eof-decl rej-decl)
+                                              cbs sps (list eof-decl rej-decl)
                                               (append
                                                (list (make-byte-dispatch-node 'd
                                                        (list (make-byte-case
@@ -2109,8 +2122,41 @@
                   '((non-eof-into-finish fb true)
                     (non-eof-into-finish fb false)))
             (list 'p (list (make-pause-node 'p 'fin #f))
-                  '((non-eof-into-finish p continuation)))))
-          (check-equal "four kinds driven" seen 4)
+                  '((non-eof-into-finish p continuation)))
+            ;; Slice ②'s kind, unlisted until Slice ③'s reconciliation. A
+            ;; DECISION callback so the branch-key roles are reachable at all --
+            ;; an event callback declares none, and the two branch edges are two
+            ;; of the four labels this row exists for.
+            (list 'cb (list (make-callback-node 'cb 'pick 'fin
+                                                '((keep fin) (skip fin)) 'fin #f))
+                  ;; Measured: BOTH branch edges carry the bare role `branch`,
+                  ;; not the key. §16.4:940 asks for "the edge role where
+                  ;; applicable" and a role is what this answers; the KEY is in
+                  ;; the node's own declaration, and two findings differing only
+                  ;; by a key are told apart by nothing here. Recorded rather
+                  ;; than silently expected, because it is the one place in this
+                  ;; table where the label is not injective over the edges.
+                  '((non-eof-into-finish cb continue)
+                    (non-eof-into-finish cb branch)
+                    (non-eof-into-finish cb branch)
+                    (non-eof-into-finish cb pause))
+                  (list (make-callback-declaration 'pick 'decision #t '(keep skip) #f #f)))
+            ;; Slice ③'s two. Both reuse `next` rather than minting a role, which
+            ;; is the thing this row pins: a span arm wired to `case` or to a
+            ;; constant would still produce a finding and still be caught only
+            ;; here. §14:843 fires alongside, because a span open at a finish is
+            ;; a successful exit with a span active.
+            (list 'ss (list (make-span-start-node 'ss 'body 'fin #f))
+                  '((span-active-at-exit fin #f)
+                    (non-eof-into-finish ss next))
+                  (list (make-callback-declaration 'on-data 'span-data #t '() #f #f))
+                  (list (make-span-declaration 'body 'on-data #f #f)))
+            (list 'se (list (make-span-end-node 'se 'body 'fin #f))
+                  '((invalid-span-state se #f)
+                    (non-eof-into-finish se next))
+                  (list (make-callback-declaration 'on-data 'span-data #t '() #f #f))
+                  (list (make-span-declaration 'body 'on-data #f #f)))))
+          (check-equal "seven kinds driven" seen 7)
           (check-equal "every role label is the accessor's own" bad '()))))
     (harness-case "a diagnostic with no applicable edge carries #f"
       (lambda ()

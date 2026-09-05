@@ -39,9 +39,12 @@
           ;; -- the generated library imports (byte-machine runtime) and nothing
           ;; else (decision 0025).
           byte-machine-callback-step/v1 byte-machine-make-callback-error/v1
-          ;; Milestone 5 Slice ③. `parser-active-span` shipped in ①b; these four
-          ;; are the span machinery both lanes call, and every one of them is
-          ;; called from EMITTED code.
+          ;; Milestone 5 Slice ③. THREE names, and the count is stated because
+          ;; the first version of this comment said "these four" over a list of
+          ;; three. They are the span machinery both lanes call, and every one is
+          ;; called from EMITTED code -- which is what puts them in
+          ;; `reserved-member-2`. `parser-active-span` shipped in ①b and is NOT
+          ;; one of them: no emitted text names it.
           byte-machine-span-open/v1 byte-machine-span-fragment-step/v1
           byte-machine-span-close/v1)
   (import (rnrs)
@@ -262,6 +265,26 @@
   ;; behavioural contract.
   (define callback-error-reason "callback failure")
   (define callback-contract-code 'callback-contract-violation)
+  ;; *** §12.7:770's ROW, AS A CONSTANT, and it was a variable until Slice ③'s
+  ;; census reconciliation. *** "Zero-width machine action or callback failure |
+  ;; `boundary` at the current stream offset." Every site building a
+  ;; callback-domain error passed the loop's `pk` instead, and Slice ②'s own
+  ;; comment claimed that carrying `pk` through "is the rule the carried-through
+  ;; `pk` already implements" -- true only when the invoking node happened to be
+  ;; reached by an ADVANCE edge. Reached over a REEXECUTE edge, `pk` is `byte`,
+  ;; and the two lanes then AGREED on the wrong value, which is why no
+  ;; differential could see it: measured through a span end on a reexecute edge,
+  ;; both lanes reported `byte`.
+  ;;
+  ;; §12.7:774's "Error nodes reached through other byte edges retain the
+  ;; author's explicit advance/reexecute choice" does not reach here: a callback
+  ;; failure is not an error node, it has no author-chosen edge, and §12.7's
+  ;; table is total over error sources with exactly one row for this one.
+  ;;
+  ;; A NAME rather than a bare quoted symbol at six sites: this is one decision,
+  ;; and six literals are six chances for a later slice to change five of them.
+  (define callback-failure-position 'boundary)
+
   (define (byte-machine-make-callback-error/v1 code detail node-name state-id
                                                offset position-kind)
     (vector parser-error-tag 'callback code callback-error-reason detail
@@ -886,7 +909,7 @@
                   (make-parser-result 'error pos (- pos start) (parser-offset parser)
                                       (byte-machine-make-callback-error/v1
                                        (cadr o) (caddr o) node (list-ref parts 5)
-                                       (parser-offset parser) pk))))))
+                                       (parser-offset parser) callback-failure-position))))))
             ;; *** Slice ③'s ELEVENTH AND TWELFTH kinds, and the interpreter's
             ;; own thirteenth arm for §14:841's substep. *** All three are
             ;; zero-width (§10.6:590), so `pos`, the offset and `pk` carry
@@ -926,7 +949,8 @@
                   (make-parser-result 'error pos (- pos start) (parser-offset parser)
                                       (byte-machine-make-callback-error/v1
                                        (cadr o) (caddr o) (cadddr parts)
-                                       (caddr parts) (parser-offset parser) pk))))))
+                                       (caddr parts) (parser-offset parser)
+                                       callback-failure-position))))))
             ((span-completion)
              ;; §14:842: "Before invoking the completion callback, execution
              ;; makes the span inactive." BEFORE -- a completion callback asking
@@ -957,7 +981,7 @@
                                             (byte-machine-make-callback-error/v1
                                              (cadr o) (caddr o) (cadddr parts)
                                              (caddr parts) (parser-offset parser)
-                                             pk))))))))
+                                             callback-failure-position))))))))
             ;; Slice ③'s INPUT-READING kind. It needs a byte, so it yields
             ;; `need-input` at the end of a slice and resumes at the same node on
             ;; the next feed -- its whole split-point behaviour, inherited from
@@ -1163,7 +1187,8 @@
                 (parser-set-current! parser node)
                 (parser-set-lifecycle! parser 'error)
                 (let ((e (byte-machine-make-callback-error/v1
-                          (cadr o) (caddr o) node (list-ref parts 5) off pk)))
+                          (cadr o) (caddr o) node (list-ref parts 5) off
+                          callback-failure-position)))
                   (parser-set-stored-error! parser e)
                   (make-parser-result 'error off 0 off e))))))
           ;; Slice ③'s span kinds on the EOF side. The SAME three arms as the
@@ -1200,7 +1225,8 @@
                 (parser-set-current! parser node)
                 (parser-set-lifecycle! parser 'error)
                 (let ((e (byte-machine-make-callback-error/v1
-                          (cadr o) (caddr o) (cadddr parts) (caddr parts) off pk)))
+                          (cadr o) (caddr o) (cadddr parts) (caddr parts) off
+                          callback-failure-position)))
                   (parser-set-stored-error! parser e)
                   (make-parser-result 'error off 0 off e))))))
           ((span-completion)
@@ -1226,7 +1252,7 @@
                       (parser-set-lifecycle! parser 'error)
                       (let ((e (byte-machine-make-callback-error/v1
                                 (cadr o) (caddr o) (cadddr parts) (caddr parts)
-                                off pk)))
+                                off callback-failure-position)))
                         (parser-set-stored-error! parser e)
                         (make-parser-result 'error off 0 off e))))))))
           ;; At finish there is no input, so an accumulate node takes its own

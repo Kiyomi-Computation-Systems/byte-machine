@@ -211,11 +211,16 @@
                       (else (put-u8 p 1) (put-u64be p a))))
               args))
 
-  ;; The `else` guards below are unreachable-today safety for a SEVENTH
-  ;; node/state kind beyond the six now handled -- dispatch/stop/error/finish/
-  ;; pause/sequence (sequence lowers to ordinary dispatch states, decision
-  ;; 0015 point 1, so it adds no new case of its own); verified by inspection,
-  ;; not mutation.
+  ;; The `else` guards below are unreachable-today safety for the kind AFTER the
+  ;; ones this file handles. *** THIS SENTENCE NAMED SIX and was already false
+  ;; when accumulate, the two field kinds and the callback landed; Slice ③ is
+  ;; the pass that re-measured it rather than adding two more kinds under it.
+  ;; *** Twelve node kinds lower here (§10.6's closed set, less Milestone 6's
+  ;; counted consume) and TWELVE normalized state kinds come out -- the same
+  ;; twelve less `sequence`, which lowers to ordinary dispatch states (decision
+  ;; 0015 point 1, so it adds no case of its own), plus `span-completion`, which
+  ;; has no source node at all. So the guards protect against the THIRTEENTH
+  ;; node kind, not a seventh. Verified by inspection, not mutation.
 
   ;; --- sequence prefix trie (decisions 0015, 0016) ---
   ;; A trie node is (children . terminal); children is an alist (byte . node)
