@@ -1285,6 +1285,219 @@
                                               "callback declares a branch key this node gives no target")))
                        (callback-declaration-branch-keys cd))))))))
 
+  ;; --- PASS 7: span-state dataflow (§16.3:925, decision 0029) ---------------
+  ;;
+  ;; *** A FIXPOINT, NOT AN ENUMERATION, and 0029 says why in one sentence: ***
+  ;; §16.2:913 makes "normal consuming cycles, including the main HTTP message
+  ;; loop" valid, so the set of reachable paths §14:843 quantifies over is
+  ;; infinite on the very machine the plan names as its motivating example. A
+  ;; walk over a finite domain terminates; an enumeration of paths does not.
+  ;;
+  ;; The abstract domain is 0029 item 1's FLAT lattice, of height two:
+  ;;   #f            -- bottom: no state has reached this node yet
+  ;;   none          -- no span is active
+  ;;   (active . s)  -- span `s` is open, one element per declared span
+  ;;   top           -- incoming edges disagree
+  ;; so the join is `#f ⊔ x = x`, `x ⊔ x = x`, and `top` otherwise, and a value
+  ;; can rise at most twice.
+  (define (span-join a b)
+    (cond ((not a) b)
+          ((not b) a)
+          ((equal? a b) a)
+          (else 'top)))
+
+  ;; *** TWO DIFFERENT QUESTIONS, and decision 0029 answers only the first. ***
+  ;; Item 3 fixes the NODE DOMAIN -- 0027's relation, byte-reachability plus the
+  ;; EOF walk -- and says nothing about which EDGES the transfer function
+  ;; follows. The gap is load-bearing: §16.2:907 is "successful EOF with an
+  ;; active span", and a dataflow over `node-out-targets` alone never reaches a
+  ;; finish node that is only EOF-reachable, because that accessor excludes
+  ;; eof-targets by construction.
+  ;;
+  ;; So the edge relation here is the one whose transitive closure IS 0027's
+  ;; relation: byte edges while input can still arrive, then eof routes and
+  ;; zero-width continuations, and never a byte edge after an eof-target. It is
+  ;; deliberately not `all-out-targets`, which crosses an eof-target and then
+  ;; keeps taking byte edges -- 0027 rejects that walk by name.
+  ;;
+  ;; A node's EOF successors: its own eof route when it has one (the three
+  ;; input-reading kinds), and its zero-width continuations otherwise. Both
+  ;; halves in one expression because they are disjoint by construction --
+  ;; `node-eof-target` answers #f for every zero-width kind and
+  ;; `eof-successors` answers '() for every input-reading one.
+  (define (eof-step n)
+    (let ((t (node-eof-target n)))
+      (append (if (symbol? t) (list t) '()) (eof-successors n))))
+
+  ;; The parked set, in the shape §16.2:909's own block uses: the entry, every
+  ;; byte-reachable pause, every byte-reachable callback (Slice ②), and every
+  ;; byte-reachable node carrying its own EOF route.
+  (define (parked? m n br)
+    (and (memq (node-name n) br)
+         (or (eq? (node-name n) (machine-entry m))
+             (pause-node? n)
+             (callback-node? n)
+             (symbol? (node-eof-target n)))))
+
+  ;; 0027 item 1's relation, as its EDGE LIST. The occupiable set is this list's
+  ;; closure from the entry, so the pass needs no separate node filter: a node no
+  ;; execution can occupy is one nothing here points at, and it receives no state
+  ;; for that reason rather than by being screened out (0029 item 3).
+  (define (span-flow m)
+    (let* ((nodes (machine-nodes m))
+           (br (byte-reached m))
+           (byte-edges
+            (apply append
+                   (map (lambda (n)
+                          (if (memq (node-name n) br)
+                              (map (lambda (t) (cons (node-name n) t))
+                                   (node-out-targets n))
+                              '()))
+                        nodes)))
+           (eof-nodes
+            ;; A DFS over eof routes from the parked set, never taking a byte
+            ;; edge: once an execution takes an eof-target it can never feed
+            ;; again (§12.2's finish-ready row), which is the sentence
+            ;; `pass-eof-execution` already records at its own gate.
+            (let walk ((frontier (apply append
+                                        (map (lambda (n)
+                                               (if (parked? m n br) (eof-step n) '()))
+                                             nodes)))
+                       (seen '()))
+              (cond ((null? frontier) seen)
+                    ((memq (car frontier) seen) (walk (cdr frontier) seen))
+                    (else
+                     (let ((n (lookup nodes (car frontier))))
+                       (walk (append (if n (eof-step n) '()) (cdr frontier))
+                             (cons (car frontier) seen)))))))
+           (eof-edges
+            (apply append
+                   (map (lambda (n)
+                          (if (or (parked? m n br) (memq (node-name n) eof-nodes))
+                              (map (lambda (t) (cons (node-name n) t)) (eof-step n))
+                              '()))
+                        nodes))))
+      (append byte-edges eof-edges)))
+
+  ;; The transfer function. `state` is the joined in-state; the answer is the
+  ;; out-state, and any diagnostic is reported by the caller so that this stays
+  ;; one decision per line.
+  ;; `(list 'active s)` and NOT `(cons 'active s)`, and the reason is this
+  ;; file's own rule: `edge-roles-in-source` collects the quoted symbol from
+  ;; EVERY `(cons 'SYM ...)` form here, so a pair built that way would enter the
+  ;; edge-role vocabulary as a thirteenth "role" and take the kind x position
+  ;; matrix's A' row red on its BASELINE. Measured -- it did, on the first draft.
+  (define (span-transfer n state)
+    (cond ((span-start-node? n) (list 'active (span-start-node-span n)))
+          ((span-end-node? n) 'none)
+          (else state)))
+
+  ;; 0029's Consequences table, transcribed rather than re-derived. `top` never
+  ;; reaches here: the caller reports it at the merge and stops propagating,
+  ;; which is what keeps this total.
+  (define (span-node-diagnostics n state)
+    (cond
+      ((span-start-node? n)
+       (let ((s (span-start-node-span n)))
+         (cond ((eq? state 'none) '())
+               ((and (pair? state) (eq? (cadr state) s))
+                (list (make-diagnostic 'invalid-span-state (node-name n)
+                                       "span re-entry: this span is already open")))
+               ((pair? state)
+                (list (make-diagnostic 'invalid-span-state (node-name n)
+                                       "span overlap: another span is already open")))
+               (else '()))))
+      ((span-end-node? n)
+       (let ((s (span-end-node-span n)))
+         (cond ((and (pair? state) (eq? (cadr state) s)) '())
+               ((pair? state)
+                (list (make-diagnostic 'invalid-span-state (node-name n)
+                                       "wrong end: a different span is open")))
+               ((eq? state 'none)
+                (list (make-diagnostic 'invalid-span-state (node-name n)
+                                       "unmatched end: no span is open")))
+               (else '()))))
+      ;; §16.2:900. §13:826's exception -- "Only the active span's own data
+      ;; callback may pause before the span closes" -- cannot apply to a NODE:
+      ;; §16.2:901's node half admits only `event` and `decision` callbacks
+      ;; there, and a span-data callback is reached through a span declaration
+      ;; and the runtime's flush, never through a callback node. So every pause
+      ;; node and every callback node is rejected with a span open.
+      ((and (pair? state) (or (pause-node? n) (callback-node? n)))
+       (list (make-diagnostic 'span-active-at-pause (node-name n)
+                              "a pause or callback invocation is reachable with a span active")))
+      ;; §16.2:907's span half and 0029 item 4. Only the SUCCESSFUL terminals:
+      ;; §14:839 contemplates a span still open at an error terminal, which is
+      ;; why decision 0023 item 5 kept `finish` distinguished from `error`.
+      ((and (pair? state) (or (stop-node? n) (finish-node? n)))
+       (list (make-diagnostic 'span-active-at-exit (node-name n)
+                              "a successful terminal is reachable with a span active")))
+      (else '())))
+
+  (define (pass-spans m)
+    (let* ((nodes (machine-nodes m))
+           (edges (span-flow m))
+           ;; The in-state map, as an association list rebuilt each round. A
+           ;; node no execution can occupy contributes no state to a join and
+           ;; receives none (0029 item 3), so it never appears here at all.
+           (initial (list (cons (machine-entry m) 'none))))
+      ;; Fixpoint. The domain has height two and `live` is finite, so a value
+      ;; can rise at most twice per node and this terminates. The round counter
+      ;; is a guard against a transfer function that is not monotone -- a
+      ;; defect, not an input -- and raises rather than looping forever.
+      (let round ((in initial) (fuel (* 3 (+ 1 (length nodes)))))
+        (when (< fuel 0)
+          (assertion-violation 'pass-spans "span dataflow did not converge" fuel))
+        (let ((next
+               (let step ((es edges) (acc in))
+                 (if (null? es) acc
+                     (let* ((e (car es))
+                            (from (car e)) (to (cdr e))
+                            (fs (cond ((assq from acc) => cdr) (else #f)))
+                            (fn (lookup nodes from)))
+                       (step (cdr es)
+                             ;; No `live` filter here, and its absence is the
+                             ;; point: `live` is the CLOSURE of this very edge
+                             ;; relation, so every edge's target is in it by
+                             ;; construction and a filter would never fire. 0029
+                             ;; item 3 is satisfied by the relation, not by a
+                             ;; guard -- and a guard that cannot guard is what
+                             ;; this project deletes rather than documents.
+                             ;; Measured: written as a filter first, its
+                             ;; mutation shipped UNCAUGHT and said so.
+                             (if (or (not fs) (eq? fs 'top) (not fn))
+                                 ;; `top` does not flow onward (0029 item 2).
+                                 acc
+                                 (let* ((out (span-transfer fn fs))
+                                        (old (cond ((assq to acc) => cdr) (else #f)))
+                                        (j (span-join old out)))
+                                   (if (equal? j old) acc
+                                       (cons (cons to j)
+                                             (remp (lambda (kv) (eq? (car kv) to)) acc)))))))))))
+          (if (equal? (list-sort (lambda (a b) (string<? (symbol->string (car a))
+                                                         (symbol->string (car b))))
+                                 next)
+                      (list-sort (lambda (a b) (string<? (symbol->string (car a))
+                                                         (symbol->string (car b))))
+                                 in))
+              ;; Converged: report.
+              (apply append
+                     (map (lambda (n)
+                            (let ((st (cond ((assq (node-name n) next) => cdr) (else #f))))
+                              (cond ((not st) '())
+                                    ;; 0029 item 2: a join yielding `top` is
+                                    ;; itself a diagnostic, reported where it
+                                    ;; arises. Reporting downstream would blame
+                                    ;; an innocent node and falling silent would
+                                    ;; be unsound.
+                                    ((eq? st 'top)
+                                     (list (make-diagnostic 'inconsistent-span-state
+                                                            (node-name n)
+                                                            "incoming edges disagree about the active span")))
+                                    (else (span-node-diagnostics n st)))))
+                          nodes))
+              (round next (- fuel 1)))))))
+
   ;; Helpers, deliberately not named `lookup`: that one is over NODES and is
   ;; itself pin-visible.
   (define (find-callback cbs nm)
@@ -1306,6 +1519,7 @@
                           (append (pass-names machine)
                                   (pass-fields machine)
                                   (pass-declarations machine)
+                                  (pass-spans machine)
                                   (pass-overlap machine)
                                   (pass-sequence-ambiguity machine)
                                   (pass-reachability machine)

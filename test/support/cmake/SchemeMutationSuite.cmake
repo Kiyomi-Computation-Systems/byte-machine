@@ -922,6 +922,21 @@ cmake_minimum_required(VERSION 3.26)
 # a predicate-driven table cannot see. THREE in the kind x position matrix, one
 # per span arm of `zero-width-edges` plus the zero-progress REPORT set.
 #
+# Milestone 5 Slice ③ task 2, PASS 7 (the span-state lattice): ELEVEN more,
+# 427 + 11 = 438. One per rejection §16.2:899 names, one for :900's callback
+# half, one for the pass never running, and THREE structural -- `top` not
+# flowing onward, the EOF half of the edge relation, and the error-versus-
+# successful terminal split that consumes decision 0023 item 5.
+#
+# *** ONE OF THEM SHIPPED UNCAUGHT AND WAS RE-TARGETED RATHER THAN WEAKENED. ***
+# "pass 7 runs over every node, not the occupiable ones" removed a `(memq to
+# live)` filter, and the filter turned out to be VACUOUS: `live` is the closure
+# of the pass's own edge relation, so every edge's target is in it by
+# construction. The filter was deleted rather than documented, and the decision
+# it was meant to witness -- 0029 item 3's relation, which is 0027's -- is now
+# witnessed where the two relations actually differ: an eof half that keeps
+# taking byte edges, against the machine 0027's Context derives.
+#
 # Milestone 5 Slice ①b: TWO. `pass-declarations` never run -- eight census
 # fixtures then find nothing, caught by a comparison naming a missing code. And
 # the span section reusing the callback section's tag, which pins the section
@@ -1107,7 +1122,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 53)
-set(EXPECTED_MUTATIONS 427)
+set(EXPECTED_MUTATIONS 438)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -5825,6 +5840,127 @@ byte_machine_mutation(
   EXPECT_OUTPUT_MATCHES
     "the resolution arm answers ALONE: case raised")
 
+# Milestone 5 Slice ③: pass 7, the span-state lattice (decision 0029). One
+# mutation per decision the pass makes, and the two structural ones -- the edge
+# set and the node domain -- are the two 0029 does NOT settle between them.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: span RE-ENTRY is accepted"
+  FIND [[               ((and (pair? state) (eq? (cadr state) s))
+                (list (make-diagnostic 'invalid-span-state (node-name n)
+                                       "span re-entry: this span is already open")))]]
+  REPLACE [[               ((and (pair? state) (eq? (cadr state) s)) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "span RE-ENTRY: a second start for the same span")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: span OVERLAP is accepted"
+  FIND [[               ((pair? state)
+                (list (make-diagnostic 'invalid-span-state (node-name n)
+                                       "span overlap: another span is already open")))]]
+  REPLACE [[               ((pair? state) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "span OVERLAP: a start for a different span while one is open")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a WRONG END is accepted"
+  FIND [[               ((pair? state)
+                (list (make-diagnostic 'invalid-span-state (node-name n)
+                                       "wrong end: a different span is open")))]]
+  REPLACE [[               ((pair? state) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "WRONG END: closing a span that is not the one open")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an UNMATCHED END is accepted"
+  FIND [[               ((eq? state 'none)
+                (list (make-diagnostic 'invalid-span-state (node-name n)
+                                       "unmatched end: no span is open")))]]
+  REPLACE [[               ((eq? state 'none) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "UNMATCHED END: closing with nothing open")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a merge disagreement is not reported"
+  # Decision 0029 item 2, whose whole Context is the argument that this is a
+  # rejection of its own and not a paraphrase of §14:843's fourth property.
+  FIND [[                                    ((eq? st 'top)
+                                     (list (make-diagnostic 'inconsistent-span-state]]
+  REPLACE [[                                    ((and #f (eq? st 'top))
+                                     (list (make-diagnostic 'inconsistent-span-state]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "INCONSISTENT: two branches disagree at a merge")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: top flows onward instead of stopping at the merge"
+  # The other half of decision 0029 item 2, and the half that keeps the transfer
+  # functions TOTAL: with `top` flowing, a span end downstream of the merge is
+  # asked what it does on `top`, answers `unmatched end`, and blames a node that
+  # is innocent.
+  FIND [[                             (if (or (not fs) (eq? fs 'top) (not fn)]]
+  REPLACE [[                             (if (or (not fs) (not fn)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "INCONSISTENT: two branches disagree at a merge")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: pass 7's edge set omits the EOF routes"
+  # *** THE ROW DECISION 0029 COULD NOT REACH. *** Its item 3 fixes the pass's
+  # node domain and says nothing about its edges; without the eof half the
+  # dataflow never arrives at a finish node that is only EOF-reachable, and
+  # §16.2:907 -- "successful EOF with an active span" -- becomes unreachable.
+  FIND [[      (append byte-edges eof-edges)))]]
+  REPLACE [[      byte-edges))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a span open at an EOF-ONLY finish is rejected too")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: pass 7's EOF half keeps taking byte edges"
+  # Decision 0029 item 3 takes 0027's relation rather than minting a third, and
+  # 0027 rejects `all-out-targets` BY NAME: that walk crosses an eof-target and
+  # then keeps taking byte edges, which describes no execution. This mutant is
+  # that walk, and the fixture is the machine 0027's own Context derives.
+  #
+  # *** ITS FIRST FORM SHIPPED UNCAUGHT AND THE SUITE SAID SO. *** It removed a
+  # `(memq to live)` filter -- which turned out to be vacuous, because `live` is
+  # the CLOSURE of the edge relation and every edge's target is in it by
+  # construction. The filter was deleted rather than documented, and the
+  # decision it was meant to witness is witnessed here, where the two relations
+  # actually differ.
+  FIND [[                              (map (lambda (t) (cons (node-name n) t)) (eof-step n))]]
+  REPLACE [[                              (map (lambda (t) (cons (node-name n) t)) (all-out-targets n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the span end on the untakeable byte edge is not reported")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a span open at an ERROR terminal is rejected too"
+  # Decision 0029 item 4 is about the SUCCESSFUL terminals only, and §14:839
+  # contemplates a span still open at an error one. This is the mutation that
+  # consumes decision 0023 item 5's kept `finish`-versus-`error` distinction:
+  # widen the check and the accepted machine is rejected.
+  FIND [[      ((and (pair? state) (or (stop-node? n) (finish-node? n)))]]
+  REPLACE [[      ((and (pair? state) (or (stop-node? n) (finish-node? n) (error-node? n)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a span open at an ERROR terminal is ACCEPTED")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: §16.2:900 does not see callback invocations"
+  # The bullet names "explicit pauses OR event/decision callback invocations",
+  # and the two halves are one arm here -- so dropping either is its own
+  # mutation and its own case.
+  FIND [[      ((and (pair? state) (or (pause-node? n) (callback-node? n)))]]
+  REPLACE [[      ((and (pair? state) (pause-node? n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a CALLBACK invocation reachable with a span active is the same finding")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 34: the reference interpreter (Milestone 1 Phase 2) ----------------
@@ -9946,11 +10082,31 @@ byte_machine_mutation(
   # The following line rides along in both halves: the runner refuses an empty
   # REPLACE, so the pass is dropped by rewriting the pair rather than by deleting
   # a line.
+  # Re-anchored by Slice ③: `pass-spans` (§16.3:925's pass 7) sits between them
+  # in `verify-machine`'s append. The edit -- drop pass-declarations -- is
+  # unchanged, and its sibling below now pins pass 7 the same way.
   FIND [[                                  (pass-declarations machine)
+                                  (pass-spans machine)]]
+  REPLACE [[                                  (pass-spans machine)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "duplicate-callback-declaration is emitted")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.unit.diagnostic-census.chez.source
+  LABEL "verify: pass-spans is never run"
+  # Milestone 5 Slice ③, and the same shape as its sibling above: the whole pass
+  # dropped from verify-machine's append. All four span fixtures then find no
+  # diagnostic at all, so this is caught by a COMPARISON naming missing codes
+  # rather than by a raise from wherever the walk happens to stop. The following
+  # line rides along in both halves; the runner refuses an empty REPLACE.
+  FIND [[                                  (pass-spans machine)
                                   (pass-overlap machine)]]
   REPLACE [[                                  (pass-overlap machine)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "duplicate-callback-declaration is emitted")
+  # Measured: each of the four span codes has a fixture, so the per-code loop
+  # fails four times by name before the summary row does. Pinned on one of them,
+  # which is what attributes this to the PASS rather than to a fixture.
+  EXPECT_OUTPUT_MATCHES "inconsistent-span-state is emitted -- expected a true value")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.unit.diagnostic-census.chez.source
@@ -10156,8 +10312,12 @@ byte_machine_mutation(
   FIND [[          ((span-end-node? n) (list (cons 'next (span-end-node-next n))))]]
   REPLACE [[          ((span-end-node? n) '())]]
   EXPECT_STATUS 1
+  # Measured: with the arm gone the axis-C cell loses BOTH findings -- the
+  # dangling target and the host span-end's own unmatched-end, because the host
+  # no longer reaches anything and pass 7 never sees it. The pin names the pair,
+  # which is what separates this from its span-start sibling.
   EXPECT_OUTPUT_MATCHES
-    "each reports its derived fault -- expected .*span-end-next want .missing-target")
+    "each reports its derived fault -- expected .*span-end-next want .invalid-span-state missing-target")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls

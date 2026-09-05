@@ -19,10 +19,15 @@
 ;;; in the entry column contradicted §16.2:909 until Slice ⓪b fixed them. A cell
 ;;; whose observation differs from its derivation is a FINDING, not a baseline.
 ;;;
-;;; Only TWO rules in the whole verifier are sensitive to a target's KIND, and
-;;; both are derived here from the spec rather than from the code:
+;;; THREE families of rule in the verifier are sensitive to a target's KIND, and
+;;; all three are derived here from the spec rather than from the code:
 ;;;   §16.2:908  a finish terminal must not be BYTE-REACHABLE
 ;;;   §16.2:909  an EOF path must not reach a stop terminal
+;;;   §16.2:899/:900/:907  the span-state lattice (Milestone 5 Slice ③,
+;;;              decision 0029) -- see `expected-codes`, which states what this
+;;;              skeleton does with a span and derives each verdict from it.
+;;; The third arrived with the eleventh and twelfth kinds; before them this
+;;; header said there were only two, and it was true when written.
 ;;; Everything else accepts. "Impossible by construction" is EMPTY on the kind
 ;;; axis, structurally: every target slot is a bare symbol and a node constructor
 ;;; cannot see the machine's node list, so every kind restriction is necessarily
@@ -228,10 +233,47 @@
 
 ;; The DERIVED expectation. Two rules, both from §16.2, applied before the
 ;; machine is run. Everything else accepts.
+;; *** Milestone 5 Slice ③ adds a THIRD kind-sensitive family, and the header's
+;; claim that there are only two is corrected there rather than here. *** Pass 7
+;; (decision 0029) makes span state a dataflow over the whole graph, so a placed
+;; span node's verdict depends on the SKELETON and not only on the position. The
+;; skeleton is fixed, so the derivation is still a derivation -- it is written
+;; out below rather than observed, and every cell that disagrees is a FINDING.
+;;
+;; What the skeleton does with a span, stated once:
+;;   - NOTHING in it opens a span except a placed span-start or the host of the
+;;     two span POSITIONS, so a placed span-end is normally `unmatched end`.
+;;   - a placed span-start leaves the span open on its own out-edge, which lands
+;;     on the SHARED SINK -- which the host also reaches with no span open. Two
+;;     disagreeing edges is `top`, reported at the sink. `machine-entry` has no
+;;     host, so nothing disagrees there.
+;;   - the three TERMINAL kinds have no out-edges, so they never carry a span to
+;;     the sink and never produce that disagreement.
+;;   - at `span-start-next` the host opens the span, so the placed node is
+;;     reached WITH it active: a pause or callback is §16.2:900, a stop or finish
+;;     is §16.2:907, a second start is re-entry, and a span-end closes it.
+;;   - at `span-end-next` the host's own span-end is unmatched, so every cell
+;;     there carries that one finding and the placed node still sees `none`.
+(define terminal-kinds '(stop error finish))
 (define (expected-codes p kind)
-  (cond ((and (eq? kind 'finish) (position-byte? p)) '(non-eof-into-finish))
-        ((and (eq? kind 'stop) (position-eof? p)) '(eof-reachable-stop))
-        (else '())))
+  (let* ((pos (position-name p))
+         (host-opens? (eq? pos 'span-start-next))
+         (host-unmatched? (eq? pos 'span-end-next))
+         (entry? (eq? pos 'machine-entry)))
+    (append
+     (if (and (eq? kind 'finish) (position-byte? p)) '(non-eof-into-finish) '())
+     (if (and (eq? kind 'stop) (position-eof? p)) '(eof-reachable-stop) '())
+     (if host-unmatched? '(invalid-span-state) '())
+     (cond
+       ((eq? kind 'span-end) (if host-opens? '() '(invalid-span-state)))
+       ((eq? kind 'span-start)
+        (append (if host-opens? '(invalid-span-state) '())
+                (if entry? '() '(inconsistent-span-state))))
+       (host-opens?
+        (append (if (memq kind '(pause callback)) '(span-active-at-pause) '())
+                (if (memq kind '(stop finish)) '(span-active-at-exit) '())
+                (if (memq kind terminal-kinds) '() '(inconsistent-span-state))))
+       (else '())))))
 
 (define (cell-machine p kind)
   (let* ((built (position-build p))
@@ -560,8 +602,13 @@
     ;; Slice ③. Both kinds are zero-width, so a self-targeting `next` is a
     ;; feed-time hang. Neither is a parked state, so neither yields an EOF cycle
     ;; -- which is the difference from the callback's pause continuation above.
-    ((span-start-next       advance)   . (zero-progress-cycle))
-    ((span-end-next         advance)   . (zero-progress-cycle))))
+    ;; The span state at a SELF-loop, derived: `ss` opens and flows to itself,
+    ;; so its own in-state joins `none` (from the host) with `(active sp)` (from
+    ;; itself) -- `top`, reported at `ss`, and `top` does not flow onward, so no
+    ;; re-entry check runs. `se` closes on `none`, which is unmatched, and its
+    ;; out-state stays `none`, so the loop agrees with itself.
+    ((span-start-next       advance)   . (inconsistent-span-state zero-progress-cycle))
+    ((span-end-next         advance)   . (invalid-span-state zero-progress-cycle))))
 
 ;; The self machine: the host points the position under test at ITSELF.
 (define (self-machine pos mode)
@@ -681,9 +728,16 @@
              (let ((pos (position-name q)))
                (unless (eq? pos 'machine-entry)
                  (set! driven (+ driven 1))
-                 (let ((want (if (memq pos eof-positions)
-                                 '(invalid-eof-target)
-                                 '(missing-target)))
+                 ;; Slice ③: `span-end-next`'s host is an unmatched span end
+                 ;; whatever the placed node is, and a dangling cell has no
+                 ;; placed node at all -- so that one finding rides along. Its
+                 ;; sibling `span-start-next` does not: the host opens a span
+                 ;; that reaches only the sink, which nothing else reaches with
+                 ;; a different state once the placed node is gone.
+                 (let ((want (cond ((memq pos eof-positions) '(invalid-eof-target))
+                                   ((eq? pos 'span-end-next)
+                                    '(invalid-span-state missing-target))
+                                   (else '(missing-target))))
                        (got (codes-of (dangle pos))))
                    (unless (equal? want got)
                      (set! bad (cons (list pos 'want want 'got got) bad)))))))
