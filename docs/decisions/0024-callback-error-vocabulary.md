@@ -4,6 +4,14 @@ Date: 2026-09-04
 Status: accepted
 Milestone: 5, Gate 0 (milestone-5-design.md §4.1, §4.2)
 
+> **Amendments** — later notes at the foot of this file reach back into the text
+> above them. Nothing above a note is rewritten.
+>
+> - **2026-09-05 (Milestone 5, Slice ②)** — **annotates the Consequences bullet
+>   "What this hands to Slice ②"**: the code half is implemented, and the
+>   Consequences' warning that a domain-only cross-lane check "passes vacuously
+>   by construction" is what shaped the fixtures. Nothing above became false.
+
 ## Context
 
 Decided 2026-09-04, against the tree this gate was dispatched at (`cc66302`).
@@ -223,3 +231,30 @@ and only if the right sentences are read.
   shipped with no producer, and adds no ninth member. For `domain` = `callback`
   this record names **two** producers, item 4's pair; for a non-`#f` `detail` it
   names the one 0022 named, `§13:808`'s explicit failure.
+
+
+## 2026-09-05 (Milestone 5, Slice ②) — the code half lands
+
+**What this record handed to Slice ②** — "the `callback` domain, item 4's two
+codes, item 5's constant, and the obligation that both are produced by both lanes
+from the same construction" — is implemented.
+
+`byte-machine-make-callback-error/v1` fixes `domain` to `callback` and `reason` to
+one printable-ASCII constant inside the constructor, exactly as 0022 item 1 fixes
+`machine` and `#f`, so no emitted site and no interpreter site writes either. The
+application's code and detail pass through on §13:808's path; the out-of-contract
+path mints `callback-contract-violation` and its detail is `#f`.
+
+**The Consequences' warning held.** "A check that only compares domain across
+lanes passes vacuously by construction" — so the differential asserts the whole
+projected record BY VALUE for both paths, not only that the two lanes agree, and
+two of that lane's mutations edit code both lanes share (the outcome classifier
+and this constructor) precisely because the cross-lane comparison cannot see them.
+
+**One thing this record did not have to decide, and did not.** §13:812's two
+sentences — event and span callbacks accept only continue/pause/failure, decision
+callbacks may additionally return their declared branch keys — turn out to be ONE
+test at the invocation site: an event node declares no branch targets and a
+decision node declares exactly the keys §16.2:901's node half admits, so "does the
+returned symbol name a declared branch of THIS node" answers both, out of data
+both lanes already carry. No callback KIND crosses the seam.

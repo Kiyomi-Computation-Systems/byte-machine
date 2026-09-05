@@ -47,7 +47,13 @@
 ;; a reservation nothing exercises -- the same gap ② closed for `v` and `r`,
 ;; reopened by ③'s own addition to the list.
 (define (make-field-drift-machine)
-  (make-machine 'pausem 'start (list (make-uint-field 'count 8 0 #f)) '() '()
+  (make-machine 'pausem 'start (list (make-uint-field 'count 8 0 #f))
+    ;; *** Milestone 5 Slice ② extends the fixture once more, with a callback
+    ;; node. *** Its arm binds `o`, which no other arm does, so without this
+    ;; declaration and the node below `o` would sit in reserved-member-3 as a
+    ;; reservation nothing exercises -- the gap ② closed for `v` and `r`, and ③
+    ;; for `d`, reopened by this slice's own addition to the list.
+    (list (make-callback-declaration 'note 'event #t '() #f #f)) '()
     (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
           (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))
     (list (make-byte-dispatch-node 'start
@@ -56,10 +62,19 @@
           ;; A FALLIBLE action, so the emitted arm binds `r` as well as `v`; a
           ;; safe one emits no bound check and would leave `r` unwitnessed.
           (make-field-action-node 'bump 'increment '(count) 'test 'reject #f)
-          ;; A STOP, not a finish: Slice ②'s own :908 check rejects a
+          ;; Its true leg went straight to `done` until Milestone 5 Slice ②
+          ;; threaded the callback node in front of it. `done` is a STOP and not
+          ;; a finish for the reason that predates both: §16.2:908 rejects a
           ;; byte-reachable zero-width node targeting a finish terminal, which
           ;; this fixture ran into on its first draft.
-          (make-field-branch-node 'test 'zero '(count) 'done 'acc #f)
+          (make-field-branch-node 'test 'zero '(count) 'note-it 'acc #f)
+          ;; A REQUIRED event callback, so the emitted arm renders `#f` for the
+          ;; default target and an empty branch map -- the ordinary event shape.
+          ;; Its pause continuation is the ERROR node and not the stop: a parser
+          ;; parked at a callback resumes on that one edge (§13:812), so a stop
+          ;; there is an EOF path reaching a stop terminal and §16.2:909 rejects
+          ;; it. Found by building this fixture.
+          (make-callback-node 'note-it 'note 'done '() 'reject #f)
           ;; Slice ③'s INPUT-READING arm. Reached from the branch's false leg so
           ;; the fixture keeps a single entry; base 16 because that arm renders
           ;; the three-range `cond`, which is where `d` is bound.
@@ -78,11 +93,36 @@
 ;; codes, reasons, node names and the metadata vector out of the measurement:
 ;; those are DATA the emitted body carries, not identifiers it binds, and a
 ;; caller binding may legitimately equal one of them.
+;;
+;; *** `case` CLAUSE DATUMS are skipped too, and Milestone 5 Slice ② is what
+;; found it. *** They are data by exactly the argument the paragraph above
+;; makes: `case` compares them with `eqv?` against literals and binds nothing,
+;; so a clause datum equal to a caller's name cannot capture it. They are
+;; skipped explicitly rather than by the quote rule only because `case` does not
+;; write them inside a `quote`. Before this, the emitted `case` over numeric
+;; state ids and bytes made the gap invisible -- numbers are not symbols -- and
+;; the callback arm's `(case (car o) ((goto) ...) ((pause) ...))` is the first
+;; emitted `case` whose datums are symbols. (Measured on the pre-slice goldens:
+;; every emitted `case` was over NUMBERS -- state ids and byte values.)
+;;
+;; Reserving `goto` and `pause` instead would have forbidden two perfectly good
+;; OUTPUT BINDINGS -- reserved-member-3 is checked by `validate-binding` against
+;; the caller's binding symbol and against nothing else; an earlier draft of this
+;; paragraph said "machine names", which no reserved-member list gates.
+;;
+;; The KEY expression and every clause BODY are still walked, which is what
+;; keeps that arm's own `o` in the measurement: it appears only inside
+;; `(car o)` and `(cadr o)`.
 (define (symbols-outside-quote x acc)
   (cond ((symbol? x) (if (memq x acc) acc (cons x acc)))
-        ((pair? x) (if (eq? (car x) 'quote)
-                       acc
-                       (symbols-outside-quote (cdr x) (symbols-outside-quote (car x) acc))))
+        ((pair? x)
+         (cond ((eq? (car x) 'quote) acc)
+               ((and (eq? (car x) 'case) (pair? (cdr x)))
+                (let cloop ((cs (cddr x)) (a (symbols-outside-quote (cadr x) acc)))
+                  (if (not (pair? cs)) a
+                      (cloop (cdr cs) (symbols-outside-quote (cdr (car cs)) a)))))
+               (else
+                (symbols-outside-quote (cdr x) (symbols-outside-quote (car x) acc)))))
         ((vector? x) (symbols-outside-quote (vector->list x) acc))
         (else acc)))
 
@@ -143,13 +183,15 @@
         ;; Milestone 5 Slice ①a adds `psr` and `cbv`, emitted `exec`'s eighth and
         ;; ninth parameters (decision 0025 point 3), and inherits that obligation
         ;; as intended: eight names, and the sentinel counts what it iterates.
+        ;; Milestone 5 Slice ② adds `o`, the callback arm's outcome binding, and
+        ;; the fixture gains a callback node so it is actually rendered: nine.
         (let ((seen 'seed) (n 0))
           (set! seen '())
           (for-each (lambda (s)
                       (set! n (+ n 1))
                       (when (memq s observed) (set! seen (cons s seen))))
-                    '(fieldv errs pk v r d psr cbv))
-          (check-equal "eight checked" n 8)
-          (check-equal "all eight emitted" (length seen) 8))))))
+                    '(fieldv errs pk v r d o psr cbv))
+          (check-equal "nine checked" n 9)
+          (check-equal "all nine emitted" (length seen) 9))))))
 
 (harness-finish)

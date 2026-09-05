@@ -10,6 +10,12 @@ Milestone: 5, Gate 0 (milestone-5-design.md §4.6, §4.9, §4.10)
 > - **2026-09-04 (Milestone 5, Slice ①b)** — **amends the Consequences bullet on
 >   Slice ①b's accessors**: `parser-state-name` was deferred whole to Slice ② by
 >   the owner, so ①b ships five of the six, not all six.
+> - **2026-09-05 (Milestone 5, Slice ②)** — **annotates the 2026-09-04 note and
+>   item 3**: the deferral it recorded is discharged — `parser-state-name`
+>   shipped, by the route that note predicted — item 1's `busy` rule is witnessed
+>   from inside a callback for all six accessors, and item 3's short circuit is
+>   implemented as written, so the constraint it placed on §18:981's trace holds.
+>   Nothing above became false.
 
 ## Context
 
@@ -241,3 +247,36 @@ id→name table into the generated lane regardless.
 
 **Nothing else in this record changes.** Item 1's `busy` rule is written for five
 accessors and still is; item 2's `parser-active-span` shipped in ①b as stated.
+
+
+## 2026-09-05 (Milestone 5, Slice ②) — the deferral closes, and item 3 reports
+
+**`parser-state-name` shipped**, as the foot note above said it would, and by the
+route that note predicted: Slice ② had to carry an id→name table into the
+generated lane regardless, and it is ABI payload member 2 — §17:963's state-id to
+source-name vector, total over internal prefix states. §9.5:444 made that a
+version bump, 4 → 5. The alternative the note called "a separate emitted
+definition" is not a third transport: the emitted library exports one name and
+the compiled-machine constructor's five arguments are the only channel, so a
+top-level `define` would still have to be passed in.
+
+**Item 1 is witnessed, and needed a fix to be true.** All six read accessors are
+called from inside a callback in both lanes and all six answer. The generated
+lane did not satisfy §13:819-820 as shipped: emitted `exec` owns its own
+`pos`/`off`/`st` locals and writes the parser's slots only on RETURN, so a
+callback would have seen the offset the feed began at and the state it began in.
+The shared invocation commits both before invoking; on the interpreted side those
+writes are no-ops.
+
+**Item 3 reports, as this record asked it to.** The sentinel is short-circuited at
+the invocation site and **the closure is never called** — the short circuit is
+literally `(if (unbound-callback? f) (list 'goto default) …)`, and `f` is only
+applied in the other arm. So the constraint this record placed on §18:981's trace
+holds: nothing can trace a short-circuited slot as an invocation, because nothing
+invokes it. The declared default is resolved to a TARGET at lowering time, in two
+independent walks (the normalizer's and the interpreter's, decision 0015 point 3),
+so the invocation site carries no rule of its own.
+
+**Nothing else in this record changes.** Item 2's `parser-active-span` shipped in
+①b and is unchanged; item 1's scoping to §12.2's four mutating operations is what
+Slice ②'s reentrancy row implements.

@@ -18,4 +18,4 @@
       ((2) (byte-machine-make-feed-outcome/v1 (quote error) pos (byte-machine-make-parser-error/v1 (vector-ref errs 1) (quote reject) 2 off pk) 2 off))
       (else (assertion-violation (quote exec) "unknown state" st)))))
   (define one-byte-parser
-    (byte-machine-make-compiled-machine 4 14095574568398596535 0 exec (quote #(#() #())))))
+    (byte-machine-make-compiled-machine 5 14095574568398596535 0 exec (quote #(#() #() #(start stop reject))))))

@@ -40,20 +40,28 @@
         (only (byte-machine private ir)
               byte-dispatch-node? sequence-dispatch-node? stop-node? error-node?
               finish-node? pause-node? field-action-node? field-branch-node?
-              integer-accumulate-node?)
+              integer-accumulate-node? callback-node?)
         (byte-machine verify))
 
 (harness-begin "unit.kind-position-census")
 
 (define eof-decl (make-error-declaration 'default-eof 'eof "unexpected end of input" #f))
 (define rej-decl (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))
+;; Declared in EVERY cell machine, including the ones that place no callback
+;; node. §16.2:901's node half resolves a callback node's `callback` and its
+;; branch keys against this table, and a matrix cell must record the placed
+;; node's POSITION -- an undeclared-callback diagnostic in every callback cell
+;; would be measuring the fixture. Uniform across all five machine builders on
+;; purpose: a declaration present in some and absent in others is exactly the
+;; divergence this instrument exists to make visible.
+(define cb-decl (make-callback-declaration 'cb 'decision #t '(yes) #f #f))
 
 ;; The shared sinks every placed node's own out-edges land on. Never the host,
 ;; so a cell's record is about the placed node's POSITION and not about a cycle
 ;; the skeleton happened to create.
 (define (sinks) (list (make-error-node 'ee 'rejected #f)))
 
-;; --- the nine kinds, as data ------------------------------------------------
+;; --- the ten kinds, as data -------------------------------------------------
 ;; Each builder returns the node named `t`. Its own out-edges go to the sinks.
 (define kind-table
   (list
@@ -76,9 +84,16 @@
          (lambda (nm) (make-field-branch-node nm 'zero '(n) 'ee 'ee #f)))
    (cons 'integer-accumulate
          (lambda (nm) (make-integer-accumulate-node nm 'n 10 'ee
-                                                    (make-edge 'ee 'advance) 'ee #f #f)))))
+                                                    (make-edge 'ee 'advance) 'ee #f #f)))
+   ;; The tenth kind (Milestone 5 Slice ②). Its three out-edges -- continue, one
+   ;; declared branch, and the pause continuation -- all land on the shared sink,
+   ;; so the cell records the placed node's POSITION and not its own wiring. The
+   ;; callback name and branch key are `cb-decl`'s, so §16.2:901's
+   ;; cross-reference resolves and the cell keeps measuring position.
+   (cons 'callback
+         (lambda (nm) (make-callback-node nm 'cb 'ee '((yes ee)) 'ee #f)))))
 
-;; --- the sixteen positions, as data -----------------------------------------
+;; --- the nineteen positions, as data ----------------------------------------
 ;; Each builder returns (entry . host-nodes) with the placed node `t` wired into
 ;; that one position. Every host is byte-reachable from the entry, so no cell
 ;; carries an incidental unreachable-node and the byte-reachability gate that
@@ -146,11 +161,28 @@
    (list 'accumulate-eof-target     #f   #t
          (lambda () (cons 'h (list (dispatch-to 'ac)
                                    (make-integer-accumulate-node 'ac 'n 10 'ac
-                                     (make-edge 'ee 'advance) 'ee 't #f)))))))
+                                     (make-edge 'ee 'advance) 'ee 't #f)))))
+   ;; --- the callback node's three out-edges (Milestone 5 Slice ②) ---
+   ;; All three are BYTE routes: the node is zero-width, so whatever byte edge
+   ;; reaches the host reaches them, and §16.2:908's gate is byte-reachability.
+   ;; Only the PAUSE CONTINUATION is an EOF route. A parser parked at a callback
+   ;; node is parked because that callback returned pause, and §13:812 resumes
+   ;; "at that invocation's declared pause continuation" -- one edge. The
+   ;; continue and branch targets become EOF-reachable only when the walk flows
+   ;; THROUGH the callback, which this host's #f eof-target prevents.
+   (list 'callback-continue          #t   #f
+         (lambda () (cons 'h (list (dispatch-to 'cn)
+                                   (make-callback-node 'cn 'cb 't '((yes ee)) 'ee #f)))))
+   (list 'callback-branch            #t   #f
+         (lambda () (cons 'h (list (dispatch-to 'cn)
+                                   (make-callback-node 'cn 'cb 'ee '((yes t)) 'ee #f)))))
+   (list 'callback-pause-continuation #t  #t
+         (lambda () (cons 'h (list (dispatch-to 'cn)
+                                   (make-callback-node 'cn 'cb 'ee '((yes ee)) 't #f)))))))
 
 ;; *** Every row must BUILD the kind it is keyed by. *** Found by the
 ;; whole-branch review: without this, swapping one builder for another kind's
-;; leaves the whole suite green while sixteen cells silently test the wrong kind
+;; leaves the whole suite green while nineteen cells silently test the wrong kind
 ;; and the kind they claim to test disappears from the matrix entirely. A table
 ;; keyed by a name nothing checks is a census with no census.
 (define kind-predicates
@@ -162,7 +194,8 @@
         (cons 'pause pause-node?)
         (cons 'field-action field-action-node?)
         (cons 'field-branch field-branch-node?)
-        (cons 'integer-accumulate integer-accumulate-node?)))
+        (cons 'integer-accumulate integer-accumulate-node?)
+        (cons 'callback callback-node?)))
 
 (define (position-name p) (car p))
 (define (position-byte? p) (cadr p))
@@ -181,7 +214,7 @@
          (entry (car built))
          (host (cdr built))
          (t ((cdr (assq kind kind-table)) 't)))
-    (make-machine 'cell entry (list (make-uint-field 'n 8 0 #f)) '() '()
+    (make-machine 'cell entry (list (make-uint-field 'n 8 0 #f)) (list cb-decl) '()
                   (list eof-decl rej-decl)
                   (append host (list t) (sinks))
                   'default-eof #f)))
@@ -201,7 +234,7 @@
          (entry (car built))
          (host (cdr built))
          (t ((cdr (assq kind kind-table)) 't)))
-    (make-machine 'cell entry (list (make-uint-field 'n 8 0 #f)) '() '()
+    (make-machine 'cell entry (list (make-uint-field 'n 8 0 #f)) (list cb-decl) '()
                   (list eof-decl rej-decl)
                   (append host (list t) (if with-sink? (sinks) '()))
                   'default-eof #f)))
@@ -323,7 +356,7 @@
                   (from-table
                    (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b)))
                               (map car kind-table))))
-              (check-equal "the same nine kinds" from-source from-table))))))))
+              (check-equal "the same ten kinds" from-source from-table))))))))
 
 
 ;; --- axis A': the POSITION drift row (Milestone 5 Slice ①a task 5) -----------
@@ -335,8 +368,8 @@
 ;; 2026-09-04, `ir.sls` has no position vocabulary to derive from -- the only
 ;; enumeration with the right cardinality is in `verify.sls`, the file this
 ;; census exists to test. So the POSITION side is a hand-written fixture table,
-;; not a second derivation, and no assertion here can say the sixteen rows are
-;; the right sixteen.
+;; not a second derivation, and no assertion here can say the nineteen rows are
+;; the right nineteen.
 ;;
 ;; *** A CLAIM MADE HERE ON FIRST WRITING WAS BACKWARDS, and the correction is
 ;; worth more than the original point. *** It said the row is BLIND under the
@@ -398,7 +431,14 @@
     (false         field-branch-false)
     (digit         accumulate-digit)
     (nondigit      accumulate-nondigit)
-    (overflow      accumulate-overflow)))
+    (overflow      accumulate-overflow)
+    ;; Slice ②. verify.sls names these three for §13:803-808's outcomes; the
+    ;; matrix names the positions after the node and the slot. `pause` here is
+    ;; the callback's pause continuation and is a different edge from the pause
+    ;; NODE's `continuation` above -- two kinds, two roles, no reuse.
+    (continue      callback-continue)
+    (branch        callback-branch)
+    (pause         callback-pause-continuation)))
 
 (harness-group "every edge role verify.sls labels has a matrix position (A')"
   (lambda ()
@@ -426,27 +466,27 @@
                            (set! missing (cons pos missing))))
                        (cdr entry)))
            role->positions)
-          (check-equal "every mapped position was looked up" checked 12)
+          (check-equal "every mapped position was looked up" checked 15)
           (check-equal "and each one exists" missing '()))))
     (harness-case "the four EOF and entry positions are accounted for outside the role map"
       (lambda ()
         ;; `node-eof-target` and the machine entry carry no `(cons 'role ...)`
         ;; label, so they cannot appear in the derived set. They are named here so
-        ;; that position-table's 16 rows are 12 mapped + these 4, and a row added
+        ;; that position-table's 19 rows are 15 mapped + these 4, and a row added
         ;; with neither a role nor a place here reddens the count below.
         (let ((names (map car position-table)))
           (for-each (lambda (p) (check (symbol->string p) (memq p names)))
                     '(machine-entry dispatch-eof-target sequence-eof-target
                       accumulate-eof-target))
-          (check-equal "position-table is exactly 12 role-carrying + 4 unlabelled"
-                       (length position-table) 16))))))
+          (check-equal "position-table is exactly 15 role-carrying + 4 unlabelled"
+                       (length position-table) 19))))))
 
 
 ;; --- axis B: self-reference --------------------------------------------------
 ;; The target IS the owning node. This is where the zero-progress rules live, and
 ;; it is the axis a scoping cut would reach for first -- wrongly: it is the only
 ;; coverage in the tree of the site that reports an EOF cycle at a PAUSE, and it
-;; is where four of the sixteen positions behave differently under `reexecute`.
+;; is where four of the nineteen positions behave differently under `reexecute`.
 ;;
 ;; `machine-entry` has no self variant: the machine is not a node. Recorded as
 ;; not-driven rather than as a verdict.
@@ -478,7 +518,18 @@
     ((accumulate-nondigit   advance)   . ())
     ((accumulate-nondigit   reexecute) . (zero-progress-cycle))
     ((accumulate-overflow   advance)   . (zero-progress-cycle))
-    ((accumulate-eof-target advance)   . (eof-zero-progress-cycle))))
+    ((accumulate-eof-target advance)   . (eof-zero-progress-cycle))
+    ;; Slice ②. Every callback edge is zero-width, so all three self-loops are
+    ;; zero-progress cycles. Only the PAUSE CONTINUATION is also an EOF cycle,
+    ;; and for the reason the position table states: a parser parked at this
+    ;; node resumes on that one edge, so a self-targeting pause continuation is
+    ;; an EOF path that never terminates -- while a self-targeting continue or
+    ;; branch target hangs during FEED, which `zero-progress-cycle` is what
+    ;; reports.
+    ((callback-continue     advance)   . (zero-progress-cycle))
+    ((callback-branch       advance)   . (zero-progress-cycle))
+    ((callback-pause-continuation advance)
+                                       . (eof-zero-progress-cycle zero-progress-cycle))))
 
 ;; The self machine: the host points the position under test at ITSELF.
 (define (self-machine pos mode)
@@ -521,8 +572,15 @@
       ((accumulate-eof-target) (list (dsp (one-case 'ac 'advance) (make-edge 'ee 'reexecute) #f)
                                      (make-integer-accumulate-node 'ac 'n 10 'ee
                                        (make-edge 'ee 'advance) 'ee 'ac #f)))
+      ((callback-continue) (list (dsp (one-case 'cn 'advance) (make-edge 'ee 'reexecute) #f)
+                                 (make-callback-node 'cn 'cb 'cn '((yes ee)) 'ee #f)))
+      ((callback-branch) (list (dsp (one-case 'cn 'advance) (make-edge 'ee 'reexecute) #f)
+                               (make-callback-node 'cn 'cb 'ee '((yes cn)) 'ee #f)))
+      ((callback-pause-continuation)
+       (list (dsp (one-case 'cn 'advance) (make-edge 'ee 'reexecute) #f)
+             (make-callback-node 'cn 'cb 'ee '((yes ee)) 'cn #f)))
       (else (assertion-violation 'self-machine "no such position" pos))))
-  (make-machine 'self 'h (list (make-uint-field 'n 8 0 #f)) '() '()
+  (make-machine 'self 'h (list (make-uint-field 'n 8 0 #f)) (list cb-decl) '()
                 (list eof-decl rej-decl)
                 (append nodes (sinks)) 'default-eof #f))
 
@@ -546,8 +604,8 @@
                  (set! bad (cons (list pos mode 'want want 'got got) bad)))))
            self-expectations)
           (check-equal "every self row was driven" driven (length self-expectations))
-          (check-equal "and fifteen positions have one, four of them twice"
-                       driven (+ 15 4))
+          (check-equal "and eighteen positions have one, four of them twice"
+                       driven (+ 18 4))
           (check-equal "each matches its derivation" bad '()))))))
 
 
@@ -571,7 +629,7 @@
          (built (position-build (cdr p)))
          (entry (car built))
          (host (cdr built)))
-    (make-machine 'dangle entry (list (make-uint-field 'n 8 0 #f)) '() '()
+    (make-machine 'dangle entry (list (make-uint-field 'n 8 0 #f)) (list cb-decl) '()
                   (list eof-decl rej-decl)
                   (append host (sinks)) 'default-eof #f)))
 
@@ -594,15 +652,15 @@
                    (unless (equal? want got)
                      (set! bad (cons (list pos 'want want 'got got) bad)))))))
            position-table)
-          (check-equal "fifteen dangling cells driven" driven 15)
+          (check-equal "eighteen dangling cells driven" driven 18)
           (check-equal "each reports its derived fault" bad '()))))))
 
 ;; --- the absence census ------------------------------------------------------
 ;; Where "impossible by construction" actually lives. The KIND axis has no
 ;; constructor refusals at all -- every target slot is a bare symbol and a node
 ;; constructor cannot see the machine's node list -- but the ABSENCE axis does:
-;; twelve positions reject #f outright, three accept it (the EOF routes, where #f
-;; means the machine default), and one is CONDITIONAL.
+;; fifteen positions reject #f outright, three accept it (the EOF routes, where
+;; #f means the machine default), and one is CONDITIONAL.
 (define (raises? thunk)
   (call/cc (lambda (k)
              (with-exception-handler (lambda (e) (k #t))
@@ -624,8 +682,16 @@
                           (lambda () (make-integer-accumulate-node 'ac 'n 10 #f
                                        (make-edge 'ee 'advance) 'ee #f #f))
                           (lambda () (make-integer-accumulate-node 'ac 'n 10 'ee
-                                       (make-edge 'ee 'advance) #f #f #f))))
-          (check-equal "eight constructor refusals" refused 8)
+                                       (make-edge 'ee 'advance) #f #f #f))
+                          ;; Slice ②. §10.6:586 makes BOTH the continue target
+                          ;; and the pause continuation mandatory, and §9.1:318
+                          ;; makes a branch entry a two-element list of a key
+                          ;; and a target -- so a #f in any of the three is a
+                          ;; construction refusal, not a verifier diagnostic.
+                          (lambda () (make-callback-node 'cn 'cb #f '((yes ee)) 'ee #f))
+                          (lambda () (make-callback-node 'cn 'cb 'ee '((yes ee)) #f #f))
+                          (lambda () (make-callback-node 'cn 'cb 'ee '((yes #f)) 'ee #f))))
+          (check-equal "eleven constructor refusals" refused 11)
           ;; The three EOF routes, built rather than refused.
           (for-each (lambda (th) (unless (raises? th) (set! accepted (+ accepted 1))))
                     (list (lambda () (make-byte-dispatch-node 'h
@@ -684,7 +750,7 @@
 (define (producer-nodes v) ((cdr (cdr (assq v verdict-producers)))))
 
 (define (lattice-machine a b)
-  (make-machine 'lat 's0 (list (make-uint-field 'n 8 0 #f)) '() '()
+  (make-machine 'lat 's0 (list (make-uint-field 'n 8 0 #f)) (list cb-decl) '()
                 (list eof-decl rej-decl)
                 (append (list (make-byte-dispatch-node 's0
                                 (list (make-byte-case (make-exact-byte-matcher 0)

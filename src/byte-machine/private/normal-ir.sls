@@ -42,7 +42,10 @@
                 field-action-node-arguments field-action-node-next field-action-node-error
                 field-branch-node? field-branch-node-name field-branch-node-predicate
                 field-branch-node-arguments field-branch-node-true-target
-                field-branch-node-false-target))
+                field-branch-node-false-target
+                callback-node? callback-node-name callback-node-callback
+                callback-node-continue-target callback-node-branch-targets
+                callback-node-pause-continuation))
 
   (define nm-tag (vector 'byte-machine-normal-machine))
   ;; The debug map is APPENDED after fp, never inserted before it:
@@ -289,6 +292,56 @@
                        (if (symbol? t)
                            (cons 'node (id-of t))
                            (cons 'default default-eof-code)))))
+           ;; Slice ②: a callback node names its callback by NAME, and the
+           ;; generated lane holds an indexed slot vector (§9.3:419). The slot IS
+           ;; the declaration position -- `name-table` below builds the same
+           ;; numbering for `normal-machine-callbacks`, and §10.1:482 makes
+           ;; declaration order carry no semantic priority precisely so it can
+           ;; give stable ids. Resolved HERE rather than at emission: the
+           ;; fingerprint must cover what the ABI carries (0019 item 2), and what
+           ;; the ABI carries is the slot.
+           (callback-slot-of
+            (lambda (nm)
+              (let loop ((cs (machine-callbacks machine)) (i 0))
+                (cond ((null? cs)
+                       (assertion-violation 'normalize-machine
+                                            "callback node names no declaration" nm))
+                      ((eq? (callback-declaration-name (car cs)) nm) i)
+                      (else (loop (cdr cs) (+ i 1)))))))
+           (callback-decl-of
+            (lambda (nm)
+              (let loop ((cs (machine-callbacks machine)))
+                (cond ((null? cs)
+                       (assertion-violation 'normalize-machine
+                                            "callback node names no declaration" nm))
+                      ((eq? (callback-declaration-name (car cs)) nm) (car cs))
+                      (else (loop (cdr cs)))))))
+           ;; §9.3:419: "An optional decision callback must declare
+           ;; `default-branch`; other optional callbacks default to `continue`."
+           ;; Resolved to a TARGET ID here, so the invocation site -- decision
+           ;; 0028 item 3's short circuit over the unbound-callback sentinel --
+           ;; is one jump and carries no rule of its own.
+           ;;
+           ;; #f for a REQUIRED callback: its slot can never hold the sentinel,
+           ;; so there is no default to take, and #f says exactly that where a
+           ;; plausible target would say something false.
+           (callback-default-of
+            (lambda (n)
+              (let ((d (callback-decl-of (callback-node-callback n))))
+                (cond ((callback-declaration-required? d) #f)
+                      ((eq? (callback-declaration-kind d) 'decision)
+                       (let ((hit (assq (callback-declaration-default-branch d)
+                                        (callback-node-branch-targets n))))
+                         ;; Unreachable once §16.2:901's node half runs: it
+                         ;; requires an optional decision callback's node to
+                         ;; declare a target for the default branch. Loud rather
+                         ;; than #f, which here means "required".
+                         (unless hit
+                           (assertion-violation 'normalize-machine
+                                                "no target for the default branch"
+                                                (callback-node-name n)))
+                         (id-of (cadr hit))))
+                      (else (id-of (callback-node-continue-target n)))))))
            (entry (id-of (machine-entry machine)))
            (declared-count (length nodes))
            ;; Decision 0016: declared nodes keep their declaration index; every
@@ -439,7 +492,38 @@
                                         (list (id-of (integer-accumulate-node-digit-target n))
                                               (cons (id-of (edge-target nd)) (edge-mode nd))
                                               (id-of (integer-accumulate-node-overflow-error n))))))
-                             ;; The repertoire is now these NINE kinds. A future
+                             ;; Callback invocation (Slice ②), the tenth kind and
+                             ;; the first that reaches OUT of the machine. 1:1
+                             ;; like the three zero-width kinds above, so it
+                             ;; allocates no internal state and prefix-blocks
+                             ;; correctly skips it.
+                             ;;
+                             ;; Its five payload values ride the three payload
+                             ;; slots rather than widening the vector: `selector`
+                             ;; carries the resolved callback SLOT, `arguments`
+                             ;; the branch map as (key . target-id) pairs, and
+                             ;; `targets` the list (continue-id pause-id
+                             ;; default-id).
+                             ;; Widening would mean editing every state literal
+                             ;; in this cond for one kind's convenience, and the
+                             ;; three slots were widened in Slice ② of the LAST
+                             ;; milestone for exactly this purpose.
+                             ;;
+                             ;; The branch map's own order is the source list's,
+                             ;; which §9.1:318 fixes as "proper lists in
+                             ;; deterministic caller order" -- so two machines
+                             ;; whose branches differ only in order are two
+                             ;; machines, and the encoder below writes the order.
+                             ((callback-node? n)
+                              (vector ns-tag 'callback i #f #f #f #f #f
+                                      (callback-slot-of (callback-node-callback n))
+                                      (map (lambda (b)
+                                             (cons (car b) (id-of (cadr b))))
+                                           (callback-node-branch-targets n))
+                                      (list (id-of (callback-node-continue-target n))
+                                            (id-of (callback-node-pause-continuation n))
+                                            (callback-default-of n))))
+                             ;; The repertoire is now these TEN kinds. A future
                              ;; kind reaching here must fail loudly, not lower to
                              ;; nothing.
                              (else (assertion-violation 'normalize-machine "unknown node kind" n)))
@@ -590,6 +674,42 @@
                 (put-operands p (normal-field-arguments s))
                 (put-u32be p (car (normal-field-targets s)))
                 (put-u32be p (cdr (normal-field-targets s))))
+               ;; callback invocation (Slice ②): the tag, then the resolved
+               ;; callback slot, the continue target, the pause continuation,
+               ;; and the branch map as a count followed by (key, target)
+               ;; records.
+               ;;
+               ;; THE TAG IS TEN, not the eight the state-kind run would reach
+               ;; next: Slice ①b spent eight and nine on the two trailing
+               ;; slot-table sections below, and a reader walking this stream
+               ;; linearly could not tell a state record from a section by
+               ;; position alone once a machine carried both.
+               ;;
+               ;; EVERY PART IS ENCODED, on decision 0019 item 2 and the
+               ;; measured failure the section comment below records: a
+               ;; different slot is a different callback, a different key
+               ;; selects a different target, and a different branch ORDER is a
+               ;; different machine (§9.1:318 fixes the list as deterministic
+               ;; caller order). Machines differing in any of them emit
+               ;; different libraries, so they must differ in fingerprint.
+               ((callback)
+                (put-u8 p 10)
+                (put-u16be p (normal-field-selector s))
+                (let ((tg (normal-field-targets s)))
+                  (put-u32be p (car tg))
+                  (put-u32be p (cadr tg))
+                  ;; The default target, written with a PRESENCE TAG rather than
+                  ;; a sentinel id -- the field action's error-target rule -- so
+                  ;; "this callback is required and has no default" and "the
+                  ;; default is state 0" cannot collide.
+                  (let ((d (caddr tg)))
+                    (if d (begin (put-u8 p 1) (put-u32be p d)) (put-u8 p 0))))
+                (let ((bs (normal-field-arguments s)))
+                  (put-u16be p (length bs))
+                  (for-each (lambda (b)
+                              (put-symbol p (car b))
+                              (put-u32be p (cdr b)))
+                            bs)))
                (else (assertion-violation 'normalize-machine "unknown state kind"
                                           (normal-state-kind s)))))
            (loop (+ i 1))))

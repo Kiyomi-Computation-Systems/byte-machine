@@ -124,9 +124,19 @@
     ;; keys are all new subjects of §16.2:886 -- before this slice they sat
     ;; outside every grammar check in the tree.
     (duplicate-callback-declaration 1) (duplicate-span-declaration 1)
-    (duplicate-branch-key 1) (reserved-branch-key 1)
-    (invalid-callback-declaration 2) (missing-callback-declaration 2)
-    (invalid-span-callback 2) (unreferenced-callback-declaration 1)))
+    (duplicate-branch-key 2) (reserved-branch-key 1)
+    (invalid-callback-declaration 2) (missing-callback-declaration 3)
+    (invalid-span-callback 2) (unreferenced-callback-declaration 1)
+    ;; Milestone 5 Slice ②: §16.2:901's NODE half. ONE new code over three
+    ;; sites -- a span callback invoked from a node, an undeclared branch key,
+    ;; and a declared key the node gives no target -- on §4.6's budget and on
+    ;; the precedent `invalid-callback-declaration` set by covering two faults.
+    ;; The two faults that already had codes REUSE them, which is why
+    ;; `missing-callback-declaration` goes 2 -> 3 and `duplicate-branch-key`
+    ;; 1 -> 2 in the same move: a callback node naming no declaration is the
+    ;; same fault a span naming no declaration reports, and a key listed twice
+    ;; is the same fault whether the list is a declaration's or a node's.
+    (invalid-callback-invocation 3)))
 
 ;; *** RE-MEASURED 2026-09-03, Slice ⓪b task 2: `non-eof-into-finish` went 3 -> 1
 ;; and the total 31 -> 29. *** This is the ratchet FIRING, not a regression: ⓪b
@@ -393,6 +403,21 @@
    (cons 'unreferenced-callback-declaration
          (verify-of (mach/decls 'a (list (cb 'on-d 'span-data #f '() #f))
                                 '() (list ed rd) (ok-nodes) 'default-eof)))
+   ;; --- Milestone 5 Slice ②: §16.2:901's node half --------------------------
+   ;; The node lists a key the declaration never declared AND omits a target for
+   ;; the one it did, so this fixture drives two of the code's three sites. The
+   ;; third -- a node invoking a span-kind callback -- cannot be reached from
+   ;; the same machine: it short-circuits before the key arms run, on purpose,
+   ;; so a node naming the wrong kind reports that and not three findings about
+   ;; keys it was never going to be asked for.
+   (cons 'invalid-callback-invocation
+         (verify-of (mach/decls 'a (list (cb 'on-x 'decision #t '(keep) #f)) '()
+                                (list ed rd)
+                                (list (one-case-dispatch 'start 'inv 'advance #f)
+                                      (make-callback-node 'inv 'on-x 'stop
+                                                          '((nosuch stop)) 'rej #f)
+                                      (make-stop-node 'stop #f) (an-error 'rej))
+                                'default-eof)))
    ;; A machine name outside the portable repertoire.
    (cons 'invalid-name
          (verify-of (mach 'BadName 'start '() (list ed rd)

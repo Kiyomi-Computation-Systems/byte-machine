@@ -182,10 +182,13 @@
         ;; headline invariant is that none moves.
         ;;
         ;; Milestone 5 Slice ①a (decision 0025 point 2) moves the version to 4
-        ;; and grows the payload with a second member, reserved empty. So the
-        ;; literal below reads 4 and a zero-field payload renders #(#() #()).
+        ;; and grows the payload with a second member, reserved empty. Slice ②
+        ;; moves it to 5 and adds member 2, §17:963's state-id to source-name
+        ;; table -- which is not reservable-empty, because it is what
+        ;; `parser-state-name` reads. So the literal reads 5 and a zero-field
+        ;; machine renders #(#() #() #(<its state names>)).
         (check "unversioned call"
-               (has? "(byte-machine-make-compiled-machine 4 14095574568398596535 0 exec (quote #(#() #())))"))
+               (has? "(byte-machine-make-compiled-machine 5 14095574568398596535 0 exec (quote #(#() #() #(start stop reject))))"))
         (check "no versioned name survives"
                (not (has? "byte-machine-make-compiled-machine/v")))))
     ;; Milestone 4 Slice ①b task 6 (decision 0019 item 3(b)). Member 0 stops
@@ -209,7 +212,7 @@
                (harness-string-contains?
                 (utf8->string (render-machine (compile-machine with-fields '())
                                               'field-parser))
-                "exec (quote #(#((count . 0) (limit . 65535)) #()))"))))
+                "exec (quote #(#((count . 0) (limit . 65535)) #() #(start stop reject)))"))))
     (harness-case "exec carries its three reserved parameters"
       (lambda ()
         ;; `fieldv` was reserved empty by decision 0019 item 3(c) and filled in

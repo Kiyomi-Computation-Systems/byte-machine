@@ -330,4 +330,50 @@
                      (run-slices cm-gen (list (list (u8v 1 2 3 4) 0 4)))
                      (run-slices ad-gen (list (list (u8v 1 2 3 4) 0 4))))))))
 
+;; --- Milestone 5 Slice ②: `parser-state-name` at an INTERNAL prefix state ----
+;;
+;; §13:820 requires "the source callback/span node, not a generated internal
+;; continuation", and this is the one machine shape in the tree where the two
+;; lanes hold structurally different things there: the interpreter parks on the
+;; compound `(seq . consumed-bytes)` and the generated lane on an integer id
+;; that names no source node at all. That is exactly why Slice ①b deferred the
+;; accessor whole -- the generated lane could not answer -- and why ABI payload
+;; member 2's table is total over internal prefix states.
+(harness-group "parser-state-name names the SOURCE node mid-sequence"
+  (lambda ()
+    (harness-case "both lanes answer the declaring node at every prefix depth"
+      (lambda ()
+        ;; Driven over every partial prefix, not one: the internal states are
+        ;; distinct per depth, so a table short by one entry would answer at
+        ;; depth 1 and raise at depth 2.
+        (let ((driven 0) (bad '()))
+          (for-each
+           (lambda (k)
+             (set! driven (+ driven 1))
+             (let ((pr (make-parser cm-ref '() #f))
+                   (pg (make-parser cm-gen '() #f)))
+               (for-each (lambda (b)
+                           (parser-feed! pr (u8 b) 0 1)
+                           (parser-feed! pg (u8 b) 0 1))
+                         (head-n seq-bytes k))
+               (let ((a (parser-state-name pr)) (b (parser-state-name pg)))
+                 (unless (and (eq? a b) (eq? a 'seq))
+                   (set! bad (cons (list k a b) bad))))))
+           '(1 2 3))
+          (check-equal "three depths driven" driven 3)
+          (check-equal "and each names the sequence node" bad '()))))
+    (harness-case "a fresh parser names the entry, and a finished one its terminal"
+      (lambda ()
+        ;; The bookends, so the mid-sequence answer above is not the only thing
+        ;; the accessor is shown to do.
+        (check-equal "fresh interpreted" (parser-state-name (make-parser cm-ref '() #f)) 'seq)
+        (check-equal "fresh generated" (parser-state-name (make-parser cm-gen '() #f)) 'seq)
+        (let ((pr (make-parser cm-ref '() #f)) (pg (make-parser cm-gen '() #f)))
+          (parser-feed! pr (u8v 1 2 3 4) 0 4)
+          (parser-feed! pg (u8v 1 2 3 4) 0 4)
+          (check-equal "stopped, both lanes"
+                       (list (parser-state-name pr) (parser-lifecycle pr))
+                       (list (parser-state-name pg) (parser-lifecycle pg)))
+          (check-equal "and it is the stop node" (parser-state-name pr) 'stop))))))
+
 (harness-finish)

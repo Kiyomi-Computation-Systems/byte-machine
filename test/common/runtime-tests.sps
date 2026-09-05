@@ -274,10 +274,16 @@
                (byte-machine-make-feed-outcome/v1 'need-input pos #f 0 off))
            (let ((b (bytevector-u8-ref bv pos)))
              (if (= b 0) (loop (+ pos 1) 1 (+ off 1)) (loop pos 2 off))))))))
+;; Milestone 5 Slice ②: ABI 5, and member 2 is the state-id to source-name
+;; table `parser-state-name` reads. The stub exec's four states are named after
+;; what they do, so a lane asserting the accessor names something checkable.
+(define stub-names (vector 's0 's1 's2 's3))
 (define (v2-machine)
-  (byte-machine-make-compiled-machine 4 99 0 stub-exec (vector (vector) (vector))))
+  (byte-machine-make-compiled-machine 5 99 0 stub-exec
+                                      (vector (vector) (vector) stub-names)))
 (define (v2-pause-machine)
-  (byte-machine-make-compiled-machine 4 99 3 stub-exec (vector (vector) (vector))))
+  (byte-machine-make-compiled-machine 5 99 3 stub-exec
+                                      (vector (vector) (vector) stub-names)))
 
 ;; Milestone 4 Slice ①a task 3 retired the whole 'v1 feed-only executor path.
 ;; Once /v1 refuses every version nothing can construct one, so make-parser's
@@ -414,32 +420,43 @@
         (check-equal "starts at zero"
                      (parser-stream-offset (make-parser (cm (vector)) '() #f)) 0)))))
 
-(harness-group "the ABI 4 payload must carry member 1"
+(harness-group "the ABI payload must carry every member this version defines"
   (lambda ()
-    (harness-case "a one-member payload is refused at the current version"
+    (harness-case "a payload short of the current minimum is refused"
       (lambda ()
         ;; Slice ①b's final review found this guard shipped with NO witness --
-        ;; no test reached its raise and no mutation pinned it. It is the guard
-        ;; that keeps a version-4 runtime from reading member 1 out of a payload
-        ;; that has none, which would be an index error deep in make-parser
-        ;; rather than a named refusal at construction.
-        ;; Discriminated by WHO, and it took two tries to get right. A one-member
+        ;; no test reached its raise and no mutation pinned it.
+        ;;
+        ;; Discriminated by WHO, and it took two tries to get right. A short
         ;; payload raises either way: the guard names it, and without the guard
-        ;; `(vector-ref metadata 1)` raises an index error four lines later. A
+        ;; `(vector-ref metadata 2)` raises an index error two lines later. A
         ;; bare `assertion-violation?` passes on both -- and so does
         ;; `irritant-is`, because vector-ref's own error carries the offending
         ;; vector as an irritant too. Both readings left the guard's mutation
         ;; UNCAUGHT and the suite said so, twice. Only `who` separates them.
-        (check-raises "refused BY THE CONSTRUCTOR, not by vector-ref"
-                      (lambda (e)
-                        (and (assertion-violation? e) (who-condition? e)
-                             (eq? (condition-who e)
-                                  'byte-machine-make-compiled-machine)))
-                      (lambda () (byte-machine-make-compiled-machine
-                                  4 99 0 stub-exec (vector (vector)))))
-        (check "and a two-member payload is accepted"
+        ;;
+        ;; *** ONE case for one guard, and Slice ② collapsed two into it. ***
+        ;; The shipped shape was a CHAIN of minimums, one per ABI version, on
+        ;; the reading that each should name the member a short payload lacks.
+        ;; Adding member 2's made the defect visible: a later minimum subsumes
+        ;; every earlier one, so the earlier guard's removal changes nothing any
+        ;; input can observe and its mutation went UNCAUGHT the moment the third
+        ;; guard landed. Both lengths below now witness the same, last, guard.
+        (let ((short-refused
+               (lambda (payload)
+                 (check-raises "refused BY THE CONSTRUCTOR, not by vector-ref"
+                               (lambda (e)
+                                 (and (assertion-violation? e) (who-condition? e)
+                                      (eq? (condition-who e)
+                                           'byte-machine-make-compiled-machine)))
+                               (lambda () (byte-machine-make-compiled-machine
+                                           5 99 0 stub-exec payload))))))
+          (short-refused (vector (vector)))
+          (short-refused (vector (vector) (vector))))
+        (check "and a three-member payload is accepted"
                (compiled-machine? (byte-machine-make-compiled-machine
-                                   4 99 0 stub-exec (vector (vector) (vector)))))))))
+                                   5 99 0 stub-exec
+                                   (vector (vector) (vector) stub-names))))))))
 
 (harness-group "callback failure values (§13:808, decision 0024)"
   (lambda ()
@@ -471,12 +488,14 @@
   (lambda ()
     (harness-case "the superseded version is refused and the current one accepted"
       (lambda ()
-        (check-raises "abi 3 refused" assertion-violation?
+        (check-raises "abi 4 refused" assertion-violation?
                       (lambda () (byte-machine-make-compiled-machine
-                                  3 99 0 stub-exec (vector (vector) (vector)))))
-        (check "abi 4 accepted"
+                                  4 99 0 stub-exec
+                                  (vector (vector) (vector) stub-names))))
+        (check "abi 5 accepted"
                (compiled-machine? (byte-machine-make-compiled-machine
-                                   4 99 0 stub-exec (vector (vector) (vector)))))))
+                                   5 99 0 stub-exec
+                                   (vector (vector) (vector) stub-names))))))
     (harness-case "the version check precedes every other guard"
       (lambda ()
         ;; Decision 0018 item 1: the check is FIRST, so a mismatch is reported
@@ -495,13 +514,15 @@
                       (lambda () (byte-machine-make-compiled-machine 2 99 0 'not-a-procedure #f)))
         (check-raises "a non-vector payload is refused at the current version"
                       (irritant-is #f)
-                      (lambda () (byte-machine-make-compiled-machine 4 99 0 stub-exec #f)))
+                      (lambda () (byte-machine-make-compiled-machine 5 99 0 stub-exec #f)))
         (check-raises "an empty payload has no member 0"
                       (irritant-is (vector))
                       (lambda () (byte-machine-make-compiled-machine
-                                  4 99 0 stub-exec (vector))))))))
+                                  5 99 0 stub-exec (vector))))))))
 
-
+;; Milestone 5 Slice ②: the member-2 guard, on the ABI-4 guard's own precedent.
+;; Each states the minimum ONE version introduced, so a payload short by one
+;; member names the member it is short of rather than the first one missing.
 (harness-group "generated-code ABI (/v2): feed and finish"
   (lambda ()
     (harness-case "a fed accepted byte stops"
@@ -530,9 +551,18 @@
       (lambda ()
         ;; The live guard, distinct from the tombstone cases above: this one
         ;; refuses a number, they refuse every number.
+        ;;
+        ;; *** The payload must be OTHERWISE VALID, and Slice ② found out why.
+        ;; *** It was a two-member vector, which the ABI-4 payload guard also
+        ;; refuses; once Slice ② made the current minimum three, disarming the
+        ;; version check left this case still raising -- from the payload guard
+        ;; -- and the version check's own mutation reported CAUGHT FOR THE WRONG
+        ;; REASON. `(lambda (e) #t)` accepts any raise, so only the payload can
+        ;; make this case about the version.
         (check-raises "refused" (lambda (e) #t)
                       (lambda () (byte-machine-make-compiled-machine
-                                  1 99 0 stub-exec (vector (vector) (vector)))))))
+                                  1 99 0 stub-exec
+                                  (vector (vector) (vector) stub-names))))))
     (harness-case "a /v2 finish error is stored and repeated on the next call"
       (lambda ()
         ;; Witnesses parser-finish-v2!'s own store -- a separate site from the

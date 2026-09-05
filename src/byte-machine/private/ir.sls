@@ -57,6 +57,10 @@
           integer-accumulate-node-nondigit-edge integer-accumulate-node-overflow-error
           integer-accumulate-node-eof-target integer-accumulate-node-source-label
           accumulate-bases
+          make-callback-node callback-node?
+          callback-node-name callback-node-callback
+          callback-node-continue-target callback-node-branch-targets
+          callback-node-pause-continuation callback-node-source-label
           node? node-name
           make-verification-result verification-result? verification-result-ok?
           verification-result-diagnostics verification-result-machine)
@@ -487,12 +491,62 @@
   (define (sequence-dispatch-node-mismatch n) (vector-ref n 3))
   (define (sequence-dispatch-node-eof-target n) (vector-ref n 4))
 
+  ;; --- callback-invocation node (§9.1:307-308, §10.6:584-586) ---
+  ;; The TENTH node kind, and Milestone 5's first. Zero-width: §11.4:652 lists
+  ;; "callback invocations" with the field kinds on the side that does not
+  ;; consume input, so it joins the verifier's `zero-width-edges` census and
+  ;; never the input-reading arms beside it.
+  ;;
+  ;; Decision 0020's CONSTRUCTOR half, and only that half. `branch-targets` is
+  ;; checked for the shape §9.1:318 fixes for every branch map -- "two-element
+  ;; lists (key target), not implementation hash tables", the same convention
+  ;; §9.3:419 fixes for callback bindings and the one Slice ①b's review caught
+  ;; being implemented as pairs -- and for nothing else. Whether `callback`
+  ;; names a declared callback, whether that declaration is an `event` or a
+  ;; `decision`, and whether these keys are the keys it declared are three
+  ;; CROSS-REFERENCES against the machine's callback table, which this
+  ;; constructor cannot see at all; §16.2:901's node half owns all three, and
+  ;; the comment on make-uint-field above states what moving one of them here
+  ;; would cost.
+  (define callback-node-tag (tag 'byte-machine-callback-node))
+  (define (make-callback-node name callback continue-target branch-targets
+                              pause-continuation source-label)
+    (require-symbol 'make-callback-node 'name name)
+    (require-symbol 'make-callback-node 'callback callback)
+    ;; §10.6:586: "Every invocation declares a continue target and a pause
+    ;; continuation." Both are mandatory symbols with no #f arm -- the
+    ;; field-branch precedent (§9.1:305, "an explicit target for every possible
+    ;; result"), not the byte-dispatch eof-target one where #f means a default.
+    (require-symbol 'make-callback-node 'continue-target continue-target)
+    (require-symbol 'make-callback-node 'pause-continuation pause-continuation)
+    ;; An EMPTY branch list is legal here and is the ordinary event-callback
+    ;; shape: §10.6:584 invokes "one named event or decision callback", and only
+    ;; a decision has branch keys at all (§10.2:504). Rejecting `'()` would make
+    ;; every event invocation unbuildable.
+    (unless (and (list? branch-targets)
+                 (for-all (lambda (b)
+                            (and (list? b) (= (length b) 2)
+                                 (symbol? (car b)) (symbol? (cadr b))))
+                          branch-targets))
+      (byte-machine-contract-violation 'make-callback-node
+                                       'invalid-argument 'branch-targets))
+    (vector callback-node-tag name callback continue-target
+            (map (lambda (b) (list (car b) (cadr b))) branch-targets)
+            pause-continuation source-label))
+  (define (callback-node? x) (tagged? callback-node-tag x))
+  (define (callback-node-name n) (vector-ref n 1))
+  (define (callback-node-callback n) (vector-ref n 2))
+  (define (callback-node-continue-target n) (vector-ref n 3))
+  (define (callback-node-branch-targets n) (vector-ref n 4))
+  (define (callback-node-pause-continuation n) (vector-ref n 5))
+  (define (callback-node-source-label n) (vector-ref n 6))
+
   ;; --- node dispatch ---
   (define (node? x)
     (or (byte-dispatch-node? x) (sequence-dispatch-node? x) (stop-node? x)
         (error-node? x) (finish-node? x) (pause-node? x)
         (field-action-node? x) (field-branch-node? x)
-        (integer-accumulate-node? x)))
+        (integer-accumulate-node? x) (callback-node? x)))
   (define (node-name x)
     (cond ((byte-dispatch-node? x) (byte-dispatch-node-name x))
           ((sequence-dispatch-node? x) (sequence-dispatch-node-name x))
@@ -503,6 +557,7 @@
           ((field-action-node? x) (field-action-node-name x))
           ((field-branch-node? x) (field-branch-node-name x))
           ((integer-accumulate-node? x) (integer-accumulate-node-name x))
+          ((callback-node? x) (callback-node-name x))
           (else (byte-machine-contract-violation 'node-name 'invalid-argument 'node))))
 
   ;; --- uint field descriptor (§9.1:283, §10.2:488-491) ---

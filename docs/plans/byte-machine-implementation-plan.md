@@ -2064,3 +2064,63 @@ operation columns and not to the read accessors. Slice ①b implements the
 accessor.
 
 Plan: `docs/plans/milestone-5-gate-0-implementation-plan.md`.
+
+### §12.3:711 — Milestone 5 Slice ②, the `paused-finish` result's `next` and `consumed`
+
+Disposed 2026-09-05, during Slice ②.
+
+**The sentence.** "A `paused-finish` result has no input slice, so `next` and
+`consumed` are inapplicable and only the absolute stream offset is exposed."
+The shipped runtime populates both members anyway — `next` is the absolute
+stream offset and `consumed` is `0` — and the tree pins that twice
+(`runtime-tests.sps`'s `/v2` finish-pause case, and a mutation on the pause
+arm's own result line). Neither §4 of `milestone-5-design.md` nor any of
+decisions 0024-0029 resolved it, so Slice ② owed the disposition.
+
+**The obligation is BROADER than the sentence Slice ②'s plan named, and that is
+the finding.** §9.3:392-393 annotate both accessors "feed-originated results
+only" — not "paused-finish results only" — so the same inapplicability covers
+`finished`, `stopped` and `error` results returned by `parser-finish!`, of which
+§12.3:711 is one worked instance. And §9.3:425 is the sentence that asks for
+enforcement rather than description: "Accessors enforce where fields such as
+`next` are meaningful", naming `next` outright. `parser-field-ref`'s
+`accessor-misuse` raise is that rule's one shipped instance.
+
+**Disposed: the shipped values stand in Slice ②, and the enforcement is an open
+obligation with a measurement.** Two things are true at once and both are stated
+rather than one being used to hide the other.
+
+1. *The values are safe today, on a reason that is not convenience.* The misuse
+   §12.3:711 guards against is **acting on** an inapplicable index, and §12.2
+   already refuses that at the operation: after a finish pause the parser is
+   `paused-finish` (`:693`), after `parser-resume!` it is `finish-ready`
+   (`:694`), and `parser-feed!` is a contract condition in both rows — §12.1:685
+   says so in words, "feeding bytes is prohibited". There is no next feed in
+   which the index could be used. Meanwhile `consumed` is exactly `0` (an EOF
+   continuation consumes no byte, which is §12.4's premise) and `next` repeats
+   the absolute stream offset, the one value §12.3:711 says *is* exposed — so the
+   record exposes that value twice rather than exposing something false.
+
+2. *The enforcement is buildable and was not rejected as impossible.* An earlier
+   draft of this disposition argued that the result record cannot tell where it
+   came from, so an accessor could not enforce. That argument is wrong and is
+   corrected here rather than left standing: the record is **opaque** (§9.3:425),
+   so an internal origin slot is not a public change at all — `make-parser-result`
+   is called from `parser-finish!`'s own paths, which know.
+
+**What it would cost, measured 2026-09-05 rather than estimated.** `rg -l
+parser-result-next` over `test/` returns **sixteen programs**, and
+`parser-finish!` appears at **83 sites** in `test/common`. Every `rfields`-style
+helper in the differential programs reads all five result members on every
+result, finish-originated ones included, so enforcing §9.3:392-393 moves a tuple
+in most of them. That is a re-baselining with its own commit, not a step of a
+census-reconciliation task, and appending it to Slice ② would bury it.
+
+**Receiver, named rather than left as "owed".** The next slice that touches
+`parser-result`'s shape owns it; failing that, **Milestone 5's close-out must
+either schedule it or dispose it explicitly**, and this paragraph is what the
+close-out is to be checked against. Slices ③ and ④ do not qualify by default:
+③ adds spans and ④ the reference fixture and retention oracle, and neither
+changes the result record.
+
+Slice: `docs/plans/milestone-5-slice-2-implementation-plan.md`, Task 9.

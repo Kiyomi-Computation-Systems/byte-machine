@@ -91,6 +91,13 @@ Adding the tenth disjunct to `node?` **fires the S2 ratchet** (`kind-position-ce
 - [ ] **Step 3: Verify** — contract-violation tests per rejection (who + code + detail); `unit.ir` green.
 - [ ] **Step 4: Commit**
 
+> **CORRECTED IN EXECUTION (2026-09-05): Tasks 1 and 2 ship as ONE commit.** Step 2
+> above already says the kind-table row "must land in the same commit", and Task 2
+> is that row — so the plan asked for a commit it had itself ruled out. `node?`'s
+> tenth disjunct reddens S2 the moment it lands, and the standing rule is that
+> tests pass before every commit; when a plan conflicts with it, the plan is what
+> gets corrected (AGENTS.md). Same shape as Slice ①a's Tasks 1–3.
+
 ---
 
 ## Task 2: The matrix row, and the edge roles
@@ -111,6 +118,16 @@ Adding the tenth disjunct to `node?` **fires the S2 ratchet** (`kind-position-ce
 - [ ] **Step 1** — `lower-machine`'s cond, `prefix-blocks`/`block-of` (**raises on a miss**), the state arms with **wire tag 10**, and `render-state-arm`.
 - [ ] **Step 2: Verify** — every existing fingerprint **unchanged**; the four goldens move only if the emitted text of a machine *without* a callback node changes, which it must not.
 - [ ] **Step 3: Commit**
+
+> **CORRECTED IN EXECUTION (2026-09-05): Tasks 3 and 5 ship as ONE commit.** Task 3
+> ends at "`render-state-arm`", but an emitted arm is a call to something: rendering
+> it without Task 5's invocation ships either a call to an unbound identifier (a
+> generated library that fails at *load*, which no test in the tree would run) or a
+> reachable `assertion-violation` that Task 5 then deletes. Task 3's own stated
+> verification — "every existing fingerprint unchanged" — cannot see either, because
+> no shipped machine has a callback node. The two land together with a both-lanes
+> fixture, which is what makes the emitted text *witnessed* rather than merely
+> rendered. Same rule as Tasks 1–2, and the same rule Slice ①a's Tasks 1–3 established.
 
 ---
 
@@ -160,6 +177,13 @@ Then the two shipped-behaviour changes of §2: `parser-reset!` gains its guard; 
 - [ ] **Step 3: Verify** — `§9.4:438`'s `reentrancy` and `poisoned parser` codes are distinct from `lifecycle-violation`; all five accessors answer during `busy` (decision `0028` item 1).
 - [ ] **Step 4: Commit**
 
+> **CORRECTED IN EXECUTION (2026-09-05): Tasks 6 and 7 ship as ONE commit.** Task 6
+> adds the `poisoned` lifecycle row; Task 7 is the only thing that can *produce*
+> `poisoned`. Landing 6 alone ships three arms — feed's, finish's and resume's —
+> that no input can reach, whose mutations would survive with nothing to write in
+> an `EXPECT_SURVIVES` reason except "the next task closes it". Same rule as
+> Tasks 1–2 and 3–5.
+
 ---
 
 ## Task 7: Poisoning, and the escape the differential cannot see
@@ -187,6 +211,23 @@ Then the two shipped-behaviour changes of §2: `parser-reset!` gains its guard; 
 - [ ] **Step 3: Exact-once under pause** — `§13:814`. The oracle is the recording *sequence* across a resume, not a count: a count cannot distinguish "delivered twice" from "delivered once and something else added an entry".
 - [ ] **Step 4: Poisoning propagates** — Task 7's wrapper.
 - [ ] **Step 5: Commit**
+
+> **AS EXECUTED (2026-09-05).** Steps 2, 3 and 4 landed with the tasks that made
+> them buildable — the committed-state capture with Task 4 (the accessor it reads
+> is Task 4's), exact-once with Tasks 3+5, and the escape wrapper with Task 7,
+> which is where it was needed rather than where it was listed. What remained for
+> this task was Step 1, and its correction held: one recording closure **per
+> lane**, each with its own accumulator, over thirty schedules from `§22.5`. The
+> plan's "one recording closure passed as the binding to both parsers" is
+> unbuildable for the reason it names — one accumulator yields one list, with
+> nothing to compare it to.
+>
+> One addition the plan did not ask for and `§22.5:1286` does: the callback trace
+> is also asserted **identical across every schedule**. A callback invocation has
+> no fragment to coalesce, so for this machine the normalized semantic trace *is*
+> the raw one, and it must be schedule-independent — which the per-schedule
+> cross-lane comparison alone would not catch, since both lanes could move
+> together.
 
 ---
 
