@@ -1,6 +1,6 @@
 # Byte Machine Implementation Plan
 
-Status: milestones 0, 1, 2, 3, and 4 are closed — 0 on 2026-08-22 ([the spike](./milestone-0-portability-spike.md), [the close-out](./milestone-0-close-out.md), [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md)), 1 on 2026-08-23 ([milestone-1-design.md](./milestone-1-design.md)), 2 on 2026-08-29 ([milestone-2-design.md](./milestone-2-design.md)), and 3 on 2026-08-30 ([milestone-3-design.md](./milestone-3-design.md)); each of those four carries a dated close note under its own §25 subsection below, and each of those cites where its exit criteria are dispositioned. Milestone 3 was delivered as a Gate 0 plus three slices: Slice ① (byte classes) closed 2026-08-29, Slice ② (sequence dispatch and prefix lowering) closed 2026-08-30, and Slice ③ (multiple alternatives, ambiguity, and cycle analysis) closed 2026-08-30 with the milestone. Milestone 4 (fields, actions, and branches) closed 2026-09-03, delivered as a Gate 0 plus four slices: Gate 0 discharged 2026-08-31 (decisions 0018-0022), Slice ①a — the unversioned generated-ABI constructor, normalized encoding format 2, and the `parser-error` family — 2026-09-02, Slice ①b (field declarations, storage, and `parser-field-ref`) 2026-09-02, Slice ② (field action and field branch) 2026-09-03, and Slice ③ (integer accumulation) 2026-09-03 with the milestone; its close note is a dated disposition, not a §25 subsection. Milestone 5 (callbacks, poisoning, and spans) is in progress: two hardening slices ran first — Slice ⓪ (the verifier's kind × position matrix and the diagnostic-code census) and Slice ⓪b (the EOF walk cluster), both closed 2026-09-04 and both dispositioned below — then Gate 0 discharged 2026-09-04 as decisions 0024-0029, Slice ①a (the seam: ABI 4, `exec`'s two reserved parameters) landed 2026-09-04, and Slice ①b (callback and span declarations, binding resolution, five `§9.3` exports) landed 2026-09-04. Slice ② (the callback-invocation node: the tenth node kind, `§13:803-808`'s four outcomes through one shared classifier, `§12.2`'s `busy` and `poisoned` rows, `§12.6:749`'s `dynamic-wind` poisoning, and `parser-state-name` on generated ABI 5) landed 2026-09-05. Slices ③ and ④ remain. Decisions amended by 0005 (Chez-only) via [chez-only-simplification.md](./chez-only-simplification.md) §2, and by 0006 (inline libraries)
+Status: milestones 0, 1, 2, 3, and 4 are closed — 0 on 2026-08-22 ([the spike](./milestone-0-portability-spike.md), [the close-out](./milestone-0-close-out.md), [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md)), 1 on 2026-08-23 ([milestone-1-design.md](./milestone-1-design.md)), 2 on 2026-08-29 ([milestone-2-design.md](./milestone-2-design.md)), and 3 on 2026-08-30 ([milestone-3-design.md](./milestone-3-design.md)); each of those four carries a dated close note under its own §25 subsection below, and each of those cites where its exit criteria are dispositioned. Milestone 3 was delivered as a Gate 0 plus three slices: Slice ① (byte classes) closed 2026-08-29, Slice ② (sequence dispatch and prefix lowering) closed 2026-08-30, and Slice ③ (multiple alternatives, ambiguity, and cycle analysis) closed 2026-08-30 with the milestone. Milestone 4 (fields, actions, and branches) closed 2026-09-03, delivered as a Gate 0 plus four slices: Gate 0 discharged 2026-08-31 (decisions 0018-0022), Slice ①a — the unversioned generated-ABI constructor, normalized encoding format 2, and the `parser-error` family — 2026-09-02, Slice ①b (field declarations, storage, and `parser-field-ref`) 2026-09-02, Slice ② (field action and field branch) 2026-09-03, and Slice ③ (integer accumulation) 2026-09-03 with the milestone; its close note is a dated disposition, not a §25 subsection. Milestone 5 (callbacks, poisoning, and spans) is in progress: two hardening slices ran first — Slice ⓪ (the verifier's kind × position matrix and the diagnostic-code census) and Slice ⓪b (the EOF walk cluster), both closed 2026-09-04 and both dispositioned below — then Gate 0 discharged 2026-09-04 as decisions 0024-0029, Slice ①a (the seam: ABI 4, `exec`'s two reserved parameters) landed 2026-09-04, and Slice ①b (callback and span declarations, binding resolution, five `§9.3` exports) landed 2026-09-04. Slice ② (the callback-invocation node: the tenth node kind, `§13:803-808`'s four outcomes through one shared classifier, `§12.2`'s `busy` and `poisoned` rows, `§12.6:749`'s `dynamic-wind` poisoning, and `parser-state-name` on generated ABI 5) landed 2026-09-05. Slice ③ (spans: the eleventh and twelfth node kinds, pass 7's span-state lattice over decision 0029's flat domain, `§16.2:898`'s reachability gate, wire tags 11-13 and the second internal-state family, `§14:831-843`'s fragment rules executing in both lanes behind `§19.3:1024`'s boundary flush, and the `§22.5` oracle) landed 2026-09-05. Slice ③ also shipped three behavioural fixes its own census and final review found — a span end that was not treated as a parked state, a span node naming an undeclared span that verified clean and then raised out of the normalizer, and `§12.7:770`'s callback-failure half, which BOTH LANES reported wrongly and the cross-lane comparison therefore could not see — plus two coverage holes closed in its own new lane; the zero-width-machine-action half of that same `§12.7:770` row is measured, still wrong, and dispositioned below with two receivers. Only Slice ④ (the retention oracle with its negative control, the EOF and reset fragment legs, and the callback/span lifetime reference) remains. Decisions amended by 0005 (Chez-only) via [chez-only-simplification.md](./chez-only-simplification.md) §2, and by 0006 (inline libraries)
 
 Date: 2026-08-15
 
@@ -2159,14 +2159,18 @@ renders `(loop pos T off pk)` and the interpreted arms carry `pk` likewise — b
 the code is Milestone 4 Slice ②'s, the fixtures and pins that would move are
 Milestone 4's, and a slice about spans is not where that re-baselining belongs.
 
-**Measured, and this is why nothing caught either half for a slice and a half:**
-BOTH LANES report the same wrong value, so the `§12.7:777` cross-lane comparison —
-all that read position kind here — is satisfied throughout. A lane-to-lane
-projection cannot see an agreed error, which is the general lesson and not a fact
-about spans.
+**Measured, and this is why nothing caught the CALLBACK half for a slice and a
+half — and the zero-width half since Milestone 4 Slice ② closed on 2026-09-03,
+across six further slices and a gate:** BOTH LANES report the same wrong value, so
+the `§12.7:777` cross-lane comparison — all that read position kind here — is
+satisfied throughout. A lane-to-lane projection cannot see an agreed error, which
+is the general lesson and not a fact about spans.
 
 **2. `§16.2:899`'s five nouns do not include a span node naming an undeclared
-span, and `§16.2:901`'s "undeclared" does.** `§16.2:899` reads "span re-entry,
+span — and neither does any other `§16.2` bullet.** `§16.2:901`'s "undeclared" is
+scoped to *callback decision branches*, so the new code is placed beside the
+callback half **by analogy** with `:901` and not under it; an earlier draft of
+this disposition claimed `:901` covered it. `§16.2:899` reads "span re-entry,
 overlap, wrong end, unmatched end, and inconsistent successful exits" — five
 faults about the STATE a span node is reached in, all decidable by decision
 `0029`'s lattice. Naming a declaration that does not exist is not one of them, and
@@ -2177,20 +2181,26 @@ The obligation had an owner in prose and none in code. `make-span-start-node`'s
 comment assigned the cross-reference to "§16.2:899 and pass 7's lattice (decision
 0029)"; pass 7 treats the name opaquely. Measured: a machine whose span nodes
 named an undeclared span verified CLEAN and then raised `assertion-violation` out
-of `normalize-machine` — a verified machine crashing the normalizer, which
-`§9.2:368` forbids in as many words. It is now `pass-declarations`'
-`missing-span-declaration`, beside the callback half, which is where a NAME
-cross-reference belongs.
+of `normalize-machine` — a verified machine raising out of the normalizer. **No
+sentence of the plan forbids that outright, and an earlier draft of this
+disposition said `§9.2:368` did.** It is an inference, and worth stating as one:
+`§16.1:878` gates normalization on verification and `§9.2:368` calls
+`compile-machine` "a pure ahead-of-time transformation", so a raise from inside it
+on a machine the gate admitted is an internal error by construction rather than by
+a prohibition. It is now `pass-declarations`' `missing-span-declaration`.
 
 **Receiver.** Neither reading changes a sentence of the plan. Two things are
 owed, and they have different owners.
 
 **Owed by whoever next touches the field/accumulate emitted arms, and failing
 that by Milestone 5's close-out:** `§12.7:770`'s zero-width-machine-action half,
-with the reproduction above. It is a one-line change per arm in each lane; what
-makes it a separate piece of work is the fixtures — `position-kind-tests.sps`
-would gain a row per producer, and every pin anchored on a `byte` verdict from a
-failed zero-width action has to be re-measured. Deferring it is a choice, and this
+with the reproduction above. It is a one-line change in the EMITTED lane and more
+than that in the interpreted one: the shared field-action/field-branch arm cannot
+tell a success jump from a failure jump, so `field-step` has to say which route it
+took — a widened return, which `interpret.sls`'s own comment warns touches every
+zero-width arm, or a new executor message. And then the fixtures:
+`position-kind-tests.sps` gains a row per producer, and every pin anchored on a
+`byte` verdict from a failed zero-width action has to be re-measured. Deferring it is a choice, and this
 paragraph is what the close-out is to be checked against.
 
 **Owed by Milestone 6's counted consume**, which `§10.6:604` says obeys "normal

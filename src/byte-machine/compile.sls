@@ -446,7 +446,7 @@
         ;; reads it, so no rendered `let` introduces a name `reserved-member-3`
         ;; would have to grow to cover.
         ((span-start)
-         ;; §14:831's "records the current cursor" -- `pos`, the slice index.
+         ;; §14:830's "records the current cursor" -- `pos`, the slice index.
          (let ((d (list-ref spans (normal-field-selector s))))
            (string-append
             "      ((" id ")\n"
@@ -471,7 +471,7 @@
             "           (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
             "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
             (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off)))))\n")))
-        ;; The SECOND substep. §14:842 puts the close BEFORE the invocation, so
+        ;; The SECOND substep. §14:841 puts the close BEFORE the invocation, so
         ;; it is the first thing rendered here in both shapes -- a completion
         ;; callback that asks `parser-active-span` must see #f.
         ((span-completion)

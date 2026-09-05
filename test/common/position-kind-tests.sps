@@ -263,7 +263,7 @@
          'callback)
    ;; The completion substep's own failure. The data callback continues, so the
    ;; fragment is delivered and the span is already inactive when this runs --
-   ;; and the offset is still 2, because §14:842's substeps consume nothing.
+   ;; and the offset is still 2, because §14:841's substeps consume nothing.
    ;; This is the third emitted arm that calls out, and the only row that
    ;; reaches it.
    (list "a span completion callback failure reports boundary too"

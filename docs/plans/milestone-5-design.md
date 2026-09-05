@@ -1,6 +1,6 @@
 # Milestone 5 Design — Callbacks, poisoning, and spans
 
-**Status: in progress.** Gate 0 discharged 2026-09-04 (decisions 0024-0029, PR #56); Slice ①a landed 2026-09-04 (PR #58 = `87a99c9`); Slice ①b landed 2026-09-04 (PR #61 = `c011e35`); Slice ② landed 2026-09-05 (PR #65 = `0578bdf`), which also **rewrote this document's Appendix in place** — its stated recogniser could not find two rows the Appendix itself listed. Slices ③ and ④ remain.
+**Status: in progress.** Gate 0 discharged 2026-09-04 (decisions 0024-0029, PR #56); Slice ①a landed 2026-09-04 (PR #58 = `87a99c9`); Slice ①b landed 2026-09-04 (PR #61 = `c011e35`); Slice ② landed 2026-09-05 (PR #65 = `0578bdf`), which also **rewrote this document's Appendix in place** — its stated recogniser could not find two rows the Appendix itself listed. Slice ③ landed 2026-09-05 (PR #68 = `b26065e`): the eleventh and twelfth node kinds, pass 7's span-state lattice, `§16.2:898`'s reachability gate, wire tags 11-13 and the second internal-state family, execution in both lanes with `§19.3:1024`'s boundary flush, and the oracle. It **rewrote this document's Appendix in place a second time** — nearly every line number in the table had moved (all but `zero-width-edges`, and three range rows whose start was unchanged), and the first correction's own diagnosis was wrong: the recognisers found both defect sites and one already had a row, so what failed was the checklist pass. It also **corrected §8's reset citation and §9's slot measurement in place** (sixteen slots, three of which can hold a bytevector, and why the conclusion survives), and **recorded in §9 that Slice ④'s liveness probe discriminates in both lanes**, measured through the real harness. Only Slice ④ remains.
 
 **Originally written when nothing had started:** Milestone 4 closed 2026-09-03 (its close note is a dated
 disposition in the parent plan, `§25:1568-1570`, written 2026-09-04). Milestone 5's two
@@ -594,10 +594,10 @@ construct with its cross-lane oracle deliberately blinded.
   callback.** Derived, not chosen, and the derivation is short enough to check: `§14:833`'s
   re-anchor clause is unconditional (§3's last bullet), so at every feed return with an open
   span the mark moves to the next feed's `start`; `parser-finish!` admits no new bytes
-  (`§12.4:729`); therefore at a span end reached during EOF, `mark == cursor`, and `§14:834`
+  (`§12.4:729`); therefore at a span end reached during EOF, `mark == cursor`, and `§14:833`
   suppresses an empty fragment. **A reviewer should check this derivation rather than take
   it** — if it is wrong, `§25:1589`'s EOF fragment leg asserts the wrong thing.
-- **`§14`'s rule 6 quantifies over successful paths only.** Rule 6 (`§14:835`) promises "exactly
+- **`§14`'s rule 6 quantifies over successful paths only.** Rule 6 (`§14:834`) promises "exactly
   one completion event"; rule 10 (`§14:839`), four lines later, says errors synthesize none.
   Both are verbatim. A fragment oracle written against rule 6's literal text will assert a
   completion event that rule 10 forbids, and `§25:1589` requires the error case. The design
@@ -919,7 +919,7 @@ and saying so is how the milestone avoids each believing the other covered a leg
    sentinel. **The bounded invalid-machine generator is Milestone 7's** (`§25` names it there),
    and this slice must not quietly become it.
 4. **The error path delivers no completion event** (`§14:839`), while the success path delivers
-   exactly one (`§14:835`) — the reading recorded in §4.11. `§22.5:1289` states the matching
+   exactly one (`§14:834`) — the reading recorded in §4.11. `§22.5:1289` states the matching
    test rule and it is easy to violate: for malformed inputs, cross-schedule assertions compare
    only acceptance, error category and absolute error position, because "a partial span may have
    been flushed by an earlier feed boundary in one schedule but not another". Callback prefixes

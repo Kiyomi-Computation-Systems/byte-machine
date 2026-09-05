@@ -1421,6 +1421,20 @@
   ;; The parked set, in the shape §16.2:909's own block uses: the entry, every
   ;; byte-reachable pause, every byte-reachable callback (Slice ②), and every
   ;; byte-reachable node carrying its own EOF route.
+  ;;
+  ;; *** THIS IS THE SECOND HAND-WRITTEN COPY OF THAT DISJUNCTION, and the two
+  ;; already differ. *** `pass-eof-execution`'s membership also lists
+  ;; `span-end-node?` -- a span-data callback's pause parks the parser on that
+  ;; node's completion substep -- and this one does not, because it was written
+  ;; while the slice still believed a span end was not a parked state and only
+  ;; the other site was corrected.
+  ;;
+  ;; The difference is INERT, and that is a derivation rather than luck: a
+  ;; byte-reachable span end's `next` is already a byte out-edge, so `span-flow`'s
+  ;; byte half carries it and seeding an EOF walk there would add a duplicate
+  ;; edge to a relation that is joined, not counted. It is written down because
+  ;; the next kind that can pause has to be added to BOTH, and a reader who
+  ;; "fixes" this omission should know they changed nothing.
   (define (parked? m n br)
     (and (memq (node-name n) br)
          (or (eq? (node-name n) (machine-entry m))

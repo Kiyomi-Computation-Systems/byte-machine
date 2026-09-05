@@ -41,8 +41,28 @@ out-of-contract return is a =callback=-domain parser error rather than a raise, 
 callback that escapes marks the parser =poisoned= through =dynamic-wind=, and
 =parser-state-name= — the accessor Slice ①b deferred whole — answers in both
 lanes now that the generated ABI (version 5) carries a state-id to source-name
-table. Slices ③ (spans) and ④ (the reference fixture and the retention oracle)
-remain.
+table. Slice ③ landed 2026-09-05: the machine now /spans/. Span-start and
+span-end are the eleventh and twelfth node kinds, a dataflow pass proves no
+reachable path opens a second span, ends the wrong one, ends with none open,
+pauses with one open, or reaches a successful stop or finish with one active, and
+a span's data callback receives the exact byte range — identical in the
+interpreted and generated lanes for the same feed schedule, and identical once
+coalesced across every schedule, which is what the parent plan asks for and the
+opposite of what it asks for raw fragment boundaries.
+
+That slice also found five defects, four of them in its own new code and one
+older; three changed behaviour and two were holes in its own new tests. A span end is a state a parser can be parked on; before the fix a
+machine whose span end continued into a =stop= verified clean and then answered
+=stopped= from =parser-finish!=. A span node naming a span the machine never
+declared verified clean and then crashed the normalizer. And every
+callback-domain error built by the feed and finish loops — nine sites, six in the
+runtime and three rendered by the emitter — reported the wrong position kind when
+its node was reached by a reexecuting edge; only the boundary flush's own arm,
+which passed the literal, was already right. /Both lanes reported the same wrong
+value/, so the cross-lane comparison that was the only thing reading it had been
+satisfied throughout. Only Slice ④ (the retention oracle with its negative
+control, the EOF and reset fragment legs, and the callback/span lifetime
+reference) remains.
 =src/byte-machine/= holds the construction API, the verifier, the normalizer and
 emitter, the reference interpreter, and the runtime, each exercised in both the
 source and ahead-of-time execution lanes. See

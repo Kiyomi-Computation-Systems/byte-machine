@@ -716,6 +716,61 @@
   verdicts that look exactly like real breakage. Use `isolation: "worktree"`, and
   never quote a suite result taken while such a workflow is live.
 
+* **A comment justifying an ABSENT arm must say whether adding it would be inert
+  or WRONG.**
+  Milestone 5 Slice ③ shipped one saying an arm on the boundary flush's `paused`
+  row "would be a guard that cannot fire". Measured, that arm would not have been
+  inert: on that row the span is still active and the mark still points at the
+  fragment the span end has just delivered, so the arm would have handed the
+  application the same bytes twice. This repository ACTS on "cannot fire" — it
+  deleted five such lines in that slice alone — so the phrase is an instruction,
+  and using it for "would be wrong" is an invitation to break something.
+
+* **In a cross-lane pin, the `expected`/`got` DIRECTION is the discriminator, not
+  the (case, check) pair.**
+  A mutation of one lane and the matching mutation of the other fail the SAME
+  check with the SAME two values, transposed — the harness prints the second
+  `check-equal` argument as "expected", so which lane you broke decides which
+  side each value lands on. Two Slice ③ pins were byte-identical to their own
+  siblings' output until they were re-pinned on the projection line rather than
+  the kind line. Pin sweeps must compare captured output, not check labels.
+
+* **A fixture that always declares the subject first cannot see a hard-coded 0.**
+  Every span fixture in the tree declared the span's data callback first, so four
+  independent sites resolving "the span's data-callback slot" were all satisfied
+  by the constant `0`, in both lanes, with the suite green. Declaring the OTHER
+  callback first is what made the resolution observable. The same shape applies
+  to any slot, index or id that a fixture could give the value 0, 1 or "first" —
+  put the subject somewhere else and see whether anything notices.
+
+* **A lane that imports no project source is outside the mutation suite, and must
+  say so at the site.**
+  Slice ③'s liveness-probe lane tests Chez's GC primitives, not byte-machine, so
+  there is nothing for a mutation to break and its absence from the suite is not
+  a coverage gap. Its control is that both arms of the discrimination are asserted
+  in one case — a probe answering a constant fails one of them. Write that down,
+  or the next census counts the lane as unpinned.
+
+* **Validate the NEXT slice's oracle while this slice is in flight.**
+  Slice ③ carried Slice ④'s retention-oracle liveness probe forward and measured
+  it through the real harness in both lanes. It cost one small lane; had it not
+  discriminated under AOT compilation, ④'s entire oracle would have needed
+  redesigning — and that is much cheaper to learn early than to discover inside
+  the slice that depends on it. When a design rests a later slice's oracle on a
+  measurement taken in a scratch driver, re-take it now.
+
+* **A status surface written at the end of a slice is the least verified text in
+  the repository.**
+  Slice ③'s closing sweep wrote the four status surfaces and the ledger, then
+  audited them: fourteen false claims, in prose minutes old — counts contradicting
+  the tree, a defect tally split the wrong way, a universal that one site never
+  satisfied, and a systematic off-by-one in `§section:line` citations inherited
+  from the milestone design and multiplied fifty-five times. Nothing catches a
+  wrong citation: a link checker sees a valid file and a grep sees a valid number.
+  Audit the surfaces with something that MEASURES — re-count every total from the
+  tree rather than from a commit message, open the plan at every cited line, and
+  narrow every "every", "the only" and "never" before writing it.
+
 ## Closing ritual
 
 Run this when a branch's work is complete and reviewed. It is a ritual because
