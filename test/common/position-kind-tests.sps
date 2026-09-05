@@ -282,10 +282,14 @@
       (lambda ()
         ;; Sentinels read OBSERVED drives, never the driving list's own length:
         ;; the outer count proves every case ran, the inner one that each ran in
-        ;; both executors. Eight per process -- four rows x two executors; four
-        ;; rows for three KINDS, because Slice ③'s row is a second producer of
-        ;; `byte` by a different mechanism (an unconsumed digit rather than a
-        ;; reexecute mismatch) and the table indexes producers, not kinds. The
+        ;; both executors. FOURTEEN per process -- seven rows x two executors --
+        ;; and the paragraph said four and eight until the final review, having
+        ;; been left behind when the rows were added. Seven rows for three KINDS,
+        ;; because this table indexes PRODUCERS and not kinds: the accumulate row
+        ;; is a second producer of `byte` (an unconsumed digit rather than a
+        ;; reexecute mismatch), and the three callback-domain rows are three
+        ;; producers of §12.7:770's `boundary`, one per emitted arm that calls
+        ;; application code. The
         ;; x2 for source/AOT is discharged by the lane PAIR both passing, which
         ;; CTest reports; no in-process counter can see it, because the two are
         ;; two registrations of this same program under different launchers.

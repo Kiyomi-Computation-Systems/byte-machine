@@ -6011,8 +6011,11 @@ byte_machine_mutation(
   # functions TOTAL: with `top` flowing, a span end downstream of the merge is
   # asked what it does on `top`, answers `unmatched end`, and blames a node that
   # is innocent.
-  FIND [[                             (if (or (not fs) (eq? fs 'top) (not fn)]]
-  REPLACE [[                             (if (or (not fs) (not fn)]]
+  # Re-anchored at the final review, which deleted the `(not fn)` disjunct that
+  # used to ride along here: `fn` is `(lookup nodes from)` and every edge's
+  # `from` is a node's own name, so it could never be #f. The mutant is the same.
+  FIND [[                             (if (or (not fs) (eq? fs 'top))]]
+  REPLACE [[                             (if (not fs)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "INCONSISTENT: two branches disagree at a merge")
 
@@ -9649,13 +9652,21 @@ byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.position-kind.chez.source
   LABEL "runtime: a callback failure reports the loop's position kind"
   # The interpreted half, over all three of its arms at once -- the constant is
-  # one decision and the six sites read it. Caught in three rows, and the pin
-  # names the callback node's, which the emitted mutations below do not move.
+  # one decision and the six sites read it.
+  #
+  # *** RE-PINNED AT THE FINAL REVIEW. *** The pin read `kind -- expected
+  # boundary, got byte`, which the emitted-callback-arm mutation below prints
+  # byte for byte: both make that row's kind check fail, and the comment here
+  # claimed the emitted ones "do not move" it. What separates them is the
+  # PROJECTION's direction -- the harness prints the second `check-equal`
+  # argument as "expected", which is the GENERATED lane, so a mutation of the
+  # interpreted lane reads `expected …boundary, got …byte` and its emitted
+  # sibling reads the mirror. Measured.
   FIND [[  (define callback-failure-position 'boundary)]]
   REPLACE [[  (define callback-failure-position 'byte)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "a callback failure reports boundary at the committed offset: kind -- expected boundary, got byte"
+    "the lanes agree on the projection -- expected .callback said-no .callback failure. inv 1 boundary., got .callback said-no .callback failure. inv 1 byte."
 )
 
 byte_machine_mutation(
@@ -10980,8 +10991,11 @@ byte_machine_mutation(
   FIND [[    (if (and (eq? (parser-result-status r) 'need-input)]]
   REPLACE [[    (if (and (eq? (parser-result-status r) 'paused)]]
   EXPECT_STATUS 1
+  # Its half of the pair the flush-pause mutation below also names: this mutant
+  # delivers NO fragment, and the pin says so rather than resting on the status
+  # line the two used to share.
   EXPECT_OUTPUT_MATCHES
-    "flushed, then the remainder, then the completion -- expected .#vu8.98 99. #vu8.100. complete., got .#vu8.100. complete."
+    "separates two mutants: delivered, and reported as a pause -- expected ..#vu8.98 99.. .paused 3 3 3 #f paused-feed.., got ... .need-input 3 3 3 #f ready.."
 )
 
 byte_machine_mutation(
@@ -11066,13 +11080,19 @@ byte_machine_mutation(
   # §14:837 makes the flush's pause the FEED's pause: the fragment is committed
   # and the caller must resume. Reported as `need-input` the parser stays ready,
   # so the caller's `parser-resume!` raises a lifecycle violation three steps
-  # later -- which the harness shows as a bare raise. Pinned on the STATUS
-  # instead, in the one case whose script has no resume in it.
+  # later -- which the harness shows as a bare raise.
+  #
+  # *** RE-PINNED AT THE FINAL REVIEW: the STATUS alone was printed BYTE FOR BYTE
+  # by "the feed-boundary flush never runs" above. *** Two mutants, one output
+  # line, and the pin attributed the catch to neither. They part on the FRAGMENT
+  # -- a flush that ran and mis-reported its status still delivered `bc`, one
+  # that never ran delivered nothing -- so the lane grew a case asserting the
+  # PAIR, and each mutation now names its own half of it. Measured both ways.
   FIND [[            ((pause) (make-parser-result 'paused (parser-result-next r)]]
   REPLACE [[            ((pause) (make-parser-result 'need-input (parser-result-next r)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "parked where the executor left it -- expected .paused 3 3 3 #f paused-feed., got .need-input 3 3 3 #f ready."
+    "separates two mutants: delivered, and reported as a pause -- expected ..#vu8.98 99.. .paused 3 3 3 #f paused-feed.., got ..#vu8.98 99.. .need-input 3 3 3 #f ready.."
 )
 
 byte_machine_mutation(

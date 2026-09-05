@@ -198,8 +198,16 @@
    ;; --- the span kinds' single successors (Milestone 5 Slice ③) ---
    ;; BYTE routes, like a field action's `next`: both kinds are zero-width, so
    ;; whatever byte edge reaches the host reaches them. NOT eof routes -- the
-   ;; host's #f eof-target means the EOF walk never flows through them, and
-   ;; neither kind is a parked state (§14:837-838 park on the CALLBACK).
+   ;; host's #f eof-target means the EOF walk never flows through the host.
+   ;;
+   ;; *** A SPAN END IS A PARKED STATE, and this comment said the opposite until
+   ;; the final review. *** The claim was that "§14:837-838 park on the
+   ;; CALLBACK", and a span-data callback has no callback node: its pause parks
+   ;; the parser on the span end's own completion substep. That is why
+   ;; `span-end-next` is the one non-EOF position whose `stop` cell reports
+   ;; `eof-reachable-stop` and whose self-loop reports `eof-zero-progress-cycle`
+   ;; -- both derived in `expected-codes` and `self-expectations` below. A span
+   ;; START is still not parked: it calls nothing.
    (list 'span-start-next           #t   #f
          (lambda () (cons 'h (list (dispatch-to 'ss)
                                    (make-span-start-node 'ss 'sp 't #f)))))

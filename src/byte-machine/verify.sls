@@ -1095,7 +1095,7 @@
   ;; coincidence. `edge-roles-in-source` in the kind x position census collects
   ;; the quoted symbol from EVERY such form in this file -- not only edge-role
   ;; ones, despite what its own comment says -- and compares the result against a
-  ;; declared mapping. A `(cons 'callback name)` here would add a thirteenth
+  ;; declared mapping. A `(cons 'callback name)` here would add a SIXTEENTH
   ;; "role", fail `derived roles equal the mapped roles`, and take that pass's
   ;; BASELINE red. RE-MEASURED at Slice ③ task 8: 18 occurrences in CODE and 22
   ;; textual, the four extra being the two mentions in this comment and two in
@@ -1554,7 +1554,13 @@
                              ;; this project deletes rather than documents.
                              ;; Measured: written as a filter first, its
                              ;; mutation shipped UNCAUGHT and said so.
-                             (if (or (not fs) (eq? fs 'top) (not fn))
+                             ;; `(not fn)` stood here as a third disjunct and
+                             ;; was DELETED: every edge's `from` is some node's
+                             ;; own name, so `lookup` cannot miss, and the final
+                             ;; review found it three lines under the comment
+                             ;; below forbidding exactly this. The fourth dead
+                             ;; guard this slice removed.
+                             (if (or (not fs) (eq? fs 'top))
                                  ;; `top` does not flow onward (0029 item 2).
                                  acc
                                  (let* ((out (span-transfer fn fs))

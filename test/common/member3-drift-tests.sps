@@ -53,14 +53,23 @@
     ;; declaration and the node below `o` would sit in reserved-member-3 as a
     ;; reservation nothing exercises -- the gap ② closed for `v` and `r`, and ③
     ;; for `d`, reopened by this slice's own addition to the list.
-    ;; *** AND SLICE ③ EXTENDS IT A SECOND TIME, with a span. *** Its own
-    ;; census reconciliation found the fixture rendering NINE of the twelve
-    ;; emitted arms: `render-state-arm` gained span-start, span-end and
-    ;; span-completion, and no node here reached any of them, so the guard below
-    ;; was measured over three quarters of the emitter. The three arms are not
-    ;; inert -- two render a `let` binding `o` -- and compile.sls's stated
-    ;; property, that none of them binds a local beyond `o`, was prose in the
-    ;; file under test rather than a check here.
+    ;; *** AND SLICE ③ EXTENDS IT A SECOND TIME, with a span and a pause. ***
+    ;; Its census reconciliation found the fixture rendering only part of
+    ;; `render-state-arm`, and the FINAL REVIEW corrected the number: SEVEN of
+    ;; the twelve arms, not the nine first written here. Measured both ways by
+    ;; rendering this fixture and probing the emitted text -- stop, error,
+    ;; accumulate, field-action, field-branch, callback and dispatch were
+    ;; rendered; finish, pause, span-start, span-end and span-completion were
+    ;; not. All five are added here, so the row the design Appendix carries for
+    ;; this fixture -- "must render EVERY emitted arm" -- is literally true at
+    ;; twelve of twelve rather than nearly true.
+    ;;
+    ;; The span arms are not inert: two render a `let` binding `o`, and
+    ;; compile.sls's stated property that none of them binds a local beyond `o`
+    ;; was prose in the file under test rather than a check here. The pause arm
+    ;; binds nothing at all, which is exactly why it went unnoticed -- and is
+    ;; also why it is worth rendering: an arm that binds nothing TODAY is one
+    ;; nobody re-checks when it starts to.
     (list (make-callback-declaration 'note 'event #t '() #f #f)
           (make-callback-declaration 'on-data 'span-data #t '() #f #f)
           (make-callback-declaration 'on-done 'span-complete #t '() #f #f))
@@ -110,9 +119,14 @@
             ;; an inconsistent merge -- found by building it.
             (make-edge 'sread 'advance) 'rej2 #f)
           (make-span-end-node 'send 'body 'sdone #f)
+          ;; The twelfth arm, on `sdone`'s fallback. Its continuation is the
+          ;; ERROR node and not the stop, for the reason the callback node above
+          ;; records: a parser parked at a pause resumes on that one edge, so a
+          ;; stop there is an EOF path reaching a stop terminal (§16.2:909).
           (make-byte-dispatch-node 'sdone
             (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'done 'advance) #f))
-            (make-edge 'reject 'reexecute) 'fin #f)
+            (make-edge 'pz 'reexecute) 'fin #f)
+          (make-pause-node 'pz 'reject #f)
           (make-finish-node 'fin #f)
           (make-stop-node 'done #f)
           (make-error-node 'reject 'rejected #f)

@@ -1044,15 +1044,33 @@ designed alongside the oracle rather than added after it goes green.
 > **REWRITTEN A SECOND TIME, 2026-09-05, by Milestone 5 Slice ③ Task 8, and this
 > is again a CORRECTION IN PLACE: an appendix a later slice works as a checklist
 > is an INSTRUCTION.** Slice ② rewrote the table and fixed its recognisers;
-> Slice ③ ran it as a checklist and found the table itself wanting in three ways.
+> Slice ③ ran it as a checklist and found the table wanting — and then this
+> paragraph got the diagnosis wrong, which the slice's own final review caught.
+> Corrected, and the corrected version is worse for the checklist than the first
+> one was for the table.
+>
 > **(1) Every line number in it had moved** — all fifteen `verify.sls` rows, all
 > five `interpret.sls` rows, all five `normal-ir.sls` rows, both `runtime.sls`
 > rows (which were also off by one *at the head they were measured on*), and four
-> of the `compile.sls` rows. **(2) It was missing rows for sites that no
-> recogniser finds**, including the two that turned out to be real defects: the
-> `pass-declarations` node filter, and the `§16.2:909` parked-set membership.
-> **(3) One row's stated obligation was not met** — the member-3 drift fixture —
-> and the checklist pass did not act on it.
+> of the `compile.sls` rows.
+>
+> **(2) Rows were missing, but NOT for the two defects.** The table did lack rows
+> for sites no recogniser finds — `normal-ir.sls`'s internal-state builder and its
+> debug-map walk, both extended by Slice ③ blind. But **recogniser 1 finds both
+> defect sites**: `pass-declarations`' filter is `(if (callback-node? n) …)` and
+> the `§16.2:909` membership is a disjunction of `-node?` predicates. And the
+> table **already carried a row** for the `§16.2:909` gate. So the recognisers
+> worked and one of the two rows existed; **what failed was the checklist pass**,
+> which walked the table and did not ask, of the row in front of it, whether a
+> span end can be parked on.
+>
+> **(3) One row's stated obligation was not met** — the member-3 drift fixture,
+> which rendered SEVEN of `render-state-arm`'s twelve arms. The row said what was
+> owed; nobody checked it. It is twelve of twelve now.
+>
+> The lesson the table can carry is (2)'s: **a row is not a check.** Reading a row
+> tells you a site exists; only asking the row's question of the new kind tells
+> you whether it owes an arm.
 >
 > **So the table no longer carries line numbers.** They are the part that goes
 > stale silently, nothing checks them, and `docs/decisions/README.md` already
@@ -1070,8 +1088,15 @@ rg -n "\(op 'kind" src/byte-machine/ test/common/         # WIRE-kind dispatch
 ```
 
 Slice ② added the third recogniser and scoped all three to `src/`; the same
-`src/`-only mistake it had just corrected for the *table*. `test/common/runtime-tests.sps`
-holds six `(op 'kind …)` stub tables that the third recogniser matches.
+`src/`-only mistake it had just corrected for the *table*.
+
+**Recogniser 3 as printed finds nothing under `test/`, and that is a finding about
+the recogniser rather than about `test/`.** `test/common/runtime-tests.sps` holds
+six stub executor tables answering the same wire-kind message, but written from
+the CALLEE's side — `((kind) (case (car args) …))` inside the op closure — not the
+caller's. So a fourth form is needed, and `rg -n "\(\(kind\)" test/common/` finds
+exactly those six. The first version of this Appendix said recogniser 3 matched
+them; run as printed it returns zero hits anywhere under `test/`.
 
 **Three rules the table itself carries, because no recogniser expresses them:**
 
@@ -1194,7 +1219,7 @@ dispatch states, plus `span-completion`, which has no source node). Wire tags
 | | the **edge-ROLE label census** | **THE ONLY census of `diagnostic-edge` in the tree.** It stopped at four kinds for two slices while `zero-width-edges` grew seven more edges. |
 | | the span-lattice group and its two tails | a fixture that CLOSES a span must route its span end through a dispatch, not into a stop: a span end is a parked state |
 | `diagnostic-census-tests.sps` | `pinned-sites`, `code-fixtures` | one row and one fixture per diagnostic code |
-| `member3-drift-tests.sps` | the fixture machine | **must render EVERY emitted arm.** It rendered nine of twelve after Slice ③. |
+| `member3-drift-tests.sps` | the fixture machine | **must render EVERY emitted arm.** It rendered SEVEN of twelve before Slice ③ extended it — the first correction here said nine, and the final review re-measured — and TWELVE of twelve after. The last to arrive was `pause`, which binds nothing, and that is exactly why nobody noticed it. |
 | | the hard-coded exercised-name list and its literal count | a second edit for any new `reserved-member-3` entry |
 | `ir-tests.sps` | the per-kind constructor/accessor group | one group per kind — the census for `ir.sls`'s own blocks |
 | `normal-ir-tests.sps` | the layout-length lists and the wire-tag golden | the only test-side pin on the encoding tags |

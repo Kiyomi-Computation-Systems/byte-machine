@@ -276,7 +276,7 @@
   ;; differential could see it: measured through a span end on a reexecute edge,
   ;; both lanes reported `byte`.
   ;;
-  ;; §12.7:774's "Error nodes reached through other byte edges retain the
+  ;; §12.7:773's "Error nodes reached through other byte edges retain the
   ;; author's explicit advance/reexecute choice" does not reach here: a callback
   ;; failure is not an error node, it has no author-chosen edge, and §12.7's
   ;; table is total over error sources with exactly one row for this one.
@@ -669,11 +669,22 @@
   ;;   error     -- §14:839 forbids a final partial fragment outright.
   ;;   stopped   -- §14:843 makes reaching either with a span active a VERIFIER
   ;;   finished     rejection (`span-active-at-exit`), so neither is reachable.
-  ;;   paused    -- §13:826 lets only the active span's own data callback pause,
-  ;;                and the only thing that invokes one advances the mark to the
-  ;;                cursor first, so the fragment a flush would emit on that row
-  ;;                is empty BY CONSTRUCTION and §14:835 suppresses it. An arm
-  ;;                there would be a guard that cannot fire.
+  ;;   paused    -- *** AND THE REASON IS THE OPPOSITE OF THE ONE FIRST WRITTEN
+  ;;                HERE. *** That comment said the fragment on this row is
+  ;;                "empty BY CONSTRUCTION" because the invoker advances the mark
+  ;;                first -- which is false twice over: nothing advances the mark
+  ;;                (see the fragment step above, which says so in capitals), and
+  ;;                MEASURED on the branch's own span machine with a pausing data
+  ;;                callback, a feed that exits `paused` leaves the span active
+  ;;                with mark 1 and `next` 4. `[1,4)` is not empty -- it is
+  ;;                byte-for-byte the fragment the span end has just delivered.
+  ;;
+  ;;                So an arm here would not be inert: it would DELIVER THAT
+  ;;                FRAGMENT A SECOND TIME, against §13:814's "it is never
+  ;;                delivered twice". The row is omitted because a flush there is
+  ;;                WRONG, not because it would do nothing -- and the difference
+  ;;                matters, because "a guard that cannot fire" is this project's
+  ;;                standing invitation to add the guard.
   (define (span-boundary-flush! parser bv r)
     (if (and (eq? (parser-result-status r) 'need-input)
              (parser-active-span parser))
@@ -1196,10 +1207,14 @@
           ;; above `parser-feed!` gives -- each records its own lifecycle -- and
           ;; over `empty-bv` at cursor 0.
           ;;
-          ;; *** THAT CURSOR IS WHY NO BYTEVECTOR IS NEEDED HERE. *** `parser-finish!`
-          ;; re-anchored the mark to 0 before this ran and nothing consumes a byte
-          ;; at finish, so every fragment an EOF-side span end could deliver is
-          ;; `[0,0)` -- empty, and §14:835 suppresses it. `empty-bv` is passed
+          ;; *** THE CURSOR IS WHY NO BYTEVECTOR IS NEEDED HERE, and the first
+          ;; version of this comment got the reason wrong. *** It said
+          ;; `parser-finish!` "re-anchored the mark to 0 before this ran" -- and
+          ;; `parser-finish!` says, in as many words 130 lines above, that the
+          ;; line doing that was written and DELETED. The derivation does not
+          ;; need it: the cursor passed below is the literal 0, a mark is never
+          ;; negative, so `from >= to` holds for EVERY mark and §14:835
+          ;; suppresses the fragment whatever the mark says. `empty-bv` is passed
           ;; because the step's signature takes one, never because a byte of it
           ;; is read.
           ((span-start)

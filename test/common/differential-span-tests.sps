@@ -30,6 +30,8 @@
 ;;; construction.
 (import (rnrs) (rnrs eval) (only (chezscheme) load)
         (byte-machine test harness)
+        ;; `error-state-id` too: §12.7:777 keeps the id out of the projection and
+        ;; still requires one, so the only way to assert it is beside.
         (byte-machine test error-projection)
         (byte-machine graph) (byte-machine verify)
         (byte-machine interpret) (byte-machine compile) (byte-machine runtime))
@@ -59,10 +61,17 @@
 ;;   - `fin` is on the EOF side only (§16.2:908).
 (define (span-machine complete-cb)
   (make-machine 'spanm 'start '()
-    (cons (make-callback-declaration 'ondata 'span-data #t '() #f #f)
-          (if complete-cb
-              (list (make-callback-declaration 'ondone 'span-complete #f '() #f #f))
-              '()))
+    ;; *** THE COMPLETION CALLBACK IS DECLARED FIRST, and that ordering is the
+    ;; assertion. *** Four sites resolve a span to its DATA callback's slot --
+    ;; the interpreter's two `*-parts` procedures and the emitter's span-start
+    ;; and span-end arms -- and with `ondata` declared first every one of them is
+    ;; satisfied by the constant 0. Declaring `ondone` first puts `ondata` at
+    ;; slot 1, so a lane that hard-coded 0 would invoke the COMPLETION callback
+    ;; where a fragment belongs and the trace would say so.
+    (if complete-cb
+        (list (make-callback-declaration 'ondone 'span-complete #f '() #f #f)
+              (make-callback-declaration 'ondata 'span-data #t '() #f #f))
+        (list (make-callback-declaration 'ondata 'span-data #t '() #f #f)))
     (list (make-span-declaration 'payload 'ondata complete-cb #f))
     (list eof-decl rej-decl trunc-decl)
     ;; `start`'s EOF route is a WHOLE SPAN on the EOF chain, and it is there so
@@ -167,8 +176,14 @@
 ;; tuples plus the fragment trace and the parser's final active span.
 (define (run lane script)
   (let ((p (car lane)) (trace-of (cadr lane)))
-    (let loop ((ss script) (out '()) (n 0))
-      (if (or (null? ss) (> n 12))
+    ;; No step bound. One stood here as `(> n 12)` with a comment saying it
+    ;; guarded the mutation suite against a hanging mutant; the final review
+    ;; found it could not fire -- every script in this file is a literal of at
+    ;; most three steps -- and could not do the job either, since a mutant that
+    ;; hangs does so INSIDE `parser-feed!`, which no counter out here can
+    ;; interrupt.
+    (let loop ((ss script) (out '()))
+      (if (null? ss)
           (list (reverse out) (trace-of) (parser-active-span p))
           (let* ((s (car ss))
                  (r (case (car s)
@@ -182,13 +197,10 @@
                       ((finish) (parser-finish! p))
                       ((resume) (parser-resume! p) #f)
                       (else (assertion-violation 'run "unknown step" s)))))
-            (loop (cdr ss) (if r (cons (rfields r p) out) out) (+ n 1)))))))
+            (loop (cdr ss) (if r (cons (rfields r p) out) out)))))))
 
 ;; The comparison, in one place: drive the same script down both lanes and answer
-;; the disagreement rather than a boolean. `n` bounds `run`'s own loop -- the
-;; mutation suite has no per-mutant timeout, and a mutant that makes a feed
-;; return `need-input` forever would otherwise hang the whole suite rather than
-;; fail this case.
+;; the disagreement rather than a boolean.
 (define (both script answers done-answer)
   (let ((a (run (make-lane cm-full-ref answers done-answer #t) script))
         (b (run (make-lane cm-full-gen answers done-answer #t) script)))
@@ -292,6 +304,49 @@
           (check-equal "the padding is in neither fragment"
                        (cadr (car r)) (list (bytes 98 99) (bytes 100) 'complete)))))))
 
+(harness-group "a FAILURE during the flush is a callback-domain error"
+  (lambda ()
+    (harness-case "the feed reports error, and the flush's own arm builds it"
+      (lambda ()
+        ;; *** THE THIRD OUTCOME OF THE FLUSH, and nothing in the tree executed
+        ;; it until the final review said so. *** `span-boundary-flush!` has
+        ;; goto, pause and failure arms; the two above drive the first two, and
+        ;; the failure arm could be deleted with the suite green.
+        ;;
+        ;; It is the ONE callback-domain error in the tree that no machine node
+        ;; produces -- the flush is not a machine step -- so the node name comes
+        ;; from `parser-state-name` and the state id from the data callback's
+        ;; SLOT. The §22.4:1271 projection carries domain, code, reason, node,
+        ;; OFFSET and kind, so the slot is not in it; what this row pins is that
+        ;; the parked node's own name and §12.7:770's `boundary` survive a flush,
+        ;; and the state id is asserted per lane below.
+        (let ((r (both (list (list 'feed (bytes 65 98 99)))
+                       (list (make-callback-failure 'flush-said-no #f))
+                       callback-continue)))
+          (check-equal "the lanes agree" (caddr r) #t)
+          (check-equal "the fragment was delivered before the failure"
+                       (cadr (car r)) (list (bytes 98 99)))
+          (check-equal "and the feed is an error at the boundary"
+                       (car (car (car r)))
+                       '(error 3 3 3 (callback flush-said-no "callback failure"
+                                      body 3 boundary)
+                         error)))))
+    (harness-case "the state id it carries is the DATA callback's slot, in both lanes"
+      (lambda ()
+        ;; §12.7:777 excludes the id from the cross-lane comparison and still
+        ;; requires an integer. Here it is a value: slot 1, because this lane's
+        ;; machine declares the COMPLETION callback first -- so a lane hard-coding
+        ;; 0 answers the wrong integer and this is the only check that sees it.
+        (let ((ids (map (lambda (cm)
+                          (let ((lane (make-lane cm (list (make-callback-failure 'x #f))
+                                                 callback-continue #t)))
+                            (parser-feed! (car lane) (bytes 65 98 99) 0 3)
+                            (error-state-id
+                             (parser-result-error
+                              (parser-feed! (car lane) (bytes 98) 0 1)))))
+                        (list cm-full-ref cm-full-gen))))
+          (check-equal "both lanes report the data callback's slot" ids '(1 1)))))))
+
 (harness-group "a pause DURING the flush commits the fragment (§14:837)"
   (lambda ()
     (harness-case "the feed reports paused, the span stays open, resume continues"
@@ -319,6 +374,19 @@
           (check-equal "the lanes agree" (caddr r) #t)
           (check-equal "paused, and parked where the executor left it"
                        (car (car (car r))) '(paused 3 3 3 #f paused-feed)))))
+    (harness-case "the fragment and the status TOGETHER, which is what separates two mutants"
+      (lambda ()
+        ;; *** THE PAIR, NOT EITHER HALF. *** The status assertion above is
+        ;; printed byte-for-byte by a DIFFERENT defect -- a flush that never runs
+        ;; at all also reports `need-input` here -- so on its own it does not
+        ;; attribute the catch. Measured, and it is what the final review found.
+        ;; The two part on the FRAGMENT: a flush that ran and mis-reported its
+        ;; status still delivered `bc`, and one that never ran delivered nothing.
+        (let* ((lane (make-lane cm-full-ref (list callback-pause) callback-continue #t))
+               (r (run lane (list (list 'feed (bytes 65 98 99))))))
+          (check-equal "delivered, and reported as a pause"
+                       (list (cadr r) (car (car r)))
+                       (list (list (bytes 98 99)) '(paused 3 3 3 #f paused-feed))))))
     (harness-case "the flush pause is not re-delivered on the next feed"
       (lambda ()
         ;; §14:837's "resume begins with the next supplied input". A lane that
@@ -820,7 +888,7 @@
                       (for-each (lambda (c) (unless (memq c codes) (set! codes (cons c codes))))
                                 (cadddr r)))
                     topologies)
-          (check-equal "three distinct rejection codes"
+          (check-equal "four distinct rejection codes"
                        (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b)))
                                   codes)
                        '(inconsistent-span-state invalid-span-state span-active-at-exit
