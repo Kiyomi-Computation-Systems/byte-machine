@@ -91,6 +91,13 @@ Adding the tenth disjunct to `node?` **fires the S2 ratchet** (`kind-position-ce
 - [ ] **Step 3: Verify** — contract-violation tests per rejection (who + code + detail); `unit.ir` green.
 - [ ] **Step 4: Commit**
 
+> **CORRECTED IN EXECUTION (2026-09-05): Tasks 1 and 2 ship as ONE commit.** Step 2
+> above already says the kind-table row "must land in the same commit", and Task 2
+> is that row — so the plan asked for a commit it had itself ruled out. `node?`'s
+> tenth disjunct reddens S2 the moment it lands, and the standing rule is that
+> tests pass before every commit; when a plan conflicts with it, the plan is what
+> gets corrected (AGENTS.md). Same shape as Slice ①a's Tasks 1–3.
+
 ---
 
 ## Task 2: The matrix row, and the edge roles

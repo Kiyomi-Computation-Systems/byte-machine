@@ -797,4 +797,111 @@
                 (make-integer-accumulate-node 'a 'nosuch 10 'a (make-edge 'd 'reexecute)
                                               'o #f #f)))))))
 
+;; --- the callback-invocation node (Milestone 5 Slice ②; §9.1:307-308, ---------
+;; §10.6:584-586). The TENTH kind, and the first Milestone 5 adds.
+;;
+;; Every check below is decision 0020's CONSTRUCTOR half: local shape, and the
+;; shape of the one value being built. The three judgements this constructor
+;; deliberately does NOT make are asserted at the end of the group rather than
+;; merely omitted -- all three need the machine's callback table, which a node
+;; constructor cannot see, and §16.2:901's node half owns them.
+(harness-group "callback-invocation nodes"
+  (lambda ()
+    (harness-case "a callback node carries its six parts"
+      (lambda ()
+        (let ((n (make-callback-node 'inv 'on-header 'onward
+                                     '((keep body) (drop discard))
+                                     'resume 'lbl)))
+          (check "predicate" (callback-node? n))
+          (check-equal "name" (callback-node-name n) 'inv)
+          (check-equal "callback" (callback-node-callback n) 'on-header)
+          (check-equal "continue-target" (callback-node-continue-target n) 'onward)
+          (check-equal "branch-targets" (callback-node-branch-targets n)
+                       '((keep body) (drop discard)))
+          (check-equal "pause-continuation" (callback-node-pause-continuation n) 'resume)
+          (check-equal "label" (callback-node-source-label n) 'lbl))))
+    (harness-case "it is a node and answers node-name"
+      (lambda ()
+        ;; The two sites that make it a member of §10.6's closed set. `node-name`
+        ;; has a RAISING else and nothing derives it, so a missed arm there is a
+        ;; crash at first use rather than a failed assertion.
+        (let ((n (make-callback-node 'inv 'cb 'onward '() 'resume #f)))
+          (check "node?" (node? n))
+          (check-equal "node-name" (node-name n) 'inv))))
+    (harness-case "an empty branch list is the ordinary event shape"
+      (lambda ()
+        ;; §10.6:584 invokes "one named event or decision callback", and only a
+        ;; decision has branch keys (§10.2:504). Refusing '() would make every
+        ;; event invocation unbuildable.
+        (check-equal "no branches"
+                     (callback-node-branch-targets
+                      (make-callback-node 'inv 'cb 'onward '() 'resume #f))
+                     '())))
+    (harness-case "the name, callback, continue target and pause continuation are mandatory symbols"
+      (lambda ()
+        ;; §10.6:586: "Every invocation declares a continue target and a pause
+        ;; continuation." No #f arm on either -- this is the field-branch
+        ;; precedent (§9.1:305), not the byte-dispatch eof-target one.
+        (check-raises "name" (contract-violation? 'make-callback-node 'name)
+                      (lambda () (make-callback-node "inv" 'cb 'onward '() 'resume #f)))
+        (check-raises "callback" (contract-violation? 'make-callback-node 'callback)
+                      (lambda () (make-callback-node 'inv #f 'onward '() 'resume #f)))
+        (check-raises "continue-target absent"
+                      (contract-violation? 'make-callback-node 'continue-target)
+                      (lambda () (make-callback-node 'inv 'cb #f '() 'resume #f)))
+        (check-raises "pause-continuation absent"
+                      (contract-violation? 'make-callback-node 'pause-continuation)
+                      (lambda () (make-callback-node 'inv 'cb 'onward '() #f #f)))))
+    (harness-case "branch targets are two-element lists, not pairs"
+      (lambda ()
+        ;; §9.1:318: "Branch maps contain two-element lists (key target), not
+        ;; implementation hash tables." The same convention §9.3:419 fixes for
+        ;; callback bindings, and the one Slice ①b's review caught being
+        ;; implemented as pairs -- so the pair form is refused HERE, where a
+        ;; caller finds out at construction.
+        (check-raises "a pair" (contract-violation? 'make-callback-node 'branch-targets)
+                      (lambda () (make-callback-node 'inv 'cb 'onward '((keep . body))
+                                                     'resume #f)))
+        (check-raises "a three-element list"
+                      (contract-violation? 'make-callback-node 'branch-targets)
+                      (lambda () (make-callback-node 'inv 'cb 'onward '((keep body extra))
+                                                     'resume #f)))
+        (check-raises "a bare symbol entry"
+                      (contract-violation? 'make-callback-node 'branch-targets)
+                      (lambda () (make-callback-node 'inv 'cb 'onward '(keep) 'resume #f)))
+        (check-raises "a non-symbol key"
+                      (contract-violation? 'make-callback-node 'branch-targets)
+                      (lambda () (make-callback-node 'inv 'cb 'onward '((7 body)) 'resume #f)))
+        (check-raises "a non-symbol target"
+                      (contract-violation? 'make-callback-node 'branch-targets)
+                      (lambda () (make-callback-node 'inv 'cb 'onward '((keep 7)) 'resume #f)))
+        (check-raises "an improper list"
+                      (contract-violation? 'make-callback-node 'branch-targets)
+                      (lambda () (make-callback-node 'inv 'cb 'onward 'nope 'resume #f)))))
+    (harness-case "the branch list is copied at construction"
+      (lambda ()
+        ;; §9.1:322 makes constructors return immutable-by-API descriptors, on
+        ;; the make-sequence-case precedent. Witnessed by IDENTITY rather than by
+        ;; mutating the caller's list: `set-car!` lives in (rnrs mutable-pairs),
+        ;; which the composite (rnrs) this file imports does not re-export, so a
+        ;; mutation test is not available here. Both levels are checked -- a copy
+        ;; of the spine alone would still share every entry.
+        (let* ((bs (list (list 'keep 'body)))
+               (n (make-callback-node 'inv 'cb 'onward bs 'resume #f)))
+          (check-equal "same value" (callback-node-branch-targets n) '((keep body)))
+          (check "a fresh spine" (not (eq? (callback-node-branch-targets n) bs)))
+          (check "fresh entries too"
+                 (not (eq? (car (callback-node-branch-targets n)) (car bs)))))))
+    (harness-case "the three cross-references are NOT checked here"
+      (lambda ()
+        ;; Asserted rather than merely absent, so the boundary is witnessed. Each
+        ;; needs the machine's callback table, which this constructor cannot see.
+        (check "an undeclared callback name builds fine"
+               (callback-node? (make-callback-node 'inv 'nosuch 'onward '() 'resume #f)))
+        (check "a branch key the declaration never declared builds fine"
+               (callback-node? (make-callback-node 'inv 'cb 'onward '((nosuch t)) 'resume #f)))
+        (check "a duplicated branch key builds fine"
+               (callback-node? (make-callback-node 'inv 'cb 'onward
+                                                   '((keep a) (keep b)) 'resume #f)))))))
+
 (harness-finish)

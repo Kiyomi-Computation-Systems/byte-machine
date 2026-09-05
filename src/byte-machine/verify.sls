@@ -107,6 +107,25 @@
           ((field-branch-node? n)
            (list (cons 'true (field-branch-node-true-target n))
                  (cons 'false (field-branch-node-false-target n))))
+          ;; The tenth kind (Slice ②). Zero-width by §11.4:652, and the first
+          ;; with a VARIABLE number of out-edges: §10.6:584-586 gives it a
+          ;; continue target, a pause continuation, and one target per declared
+          ;; decision branch. All three roles are successors on the byte side --
+          ;; a resumed pause continues during feed exactly as a continue does --
+          ;; so all three belong to this one census.
+          ;;
+          ;; The three roles are named for §13:803-808's three non-failing
+          ;; OUTCOMES, which is what selects among them at run time. The branch
+          ;; role is deliberately not the branch KEY: a role is §16.4:940's edge
+          ;; label and this file's roles are a closed vocabulary the kind x
+          ;; position matrix maps (axis A'), so keying it by an
+          ;; application-chosen symbol would make that vocabulary open and the
+          ;; matrix underivable.
+          ((callback-node? n)
+           (append (list (cons 'continue (callback-node-continue-target n)))
+                   (map (lambda (b) (cons 'branch (cadr b)))
+                        (callback-node-branch-targets n))
+                   (list (cons 'pause (callback-node-pause-continuation n)))))
           (else '())))
 
   (define (zero-width-successors n) (map cdr (zero-width-edges n)))
@@ -138,7 +157,8 @@
                         (sequence-dispatch-node-cases n))
                    (list (cons 'mismatch
                                (edge-target (sequence-dispatch-node-mismatch n))))))
-          ((or (field-action-node? n) (field-branch-node? n))
+          ((or (field-action-node? n) (field-branch-node? n)
+               (callback-node? n))
            (zero-width-edges n))
           ;; Integer accumulate (Slice ③). Three of its four explicit targets are
           ;; BYTE out-targets; the fourth, `eof-target`, is not -- it belongs to
@@ -579,7 +599,13 @@
               ;; `store`-into-itself machine verifies clean and then hangs in
               ;; BOTH lanes without this -- the precise failure M3 Slice ②
               ;; shipped by extending the walk and not the REPORT set.
-              ((or (field-action-node? n) (field-branch-node? n))
+              ;; The callback node joins for the same reason and in the same
+              ;; commit as the REPORT guard below: every one of its three edges
+              ;; is zero-width, so a callback that continues, branches or
+              ;; resumes into itself invokes its callback forever without
+              ;; reading a byte, and neither runtime loop guards against it.
+              ((or (field-action-node? n) (field-branch-node? n)
+                   (callback-node? n))
                (zero-width-successors n))
               ;; *** Integer accumulate contributes TWO edges, not one. Design §8
               ;; says only `nondigit-edge` can be `reexecute`, "since the
@@ -626,7 +652,8 @@
                      (if (and (or (byte-dispatch-node? n) (pause-node? n)
                                   (sequence-dispatch-node? n)
                                   (field-action-node? n) (field-branch-node? n)
-                                  (integer-accumulate-node? n))
+                                  (integer-accumulate-node? n)
+                                  (callback-node? n))
                               (reaches-self? (node-name n)))
                          (make-diagnostic 'zero-progress-cycle (node-name n)
                                           "a zero-progress cycle (reexecute edges, pause continuations, field actions and branches, accumulate overflow edges) makes no progress")
@@ -773,7 +800,15 @@
                  (dispatch-arm (byte-dispatch-node-eof-target n) path))
                 ((sequence-dispatch-node? n)
                  (dispatch-arm (sequence-dispatch-node-eof-target n) path))
-                ((or (pause-node? n) (field-action-node? n) (field-branch-node? n))
+                ;; A callback node classified HERE is being flowed through: the
+                ;; EOF walk arrived at it, so `parser-finish!` will invoke the
+                ;; callback and every one of §13:803-808's outcomes is live.
+                ;; That is why the join is over all three edges, and it is NOT
+                ;; the same question as which edge a parser PARKED at this node
+                ;; resumes on -- see `parked-eof-start` below, the one place
+                ;; those two come apart.
+                ((or (pause-node? n) (field-action-node? n) (field-branch-node? n)
+                     (callback-node? n))
                  (join-over (eof-successors n) path))
                 ;; *** Slice ③, added by the whole-branch review. *** An
                 ;; integer-accumulate node is a legal EOF target -- this slice
@@ -794,6 +829,30 @@
   ;; excluding eof-targets. An eof-only-reachable pause legally continues into
   ;; a finish node (decision 0011); a byte-reachable one must not (§16.2:908).
   (define (byte-reached m) (reach-from m node-out-targets))
+
+  ;; *** "A state an execution can be parked on" and "the name the EOF walk
+  ;; starts at" are two different questions, and the callback node is the first
+  ;; kind where they come apart. *** For all nine older kinds they coincide, so
+  ;; the parked block below classifies the parked node itself and lets
+  ;; `classify` hop: a dispatch follows its eof-target, a pause joins over its
+  ;; continuation.
+  ;;
+  ;; A parser parked at a callback node is parked because that callback RETURNED
+  ;; pause, and §13:812 resumes "at that invocation's declared pause
+  ;; continuation" -- ONE edge, not three. Classifying the callback itself would
+  ;; join over its continue and branch targets as well and report
+  ;; `eof-reachable-stop` for a stop terminal only a FEED-time `continue`
+  ;; reaches; that is a legal `stopped` feed result and not an EOF path. The
+  ;; flow-through case, where the walk ARRIVES at a callback and every outcome
+  ;; is live, is `classify`'s and is unaffected.
+  ;;
+  ;; The entry is the exception to the exception: a fresh or reset parser is
+  ;; parked at the entry WITHOUT having executed it, so `parser-finish!` runs an
+  ;; entry callback and all three outcomes are live -- flow-through again.
+  (define (parked-eof-start m n)
+    (if (and (callback-node? n) (not (eq? (node-name n) (machine-entry m))))
+        (callback-node-pause-continuation n)
+        (node-name n)))
 
   ;; §16.2:908/:909 and the separate EOF zero-progress-cycle check.
   (define (pass-eof-execution m)
@@ -908,8 +967,13 @@
                        (if (and (memq (node-name n) br909)
                                 (or (eq? (node-name n) (machine-entry m))
                                     (pause-node? n)
+                                    ;; Slice ②: a callback that returned pause
+                                    ;; parks the parser exactly as a pause node
+                                    ;; does. `parked-eof-start` above is where
+                                    ;; its start differs from its name.
+                                    (callback-node? n)
                                     (symbol? (node-eof-target n))))
-                           (case (eof-terminal m (node-name n))
+                           (case (eof-terminal m (parked-eof-start m n))
                              ((eof-reachable-stop)
                               (list (make-diagnostic 'eof-reachable-stop (node-name n)
                                                      "an EOF path reaches a stop terminal")))

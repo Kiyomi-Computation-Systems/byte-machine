@@ -13,6 +13,10 @@
 ;;; one accessor per §10.2:488-491 part, on the same precedent. Machine
 ;;; ACCESSORS stay private: §9.1 fixes a construction surface, and reading a
 ;;; built machine back is not part of it.
+;;;
+;;; Milestone 5 Slice ② adds `make-callback-node` (§9.1:307-308) -- the
+;;; constructor only, on the same rule: its six accessors and its predicate stay
+;;; in the private library, where every other node kind's do.
 (library (byte-machine graph)
   (export make-uint-field uint-field? uint-field-name uint-field-width
           uint-field-initial uint-field-source-label
@@ -27,7 +31,7 @@
           make-exact-byte-matcher make-edge make-stop-node make-finish-node
           make-pause-node make-error-node make-error-declaration
           make-field-action-node make-field-branch-node
-          make-integer-accumulate-node
+          make-integer-accumulate-node make-callback-node
           make-byte-set-matcher make-byte-range-matcher
           make-byte-complement-matcher ascii-bytes
           matcher? exact-byte-matcher? exact-byte-matcher-byte
@@ -55,7 +59,7 @@
                 make-exact-byte-matcher make-edge make-stop-node make-finish-node
                 make-pause-node make-error-node make-error-declaration
                 make-field-action-node make-field-branch-node
-                make-integer-accumulate-node
+                make-integer-accumulate-node make-callback-node
                 make-byte-set-matcher make-byte-range-matcher
                 make-byte-complement-matcher ascii-bytes
                 matcher? exact-byte-matcher? exact-byte-matcher-byte
