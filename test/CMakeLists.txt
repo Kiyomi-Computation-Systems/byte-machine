@@ -1030,6 +1030,30 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-callback-tests.sps"
   TIMEOUT 120)
 
+# --- Milestone 5 Slice ③: the two span kinds --------------------------------
+# What is compared here is not a parser result but the FRAGMENT TRACE: two lanes
+# can agree on every tuple while handing the application different bytes, because
+# the range a data callback receives is chosen by §14:832, §14:834 and §14:835
+# and appears in no result. Six rules, one group each, plus the substep pause
+# §14:838 resumes into and the reset §12.5:739 requires.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.span.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-span-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/differential-span-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.span.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-span-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/differential-span-tests.sps"
+  TIMEOUT 120)
+
 byte_machine_add_scheme_lane(
   NAME byte-machine.example.one-byte.chez.source
   BACKEND chez

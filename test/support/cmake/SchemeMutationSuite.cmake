@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FIFTY-THREE PASSES, BECAUSE FIFTY-THREE DIFFERENT WITNESSES ARE NEEDED
+# FIFTY-FOUR PASSES, BECAUSE FIFTY-FOUR DIFFERENT WITNESSES ARE NEEDED
 # (46 through Milestone 3; Milestone 4 Slice ①a adds the member-3 drift
 # guard and the position-kind lane, and Slice ①b the field-access lane -- since
 # renamed byte-machine.differential.field, the only lane in which the field
@@ -21,7 +21,11 @@
 # Slice ② task 10, which found it by running the check the commit claimed to
 # have run. Milestone 5 Slice ② adds the FIFTY-THIRD: the differential lane over
 # the callback node, which is the only program in the tree that loads a
-# generated library containing a callback state.)
+# generated library containing a callback state. Slice ③ adds the FIFTY-FOURTH
+# on the same argument one kind later -- the differential lane over the two span
+# kinds, the only program that loads a generated library containing a span
+# state, and the only one that can see a span FRAGMENT at all, since no parser
+# result carries one.)
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -1140,8 +1144,8 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-set(EXPECTED_PASSES 53)
-set(EXPECTED_MUTATIONS 443)
+set(EXPECTED_PASSES 54)
+set(EXPECTED_MUTATIONS 455)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -6079,8 +6083,12 @@ byte_machine_mutation(
   # that check on the very same call that just built the compound (a
   # single-byte slice hits end-of-slice exactly there), so every multi-byte
   # sequence stops dead after its first byte. Comparison-caught.
-  FIND [[            'dispatch                   ; mid-sequence: always reading a byte]]
-  REPLACE [[            'stop                   ; mid-sequence: always reading a byte]]
+  # Re-anchored in Slice ③: `kind`'s compound branch now has to separate TWO
+  # compounds -- a mid-sequence (name . byte-list) from a span end's
+  # (name . completion-pending) -- so the bare `'dispatch` line became an inner
+  # `if`. The mutant is the same one: the mid-sequence compound stops reading.
+  FIND [[            (if (completion? name) 'span-completion 'dispatch)]]
+  REPLACE [[            (if (completion? name) 'span-completion 'stop)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
     "the full sequence stops after four bytes: stopped -- expected \\(stopped 1 1 4 #f\\), got \\(stopped 0 0 1 #f\\)")
 
@@ -10491,8 +10499,11 @@ byte_machine_mutation(
   # cross-lane comparison stays green. Caught by the by-value case that asserts
   # the four outcomes are four DISTINCT tuples -- without which a lane pair
   # agreeing on one wrong answer for every outcome would pass.
-  FIND [[                ((eq? r callback-pause) (list 'pause))]]
-  REPLACE [[                ((eq? r callback-pause) (list 'goto continue))]]
+  # Re-anchored in Slice ③: the classifier moved into `classify-callback-result`
+  # (one `cond` serving both arities), so this arm lost six leading spaces. The
+  # mutant and its verdict are unchanged.
+  FIND [[          ((eq? r callback-pause) (list 'pause))]]
+  REPLACE [[          ((eq? r callback-pause) (list 'goto continue))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "and the pause is neither -- expected a true value")
 
@@ -10594,19 +10605,13 @@ byte_machine_mutation(
   # what a callback observes.
   # The following line rides along in both halves; the runner refuses an empty
   # REPLACE.
+  # Re-anchored in Slice ③: §14:834's mark re-anchor now sits between the `busy`
+  # write and the wind. The FIND had to carry the following lines only because
+  # the runner refuses an empty REPLACE, so it carries the new ones instead --
+  # the mutant, and its verdict, are unchanged.
   FIND [[       (parser-set-lifecycle! parser 'busy)
-       (let ((completed #f))
-         (dynamic-wind
-           (lambda () #t)
-           (lambda ()
-             (let ((r (case (parser-variant parser)
-                        ((op) (parser-feed-op! parser bv start end))]]
-  REPLACE [[       (let ((completed #f))
-         (dynamic-wind
-           (lambda () #t)
-           (lambda ()
-             (let ((r (case (parser-variant parser)
-                        ((op) (parser-feed-op! parser bv start end))]]
+       ;; §14:834: an open span "begins its next possible fragment at the next]]
+  REPLACE [[       ;; §14:834: an open span "begins its next possible fragment at the next]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "all six answered -- expected .busy inv 1 7")
 
@@ -10671,10 +10676,17 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.callback.chez.source
   LABEL "runtime: a callback invocation consumes a byte"
-  FIND [[                 ((goto)
+  # Re-anchored in Slice ③: the span-end arm's `goto` is textually identical to
+  # this one -- both are zero-width, which is the point -- so the FIND now
+  # carries the invocation above it, which names the kind it belongs to.
+  FIND [[                        (caddr parts) (cadr parts) (list-ref parts 4))))
+               (case (car o)
+                 ((goto)
                   (parser-set-current! parser (cadr o))
                   (loop pos pk))]]
-  REPLACE [[                 ((goto)
+  REPLACE [[                        (caddr parts) (cadr parts) (list-ref parts 4))))
+               (case (car o)
+                 ((goto)
                   (parser-set-current! parser (cadr o))
                   (loop (+ pos 1) pk))]]
   EXPECT_STATUS 1
@@ -10684,17 +10696,226 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.callback.chez.source
   LABEL "compile: the emitted callback jump consumes a byte"
-  FIND [[            "           ((goto) (loop pos (cadr o) off pk))\n"]]
-  REPLACE [[            "           ((goto) (loop (+ pos 1) (cadr o) off pk))\n"]]
+  # Re-anchored in Slice ③, for the same reason its interpreted sibling above
+  # was: the emitted span-end arm renders the identical `goto` line. The FIND
+  # carries the invocation line above it, which is this arm's alone.
+  FIND [[            (let ((d (caddr tg))) (if d (num d) "#f")) ")))\n"
+            "         (case (car o)\n"
+            "           ((goto) (loop pos (cadr o) off pk))\n"]]
+  REPLACE [[            (let ((d (caddr tg))) (if d (num d) "#f")) ")))\n"
+            "         (case (car o)\n"
+            "           ((goto) (loop (+ pos 1) (cadr o) off pk))\n"]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the lanes agree -- expected .stopped 2 2 1 #f stopped., got .stopped 1 1 1")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
+# --- Milestone 5 Slice ③: the span kinds execute (pass 54) -------------------
+#
+# The differential lane is the SPEC for the same reason Slice ②'s was: no other
+# program in the tree loads a generated library containing a span state. What is
+# different here is what the lane can SEE. A callback outcome shows up in a
+# parser result; a span fragment does not -- two lanes can agree on every tuple
+# in §22.4 while handing the application different bytes. So the pins below are
+# anchored on the FRAGMENT TRACE, and three of them (the emitted span start, the
+# emitted span end, and the emitted completion substep) would otherwise resolve
+# to the same "the lanes agree" line. The fixture asserts the GENERATED lane's
+# trace and active span as values for exactly that reason, and each pin names
+# the wrong value rather than the disagreement.
+#
+# Six mutations edit code SHARED by both lanes -- the fragment step's empty
+# check, the boundary flush, the feed's mark re-anchor, reset's span clear -- so
+# both lanes move together and a cross-lane comparison cannot see them at all.
+# Those are pinned on recorded VALUES, never on agreement.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/differential-span-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "runtime: an empty span fragment is delivered instead of suppressed"
+  # §14:835. SHARED, so both lanes deliver the empty fragment and agree about
+  # it; only a test that says what the trace IS can notice. `AZ` opens and
+  # closes with nothing between, and the EOF-chain span is the same shape.
+  FIND [[      (if (or (>= from to) (unbound-callback? f))]]
+  REPLACE [[      (if (or (> from to) (unbound-callback? f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "completion only -- expected .complete., got .#vu8.. complete."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "runtime: the feed-boundary flush never runs"
+  # §14:833-834 and §19.3:1024. The status guard is what selects the boundary:
+  # `error` is forbidden a final fragment (§14:839), `stopped`/`finished` with a
+  # span active are verifier-rejected, and `paused` cannot produce a nonempty
+  # one. Pointing it at `paused` disables the flush without deleting it.
+  FIND [[    (if (and (eq? (parser-result-status r) 'need-input)]]
+  REPLACE [[    (if (and (eq? (parser-result-status r) 'paused)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "flushed, then the remainder, then the completion -- expected .#vu8.98 99. #vu8.100. complete., got .#vu8.100. complete."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "runtime: an open span's mark is not re-anchored at the next feed"
+  # *** THE ONE PLACE §14:834's RE-ANCHOR LIVES, and since the mark advance was
+  # measured subsumed and deleted, the only place a mark ever moves after a span
+  # opens. *** With it gone the mark keeps the coordinates it had in the slice
+  # the span STARTED in, so the second feed's span end slices `[1,2)` of the new
+  # bytevector -- one wrong byte, not none, which is why the pin names the
+  # sequence rather than a count.
+  #
+  # Measured, not derived: the sub-slice case below does NOT fail under this
+  # mutant, because there the stale mark happens to land on the right byte. Two
+  # mutations, two cases, and neither case covers both.
+  FIND [[       (when (parser-active-span parser)
+         (parser-set-span-mark! parser start))
+       (let ((completed #f))]]
+  REPLACE [[       (let ((completed #f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "bc then de, never bc twice -- expected .#vu8.98 99. #vu8.100 101. complete., got .#vu8.98 99. #vu8.101. complete."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "runtime: the mark is re-anchored to 0 rather than to the slice start"
+  # §14:833 makes the mark a SLICE offset and §14:834 anchors it at "the next
+  # feed's `start`". Every other case in the lane feeds a whole bytevector,
+  # where `start` and `0` are the same program -- so this mutant is invisible to
+  # all of them, and the sub-slice case exists only to separate the two.
+  FIND [[         (parser-set-span-mark! parser start))]]
+  REPLACE [[         (parser-set-span-mark! parser 0))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the padding is in neither fragment -- expected .#vu8.98 99. #vu8.100. complete., got .#vu8.98 99. #vu8.7 7 100. complete."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "runtime: a full reset leaves the span state behind"
+  # §12.5:739 lists span state FIRST among what a reset clears, and F2 found the
+  # comment above `parser-reset!` still saying it "does not exist". Both lanes
+  # move, so the pin names the accessor's value in each.
+  FIND [[    (byte-machine-span-close/v1 parser)
+    (vector-set! parser 8]]
+  REPLACE [[    (vector-set! parser 8]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "inactive after -- expected .#f #f., got .payload payload."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "interpret loop: the span is not made inactive before the completion callback"
+  # §14:842: "Before invoking the completion callback, execution makes the span
+  # inactive." One lane only, so the cross-lane comparison catches it too -- but
+  # the pin is on the VALUE, because the emitted mutation two below shares that
+  # line and only the value separates them.
+  FIND [[             (let ((parts (op 'span-completion-parts node)))
+               (byte-machine-span-close/v1 parser)]]
+  REPLACE [[             (let ((parts (op 'span-completion-parts node)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "and the span is inactive afterwards -- expected #f, got payload"
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "interpret loop: a span start records the mark at 0 instead of the cursor"
+  # §14:831: "Starting a span records the current cursor." The interpreted arm's
+  # `pos` against the finish arm's literal 0 -- which is correct THERE, since the
+  # finish path has no cursor, and is what makes this FIND one site.
+  FIND [[               (byte-machine-span-open/v1 parser (car parts) pos (cadr parts))]]
+  REPLACE [[               (byte-machine-span-open/v1 parser (car parts) 0 (cadr parts))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "one fragment then one completion -- expected .#vu8.98 99 100. complete., got .#vu8.65 98 99 100. complete."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "runtime: a pause during the flush is reported as need-input"
+  # §14:837 makes the flush's pause the FEED's pause: the fragment is committed
+  # and the caller must resume. Reported as `need-input` the parser stays ready,
+  # so the caller's `parser-resume!` raises a lifecycle violation three steps
+  # later -- which the harness shows as a bare raise. Pinned on the STATUS
+  # instead, in the one case whose script has no resume in it.
+  FIND [[            ((pause) (make-parser-result 'paused (parser-result-next r)]]
+  REPLACE [[            ((pause) (make-parser-result 'need-input (parser-result-next r)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "parked where the executor left it -- expected .paused 3 3 3 #f paused-feed., got .need-input 3 3 3 #f ready."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "compile: the emitted span start records the mark at 0"
+  # The generated half of the interpreted mutation above. Both are needed: each
+  # edits one lane, and a lane agreeing with a mutated sibling is the defect
+  # neither alone can show.
+  FIND [[            (symbol->string (car d)) ") pos " (num (cadr d)) ")\n"]]
+  REPLACE [[            (symbol->string (car d)) ") 0 " (num (cadr d)) ")\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the generated lane's own fragment -- expected .#vu8.98 99 100. complete., got .#vu8.65 98 99 100. complete."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "compile: the emitted span end slices to the end of the feed"
+  # §14:832 emits `[mark,cursor)`, and `cursor` is `pos` -- not `end`. The
+  # difference is exactly the delimiter the span end reexecutes onto, so this
+  # mutant produces a fragment one byte too long and nothing else moves.
+  FIND [[" off (vector-ref cbv " (num (cadr d)) ") bv pos " cid ")))\n"]]
+  REPLACE [[" off (vector-ref cbv " (num (cadr d)) ") bv end " cid ")))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the generated lane's own fragment -- expected .#vu8.98 99 100. complete., got .#vu8.98 99 100 90. complete."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "compile: the emitted completion substep does not close the span"
+  # §14:842's generated half. TWO shapes are rendered here -- with and without a
+  # declared completion callback (§10.4:516) -- and this is the one that calls;
+  # its sibling below is the one that does not, and each needs its own witness
+  # because a single machine renders only one of them.
+  FIND [[                "       (begin (byte-machine-span-close/v1 psr)\n"
+                "         (let ((o (byte-machine-callback-step/v1 psr " id]]
+  REPLACE [[                "       (begin #t\n"
+                "         (let ((o (byte-machine-callback-step/v1 psr " id]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "and its span is inactive too -- expected #f, got payload"
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "compile: the emitted completion substep for a span with no callback does not close"
+  # The OTHER rendered shape, and the reason the lane builds a second machine at
+  # all: a span declaring no completion callback still needs the substep, whose
+  # only job is then to make the span inactive. Nothing else in the tree renders
+  # this arm, so without the second machine it would ship unexecuted.
+  FIND [[                "       (begin (byte-machine-span-close/v1 psr)\n"
+                "              " (zero-width-jump (normal-field-targets s)) "))\n")]]
+  REPLACE [[                "       (begin #t\n"
+                "              " (zero-width-jump (normal-field-targets s)) "))\n")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "#vu8.98 99 100.. payload., got "
+)
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FIFTY-THREE PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FIFTY-FOUR PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

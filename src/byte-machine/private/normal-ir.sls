@@ -13,7 +13,7 @@
           normal-error-code normal-error-reason normal-dispatch-eof normal-pause-target
           normal-machine-debug-map normal-machine-fields
           normal-machine-callbacks normal-machine-spans
-          normal-machine-callback-decls
+          normal-machine-callback-decls normal-machine-span-decls
           normal-field-selector normal-field-arguments normal-field-targets)
   (import (rnrs)
           (only (byte-machine private ir)
@@ -55,8 +55,9 @@
   ;; map ahead of fp would silently renumber that slot and render a debug map
   ;; where the IR fingerprint belongs in the emitted constructor call.
   (define (make-normal-machine entry states fp debug-map fields callbacks spans
-                               callback-decls)
-    (vector nm-tag entry states fp debug-map fields callbacks spans callback-decls))
+                               callback-decls span-decls)
+    (vector nm-tag entry states fp debug-map fields callbacks spans callback-decls
+            span-decls))
   (define (normal-machine? x) (and (vector? x) (> (vector-length x) 0) (eq? (vector-ref x 0) nm-tag)))
   (define (normal-machine-entry m) (vector-ref m 1))
   (define (normal-machine-states m) (vector-ref m 2))
@@ -99,6 +100,19 @@
   ;; Separate from the slot table above: that one is what the ENCODING walks and
   ;; carries names only, this one is what the EMITTER renders into ABI member 1.
   (define (normal-machine-callback-decls m) (vector-ref m 8))
+  ;; Slot 9, Milestone 5 Slice ③, and the span half of exactly the split above:
+  ;; the table at slot 7 carries NAMES, which is what the fingerprint's span
+  ;; section walks, and this one carries what the EMITTER needs -- the span's
+  ;; name plus its two callbacks RESOLVED TO CALLBACK SLOTS, in span-slot order.
+  ;;
+  ;; The resolution belongs here and not in the emitter. A lowered span state
+  ;; carries the SPAN slot (§17:962), but the arm it renders indexes `cbv`, so
+  ;; something has to cross from one numbering to the other; doing it in
+  ;; compile.sls would put a second, independently-written copy of the
+  ;; declaration walk in the lane that is supposed to be checked against this
+  ;; one. Entries are (name data-slot complete-slot), complete-slot #f when
+  ;; §10.4:516's optional completion callback is absent.
+  (define (normal-machine-span-decls m) (vector-ref m 9))
   (define (normal-machine-spans m) (vector-ref m 7))
 
   (define ns-tag (vector 'byte-machine-normal-state))
@@ -934,10 +948,30 @@
 
   (define (normalize-machine machine)
     (let-values (((entry states debug-map) (lower-machine machine)))
-      (let ((fields (field-table machine))
-            (callbacks (name-table (machine-callbacks machine)
-                                   callback-declaration-name))
-            (spans (name-table (machine-spans machine) span-declaration-name)))
+      (let* ((fields (field-table machine))
+             (callbacks (name-table (machine-callbacks machine)
+                                    callback-declaration-name))
+             (spans (name-table (machine-spans machine) span-declaration-name))
+             ;; Name -> CALLBACK slot, read off the table just built rather than
+             ;; re-walking the declarations: the slot IS the list position
+             ;; (§17:962), and reading it back is what keeps the span table's
+             ;; numbering the same object the callback table published.
+             ;;
+             ;; A MISS ANSWERS #f AND DOES NOT RAISE, which is the one place this
+             ;; table differs from `span-slot-of` above. `normalize-machine` is
+             ;; reachable for an unverified machine -- normal-ir-tests.sps drives
+             ;; it directly, and a span naming no callback declaration is exactly
+             ;; what §16.2:890 rejects as `missing-callback-declaration`. Raising
+             ;; here would move that rejection out of the verifier and into the
+             ;; normalizer for every caller. The #f cannot reach an emitted arm:
+             ;; `render-machine` refuses an unverified compilation before it
+             ;; reads this table, so a guard on the emitter side would be one
+             ;; that cannot fire.
+             (cb-slot (lambda (nm)
+                        (let loop ((cs callbacks))
+                          (cond ((null? cs) #f)
+                                ((eq? (car (car cs)) nm) (cadr (car cs)))
+                                (else (loop (cdr cs))))))))
         (make-normal-machine entry states
                              ;; The DECLARATIONS reach the encoder, not the slot
                              ;; tables: every part the ABI carries must be in the
@@ -952,4 +986,10 @@
                                           (callback-declaration-kind c)
                                           (callback-declaration-required? c)
                                           (callback-declaration-default-branch c)))
-                                  (machine-callbacks machine)))))))
+                                  (machine-callbacks machine))
+                             (map (lambda (d)
+                                    (list (span-declaration-name d)
+                                          (cb-slot (span-declaration-data-callback d))
+                                          (let ((c (span-declaration-complete-callback d)))
+                                            (and c (cb-slot c)))))
+                                  (machine-spans machine)))))))

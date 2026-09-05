@@ -38,7 +38,12 @@
           ;; why they carry the /v1 seam suffix and why they are exported at all
           ;; -- the generated library imports (byte-machine runtime) and nothing
           ;; else (decision 0025).
-          byte-machine-callback-step/v1 byte-machine-make-callback-error/v1)
+          byte-machine-callback-step/v1 byte-machine-make-callback-error/v1
+          ;; Milestone 5 Slice ③. `parser-active-span` shipped in ①b; these four
+          ;; are the span machinery both lanes call, and every one of them is
+          ;; called from EMITTED code.
+          byte-machine-span-open/v1 byte-machine-span-fragment-step/v1
+          byte-machine-span-close/v1)
   (import (rnrs)
           (byte-machine private conditions))
 
@@ -390,7 +395,7 @@
          (vector parser-tag 'op op entry entry 0 'ready #f
                  (initial-values decls) decls
                  (resolve-callbacks (op 'callback-decls) callback-bindings)
-                 user-context #f #f)))
+                 user-context #f #f 0 #f)))
       ((eq? (compiled-machine-variant compiled-machine) 'v2)
        (let ((exec (compiled-machine-v2-exec compiled-machine))
              (entry-state (compiled-machine-v2-entry-state compiled-machine))
@@ -400,7 +405,7 @@
                  (resolve-callbacks (compiled-machine-v2-callbacks compiled-machine)
                                     callback-bindings)
                  user-context #f
-                 (compiled-machine-v2-state-names compiled-machine))))
+                 (compiled-machine-v2-state-names compiled-machine) 0 #f)))
       ;; Unreachable through the public API: the only two constructors build 'op
       ;; and 'v2. Kept LOUD rather than deleted, the same convention as
       ;; compile.sls's and normal-ir.sls's own unreachable else arms.
@@ -437,6 +442,18 @@
   ;; established -- the interpreter holds the verified source machine, the
   ;; generated lane holds only what the payload carried.
   (define (parser-state-names p) (vector-ref p 13))
+  ;; Milestone 5 Slice ③: slots 14 and 15, beside ①b's slot 12. The three are one
+  ;; piece of state and are named apart because they have different lifetimes --
+  ;; the NAME is what `parser-active-span` answers and what §14:843 quantifies
+  ;; over, the MARK is a slice offset re-anchored every feed (§14:833), and the
+  ;; SLOT is what the boundary flush needs to reach the data callback without
+  ;; consulting the machine, which it cannot do: the flush runs in `parser-feed!`
+  ;; and the two lanes reach their declarations by different routes.
+  (define (parser-span-mark p) (vector-ref p 14))
+  (define (parser-set-span-mark! p v) (vector-set! p 14 v))
+  (define (parser-span-data-slot p) (vector-ref p 15))
+  (define (parser-set-span-data-slot! p v) (vector-set! p 15 v))
+  (define (parser-set-active-span! p v) (vector-set! p 12 v))
   ;; §9.3:409. The absolute offset, which the parser already tracks; this is the
   ;; public name for it, and §13:819 makes it one of the values committed before
   ;; a callback sees the parser.
@@ -488,7 +505,7 @@
   (define (callback-failure-code f) (vector-ref f 1))
   (define (callback-failure-detail f) (vector-ref f 2))
 
-  ;; --- the ONE callback invocation, shared by both lanes (Slice ②) -----------
+  ;; --- the callback seam, shared by both lanes (Slice ②, split in Slice ③) ---
   ;; §13:803-808's outcomes, classified in one place. The emitted arm and
   ;; `parser-feed-op!`'s arm both call this, so neither lane can invent its own
   ;; vocabulary -- which §22.4:1268 compares and decision 0024's Consequences
@@ -513,6 +530,24 @@
   ;;   (pause)                -- park on the node's pause continuation
   ;;   (failure CODE DETAIL)  -- decision 0024's stored callback-domain error
   ;;
+  ;; *** THE SPLIT SLICE ③ NEEDED, and only one line of the shipped procedure
+  ;; was arity-dependent. *** §13:790 gives a span-data callback five arguments
+  ;; where every other kind takes two, so the invocation cannot be shared -- but
+  ;; the CLASSIFICATION can, and must: §22.4:1268 compares callback results
+  ;; across lanes and decision 0024's Consequences require both codes to be
+  ;; produced "by both lanes from the same construction".
+  ;;
+  ;; A widened rest-arg was rejected: it would put the arity decision inside the
+  ;; classifier, where neither lane can see which kind it holds.
+  (define (classify-callback-result r branches continue)
+    (cond ((eq? r callback-continue) (list 'goto continue))
+          ((eq? r callback-pause) (list 'pause))
+          ((callback-failure? r)
+           (list 'failure (callback-failure-code r) (callback-failure-detail r)))
+          ((and (symbol? r) (assq r branches))
+           => (lambda (hit) (list 'goto (cdr hit))))
+          (else (list 'failure callback-contract-code #f))))
+
   ;; *** IT COMMITS `current` AND THE OFFSET BEFORE INVOKING, and that is not
   ;; bookkeeping -- it is §13:816-821. *** "At callback entry, the interpreter
   ;; and generated executor expose identical committed parser state": the stream
@@ -525,24 +560,136 @@
   ;; feed and `parser-state-name` answers the state the feed started in. The
   ;; emitted arm passes its own `st` and `off`; the interpreted arm passes the
   ;; values already there, so the writes are no-ops on that side.
-  (define (byte-machine-callback-step/v1 parser state offset f branches continue default)
+  ;;
+  ;; Both entry points call this rather than writing the two lines themselves.
+  ;; That is not only taste: each line carries a one-site mutation FIND of its
+  ;; own and the suite declares no SITES anywhere, so a second copy is a
+  ;; configure-TIME failure, not a test failure.
+  (define (callback-commit! parser state offset)
     (parser-set-current! parser state)
-    (parser-set-offset! parser offset)
+    (parser-set-offset! parser offset))
+
+  (define (byte-machine-callback-step/v1 parser state offset f branches continue default)
+    (callback-commit! parser state offset)
     (if (unbound-callback? f)
         ;; §9.3:419: "An optional decision callback must declare
         ;; `default-branch`; other optional callbacks default to `continue`."
         ;; Both are resolved to a TARGET at lowering time, so this arm is one
         ;; jump and carries no rule of its own.
         (list 'goto default)
-        (let ((r (f parser (parser-user-context parser))))
-          (cond ((eq? r callback-continue) (list 'goto continue))
-                ((eq? r callback-pause) (list 'pause))
-                ((callback-failure? r)
-                 (list 'failure (callback-failure-code r)
-                       (callback-failure-detail r)))
-                ((and (symbol? r) (assq r branches))
-                 => (lambda (hit) (list 'goto (cdr hit))))
-                (else (list 'failure callback-contract-code #f))))))
+        (classify-callback-result (f parser (parser-user-context parser))
+                                  branches continue)))
+
+  ;; --- the span runtime (§19.3:1024, Milestone 5 Slice ③) --------------------
+  ;;
+  ;; Span state is a NAME, a MARK and the data callback's SLOT -- never a
+  ;; bytevector. §14:833 re-anchors the mark at every feed boundary, so it is a
+  ;; SLICE offset and never has to mean anything between feeds; that is what
+  ;; keeps §28:1725's "no bytevector field in parser storage" structurally true
+  ;; rather than merely observed.
+  (define (byte-machine-span-open/v1 parser name mark data-slot)
+    (parser-set-active-span! parser name)
+    (parser-set-span-mark! parser mark)
+    (parser-set-span-data-slot! parser data-slot))
+
+  (define (byte-machine-span-close/v1 parser)
+    (parser-set-active-span! parser #f)
+    (parser-set-span-mark! parser 0)
+    (parser-set-span-data-slot! parser #f))
+
+  ;; *** ONE PROCEDURE DELIVERS EVERY SPAN FRAGMENT, and §14:835's suppression
+  ;; is inside it. *** A fragment is delivered in exactly three places -- a span
+  ;; end, the feed-boundary flush, and the emitted arms for both -- and every one
+  ;; of them owes §14:835 the same empty check. Written out per caller it would
+  ;; be three chances to get it wrong and three mutation sites saying one thing.
+  ;;
+  ;; It also keeps the emitted arm free of a mark local: `reserved-member-3` is
+  ;; the exact set of identifiers the generated body binds, so a rendered
+  ;; `(let ((m (byte-machine-span-mark/v1 psr))) ...)` would move that list, both
+  ;; of its FINDs, and member3-drift-tests.sps's twice-asserted nine.
+  ;;
+  ;; *** IT DOES NOT ADVANCE THE MARK, and that is measured rather than assumed.
+  ;; *** §14:842 says the data callback sees "its mark advanced to the current
+  ;; cursor", and an advance was written here first. Measured: deleting it fails
+  ;; nothing, in either lane. The reason is a construction, not a coverage gap --
+  ;; every path out of a delivery either CLOSES the span (the completion substep
+  ;; sets the mark to 0) or crosses a feed boundary, where §14:834's re-anchor
+  ;; overwrites the mark with the next slice's `start`. There is no third path,
+  ;; and no public accessor reads the mark, so nothing can observe the value
+  ;; between the two. Keeping both would be one rule written twice with only one
+  ;; of them load-bearing; §14:842's sentence is discharged by §14:834's
+  ;; re-anchor, which is where the re-anchoring now lives entirely.
+  ;;
+  ;; §13:790's five-argument application is the ONLY thing here that the
+  ;; two-argument entry point above does differently. `branches` is '() because
+  ;; §13:812 gives a span callback only continue, pause and failure -- the branch
+  ;; arm is dead for spans rather than absent, which is what keeps ONE
+  ;; classifier and satisfies decision 0024's "from the same construction".
+  (define (byte-machine-span-fragment-step/v1 parser state offset f bv to continue)
+    (let ((from (parser-span-mark parser)))
+      (if (or (>= from to) (unbound-callback? f))
+          (list 'goto continue)
+          (begin
+            (callback-commit! parser state offset)
+            (classify-callback-result
+             (f parser (parser-user-context parser) bv from to)
+             '() continue)))))
+
+  ;; §19.3:1024's boundary flush, and §14:833-834. It runs at the ONE seam both
+  ;; lanes cross -- after the executor has answered and before `parser-feed!`
+  ;; records the lifecycle -- because the emitted `exec` has nowhere to put it:
+  ;; its `need-input` return is rendered inside `render-exhausted-preamble` and
+  ;; returns immediately.
+  ;;
+  ;; *** ONLY ON `need-input`, and every other status has a reason rather than an
+  ;; omission. ***
+  ;;   error     -- §14:839 forbids a final partial fragment outright.
+  ;;   stopped   -- §14:843 makes reaching either with a span active a VERIFIER
+  ;;   finished     rejection (`span-active-at-exit`), so neither is reachable.
+  ;;   paused    -- §13:826 lets only the active span's own data callback pause,
+  ;;                and the only thing that invokes one advances the mark to the
+  ;;                cursor first, so the fragment a flush would emit on that row
+  ;;                is empty BY CONSTRUCTION and §14:835 suppresses it. An arm
+  ;;                there would be a guard that cannot fire.
+  (define (span-boundary-flush! parser bv r)
+    (if (and (eq? (parser-result-status r) 'need-input)
+             (parser-active-span parser))
+        (let ((o (byte-machine-span-fragment-step/v1
+                  parser (parser-current parser) (parser-offset parser)
+                  (vector-ref (parser-callbacks parser)
+                              (parser-span-data-slot parser))
+                  bv (parser-result-next r)
+                  ;; No target: a flush is not a machine step. §14:834 keeps the
+                  ;; span open and the parser parked exactly where the executor
+                  ;; left it, so the `goto` payload is discarded below.
+                  #f)))
+          (case (car o)
+            ((goto) r)
+            ;; §14:837: "the fragment is committed, the span remains open, and
+            ;; resume begins with the next supplied input." Committed means not
+            ;; delivered again, which §14:834's re-anchor on the NEXT feed is what
+            ;; guarantees; this arm only changes what the feed REPORTS, keeping
+            ;; the resume state the executor chose.
+            ((pause) (make-parser-result 'paused (parser-result-next r)
+                                         (parser-result-consumed r)
+                                         (parser-offset parser) #f))
+            ;; The node name is asked for rather than passed: `parser-state-name`
+            ;; answers the source node in BOTH lanes (member 2's table on one
+            ;; side, the executor on the other), and a flush has no state id of
+            ;; its own -- §12.7:777 excludes the id from the comparison but still
+            ;; requires an integer, and the data callback's slot is the integer
+            ;; that actually identifies this invocation.
+            ;;
+            ;; `boundary`: the flush happens with the slice exhausted, which is a
+            ;; byte boundary by definition (§12.7:768).
+            (else
+             (make-parser-result 'error (parser-result-next r)
+                                 (parser-result-consumed r) (parser-offset parser)
+                                 (byte-machine-make-callback-error/v1
+                                  (cadr o) (caddr o) (parser-state-name parser)
+                                  (parser-span-data-slot parser)
+                                  (parser-offset parser) 'boundary)))))
+        r))
 
   ;; A FRESH vector every call, never a shared one: two parsers from one compiled
   ;; machine must not share storage, and parser-reset! must not hand back a
@@ -595,15 +742,27 @@
        ;; back into this parser meets it -- and what makes §13:821's "lifecycle
        ;; is `busy`" true of what a callback observes.
        (parser-set-lifecycle! parser 'busy)
+       ;; §14:834: an open span "begins its next possible fragment at the next
+       ;; feed's `start`". The mark is a SLICE offset, so it means nothing in a
+       ;; slice it did not come from -- re-anchoring HERE is what lets it be one,
+       ;; and a slice offset is what keeps §28:1725's "no bytevector field in
+       ;; parser storage" structurally true rather than merely observed.
+       (when (parser-active-span parser)
+         (parser-set-span-mark! parser start))
        (let ((completed #f))
          (dynamic-wind
            (lambda () #t)
            (lambda ()
-             (let ((r (case (parser-variant parser)
+             ;; The flush is INSIDE the wind: it runs application code, so a
+             ;; callback that escapes from it must poison the parser exactly as
+             ;; one escaping from the executor does (§12.6:749).
+             (let ((r (span-boundary-flush!
+                       parser bv
+                       (case (parser-variant parser)
                         ((op) (parser-feed-op! parser bv start end))
                         ((v2) (parser-feed-v2! parser bv start end))
                         (else (assertion-violation 'parser-feed! "unknown parser variant"
-                                                   (parser-variant parser))))))
+                                                   (parser-variant parser)))))))
                (case (parser-result-status r)
                  ((stopped) (parser-set-lifecycle! parser 'stopped))
                  ((error) (parser-set-lifecycle! parser 'error)
@@ -728,6 +887,77 @@
                                       (byte-machine-make-callback-error/v1
                                        (cadr o) (caddr o) node (list-ref parts 5)
                                        (parser-offset parser) pk))))))
+            ;; *** Slice ③'s ELEVENTH AND TWELFTH kinds, and the interpreter's
+            ;; own thirteenth arm for §14:841's substep. *** All three are
+            ;; zero-width (§10.6:590), so `pos`, the offset and `pk` carry
+            ;; through unchanged, exactly as the callback arm's do.
+            ((span-start)
+             ;; §14:831: "Starting a span records the current cursor." `pos` is
+             ;; the slice index, which is what a mark IS (§14:833).
+             (let ((parts (op 'span-start-parts node)))
+               (byte-machine-span-open/v1 parser (car parts) pos (cadr parts))
+               (parser-set-current! parser (caddr parts))
+               (loop pos pk)))
+            ((span-end)
+             ;; §14:832 and §14:842: the remaining fragment, with the mark
+             ;; advanced to the cursor first and the empty one suppressed --
+             ;; all three rules inside the step, so this arm only routes.
+             ;;
+             ;; TWO substeps, not one: §14:838 resumes "at the next undelivered
+             ;; substep", so the fragment's continuation is the substep below
+             ;; and never the node's own successor.
+             (let* ((parts (op 'span-end-parts node))
+                    (o (byte-machine-span-fragment-step/v1
+                        parser node (parser-offset parser)
+                        (vector-ref (parser-callbacks parser) (car parts))
+                        bv pos (cadr parts))))
+               (case (car o)
+                 ((goto)
+                  (parser-set-current! parser (cadr o))
+                  (loop pos pk))
+                 ;; §13:814's rule again, and §14:837's "the fragment is
+                 ;; committed": the park is PAST the delivery, on the substep
+                 ;; that has not run.
+                 ((pause)
+                  (parser-set-current! parser (cadr parts))
+                  (make-parser-result 'paused pos (- pos start)
+                                      (parser-offset parser) #f))
+                 (else
+                  (make-parser-result 'error pos (- pos start) (parser-offset parser)
+                                      (byte-machine-make-callback-error/v1
+                                       (cadr o) (caddr o) (cadddr parts)
+                                       (caddr parts) (parser-offset parser) pk))))))
+            ((span-completion)
+             ;; §14:842: "Before invoking the completion callback, execution
+             ;; makes the span inactive." BEFORE -- a completion callback asking
+             ;; `parser-active-span` must see #f, and this is the only place the
+             ;; ordering is written.
+             (let ((parts (op 'span-completion-parts node)))
+               (byte-machine-span-close/v1 parser)
+               (if (not (car parts))
+                   ;; §10.4:516's absent completion callback: no invocation, no
+                   ;; slot lookup, straight to the node's successor.
+                   (begin (parser-set-current! parser (cadr parts))
+                          (loop pos pk))
+                   (let ((o (byte-machine-callback-step/v1
+                             parser node (parser-offset parser)
+                             (vector-ref (parser-callbacks parser) (car parts))
+                             '() (cadr parts) (cadr parts))))
+                     (case (car o)
+                       ((goto)
+                        (parser-set-current! parser (cadr o))
+                        (loop pos pk))
+                       ((pause)
+                        (parser-set-current! parser (cadr parts))
+                        (make-parser-result 'paused pos (- pos start)
+                                            (parser-offset parser) #f))
+                       (else
+                        (make-parser-result 'error pos (- pos start)
+                                            (parser-offset parser)
+                                            (byte-machine-make-callback-error/v1
+                                             (cadr o) (caddr o) (cadddr parts)
+                                             (caddr parts) (parser-offset parser)
+                                             pk))))))))
             ;; Slice ③'s INPUT-READING kind. It needs a byte, so it yields
             ;; `need-input` at the end of a slice and resumes at the same node on
             ;; the next feed -- its whole split-point behaviour, inherited from
@@ -810,6 +1040,16 @@
       ;; every lifecycle value added after it.
       ((ready finish-ready)
        (parser-set-lifecycle! parser 'busy)
+       ;; *** NO MARK RE-ANCHOR HERE, and its absence is a derivation rather than
+       ;; an omission. *** The feed path re-anchors because the next slice has its
+       ;; own coordinates; the finish path runs over `empty-bv 0 0` in both lanes,
+       ;; so an EOF-side span end delivers `[mark,0)` -- and `from >= to` holds
+       ;; for EVERY mark, a mark never being negative. §14:835 suppresses that
+       ;; fragment whatever the mark says, which is also why the EOF side needs
+       ;; no bytevector and why there is no boundary flush after EOF. A
+       ;; `(parser-set-span-mark! parser 0)` was written here first and deleted:
+       ;; it could not change an outcome, and a guard that cannot fire reads as
+       ;; one that does.
        (let ((completed #f))
          (dynamic-wind
            (lambda () #t)
@@ -926,6 +1166,69 @@
                           (cadr o) (caddr o) node (list-ref parts 5) off pk)))
                   (parser-set-stored-error! parser e)
                   (make-parser-result 'error off 0 off e))))))
+          ;; Slice ③'s span kinds on the EOF side. The SAME three arms as the
+          ;; feed loop's, written out for the reason this file's own comment
+          ;; above `parser-feed!` gives -- each records its own lifecycle -- and
+          ;; over `empty-bv` at cursor 0.
+          ;;
+          ;; *** THAT CURSOR IS WHY NO BYTEVECTOR IS NEEDED HERE. *** `parser-finish!`
+          ;; re-anchored the mark to 0 before this ran and nothing consumes a byte
+          ;; at finish, so every fragment an EOF-side span end could deliver is
+          ;; `[0,0)` -- empty, and §14:835 suppresses it. `empty-bv` is passed
+          ;; because the step's signature takes one, never because a byte of it
+          ;; is read.
+          ((span-start)
+           (let ((parts (op 'span-start-parts node)))
+             (byte-machine-span-open/v1 parser (car parts) 0 (cadr parts))
+             (parser-set-current! parser (caddr parts))
+             (loop (caddr parts) pk)))
+          ((span-end)
+           (let* ((parts (op 'span-end-parts node))
+                  (o (byte-machine-span-fragment-step/v1
+                      parser node off
+                      (vector-ref (parser-callbacks parser) (car parts))
+                      empty-bv 0 (cadr parts))))
+             (case (car o)
+               ((goto)
+                (parser-set-current! parser (cadr o))
+                (loop (cadr o) pk))
+               ((pause)
+                (parser-set-current! parser (cadr parts))
+                (parser-set-lifecycle! parser 'paused-finish)
+                (make-parser-result 'paused off 0 off #f))
+               (else
+                (parser-set-current! parser node)
+                (parser-set-lifecycle! parser 'error)
+                (let ((e (byte-machine-make-callback-error/v1
+                          (cadr o) (caddr o) (cadddr parts) (caddr parts) off pk)))
+                  (parser-set-stored-error! parser e)
+                  (make-parser-result 'error off 0 off e))))))
+          ((span-completion)
+           (let ((parts (op 'span-completion-parts node)))
+             (byte-machine-span-close/v1 parser)
+             (if (not (car parts))
+                 (begin (parser-set-current! parser (cadr parts))
+                        (loop (cadr parts) pk))
+                 (let ((o (byte-machine-callback-step/v1
+                           parser node off
+                           (vector-ref (parser-callbacks parser) (car parts))
+                           '() (cadr parts) (cadr parts))))
+                   (case (car o)
+                     ((goto)
+                      (parser-set-current! parser (cadr o))
+                      (loop (cadr o) pk))
+                     ((pause)
+                      (parser-set-current! parser (cadr parts))
+                      (parser-set-lifecycle! parser 'paused-finish)
+                      (make-parser-result 'paused off 0 off #f))
+                     (else
+                      (parser-set-current! parser node)
+                      (parser-set-lifecycle! parser 'error)
+                      (let ((e (byte-machine-make-callback-error/v1
+                                (cadr o) (caddr o) (cadddr parts) (caddr parts)
+                                off pk)))
+                        (parser-set-stored-error! parser e)
+                        (make-parser-result 'error off 0 off e))))))))
           ;; At finish there is no input, so an accumulate node takes its own
           ;; declared EOF edge exactly as a dispatch node does (§10.6:569).
           ((accumulate dispatch)
@@ -993,8 +1296,12 @@
   ;; DECLARED initials rather than to zero: §12.5:738 returns the parser to its
   ;; just-constructed state, and a just-constructed parser holds the declared
   ;; initials. Zeroing would silently make `u8 count = 3` mean 3 before the first
-  ;; reset and 0 after it. Span and poisoned/busy state still do not exist (②/③
-  ;; and M5). Returns unspecified.
+  ;; reset and 0 after it. SPAN state joins them in Slice ③ -- §12.5:739 lists it
+  ;; first -- and is cleared through the same procedure the span-end arms call,
+  ;; so "inactive" has exactly one definition. `busy` and `poisoned` are not
+  ;; reset state at all: the guard below rejects the first, and §12.2:698 makes
+  ;; the second the row this operation exists to clear, which the lifecycle write
+  ;; already does. Returns unspecified.
   ;;
   ;; It writes slot 8 and never slot 9: the declarations belong to the compiled
   ;; machine and outlive every reset.
@@ -1017,4 +1324,5 @@
     (parser-set-offset! parser 0)
     (parser-set-lifecycle! parser 'ready)
     (parser-set-stored-error! parser #f)
+    (byte-machine-span-close/v1 parser)
     (vector-set! parser 8 (initial-values (parser-field-decls parser)))))

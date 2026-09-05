@@ -77,9 +77,25 @@
                 ;; step always advances into the declared target.
                 ((pair? ends) (cons (sequence-case-target (car ends)) 'advance))
                 (else (cons (cons (sequence-dispatch-node-name n) new) 'advance)))))
+      ;; *** THE INTERPRETER'S OWN SUBSTEP REPRESENTATION, and §18:972 requires
+      ;; it to be its own. *** "Interpreter-private state may track progress
+      ;; inside a high-level source node ... but that representation must be
+      ;; derived independently from the production normalizer." The normalizer
+      ;; answers with a NUMBERED internal state (§14:841's `completion-pending`,
+      ;; lowered to its own id); this answers with the compound
+      ;; `(span-end-name . completion-pending)` -- a symbol cdr, where a
+      ;; mid-sequence compound's cdr is a non-empty list of consumed bytes, so
+      ;; the two compounds are told apart structurally and neither had to change
+      ;; to admit the other.
+      ;;
+      ;; Sharing the normalizer's numbering instead would be a change to decision
+      ;; 0015, not a refactor: it is precisely this independence that lets the
+      ;; differential catch a lowering defect in the substep chain.
+      (define (completion-state n) (cons (node-name n) 'completion-pending))
+      (define (completion? name) (and (pair? name) (symbol? (cdr name))))
       (define (kind name)
         (if (pair? name)
-            'dispatch                   ; mid-sequence: always reading a byte
+            (if (completion? name) 'span-completion 'dispatch)
             (let ((n (lookup nodes name)))
               (cond ((byte-dispatch-node? n) 'dispatch)
                     ((sequence-dispatch-node? n) 'dispatch)
@@ -91,6 +107,8 @@
                     ((field-branch-node? n) 'field-branch)
                     ((integer-accumulate-node? n) 'accumulate)
                     ((callback-node? n) 'callback)
+                    ((span-start-node? n) 'span-start)
+                    ((span-end-node? n) 'span-end)
                     (else (byte-machine-contract-violation 'interpret 'internal name))))))
       (define (dispatch name byte)
         (if (pair? name)
@@ -208,6 +226,50 @@
               (callback-node-pause-continuation n)
               (callback-default n)
               (declaration-index (callback-node-name n))))
+      ;; --- Slice ③'s span parts, interpreter side ---
+      ;; Resolved the same way `callback-parts` resolves a callback node's, and
+      ;; separately from the normalizer's `span-slot-of`/`cb-slot` for decision
+      ;; 0015 point 3's reason: two walks over one list, not one shared helper.
+      ;;
+      ;; A span's DATA callback is required by the declaration (§10.4:516 makes
+      ;; only the completion one optional), but the callback DECLARATION it names
+      ;; may itself be optional -- so both slots can hold the unbound sentinel and
+      ;; both invocation paths short-circuit on it.
+      (define (span-decl nm)
+        (let walk ((sp (machine-spans m)))
+          (cond ((null? sp) (byte-machine-contract-violation 'interpret 'internal nm))
+                ((eq? (span-declaration-name (car sp)) nm) (car sp))
+                (else (walk (cdr sp))))))
+      (define (span-slot nm)
+        (let walk ((sp (machine-spans m)) (i 0))
+          (cond ((null? sp) (byte-machine-contract-violation 'interpret 'internal nm))
+                ((eq? (span-declaration-name (car sp)) nm) i)
+                (else (walk (cdr sp) (+ i 1))))))
+      (define (span-start-parts n)
+        (list (span-start-node-span n)
+              (callback-slot (span-declaration-data-callback
+                              (span-decl (span-start-node-span n))))
+              (span-start-node-next n)))
+      ;; The span END's parts stop at the completion substep: §14:838 resumes "at
+      ;; the next undelivered substep", so the fragment step's continuation is
+      ;; the substep and never the node's own successor -- that successor belongs
+      ;; to `span-completion-parts` below and is unreachable from here.
+      (define (span-end-parts n)
+        (list (callback-slot (span-declaration-data-callback
+                              (span-decl (span-end-node-span n))))
+              (completion-state n)
+              (span-slot (span-end-node-span n))
+              (node-name n)))
+      ;; The completion callback is OPTIONAL (§10.4:516). `#f` reaches the slot
+      ;; lookup as no lookup at all: `-1` would index, and a plausible slot is
+      ;; worse than none. The runtime arm reads this and skips the invocation.
+      (define (span-completion-parts name)
+        (let* ((n (lookup nodes (car name)))
+               (c (span-declaration-complete-callback (span-decl (span-end-node-span n)))))
+          (list (and c (callback-slot c))
+                (span-end-node-next n)
+                (span-slot (span-end-node-span n))
+                (car name))))
       ;; --- Slice ②'s field semantics, interpreter side ---
       ;; Slot = declaration index (§17:962), so the slot and the width come from
       ;; the same walk over machine-fields and cannot disagree.
@@ -366,6 +428,12 @@
            ;; `byte-machine-callback-step/v1`, so the OUTCOME vocabulary is
            ;; identical in both lanes while the targets stay each lane's own.
            ((callback-parts) (callback-parts (lookup nodes (car args))))
+           ;; Slice ③'s three span messages. Each answers what its arm needs and
+           ;; nothing more, in the shape `callback-parts` established: slots and
+           ;; targets resolved here, outcome vocabulary owned by the runtime.
+           ((span-start-parts) (span-start-parts (lookup nodes (car args))))
+           ((span-end-parts) (span-end-parts (lookup nodes (car args))))
+           ((span-completion-parts) (span-completion-parts (car args)))
            ;; §9.3:408 / §13:820, Milestone 5 Slice ②. A bare SOURCE node name,
            ;; always: `current` is a declared node name, or the compound
            ;; (name . consumed-bytes) inside a lowered sequence, and §13:820
