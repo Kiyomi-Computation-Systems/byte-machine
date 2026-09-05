@@ -1030,6 +1030,29 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-callback-tests.sps"
   TIMEOUT 120)
 
+# --- Milestone 5 Slice ③ task 7: Slice ④'s liveness probe, measured early ---
+# It tests an INSTRUMENT, not the parser: design §9's retention oracle rests on
+# a weak reference reading `bwp` once the test drops its own, and §9 says in its
+# own words that the measurement behind that "was taken in a throwaway scratch
+# driver and does not count". Both lanes, because AOT compilation is where a
+# probe like this is most likely to stop discriminating -- and learning that
+# while ③ is in flight is much cheaper than learning it inside ④.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.liveness-probe.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/liveness-probe-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${CMAKE_SOURCE_DIR}/test/common/liveness-probe-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.liveness-probe.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/liveness-probe-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${CMAKE_SOURCE_DIR}/test/common/liveness-probe-tests.sps"
+  TIMEOUT 120)
+
 # --- Milestone 5 Slice ③: the two span kinds --------------------------------
 # What is compared here is not a parser result but the FRAGMENT TRACE: two lanes
 # can agree on every tuple while handing the application different bytes, because

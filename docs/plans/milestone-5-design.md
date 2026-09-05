@@ -939,10 +939,23 @@ oracle must *fail* on, designed alongside the oracle rather than added after it 
 1. **Liveness.** A weak reference to a freshly allocated fed bytevector is `bwp` after the test
    drops its own strong reference and collects. Research measured under Chez 10.4.1 that
    `weak-cons`, `bwp-object?`, `collect` and `make-guardian` are all bound and that the probe
-   discriminates. **That measurement was taken in a throwaway scratch driver and does not
-   count.** It must be re-measured through the real harness and in the AOT lane before it enters
-   an implementation plan — this repository has a standing rule about exactly this
-   (`AGENTS.md`, and the "scratch-fixture measurements" finding).
+   discriminates. That measurement was taken in a throwaway scratch driver and did not count; it
+   has since been **re-measured through the real harness, in both lanes** — Slice ③ task 7,
+   `test/common/liveness-probe-tests.sps`, registered as
+   `byte-machine.unit.liveness-probe.chez.{source,aot}`. **The probe discriminates in both:** a
+   dropped bytevector reads `bwp` and a retained one does not, repeatably rather than only on a
+   process's first collection, and a guardian agrees with the weak pair on both arms. Slice ④
+   may build on it.
+
+   Three things that lane found, and Slice ④ inherits all three. **The allocation must happen
+   inside a procedure that returns only the weak pair** — a `let`-bound temporary in the same
+   frame as the `collect` call can still be live at the collection point, which a scratch driver
+   would not have surfaced. **The strong reference the negative control holds must live at
+   module level and be cleared by assignment**, because a `harness-case` thunk closing over the
+   bytevector keeps it alive whatever the runtime does, and the case then reports "retained"
+   about its own closure. And **the lane is not mutation-pinned, because it imports no
+   `byte-machine` source**: its control is the two-directional assertion, not a mutant — a probe
+   answering a constant fails one arm or the other.
 2. **The negative control**, above — without which layer 1 asserts nothing.
 3. **The exemption boundary.** `§13:799` names **three** application-owned carriers outside the
    guarantee: callback closures, user context, and **callback error detail**. Once §4.1 gives a
