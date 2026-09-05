@@ -614,7 +614,9 @@
 
 ;; --- Milestone 5 Slice ② task 8: §22.4:1268's callback ORDER ----------------
 ;;
-;; *** MEASURED: no test in this tree has ever compared a callback order. ***
+;; *** MEASURED at this branch's merge base: no test in this tree has ever
+;; compared a callback order -- `git grep callback` over `test/common/*.sps`
+;; returns one hit about span-kind declarations and nothing else. ***
 ;; §22.4:1268 lists "callback order and results" among the values the two lanes
 ;; must agree on, and until a callback-invocation node existed nothing could
 ;; produce one. This is that comparison's first exercise, over §22.5's schedule

@@ -192,8 +192,9 @@
   ;; callback vector contents owns replacing the sentinel. This is that slice
   ;; for both: `parser-feed-v2!` and `parser-finish-v2!` now pass the parser's
   ;; own field vector and its own callback slot vector, and nothing else in the
-  ;; tree named either binding -- measured, including the mutation suite, whose
-  ;; one pin on the `empty-callbacks` call site moved with it.
+  ;; CODE named either binding -- measured; two mutation-suite comments mention
+  ;; them by name, and the suite's one FIND on the `empty-callbacks` call site
+  ;; moved with it.
 
   ;; --- feed outcome (the runtime<-generated seam; accessors private) ---
   (define feed-outcome-tag (tag 'byte-machine-feed-outcome))
@@ -998,12 +999,14 @@
   ;; It writes slot 8 and never slot 9: the declarations belong to the compiled
   ;; machine and outlive every reset.
   (define (parser-reset! parser)
-    ;; *** THE ONLY OPERATION WHOSE `busy` CELL IS NOT ITS `poisoned` CELL. ***
-    ;; §12.2:699 raises reentrancy for reset while busy -- a callback may not
-    ;; reset the parser it is running inside -- and §12.2:698 RESETS a poisoned
-    ;; one, because §12.6:749 says "Only full reset may reuse it", which is a
-    ;; permission and not a prohibition. Before this the procedure had no
-    ;; lifecycle guard at all: five unconditional mutations.
+    ;; *** THE ONLY OPERATION §12.2 LETS A POISONED PARSER RUN. *** Every
+    ;; operation's `busy` cell differs from its `poisoned` cell -- the two rows
+    ;; name different codes throughout -- but reset is the one whose poisoned
+    ;; cell is not a raise at all: §12.2:698 RESETS a poisoned parser, because
+    ;; §12.6:749's "Only full reset may reuse it" is a permission and not a
+    ;; prohibition, while §12.2:699 raises reentrancy for reset while busy -- a
+    ;; callback may not reset the parser it is running inside. Before this the
+    ;; procedure had no lifecycle guard at all: five unconditional mutations.
     ;;
     ;; §12.6:747 puts the raise "before further mutation", so the guard is the
     ;; first thing here and nothing above it can move.

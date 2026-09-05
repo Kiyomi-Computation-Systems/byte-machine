@@ -62,7 +62,9 @@
           ;; A FALLIBLE action, so the emitted arm binds `r` as well as `v`; a
           ;; safe one emits no bound check and would leave `r` unwitnessed.
           (make-field-action-node 'bump 'increment '(count) 'test 'reject #f)
-          ;; A STOP, not a finish: Slice ②'s own :908 check rejects a
+          ;; Its true leg went straight to `done` until Milestone 5 Slice ②
+          ;; threaded the callback node in front of it. `done` is a STOP and not
+          ;; a finish for the reason that predates both: §16.2:908 rejects a
           ;; byte-reachable zero-width node targeting a finish terminal, which
           ;; this fixture ran into on its first draft.
           (make-field-branch-node 'test 'zero '(count) 'note-it 'acc #f)
@@ -100,9 +102,13 @@
 ;; write them inside a `quote`. Before this, the emitted `case` over numeric
 ;; state ids and bytes made the gap invisible -- numbers are not symbols -- and
 ;; the callback arm's `(case (car o) ((goto) ...) ((pause) ...))` is the first
-;; emitted `case` whose datums are symbols. Reserving `goto` and `pause` instead
-;; would have forbidden two perfectly good machine names to satisfy a guard that
-;; was measuring the wrong thing.
+;; emitted `case` whose datums are symbols. (Measured on the pre-slice goldens:
+;; every emitted `case` was over NUMBERS -- state ids and byte values.)
+;;
+;; Reserving `goto` and `pause` instead would have forbidden two perfectly good
+;; OUTPUT BINDINGS -- reserved-member-3 is checked by `validate-binding` against
+;; the caller's binding symbol and against nothing else; an earlier draft of this
+;; paragraph said "machine names", which no reserved-member list gates.
 ;;
 ;; The KEY expression and every clause BODY are still walked, which is what
 ;; keeps that arm's own `o` in the measurement: it appears only inside
