@@ -31,9 +31,20 @@ identically in both lanes through one shared classifier; an out-of-contract
 return is a `callback`-domain parser error and not a raise; a callback that
 raises or escapes marks the parser `poisoned` through `dynamic-wind`; and
 `parser-state-name` answers in both lanes, which took the generated ABI to
-version 5 to carry a state-id to source-name table. Slices ③ (spans) and ④ (the
-reference fixture and the retention oracle) remain. No versioned release exists
-yet.
+version 5 to carry a state-id to source-name table. Slice ③ landed
+**2026-09-05**: the machine spans. Span-start and span-end are the eleventh and
+twelfth node kinds; pass 7 proves the span topology by dataflow over a flat
+lattice rather than by enumerating paths; the fragment rules execute in both
+lanes behind one runtime boundary flush; and the oracle compares exact fragment
+ranges per schedule while comparing only the coalesced trace across schedules,
+because §22.5 calls raw fragment boundaries intentionally schedule-dependent.
+Slice ③ also fixed three reachable defects — a span end not treated as a parked
+state, a span node naming an undeclared span, and §12.7:770's callback-failure
+half, which both lanes reported wrongly and no cross-lane comparison could see —
+closed two coverage holes in its own new test lane, and deleted five lines
+measured unable to change any outcome. Only Slice ④ (the retention oracle with
+its negative control, the EOF and reset fragment legs, and the callback/span
+lifetime reference) remains. No versioned release exists yet.
 
 ### Added
 

@@ -620,10 +620,10 @@
     (parser-set-span-mark! parser 0)
     (parser-set-span-data-slot! parser #f))
 
-  ;; *** ONE PROCEDURE DELIVERS EVERY SPAN FRAGMENT, and §14:835's suppression
+  ;; *** ONE PROCEDURE DELIVERS EVERY SPAN FRAGMENT, and §14:834's suppression
   ;; is inside it. *** A fragment is delivered in exactly three places -- a span
   ;; end, the feed-boundary flush, and the emitted arms for both -- and every one
-  ;; of them owes §14:835 the same empty check. Written out per caller it would
+  ;; of them owes §14:834 the same empty check. Written out per caller it would
   ;; be three chances to get it wrong and three mutation sites saying one thing.
   ;;
   ;; It also keeps the emitted arm free of a mark local: `reserved-member-3` is
@@ -632,15 +632,15 @@
   ;; of its FINDs, and member3-drift-tests.sps's twice-asserted nine.
   ;;
   ;; *** IT DOES NOT ADVANCE THE MARK, and that is measured rather than assumed.
-  ;; *** §14:842 says the data callback sees "its mark advanced to the current
+  ;; *** §14:841 says the data callback sees "its mark advanced to the current
   ;; cursor", and an advance was written here first. Measured: deleting it fails
   ;; nothing, in either lane. The reason is a construction, not a coverage gap --
   ;; every path out of a delivery either CLOSES the span (the completion substep
-  ;; sets the mark to 0) or crosses a feed boundary, where §14:834's re-anchor
+  ;; sets the mark to 0) or crosses a feed boundary, where §14:833's re-anchor
   ;; overwrites the mark with the next slice's `start`. There is no third path,
   ;; and no public accessor reads the mark, so nothing can observe the value
   ;; between the two. Keeping both would be one rule written twice with only one
-  ;; of them load-bearing; §14:842's sentence is discharged by §14:834's
+  ;; of them load-bearing; §14:841's sentence is discharged by §14:833's
   ;; re-anchor, which is where the re-anchoring now lives entirely.
   ;;
   ;; §13:790's five-argument application is the ONLY thing here that the
@@ -693,7 +693,7 @@
                   (vector-ref (parser-callbacks parser)
                               (parser-span-data-slot parser))
                   bv (parser-result-next r)
-                  ;; No target: a flush is not a machine step. §14:834 keeps the
+                  ;; No target: a flush is not a machine step. §14:833 keeps the
                   ;; span open and the parser parked exactly where the executor
                   ;; left it, so the `goto` payload is discarded below.
                   #f)))
@@ -701,7 +701,7 @@
             ((goto) r)
             ;; §14:837: "the fragment is committed, the span remains open, and
             ;; resume begins with the next supplied input." Committed means not
-            ;; delivered again, which §14:834's re-anchor on the NEXT feed is what
+            ;; delivered again, which §14:833's re-anchor on the NEXT feed is what
             ;; guarantees; this arm only changes what the feed REPORTS, keeping
             ;; the resume state the executor chose.
             ((pause) (make-parser-result 'paused (parser-result-next r)
@@ -776,7 +776,7 @@
        ;; back into this parser meets it -- and what makes §13:821's "lifecycle
        ;; is `busy`" true of what a callback observes.
        (parser-set-lifecycle! parser 'busy)
-       ;; §14:834: an open span "begins its next possible fragment at the next
+       ;; §14:833: an open span "begins its next possible fragment at the next
        ;; feed's `start`". The mark is a SLICE offset, so it means nothing in a
        ;; slice it did not come from -- re-anchoring HERE is what lets it be one,
        ;; and a slice offset is what keeps §28:1725's "no bytevector field in
@@ -888,10 +888,17 @@
                (loop pos pk)))
             ;; *** The tenth kind, and the first arm in this loop that runs
             ;; APPLICATION code. *** Zero-width like the two above (§11.4:652),
-            ;; so `pos`, the offset and `pk` are all carried through unchanged;
-            ;; §12.7:770 puts a "callback failure" on the same `boundary at the
-            ;; current stream offset` row as a zero-width machine action, which
-            ;; is the rule the carried-through `pk` already implements.
+            ;; so `pos` and the offset are carried through unchanged, and `pk`
+            ;; is carried for the LOOP but is NOT what the error records.
+            ;;
+            ;; *** This comment said the carried-through `pk` "already
+            ;; implements" §12.7:770, and it does not. *** That row is "zero-width
+            ;; machine action or callback failure | `boundary` at the current
+            ;; stream offset", flatly; `pk` is `byte` whenever this node was
+            ;; entered over a REEXECUTE edge, and BOTH LANES reported it, so the
+            ;; cross-lane comparison could not see it. The failure arm below
+            ;; records `callback-failure-position` -- see its own note beside
+            ;; `byte-machine-make-callback-error/v1`.
             ;;
             ;; The parts are (slot continue branches pause default state-id) and
             ;; the vocabulary lives in `byte-machine-callback-step/v1`, which
@@ -926,14 +933,14 @@
             ;; zero-width (§10.6:590), so `pos`, the offset and `pk` carry
             ;; through unchanged, exactly as the callback arm's do.
             ((span-start)
-             ;; §14:831: "Starting a span records the current cursor." `pos` is
+             ;; §14:830: "Starting a span records the current cursor." `pos` is
              ;; the slice index, which is what a mark IS (§14:833).
              (let ((parts (op 'span-start-parts node)))
                (byte-machine-span-open/v1 parser (car parts) pos (cadr parts))
                (parser-set-current! parser (caddr parts))
                (loop pos pk)))
             ((span-end)
-             ;; §14:832 and §14:842: the remaining fragment, with the mark
+             ;; §14:831 and §14:841: the remaining fragment, with the mark
              ;; advanced to the cursor first and the empty one suppressed --
              ;; all three rules inside the step, so this arm only routes.
              ;;
@@ -963,7 +970,7 @@
                                        (caddr parts) (parser-offset parser)
                                        callback-failure-position))))))
             ((span-completion)
-             ;; §14:842: "Before invoking the completion callback, execution
+             ;; §14:841: "Before invoking the completion callback, execution
              ;; makes the span inactive." BEFORE -- a completion callback asking
              ;; `parser-active-span` must see #f, and this is the only place the
              ;; ordering is written.
@@ -1079,7 +1086,7 @@
        ;; an omission. *** The feed path re-anchors because the next slice has its
        ;; own coordinates; the finish path runs over `empty-bv 0 0` in both lanes,
        ;; so an EOF-side span end delivers `[mark,0)` -- and `from >= to` holds
-       ;; for EVERY mark, a mark never being negative. §14:835 suppresses that
+       ;; for EVERY mark, a mark never being negative. §14:834 suppresses that
        ;; fragment whatever the mark says, which is also why the EOF side needs
        ;; no bytevector and why there is no boundary flush after EOF. A
        ;; `(parser-set-span-mark! parser 0)` was written here first and deleted:
@@ -1213,7 +1220,7 @@
           ;; `parser-finish!` says, in as many words 130 lines above, that the
           ;; line doing that was written and DELETED. The derivation does not
           ;; need it: the cursor passed below is the literal 0, a mark is never
-          ;; negative, so `from >= to` holds for EVERY mark and §14:835
+          ;; negative, so `from >= to` holds for EVERY mark and §14:834
           ;; suppresses the fragment whatever the mark says. `empty-bv` is passed
           ;; because the step's signature takes one, never because a byte of it
           ;; is read.

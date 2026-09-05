@@ -1,11 +1,11 @@
 ;;; interpreter ≡ generated over the two span kinds (Milestone 5 Slice ③;
-;;; parent §14:831-843, §19.3:1024, §22.4:1268-1271).
+;;; parent §14:830-843, §19.3:1024, §22.4:1268-1271).
 ;;;
 ;;; Slice ② compared what a callback ANSWERS. A span callback answers the same
 ;;; three things (§13:812), so what is new here is what it is HANDED: a range of
 ;;; the caller's bytevector, chosen by rules that live in three different places
-;;; -- the span end (§14:832), the feed boundary (§14:834) and the empty-fragment
-;;; suppression that governs both (§14:835). Every one of those rules can be
+;;; -- the span end (§14:831), the feed boundary (§14:833) and the empty-fragment
+;;; suppression that governs both (§14:834). Every one of those rules can be
 ;;; wrong in one lane and right in the other, and none of them is visible in a
 ;;; parser result: two lanes can agree on `(stopped 5 5 5 #f stopped)` while
 ;;; delivering different bytes to the application.
@@ -17,8 +17,8 @@
 ;;; copy would be reading whatever the next feed put there).
 ;;;
 ;;; Task 5's six rules, one group each:
-;;;   a nonempty fragment at the span end          §14:832
-;;;   an empty one suppressed                      §14:835
+;;;   a nonempty fragment at the span end          §14:831
+;;;   an empty one suppressed                      §14:834
 ;;;   a flush at a feed boundary, span still open  §14:833-834
 ;;;   a pause DURING the flush                     §14:837
 ;;;   a pause between the span-end substeps        §14:838, §14:841-842
@@ -49,7 +49,7 @@
 ;;
 ;; Four verifier rules shaped this graph, and each was found by building it:
 ;;
-;;   - `body`'s Z case REEXECUTES. A span end emits `[mark,cursor)` (§14:832), so
+;;   - `body`'s Z case REEXECUTES. A span end emits `[mark,cursor)` (§14:831), so
 ;;     consuming Z on the way in would put the delimiter inside the payload.
 ;;   - `body`'s eof-target is an ERROR and not `fin`: §14:843 rejects reaching a
 ;;     successful finish with a span active, and this is pass 7's
@@ -190,7 +190,7 @@
                       ((feed) (let ((b (cadr s)))
                                 (parser-feed! p b 0 (bytevector-length b))))
                       ;; A SUB-slice, so `start` is not always 0. §14:833 makes
-                      ;; the mark a slice offset and §14:834 re-anchors it to the
+                      ;; the mark a slice offset and §14:833 re-anchors it to the
                       ;; next feed's `start`; with every feed starting at 0, that
                       ;; re-anchor and a bare `0` are the same program.
                       ((feed-slice) (parser-feed! p (cadr s) (caddr s) (cadddr s)))
@@ -215,7 +215,7 @@
         (check-equal "with" (map diagnostic-code (verification-diagnostics v-full)) '())
         (check-equal "without" (map diagnostic-code (verification-diagnostics v-bare)) '())))))
 
-(harness-group "a span end delivers [mark,cursor) and exactly one completion (§14:832)"
+(harness-group "a span end delivers [mark,cursor) and exactly one completion (§14:831)"
   (lambda ()
     (harness-case "one feed, one nonempty fragment, then the completion"
       (lambda ()
@@ -245,7 +245,7 @@
           (check "the fragment excludes the opener and the delimiter"
                  (not (equal? (car (cadr (car r))) (bytes 65 98 99 100 90)))))))))
 
-(harness-group "an empty fragment is suppressed (§14:835)"
+(harness-group "an empty fragment is suppressed (§14:834)"
   (lambda ()
     (harness-case "AZ delivers no data callback at all, only the completion"
       (lambda ()
@@ -267,7 +267,7 @@
                        (car (car (car r))) '(need-input 3 3 3 #f ready)))))
     (harness-case "the span is still active between the two feeds"
       (lambda ()
-        ;; §14:834's "remains logically open", asserted where it is observable:
+        ;; §14:833's "remains logically open", asserted where it is observable:
         ;; after the flush and before the close. A lane that closed the span at
         ;; the boundary would still produce the same two fragments.
         (let* ((lane (make-lane cm-full-ref '() callback-continue #t))
@@ -278,7 +278,7 @@
           (check-equal "generated" (caddr mid) 'payload))))
     (harness-case "a fragment is never delivered twice across the boundary"
       (lambda ()
-        ;; The mark re-anchor (§14:834) is what makes this true, and a count
+        ;; The mark re-anchor (§14:833) is what makes this true, and a count
         ;; cannot see it: re-delivering `bc` would give three fragments, but so
         ;; would splitting `bcd` differently. The SEQUENCE is the oracle.
         (let ((r (both (list (list 'feed (bytes 65 98 99))
@@ -416,7 +416,7 @@
                        (car (car (car r))) '(paused 4 4 4 #f paused-feed)))))
     (harness-case "the span is STILL ACTIVE while parked between the substeps"
       (lambda ()
-        ;; §14:842 makes the span inactive *before* the completion callback and
+        ;; §14:841 makes the span inactive *before* the completion callback and
         ;; not before the pause, so this is the one moment a paused parser
         ;; answers a span name. Both lanes, because the two park on different
         ;; things -- a compound name here, a numbered internal state there.
@@ -428,7 +428,7 @@
           (check-equal "generated" (caddr b) 'payload))))
     (harness-case "the completion substep pauses, and the span is already inactive"
       (lambda ()
-        ;; §14:842: "Before invoking the completion callback, execution makes the
+        ;; §14:841: "Before invoking the completion callback, execution makes the
         ;; span inactive." A lane that closed the span AFTER the callback would
         ;; be caught only here -- every fragment and every tuple is identical.
         (let* ((la (make-lane cm-full-ref '() callback-pause #t))
@@ -483,12 +483,12 @@
           (check-equal "and the walk still reached the stop"
                        (car (car a)) '(stopped 5 5 5 #f stopped)))))))
 
-(harness-group "a span on the EOF chain (§12.4:729, §14:835)"
+(harness-group "a span on the EOF chain (§12.4:729, §14:834)"
   (lambda ()
     (harness-case "finish opens and closes a span, delivering no fragment"
       (lambda ()
         ;; Nothing is consumed at finish, so `[mark,0)` is empty for every mark
-        ;; and §14:835 suppresses it -- which is exactly why `parser-finish-op!`
+        ;; and §14:834 suppresses it -- which is exactly why `parser-finish-op!`
         ;; takes no bytevector. A lane that delivered a fragment here would have
         ;; had to slice something, and there is nothing to slice.
         (let ((r (both (list (list 'finish)) '() callback-continue)))

@@ -557,8 +557,17 @@
   ;; whether it names a DECLARED span, whether that span is the one currently
   ;; open, and whether any reachable path opens two at once are all judgements
   ;; that need the machine's span table and its whole graph, which this
-  ;; constructor cannot see. §16.2:899 and pass 7's lattice own every one of
-  ;; them (decision 0029).
+  ;; constructor cannot see.
+  ;;
+  ;; *** THEY DO NOT ALL HAVE THE SAME OWNER, and this comment said they did.
+  ;; *** It read "§16.2:899 and pass 7's lattice own every one of them (decision
+  ;; 0029)", and pass 7 provably cannot own the first: a lattice over span STATE
+  ;; is well defined for any symbol, so it treats an undeclared name exactly as
+  ;; it treats a declared one. The obligation therefore had a named owner and no
+  ;; implementation, and a machine naming no span verified CLEAN and then raised
+  ;; out of the normalizer. Split as it actually is: DECLAREDNESS is
+  ;; `pass-declarations`' (`missing-span-declaration`); which span is open, and
+  ;; whether two are, are pass 7's lattice (decision 0029).
   ;;
   ;; One mandatory successor each, on the field-action precedent rather than the
   ;; byte-dispatch eof-target one: neither §10.6:590 nor §10.6:594 gives these

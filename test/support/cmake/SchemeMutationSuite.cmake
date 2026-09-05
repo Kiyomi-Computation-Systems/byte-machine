@@ -973,12 +973,12 @@ cmake_minimum_required(VERSION 3.26)
 # the GENERATED lane's trace and active span as values for exactly that reason.
 #
 # *** TWO SHIPPED LINES WERE DELETED HERE, both measured rather than argued. ***
-# The mark advance inside the fragment step (§14:842) SURVIVED its mutation:
+# The mark advance inside the fragment step (§14:841) SURVIVED its mutation:
 # every path out of a delivery either closes the span or crosses a feed boundary,
-# where §14:834's re-anchor overwrites the mark, and no public accessor reads a
+# where §14:833's re-anchor overwrites the mark, and no public accessor reads a
 # mark -- a nesting by construction, not a coverage gap. The finish path's
 # re-anchor to 0 was inert for a different reason: an EOF-side fragment is
-# `[mark,0)` and `from >= to` holds for every mark, so §14:835 suppresses it
+# `[mark,0)` and `from >= to` holds for every mark, so §14:834 suppresses it
 # whatever the mark says. Both rules now live in one place each.
 #
 # FOUR shipped pins moved. Two because the F1 split re-indented the classifier
@@ -10836,13 +10836,13 @@ byte_machine_mutation(
   # what a callback observes.
   # The following line rides along in both halves; the runner refuses an empty
   # REPLACE.
-  # Re-anchored in Slice ③: §14:834's mark re-anchor now sits between the `busy`
+  # Re-anchored in Slice ③: §14:833's mark re-anchor now sits between the `busy`
   # write and the wind. The FIND had to carry the following lines only because
   # the runner refuses an empty REPLACE, so it carries the new ones instead --
   # the mutant, and its verdict, are unchanged.
   FIND [[       (parser-set-lifecycle! parser 'busy)
-       ;; §14:834: an open span "begins its next possible fragment at the next]]
-  REPLACE [[       ;; §14:834: an open span "begins its next possible fragment at the next]]
+       ;; §14:833: an open span "begins its next possible fragment at the next]]
+  REPLACE [[       ;; §14:833: an open span "begins its next possible fragment at the next]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "all six answered -- expected .busy inv 1 7")
 
@@ -10972,7 +10972,7 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
   LABEL "runtime: an empty span fragment is delivered instead of suppressed"
-  # §14:835. SHARED, so both lanes deliver the empty fragment and agree about
+  # §14:834. SHARED, so both lanes deliver the empty fragment and agree about
   # it; only a test that says what the trace IS can notice. `AZ` opens and
   # closes with nothing between, and the EOF-chain span is the same shape.
   FIND [[      (if (or (>= from to) (unbound-callback? f))]]
@@ -11001,7 +11001,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
   LABEL "runtime: an open span's mark is not re-anchored at the next feed"
-  # *** THE ONE PLACE §14:834's RE-ANCHOR LIVES, and since the mark advance was
+  # *** THE ONE PLACE §14:833's RE-ANCHOR LIVES, and since the mark advance was
   # measured subsumed and deleted, the only place a mark ever moves after a span
   # opens. *** With it gone the mark keeps the coordinates it had in the slice
   # the span STARTED in, so the second feed's span end slices `[1,2)` of the new
@@ -11023,7 +11023,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
   LABEL "runtime: the mark is re-anchored to 0 rather than to the slice start"
-  # §14:833 makes the mark a SLICE offset and §14:834 anchors it at "the next
+  # §14:833 makes the mark a SLICE offset and §14:833 anchors it at "the next
   # feed's `start`". Every other case in the lane feeds a whole bytevector,
   # where `start` and `0` are the same program -- so this mutant is invisible to
   # all of them, and the sub-slice case exists only to separate the two.
@@ -11050,7 +11050,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
   LABEL "interpret loop: the span is not made inactive before the completion callback"
-  # §14:842: "Before invoking the completion callback, execution makes the span
+  # §14:841: "Before invoking the completion callback, execution makes the span
   # inactive." One lane only, so the cross-lane comparison catches it too -- but
   # the pin is on the VALUE, because the emitted mutation two below shares that
   # line and only the value separates them.
@@ -11064,7 +11064,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
   LABEL "interpret loop: a span start records the mark at 0 instead of the cursor"
-  # §14:831: "Starting a span records the current cursor." The interpreted arm's
+  # §14:830: "Starting a span records the current cursor." The interpreted arm's
   # `pos` against the finish arm's literal 0 -- which is correct THERE, since the
   # finish path has no cursor, and is what makes this FIND one site.
   FIND [[               (byte-machine-span-open/v1 parser (car parts) pos (cadr parts))]]
@@ -11111,7 +11111,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.span.chez.source
   LABEL "compile: the emitted span end slices to the end of the feed"
-  # §14:832 emits `[mark,cursor)`, and `cursor` is `pos` -- not `end`. The
+  # §14:831 emits `[mark,cursor)`, and `cursor` is `pos` -- not `end`. The
   # difference is exactly the delimiter the span end reexecutes onto, so this
   # mutant produces a fragment one byte too long and nothing else moves.
   FIND [[" off (vector-ref cbv " (num (cadr d)) ") bv pos " cid ")))\n"]]
@@ -11124,7 +11124,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.span.chez.source
   LABEL "compile: the emitted completion substep does not close the span"
-  # §14:842's generated half. TWO shapes are rendered here -- with and without a
+  # §14:841's generated half. TWO shapes are rendered here -- with and without a
   # declared completion callback (§10.4:516) -- and this is the one that calls;
   # its sibling below is the one that does not, and each needs its own witness
   # because a single machine renders only one of them.
