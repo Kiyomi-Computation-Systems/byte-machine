@@ -815,9 +815,12 @@
 
 
 * **The mutation suite prints "suite complete" on the way to FAILING.**
-  `byte_machine_mutation_run` emits its totals line and then, separately, raises
-  a `CMake Error` for a mutation caught "for the wrong reason" — a mutant that
-  exited nonzero but whose output did not match the pin. Slice ④ read a filtered
+  A mutation caught "for the wrong reason" — a mutant that exited nonzero but
+  whose output did not match its pin — raises a `SEND_ERROR` from
+  `MutationRunner.cmake` **inline, during the pass**, and
+  `byte_machine_mutation_run` then prints no totals line for that pass at all.
+  The reassuring `(N passes, M mutations)` line still appears, because it comes
+  from the suite's own epilogue, which runs after the error. Slice ④ read a filtered
   log for `suite complete|UNCAUGHT` three times, saw `(55 passes, 471 mutations)`
   each time, and missed a wrong-reason error underneath it; the pin had been
   broken from the moment it was written.
@@ -844,8 +847,14 @@
   that is a closed question rather than a coverage gap: their control is that
   each is asserted in BOTH directions. What does get pinned is the part that is
   *not* nested — here the absence arm, which decides before the inner predicate
-  is reached, and the per-family conjuncts, which the inner mutant cannot touch.
-  Before writing a pin, ask which shipped mutant already contains yours.
+  is reached, and the per-family label conjuncts — but only once the fixture
+  gives each family a record the inner mutant cannot produce. Measured: with the
+  wrong-shape label on the callback alone, the SPAN family's conjunct mutant was
+  itself nested and shipped unpinned for a day; the fix was a second fixture
+  value, not a second pin.
+  Before writing a pin, ask which shipped mutant already contains yours — and if
+  one does, look for the fixture change that would separate them rather than
+  dropping the pin.
 
 * **`$` does not anchor a line in a mutation pin.** CMake's `MATCHES` anchors at
   the end of the whole captured output, so `got ..$` matches nothing and the
@@ -853,6 +862,20 @@
   own shape instead: `got .[)]` is what says the list is EMPTY, and it is what
   separates a mutant that suppresses a finding from one that adds findings to the
   same case.
+
+
+* **A `file:line` into a document your own commit also edits must be re-measured
+  AFTER the last edit to that document.**
+  Decision `0024`'s pointer into `milestone-5-design.md` has now been wrong three
+  separate ways: wrong on arrival (off by twenty-two lines at the commit that
+  wrote it), wrongly diagnosed as drift when it was corrected, and then stale
+  again **within the correcting commit itself** — that commit inserted eighteen
+  lines above the target after the new number was written. Resolving a citation
+  when you type the sentence is not enough when the same change is still moving
+  the file. Re-open every cross-document citation as the last step before commit,
+  and prefer a searchable construct name to a line number whenever the target has
+  one. See also the standard on status surfaces: this is the same failure with a
+  shorter fuse.
 
 
 ## Closing ritual

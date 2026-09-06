@@ -1085,7 +1085,8 @@ byte_machine_add_scheme_lane(
 #
 # Both lanes, because a retention defect that appears only under AOT compilation
 # is exactly what the probe was measured in both lanes to rule out. `collect` is
-# not free: eight probes per lane, one full collection each.
+# not free: sixteen probes per lane, one full collection each (eight distinct
+# FIXTURES, driven more than once apiece).
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.retention.chez.source
   BACKEND chez

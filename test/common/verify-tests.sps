@@ -2832,7 +2832,18 @@
         ;; clean, so it is reported; that it is reported under a PORTABILITY code
         ;; is the one judgment design §4.12 item 2 does not settle, and it is
         ;; recorded at the predicate.
-        (check-equal "an integer" (codes (label-machine 42 #f)) '(invalid-name))))
+        (check-equal "an integer on the callback"
+                     (codes (label-machine 42 #f)) '(invalid-name))
+        ;; *** BOTH FAMILIES, and this one is load-bearing for the PINS. *** The
+        ;; shape arm is the only label check the reason mutants cannot reach --
+        ;; `valid-label?`'s `(else #f)` rejects an integer without consulting the
+        ;; repertoire at all -- so it is the case that gives a per-family
+        ;; conjunct mutant a record of its own. With the integer only on the
+        ;; callback, a mutant dropping the SPAN family's label conjunct was
+        ;; wholly nested inside the shipped permissive-`reason-char?` mutant and
+        ;; could not be pinned; measured, and this line is the fix.
+        (check-equal "an integer on the span"
+                     (codes (label-machine #f 42)) '(invalid-name))))
     (harness-case "a declaration bad in BOTH name and label reports ONCE"
       (lambda ()
         ;; The fold's own assertion, and the reason the label clause went into

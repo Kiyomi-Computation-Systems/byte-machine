@@ -4,8 +4,9 @@ What a callback receives, how long it may hold it, and what the parser
 guarantees about the bytes you feed it.
 
 This is `§27:1694` of
-[the implementation plan](../plans/byte-machine-implementation-plan.md), and the
-first of that section's deliverables. Everything below was checked against the
+[the implementation plan](../plans/byte-machine-implementation-plan.md). It is the
+first document in this directory, not the first of §27's eleven deliverables to
+exist — `:1701`'s changelog predates it by several milestones. Everything below was checked against the
 code, not against the plan; where the two would differ, the code is described and
 the difference is named.
 
@@ -55,8 +56,8 @@ answers "gone".
 
 The structural reason is worth knowing, because it is what keeps the guarantee
 from depending on a review: an open span records its position as a **slice
-offset**, re-anchored at the start of every feed (`§14:833`), never as a pointer
-into a buffer. There is nothing to retain because nothing the parser stores means
+offset**, re-anchored at the start of every feed that finds a span
+open (`§14:833`), never as a pointer into a buffer. There is nothing to retain because nothing the parser stores means
 anything outside the feed it came from.
 
 ### The three exemptions
@@ -93,7 +94,12 @@ At callback entry both executors expose **identical committed parser state**
   generated internal continuation (`§13:820`) — with the exception `§13:820`'s
   own second sentence makes: at an **automatic feed-boundary fragment** there is
   no callback or span node to name, and the runtime answers the input node the
-  executor stopped on;
+  executor stopped on — a **bare symbol**. `§13:820` asks for that node "together
+  with the active span name"; the code answers the node only, and the span name
+  is reached through `parser-active-span` instead. That divergence is adjudicated in
+  the plan's `§9.3:407-411` disposition and recorded in decision `0028`, which
+  rejected widening the accessor to a compound value; it is named here rather
+  than implied;
 - **lifecycle is `busy`** (`§13:821`), so `parser-feed!`, `parser-finish!`,
   `parser-resume!` and `parser-reset!` all raise from inside a callback. Every
   *read* accessor answers normally;
@@ -188,8 +194,7 @@ invocation, on any reachable path where a span is active — only the active spa
 own data callback may pause before the span closes. **The verifier enforces
 this** — diagnostic `span-active-at-pause`; its sibling `span-active-at-exit`
 enforces the different rule at `§14:843` (no reachable path reaches a successful
-stop or finish with a span active), and the two arms carry those two citations
-separately in `verify.sls`. The plan says in as many words that the `:826`
+stop or finish with a span active). The plan says in as many words that the `:826`
 restriction is "what makes the no-retention contract possible without invoking
 unrelated callbacks after a pause request".
 
