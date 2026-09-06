@@ -175,6 +175,11 @@ On an error, the runtime does **not** flush a final partial fragment and does
 **not** synthesize a completion; fragments already emitted at earlier feed
 boundaries remain observable (`§14:839`).
 
+A body's ordinary carrier is a counted consume (`§10.6:596`), which commits its
+bytes in bulk; that changes nothing above — fragment boundaries are still your
+feed boundaries, and when the count and the input run out at the same byte the
+completion event arrives in that same feed (`§10.6:603`).
+
 ## 7. Escaping, and poisoning
 
 Expected failures use the return value. **If a callback raises, or escapes

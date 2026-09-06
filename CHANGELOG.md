@@ -76,8 +76,21 @@ arms that already check names — one finding per carrier, no new diagnostic cod
 the census unmoved — with a derived totality row for the new per-kind
 `node-source-label` census site; and one portable-name grammar,
 `(byte-machine private names)`, shared by the verifier, the emitter and the
-runtime, which closes `§9.3:423`'s grammar half at `make-callback-failure`. No versioned
-release exists yet.
+runtime, which closes `§9.3:423`'s grammar half at `make-callback-failure`.
+Slice ① landed **2026-09-06**: the thirteenth node kind, counted consume
+(`§9.1:311`), lowered 1:1 behind wire tag 14, executed in both lanes on decision
+0030's contract — the zero-count test before the exhausted-input test, count
+completion winning by construction, the position kind carried through a
+zero-count transition — and verified with `next` as both an EOF successor and a
+zero-progress edge while a parser parked on the node resumes on its EOF route.
+`§25:1597`, `:1598`, `:1601`, `:1602` and `:1603` are discharged, exit criteria
+`:1607` and `:1609` whole (`:1607` by two structural witnesses, since a body
+consumed one byte per step returns the same tuples as one consumed in bulk) and
+`:1608`'s field, cursor and offset clauses; a fifth committed golden and a
+both-lane differential over `§22.3:1254`'s cases and `§22.5`'s schedules join
+the suite. Slice ② (span interaction, pause at fragment boundaries, the
+close-out) is next; its `§10.6:603` placement oracle already discriminates, as
+one case here. No versioned release exists yet.
 
 ### Added
 

@@ -2,7 +2,10 @@
 
 **Status: in progress.** Slice ⓪ delivered 2026-09-06 (PR #77: four source commits — the three
 planned and one the pin sweep required — and a documentation commit); Gate 0 discharged 2026-09-06 as decision 0030
-(PR #76 = `0247ece`; §4's blockquote and §9's first bullet carry the discharge); Slice ① is next. Milestone 5 closed 2026-09-06 with Slice ④ (PR #71 =
+(PR #76 = `0247ece`; §4's blockquote and §9's first bullet carry the discharge); Slice ① delivered
+2026-09-06 on `feat/m6-slice-1` (three source commits and a documentation commit; 112/112, 57 passes /
+520 mutations) — the parent plan's disposition "§25:1597-1603 and §25:1607-1609 — Milestone 6 Slice ①,
+delivered" records it; Slice ② is next. Milestone 5 closed 2026-09-06 with Slice ④ (PR #71 =
 `6bfa8ed`); its close-out audit (PR #72 = `6bc1aca`) and completeness check (PR #73 =
 `b470665`) followed the same day. This document is written against **`b470665`** on branch
 `docs/milestone-6-design`, `main` at the same commit, tree clean. Measured on 2026-09-06 by
@@ -29,6 +32,18 @@ re-measured at plan-writing time (§9).
 > slice, a resolution a slice must implement — is corrected in place, because leaving a false
 > one is a landmine and what it used to say is in git. Later dated notes are indexed here,
 > newest first, each naming the section it amends.
+>
+> **2026-09-06, Slice ① delivered** — **corrects §4.10, §6, §9 and the appendix in place**, all
+> instructions, each where the slice measured what this document had derived: `count-next` is a
+> BYTE position and its self row is `zero-progress-cycle` alone (four sites said "both"; under
+> decision 0030 item 6 no EOF walk reaches a non-entry counted consume with a `#f` route);
+> `eof-successors` was a bare alias and gains a `cond`, not an arm; the normalizer's counted
+> resolver is the fourth, not the third; §6's oracle 3 drops "a mutant that makes both lanes
+> agree on a wrong value" (one FILE per mutation and a runtime arm that serves the interpreted
+> lane alone make it impossible) and keeps its pin shape; §6's second ordering witness could not
+> see the finish order and is replaced by the entry-zero machine; `position-kind-tests.sps` gains
+> three producer rows, not two; §9's "at most two commits" is three green source commits. The
+> Status header moved with it.
 >
 > **2026-09-06, Slice ⓪ delivered (PR #77)** — **corrects §4.12 item 2, §5 and the appendix in
 > place**, all instructions, each where the plan measured what the design had counted: the
@@ -685,7 +700,7 @@ are false:
   ZERO-WIDTH node" and `node-out-edges` gives the kind its own arm; making it a member would
   put an input-reading kind under a name that says otherwise, and `eof-successors` gets the
   kind's arm directly (§4.2 item 2).
-- **The position-kind producer table gains two rows, not one.** `position-kind-tests.sps` is
+- **The position-kind producer table gains three rows, not one.** `position-kind-tests.sps` is
   keyed by *producer*: truncation at a parked counted consume (`eof` at the final offset) is a
   new producer of an existing kind, and a zero-count transition into an error node over a
   reexecute edge (`byte`, carried) is another. Both lanes, both rows.
@@ -876,12 +891,13 @@ over `conditions` alone; `interpret` over `ir`, `verify` and `runtime`):
   over it (§4.2 items 1-2); `parked-eof-start`'s arm, with both parked-set disjunctions left as they are (§4.2 item 3);
   `reexec-targets` and the report set (§4.2 item 4). Fixtures in `verify-tests.sps`: the
   zero-count-route stop (`eof-reachable-stop` with a `#f` eof-target — §3.2 item 3's machine,
-  asserted REJECTED); the self-targeting `next` (`zero-progress-cycle` and
-  `eof-zero-progress-cycle`, both); the byte-reachable `next` into a finish
+  asserted REJECTED); the self-targeting `next` (`zero-progress-cycle` **alone** — no EOF walk
+  reaches a non-entry counted consume with a `#f` route, decision 0030 item 6) and the
+  self-targeting eof-target (`eof-zero-progress-cycle`); the byte-reachable `next` into a finish
   (`non-eof-into-finish`, and the `t2-kinds` row); the undeclared field (`invalid-field-operand`
   under the node's name); and the priced over-rejection of §4.2 item 4 as an accept/reject pair
   — the loop with a consuming node verifies, the loop without one does not.
-- **`normal-ir.sls`**: the `lower-machine` arm, the third EOF resolver, the tag-14 encode arm
+- **`normal-ir.sls`**: the `lower-machine` arm, the fourth EOF resolver (§4.4), the tag-14 encode arm
   (§4.4), the `(only …)` import. `normal-ir-tests.sps`: an exact-value fingerprint golden for a
   counted-consume machine (the discipline every tag since 5 has followed), the eleven-slot
   layout check over its state, and the drift pair — two machines differing only in the field,
@@ -911,9 +927,13 @@ over `conditions` alone; `interpret` over `ir`, `verify` and `runtime`):
   zero-length body: after `0:` both orders return `need-input` with the same `next`, `consumed`
   and offset, one parked on `,` and the other on `body`. It **is** visible three ways, and
   Slice ① asserts the first two in both lanes: `parser-state-name` after `0:` names the `,`
-  dispatch, not `body` (the generated lane answers from the state-name table); and
-  `parser-finish!` after `0:` reports the `,` dispatch's default EOF error, not `body`'s
-  truncation. The third — a completion event in the feed that delivered `0:` — is Slice ②'s.
+  dispatch, not `body` (the generated lane answers from the state-name table); and — since
+  "`parser-finish!` after `0:`" cannot see the finish order (a correct feed arm has already
+  parked the parser on `,`, and a wrong-order feed arm leaves it on `body` where a correct
+  finish arm answers the same error) — a machine whose **entry** is a counted consume with
+  field initial 0 and an error node for `next`: a fresh parser's `parser-finish!` reports that
+  node's error, not the default EOF, in both lanes. The third — a completion event in the feed
+  that delivered the last body byte — is Slice ②'s, and Slice ① validated it as one case.
 - **The only-consumer fixture** for the reached-declaration walk must carry **no error node
   naming the default-EOF declaration or sharing its code and reason** — the walk puts every
   error state's pair into the reached set first, and such a node would keep the declaration in
@@ -930,7 +950,7 @@ over `conditions` alone; `interpret` over `ir`, `verify` and `runtime`):
   `count-eof-target`, so 17 + 4 becomes 18 + 5); `t2-kinds`; the edge-role label census; the
   diagnostic census's `(invalid-field-operand 7)`; `member3-drift`'s fixture rendering the
   thirteenth arm and exercising `n`; `ir-tests.sps`'s constructor group;
-  `position-kind-tests.sps`'s two producer rows (§4.10); `graph-tests.sps`'s façade case.
+  `position-kind-tests.sps`'s three producer rows (§4.10); `graph-tests.sps`'s façade case.
 - **The differential**, `test/common/differential-counted-tests.sps`, both lanes: the four
   `§22.3:1254` cases — zero (`0:,`), partial (`3:ab` then `c,`), exact (`3:abc` then `,`),
   surplus (`3:abc,0:,` in one feed) — each asserting the **expected** tuple and field value, not
@@ -959,10 +979,12 @@ over `conditions` alone; `interpret` over `ir`, `verify` and `runtime`):
    of them red at the head is a site the appendix missed, and the appendix gains the row before
    the fix lands.
 3. **The differential asserts values.** Every case in `differential-counted-tests.sps`
-   compares each lane against an expected tuple and against the other lane; the mutation pass
-   for the slice includes at least one mutant that makes both lanes agree on a wrong value —
-   dropping the subtraction, so the field never reaches zero — and the pin is on the expected
-   value's failure, not on lane disagreement.
+   compares each lane against an expected tuple and against the other lane, and every mutant
+   declared in the slice's differential pass is pinned on one lane's **expected value's**
+   failure record, never on lane disagreement. (The first draft also asked for "a mutant that
+   makes both lanes agree on a wrong value"; with one `FILE` per mutation and a runtime arm
+   that serves the interpreted lane alone, no mutant of this slice's code can — the slice's
+   plan, F13. The pin shape is what the sentence was for, and it holds.)
 
 **Mutations this slice owes**, so the plan writes them from a list rather than from memory:
 constructor (`next` required, `#f` eof-target accepted); the `:903` arm; `parked-eof-start`'s
@@ -1115,12 +1137,15 @@ that meets it — never reworded to match what shipped.
 - **Re-run the appendix's four recognisers over `src/` and `test/common/`** before writing the
   Slice ① plan and reconcile against the table: a construct the recogniser finds and the table
   lacks is the finding, and the table is corrected in place — it is an instruction.
-- **Slice ①'s plan is one PR with at most two commits, each green.** The S2 row forces the
-  constructor, every verifier arm and the verifier-side census rows into one commit; the
-  executor-side rows (the fingerprint golden, `position-kind-tests`, `member3-drift`, the
-  differential) force the normalizer, both executors and the emitter into one commit, because
-  each of them lowers, emits or executes a machine that carries the kind. A census row that
-  lands before the library it reads is a red intermediate commit.
+- **Slice ①'s plan is one PR of three green source commits and a documentation commit.** The
+  S2 row forces the constructor, every verifier arm and the verifier-side census rows into one
+  commit; the executor-side rows (the fingerprint golden, `position-kind-tests`,
+  `member3-drift`) force the normalizer, both executors and the emitter into one commit, because
+  each of them lowers, emits or executes a machine that carries the kind; the differential, the
+  committed golden with its lanes and the two structural witnesses read that commit and add
+  lanes only, so they are a third. That rule fixes a partition, not a count (the slice's plan,
+  F11): a census row that lands before the library it reads is a red intermediate commit, and
+  so is a commit that adds pins without moving `EXPECTED_MUTATIONS`.
 - **Decide whether Slice ② folds into ①**, with §2's cost stated: the `§10.6:603` placement
   oracle would become one task among twenty that pass on lane agreement alone.
 - **Slice ②'s plan re-measures what ① shipped before allocating.** Milestone 5's Slice ③
@@ -1202,7 +1227,7 @@ input-reading and zero-width and needs this kind in *both* partitions' answer. T
 | `pass-eof-execution`'s parked-set membership | **no disjunct** — the existing `(symbol? (node-eof-target n))` clause admits the kind when its EOF route is worth classifying; a `#f` route is benign for a parked node because the count is positive (§4.2 item 3). The first draft added one; it was unnecessary |
 | `pass-declarations`' node walk | no arm — names no callback or span (§4.9) |
 | `callback-node-diagnostics`, `span-node-declaration-diagnostics` | no arm |
-| `eof-successors` / pass 7's `eof-step` | **BOTH**: an arm answering `(list next)` (§4.2 item 2) — the one helper `classify`'s arm also reads. `eof-step`'s comment, "disjoint by construction … `eof-successors` answers `'()` for every input-reading one", becomes false and is corrected in place; the `append` stays correct |
+| `eof-successors` / pass 7's `eof-step` | **BOTH**: a `cond` — the shipped construct was a one-line alias of `zero-width-successors` with no arms to add one to — whose counted arm answers `(list next)` and whose `else` is the alias body (§4.2 item 2); the one helper `classify`'s arm also reads. `eof-step`'s comment, "disjoint by construction … `eof-successors` answers `'()` for every input-reading one", becomes false and is corrected in place; the `append` stays correct |
 | pass 7's `parked?` | **no disjunct**, as for the `:909` set. Adding one would be inert — a byte-reachable counted consume's `next` is already a byte edge, the span-end derivation in that construct's own comment — and an inert disjunct is a mutation nothing can catch |
 | `span-transfer` | **DERIVED**: the `else` is identity, which is `§10.6:604` |
 | `span-node-diagnostics` | **DERIVED**: the `else` answers nothing |
@@ -1267,9 +1292,9 @@ input-reading and zero-width and needs this kind in *both* partitions' answer. T
 | File | Construct | This kind's answer |
 |---|---|---|
 | `kind-position-census-tests.sps` | `kind-table`, `kind-predicates` | a row — the cell machines already declare field `n` |
-| | `position-table`, `role->positions` | `count-next` (byte **and** EOF) and `count-eof-target` (EOF); `next`'s mapping gains `count-next`; the unlabelled set gains `count-eof-target` |
-| | `expected-codes` | no change to the derivation: a stop at an EOF position is `eof-reachable-stop`, a finish at a byte position `non-eof-into-finish`, and `count-next` is both |
-| | `self-expectations` | `count-next`: both cycles; `count-eof-target`: the EOF cycle |
+| | `position-table`, `role->positions` | `count-next` (a BYTE position and **not** an EOF one — the cell's host has a `#f` eof-target, so the placed node is in neither `§16.2:909` disjunction and no EOF walk reaches `next`; decision 0030 item 6) and `count-eof-target` (EOF); `next`'s mapping gains `count-next`; the unlabelled set gains `count-eof-target` |
+| | `expected-codes` | no change to the derivation: a stop at an EOF position is `eof-reachable-stop`, a finish at a byte position `non-eof-into-finish`; a stop at `count-next` is **not** `eof-reachable-stop` |
+| | `self-expectations` | `count-next`: `zero-progress-cycle` alone; `count-eof-target`: the EOF cycle |
 | | the dangling group, the absence census | `missing-target` / `invalid-eof-target`; refusals 13 → 14, legally-absent routes 3 → 4 |
 | | "exactly three cells prune the sink" | re-measured, not assumed |
 | | the `node-source-label` totality row (S2b, Slice ⓪) | **DERIVED** — reads the arm predicates out of `ir.sls` as a datum and compares them with `node?`'s disjuncts; red at "node-source-label's arm predicates equal node?'s disjuncts" until the arm exists; with it, the literal "and there are twelve of them" is red until moved to thirteen, as S2's is |
