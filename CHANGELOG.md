@@ -6,9 +6,10 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ## [Unreleased]
 
-Milestones 0 through 5 (portability spike, minimal executable machine,
+Milestones 0 through 6 (portability spike, minimal executable machine,
 incremental execution and lifecycle, byte classes and sequences, fields and
-actions and branches, callbacks and poisoning and spans) have closed. Milestone 3 closed **2026-08-30** with Slice
+actions and branches, callbacks and poisoning and spans, counted consumption)
+have closed. Milestone 3 closed **2026-08-30** with Slice
 ③ (multiple alternatives, ambiguity, and cycle analysis), after Slices ① (byte
 classes) and ② (sequence dispatch and prefix lowering). Milestone 4 closed
 **2026-09-03** with Slice ③ (integer accumulation), after its Gate 0
@@ -68,7 +69,7 @@ and so invisible to both completeness sweeps. It reuses the shipped
 `valid-reason?` predicate, folded into each family's existing name check, so it
 adds no diagnostic code and does not move the census; the two name checks beside
 it, which had shipped with no test and no mutation pin, were closed with it.
-Milestone 6 (counted consumption) is in progress. Slice ⓪ closed **2026-09-06**
+Milestone 6 (counted consumption) closed **2026-09-06**. Slice ⓪ closed **2026-09-06**
 (Gate 0 discharged the same day as decision 0030 — a counted consume is
 input-reading with a zero-count route, amending decision 0023 item 3): `§16.2:886`'s
 label clause made **total** over all nineteen label carriers through the four
@@ -88,9 +89,16 @@ zero-progress edge while a parser parked on the node resumes on its EOF route.
 consumed one byte per step returns the same tuples as one consumed in bulk) and
 `:1608`'s field, cursor and offset clauses; a fifth committed golden and a
 both-lane differential over `§22.3:1254`'s cases and `§22.5`'s schedules join
-the suite. Slice ② (span interaction, pause at fragment boundaries, the
-close-out) is next; its `§10.6:603` placement oracle already holds here as one
-both-lane case, asserted as per-feed values. No versioned release exists yet.
+the suite. Slice ② closed the milestone **2026-09-06**: `§25:1599` and `:1600`
+by the counted-span differential — the six `§14` fragment rules over a counted
+body, `§10.6:603`'s completion placement asserted per feed against a table
+derived from each of forty-five schedules before the run, same-schedule
+exactness, coalesced invariance and the error path — a body-shaped arm in the
+retention lane, and the close-out: the `§25:1593-1609` disposition against the
+tree, `§4.11`'s five obligations disposed, and the reachability narrowing handed
+to Milestone 7 under `§25:1611` with both ends written. No mechanism was added:
+the slice's source diff is one comment. Milestone 7 (verification and generative
+hardening) is next. No versioned release exists yet.
 
 ### Added
 

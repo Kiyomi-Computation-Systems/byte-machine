@@ -610,7 +610,12 @@
   ;; Written here by Milestone 5's completeness check (2026-09-06) because a
   ;; relaxation known to four documents and to no reader of this procedure is
   ;; the failure mode this milestone added a standard against. Owed by whoever
-  ;; next narrows reachability, and failing that by Milestone 6's close-out.
+  ;; next narrows reachability, and failing that by MILESTONE 7 (§25:1615, the
+  ;; generative and diagnostic hardening of the passes already introduced).
+  ;; Handed on 2026-09-06 when Milestone 6 closed without narrowing it, and
+  ;; adjudicated at the parent plan's disposition "§25:1611 — Milestone 6 hands
+  ;; the reachability narrowing to Milestone 7", which carries the pricing from
+  ;; Milestone 6's design §8.
   (define (pass-reachability m)
     (let ((nodes (machine-nodes m)) (reached (reach-from m all-out-targets)))
       (filter values

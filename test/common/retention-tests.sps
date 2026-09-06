@@ -315,7 +315,51 @@
   (make-parser cm (closure-holds-bindings rec bv) 'ctx))
 (define (pausing cm bv rec) (make-parser cm (pausing-bindings rec) 'ctx))
 
+;; Milestone 6 Slice ②'s body-shaped arm: the same protocol -- `A` opens, `Z`
+;; follows the span end -- with the body a COUNTED CONSUME of three instead of a
+;; byte dispatch looping to `Z`. It consumes the same five bytes under both
+;; probes: the split probe leaves the span open after `b` with a count of two,
+;; the flush delivers `b` out of the first buffer, and the second feed completes
+;; the count, closes the span and stops on `Z`. A bulk copy is the shape most
+;; likely to tempt a runtime into holding a range; this arm is what says it does
+;; not. Layers 1 and 2 only: layer 3's carriers are application-owned and
+;; machine-independent, so they are not repeated here.
+(define retention-counted-machine
+  (make-machine 'retcm 'start (list (make-uint-field 'len 8 3 #f))
+    (list (make-callback-declaration 'ondone 'span-complete #f '() #f #f)
+          (make-callback-declaration 'ondata 'span-data #t '() #f #f))
+    (list (make-span-declaration 'payload 'ondata 'ondone #f))
+    (list eof-decl rej-decl trunc-decl)
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 65)
+                                  (make-edge 'sopen 'advance) #f))
+            (make-edge 'reject 'reexecute) 'fin #f)
+          (make-span-start-node 'sopen 'payload 'body #f)
+          (make-counted-consume-node 'body 'len 'sclose 'trunc #f)
+          (make-span-end-node 'sclose 'payload 'after #f)
+          (make-byte-dispatch-node 'after
+            (list (make-byte-case (make-exact-byte-matcher 90)
+                                  (make-edge 'done 'advance) #f))
+            (make-edge 'reject 'reexecute) 'fin #f)
+          (make-stop-node 'done #f)
+          (make-finish-node 'fin #f)
+          (make-error-node 'trunc 'truncated #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+
+(define v-cret (verify-machine retention-counted-machine))
+(define cm-cref (make-interpreted-machine v-cret))
+(define cm-cgen
+  (let ((f (string-append tmpdir "/generated-retention-counted.sls")))
+    (call-with-port (open-file-output-port f (file-options no-fail))
+      (lambda (p) (emit-machine (compile-machine retention-counted-machine '()) 'cret-parser p)))
+    (load f)
+    (eval 'cret-parser (environment '(generated retcm)))))
+
 (define both-lanes (list (list 'interpreted cm-ref) (list 'generated cm-gen)))
+(define both-counted-lanes (list (list 'interpreted cm-cref) (list 'generated cm-cgen)))
+(define (each-counted-lane f)
+  (map (lambda (l) (cons (car l) (f (cadr l)))) both-counted-lanes))
 
 (define (each-lane f)
   (map (lambda (l) (cons (car l) (f (cadr l)))) both-lanes))
@@ -430,6 +474,54 @@
                                   (let ((r (retained-split? cm stashing)))
                                     (list (car r) (cadr r)))))
                      '((interpreted #f #t) (generated #f #t)))))))
+
+(harness-group "a counted body inside the span retains nothing either (Milestone 6 Slice ②)"
+  (lambda ()
+    (harness-case "the counted machine verifies clean"
+      (lambda ()
+        (check-equal "no diagnostics" (map diagnostic-code (verification-diagnostics v-cret)) '())))
+    (harness-case "counted: the one-feed probe with the parser still alive"
+      (lambda ()
+        (check-equal "counted: one-feed buffer released, interpreted and generated"
+                     (each-counted-lane (lambda (cm) (car (retained? cm plain))))
+                     '((interpreted . #f) (generated . #f)))
+        (check-equal "counted: and the span really ran"
+                     (each-counted-lane (lambda (cm) (cadr (retained? cm plain))))
+                     (let ((bcd (u8-list->bytevector '(98 99 100))))
+                       (list (cons 'interpreted (list bcd 'complete))
+                             (cons 'generated (list bcd 'complete)))))))
+    (harness-case "counted: a span left open across a feed boundary retains neither buffer"
+      (lambda ()
+        (check-equal "counted: split probe, both buffers released"
+                     (each-counted-lane (lambda (cm)
+                                          (let ((r (retained-split? cm plain)))
+                                            (list (car r) (cadr r)))))
+                     '((interpreted #f #f) (generated #f #f)))
+        (check-equal "counted: b from the flush, cd from the span end, one completion"
+                     (each-counted-lane (lambda (cm) (caddr (retained-split? cm plain))))
+                     (let ((b (u8-list->bytevector '(98)))
+                           (cd (u8-list->bytevector '(99 100))))
+                       (list (cons 'interpreted (list b cd 'complete))
+                             (cons 'generated (list b cd 'complete)))))))
+    (harness-case "counted: the negative controls read RETAINED, so the arm can fail"
+      (lambda ()
+        (check-equal "counted: stashing on the one-feed probe"
+                     (each-counted-lane (lambda (cm) (car (retained? cm stashing))))
+                     '((interpreted . #t) (generated . #t)))
+        ;; The control's trace, as layer 2 asserts for the plain machine: a
+        ;; fixture that answers RETAINED without having run the span would make
+        ;; the control vacuous.
+        (check-equal "counted: the stashing control really ran the span"
+                     (each-counted-lane (lambda (cm) (cadr (retained? cm stashing))))
+                     '((interpreted stashed complete) (generated stashed complete)))
+        (check-equal "counted: the split control holds the flush's buffer and not the second"
+                     (each-counted-lane (lambda (cm)
+                                          (let ((r (retained-split? cm stashing-first)))
+                                            (list (car r) (cadr r)))))
+                     '((interpreted #t #f) (generated #t #f)))))
+    (harness-case "two counted lanes were driven"
+      (lambda ()
+        (check-equal "both" (length both-counted-lanes) 2)))))
 
 (harness-group "layer 3 — the exemption boundary (§13:799, decision 0024)"
   (lambda ()

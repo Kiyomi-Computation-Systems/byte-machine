@@ -1058,6 +1058,17 @@ cmake_minimum_required(VERSION 3.26)
 # and node-name grammar pins, whose `if` tests grew a conjunct; their REPLACEs
 # now drop the name check alone. No pass is added.
 #
+# Milestone 6 Slice ② task 3, the counted-span differential: TWO more in ONE new
+# pass, 520 + 2 = 522 and 57 + 1 = 58. The slice adds no mechanism, so its lane
+# witnesses one decision no other lane does -- decision 0030 item 2's placement
+# of the completion event -- and the two count-completion-order mutants Slice ①
+# declared elsewhere are declared again here, pinned per lane on the per-feed
+# placement record. The retention lane's body-shaped arm adds no pin: the shipped
+# stored-bytevector MUTANT reddens it (measured by the sweep), and the arm's labels
+# share no run of words with the shipped pin's regex, so that pin still resolves to
+# exactly one (case, check) pair -- the review caught a first draft whose label
+# "counted: gone in both lanes" made it resolve to two.
+#
 # Milestone 6 Slice ① task 3, the differential, the fifth golden and the two
 # structural witnesses: NINE more in TWO new passes plus one, 511 + 9 = 520, and
 # 55 + 2 = 57 passes. Seven in the counted differential pass (the reached walk
@@ -1289,8 +1300,8 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-set(EXPECTED_PASSES 57)
-set(EXPECTED_MUTATIONS 520)
+set(EXPECTED_PASSES 58)
+set(EXPECTED_MUTATIONS 522)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -12166,6 +12177,44 @@ byte_machine_mutation(
   REPLACE [[            "                      (loop (+ pos n) " (num next-id) " (+ off n) 'boundary)\n"]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the emitted bytes equal the committed golden: golden")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Milestone 6 Slice ② task 3: the counted-span differential (pass 58) ---------
+#
+# No mechanism was added by the slice, so the only decision this lane witnesses
+# that no other lane does is decision 0030 item 2's PLACEMENT: the completion
+# event lands in the feed that delivered the last body byte. The two mutants that
+# move it are the count-completion-order mutants Slice ① already declared under
+# unit.interpret and differential.counted on other records; here each is pinned
+# on the placement record per lane, the value §7's oracle 3 exists for -- a
+# symmetric wrong reading puts the completion in the `,` feed in BOTH lanes and
+# agrees with itself, so neither pin could ever rest on lane disagreement.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/differential-counted-span-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.counted-span.chez.source
+  LABEL "interpret: count-step continues only when input remains -- the completion lands in the delimiter's feed"
+  FIND [[                (cons k (if (= k v) (counted-consume-node-next n) #f))))))]]
+  REPLACE [[                (cons k (if (and (= k v) (< (+ pos k) end)) (counted-consume-node-next n) #f))))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "interpreter: byte-at-a-time per-feed events, count and span -- expected .... 3 #f. ... 3 sp. ...data 1.. 2 sp. ...data 1.. 1 sp. ...data 1. complete. 0 #f. ... 0 #f.., got .... 3 #f. ... 3 sp. ...data 1.. 2 sp. ...data 1.. 1 sp. ...data 1.. 0 sp. ..complete. 0 #f..")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.counted-span.chez.source
+  LABEL "compile: the emitted counted arm continues only when input remains -- the completion lands in the delimiter's feed"
+  FIND [[            "                  (if (= n v)\n"]]
+  REPLACE [[            "                  (if (and (= n v) (< (+ pos n) end))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "generated: byte-at-a-time per-feed events, count and span -- expected .... 3 #f. ... 3 sp. ...data 1.. 2 sp. ...data 1.. 1 sp. ...data 1. complete. 0 #f. ... 0 #f.., got .... 3 #f. ... 3 sp. ...data 1.. 2 sp. ...data 1.. 1 sp. ...data 1.. 0 sp. ..complete. 0 #f..")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
