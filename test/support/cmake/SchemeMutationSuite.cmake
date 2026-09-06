@@ -1058,6 +1058,17 @@ cmake_minimum_required(VERSION 3.26)
 # and node-name grammar pins, whose `if` tests grew a conjunct; their REPLACEs
 # now drop the name check alone. No pass is added.
 #
+# Milestone 6 Slice ① task 3, the differential, the fifth golden and the two
+# structural witnesses: NINE more in TWO new passes plus one, 511 + 9 = 520, and
+# 55 + 2 = 57 passes. Seven in the counted differential pass (the reached walk
+# ignoring the kind, the emitted arm's min, subtraction, completion order and
+# exhaustion order -- each on the GENERATED lane's expected value -- the
+# runtime re-asking the op after a partial commit, caught only by the
+# count-step counter, and the finish arm asking the EOF route first, caught by
+# the entry-zero machine); one in unit.compile (the per-byte self-loop render,
+# caught only by the datum walk); one in the counted determinism pass (a quote
+# mark for `(quote …)`, caught only by the golden).
+#
 # Milestone 6 Slice ① task 2, the kind lowered, encoded and executed in both
 # lanes: FOURTEEN more, 497 + 14 = 511. Six in the normal-ir pass (the tag, the
 # field name, the successor and the EOF routing each dropped from the encoding,
@@ -1277,8 +1288,8 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-set(EXPECTED_PASSES 55)
-set(EXPECTED_MUTATIONS 511)
+set(EXPECTED_PASSES 57)
+set(EXPECTED_MUTATIONS 520)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -8001,6 +8012,24 @@ byte_machine_mutation(
     "a field-declaring machine renders its declarations in member 0: pairs in slot order -- expected a true value")
 
 
+# --- Milestone 6 Slice ① task 3: the structural witness for §25:1607 ------------
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: the emitted counted arm renders a per-byte self-loop"
+  # Behaviour-identical: one byte per iteration through the same state, the count
+  # decremented each time, the zero-count and exhausted clauses unchanged -- so
+  # every behavioural lane passes, and only the datum walk over the emitted arm
+  # (no `min`, a `(+ pos 1)`) can see it. That is design §4.7's whole argument.
+  FIND [[            "                (let ((n (min v (- end pos))))\n"
+            "                  (vector-set! fieldv " slot " (- v n))\n"
+            "                  (if (= n v)\n"
+            "                      (loop (+ pos n) " (num next-id) " (+ off n) (quote boundary))\n"
+            "                      (byte-machine-make-feed-outcome/v1 (quote need-input) (+ pos n) #f " id " (+ off n))))))))\n")))]]
+  REPLACE [[            "                (begin (vector-set! fieldv " slot " (- v 1))\n"
+            "                       (loop (+ pos 1) " id " (+ off 1) (quote boundary)))))))\n")))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the emitted arm applies min exactly once and never advances by one: exactly one min -- expected 1, got 0")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 37: D7 identifier repertoire + LF (Slice B) -------------------------
@@ -11965,6 +11994,130 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "user context may retain it, and does: retained, and permitted -- expected ..interpreted . #t. .generated . #t.., got ..interpreted . #f. .generated . #t."
 )
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Milestone 6 Slice ① task 3: the counted differential (pass 56) --------------
+#
+# Both lanes over the counted machine, every check labelled by LANE, so a pin
+# names which lane went wrong and is caught by the EXPECTED VALUE's record, never
+# by the lanes' disagreement (design §6 oracle 3 as the slice plan's F13 corrects
+# it: with one FILE per mutation and a runtime arm that serves the interpreted
+# lane alone, no mutant of this slice can make both lanes agree on a wrong value).
+# The emitter's min, subtraction and completion-order decisions live here rather
+# than in unit.compile, because only an executing lane with a surplus or exact
+# body can see them; the emitter's exhaustion-first twin of the runtime pin in
+# the position-kind pass lives here because that pass's labels carry no lane.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/differential-counted-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.counted.chez.source
+  LABEL "compile: the reached declaration walk ignores counted consume"
+  # The machine whose ONLY default-EOF consumer is the counted consume: the
+  # declaration leaves the errs table and render-machine raises on a machine the
+  # verifier accepted -- the Milestone 4 Slice ③ defect, one kind later.
+  FIND [[                                                      '(dispatch accumulate counted-consume))]]
+  REPLACE [[                                                      '(dispatch accumulate))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the only-consumer machine renders, loads and runs: case raised")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.counted.chez.source
+  LABEL "compile: the emitted counted arm commits (- end pos) instead of the min"
+  FIND [[            "                (let ((n (min v (- end pos))))\n"]]
+  REPLACE [[            "                (let ((n (- end pos)))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "generated: surplus into a rejection -- expected ..error 5 5 .*, got ..need-input")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.counted.chez.source
+  LABEL "compile: the emitted counted arm never subtracts"
+  FIND [[            "                  (vector-set! fieldv " slot " (- v n))\n"]]
+  REPLACE [[            "                  (vector-set! fieldv " slot " v)\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "generated: exact body -- expected .*comma 0.., got .*comma 3..")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.counted.chez.source
+  LABEL "compile: the emitted counted arm continues only when input remains"
+  # The count-completion-wins mutant (decision 0030 item 2) in the generated
+  # lane: the exact body parks on `body` with a zero count instead of continuing
+  # to the delimiter dispatch in the same feed.
+  FIND [[            "                  (if (= n v)\n"]]
+  REPLACE [[            "                  (if (and (= n v) (< (+ pos n) end))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "generated: exact body -- expected .*comma 0.., got .*body 0..")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.counted.chez.source
+  LABEL "compile: the emitted counted arm tests exhaustion before the zero count"
+  # The runtime arm's twin is pinned in the position-kind pass; this one needs a
+  # lane-labelled witness, and the feed-order witness is exactly that.
+  FIND [[            "         (cond ((= v 0) " (zero-width-jump next-id) ")\n"]]
+  REPLACE [[            "         (cond ((and (= v 0) (< pos end)) " (zero-width-jump next-id) ")\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "generated: parked on the delimiter after 0: -- expected comma, got body")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.counted.chez.source
+  LABEL "runtime: the counted arm re-asks the op after a partial commit"
+  # Loops back through the node instead of parking: the op is asked again over
+  # the exhausted slice, answers (0 . #f), and the parser parks with the same
+  # result -- every tuple lane agrees, and only the counting witness sees the
+  # second message. §25:1607 in the interpreted lane.
+  FIND [[                          (make-parser-result 'need-input (+ pos n) (- (+ pos n) start)
+                                              (parser-offset parser) #f))))))]]
+  REPLACE [[                          (loop (+ pos n) 'boundary))))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "one count-step per feed -- expected 1, got 2")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.counted.chez.source
+  LABEL "runtime: the counted finish arm asks the EOF route before the zero count"
+  # Decision 0030 item 1 at finish: the entry-zero machine's fresh parser must
+  # transition to `next` and report the empty-body error, not the default EOF.
+  FIND [[             (if (cdr r)
+                 (begin (parser-set-current! parser (cdr r)) (loop (cdr r) pk))
+                 (take-eof-route! node loop))))]]
+  REPLACE [[             (take-eof-route! node loop)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "interpreter: the finish reports the empty-body error -- expected .empty body rejected., got .unexpected end of input.")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Milestone 6 Slice ① task 3: the counted determinism lane (pass 57) ----------
+#
+# A pass of its own because the verify command is a different program, and its
+# ONE mutation is one no behavioural lane can catch: the emitted position kind
+# spelled with a quote mark instead of `(quote …)`. The reader turns both into
+# the same datum, so the structural walk in compile-tests cannot see it either;
+# the emitted BYTES change, and the committed golden is the only thing that
+# looks at those -- the accumulate lane's argument, made falsifiable once more.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/determinism-counted-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.determinism.counted.chez.source
+  LABEL "compile: the emitted counted arm spells its position kind with a quote mark"
+  FIND [[            "                      (loop (+ pos n) " (num next-id) " (+ off n) (quote boundary))\n"]]
+  REPLACE [[            "                      (loop (+ pos n) " (num next-id) " (+ off n) 'boundary)\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the emitted bytes equal the committed golden: golden")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

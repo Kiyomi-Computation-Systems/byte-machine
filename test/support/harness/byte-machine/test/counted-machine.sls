@@ -1,0 +1,122 @@
+;;; The Milestone 6 Slice ① proving machines (design §6): a length-prefixed
+;;; message loop WITHOUT a span -- `idle` -> `len` -> `:` -> `body` -> `,` ->
+;;; clear -> `idle` -- in the shape §21 needs (§21.3:1149-1150: completion resets
+;;; the message field and loops to request start), plus the two smaller machines
+;;; the slice's oracles need and one the reached-declaration walk owes.
+;;;
+;;; `idle`'s eof-target is the FINISH, so EOF between messages is `finished`,
+;;; and `len`, `body` and `,` route EOF to the truncation error, so EOF after a
+;;; partial length, mid-body or before the delimiter is a truncation --
+;;; §12.4:725's idle-versus-partial distinction, which a machine whose entry is
+;;; the accumulate node cannot make. The entry reexecutes the first digit into
+;;; `len` so the accumulator sees every digit; `len`'s non-digit edge reexecutes
+;;; the `:` into a dispatch that consumes it, so the body starts exactly after
+;;; the colon. Slice ② wraps `body` in a span; nothing here changes for it.
+(library (byte-machine test counted-machine)
+  (export make-counted-machine make-only-consumer-machine make-entry-zero-machine
+          make-big-count-machine)
+  (import (rnrs)
+          (byte-machine graph))
+
+  (define (decls)
+    (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
+          (make-error-declaration 'truncated 'eof "truncated message" #f)
+          (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f)
+          (make-error-declaration 'too-long 'unexpected-byte "length overflow" #f)))
+
+  (define (make-counted-machine)
+    (make-machine 'countedm 'idle
+                  (list (make-uint-field 'len 32 0 #f))
+                  '() '() (decls)
+                  (list
+                   ;; A digit opens a message and is REEXECUTED into the
+                   ;; accumulator; EOF here is a clean end between messages.
+                   (make-byte-dispatch-node
+                    'idle
+                    (list (make-byte-case (make-byte-range-matcher 48 57)
+                                          (make-edge 'len 'reexecute) #f))
+                    (make-edge 'reject 'reexecute)
+                    'fin #f)
+                   (make-integer-accumulate-node
+                    'len 'len 10 'len
+                    (make-edge 'colon 'reexecute)
+                    'over 'trunc #f)
+                   (make-byte-dispatch-node
+                    'colon
+                    (list (make-byte-case (make-exact-byte-matcher 58)
+                                          (make-edge 'body 'advance) #f))
+                    (make-edge 'reject 'reexecute)
+                    'trunc #f)
+                   (make-counted-consume-node 'body 'len 'comma 'trunc #f)
+                   (make-byte-dispatch-node
+                    'comma
+                    (list (make-byte-case (make-exact-byte-matcher 44)
+                                          (make-edge 'clear 'advance) #f))
+                    (make-edge 'reject 'reexecute)
+                    'trunc #f)
+                   ;; §21.3:1150: completion resets the message field by an
+                   ;; explicit action and loops to request start.
+                   (make-field-action-node 'clear 'clear '(len) 'idle #f #f)
+                   (make-finish-node 'fin #f)
+                   (make-error-node 'trunc 'truncated #f)
+                   (make-error-node 'over 'too-long #f)
+                   (make-error-node 'reject 'rejected #f))
+                  'default-eof #f))
+
+  ;; The machine whose ONLY default-EOF consumer is the counted consume: the
+  ;; entry routes EOF to the finish, so nothing but `body` credits the default
+  ;; declaration to the emitted errs table, and no error node names it or shares
+  ;; its code and reason. compile.sls's reached-declaration walk found the
+  ;; accumulate defect on exactly this shape (design §3.2 item 5).
+  (define (make-only-consumer-machine)
+    (make-machine 'onlycc 'start
+                  (list (make-uint-field 'len 8 2 #f))
+                  '() '()
+                  (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
+                        (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))
+                  (list (make-byte-dispatch-node
+                         'start
+                         (list (make-byte-case (make-exact-byte-matcher 0)
+                                               (make-edge 'body 'advance) #f))
+                         (make-edge 'reject 'reexecute)
+                         'fin #f)
+                        (make-counted-consume-node 'body 'len 'done #f #f)
+                        (make-stop-node 'done #f)
+                        (make-finish-node 'fin #f)
+                        (make-error-node 'reject 'rejected #f))
+                  'default-eof #f))
+
+  ;; The ENTRY is a counted consume with a zero initial and an error node for
+  ;; `next`: the only shape that reaches the finish arm's zero-count route
+  ;; (decision 0030 item 6 -- a parser parked by need-input holds a positive
+  ;; count, so only a fresh parser arrives there with zero). It verifies clean:
+  ;; the entry's walk joins the default EOF error with the error node, tier 0.
+  (define (make-entry-zero-machine)
+    (make-machine 'entryzero 'body
+                  (list (make-uint-field 'len 8 0 #f))
+                  '() '()
+                  (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
+                        (make-error-declaration 'empty 'unexpected-byte "empty body rejected" #f))
+                  (list (make-counted-consume-node 'body 'len 'bad #f #f)
+                        (make-error-node 'bad 'empty #f))
+                  'default-eof #f))
+
+  ;; A u64 count above the fixnum range: the subtraction is bignum arithmetic
+  ;; (§15:856), and both lanes must agree with the expected value, not only
+  ;; with each other.
+  (define (make-big-count-machine)
+    (make-machine 'bigcount 'start
+                  (list (make-uint-field 'big 64 9223372036854775808 #f))
+                  '() '()
+                  (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
+                        (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))
+                  (list (make-byte-dispatch-node
+                         'start
+                         (list (make-byte-case (make-exact-byte-matcher 0)
+                                               (make-edge 'body 'advance) #f))
+                         (make-edge 'reject 'reexecute)
+                         #f #f)
+                        (make-counted-consume-node 'body 'big 'done #f #f)
+                        (make-stop-node 'done #f)
+                        (make-error-node 'reject 'rejected #f))
+                  'default-eof #f)))
