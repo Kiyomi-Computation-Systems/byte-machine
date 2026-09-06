@@ -13,7 +13,7 @@ Milestone: 5, Gate 0 (milestone-5-design.md §4.1, §4.2)
 >   by construction" is what shaped the fixtures. Nothing above became false.
 > - **2026-09-05 (Milestone 5, Slice ④)** — **annotates the Consequences bullet
 >   "What this hands to Slice ④"** (its `milestone-5-design.md`:876-881 citation
->   is wrong; §9's exemption boundary is at :980-985): the discharge, and the
+>   is wrong; §9's exemption boundary is at :998): the discharge, and the
 >   citation's correction. The obligation itself was read correctly and is met.
 
 ## Context
@@ -281,8 +281,8 @@ signature is that case's, and its control is the pair, not a pin.
 
 *The wrong citation, and the first diagnosis of it was also wrong.* The bullet
 points at `milestone-5-design.md`:876-881 for "the retention oracle's third
-layer". Today that lands in §8's work list; the exemption boundary is at
-**:980-985**. The first version of this note said Slice ③'s Appendix rewrites had
+layer". Today that lands in §8's "Scope, as an allocation" paragraph; the
+exemption boundary is at **:998**. The first version of this note said Slice ③'s Appendix rewrites had
 moved it — **measured, that is impossible**: the Appendix heading has always sat
 BELOW §9 (960 at Gate 0, 1009 after Slice ②, 1042 after Slice ③), and an edit
 below a section cannot renumber it. The citation was **wrong when it was
@@ -298,3 +298,13 @@ this note is rewritten.
 
 The bullet called itself "the deferral's second end", which is why it mattered:
 the second end never pointed at the first.
+
+**2026-09-06 — and the correction above was itself stale within its own commit.**
+It read `:980-985`, measured against the tree before the edit; the SAME commit
+then inserted eighteen lines into `milestone-5-design.md` above §9 — the §4.12
+item-2 discharge note and §8's allocation correction — and moved the target to
+`:998`. Corrected here, and worth stating as the general case: **a `file:line`
+into a document your own commit also edits must be re-measured after the last
+edit to that document, not when you write the sentence.** This citation has now
+been wrong three ways: wrong on arrival, wrongly diagnosed as drift, and stale
+again from its own repair.

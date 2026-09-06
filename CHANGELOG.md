@@ -6,9 +6,9 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ## [Unreleased]
 
-Milestones 0 through 4 (portability spike, minimal executable machine,
+Milestones 0 through 5 (portability spike, minimal executable machine,
 incremental execution and lifecycle, byte classes and sequences, fields and
-actions and branches) have closed. Milestone 3 closed **2026-08-30** with Slice
+actions and branches, callbacks and poisoning and spans) have closed. Milestone 3 closed **2026-08-30** with Slice
 ③ (multiple alternatives, ambiguity, and cycle analysis), after Slices ① (byte
 classes) and ② (sequence dispatch and prefix lowering). Milestone 4 closed
 **2026-09-03** with Slice ③ (integer accumulation), after its Gate 0
@@ -18,7 +18,7 @@ declaration, slots, and `parser-field-ref`), and Slice ② **2026-09-03** (field
 action and field branch). See
 [the implementation plan](docs/plans/byte-machine-implementation-plan.md) §25
 for overall scope; the entries below record what each milestone actually
-delivered. Milestone 5 (callbacks, poisoning, and spans) is in progress. Two
+delivered. Milestone 5 (callbacks, poisoning, and spans) closed 2026-09-06. Two
 hardening slices ran first and closed **2026-09-04** — Slice ⓪ (the verifier's
 kind × position matrix and a diagnostic-code census derived from the source
 rather than declared) and Slice ⓪b (the EOF walk cluster). Gate 0 discharged
@@ -42,7 +42,7 @@ Slice ③ also fixed three reachable defects — a span end not treated as a par
 state, a span node naming an undeclared span, and §12.7:770's callback-failure
 half, which both lanes reported wrongly and no cross-lane comparison could see —
 closed two coverage holes in its own new test lane, and deleted five lines
-measured unable to change any outcome. Slice ④ landed **2026-09-05** and closed
+measured unable to change any outcome. Slice ④ landed **2026-09-06** and closed
 the milestone: the input-retention oracle in both lanes, reachability-based
 rather than a slot walk — the parser is held alive across a full collection and
 only the fed bytevector is dropped, so what the weak reference measures is the
@@ -57,8 +57,9 @@ scope at a return.
 The slice also closed the three fragment shapes `§25:1589` still lacked — a span
 open at `parser-finish!` and closed on the EOF chain, a reset while parked
 between the span-end substeps, and a reset of a poisoned parser with a span open
-— shipped `§27:1694`'s callback/span lifetime reference as the first `§27`
-deliverable in the tree, and disposed the two obligations that named Milestone
+— shipped `§27:1694`'s callback/span lifetime reference — the first thing in
+`docs/reference/`, though not the first item on `§27`'s list to exist: this
+changelog is `:1701` — and disposed the two obligations that named Milestone
 5's close-out as their receiver, writing each at the source construct its
 receiver will open. It also built `§16.2:886`'s **label-grammar check** for the
 two new declaration families — an owner approval from Gate 0 that no slice had

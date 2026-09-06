@@ -225,9 +225,11 @@
   ;; change -- the reason this was deferred is COST, RE-MEASURED here 2026-09-05
   ;; rather than copied: `rg -l parser-result-next test/ --glob '*.sps'` returns
   ;; **17** programs and `rg -o '\(parser-finish!' test/common/` returns **73**
-  ;; call sites across **16** files. (The parent plan's own paragraph says
-  ;; "sixteen programs" and "83 sites"; neither number is reproducible against
-  ;; the tree, at this commit or at the one that wrote them. The conclusion --
+  ;; call sites across **13** files. (The parent plan's own paragraph says
+  ;; "sixteen programs" and "83 sites". Both REPRODUCE EXACTLY at `0578bdf`, the
+  ;; commit that wrote them -- an earlier version of this note accused them of
+  ;; being unreproducible, which was itself a measurement taken at the wrong
+  ;; commit. They have simply moved since. The conclusion --
   ;; enforcing this re-baselines a tuple in most of the differential programs --
   ;; is unaffected, and is why it was deferred.)
   ;;

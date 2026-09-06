@@ -1224,7 +1224,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 55)
-set(EXPECTED_MUTATIONS 475)
+set(EXPECTED_MUTATIONS 476)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -6192,7 +6192,26 @@ byte_machine_mutation(
   # list. Requiring a literal `)` as the second character is what asserts the
   # list is EMPTY -- measured, `$` does not work here, because CMake's MATCHES
   # anchors at the end of the whole captured output rather than the line.
-  EXPECT_OUTPUT_MATCHES "an integer -- expected .invalid-name., got .[)]"
+  EXPECT_OUTPUT_MATCHES "an integer on the callback -- expected .invalid-name., got .[)]"
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the span family stops checking its label, the callback family does not"
+  # The other half of the per-family split. It had NO pin until the close-out
+  # audit found the asymmetry: with the shape fixture's integer sitting only on
+  # the callback, this mutant's single record -- the span label case -- was
+  # wholly contained in the permissive `reason-char?` mutant's, so it could not
+  # be pinned soundly. The fixture now carries an integer on the SPAN too, which
+  # is the record no reason mutant can produce.
+  FIND [[                      (if (and (valid-name? (span-declaration-name sd))
+                               (valid-label? (span-declaration-source-label sd)))
+                          #f]]
+  REPLACE [[                      (if (and (valid-name? (span-declaration-name sd))
+                               #t)
+                          #f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "an integer on the span -- expected .invalid-name., got .[)]"
 )
 
 byte_machine_mutation(
@@ -11351,7 +11370,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # in this file whose SPEC reads something no result and no trace can show: what
 # is still REACHABLE from a live parser after `parser-feed!` returns.
 #
-# Two of the three mutations below are the two halves of design §9's argument.
+# All three mutations below are halves of design §9's argument.
 # The first makes the runtime retain and layer 1 must see it. The other two make
 # an EXEMPT carrier stop carrying, and layer 3 must see that too -- because an
 # oracle asserting "nothing is reachable" would pass a runtime that quietly
