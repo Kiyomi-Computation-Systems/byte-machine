@@ -68,9 +68,10 @@ and so invisible to both completeness sweeps. It reuses the shipped
 `valid-reason?` predicate, folded into each family's existing name check, so it
 adds no diagnostic code and does not move the census; the two name checks beside
 it, which had shipped with no test and no mutation pin, were closed with it.
-Milestone 6 (counted consumption) is in progress. Gate 0 discharged **2026-09-06**
-as decision 0030 (a counted consume is input-reading with a zero-count route,
-amending decision 0023 item 3), and Slice ⓪ closed the same day: `§16.2:886`'s
+Milestone 6 (counted consumption) is in progress. Slice ⓪ closed **2026-09-06**
+(Gate 0's record, decision 0030 — a counted consume is input-reading with a
+zero-count route, amending decision 0023 item 3 — is on PR #76, open as of the
+same day): `§16.2:886`'s
 label clause made **total** over all nineteen label carriers through the four
 arms that already check names — one finding per carrier, no new diagnostic code,
 the census unmoved — with a derived totality row for the new per-kind

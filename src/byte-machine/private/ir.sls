@@ -648,8 +648,8 @@
   ;; Milestone 6 Slice ⓪. `node-name`'s shape -- one arm per kind above a raising
   ;; `else` -- for the one other field every node kind carries. It exists so that
   ;; §16.2:886's label clause can be TOTAL over the node kinds from one arm in the
-  ;; verifier rather than twelve; before it, nine kinds stored a label nothing
-  ;; could read.
+  ;; verifier rather than twelve; before it, nine CARRIERS -- six node kinds, both
+  ;; case kinds and the error declaration -- stored a label nothing could read.
   ;;
   ;; *** THIS IS A PER-KIND CENSUS, and a new kind owes it an arm. *** The kind x
   ;; position census derives this cond's predicate set from the file and compares

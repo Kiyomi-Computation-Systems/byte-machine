@@ -1042,8 +1042,9 @@ cmake_minimum_required(VERSION 3.26)
 # kind" now, the table having grown a callback row and two span rows.
 #
 # Milestone 5 Slice ④ and the close-out audit took the count from 466 to 476 at
-# their pins' own sites (the retention pass, the verify-rejections pass's four
-# label pins, and the audit's one), with no entry here.
+# their pins' own sites, with no entry here: Slice ④'s nine (466 + 9 = 475) are
+# the verify-rejections pass's four label pins, three in the retention pass and
+# two in the span-oracle pass; the audit's one makes 476.
 #
 # Milestone 6 Slice ⓪ tasks 2 and 3, §16.2:886's label clause made TOTAL: SEVEN
 # more, 476 + 7 = 483. Five in the verify-rejections pass, one per conjunct the
@@ -6203,9 +6204,16 @@ byte_machine_mutation(
   # rejects absence now reddens nearly every case here, where before the fold it
   # reddened the two declaration-family cases alone. The Slice ⓪ sweep measured
   # the consequence -- NINE shipped pins in this pass are satisfied by this
-  # mutant's output that were satisfied by nothing else before (the sweep report
-  # names them: the three tier-promotion pins, the two :908 pins, the D-1 walk
-  # start, the OQ-2 entry finish, the byte-reachability gate, node-out-targets).
+  # mutant's output that were satisfied by nothing else before. By LABEL:
+  #   "verify: default-error is promoted out of the benign tier"
+  #   "verify: eof-reachable-stop is promoted into the benign tier"
+  #   "verify: unresolved is promoted out of the benign tier"
+  #   "verify: every :908 finding is labelled `case` regardless of which edge produced it"
+  #   "verify: the :908 check reads only the first of a node's out-targets"
+  #   "verify: node-out-targets returns the roles instead of the targets"
+  #   "verify: the :909 walk does not start at the entry (D-1)"
+  #   "verify: the entry being a finish terminal is not rejected (Slice ⓪b, OQ-2)"
+  #   "verify: the zero-progress report is not gated on byte-reachability"
   # A nesting by construction, in the pass-fields-never-run shape, and not a
   # weakness in any of the nine: each still catches its own mutant for its
   # declared reason (0 self-failures), and this pin still catches this one.

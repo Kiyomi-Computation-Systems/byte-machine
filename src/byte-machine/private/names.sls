@@ -2,8 +2,8 @@
 ;;; [a-z][a-z0-9-]*, in ONE place (parent §9.3:423, §10.1:480, §16.2:886;
 ;;; Milestone 6 Slice ⓪, design §4.12 item 2).
 ;;;
-;;; Three libraries check names against it and no two of them may import each
-;;; other: verify.sls checks every declared name (§16.2:886), compile.sls checks
+;;; Three libraries check names against it, and the runtime may import neither of
+;;; the other two: verify.sls checks every declared name (§16.2:886), compile.sls checks
 ;;; the caller's output binding (§20), and runtime.sls checks an application's
 ;;; callback failure code (§9.3:423) -- and the runtime is downstream of
 ;;; verification, so it must not import (byte-machine verify). Through
