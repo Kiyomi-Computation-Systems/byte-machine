@@ -1,6 +1,6 @@
 # Milestone 5 Slice ⓪b — the EOF walk cluster
 
-**Status:** planned, not started. Depends on Slice ⓪ (the matrix must exist to measure this
+**Status:** CLOSED 2026-09-04, with Slice ⓪. (This line read "planned, not started" until Milestone 5's completeness check found it on 2026-09-06 — a closed slice's own plan is a status surface too, and this one had no owner in the ritual.) Depends on Slice ⓪ (the matrix must exist to measure this
 slice's blast radius). Written 2026-09-03 against `main` at `d47a12b` plus Slice ⓪'s Tasks 1 and
 6; every line citation and count below re-measured against the tree, not carried from the design
 pass — **which is how the design pass's own figures were caught** (§7).

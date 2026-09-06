@@ -408,7 +408,7 @@
            ;; together, because the argument for one message per shape is what
            ;; makes the widened return the wrong first instinct.
            ;;
-           ;; Deferred by Milestone 5's close-out (Slice ④, 2026-09-05); the
+           ;; Deferred by Milestone 5's close-out (Slice ④, 2026-09-06); the
            ;; adjudication is the §12.7 disposition in the parent plan, and this
            ;; note exists because the receiver is a role, not a step.
            ((field-step)

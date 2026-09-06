@@ -11,7 +11,7 @@ Milestone: 5, Gate 0 (milestone-5-design.md §4.1, §4.2)
 >   "What this hands to Slice ②"**: the code half is implemented, and the
 >   Consequences' warning that a domain-only cross-lane check "passes vacuously
 >   by construction" is what shaped the fixtures. Nothing above became false.
-> - **2026-09-05 (Milestone 5, Slice ④)** — **annotates the Consequences bullet
+> - **2026-09-06 (Milestone 5, Slice ④)** — **annotates the Consequences bullet
 >   "What this hands to Slice ④"** (its `milestone-5-design.md`:876-881 citation
 >   is wrong; §9's exemption boundary is at :998): the discharge, and the
 >   citation's correction. The obligation itself was read correctly and is met.
@@ -265,7 +265,7 @@ both lanes already carry. No callback KIND crosses the seam.
 
 ---
 
-**2026-09-05 (Milestone 5, Slice ④) — the "What this hands to Slice ④" bullet is
+**2026-09-06 (Milestone 5, Slice ④) — the "What this hands to Slice ④" bullet is
 discharged, and its own citation had gone stale.**
 
 *Discharged.* Slice ④'s retention oracle excludes neither carrier by enumeration:

@@ -1,6 +1,6 @@
 # Milestone 5 Slice ⓪ — the kind × position matrix and the diagnostic-code census
 
-**Status:** Tasks 1 and 6 done. **Tasks 2-5 and 7 now run AFTER Slice ⓪b** (reordered
+**Status:** CLOSED 2026-09-04. (Below is the plan as executed; the mid-flight ordering note is kept as the record of how it ran, not as outstanding work.) Tasks 1 and 6 done first. **Tasks 2-5 and 7 now run AFTER Slice ⓪b** (reordered
 2026-09-03 — see §2). Task 1's fixture is measured byte-identical under ⓪b's new verifier, and
 Task 6's census is expected to move from 31 sites to 28, which is its ratchet working.
 

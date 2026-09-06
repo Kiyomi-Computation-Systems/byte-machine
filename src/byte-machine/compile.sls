@@ -364,7 +364,7 @@
         ;; anchored on a `byte` verdict from a failed zero-width action has to be
         ;; re-measured.
         ;;
-        ;; Milestone 5's close-out (Slice ④, 2026-09-05) DEFERRED it rather than
+        ;; Milestone 5's close-out (Slice ④, 2026-09-06) DEFERRED it rather than
         ;; scheduling it, and wrote this note because the obligation is addressed
         ;; to "whoever next touches these arms" -- a receiver who opens this file
         ;; and has no reason to open the parent plan. Adjudicated at

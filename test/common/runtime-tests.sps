@@ -907,7 +907,7 @@
       (lambda ()
         ;; Decision 0022 item 2: domain and detail are NOT call-site arguments.
         ;; #f is not a placeholder -- §9.3:401 annotates detail "#f for machine
-        ;; errors" -- and `callback` has no producer until Milestone 5, which is
+        ;; errors" -- and `callback` had no producer until Milestone 5, which is
         ;; the ordinary condition of a closed enumeration mid-plan.
         (check-equal "domain" (parser-error-domain (err)) 'machine)
         (check-equal "detail" (parser-error-detail (err)) #f)))))

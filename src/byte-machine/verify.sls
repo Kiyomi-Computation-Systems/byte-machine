@@ -563,6 +563,19 @@
                 (machine-nodes m))))
 
   ;; PASS 4: reachability from entry.
+  ;; *** THIS PASS OVER-APPROXIMATES, and until now that was recorded in four
+  ;; documents and no source file. *** It walks `all-out-targets`, which crosses
+  ;; an eof-target and then keeps taking byte edges, so a node reachable only
+  ;; through an EOF edge no execution can take still counts as reached and
+  ;; `unreachable-node` does not fire. Recorded in decisions 0023 and 0027,
+  ;; design §4.5, and the parent plan's §16.2 disposition; decision 0027 says it
+  ;; is "handed to nobody" and that "item 3's verdict change is the first thing
+  ;; that depends on the answer" -- and Milestone 5 shipped that verdict change.
+  ;;
+  ;; Written here by Milestone 5's completeness check (2026-09-06) because a
+  ;; relaxation known to four documents and to no reader of this procedure is
+  ;; the failure mode this milestone added a standard against. Owed by whoever
+  ;; next narrows reachability, and failing that by Milestone 6's close-out.
   (define (pass-reachability m)
     (let ((nodes (machine-nodes m)) (reached (reach-from m all-out-targets)))
       (filter values
@@ -1209,10 +1222,12 @@
        ;;
        ;; Everything else carrying a `source-label` is deliberately not here, and
        ;; the list is longer than "the nine shipped node kinds": the machine
-       ;; itself, every uint field, every error declaration, both case kinds,
-       ;; and -- the ones NO artifact excludes, because they are neither the nine
-       ;; nor a declaration family -- MILESTONE 5'S OWN THREE NEW NODE KINDS,
-       ;; span-start, span-end and callback. That gap is real, and is recorded in
+       ;; itself, every uint field, every error declaration, both case kinds, and
+       ;; Milestone 5's own span-start, span-end and callback nodes. **EIGHT of
+       ;; those are excluded by NOTHING**: design §10's exclusion names "the nine
+       ;; already-shipped KINDS" and design `:106` defines the nine as `node?`'s
+       ;; nine node-kind disjuncts, so it reaches no non-node carrier -- the
+       ;; close note said otherwise once and is corrected. That gap is real, and is recorded in
        ;; the parent plan's Milestone 5 close note with a receiver; it is not
        ;; closed by widening this arm, which §4.12 item 2 does not authorise.
        (filter values
