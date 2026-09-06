@@ -971,4 +971,104 @@
         (check "and so does an end with no matching start anywhere"
                (span-end-node? (make-span-end-node 's 'nosuch 'onward #f)))))))
 
+;; --- source labels on every carrier (Milestone 6 Slice ⓪; §16.2:886) ---------
+;; Nineteen constructors take a `source-label`; ten had an accessor. These are
+;; the nine that did not, driven from one table: a copied accessor reading the
+;; wrong slot is what a per-kind list of cases would let through, and a table
+;; whose sentinel reads the observed count is what says all nine ran.
+(define (edge-to t) (make-edge t 'advance))
+(define (case-on-0 t) (make-byte-case (make-exact-byte-matcher 0) (edge-to t) #f))
+(define label-accessor-rows
+  ;; (name build accessor), build: label -> carrier
+  (list
+   (list 'byte-case (lambda (l) (make-byte-case (make-exact-byte-matcher 0) (edge-to 't) l))
+         byte-case-source-label)
+   (list 'byte-dispatch
+         (lambda (l) (make-byte-dispatch-node 'n (list (case-on-0 't)) (edge-to 'u) #f l))
+         byte-dispatch-node-source-label)
+   (list 'stop (lambda (l) (make-stop-node 'n l)) stop-node-source-label)
+   (list 'finish (lambda (l) (make-finish-node 'n l)) finish-node-source-label)
+   (list 'pause (lambda (l) (make-pause-node 'n 'c l)) pause-node-source-label)
+   (list 'error-node (lambda (l) (make-error-node 'n 'e l)) error-node-source-label)
+   (list 'error-declaration (lambda (l) (make-error-declaration 'n 'code "reason" l))
+         error-declaration-source-label)
+   (list 'sequence-case (lambda (l) (make-sequence-case '(1) 't l))
+         sequence-case-source-label)
+   (list 'sequence-dispatch
+         (lambda (l) (make-sequence-dispatch-node 'n (list (make-sequence-case '(1) 't #f))
+                                                  (edge-to 'u) #f l))
+         sequence-dispatch-node-source-label)))
+
+(harness-group "source labels: the nine carriers that had no accessor (Milestone 6 Slice ⓪)"
+  (lambda ()
+    (harness-case "each accessor reads the label back, and reads absence as #f"
+      (lambda ()
+        (let ((driven 0) (bad '()))
+          (for-each
+           (lambda (row)
+             (set! driven (+ driven 1))
+             (let ((nm (car row)) (build (cadr row)) (label-of (caddr row)))
+               (unless (and (eq? (label-of (build 'lbl)) 'lbl)
+                            (eq? (label-of (build #f)) #f)
+                            ;; A STRING label survives too: §10.1:480 puts labels
+                            ;; under a string repertoire, and the verifier's
+                            ;; `valid-label?` accepts both shapes.
+                            (equal? (label-of (build "Body: outer")) "Body: outer"))
+                 (set! bad (cons nm bad)))))
+           label-accessor-rows)
+          (check-equal "nine carriers driven" driven 9)
+          (check-equal "and the table has nine rows" (length label-accessor-rows) 9)
+          (check-equal "each reads its own slot" bad '()))))
+    (harness-case "the sequence-case accessor is tag-guarded like its siblings"
+      (lambda ()
+        (check-raises "a byte case is refused"
+                      (contract-violation? 'sequence-case-source-label 'case)
+                      (lambda () (sequence-case-source-label (case-on-0 't))))))))
+
+;; `node-source-label` -- `node-name`'s shape for the other field every kind
+;; carries. Twelve kinds, one label each, from the kind x position census's own
+;; builder shapes; the census derives the cond's predicate set from ir.sls and
+;; compares it to node?'s, so a missing arm fails there by comparison and here
+;; by the else's raise.
+(define node-builders
+  (list
+   (list 'byte-dispatch
+         (lambda (l) (make-byte-dispatch-node 'n (list (case-on-0 't)) (edge-to 'u) #f l)))
+   (list 'sequence-dispatch
+         (lambda (l) (make-sequence-dispatch-node 'n (list (make-sequence-case '(1) 't #f))
+                                                  (edge-to 'u) #f l)))
+   (list 'stop (lambda (l) (make-stop-node 'n l)))
+   (list 'error (lambda (l) (make-error-node 'n 'e l)))
+   (list 'finish (lambda (l) (make-finish-node 'n l)))
+   (list 'pause (lambda (l) (make-pause-node 'n 'c l)))
+   (list 'field-action (lambda (l) (make-field-action-node 'n 'clear '(f) 't #f l)))
+   (list 'field-branch (lambda (l) (make-field-branch-node 'n 'zero '(f) 't 'u l)))
+   (list 'integer-accumulate
+         (lambda (l) (make-integer-accumulate-node 'n 'f 10 't (edge-to 'u) 'e #f l)))
+   (list 'callback (lambda (l) (make-callback-node 'n 'cb 't '() 'p l)))
+   (list 'span-start (lambda (l) (make-span-start-node 'n 's 't l)))
+   (list 'span-end (lambda (l) (make-span-end-node 'n 's 't l)))))
+
+(harness-group "node-source-label answers for every node kind (Milestone 6 Slice ⓪)"
+  (lambda ()
+    (harness-case "twelve kinds, one label each, and absence"
+      (lambda ()
+        (let ((driven 0) (bad '()))
+          (for-each
+           (lambda (row)
+             (set! driven (+ driven 1))
+             (let ((nm (car row)) (build (cadr row)))
+               (unless (and (node? (build 'lbl))
+                            (eq? (node-source-label (build 'lbl)) 'lbl)
+                            (eq? (node-source-label (build #f)) #f))
+                 (set! bad (cons nm bad)))))
+           node-builders)
+          (check-equal "twelve kinds driven" driven 12)
+          (check-equal "and the table has twelve rows" (length node-builders) 12)
+          (check-equal "each answers its own label" bad '()))))
+    (harness-case "a non-node is refused, as node-name refuses it"
+      (lambda ()
+        (check-raises "refused" (contract-violation? 'node-source-label 'node)
+                      (lambda () (node-source-label (make-uint-field 'f 8 0 #f))))))))
+
 (harness-finish)

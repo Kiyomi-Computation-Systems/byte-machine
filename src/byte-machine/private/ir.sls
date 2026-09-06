@@ -12,8 +12,9 @@
           machine-default-eof-error machine-source-label
           make-byte-dispatch-node byte-dispatch-node? byte-dispatch-node-name
           byte-dispatch-node-cases byte-dispatch-node-fallback
-          byte-dispatch-node-eof-target
+          byte-dispatch-node-eof-target byte-dispatch-node-source-label
           make-byte-case byte-case? byte-case-matcher byte-case-edge
+          byte-case-source-label
           make-exact-byte-matcher exact-byte-matcher? exact-byte-matcher-byte
           make-byte-set-matcher byte-set-matcher? byte-set-matcher-bytes
           make-byte-range-matcher byte-range-matcher?
@@ -22,15 +23,18 @@
           byte-complement-matcher-matcher
           matcher? matcher-bytes ascii-bytes
           make-edge edge? edge-target edge-mode
-          make-stop-node stop-node? stop-node-name
-          make-finish-node finish-node? finish-node-name
+          make-stop-node stop-node? stop-node-name stop-node-source-label
+          make-finish-node finish-node? finish-node-name finish-node-source-label
           make-pause-node pause-node? pause-node-name pause-node-continuation
+          pause-node-source-label
           make-error-node error-node? error-node-name error-node-error-name
+          error-node-source-label
           machine-ir-version-of supported-ir-version
           make-uint-field uint-field? uint-field-name uint-field-width
           uint-field-initial uint-field-source-label
           make-error-declaration error-declaration? error-declaration-name
           error-declaration-code error-declaration-reason
+          error-declaration-source-label
           make-callback-declaration callback-declaration?
           callback-declaration-name callback-declaration-kind
           callback-declaration-required? callback-declaration-branch-keys
@@ -41,7 +45,9 @@
           make-sequence-dispatch-node sequence-dispatch-node?
           sequence-dispatch-node-name sequence-dispatch-node-cases
           sequence-dispatch-node-mismatch sequence-dispatch-node-eof-target
+          sequence-dispatch-node-source-label
           make-sequence-case sequence-case? sequence-case-bytes sequence-case-target
+          sequence-case-source-label
           make-field-action-node field-action-node?
           field-action-node-name field-action-node-operation
           field-action-node-arguments field-action-node-next
@@ -67,7 +73,7 @@
           callback-node-name callback-node-callback
           callback-node-continue-target callback-node-branch-targets
           callback-node-pause-continuation callback-node-source-label
-          node? node-name
+          node? node-name node-source-label
           make-verification-result verification-result? verification-result-ok?
           verification-result-diagnostics verification-result-machine)
   (import (rnrs)
@@ -252,6 +258,10 @@
   (define (byte-case? x) (tagged? byte-case-tag x))
   (define (byte-case-matcher c) (vector-ref c 1))
   (define (byte-case-edge c) (vector-ref c 2))
+  ;; Milestone 6 Slice ⓪: the label had been stored since Milestone 1 with no
+  ;; accessor, so §16.2:886's label clause could not reach it. A case has no name
+  ;; of its own; the verifier reports its label under the owning node.
+  (define (byte-case-source-label c) (vector-ref c 3))
 
   ;; --- byte-dispatch node ---
   (define byte-dispatch-node-tag (tag 'byte-machine-byte-dispatch-node))
@@ -270,6 +280,7 @@
   (define (byte-dispatch-node-cases n) (vector-ref n 2))
   (define (byte-dispatch-node-fallback n) (vector-ref n 3))
   (define (byte-dispatch-node-eof-target n) (vector-ref n 4))
+  (define (byte-dispatch-node-source-label n) (vector-ref n 5))
 
   ;; --- stop node ---
   (define stop-node-tag (tag 'byte-machine-stop-node))
@@ -278,6 +289,7 @@
     (vector stop-node-tag name source-label))
   (define (stop-node? x) (tagged? stop-node-tag x))
   (define (stop-node-name n) (vector-ref n 1))
+  (define (stop-node-source-label n) (vector-ref n 2))
 
   ;; --- finish node (EOF-only successful terminal, returns finished) ---
   (define finish-node-tag (tag 'byte-machine-finish-node))
@@ -286,6 +298,7 @@
     (vector finish-node-tag name source-label))
   (define (finish-node? x) (tagged? finish-node-tag x))
   (define (finish-node-name n) (vector-ref n 1))
+  (define (finish-node-source-label n) (vector-ref n 2))
 
   ;; --- pause node (explicit continuation; returns paused -- parent §10.6) ---
   ;; One zero-width out-edge to `continuation`: pause reads no byte, so it has
@@ -298,6 +311,7 @@
   (define (pause-node? x) (tagged? pause-node-tag x))
   (define (pause-node-name n) (vector-ref n 1))
   (define (pause-node-continuation n) (vector-ref n 2))
+  (define (pause-node-source-label n) (vector-ref n 3))
 
   ;; --- zero-width field nodes (Milestone 4 Slice ②; §9.1:301-306, §10.6:550,
   ;; :575). Both are ZERO-WIDTH: they consume no byte, which is what every
@@ -437,6 +451,7 @@
   (define (error-node? x) (tagged? error-node-tag x))
   (define (error-node-name n) (vector-ref n 1))
   (define (error-node-error-name n) (vector-ref n 2))
+  (define (error-node-source-label n) (vector-ref n 3))
 
   ;; --- error declaration ---
   (define error-declaration-tag (tag 'byte-machine-error-declaration))
@@ -450,6 +465,7 @@
   (define (error-declaration-name d) (vector-ref d 1))
   (define (error-declaration-code d) (vector-ref d 2))
   (define (error-declaration-reason d) (vector-ref d 3))
+  (define (error-declaration-source-label d) (vector-ref d 4))
 
   ;; --- sequence case (§9.1:298) ---
   ;; A byte list and a bare TARGET, with no mode. A successful sequence consumes
@@ -474,6 +490,12 @@
     (unless (sequence-case? c)
       (byte-machine-contract-violation 'sequence-case-target 'invalid-argument 'case))
     (vector-ref c 2))
+  ;; Tag-guarded like its two siblings above, and reported under the owning node
+  ;; by the verifier, as a byte case's label is.
+  (define (sequence-case-source-label c)
+    (unless (sequence-case? c)
+      (byte-machine-contract-violation 'sequence-case-source-label 'invalid-argument 'case))
+    (vector-ref c 3))
 
   ;; --- sequence-dispatch node (§9.1:297, §10.6:542-546) ---
   ;; The sixth node kind. Matches one of a finite set of exact byte sequences
@@ -496,6 +518,7 @@
   (define (sequence-dispatch-node-cases n) (vector-ref n 2))
   (define (sequence-dispatch-node-mismatch n) (vector-ref n 3))
   (define (sequence-dispatch-node-eof-target n) (vector-ref n 4))
+  (define (sequence-dispatch-node-source-label n) (vector-ref n 5))
 
   ;; --- callback-invocation node (§9.1:307-308, §10.6:584-586) ---
   ;; The TENTH node kind, and Milestone 5's first. Zero-width: §11.4:652 lists
@@ -622,6 +645,30 @@
           ((span-start-node? x) (span-start-node-name x))
           ((span-end-node? x) (span-end-node-name x))
           (else (byte-machine-contract-violation 'node-name 'invalid-argument 'node))))
+  ;; Milestone 6 Slice ⓪. `node-name`'s shape -- one arm per kind above a raising
+  ;; `else` -- for the one other field every node kind carries. It exists so that
+  ;; §16.2:886's label clause can be TOTAL over the node kinds from one arm in the
+  ;; verifier rather than twelve; before it, nine kinds stored a label nothing
+  ;; could read.
+  ;;
+  ;; *** THIS IS A PER-KIND CENSUS, and a new kind owes it an arm. *** The kind x
+  ;; position census derives this cond's predicate set from the file and compares
+  ;; it to `node?`'s disjuncts, so a thirteenth disjunct with no arm here fails by
+  ;; comparison before the `else` can raise on it.
+  (define (node-source-label x)
+    (cond ((byte-dispatch-node? x) (byte-dispatch-node-source-label x))
+          ((sequence-dispatch-node? x) (sequence-dispatch-node-source-label x))
+          ((stop-node? x) (stop-node-source-label x))
+          ((error-node? x) (error-node-source-label x))
+          ((finish-node? x) (finish-node-source-label x))
+          ((pause-node? x) (pause-node-source-label x))
+          ((field-action-node? x) (field-action-node-source-label x))
+          ((field-branch-node? x) (field-branch-node-source-label x))
+          ((integer-accumulate-node? x) (integer-accumulate-node-source-label x))
+          ((callback-node? x) (callback-node-source-label x))
+          ((span-start-node? x) (span-start-node-source-label x))
+          ((span-end-node? x) (span-end-node-source-label x))
+          (else (byte-machine-contract-violation 'node-source-label 'invalid-argument 'node))))
 
   ;; --- uint field descriptor (§9.1:283, §10.2:488-491) ---
   ;; The four parts §10.2 names: a symbolic name, an unsigned width of 8, 16, 32
