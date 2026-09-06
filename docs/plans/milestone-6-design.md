@@ -28,6 +28,12 @@ re-measured at plan-writing time (§9).
 > one is a landmine and what it used to say is in git. Later dated notes are indexed here,
 > newest first, each naming the section it amends.
 >
+> **2026-09-06, the owner's decision on §4.12** — **annotates §4.12, §5, §2, §4.11 and §9**:
+> items 1 and 2 approved and in scope as Slice ⓪. §4.12's heading and preamble, §5's
+> allocation and the §4.11 dispositions are corrected in place as instructions; the decision
+> and its date are recorded on each item, and §2's conditional-slice paragraph is left standing
+> with a settled line under it.
+>
 > **2026-09-06, the review of the first draft (`c16f44f`).** Four read-only reviewers — spec
 > citations, tree claims, semantics, process — audited the draft before it left the branch, and
 > no *record* here has been amended; everything they moved was an **instruction** and was
@@ -51,7 +57,7 @@ re-measured at plan-writing time (§9).
 Scope list is `§25:1597-1603` and its Exit criteria are `§25:1607-1609`. **This document
 changes no scope and rewords no criterion**; where it appears to say something the parent does
 not, the parent wins and this document is wrong. Two additions this document *proposes* are
-collected in §4.12 and are not in scope until the owner approves them on a stated date.
+collected in §4.12; the owner approved both on 2026-09-06, and they are in scope as Slice ⓪.
 
 ---
 
@@ -88,14 +94,14 @@ files. The appendix walks every one and states the kind's answer at each.
 | Phase | Kind | Produces | Discharges |
 |---|---|---|---|
 | Gate 0 | decisions only | record `0030` | nothing; unblocks Slice ① |
-| Slice ⓪ *(conditional on §4.12)* | hardening | the label-grammar totality and a shared name-grammar library | no `§25` bullet; disposes two obligations whose fallback receiver is this milestone's close-out |
+| Slice ⓪ *(§4.12, approved 2026-09-06)* | hardening | the label-grammar totality and a shared name-grammar library | no `§25` bullet; disposes two obligations whose fallback receiver is this milestone's close-out |
 | Slice ① | the node kind | constructor, verifier arms, lowering and tag 14, both executors, the emitted arm, the golden, the census rows | `§25:1597`, `:1598`, `:1601`, `:1602`, `:1603`; exit `:1607`, `:1609`, and `:1608`'s field/cursor/offset clauses |
 | Slice ② | span interaction + close | the span-enclosed fixtures, the per-feed placement oracle, the close note | `§25:1599`, `:1600`; exit `:1608`'s fragment clause and `:1609`'s span variant; the milestone close note |
 
 **Dependency order.** Gate 0 before ①, because ①'s verifier arms implement `0030` and a slice
 that picks the parked-set rule by accident pins the wrong diagnostic in a fixture. ① before
 ②, because nothing can be enclosed in a span until the kind exists. ⓪ is independent of Gate 0
-and precedes ① if approved, because ①'s new label carrier should join a total check rather than
+and precedes ①, because ①'s new label carrier should join a total check rather than
 a partial one (§4.12 item 1).
 
 **The oracle every slice runs under is the interpreter ≡ generated differential**, and this
@@ -152,6 +158,8 @@ label clause for eight carriers at `pass-declarations`' label arms), and this mi
 dispose both — but neither is Milestone 6 scope, and inventing scope at a design gate is the
 inverse of the failure Milestone 5's close-out recorded. §4.12 prices both and recommends
 approval; the slice exists if the owner approves and the close-out defers with a receiver if not.
+**Settled 2026-09-06: the owner approved both**, so §5 is unconditional; this paragraph stands
+as the reason the slice was proposed conditionally rather than assumed.
 
 **Why the milestone does not open with the verifier.** Tempting again, because §4.2 describes
 seven verifier sites that change. But a verifier arm with no construct to reject is
@@ -682,14 +690,16 @@ that defers names both ends.
    Discharged by finding, §4.9.
 3. **`runtime.sls` `make-callback-failure` — `§9.3:423`'s grammar half.** "Owed by whoever
    next gives the runtime a shared portability predicate, and failing that by Milestone 6's
-   close-out." **Proposed for Slice ⓪ as §4.12 item 2**, priced there. If declined, the
-   close-out defers to Milestone 7 and writes the receiver at the site and in an appended
-   `§25:1611` disposition.
+   close-out." **Scheduled in Slice ⓪ as §4.12 item 2, approved 2026-09-06**, priced there.
+   The obligation's second end moves from the parent plan to Slice ⓪'s plan, and the source
+   note at `make-callback-failure` is corrected by the commit that closes it.
 4. **`verify.sls` `pass-declarations` label arms — `§16.2:886`'s label clause for eight
    carriers.** "Owed by whoever next widens `pass-declarations`' label arms, and failing that by
-   Milestone 6's close-out." **Proposed for Slice ⓪ as §4.12 item 1**, priced there, with this
-   milestone's own kind as the ninth carrier. If declined, Slice ① adds the ninth carrier to the
-   recorded gap and the close-out defers as in item 3.
+   Milestone 6's close-out." **Scheduled in Slice ⓪ as §4.12 item 1, approved 2026-09-06**,
+   priced there; Slice ① then adds this milestone's own kind as the twentieth carrier under a
+   check that is already total. The parent plan's Milestone 5 close note gets an appended
+   disposition naming the slice that closed the gap, and the `verify.sls` arm comment that
+   forbids widening is corrected in place by the commit that widens it.
 5. **`verify.sls` `pass-reachability` — the over-approximation.** "Owed by whoever next
    narrows reachability, and failing that by Milestone 6's close-out." This milestone does not
    narrow it; §8 prices the narrowing and **defers it to Milestone 7**, whose scope is
@@ -702,15 +712,16 @@ that defers names both ends.
 owner in any milestone, as Milestone 5's §4.11 and close note record. Naming it is not
 claiming it; it is listed so it does not read as covered.
 
-### 4.12 Scope additions — proposed, awaiting the owner's decision
+### 4.12 Scope additions — settled by the owner 2026-09-06
 
-Each is a demonstrated gap in code this milestone edits or is the named fallback receiver for,
-stated with what was measured and what it costs, so the decision is of a fact rather than a
-feeling. Both are recommended for approval as **Slice ⓪**; an approved item gets that slice at
-the moment it is approved (`AGENTS.md`, "an approval with no receiver is invisible to every
-completeness sweep you have").
+**Both items are approved and in scope as Slice ⓪** (owner, 2026-09-06). Each was a
+demonstrated gap in code this milestone edits or is the named fallback receiver for, stated
+with what was measured and what it costs, so the approval was of a fact rather than a feeling.
+Each got its slice at the moment it was approved (`AGENTS.md`, "an approval with no receiver
+is invisible to every completeness sweep you have"); §5 is that slice, and its plan is the
+next artifact this milestone writes.
 
-1. **PROPOSED. `§16.2:886`'s label clause, made total.** Measured: `valid-label?` exists and
+1. **APPROVED 2026-09-06. `§16.2:886`'s label clause, made total.** Measured: `valid-label?` exists and
    is called at exactly two sites, the callback- and span-declaration arms of
    `pass-declarations`. Nineteen constructors store a `source-label`; **nine have no accessor
    for it** — `make-error-declaration`, `make-byte-case`, `make-sequence-case`,
@@ -735,11 +746,11 @@ completeness sweep you have").
    every `node?` disjunct answers `node-source-label` — which sees node kinds only, so the five
    non-node carriers (the machine, the uint field, the error declaration, both case kinds) are
    enumerated by name in the fixture table, whose sentinel reads its own row count.
-   **Recommended: approve.** The check is
+   **Approved as recommended.** The check is
    one `§16.2` has required since the plan was written, the fallback receiver is this
    milestone, and the cheapest moment to make a per-carrier check total is the commit that adds
    a carrier.
-2. **PROPOSED. A shared private name-grammar library, discharging `§9.3:423`.** Measured: the
+2. **APPROVED 2026-09-06. A shared private name-grammar library, discharging `§9.3:423`.** Measured: the
    portable name grammar `[a-z][a-z0-9-]*` is written **twice** in `src/` — `verify.sls`'s
    `valid-name?` and `compile.sls`'s `valid-binding?`, each with its own `lower-alpha?` and
    `name-char?` — and `runtime.sls`'s `make-callback-failure` checks `symbol?` only, with a
@@ -761,12 +772,12 @@ completeness sweep you have").
 
 ---
 
-## 5. Slice ⓪ — Two inherited verifier obligations *(conditional)*
+## 5. Slice ⓪ — Two inherited verifier obligations
 
-**Scope, as an allocation.** Discharges **no `§25` bullet.** It exists only if the owner
-approves §4.12 items 1 and 2, and it carries exactly the approved items — a hardening slice on
-the Milestone 5 Slice ⓪/⓪b precedent, before the milestone's own scope. If one item is approved
-and one declined, the slice carries one and the close-out defers the other with both ends.
+**Scope, as an allocation.** Discharges **no `§25` bullet.** It carries §4.12 items 1 and 2,
+**both approved by the owner on 2026-09-06** — a hardening slice on the Milestone 5 Slice ⓪/⓪b
+precedent, before the milestone's own scope. It is independent of Gate 0; Slice ① depends on
+it only in that ①'s new label carrier joins a check that is already total.
 
 **The work** is §4.12's, in two tasks that touch disjoint code: the label totality edits
 `ir.sls`, `verify.sls`, `ir-tests.sps`, `verify-tests.sps` and the pins on `pass-names-valid`;
@@ -1058,9 +1069,10 @@ that meets it — never reworded to match what shipped.
   name plus `parked-eof-start`'s arm, state the over-rejection of §4.2 item 4 with the
   workaround, and hand Slice ① the two machines §4.2 item 3 names — the flow-through zero-count
   stop (REJECTED) and the one-shot "length, body, stop" grammar (ACCEPTED).
-- **§4.12 needs the owner's decision before Slice ⓪'s plan is written**, and the design's §5
-  is corrected in place to say which items it carries. Slice ①'s plan can be written in parallel
-  with Gate 0's execution; it must not be *dispatched* before `0030` exists.
+- **§4.12 is settled (owner, 2026-09-06): items 1 and 2 approved.** Slice ⓪'s plan may
+  proceed on that basis and is independent of Gate 0. Slice ①'s plan can be written in parallel
+  with Gate 0's execution; it must not be *dispatched* before `0030` exists, and it is measured
+  against the tree after ⓪ lands, because ⓪ moves lines in `verify.sls` and `ir.sls`.
 - **Re-measure every `file:line` and every count in §3.1, §6 and the appendix at plan-writing
   time.** They were measured at `b470665`. Slice ⓪, if it lands first, moves lines in
   `verify.sls` and `ir.sls`; Slice ① moves lines in every library it touches.

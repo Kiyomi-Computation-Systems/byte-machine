@@ -4,7 +4,7 @@
 
 **Goal:** Settle, as one durable record — `0030` — the two design calls Milestone 6 depends on, so that Slice ① cites a decision instead of re-deriving it. Both are externally observable: `0030`'s executor contract decides *which feed* a span's completion event lands in for every schedule, and its verifier rule decides which diagnostic a fixture emits for a stop behind a zero-count route. A slice that picks either by accident pins the wrong answer in a fixture, and the fixture then defends it.
 
-**Architecture:** This phase writes *documentation only* — no product code, no tests, no CMake. It produces one new decision record, one dated amendment of an existing record, and the Gate-0-discharged mapping in the design document. It is the prerequisite for Slice ①, which implements every item of `0030` in one commit; Slice ⓪ (if the owner approves `milestone-6-design.md` §4.12) does not depend on it and may run first or in parallel.
+**Architecture:** This phase writes *documentation only* — no product code, no tests, no CMake. It produces one new decision record, one dated amendment of an existing record, and the Gate-0-discharged mapping in the design document. It is the prerequisite for Slice ①, which implements every item of `0030` in one commit; Slice ⓪ (design §4.12, both items approved by the owner 2026-09-06) does not depend on it and may run first or in parallel.
 
 **Tech Stack:** Markdown, `rg`, `sed`, git. No Scheme, no CMake.
 
@@ -35,7 +35,7 @@
 | File | Change | Task |
 | --- | --- | --- |
 | `docs/decisions/0023-eof-walk-starts-and-finish-reachability.md` | Dated note — item 3's closing clause, "with each node classified as itself", now has two exceptions: the callback node since Milestone 5 Slice ② (never recorded here) and the counted consume by `0030`, both because the state a parser is parked on and the name its EOF walk starts at are different questions. A record, **amended** at that clause, with a site marker under item 3 | 2 |
-| `docs/plans/milestone-6-design.md` | §4's Gate-0-discharged blockquote; §9's first bullet gains the discharge note; §4.12 and §5 corrected in place if the owner's decision exists | 3 |
+| `docs/plans/milestone-6-design.md` | §4's Gate-0-discharged blockquote; §9's first bullet gains the discharge note | 3 |
 
 **Deliberately untouched.** Every `.sls` and `.sps`, every CMake file, `README.org`, `CHANGELOG.md`, and `docs/plans/byte-machine-implementation-plan.md` — `0030` changes no normative sentence of the parent plan, so unlike Milestone 5's Gate 0 it appends no disposition; the milestone's close-out (Slice ②) appends the `§25:1593-1609` disposition and the status surfaces move then. Design §3.2's five items are **recorded, not fixed, here**; each is Slice ①'s edit and Gate 0 owns only the reason.
 
@@ -184,9 +184,15 @@ A blockquote under `## 4. Gate 0 — design-call resolutions`, recording that §
 
 It reads "Gate 0 is one record, `0030`, carrying §4.1 and §4.2 …" — an **instruction**, corrected in place to say the gate is discharged, with the record's title as shipped.
 
-- [ ] **Step 3: If the owner has decided §4.12, record the decision**
+- [ ] **Step 3: Confirm §4.12 is recorded as settled, and do not re-decide it**
 
-Each item's leading **PROPOSED** becomes **APPROVED `<date>`** or **DECLINED `<date>`**, with the owner's stated reason if one was given; §5's first paragraph is corrected in place to name which items the slice carries, or to say the slice does not exist and the close-out defers both with named receivers. If no decision exists yet, leave §4.12 and §5 untouched and say so in the commit message — an approval invented here would be the failure Milestone 5's close-out recorded.
+The owner approved both items on 2026-09-06 and the design PR recorded it. This step only verifies:
+
+```bash
+rg -c "APPROVED 2026-09-06" docs/plans/milestone-6-design.md
+rg -n "PROPOSED" docs/plans/milestone-6-design.md
+```
+Expected: the first prints **`2`** (items 1 and 2); the second prints **nothing**. If either differs, stop — the decision lives in the design and this plan must not invent or revise an approval.
 
 - [ ] **Step 4: Verify the whole gate**
 
