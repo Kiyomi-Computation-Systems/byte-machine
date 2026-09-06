@@ -1769,7 +1769,7 @@
 ;;
 ;; Decision 0021 item 5 split the kinds by "reads input" versus "zero-width", on
 ;; the reasoning that an input-reading node is always on the feed path. These
-;; twelve machines are the counterexample: all three input-reading kinds can be
+;; sixteen machines are the counterexample: all four input-reading kinds can be
 ;; EOF-only-reachable.
 (define (t2-hop kind)
   ;; The offender: a node of `kind` carrying a BYTE edge into the finish `fin`.
@@ -1791,6 +1791,11 @@
     ;; EOF walk starts on that one edge, so a stop there is a §16.2:909 finding
     ;; and this row would stop being about §16.2:908. Found by building it.
     ((callback) (make-callback-node 'hop 'cb 'fin '() 'rej #f))
+    ;; Milestone 6 Slice ①'s thirteenth kind. A #f eof-target keeps `hop` out of
+    ;; the parked set, and in the eof-only variant the entry's walk classifies
+    ;; it as the join of default-error and finish -- tier 0 -- so the row still
+    ;; isolates §16.2:908 (design §4.10).
+    ((counted-consume) (make-counted-consume-node 'hop 'n 'fin #f #f))
     (else (assertion-violation 't2-hop "no such kind" kind))))
 
 (define (t2-machine kind eof-only?)
@@ -1820,7 +1825,7 @@
 ;; `test/`, which is why it was missed there and is recorded here.
 (define t2-kinds
   '(byte-dispatch sequence-dispatch integer-accumulate pause field-action
-    field-branch callback))
+    field-branch callback counted-consume))
 
 ;; *** THE TWO SPAN KINDS ARE EXCLUDED, and the reason is a property rather than
 ;; a fixture problem. *** This row isolates §16.2:908 -- a byte edge into a
@@ -1844,7 +1849,7 @@
   (lambda ()
     (harness-case "an EOF-only-reachable byte edge into a finish is accepted"
       (lambda ()
-        ;; The half that fails today for the three input-reading kinds. The edge
+        ;; The half that fails today for the four input-reading kinds. The edge
         ;; is untakeable: once an execution takes an eof-target it can never feed
         ;; again, so no byte ever traverses it.
         (let ((seen 0) (bad '()))
@@ -1855,7 +1860,7 @@
                                       (verify-machine (t2-machine k #t))))))
                         (unless (null? ds) (set! bad (cons (cons k ds) bad)))))
                     t2-kinds)
-          (check-equal "all seven kinds driven" seen 7)
+          (check-equal "all eight kinds driven" seen 8)
           (check-equal "none rejected" bad '()))))
     (harness-case "a BYTE-reachable byte edge into a finish is rejected at its source node"
       (lambda ()
@@ -1872,7 +1877,7 @@
                         (unless (equal? ds '((non-eof-into-finish . hop)))
                           (set! bad (cons (cons k ds) bad)))))
                     t2-kinds)
-          (check-equal "all seven kinds driven" seen 7)
+          (check-equal "all eight kinds driven" seen 8)
           (check-equal "each rejected exactly once, at `hop`" bad '()))))))
 
 ;; Milestone 5 Slice ⓪b task 3: the ENTRY may not be a finish terminal (OQ-2).
@@ -2155,8 +2160,11 @@
                   '((invalid-span-state se #f)
                     (non-eof-into-finish se next))
                   (list (make-callback-declaration 'on-data 'span-data #t '() #f #f))
-                  (list (make-span-declaration 'body 'on-data #f #f)))))
-          (check-equal "seven kinds driven" seen 7)
+                  (list (make-span-declaration 'body 'on-data #f #f)))
+            ;; Milestone 6 Slice ①: one byte edge, the shipped `next` role.
+            (list 'cc (list (make-counted-consume-node 'cc 'n 'fin #f #f))
+                  '((non-eof-into-finish cc next)))))
+          (check-equal "eight kinds driven" seen 8)
           (check-equal "every role label is the accessor's own" bad '()))))
     (harness-case "a diagnostic with no applicable edge carries #f"
       (lambda ()
@@ -3171,5 +3179,127 @@
                                    (make-error-node 'reject 'rejected #f))
                              'default-eof))))
                      '((zero-progress-cycle . t)))))))
+
+;; --- the thirteenth kind in the verifier census (Milestone 6 Slice ①) ---------
+;;
+;; Decision 0030's fixtures, by shape. `done` and `reject` are the shared stop
+;; and error nodes defined for the label group above; `entry-into` reaches the
+;; node under test on byte 0 and the stop on byte 1, so every node is reachable.
+(define len-field (list (make-uint-field 'len 8 0 #f)))
+(define (cc-machine entry fields nodes)
+  (make-machine 'ccm entry fields '() '() errs nodes 'default-eof #f))
+
+(harness-group "the thirteenth kind in the verifier census (Milestone 6 Slice ①)"
+  (lambda ()
+    (harness-case "the flow-through zero-count stop at the ENTRY is rejected (0030 item 5)"
+      (lambda ()
+        ;; A fresh parser is parked at the entry with the field's initial, 0; a
+        ;; zero count transitions to `next` at finish (§10.6:600), and `next` is
+        ;; a stop -- §16.2:909's prohibition. A dispatch-shaped classify arm
+        ;; never sees `next` and this machine verified clean under it.
+        (let ((m (cc-machine 'body len-field
+                             (list (make-counted-consume-node 'body 'len 'done #f #f) done))))
+          (check-equal "eof-reachable-stop, at the entry"
+                       (map cons (codes m) (nodes-of m))
+                       '((eof-reachable-stop . body))))))
+    (harness-case "the same through a pause continuation is rejected at the pause"
+      (lambda ()
+        (let ((m (cc-machine 'start len-field
+                             (list (entry-to 'p)
+                                   (make-pause-node 'p 'body #f)
+                                   (make-counted-consume-node 'body 'len 'done #f #f)
+                                   done reject))))
+          (check-equal "eof-reachable-stop, at the pause"
+                       (map cons (codes m) (nodes-of m))
+                       '((eof-reachable-stop . p))))))
+    (harness-case "the one-shot length, body, stop grammar is ACCEPTED (0030 item 6)"
+      (lambda ()
+        ;; A parser parked on `body` by need-input holds a positive count and
+        ;; takes the error at EOF; no EOF path reaches the stop. The design's
+        ;; first draft parked the kind by kind and rejected this machine.
+        (let ((m (cc-machine 'start len-field
+                             (list (entry-to 'body)
+                                   (make-counted-consume-node 'body 'len 'done 'reject #f)
+                                   done reject))))
+          (check-equal "no diagnostics" (codes m) '()))))
+    (harness-case "a self-targeting next is a zero-progress cycle, and nothing else (0030 item 7)"
+      (lambda ()
+        (let ((m (cc-machine 'start len-field
+                             (list (entry-into 'body)
+                                   (make-counted-consume-node 'body 'len 'body #f #f)
+                                   done reject))))
+          (check-equal "zero-progress-cycle alone, at the node"
+                       (map cons (codes m) (nodes-of m))
+                       '((zero-progress-cycle . body))))))
+    (harness-case "a self-targeting eof-target is an EOF zero-progress cycle"
+      (lambda ()
+        (let ((m (cc-machine 'start len-field
+                             (list (entry-into 'body)
+                                   (make-counted-consume-node 'body 'len 'done 'body #f)
+                                   done reject))))
+          (check-equal "eof-zero-progress-cycle, at the node"
+                       (map cons (codes m) (nodes-of m))
+                       '((eof-zero-progress-cycle . body))))))
+    (harness-case "an undeclared field is invalid-field-operand under the node's name (§16.2:903)"
+      (lambda ()
+        (let ((bad (cc-machine 'start '()
+                               (list (entry-into 'body)
+                                     (make-counted-consume-node 'body 'nosuch 'done #f #f)
+                                     done reject)))
+              (good (cc-machine 'start len-field
+                                (list (entry-into 'body)
+                                      (make-counted-consume-node 'body 'len 'done #f #f)
+                                      done reject))))
+          (check-equal "undeclared: reported under the node"
+                       (map cons (codes bad) (nodes-of bad))
+                       '((invalid-field-operand . body)))
+          (check-equal "declared: clean" (codes good) '()))))
+    (harness-case "the priced over-rejection: a value-terminated loop is rejected, the same loop with a byte dispatch in it is accepted (0030 item 7)"
+      (lambda ()
+        ;; records := 3, size := 2. `[branch zero? records -> done] -> consume(size)
+        ;; -> decrement records -> branch` terminates whenever `records` does,
+        ;; and the verifier cannot see that it does (§11.4:654); §16.2:913 bounds
+        ;; the over-rejection to loops with no consuming node. The loop sits
+        ;; behind a byte dispatch so the entry, not the branch, is the parked
+        ;; node, and the finding is item 7's alone.
+        (let* ((fields (list (make-uint-field 'records 8 3 #f) (make-uint-field 'size 8 2 #f)))
+               (branch (make-field-branch-node 'br 'zero '(records) 'done 'body #f))
+               (dec (make-field-action-node 'dec 'decrement '(records) 'br 'reject #f))
+               (rejected (cc-machine 'start fields
+                                     (list (entry-to 'br) branch
+                                           (make-counted-consume-node 'body 'size 'dec #f #f)
+                                           dec done reject)))
+               (accepted (cc-machine 'start fields
+                                     (list (entry-to 'br) branch
+                                           (make-counted-consume-node 'body 'size 'sep #f #f)
+                                           (make-byte-dispatch-node 'sep (list (case-to 'dec))
+                                                                    (make-edge 'reject 'reexecute)
+                                                                    #f #f)
+                                           dec done reject))))
+          (check-equal "rejected: the three nodes of the loop"
+                       (map cons (codes rejected) (nodes-of rejected))
+                       '((zero-progress-cycle . br) (zero-progress-cycle . body)
+                         (zero-progress-cycle . dec)))
+          (check-equal "accepted with a consuming node in the loop" (codes accepted) '()))))
+    (harness-case "a counted consume inside a span verifies clean (§10.6:604)"
+      (lambda ()
+        ;; `span-transfer` is the identity for the kind and `span-node-diagnostics`
+        ;; answers nothing; the body's own EOF route gets its own error node, on
+        ;; the member3-drift precedent (the shared `reject` is reached with no
+        ;; span open, and merging the two states at one node is a rejection).
+        (let ((m (make-machine 'ccm 'start len-field
+                               (list (make-callback-declaration 'on-data 'span-data #t '() #f #f))
+                               (list (make-span-declaration 'sp 'on-data #f #f))
+                               errs
+                               (list (entry-into 'ss)
+                                     (make-span-start-node 'ss 'sp 'body #f)
+                                     (make-counted-consume-node 'body 'len 'se 'rej2 #f)
+                                     (make-error-node 'rej2 'rejected #f)
+                                     (make-span-end-node 'se 'sp 'after #f)
+                                     (make-byte-dispatch-node 'after (list (case-to 'done))
+                                                              (make-edge 'reject 'reexecute) #f #f)
+                                     done reject)
+                               'default-eof #f)))
+          (check-equal "no diagnostics" (codes m) '()))))))
 
 (harness-finish)

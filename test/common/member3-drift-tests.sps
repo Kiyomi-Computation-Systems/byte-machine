@@ -62,7 +62,8 @@
     ;; rendered; finish, pause, span-start, span-end and span-completion were
     ;; not. All five are added here, so the row the design Appendix carries for
     ;; this fixture -- "must render EVERY emitted arm" -- is literally true at
-    ;; twelve of twelve rather than nearly true.
+    ;; twelve of twelve rather than nearly true. Milestone 6 Slice ① made it
+    ;; thirteen of thirteen: `cbody` below renders the counted-consume arm.
     ;;
     ;; The span arms are not inert: two render a `let` binding `o`, and
     ;; compile.sls's stated property that none of them binds a local beyond `o`
@@ -124,8 +125,12 @@
           ;; records: a parser parked at a pause resumes on that one edge, so a
           ;; stop there is an EOF path reaching a stop terminal (§16.2:909).
           (make-byte-dispatch-node 'sdone
-            (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'done 'advance) #f))
+            (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'cbody 'advance) #f))
             (make-edge 'pz 'reexecute) 'fin #f)
+          ;; The thirteenth arm (Milestone 6 Slice ①), on `sdone`'s byte, after
+          ;; the span has closed: it consumes `count` bytes in bulk and is the one
+          ;; arm that binds `n`, the local this slice adds to reserved-member-3.
+          (make-counted-consume-node 'cbody 'count 'done #f #f)
           (make-pause-node 'pz 'reject #f)
           (make-finish-node 'fin #f)
           (make-stop-node 'done #f)
@@ -239,8 +244,8 @@
           (for-each (lambda (s)
                       (set! n (+ n 1))
                       (when (memq s observed) (set! seen (cons s seen))))
-                    '(fieldv errs pk v r d o psr cbv))
-          (check-equal "nine checked" n 9)
-          (check-equal "all nine emitted" (length seen) 9))))))
+                    '(fieldv errs pk v r d o psr cbv n))
+          (check-equal "ten checked" n 10)
+          (check-equal "all ten emitted" (length seen) 10))))))
 
 (harness-finish)

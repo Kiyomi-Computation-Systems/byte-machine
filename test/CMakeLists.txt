@@ -601,7 +601,8 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
                 "BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin"
                 "BYTE_MACHINE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-one-byte.golden.sls"
                 "BYTE_MACHINE_HTTP_VERSION_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-http-version.golden.sls"
-                "BYTE_MACHINE_ACCUMULATE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-accumulate.golden.sls")
+                "BYTE_MACHINE_ACCUMULATE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-accumulate.golden.sls"
+                "BYTE_MACHINE_COUNTED_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-counted.golden.sls")
 endif()
 
 # --- Provenance ------------------------------------------------------------
@@ -1085,6 +1086,33 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-span-tests.sps"
   TIMEOUT 120)
 
+# --- Milestone 6 Slice ①: the counted consume in both lanes -------------------
+# §22.3:1254's four cases under §22.5's schedules, EOF truncation, the two-message
+# feed of §25:1609, the u64 count, decision 0030 item 1's two ordering witnesses,
+# the only-consumer machine compile.sls's reached-declaration walk owes, the
+# structural witness for §25:1607, and Slice ②'s §10.6:603 placement oracle as
+# one case. Both lanes list counted-machine.sls in SOURCES: the aot lane resolves
+# libraries only through objects compiled from its own SOURCES.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.counted.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-counted-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/counted-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-counted-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.counted.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-counted-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/counted-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-counted-tests.sps"
+  TIMEOUT 120)
+
 # --- Milestone 5 Slice ④: the input-retention oracle (§25:1591) --------------
 # The lane Slice ③'s liveness probe was brought forward FOR. Unlike that probe,
 # this one imports `byte-machine` source and drives a real parser, so it is
@@ -1487,6 +1515,34 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/determinism-accumulate-tests.sps"
   TIMEOUT 120
   ENVIRONMENT "BYTE_MACHINE_ACCUMULATE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-accumulate.golden.sls")
+
+# --- Milestone 6 Slice ①: determinism against a committed golden (counted) -----
+# The FIFTH golden, for the accumulate golden's reason: a counted-consume node
+# renders an arm no other golden contains -- a zero-count jump, a bulk commit
+# through `min`, an exhausted clause that is not the shared preamble -- so a
+# determinism claim about emission that excluded it would be a claim about the
+# other four machines. Both lanes list counted-machine.sls in SOURCES.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.determinism.counted.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/determinism-counted-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/counted-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/determinism-counted-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_COUNTED_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-counted.golden.sls")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.determinism.counted.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/determinism-counted-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/counted-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/determinism-counted-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_COUNTED_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-counted.golden.sls")
 
 # --- Milestone 3 Slice ③: determinism against a committed golden (sequence) ---
 # The third golden. Unlike the one-byte and pause goldens, this machine has a

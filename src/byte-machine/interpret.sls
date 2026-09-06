@@ -109,6 +109,7 @@
                     ((callback-node? n) 'callback)
                     ((span-start-node? n) 'span-start)
                     ((span-end-node? n) 'span-end)
+                    ((counted-consume-node? n) 'counted-consume)
                     (else (byte-machine-contract-violation 'interpret 'internal name))))))
       (define (dispatch name byte)
         (if (pair? name)
@@ -177,6 +178,10 @@
           (cond ((sequence-dispatch-node? n) (sequence-dispatch-node-eof-target n))
                 ((byte-dispatch-node? n) (byte-dispatch-node-eof-target n))
                 ((integer-accumulate-node? n) (integer-accumulate-node-eof-target n))
+                ;; Milestone 6 Slice ①: without this arm a parked counted consume
+                ;; raises out of parser-finish!, which is the loud else doing
+                ;; its job.
+                ((counted-consume-node? n) (counted-consume-node-eof-target n))
                 (else (byte-machine-contract-violation 'interpret 'internal
                                                        (node-name n))))))
       ;; --- Milestone 5 Slice ②: the callback node, interpreter side ---------
@@ -336,6 +341,24 @@
                        ((and (>= byte 65) (<= byte 70)) (+ 10 (- byte 65)))
                        (else #f))))
           (and v (< v base) v)))
+      ;; Counted consume (Milestone 6 Slice ①; decision 0030 items 1 and 4). The
+      ;; op RECEIVES the parser's field vector and COMMITS into it; the runtime
+      ;; only routes the target it answers. THE ZERO-COUNT TEST COMES FIRST: a
+      ;; zero count transitions immediately (§10.6:600) before `pos` and `end`
+      ;; are looked at, so a zero count over an empty slice answers `(0 . next)`
+      ;; and only a positive count over an empty slice answers `(0 . #f)`, the
+      ;; EOF route. Count completion wins by construction: `k = v` continues at
+      ;; `next` whether or not `pos + k = end` (§10.6:603). The subtraction is
+      ;; exact and cannot underflow -- `k` never exceeds `v` (§15:872) -- and it
+      ;; is bignum arithmetic on a u64 count above the fixnum range (§15:856).
+      (define (count-step n fv pos end)
+        (let* ((slot (car (field-slot-and-width (counted-consume-node-field n))))
+               (v (vector-ref fv slot)))
+          (if (= v 0)
+              (cons 0 (counted-consume-node-next n))
+              (let ((k (min v (- end pos))))
+                (vector-set! fv slot (- v k))
+                (cons k (if (= k v) (counted-consume-node-next n) #f))))))
       (define (accumulate-step n fv byte)
         (let* ((fname (integer-accumulate-node-field n))
                (sw (field-slot-and-width fname))
@@ -397,6 +420,14 @@
            ((accumulate-step)
             (let* ((name (car args)) (fv (cadr args)) (byte (caddr args)))
               (accumulate-step (lookup nodes name) fv byte)))
+           ;; Counted consume (Milestone 6 Slice ①; decision 0030 item 4). One
+           ;; message per shape: `(count-step node fv pos end)` answers
+           ;; `(committed . target)`, and the finish path asks it over an empty
+           ;; slice and reads only the target -- `(0 . next)` is the zero-count
+           ;; transition, `(0 . #f)` means take the EOF route.
+           ((count-step)
+            (let* ((name (car args)) (fv (cadr args)) (pos (caddr args)) (end (cadddr args)))
+              (count-step (lookup nodes name) fv pos end)))
            ;; *** OWED HERE TOO, AND THIS IS THE HARDER END. *** `§12.7:770`'s
            ;; machine-action half is still wrong (the emitted arms carry the
            ;; other end of this note, at `compile.sls`'s `field-action`). The

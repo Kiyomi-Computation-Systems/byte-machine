@@ -112,7 +112,7 @@
   ;; below, the arm's outcome binding.
   (define reserved-member-3
     '(exec loop pos st off b bv start end state offset finish? fieldv errs pk
-      v r d o psr cbv))
+      v r d o psr cbv n))
   ;; The grammar half is (byte-machine private names)' `portable-name?` since
   ;; Milestone 6 Slice ⓪ (design §4.12 item 2): one body with verify.sls's
   ;; name check and runtime.sls's callback-code check, where this file carried
@@ -369,8 +369,11 @@
         ;; scheduling it, and wrote this note because the obligation is addressed
         ;; to "whoever next touches these arms" -- a receiver who opens this file
         ;; and has no reason to open the parent plan. Adjudicated at
-        ;; `byte-machine-implementation-plan.md` §12.7's disposition; owed also by
-        ;; Milestone 6's counted consume if it can fail a callback.
+        ;; `byte-machine-implementation-plan.md` §12.7's disposition. Milestone
+        ;; 6's counted consume does NOT inherit it: the kind invokes no callback
+        ;; and takes no error edge of its own, so it can produce neither half of
+        ;; the row (Milestone 6 design §4.9, discharged by finding in Slice ①);
+        ;; the constant stays owed to whoever next touches THESE arms.
         ((field-action)
          (let* ((args (normal-field-arguments s))
                 (sw (field-slot-width fields (car args)))
@@ -522,6 +525,36 @@
                 "             (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
                 "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
                 (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off))))))\n"))))
+        ;; Counted consume (Milestone 6 Slice ①; decision 0030 items 1-3). A
+        ;; three-clause `cond` -- zero count, exhausted, commit -- and NOT the
+        ;; shared exhausted-input preamble, because the zero-count test comes
+        ;; first (§10.6:600) and the preamble opens with exhaustion; nor a
+        ;; re-rendering of the preamble's lines, which would take every pin on
+        ;; them to two sites. The zero-count clause is `zero-width-jump`, a
+        ;; call, carrying the position kind through. `n` is the committed count,
+        ;; the one local this arm adds to reserved-member-3 (design §4.5); the
+        ;; subtraction is exact (§15:872) and count completion wins by
+        ;; construction -- `n = v` continues whether or not input remains.
+        ((counted-consume)
+         (let* ((fname (car (normal-field-arguments s)))
+                (slot (num (car (field-slot-width fields fname))))
+                (next-id (car (normal-field-targets s))))
+           (string-append
+            "      ((" id ")" "\n"
+            "       (let ((v (vector-ref fieldv " slot ")))\n"
+            "         (cond ((= v 0) " (zero-width-jump next-id) ")\n"
+            "               ((>= pos end)\n"
+            "                (if finish?\n"
+            "                    " (render-eof-branch (normal-dispatch-eof s) id
+                                                     (string->symbol (nm (normal-state-id s)))
+                                                     (normal-error-reason s) index-of) "\n"
+            "                    (byte-machine-make-feed-outcome/v1 (quote need-input) pos #f " id " off)))\n"
+            "               (else\n"
+            "                (let ((n (min v (- end pos))))\n"
+            "                  (vector-set! fieldv " slot " (- v n))\n"
+            "                  (if (= n v)\n"
+            "                      (loop (+ pos n) " (num next-id) " (+ off n) (quote boundary))\n"
+            "                      (byte-machine-make-feed-outcome/v1 (quote need-input) (+ pos n) #f " id " (+ off n))))))))\n")))
         ((dispatch)
          (let ((fb (normal-dispatch-fallback s)))
            (string-append
@@ -533,8 +566,9 @@
         ;; Unreachable today -- this case already covers every kind
         ;; normal-state-kind can produce: dispatch, stop, error, finish, pause,
         ;; field-action, field-branch (Milestone 4 Slice ②), accumulate
-        ;; (Milestone 4 Slice ③), callback (Milestone 5 Slice ②) and span-start,
-        ;; span-end and span-completion (Milestone 5 Slice ③) -- TWELVE.
+        ;; (Milestone 4 Slice ③), callback (Milestone 5 Slice ②), span-start,
+        ;; span-end and span-completion (Milestone 5 Slice ③), and
+        ;; counted-consume (Milestone 6 Slice ①) -- THIRTEEN.
         ;; *** The parenthetical here listed only the first five until
         ;; 2026-09-03, having survived both slices that widened the set --
         ;; including the one eleven lines above this comment. A comment that
@@ -609,7 +643,7 @@
                                           ;; it could route the entry's eof to a
                                           ;; finish node instead.
                                           ((and (memq (normal-state-kind st)
-                                                      '(dispatch accumulate))
+                                                      '(dispatch accumulate counted-consume))
                                                 (eq? (car (normal-dispatch-eof st)) 'default))
                                            (cdr (normal-dispatch-eof st)))
                                           (else #f))))

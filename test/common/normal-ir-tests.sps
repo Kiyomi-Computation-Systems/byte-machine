@@ -838,6 +838,63 @@
                     (state-lengths (acc-machine 10 #f)))
           (check-equal "all eleven" bad '()))))))
 
+;; --- Milestone 6 Slice ①: the counted-consume state's encoding ---------------
+;;
+;; The thirteenth kind lowers 1:1 (design §4.4): `arguments` the field NAME,
+;; `targets` the one successor id, slot 6 the EOF routing in the shipped
+;; convention through its own resolver, no selector. Every part is encoded
+;; (decision 0019 item 2), so the three drift pairs below each move the
+;; fingerprint. The fixture puts a dispatch in front of the counted node so the
+;; base machine verifies clean; the "another successor" variant does not (its
+;; stop is unreachable), which the normalizer does not care about and the
+;; fingerprint pins regardless.
+(define (cc-machine field next eof)
+  (make-machine 'm 'start
+    (list (make-uint-field 'count 32 0 #f) (make-uint-field 'other 8 0 #f)) '() '()
+    (list s2-eof s2-rej)
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 0) (make-edge 'cc 'advance) #f))
+            (make-edge 'over 'reexecute) #f #f)
+          (make-counted-consume-node 'cc field next eof #f)
+          (make-stop-node 'stop #f) (make-error-node 'over 'rejected #f))
+    'default-eof #f))
+
+(harness-group "the counted-consume state's encoding (Milestone 6 Slice ①)"
+  (lambda ()
+    (harness-case "a counted-consume machine's fingerprint is the measured golden value"
+      (lambda ()
+        (check-equal "fingerprint" (s2-fp (cc-machine 'count 'stop #f)) 8698736890881894294)))
+    (harness-case "the field, the successor and the EOF routing each reach the encoding"
+      (lambda ()
+        ;; Three drift pairs, each variant's own value pinned too, so a change
+        ;; that moves two of them together still shows.
+        (check-equal "another field" (s2-fp (cc-machine 'other 'stop #f)) 6149252348841521437)
+        (check-equal "another successor" (s2-fp (cc-machine 'count 'over #f)) 17315953633258746487)
+        (check-equal "node EOF routing" (s2-fp (cc-machine 'count 'stop 'over)) 11703601680155498763)
+        (check "the field differs"
+               (not (= (s2-fp (cc-machine 'count 'stop #f)) (s2-fp (cc-machine 'other 'stop #f)))))
+        (check "the successor differs"
+               (not (= (s2-fp (cc-machine 'count 'stop #f)) (s2-fp (cc-machine 'count 'over #f)))))
+        (check "the EOF routing differs"
+               (not (= (s2-fp (cc-machine 'count 'stop #f)) (s2-fp (cc-machine 'count 'stop 'over)))))))
+    (harness-case "the counted-consume state has the declared layout length"
+      (lambda ()
+        (let ((bad '()))
+          (for-each (lambda (len) (unless (= len 11) (set! bad (cons len bad))))
+                    (state-lengths (cc-machine 'count 'stop #f)))
+          (check-equal "all eleven" bad '()))))
+    (harness-case "the lowered state carries the field name, one successor and the routing"
+      (lambda ()
+        (let* ((n (normalize (cc-machine 'count 'stop #f)))
+               (st (find (lambda (s) (eq? (normal-state-kind s) 'counted-consume))
+                         (vector->list (normal-machine-states n)))))
+          (check "a counted-consume state exists" (and st #t))
+          (when st
+            (check-equal "arguments hold the field name" (normal-field-arguments st) '(count))
+            (check-equal "one successor" (length (normal-field-targets st)) 1)
+            (check-equal "default EOF routing" (car (normal-dispatch-eof st)) 'default)
+            (check-equal "no selector" (normal-field-selector st) #f)))))))
+
 ;; --- Milestone 5 Slice ②: the callback state's encoding ----------------------
 ;;
 ;; *** THIS GROUP IS DECISION 0019 ITEM 2, and Slice ①b shipped its converse.

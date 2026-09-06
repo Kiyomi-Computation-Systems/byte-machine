@@ -290,4 +290,52 @@
             (check-equal "bytes written match render"
                          (get) (render-machine ok 'one-byte-parser))))))))
 
+
+;; --- Milestone 6 Slice ①: the structural witness for §25:1607 (design §4.7) -----
+;;
+;; "counted consume does not dispatch once per body byte" is a claim about the
+;; emitted STRUCTURE, and no behavioural lane can see it: a per-byte self-loop
+;; consumes the same bytes, reads the same field and returns the same tuple. So
+;; the rendered library is read back as a datum (the technique member3-drift
+;; ships), the counted state's `case` arm is located by its id, and the arm is
+;; asserted to contain exactly one `min` application and no `(+ pos 1)` form.
+(define cc-witness
+  (make-machine 'ccw 'start (list (make-uint-field 'len 8 3 #f)) '() '()
+                (list eof-decl rej-decl)
+                (list (make-byte-dispatch-node 'start
+                        (list (make-byte-case (make-exact-byte-matcher 0) (make-edge 'body 'advance) #f))
+                        (make-edge 'reject 'reexecute) #f #f)
+                      (make-counted-consume-node 'body 'len 'stop #f #f)
+                      (make-stop-node 'stop #f)
+                      (make-error-node 'reject 'rejected #f))
+                'default-eof #f))
+(define cc-datum
+  (read (open-string-input-port
+         (utf8->string (render-machine (compile-machine cc-witness '()) 'ccw-parser)))))
+
+;; The emitted exec dispatches on `st`; find that `case` and the clause whose
+;; datum list holds `id`. Node order is state order, so `body` is state 1.
+(define (find-state-arm x id)
+  (cond ((not (pair? x)) #f)
+        ((and (eq? (car x) 'case) (pair? (cdr x)) (eq? (cadr x) 'st))
+         (let loop ((cs (cddr x)))
+           (cond ((not (pair? cs)) #f)
+                 ((and (pair? (car cs)) (pair? (caar cs)) (memv id (caar cs))) (car cs))
+                 (else (loop (cdr cs))))))
+        (else (or (find-state-arm (car x) id) (find-state-arm (cdr x) id)))))
+(define (count-forms x pred)
+  (cond ((not (pair? x)) 0)
+        (else (+ (if (pred x) 1 0) (count-forms (car x) pred) (count-forms (cdr x) pred)))))
+
+(harness-group "the counted arm consumes in bulk (§25:1607, a structural witness)"
+  (lambda ()
+    (harness-case "the emitted arm applies min exactly once and never advances by one"
+      (lambda ()
+        (let ((arm (find-state-arm cc-datum 1)))
+          (check "the counted state's arm was found" (and arm #t))
+          (when arm
+            (check-equal "exactly one min" (count-forms arm (lambda (f) (eq? (car f) 'min))) 1)
+            (check-equal "no per-byte advance"
+                         (count-forms arm (lambda (f) (equal? f '(+ pos 1)))) 0)))))))
+
 (harness-finish)

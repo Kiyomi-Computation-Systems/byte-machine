@@ -46,7 +46,7 @@
               byte-dispatch-node? sequence-dispatch-node? stop-node? error-node?
               finish-node? pause-node? field-action-node? field-branch-node?
               integer-accumulate-node? callback-node?
-              span-start-node? span-end-node?)
+              span-start-node? span-end-node? counted-consume-node?)
         (byte-machine verify))
 
 (harness-begin "unit.kind-position-census")
@@ -73,7 +73,7 @@
 ;; the skeleton happened to create.
 (define (sinks) (list (make-error-node 'ee 'rejected #f)))
 
-;; --- the twelve kinds, as data ----------------------------------------------
+;; --- the thirteen kinds, as data --------------------------------------------
 ;; Each builder returns the node named `t`. Its own out-edges go to the sinks.
 (define kind-table
   (list
@@ -107,9 +107,13 @@
    ;; The eleventh and twelfth (Milestone 5 Slice ③). One successor each, on the
    ;; shared sink, so the cell records the placed node's POSITION.
    (cons 'span-start (lambda (nm) (make-span-start-node nm 'sp 'ee #f)))
-   (cons 'span-end (lambda (nm) (make-span-end-node nm 'sp 'ee #f)))))
+   (cons 'span-end (lambda (nm) (make-span-end-node nm 'sp 'ee #f)))
+   ;; The thirteenth (Milestone 6 Slice ①). One byte successor on the shared
+   ;; sink, the field `n` every cell machine already declares, and the machine
+   ;; default for EOF, so the cell records the placed node's POSITION.
+   (cons 'counted-consume (lambda (nm) (make-counted-consume-node nm 'n 'ee #f #f)))))
 
-;; --- the twenty-one positions, as data --------------------------------------
+;; --- the twenty-three positions, as data ------------------------------------
 ;; Each builder returns (entry . host-nodes) with the placed node `t` wired into
 ;; that one position. Every host is byte-reachable from the entry, so no cell
 ;; carries an incidental unreachable-node and the byte-reachability gate that
@@ -213,7 +217,21 @@
                                    (make-span-start-node 'ss 'sp 't #f)))))
    (list 'span-end-next             #t   #f
          (lambda () (cons 'h (list (dispatch-to 'se)
-                                   (make-span-end-node 'se 'sp 't #f)))))))
+                                   (make-span-end-node 'se 'sp 't #f)))))
+   ;; --- the thirteenth kind's two routes (Milestone 6 Slice ①) ---
+   ;; `count-next` is a BYTE position and NOT an EOF one: the host's #f
+   ;; eof-target keeps a byte-reachable counted consume out of both §16.2:909
+   ;; disjunctions -- decision 0030 item 6, a parser parked there by need-input
+   ;; holds a positive count -- so no EOF walk reaches `next` from this cell. A
+   ;; stop at `next` is not eof-reachable-stop, and its self row (axis B) is
+   ;; zero-progress-cycle alone. `count-eof-target` is an EOF route like the
+   ;; other three, and the walk from the parked node starts there.
+   (list 'count-next               #t   #f
+         (lambda () (cons 'h (list (dispatch-to 'cc)
+                                   (make-counted-consume-node 'cc 'n 't #f #f)))))
+   (list 'count-eof-target         #f   #t
+         (lambda () (cons 'h (list (dispatch-to 'cc)
+                                   (make-counted-consume-node 'cc 'n 'ee 't #f)))))))
 
 ;; *** Every row must BUILD the kind it is keyed by. *** Found by the
 ;; whole-branch review: without this, swapping one builder for another kind's
@@ -232,7 +250,8 @@
         (cons 'integer-accumulate integer-accumulate-node?)
         (cons 'callback callback-node?)
         (cons 'span-start span-start-node?)
-        (cons 'span-end span-end-node?)))
+        (cons 'span-end span-end-node?)
+        (cons 'counted-consume counted-consume-node?)))
 
 (define (position-name p) (car p))
 (define (position-byte? p) (cadr p))
@@ -437,7 +456,7 @@
                   (from-table
                    (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b)))
                               (map car kind-table))))
-              (check-equal "the same twelve kinds" from-source from-table))))))))
+              (check-equal "the same thirteen kinds" from-source from-table))))))))
 
 ;; --- S2b: `node-source-label` is total over `node?`'s closed set (Milestone 6
 ;; Slice ⓪) ---------------------------------------------------------------------
@@ -448,7 +467,7 @@
 ;; file S2 reads and compares it to `node?`'s disjuncts, so the omission fails by
 ;; COMPARISON, and before any fixture exists for the new kind.
 ;;
-;; The check label is deliberately NOT S2's "the same twelve kinds": the shipped
+;; The check label is deliberately NOT S2's "the same thirteen kinds": the shipped
 ;; ratchet pin "ir: node? admits a kind the matrix's table does not cover" is
 ;; anchored on that text, and a second check printing it would make one pin
 ;; resolve to two (case, check) pairs.
@@ -491,7 +510,7 @@
                            (sorted arms) (sorted preds))
               ;; The size too: two lists that both lost the same predicate would
               ;; still agree with each other.
-              (check-equal "and there are twelve of them" (length arms) 12))))))))
+              (check-equal "and there are thirteen of them" (length arms) 13))))))))
 
 
 ;; --- axis A': the POSITION drift row (Milestone 5 Slice ①a task 5) -----------
@@ -563,7 +582,7 @@
     ;; Slice ③ adds two positions under the SAME role: both span kinds have one
     ;; successor and reuse `next` rather than minting roles that would say the
     ;; same thing. The mapping's value is a LIST for exactly this case.
-    (next          field-action-next span-start-next span-end-next)
+    (next          field-action-next span-start-next span-end-next count-next)
     (error         field-action-error)
     (true          field-branch-true)
     (false         field-branch-false)
@@ -604,20 +623,20 @@
                            (set! missing (cons pos missing))))
                        (cdr entry)))
            role->positions)
-          (check-equal "every mapped position was looked up" checked 17)
+          (check-equal "every mapped position was looked up" checked 18)
           (check-equal "and each one exists" missing '()))))
     (harness-case "the four EOF and entry positions are accounted for outside the role map"
       (lambda ()
         ;; `node-eof-target` and the machine entry carry no `(cons 'role ...)`
         ;; label, so they cannot appear in the derived set. They are named here so
-        ;; that position-table's 21 rows are 17 mapped + these 4, and a row added
+        ;; that position-table's 23 rows are 18 mapped + these 5, and a row added
         ;; with neither a role nor a place here reddens the count below.
         (let ((names (map car position-table)))
           (for-each (lambda (p) (check (symbol->string p) (memq p names)))
                     '(machine-entry dispatch-eof-target sequence-eof-target
-                      accumulate-eof-target))
-          (check-equal "position-table is exactly 17 role-carrying + 4 unlabelled"
-                       (length position-table) 21))))))
+                      accumulate-eof-target count-eof-target))
+          (check-equal "position-table is exactly 18 role-carrying + 5 unlabelled"
+                       (length position-table) 23))))))
 
 
 ;; --- axis B: self-reference --------------------------------------------------
@@ -684,7 +703,16 @@
     ;; out-state stays `none`, so the loop agrees with itself.
     ((span-start-next       advance)   . (inconsistent-span-state zero-progress-cycle))
     ((span-end-next         advance)   . (eof-zero-progress-cycle invalid-span-state
-                                          zero-progress-cycle))))
+                                          zero-progress-cycle))
+    ;; Milestone 6 Slice ①, decision 0030 items 6 and 7. A self-targeting `next`
+    ;; is a zero-progress cycle ALONE: `next` joins the walk unconditionally
+    ;; (a zero count takes it without consuming), and no EOF walk reaches this
+    ;; non-entry node with a #f route, so no EOF verdict is reported here. A
+    ;; self-targeting eof-target is the EOF cycle: the node is parked through
+    ;; its symbolic route, the walk starts at that route -- itself -- and the
+    ;; join of `cycle` with the zero-width half's `error` is `cycle`.
+    ((count-next            advance)   . (zero-progress-cycle))
+    ((count-eof-target      advance)   . (eof-zero-progress-cycle))))
 
 ;; The self machine: the host points the position under test at ITSELF.
 (define (self-machine pos mode)
@@ -738,6 +766,10 @@
                                (make-span-start-node 'ss 'sp 'ss #f)))
       ((span-end-next) (list (dsp (one-case 'se 'advance) (make-edge 'ee 'reexecute) #f)
                              (make-span-end-node 'se 'sp 'se #f)))
+      ((count-next) (list (dsp (one-case 'cc 'advance) (make-edge 'ee 'reexecute) #f)
+                          (make-counted-consume-node 'cc 'n 'cc #f #f)))
+      ((count-eof-target) (list (dsp (one-case 'cc 'advance) (make-edge 'ee 'reexecute) #f)
+                                (make-counted-consume-node 'cc 'n 'ee 'cc #f)))
       (else (assertion-violation 'self-machine "no such position" pos))))
   (make-machine 'self 'h (list (make-uint-field 'n 8 0 #f)) (list cb-decl sd-decl) (list sp-decl)
                 (list eof-decl rej-decl)
@@ -763,8 +795,8 @@
                  (set! bad (cons (list pos mode 'want want 'got got) bad)))))
            self-expectations)
           (check-equal "every self row was driven" driven (length self-expectations))
-          (check-equal "and twenty positions have one, four of them twice"
-                       driven (+ 20 4))
+          (check-equal "and twenty-two positions have one, four of them twice"
+                       driven (+ 22 4))
           (check-equal "each matches its derivation" bad '()))))))
 
 
@@ -778,7 +810,8 @@
 ;; EOF routes carry `invalid-eof-target` instead, because a #f there is legal and
 ;; means "the machine default", so a SYMBOL that resolves to nothing is a
 ;; different fault from a missing edge.
-(define eof-positions '(dispatch-eof-target sequence-eof-target accumulate-eof-target))
+(define eof-positions
+  '(dispatch-eof-target sequence-eof-target accumulate-eof-target count-eof-target))
 
 ;; Rebuilt directly rather than reusing axis A's builder: a dangling cell has no
 ;; `t` node at all, and threading "omit t" through the shared builder would make
@@ -818,14 +851,14 @@
                    (unless (equal? want got)
                      (set! bad (cons (list pos 'want want 'got got) bad)))))))
            position-table)
-          (check-equal "twenty dangling cells driven" driven 20)
+          (check-equal "twenty-two dangling cells driven" driven 22)
           (check-equal "each reports its derived fault" bad '()))))))
 
 ;; --- the absence census ------------------------------------------------------
 ;; Where "impossible by construction" actually lives. The KIND axis has no
 ;; constructor refusals at all -- every target slot is a bare symbol and a node
 ;; constructor cannot see the machine's node list -- but the ABSENCE axis does:
-;; seventeen positions reject #f outright, three accept it (the EOF routes,
+;; eighteen positions reject #f outright, four accept it (the EOF routes,
 ;; where #f means the machine default), and one is CONDITIONAL.
 (define (raises? thunk)
   (call/cc (lambda (k)
@@ -834,7 +867,7 @@
 
 (harness-group "which positions may be absent (the absence census)"
   (lambda ()
-    (harness-case "the three EOF routes accept #f and the rest refuse it"
+    (harness-case "the four EOF routes accept #f and the rest refuse it"
       (lambda ()
         (let ((refused 0) (accepted 0))
           ;; A representative of each refusing family, by constructor.
@@ -861,9 +894,12 @@
                           ;; successor and no route of its own, so #f there is a
                           ;; construction refusal on the field-action precedent.
                           (lambda () (make-span-start-node 'ss 'sp #f #f))
-                          (lambda () (make-span-end-node 'se 'sp #f #f))))
-          (check-equal "thirteen constructor refusals" refused 13)
-          ;; The three EOF routes, built rather than refused.
+                          (lambda () (make-span-end-node 'se 'sp #f #f))
+                          ;; Milestone 6 Slice ①: a count that reaches zero always
+                          ;; has somewhere to go, so `next` has no #f arm.
+                          (lambda () (make-counted-consume-node 'cc 'n #f #f #f))))
+          (check-equal "fourteen constructor refusals" refused 14)
+          ;; The four EOF routes, built rather than refused.
           (for-each (lambda (th) (unless (raises? th) (set! accepted (+ accepted 1))))
                     (list (lambda () (make-byte-dispatch-node 'h
                                        (list (make-byte-case (make-exact-byte-matcher 0)
@@ -873,8 +909,9 @@
                                        (list (make-sequence-case '(1) 'ee #f))
                                        (make-edge 'ee 'reexecute) #f #f))
                           (lambda () (make-integer-accumulate-node 'ac 'n 10 'ee
-                                       (make-edge 'ee 'advance) 'ee #f #f))))
-          (check-equal "three legally-absent EOF routes" accepted 3))))
+                                       (make-edge 'ee 'advance) 'ee #f #f))
+                          (lambda () (make-counted-consume-node 'cc 'n 'ee #f #f))))
+          (check-equal "four legally-absent EOF routes" accepted 4))))
     (harness-case "the field action's error slot is the one CONDITIONAL position"
       (lambda ()
         ;; Its existence is gated on the operation's fallibility (ir.sls's

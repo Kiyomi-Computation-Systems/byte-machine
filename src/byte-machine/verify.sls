@@ -219,6 +219,13 @@
                  (cons 'nondigit
                        (edge-target (integer-accumulate-node-nondigit-edge n)))
                  (cons 'overflow (integer-accumulate-node-overflow-error n))))
+          ;; Counted consume (Milestone 6 Slice ①). Its one explicit target is
+          ;; the byte edge taken after a commit, role `next`; its eof-target is
+          ;; node-eof-target's, as accumulate's is. A zero count reaches `next`
+          ;; without a byte as well -- that route is `eof-successors`' and
+          ;; `reexec-targets`' (decision 0030 items 5 and 7), not this one's.
+          ((counted-consume-node? n)
+           (list (cons 'next (counted-consume-node-next n))))
           (else '())))
 
   (define (node-out-targets n) (map cdr (node-out-edges n)))
@@ -235,6 +242,8 @@
           ;; Slice ③: an accumulate node declares its own EOF edge (§10.6:569),
           ;; with #f meaning the machine default -- the byte-dispatch convention.
           ((integer-accumulate-node? n) (integer-accumulate-node-eof-target n))
+          ;; Milestone 6 Slice ①: the fourth input-reading kind, same convention.
+          ((counted-consume-node? n) (counted-consume-node-eof-target n))
           (else #f)))
   ;; byte out-targets PLUS a dispatch/sequence node's eof-target (for
   ;; reachability only).
@@ -451,11 +460,28 @@
         (list (make-diagnostic 'invalid-field-operand (node-name n)
                                "accumulate names no declared field"))))
 
+  ;; §16.2:903, Milestone 6 Slice ①: "counted consume using an incompatible
+  ;; field". Its own arm beside accumulate's and not folded into it -- Milestone
+  ;; 4's design drew that boundary (":903 arrives with its own construct and its
+  ;; own check, and inherits nothing") -- reusing the CODE, which is the
+  ;; precedent accumulate set. Only the field reference: one field type exists
+  ;; (§10.2:489) and §29:1754 defers more, so every declared field is a count a
+  ;; consume can draw from and "incompatible" reduces to "undeclared" (design
+  ;; §4.3). When a second field type arrives, this arm is where :903 gains
+  ;; content. Reported under the NODE's name, on the operand walk's convention.
+  (define (counted-operand-diagnostics fs n)
+    (if (field-width-of fs (counted-consume-node-field n))
+        '()
+        (list (make-diagnostic 'invalid-field-operand (node-name n)
+                               "counted consume names no declared field"))))
+
   (define (pass-field-operands m fs)
     (apply append
            (map (lambda (n)
                   (cond ((integer-accumulate-node? n)
                          (accumulate-operand-diagnostics fs n))
+                        ((counted-consume-node? n)
+                         (counted-operand-diagnostics fs n))
                         ((field-action-node? n)
                          (field-operand-diagnostics fs (node-name n)
                                                     (field-action-node-operation n)
@@ -725,6 +751,15 @@
                     (list (edge-target (integer-accumulate-node-nondigit-edge n)))
                     '())
                 (list (integer-accumulate-node-overflow-error n))))
+              ;; Counted consume (Milestone 6 Slice ①): `next` is taken without
+              ;; consuming exactly when the count is zero, which this pass cannot
+              ;; see, so it joins unconditionally -- the overflow edge's shape
+              ;; above. A self-targeting `next` hangs both executors the first
+              ;; time its count is zero. Decision 0030 item 7 prices the
+              ;; over-rejection this brings (a loop terminated by a field value
+              ;; is rejected, §11.4:654) and bounds it (§16.2:913: a loop with a
+              ;; byte dispatch in it is untouched).
+              ((counted-consume-node? n) (list (counted-consume-node-next n)))
               (else '())))
       (define (reaches-self? start)
         (let loop ((frontier (reexec-targets (lookup nodes start))) (seen '()))
@@ -748,7 +783,8 @@
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
                                   (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n))
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))
                          (make-diagnostic 'zero-progress-cycle (node-name n)
                                           "a zero-progress cycle (reexecute edges, pause continuations, field actions and branches, accumulate overflow edges) makes no progress")
@@ -851,7 +887,16 @@
   ;; which is the whole reason this walk became multi-successor. A field action's
   ;; `error` is a successor exactly when it has one -- the constructor makes that
   ;; `#f` precisely when the operation cannot fail.
-  (define (eof-successors n) (zero-width-successors n))
+  ;;
+  ;; Counted consume (Milestone 6 Slice ①) is the one INPUT-READING kind with an
+  ;; EOF successor of its own: a zero count takes `next` at EOF (§10.6:600), and
+  ;; at a node the walk ARRIVES at the count is unknown, so `next` is a successor
+  ;; unconditionally (decision 0030 item 5). One fact, two consumers --
+  ;; `classify`'s counted arm and pass 7's `eof-step` both read this and cannot
+  ;; disagree -- which is `zero-width-edges`' rule applied a kind later.
+  (define (eof-successors n)
+    (cond ((counted-consume-node? n) (list (counted-consume-node-next n)))
+          (else (zero-width-successors n))))
 
   (define (eof-terminal m start)
     (let ((nodes (machine-nodes m)) (done '()))
@@ -906,6 +951,19 @@
                      (callback-node? n)
                      (span-start-node? n) (span-end-node? n))
                  (join-over (eof-successors n) path))
+                ;; Counted consume (Milestone 6 Slice ①): BOTH families' answer,
+                ;; joined (decision 0030 item 5). The walk ARRIVED here, so the
+                ;; count is unknown -- a positive count takes the eof-target (the
+                ;; dispatch half) and a zero count takes `next` (the zero-width
+                ;; half, read through `eof-successors` so pass 7 cannot disagree).
+                ;; A stop behind `next` is `eof-reachable-stop`: the machine whose
+                ;; entry is a counted consume with initial 0, a #f route and a
+                ;; stop for `next` verified clean under a dispatch-shaped arm and
+                ;; answered `stopped` from `parser-finish!`. `join-over` raises on
+                ;; an empty list; the list here is always the one name.
+                ((counted-consume-node? n)
+                 (eof-verdict-join (dispatch-arm (counted-consume-node-eof-target n) path)
+                                   (join-over (eof-successors n) path)))
                 ;; *** Slice ③, added by the whole-branch review. *** An
                 ;; integer-accumulate node is a legal EOF target -- this slice
                 ;; taught `node-eof-target` to read one -- and it carries its own
@@ -972,9 +1030,25 @@
   ;; A span START stays out of that membership: it calls nothing, so nothing can
   ;; pause there, and it is flow-through like a field action.
   (define (parked-eof-start m n)
-    (if (and (callback-node? n) (not (eq? (node-name n) (machine-entry m))))
-        (callback-node-pause-continuation n)
-        (node-name n)))
+    (cond ((and (callback-node? n) (not (eq? (node-name n) (machine-entry m))))
+           (callback-node-pause-continuation n))
+          ;; Counted consume (Milestone 6 Slice ①, decision 0030 item 6): a
+          ;; parser parked here by `need-input` holds a POSITIVE count -- rows 2
+          ;; and 3-partial of 0030's table are the only returns that leave
+          ;; `current` on the node, and both leave the field positive -- so at
+          ;; finish it takes its EOF route, never `next`, and the walk starts
+          ;; there. That route is a symbol whenever this arm is reached:
+          ;; `pass-eof-execution` asks only for nodes in the parked set, and a
+          ;; non-entry counted consume is in that set only through its
+          ;; `(symbol? (node-eof-target n))` clause. The ENTRY falls through: a
+          ;; fresh parser is parked there without having executed it, its count
+          ;; is the field's initial and may be zero, so it starts at itself and
+          ;; takes `classify`'s join. The first draft of the design parked the
+          ;; kind by kind instead; that rejected the one-shot "length, body,
+          ;; stop" grammar, and 0030 records why it was withdrawn.
+          ((and (counted-consume-node? n) (not (eq? (node-name n) (machine-entry m))))
+           (counted-consume-node-eof-target n))
+          (else (node-name n))))
 
   ;; §16.2:908/:909 and the separate EOF zero-progress-cycle check.
   (define (pass-eof-execution m)
@@ -1534,11 +1608,15 @@
   ;; deliberately not `all-out-targets`, which crosses an eof-target and then
   ;; keeps taking byte edges -- 0027 rejects that walk by name.
   ;;
-  ;; A node's EOF successors: its own eof route when it has one (the three
+  ;; A node's EOF successors: its own eof route when it has one (the four
   ;; input-reading kinds), and its zero-width continuations otherwise. Both
-  ;; halves in one expression because they are disjoint by construction --
-  ;; `node-eof-target` answers #f for every zero-width kind and
-  ;; `eof-successors` answers '() for every input-reading one.
+  ;; halves in one expression. They were disjoint by construction through
+  ;; Milestone 5 -- `node-eof-target` answers #f for every zero-width kind and
+  ;; `eof-successors` answered '() for every input-reading one -- and counted
+  ;; consume (Milestone 6 Slice ①) is where they meet: its `next` is an EOF
+  ;; successor too (decision 0030 item 5), so a counted consume with a symbolic
+  ;; route contributes BOTH, which is exactly the join `classify` computes for
+  ;; it. The `append` stays right.
   (define (eof-step n)
     (let ((t (node-eof-target n)))
       (append (if (symbol? t) (list t) '()) (eof-successors n))))

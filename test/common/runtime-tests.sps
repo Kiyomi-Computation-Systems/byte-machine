@@ -27,6 +27,10 @@
   (let ((e (parser-result-error r)))
     (and (parser-error? e) (parser-error-code e))))
 
+;; No stub table in this file carries Milestone 6's counted-consume kind, and
+;; none owes it an arm: the runtime's counted arms are witnessed by the lanes
+;; that EXECUTE a machine carrying the kind (position-kind and the counted
+;; differential), which is where a runtime decision's pin can live at all.
 (define (one-byte-op msg . args)
   (case msg
     ;; Slice ①b task 6: make-parser asks every op closure for the field

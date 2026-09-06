@@ -47,7 +47,9 @@
                 callback-node-continue-target callback-node-branch-targets
                 callback-node-pause-continuation
                 span-start-node? span-start-node-span span-start-node-next
-                span-end-node? span-end-node-span span-end-node-next))
+                span-end-node? span-end-node-span span-end-node-next
+                counted-consume-node? counted-consume-node-field counted-consume-node-next
+                counted-consume-node-eof-target))
 
   (define nm-tag (vector 'byte-machine-normal-machine))
   ;; The debug map is APPENDED after fp, never inserted before it:
@@ -215,12 +217,13 @@
   ;; ones this file handles. *** THIS SENTENCE NAMED SIX and was already false
   ;; when accumulate, the two field kinds and the callback landed; Slice ③ is
   ;; the pass that re-measured it rather than adding two more kinds under it.
-  ;; *** Twelve node kinds lower here (§10.6's closed set, less Milestone 6's
-  ;; counted consume) and TWELVE normalized state kinds come out -- the same
-  ;; twelve less `sequence`, which lowers to ordinary dispatch states (decision
-  ;; 0015 point 1, so it adds no case of its own), plus `span-completion`, which
-  ;; has no source node at all. So the guards protect against the THIRTEENTH
-  ;; node kind, not a seventh. Verified by inspection, not mutation.
+  ;; *** Thirteen node kinds lower here (§10.6's closed set, complete since
+  ;; Milestone 6 Slice ①'s counted consume) and THIRTEEN normalized state kinds
+  ;; come out -- the same thirteen less `sequence`, which lowers to ordinary
+  ;; dispatch states (decision 0015 point 1, so it adds no case of its own),
+  ;; plus `span-completion`, which has no source node at all. So the guards
+  ;; protect against a FOURTEENTH node kind, not a seventh. Verified by
+  ;; inspection, not mutation.
 
   ;; --- sequence prefix trie (decisions 0015, 0016) ---
   ;; A trie node is (children . terminal); children is an alist (byte . node)
@@ -384,6 +387,13 @@
                          (let ((t (sequence-dispatch-node-eof-target n)))
                            (if (symbol? t) (cons 'node (id-of t))
                                (cons 'default default-eof-code)))))
+           ;; Milestone 6 Slice ①: the FOURTH resolver, for acc-eof-of's reason
+           ;; -- each reads its own kind's accessor, and a shared one would be a
+           ;; bare slot read from the wrong kind's vector.
+           (count-eof-of (lambda (n)
+                           (let ((t (counted-consume-node-eof-target n)))
+                             (if (symbol? t) (cons 'node (id-of t))
+                                 (cons 'default default-eof-code)))))
            ;; *** THE WALK THAT MAKES DECISION 0026 ITEM 1 NON-INERT. *** Until
            ;; Slice ③ there was exactly ONE family of internal states -- a
            ;; sequence node's prefix states -- so the rule "a declaring node
@@ -567,6 +577,22 @@
                                         (list (id-of (integer-accumulate-node-digit-target n))
                                               (cons (id-of (edge-target nd)) (edge-mode nd))
                                               (id-of (integer-accumulate-node-overflow-error n))))))
+                             ;; Counted consume (Milestone 6 Slice ①), the fourth
+                             ;; INPUT-READING kind with an EOF route of its own
+                             ;; (after both dispatch kinds and accumulate), and
+                             ;; 1:1 like accumulate: `arguments` the field
+                             ;; NAME (the emitter resolves name to slot),
+                             ;; `targets` the one successor id, slot 6 the EOF
+                             ;; routing in the shipped convention through its own
+                             ;; resolver, slot 7 the reason when that routing is
+                             ;; the default. No selector.
+                             ((counted-consume-node? n)
+                              (let ((eof (count-eof-of n)))
+                                (vector ns-tag 'counted-consume i #f #f #f
+                                        eof (eof-reason-of eof)
+                                        #f
+                                        (list (counted-consume-node-field n))
+                                        (list (id-of (counted-consume-node-next n))))))
                              ;; Callback invocation (Slice ②), the tenth kind and
                              ;; the first that reaches OUT of the machine. 1:1
                              ;; like the three zero-width kinds above, so it
@@ -618,7 +644,7 @@
                                       (span-slot-of (span-end-node-span n))
                                       (completion-id-of n)
                                       (id-of (span-end-node-next n))))
-                             ;; The repertoire is now these TWELVE kinds. A future
+                             ;; The repertoire is now these THIRTEEN kinds. A future
                              ;; kind reaching here must fail loudly, not lower to
                              ;; nothing.
                              (else (assertion-violation 'normalize-machine "unknown node kind" n)))
@@ -785,6 +811,16 @@
                   (put-u32be p (car (cadr tg)))
                   (put-u8 p (mode->byte (cdr (cadr tg))))
                   (put-u32be p (caddr tg)))
+                (put-eof-routing p (normal-dispatch-eof s) (normal-error-reason s)))
+               ;; counted consume: tag, field name, successor id, eof routing --
+               ;; every part, because each is observable to a generated parser
+               ;; (decision 0019 item 2). The tag is the next free literal above
+               ;; the Milestone 5 kinds; it is named in words here and never as
+               ;; a digit in a comment (the pause tag's history, below).
+               ((counted-consume)
+                (put-u8 p 14)
+                (put-symbol p (car (normal-field-arguments s)))
+                (put-u32be p (car (normal-field-targets s)))
                 (put-eof-routing p (normal-dispatch-eof s) (normal-error-reason s)))
                ((field-branch)
                 (put-u8 p 6)

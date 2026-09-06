@@ -93,7 +93,14 @@ through the same four checks that already read each construct's name, so no new
 diagnostic was added. And the portable name grammar lives in one library shared
 by the verifier, the emitter and the runtime, which means an application's
 callback failure code is finally checked against it, as the plan has always
-required.
+required. Slice ① landed the same day: the thirteenth node kind, counted
+consume, in every library, both executors, the emitter and every census. A body
+of a thousand bytes is one step in either lane — witnessed structurally, since no
+behavioural comparison can tell bulk from byte-at-a-time — a zero count
+transitions before exhaustion is even asked, count completion wins when input
+runs out at the same byte, and the verifier treats the successor as both an EOF
+route and a non-consuming edge because it cannot see the count. What remains of
+the milestone is the span interaction and the close-out.
 
 =src/byte-machine/= holds the construction API, the verifier, the normalizer and
 emitter, the reference interpreter, and the runtime, each exercised in both the

@@ -8,7 +8,8 @@
         (byte-machine interpret)
         (byte-machine runtime)
         (byte-machine private conditions)
-        (only (byte-machine private ir) make-verification-result))
+        (only (byte-machine private ir) make-verification-result)
+        (only (chezscheme) greatest-fixnum))
 
 (harness-begin "unit.interpret")
 
@@ -291,5 +292,70 @@
             (check-equal "status" (parser-result-status r) 'error)
             (check-equal "the sequence node's own eof-target code, not default-eof"
                          (error-code-of r) 'unexpected-byte)))))))
+
+;; --- Milestone 6 Slice ①: the counted-consume op, driven directly ----------------
+;;
+;; `count-step` is decision 0030 item 4's message, driven through the op closure
+;; a compiled machine wraps (slot 2 of its tagged vector -- the shipped practice
+;; for a test that needs an internal). The cases are 0030 item 1's table, read
+;; off the op's answer and the field vector it commits into.
+(define (op-of cm) (vector-ref cm 2))
+(define (cc-interp eof)
+  (make-machine 'ccint 'start (list (make-uint-field 'len 64 3 #f)) '() '() (list eof-decl rej-decl)
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 0) (make-edge 'body 'advance) #f))
+            (make-edge 'reject 'reexecute) #f #f)
+          (make-counted-consume-node 'body 'len 'done eof #f)
+          (make-stop-node 'done #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+(define cc-op (op-of (make-interpreted-machine (verify-machine (cc-interp #f)))))
+(define (fresh-fields v) (let ((fv (cc-op 'field-initials))) (vector-set! fv 0 v) fv))
+
+(harness-group "count-step, decision 0030 item 1's table (Milestone 6 Slice ①)"
+  (lambda ()
+    (harness-case "the kind and the EOF route are the op's own arms"
+      (lambda ()
+        (check-equal "kind" (cc-op 'kind 'body) 'counted-consume)
+        (check-equal "absent eof-target" (cc-op 'eof-target 'body) #f)
+        (check-equal "a named eof-target"
+                     ((op-of (make-interpreted-machine (verify-machine (cc-interp 'reject))))
+                      'eof-target 'body)
+                     'reject)))
+    (harness-case "a zero count over an empty slice transitions -- the zero-count test comes first"
+      (lambda ()
+        (let ((fv (fresh-fields 0)))
+          (check-equal "(0 . next)" (cc-op 'count-step 'body fv 5 5) '(0 . done))
+          (check-equal "nothing committed" (vector-ref fv 0) 0))))
+    (harness-case "a positive count over an empty slice takes the EOF route"
+      (lambda ()
+        (let ((fv (fresh-fields 3)))
+          (check-equal "(0 . #f)" (cc-op 'count-step 'body fv 5 5) '(0 . #f))
+          (check-equal "the count is untouched" (vector-ref fv 0) 3))))
+    (harness-case "partial input commits what is available and does not continue"
+      (lambda ()
+        (let ((fv (fresh-fields 3)))
+          (check-equal "(2 . #f)" (cc-op 'count-step 'body fv 0 2) '(2 . #f))
+          (check-equal "the count is reduced by the commit" (vector-ref fv 0) 1))))
+    (harness-case "exact input completes the count and continues -- count completion wins"
+      (lambda ()
+        (let ((fv (fresh-fields 3)))
+          (check-equal "(3 . next)" (cc-op 'count-step 'body fv 0 3) '(3 . done))
+          (check-equal "the count reaches zero" (vector-ref fv 0) 0))))
+    (harness-case "surplus input commits the count only and continues"
+      (lambda ()
+        (let ((fv (fresh-fields 3)))
+          (check-equal "(3 . next)" (cc-op 'count-step 'body fv 0 5) '(3 . done))
+          (check-equal "the count reaches zero" (vector-ref fv 0) 0))))
+    (harness-case "a nonzero cursor commits from the cursor"
+      (lambda ()
+        (let ((fv (fresh-fields 2)))
+          (check-equal "(1 . #f)" (cc-op 'count-step 'body fv 4 5) '(1 . #f))
+          (check-equal "one committed" (vector-ref fv 0) 1))))
+    (harness-case "a u64 count above the fixnum range subtracts exactly (§15:856)"
+      (lambda ()
+        (let* ((big (+ (greatest-fixnum) 5)) (fv (fresh-fields big)))
+          (check-equal "(3 . #f)" (cc-op 'count-step 'body fv 0 3) '(3 . #f))
+          (check "bignum arithmetic" (= (vector-ref fv 0) (- big 3))))))))
 
 (harness-finish)

@@ -1058,6 +1058,44 @@ cmake_minimum_required(VERSION 3.26)
 # and node-name grammar pins, whose `if` tests grew a conjunct; their REPLACEs
 # now drop the name check alone. No pass is added.
 #
+# Milestone 6 Slice ① task 3, the differential, the fifth golden and the two
+# structural witnesses: NINE more in TWO new passes plus one, 511 + 9 = 520, and
+# 55 + 2 = 57 passes. Seven in the counted differential pass (the reached walk
+# ignoring the kind, the emitted arm's min, subtraction, completion order and
+# exhaustion order -- each on the GENERATED lane's expected value -- the
+# runtime re-asking the op after a partial commit, caught only by the
+# count-step counter, and the finish arm asking the EOF route first, caught by
+# the entry-zero machine); one in unit.compile (the per-byte self-loop render,
+# which every behavioural lane passes -- the datum walk catches it here, and the
+# counted golden would too, being bytes); one in the counted determinism pass (a quote
+# mark for `(quote …)`, caught only by the golden).
+#
+# Milestone 6 Slice ① task 2, the kind lowered, encoded and executed in both
+# lanes: FOURTEEN more, 497 + 14 = 511. Six in the normal-ir pass (the tag, the
+# field name, the successor and the EOF routing each dropped from the encoding,
+# a second successor lowered, the EOF edge read as absent), four in the
+# interpret pass driving `count-step` directly (exhaustion before the zero
+# count, `(- end pos)` for the min, no subtraction, the count-completion-wins
+# order), three in the position-kind pass for the runtime's arm (the offset
+# advance, `current` parked on the EOF route, exhaustion asked before the op --
+# the emitted arm's twin of that last one is pinned in the counted differential
+# pass, because this pass's labels carry no lane prefix), and one for the local
+# `n` in reserved-member-3. Three shipped pins re-anchored: the two member-3
+# pins and the reached-declaration walk's kind list.
+#
+# Milestone 6 Slice ① task 1, the thirteenth kind and its two answers in the
+# verifier: FOURTEEN more, 483 + 14 = 497. Five in the ir pass (the mandatory
+# `next`, the eof-target check, `node?`'s disjunct, `node-name`'s arm,
+# `node-source-label`'s arm) and nine in the verify-rejections pass, one per
+# verifier decision 0030 names: `node-out-edges`' arm, `node-eof-target`'s arm,
+# the §16.2:903 field check, the zero-progress WALK arm and the REPORT-set
+# predicate (separated by the value-terminated loop's `got`), `eof-successors`'
+# arm (a raise), both halves of `classify`'s join, and `parked-eof-start`'s arm.
+# Fifteen shipped pins were re-anchored in the same commit -- six on `node?`'s
+# tail, seven on the REPORT set's predicate list, `parked-eof-start`'s, and the
+# two census ratchets whose expectations read thirteen now. Two of the
+# REPORT-set REPLACEs were narrowed to the one predicate their LABELs name.
+#
 # Milestone 6 Slice ⓪ task 4, one name grammar: ONE added and ONE retired,
 # 483 + 1 - 1 = 483. Added: the runtime's callback-code grammar check (Pass 32),
 # the §9.3:423 deferral Milestone 5's completeness check named a receiver for.
@@ -1251,8 +1289,8 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-set(EXPECTED_PASSES 55)
-set(EXPECTED_MUTATIONS 483)
+set(EXPECTED_PASSES 57)
+set(EXPECTED_MUTATIONS 520)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3211,12 +3249,14 @@ byte_machine_mutation(
   # dispatch node (decision 0022 item 9 -- a default-EOF error has no error node,
   # so its node-name is the dispatch node's), and the record is built here from
   # the parts it returns.
+  # Re-anchored by Milestone 6 Slice ①, which factored this body into
+  # `take-eof-route!` (three columns left); the mutant is unchanged.
   FIND [[(let ((e (parts->parser-error (op 'default-eof-value node) off 'eof)))
-                          (parser-set-stored-error! parser e)
-                          (make-parser-result 'error off 0 off e))))))]]
+                       (parser-set-stored-error! parser e)
+                       (make-parser-result 'error off 0 off e))))))]]
   REPLACE [[(let ((e (parts->parser-error (op 'default-eof-value node) off 'eof)))
-                          (parser-set-stored-error! parser e)
-                          (make-parser-result 'stopped off 0 off e))))))]]
+                       (parser-set-stored-error! parser e)
+                       (make-parser-result 'stopped off 0 off e))))))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "no eof-target routes to the default-eof error: default-eof status")
 
@@ -3229,11 +3269,13 @@ byte_machine_mutation(
   # Signature review: bare "stored error value" is a substring of a DIFFERENT
   # check's own label, "feed-stored error value" (the feed-side store's
   # witness below) -- pinned to this case's own name instead.
+  # Re-anchored by Milestone 6 Slice ①, which factored this body into
+  # `take-eof-route!` (three columns left); the mutant is unchanged.
   FIND [[(let ((e (parts->parser-error (op 'default-eof-value node) off 'eof)))
-                          (parser-set-stored-error! parser e)
-                          (make-parser-result 'error off 0 off e))))))]]
+                       (parser-set-stored-error! parser e)
+                       (make-parser-result 'error off 0 off e))))))]]
   REPLACE [[(let ((e (parts->parser-error (op 'default-eof-value node) off 'eof)))
-                          (make-parser-result 'error off 0 off e))))))]]
+                       (make-parser-result 'error off 0 off e))))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "default-EOF truncation: stored error value")
 
 # Code-review fix for Task 2 (§12.2 finished x feed!): parser-feed-op!'s own
@@ -4185,7 +4227,8 @@ byte_machine_mutation(
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
                                   (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n))
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[(if #f]]
   EXPECT_STATUS 1
@@ -4665,14 +4708,16 @@ byte_machine_mutation(
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
                                   (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n))
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[(if (and (or (byte-dispatch-node? n)
                                   (sequence-dispatch-node? n)
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
                                   (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n))
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
     # Re-pinned by Milestone 5 Slice ③. Its witness was an EOF-ONLY pause cycle,
   # which §16.2:898's new gate (decision 0027 item 3) excludes on purpose -- so
@@ -4926,13 +4971,15 @@ byte_machine_mutation(
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
                                   (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n))]]
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))]]
   REPLACE [[(if (and (memq (node-name n) br898)
                               (or (byte-dispatch-node? n) (pause-node? n)
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
                                   (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n))]]
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "and the sequence node itself are three zero-progress cycles: zero-progress-cycle count -- expected 3, got 2")
@@ -5314,9 +5361,12 @@ byte_machine_mutation(
   # the half-fix this pass exists to prevent.
   FIND [[                                  (integer-accumulate-node? n)
                                   (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n))
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
-  REPLACE [[                                  (callback-node? n))
+  REPLACE [[                                  (callback-node? n)
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
@@ -5414,11 +5464,13 @@ byte_machine_mutation(
   FIND [[                                  (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
                                   (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n))
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[                                  (integer-accumulate-node? n)
                                   (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n))
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
@@ -6365,6 +6417,150 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "uint-field: integer label -- expected ..invalid-field-declaration . count.., got .[)]")
 
+# --- Milestone 6 Slice ① task 1: the thirteenth kind's nine verifier decisions --
+# Decision 0030 items 5-7, one pin per arm the appendix names. Two pairs share a
+# fixture and are separated by the `got`: the walk arm and the REPORT-set
+# predicate both redden the value-terminated loop, one to an EMPTY list and the
+# other to a list missing the counted node; the two halves of `classify`'s join
+# each unreport a different fixture.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a counted consume's next is not an out-edge"
+  # The Slice ① sweep, the OTHER direction: this mutant satisfies three shipped
+  # pins -- "verify: the :908 check is not gated on byte-reachability", "verify:
+  # the :908 gate is vacuous, so no byte edge into a finish is ever rejected" and
+  # "verify: the zero-width kinds report one role for all their edges" -- whose
+  # regexes are case-label prefixes over the t2 and edge-role rows; dropping one
+  # kind's out-edge is a per-kind subset of dropping the gate. Recorded, not
+  # fixed here: those pins are pre-existing and coarse, and this pin's own record
+  # is the entry fixture's, which none of them produce.
+  FIND [[          ((counted-consume-node? n)
+           (list (cons 'next (counted-consume-node-next n))))]]
+  REPLACE [[          ((counted-consume-node? n) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the flow-through zero-count stop at the ENTRY is rejected .0030 item 5.: eof-reachable-stop, at the entry -- expected ..eof-reachable-stop . body.., got ..unreachable-node")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a counted consume's eof-target is read as absent"
+  # The Slice ① sweep: also satisfied by "verify: the :909 start set enumerates a
+  # kind instead of deriving the EOF route" and "verify: an EOF cycle through
+  # pause continuations is not reported" -- both unpark or unreport the node this
+  # arm's route parks, so the self-eof fixture goes empty under them too. By
+  # construction: the route this arm answers is what the parked-set proxy reads.
+  FIND [[          ((counted-consume-node? n) (counted-consume-node-eof-target n))]]
+  REPLACE [[          ((counted-consume-node? n) #f)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a self-targeting eof-target is an EOF zero-progress cycle: eof-zero-progress-cycle, at the node -- expected ..eof-zero-progress-cycle . body.., got .[)]")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a counted consume's field reference is not checked"
+  # The Slice ① sweep: also satisfied by "verify: pass-fields is never run" and
+  # "verify: the operand half is never run" -- pass containment, the nesting every
+  # pin inside pass-fields shares. By construction.
+  FIND [[    (if (field-width-of fs (counted-consume-node-field n))]]
+  REPLACE [[    (if #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "undeclared: reported under the node -- expected ..invalid-field-operand . body.., got .[)]")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a counted consume's next is invisible to the zero-progress walk"
+  # The WALK half of 0030 item 7. Without it no node of the value-terminated
+  # loop reaches itself, so the loop's record is EMPTY -- the `got` that
+  # separates this pin from the REPORT-set pin below.
+  # The Slice ① sweep: also satisfied by "verify: zero-progress detection never
+  # fires" and "verify: the zero-progress WALK does not follow a zero-width node"
+  # -- the value-terminated loop runs through a branch and an action, so any
+  # mutant that breaks the walk at those kinds empties the same record. By
+  # construction of the fixture, which needs all three edges to close.
+  FIND [[              ((counted-consume-node? n) (list (counted-consume-node-next n)))]]
+  REPLACE [[              ((counted-consume-node? n) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "rejected: the three nodes of the loop -- expected ..zero-progress-cycle . br. .zero-progress-cycle . body. .zero-progress-cycle . dec.., got .[)]")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the zero-progress REPORT set excludes the counted-consume kind"
+  # The REPORT half. The branch and the action still reach themselves through
+  # the counted node's `next`, so the loop's record loses exactly the counted
+  # node -- and the self-targeting-next fixture goes empty, which the walk pin
+  # above also produces; the loop record is what separates them.
+  FIND [[                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))]]
+  REPLACE [[                                  (span-start-node? n) (span-end-node? n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "rejected: the three nodes of the loop -- expected ..zero-progress-cycle . br. .zero-progress-cycle . body. .zero-progress-cycle . dec.., got ..zero-progress-cycle . br. .zero-progress-cycle . dec..")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: eof-successors answers nothing for a counted consume"
+  # `join-over` raises on an empty list, so the arm's loss is a RAISE out of
+  # verification -- the accumulate-arm precedent's failure mode, pinned on the
+  # raise the same way.
+  # The Slice ① sweep, the OTHER direction: this mutant's raise satisfies the
+  # shipped pin "verify: eof-terminal chains through a pause continuation", whose
+  # regex is a case-raised record; the empty-join raise reaches that case too. The
+  # shipped pin is the coarse one; recorded.
+  FIND [[    (cond ((counted-consume-node? n) (list (counted-consume-node-next n)))
+          (else (zero-width-successors n))))]]
+  REPLACE [[    (cond ((counted-consume-node? n) '())
+          (else (zero-width-successors n))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the flow-through zero-count stop at the ENTRY is rejected .0030 item 5.: case raised")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: classify drops the next half of the counted join"
+  # A dispatch-shaped arm: the entry zero-count stop verifies CLEAN -- the hole
+  # 0030 item 5 closes.
+  # The Slice ① sweep: also satisfied by "verify: an EOF-reachable stop terminal
+  # is accepted", "verify: default-error is promoted out of the benign tier",
+  # "verify: eof-reachable-stop is promoted into the benign tier" and "verify: the
+  # :909 walk does not start at the entry (D-1)" -- each unreports the entry
+  # zero-count stop by a tier or start-set change that sits above this arm in the
+  # walk. By construction.
+  FIND [[                 (eof-verdict-join (dispatch-arm (counted-consume-node-eof-target n) path)
+                                   (join-over (eof-successors n) path)))]]
+  REPLACE [[                 (dispatch-arm (counted-consume-node-eof-target n) path))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the flow-through zero-count stop at the ENTRY is rejected .0030 item 5.: eof-reachable-stop, at the entry -- expected ..eof-reachable-stop . body.., got .[)]")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: classify drops the eof half of the counted join"
+  # A zero-width-shaped arm: the self-targeting eof-target is no longer a cycle
+  # but the stop behind `next`, a DIFFERENT wrong verdict from the arm's absence.
+  # The Slice ① sweep: also satisfied by "verify: an eof-target cycle is
+  # classified as a finish terminal" and "verify: cycle no longer outranks
+  # eof-reachable-stop in the join" -- both turn the self-eof cycle into the stop
+  # this half's absence turns it into. By construction (the join's ranking).
+  FIND [[                 (eof-verdict-join (dispatch-arm (counted-consume-node-eof-target n) path)
+                                   (join-over (eof-successors n) path)))]]
+  REPLACE [[                 (join-over (eof-successors n) path))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a self-targeting eof-target is an EOF zero-progress cycle: eof-zero-progress-cycle, at the node -- expected ..eof-zero-progress-cycle . body.., got ..eof-reachable-stop . body..")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a parked counted consume is classified from its own name"
+  # 0030 item 6's arm answering the node itself: the one-shot "length, body,
+  # stop" grammar -- the design's first-draft rejection -- goes red.
+  FIND [[           (counted-consume-node-eof-target n))
+          (else (node-name n))))]]
+  REPLACE [[           (node-name n))
+          (else (node-name n))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the one-shot length, body, stop grammar is ACCEPTED .0030 item 6.: no diagnostics -- expected .., got .eof-reachable-stop.")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 
@@ -6628,6 +6824,45 @@ byte_machine_mutation(
                   (seq-step n '() byte)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
     "the full sequence stops after four bytes: case raised.*code: invalid-argument.*who\\*: matcher-bytes.*detail: matcher")
+
+# --- Milestone 6 Slice ① task 2: count-step, decision 0030 item 1's table ------
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
+  LABEL "interpret: count-step tests exhaustion before the zero count"
+  FIND [[          (if (= v 0)
+              (cons 0 (counted-consume-node-next n))]]
+  # The wrong order: exhaustion answered first, so a zero count over an empty
+  # slice takes the EOF route instead of transitioning (decision 0030 item 1).
+  REPLACE [[          (if (or (>= pos end) (= v 0))
+              (cons 0 (if (>= pos end) #f (counted-consume-node-next n)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the zero-count test comes first: .0 . next. -- expected .0 . done., got .0 . #f.")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
+  LABEL "interpret: count-step commits (- end pos) instead of the min"
+  FIND [[              (let ((k (min v (- end pos))))]]
+  REPLACE [[              (let ((k (- end pos)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "surplus input commits the count only and continues: .3 . next. -- expected .3 . done., got .5 . #f.")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
+  LABEL "interpret: count-step never subtracts"
+  FIND [[                (vector-set! fv slot (- v k))]]
+  REPLACE [[                (vector-set! fv slot v)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "exact input completes the count and continues -- count completion wins: the count reaches zero -- expected 0, got 3")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
+  LABEL "interpret: count-step continues only when input remains"
+  # The count-completion-wins mutant (decision 0030 item 2): `pos + k >= end`
+  # tested before `k = v`, so the exact case parks instead of continuing.
+  FIND [[                (cons k (if (= k v) (counted-consume-node-next n) #f))))))]]
+  REPLACE [[                (cons k (if (and (= k v) (< (+ pos k) end)) (counted-consume-node-next n) #f))))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "exact input completes the count and continues -- count completion wins: .3 . next. -- expected .3 . done., got .3 . #f.")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -7530,6 +7765,73 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "every state id has a source name -- expected \\(\\), got \\(6\\)")
 
+# --- Milestone 6 Slice ① task 2: the counted-consume state's lowering and encoding
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the counted-consume encode tag collides with span-completion"
+  FIND [[                (put-u8 p 14)]]
+  REPLACE [[                (put-u8 p 13)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a counted-consume machine's fingerprint is the measured golden value: fingerprint -- expected 8698736890881894294, got 16257961618954127535")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a counted consume's field name is dropped from the encoding"
+  # The accumulate arm writes the same put-symbol line; the FIND is unique
+  # through its second line, which only this arm has.
+  # The Slice ① sweep: the three drift-pair pins here ("… field name …",
+  # "… successor …", "… EOF routing …") are also satisfied by "normal-ir: the
+  # FNV prime is changed" and "normal-ir: the byte is never mixed into the hash",
+  # which degenerate the hash so every pair collides; and the EOF-routing pin by
+  # "normal-ir: a counted consume's EOF edge is read as absent", which makes the
+  # node-routed variant encode as the base. By construction of a drift pair: any
+  # mutant that collapses two fingerprints satisfies a pin that expects them apart.
+  FIND [[                (put-symbol p (car (normal-field-arguments s)))
+                (put-u32be p (car (normal-field-targets s)))]]
+  REPLACE [[                (put-u32be p (car (normal-field-targets s)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the field, the successor and the EOF routing each reach the encoding: the field differs -- expected a true value")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a counted consume's successor is dropped from the encoding"
+  FIND [[                (put-u32be p (car (normal-field-targets s)))
+                (put-eof-routing p (normal-dispatch-eof s) (normal-error-reason s)))
+               ((field-branch)]]
+  REPLACE [[                (put-eof-routing p (normal-dispatch-eof s) (normal-error-reason s)))
+               ((field-branch)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the field, the successor and the EOF routing each reach the encoding: the successor differs -- expected a true value")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a counted consume's EOF routing is dropped from the encoding"
+  FIND [[                (put-u32be p (car (normal-field-targets s)))
+                (put-eof-routing p (normal-dispatch-eof s) (normal-error-reason s)))
+               ((field-branch)]]
+  REPLACE [[                (put-u32be p (car (normal-field-targets s))))
+               ((field-branch)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the field, the successor and the EOF routing each reach the encoding: the EOF routing differs -- expected a true value")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a counted consume lowers a second successor"
+  FIND [[                                        (list (id-of (counted-consume-node-next n))))))]]
+  REPLACE [[                                        (list (id-of (counted-consume-node-next n)) 0))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "one successor -- expected 1, got 2")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: a counted consume's EOF edge is read as absent"
+  # `count-eof-of` reads the machine default for every node, so the node-routed
+  # variant encodes exactly like the base machine -- a predictable `got`.
+  FIND [[                           (let ((t (counted-consume-node-eof-target n)))]]
+  REPLACE [[                           (let ((t #f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "node EOF routing -- expected 11703601680155498763, got 8698736890881894294")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 36: the emitter (Milestone 1 Phase 3 Slice A) ----------------------
@@ -7752,6 +8054,26 @@ byte_machine_mutation(
   EXPECT_OUTPUT_MATCHES
     "a field-declaring machine renders its declarations in member 0: pairs in slot order -- expected a true value")
 
+
+# --- Milestone 6 Slice ① task 3: the structural witness for §25:1607 ------------
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: the emitted counted arm renders a per-byte self-loop"
+  # Behaviour-identical: one byte per iteration through the same state, the count
+  # decremented each time, the zero-count and exhausted clauses unchanged -- so
+  # every behavioural lane passes, and within this SPEC only the datum walk over
+  # the emitted arm (no `min`, a `(+ pos 1)`) can see it -- the committed counted
+  # golden, being bytes, would see the changed text too. That is design §4.7's
+  # argument: a differential is blind to it by construction.
+  FIND [[            "                (let ((n (min v (- end pos))))\n"
+            "                  (vector-set! fieldv " slot " (- v n))\n"
+            "                  (if (= n v)\n"
+            "                      (loop (+ pos n) " (num next-id) " (+ off n) (quote boundary))\n"
+            "                      (byte-machine-make-feed-outcome/v1 (quote need-input) (+ pos n) #f " id " (+ off n))))))))\n")))]]
+  REPLACE [[            "                (begin (vector-set! fieldv " slot " (- v 1))\n"
+            "                       (loop (+ pos 1) " id " (+ off 1) (quote boundary)))))))\n")))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the emitted arm applies min exactly once and never advances by one: exactly one min -- expected 1, got 0")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -8545,9 +8867,9 @@ byte_machine_mutation(
   # The two census sites every new kind must join. One mutation per site, so a
   # half-taught pair cannot pass.
   FIND [[        (integer-accumulate-node? x) (callback-node? x)
-        (span-start-node? x) (span-end-node? x)))]]
+        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))]]
   REPLACE [[        (callback-node? x)
-        (span-start-node? x) (span-end-node? x)))]]
+        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "integer-accumulate nodes.it is a node and answers node-name: node\\? -- expected a true value")
@@ -8653,10 +8975,10 @@ byte_machine_mutation(
   # unchanged -- this still drops the field-action disjunct.
   FIND [[        (field-action-node? x) (field-branch-node? x)
         (integer-accumulate-node? x) (callback-node? x)
-        (span-start-node? x) (span-end-node? x)))]]
+        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))]]
   REPLACE [[        (field-branch-node? x)
         (integer-accumulate-node? x) (callback-node? x)
-        (span-start-node? x) (span-end-node? x)))]]
+        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))]]
   EXPECT_STATUS 1
   # `?` is a regex metacharacter -- unescaped, `node? --` matches "nod --",
   # which no output contains, and the runner reports a wrong-reason catch.
@@ -8683,9 +9005,9 @@ byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
   LABEL "ir: node? does not admit a callback node"
   FIND [[        (integer-accumulate-node? x) (callback-node? x)
-        (span-start-node? x) (span-end-node? x)))]]
+        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))]]
   REPLACE [[        (integer-accumulate-node? x)
-        (span-start-node? x) (span-end-node? x)))]]
+        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))]]
   EXPECT_STATUS 1
   # `?` is a regex metacharacter -- unescaped, `node? --` matches "nod --", which
   # no output contains, and the runner reports a wrong-reason catch.
@@ -8758,8 +9080,8 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
   LABEL "ir: node? does not admit a span-start node"
-  FIND [[        (span-start-node? x) (span-end-node? x)))]]
-  REPLACE [[        (span-end-node? x)))]]
+  FIND [[        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))]]
+  REPLACE [[        (span-end-node? x) (counted-consume-node? x)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "and each carries all four parts -- expected .., got .span-start.")
@@ -8767,8 +9089,8 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
   LABEL "ir: node? does not admit a span-end node"
-  FIND [[        (span-start-node? x) (span-end-node? x)))]]
-  REPLACE [[        (span-start-node? x)))]]
+  FIND [[        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))]]
+  REPLACE [[        (span-start-node? x) (counted-consume-node? x)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "and each carries all four parts -- expected .., got .span-end.")
@@ -8833,6 +9155,62 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "each answers its own label -- expected .., got .stop.")
 
+
+# --- Milestone 6 Slice ① task 1: the thirteenth kind's constructor and dispatch --
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: a counted-consume node's next may be absent"
+  FIND [[    (require-symbol 'make-counted-consume-node 'next next)
+]]
+  REPLACE [[    ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "fourteenth constructor refusal: absent -- expected a raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: a counted-consume node's eof-target is unchecked"
+  # The `or` is written in the byte-dispatch operand order on purpose: the
+  # accumulate constructor's order is pinned at one site and a verbatim copy
+  # would take that FIND to two. This FIND is unique through its second line,
+  # which names this constructor.
+  FIND [[    (unless (or (symbol? eof-target) (eq? eof-target #f))
+      (byte-machine-contract-violation 'make-counted-consume-node]]
+  REPLACE [[    (unless #t
+      (byte-machine-contract-violation 'make-counted-consume-node]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "meaning the machine default .§9.1:318.: a number -- expected a raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node? does not admit a counted-consume node"
+  FIND [[        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))]]
+  REPLACE [[        (span-start-node? x) (span-end-node? x)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "counted-consume nodes .Milestone 6 Slice ①..it is a node and answers node-name and node-source-label: node\\? -- expected a true value")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node-name does not answer for a counted-consume node"
+  # `node-name`'s cond has a RAISING else, so the mutant crashes rather than
+  # answering wrongly; the pin is on the raise, as for every sibling arm.
+  FIND [[          ((counted-consume-node? x) (counted-consume-node-name x))
+]]
+  REPLACE [[          ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "counted-consume nodes .Milestone 6 Slice ①..it is a node and answers node-name and node-source-label: case raised")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node-source-label answers #f for a counted-consume node"
+  # The Slice ① sweep: also satisfied by "ir: node? does not admit a
+  # counted-consume node" -- node-builders' one check conjoins node? with the
+  # label answer, so a kind node? refuses fails it the same way. By construction.
+  FIND [[((counted-consume-node? x) (counted-consume-node-source-label x))]]
+  REPLACE [[((counted-consume-node? x) #f)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "each answers its own label -- expected .., got .counted-consume.")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -9682,9 +10060,9 @@ byte_machine_mutation(
   # Re-anchored by Milestone 5 Slice ②: the list gained `o`, the callback arm's
   # outcome binding. Dropping `pk` is still the edit.
   FIND [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs pk
-      v r d o psr cbv))]]
+      v r d o psr cbv n))]]
   REPLACE [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs
-      v r d o psr cbv))]]
+      v r d o psr cbv n))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(pk\\)")
 
@@ -9703,10 +10081,19 @@ byte_machine_mutation(
   # declared anywhere in this file, so every FIND is pinned at one occurrence).
   # Re-anchored by Milestone 5 Slice ②: the tail gained `o`. Dropping `d` is
   # still the edit, and the two FINDs in this pair stay textually distinct.
-  FIND [[      v r d o psr cbv))]]
-  REPLACE [[      v r o psr cbv))]]
+  FIND [[      v r d o psr cbv n))]]
+  REPLACE [[      v r o psr cbv n))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(d\\)")
+
+# --- Milestone 6 Slice ① task 2: the counted arm's one local ---------------------
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.member3-drift.chez.source
+  LABEL "compile: reserved-member-3 loses the counted arm's n"
+  FIND [[      v r d o psr cbv n))]]
+  REPLACE [[      v r d o psr cbv))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(n\\)")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -9953,6 +10340,45 @@ byte_machine_mutation(
   EXPECT_OUTPUT_MATCHES
     "a span completion callback failure reports boundary too: the lanes agree on the projection -- expected .callback said-no .callback failure. cl 2 byte."
 )
+
+# --- Milestone 6 Slice ① task 2: the runtime's counted arm, witnessed here -----
+# The arm runs in the interpreted lane only (the generated lane calls the emitted
+# `exec`), so its pins live in a pass whose program EXECUTES a machine carrying
+# the kind through the interpreter -- this one, through the three counted rows.
+# The emitted arm's exhaustion-first twin is NOT here: this file's check labels
+# carry no lane prefix, so the two mutants' records are identical, and the twin
+# is pinned in the counted differential pass on a lane-labelled witness.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "runtime: the counted arm does not advance the stream offset"
+  FIND [[                      (parser-set-offset! parser (+ n (parser-offset parser)))]]
+  REPLACE [[                      (parser-set-offset! parser (parser-offset parser))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "truncation at a parked counted consume reports eof at the final offset: offset -- expected 2, got 1")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "runtime: the counted arm parks current on its EOF route when input runs out"
+  # `current` must stay on the node after a partial commit; the wrong value
+  # available to the arm is the EOF route, and a parser parked THERE finishes
+  # on the error node by no jump -- `boundary`, where a truncation is `eof`.
+  FIND [[                          (make-parser-result 'need-input (+ pos n) (- (+ pos n) start)
+                                              (parser-offset parser) #f))))))]]
+  REPLACE [[                          (begin (parser-set-current! parser (op 'eof-target node))
+                                 (make-parser-result 'need-input (+ pos n) (- (+ pos n) start)
+                                                     (parser-offset parser) #f)))))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "truncation at a parked counted consume reports eof at the final offset: kind -- expected eof, got boundary")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.position-kind.chez.source
+  LABEL "runtime: the counted arm asks exhaustion before the op"
+  FIND [[            ((counted-consume)
+             (let* ((r (op 'count-step node (parser-field-values parser) pos end))]]
+  REPLACE [[            ((counted-consume)
+             (let* ((r (if (>= pos end) (cons 0 #f) (op 'count-step node (parser-field-values parser) pos end)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a zero count at the end of a slice transitions before exhaustion is tested: is a record -- expected a true value")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -10501,7 +10927,7 @@ byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
   LABEL "compile: only dispatch states are credited with consuming the default EOF declaration"
   FIND [[((and (memq (normal-state-kind st)
-                                                      '(dispatch accumulate))]]
+                                                      '(dispatch accumulate counted-consume))]]
   REPLACE [[((and (memq (normal-state-kind st)
                                                       '(dispatch))]]
   EXPECT_STATUS 1
@@ -10758,11 +11184,11 @@ byte_machine_mutation(
   #
   # Measured caught by the matrix ALONE: no other lane in the tree notices.
   FIND [[        (integer-accumulate-node? x) (callback-node? x)
-        (span-start-node? x) (span-end-node? x)))]]
+        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))]]
   REPLACE [[        (integer-accumulate-node? x) (callback-node? x)
-        (span-start-node? x) (span-end-node? x) (stop-node? x)))]]
+        (span-start-node? x) (span-end-node? x) (counted-consume-node? x) (stop-node? x)))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the same twelve kinds -- expected")
+  EXPECT_OUTPUT_MATCHES "the same thirteen kinds -- expected")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls
@@ -10782,7 +11208,7 @@ byte_machine_mutation(
           ((error-node? x) (error-node-source-label x))]]
   REPLACE [[          ((error-node? x) (error-node-source-label x))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "and there are twelve of them -- expected 12, got 11")
+  EXPECT_OUTPUT_MATCHES "and there are thirteen of them -- expected 13, got 12")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls
@@ -10858,10 +11284,13 @@ byte_machine_mutation(
   # reaches -- a legal `stopped` feed result and no EOF path. Measured: four
   # cells, across axes A and B; pinned on the axis-A record, which no other
   # mutant in this lane emits.
-  FIND [[    (if (and (callback-node? n) (not (eq? (node-name n) (machine-entry m))))
-        (callback-node-pause-continuation n)
-        (node-name n)))]]
-  REPLACE [[    (node-name n))]]
+  # Re-anchored by Milestone 6 Slice ①, which turned the `if` into a `cond` with
+  # a counted-consume arm; the mutant is still "a parked callback starts its
+  # walk at its own name".
+  FIND [[    (cond ((and (callback-node? n) (not (eq? (node-name n) (machine-entry m))))
+           (callback-node-pause-continuation n))]]
+  REPLACE [[    (cond ((and (callback-node? n) (not (eq? (node-name n) (machine-entry m))))
+           (node-name n))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "callback-branch stop want .. got .eof-reachable-stop")
 
@@ -10891,9 +11320,12 @@ byte_machine_mutation(
   # the EOF cycle and loses the feed one -- a record no other mutant here emits.
   FIND [[                                  (integer-accumulate-node? n)
                                   (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n))
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
-  REPLACE [[                                  (integer-accumulate-node? n))
+  REPLACE [[                                  (integer-accumulate-node? n)
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "callback-pause-continuation advance want")
@@ -10937,9 +11369,10 @@ byte_machine_mutation(
   # The half-fix Milestone 3 Slice ② shipped, two kinds later: the WALK finds
   # the cycle and nothing reports it, so a span node whose successor is itself
   # verifies clean and then hangs in both lanes.
-  FIND [[                                  (span-start-node? n) (span-end-node? n))
+  FIND [[                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
-  REPLACE [[                                  )
+  REPLACE [[                                                                    (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "span-start-next advance want")
@@ -11609,6 +12042,130 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "user context may retain it, and does: retained, and permitted -- expected ..interpreted . #t. .generated . #t.., got ..interpreted . #f. .generated . #t."
 )
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Milestone 6 Slice ① task 3: the counted differential (pass 56) --------------
+#
+# Both lanes over the counted machine, every check labelled by LANE, so a pin
+# names which lane went wrong and is caught by the EXPECTED VALUE's record, never
+# by the lanes' disagreement (design §6 oracle 3 as the slice plan's F13 corrects
+# it: with one FILE per mutation and a runtime arm that serves the interpreted
+# lane alone, no mutant of this slice can make both lanes agree on a wrong value).
+# The emitter's min, subtraction and completion-order decisions live here rather
+# than in unit.compile, because only an executing lane with a surplus or exact
+# body can see them; the emitter's exhaustion-first twin of the runtime pin in
+# the position-kind pass lives here because that pass's labels carry no lane.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/differential-counted-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.counted.chez.source
+  LABEL "compile: the reached declaration walk ignores counted consume"
+  # The machine whose ONLY default-EOF consumer is the counted consume: the
+  # declaration leaves the errs table and render-machine raises on a machine the
+  # verifier accepted -- the Milestone 4 Slice ③ defect, one kind later.
+  FIND [[                                                      '(dispatch accumulate counted-consume))]]
+  REPLACE [[                                                      '(dispatch accumulate))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the only-consumer machine renders, loads and runs: case raised")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.counted.chez.source
+  LABEL "compile: the emitted counted arm commits (- end pos) instead of the min"
+  FIND [[            "                (let ((n (min v (- end pos))))\n"]]
+  REPLACE [[            "                (let ((n (- end pos)))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "generated: surplus into a rejection -- expected ..error 5 5 .machine unexpected-byte .unexpected byte. reject 5 byte. error reject 0.., got ..need-input")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.counted.chez.source
+  LABEL "compile: the emitted counted arm never subtracts"
+  FIND [[            "                  (vector-set! fieldv " slot " (- v n))\n"]]
+  REPLACE [[            "                  (vector-set! fieldv " slot " v)\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "generated: exact body -- expected ..need-input 5 5 #f ready comma 0.., got ..need-input 5 5 #f ready comma 3..")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.counted.chez.source
+  LABEL "compile: the emitted counted arm continues only when input remains"
+  # The count-completion-wins mutant (decision 0030 item 2) in the generated
+  # lane: the exact body parks on `body` with a zero count instead of continuing
+  # to the delimiter dispatch in the same feed.
+  FIND [[            "                  (if (= n v)\n"]]
+  REPLACE [[            "                  (if (and (= n v) (< (+ pos n) end))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "generated: exact body -- expected ..need-input 5 5 #f ready comma 0.., got ..need-input 5 5 #f ready body 0..")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.counted.chez.source
+  LABEL "compile: the emitted counted arm tests exhaustion before the zero count"
+  # The runtime arm's twin is pinned in the position-kind pass; this one needs a
+  # lane-labelled witness, and the feed-order witness is exactly that.
+  FIND [[            "         (cond ((= v 0) " (zero-width-jump next-id) ")\n"]]
+  REPLACE [[            "         (cond ((and (= v 0) (< pos end)) " (zero-width-jump next-id) ")\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "generated: parked on the delimiter after 0: -- expected comma, got body")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.counted.chez.source
+  LABEL "runtime: the counted arm re-asks the op after a partial commit"
+  # Loops back through the node instead of parking: the op is asked again over
+  # the exhausted slice, answers (0 . #f), and the parser parks with the same
+  # result -- every tuple lane agrees, and only the counting witness sees the
+  # second message. §25:1607 in the interpreted lane.
+  FIND [[                          (make-parser-result 'need-input (+ pos n) (- (+ pos n) start)
+                                              (parser-offset parser) #f))))))]]
+  REPLACE [[                          (loop (+ pos n) 'boundary))))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "one count-step per feed -- expected 1, got 2")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.counted.chez.source
+  LABEL "runtime: the counted finish arm asks the EOF route before the zero count"
+  # Decision 0030 item 1 at finish: the entry-zero machine's fresh parser must
+  # transition to `next` and report the empty-body error, not the default EOF.
+  FIND [[             (if (cdr r)
+                 (begin (parser-set-current! parser (cdr r)) (loop (cdr r) pk))
+                 (take-eof-route! node loop))))]]
+  REPLACE [[             (take-eof-route! node loop)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "interpreter: the finish reports the empty-body error -- expected .empty body rejected., got .unexpected end of input.")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Milestone 6 Slice ① task 3: the counted determinism lane (pass 57) ----------
+#
+# A pass of its own because the verify command is a different program, and its
+# ONE mutation is one no behavioural lane can catch: the emitted position kind
+# spelled with a quote mark instead of `(quote …)`. The reader turns both into
+# the same datum, so the structural walk in compile-tests cannot see it either;
+# the emitted BYTES change, and the committed golden is the only thing that
+# looks at those -- the accumulate lane's argument, made falsifiable once more.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/determinism-counted-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.determinism.counted.chez.source
+  LABEL "compile: the emitted counted arm spells its position kind with a quote mark"
+  FIND [[            "                      (loop (+ pos n) " (num next-id) " (+ off n) (quote boundary))\n"]]
+  REPLACE [[            "                      (loop (+ pos n) " (num next-id) " (+ off n) 'boundary)\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the emitted bytes equal the committed golden: golden")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
