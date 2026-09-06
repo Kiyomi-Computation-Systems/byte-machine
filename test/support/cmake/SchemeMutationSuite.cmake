@@ -6198,6 +6198,18 @@ byte_machine_mutation(
   # §16.2:886's LABEL clause, built by Milestone 5's close-out from design §4.12
   # item 2 -- an owner approval no slice had picked up.
   #
+  # Milestone 6 Slice ⓪ made the clause TOTAL, and this mutant's blast radius
+  # grew with it: every fixture in this lane carries `#f` labels, so an arm that
+  # rejects absence now reddens nearly every case here, where before the fold it
+  # reddened the two declaration-family cases alone. The Slice ⓪ sweep measured
+  # the consequence -- NINE shipped pins in this pass are satisfied by this
+  # mutant's output that were satisfied by nothing else before (the sweep report
+  # names them: the three tier-promotion pins, the two :908 pins, the D-1 walk
+  # start, the OQ-2 entry finish, the byte-reachability gate, node-out-targets).
+  # A nesting by construction, in the pass-fields-never-run shape, and not a
+  # weakness in any of the nine: each still catches its own mutant for its
+  # declared reason (0 self-failures), and this pin still catches this one.
+  #
   # *** THIS IS THE ARM THAT GETS THE PIN, and the symbol and string arms
   # deliberately do NOT. *** Both of those call the shipped `valid-reason?`, so
   # every mutant of them is NESTED BY CONSTRUCTION inside the two reason mutants
@@ -6335,7 +6347,11 @@ byte_machine_mutation(
   LABEL "verify: a field's label is no longer checked"
   # `pass-fields`' arm, the fourth of the fold's four; it reports under the field
   # name and the CODE is `invalid-field-declaration`, so the expected list here
-  # differs from the four `invalid-name` rows above.
+  # differs from the four `invalid-name` rows above. The Slice ⓪ sweep found
+  # this pin also satisfied by "pass-fields is never run" -- a nesting BY
+  # CONSTRUCTION shared with all eight pins inside that pass (the sweep names
+  # them), not a collision this pin introduced: a pass that never runs produces
+  # every failure any conjunct inside it can.
   FIND [[(valid-label? (uint-field-source-label f))]]
   REPLACE [[#t]]
   EXPECT_STATUS 1
@@ -10748,8 +10764,12 @@ byte_machine_mutation(
   # matrix derives from the file. Deleting an arm shrinks the cond's predicate
   # set to eleven, and the row's count check says so by comparison -- before any
   # fixture for a missing kind exists, which is the point of deriving it. The
-  # sibling `#f`-arm mutant in Pass 42 leaves the predicate set intact and cannot
-  # redden this row; the two are separate decisions.
+  # sibling `#f`-arm mutant in the ir pass leaves the predicate set intact and
+  # cannot redden this row; the two are separate decisions. S2b's set-equality
+  # check is labelled "arm predicates equal node?'s disjuncts" and NOT "the same
+  # twelve kinds": the slice's first label contained the ratchet pin's substring
+  # and the sweep found that pin satisfied by this mutant -- the exact resolution
+  # the plan's F2 warned about, caught by the sweep and not by the lane.
   FIND [[          ((stop-node? x) (stop-node-source-label x))
           ((error-node? x) (error-node-source-label x))]]
   REPLACE [[          ((error-node? x) (error-node-source-label x))]]

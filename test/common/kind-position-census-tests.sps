@@ -487,7 +487,7 @@
                                                    (string<? (symbol->string a)
                                                              (symbol->string b)))
                                                  l))))
-              (check-equal "node-source-label's arms are the same twelve kinds"
+              (check-equal "node-source-label's arm predicates equal node?'s disjuncts"
                            (sorted arms) (sorted preds))
               ;; The size too: two lists that both lost the same predicate would
               ;; still agree with each other.

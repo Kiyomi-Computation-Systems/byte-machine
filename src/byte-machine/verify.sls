@@ -1121,7 +1121,7 @@
        )))
 
   ;; The labels a node carries BESIDE its own: its byte cases' or sequence cases'.
-  ;; A case has no name (§9.1:296, :298), so its label is checked under the
+  ;; A case has no name (§9.1:290, :298), so its label is checked under the
   ;; owning node, inside that node's one finding. A per-kind `cond` -- a census
   ;; a new kind must answer, with "no cases" being an answer -- built with `map`
   ;; and no `(cons 'x ...)` form, because the kind x position census collects
@@ -1259,8 +1259,9 @@
        ;; Slice ⓪ closed that gap where each carrier's NAME is already checked:
        ;; `pass-names-valid` (machine, node with its cases, error declaration) and
        ;; `pass-fields` (field), each as a conjunct of the existing `and`, so the
-       ;; diagnostic census did not move. The parent plan's Milestone 5 close note
-       ;; carries the dated disposition.
+       ;; diagnostic census did not move. The parent plan's dated disposition
+       ;; "§16.2:886 and §9.3:423 -- Milestone 6 Slice ⓪, delivered" records the
+       ;; closure; its Milestone 5 close note records the gap.
        (filter values
                (map (lambda (cd)
                       (if (and (valid-name? (callback-declaration-name cd))
