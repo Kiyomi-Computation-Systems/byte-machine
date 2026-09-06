@@ -1107,7 +1107,7 @@
                (frags (filter bytevector? (cadr (car r)))))
           (check-equal "exactly one fragment in the whole run" (length frags) 1)
           (check-equal "and it is the boundary flush's" (car frags) (bytes 98 99)))))
-    (harness-case "with no feed at all it is one empty span, not an error"
+    (harness-case "with no feed at all NO span opens, and finish is clean"
       (lambda ()
         ;; `start`'s own eof-target is `fin`, so a bare finish never opens a
         ;; span. The contrast is what shows the case above is about the OPEN

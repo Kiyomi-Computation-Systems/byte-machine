@@ -140,6 +140,8 @@ cmake --preset no-scheme && ctest --preset no-scheme
 - [[file:docs/plans/milestone-2-design.md][Milestone 2 design]] — incremental execution and lifecycle
 - [[file:docs/plans/milestone-3-design.md][Milestone 3 design]] — byte classes and sequences
 - [[file:docs/plans/milestone-4-design.md][Milestone 4 design]] — fields, actions, and branches
+- [[file:docs/plans/milestone-5-design.md][Milestone 5 design]] — callbacks, poisoning, and spans
+- [[file:docs/reference/callback-span-lifetime.md][Callback and span lifetime]] — what a callback receives, how long it may hold it, and what the parser guarantees about the bytes you feed it
 - [[file:docs/decisions/][Architecture decisions]]
 - [[file:CHANGELOG.md][Changelog]]
 
