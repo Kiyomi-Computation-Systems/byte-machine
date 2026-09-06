@@ -23,7 +23,8 @@
           diagnostic? diagnostic-code diagnostic-node diagnostic-message
           diagnostic-edge)
   (import (rnrs)
-          (byte-machine private ir))
+          (byte-machine private ir)
+          (byte-machine private names))
 
   ;; --- diagnostics ---
   (define diagnostic-tag (vector 'byte-machine-diagnostic))
@@ -43,20 +44,18 @@
   (define (diagnostic-edge d) (vector-ref d 4))
 
   ;; --- name grammar [a-z][a-z0-9-]* and reserved-set member 1 ---
+  ;; The grammar is (byte-machine private names)' `portable-name?` since
+  ;; Milestone 6 Slice ⓪ -- one body shared with compile.sls's binding check and
+  ;; runtime.sls's callback-code check, where this file's copy was one of two
+  ;; textually identical bodies through Milestone 5. Member 1 stays here: which
+  ;; reserved set applies is a property of the site, and a declared NAME is
+  ;; barred from the R6RS syntactic keywords only.
   (define reserved-member-1
     '(library import export define define-syntax let let* letrec lambda quote
       if begin set! cond case and or when unless do quasiquote unquote))
-  (define (lower-alpha? c) (and (char>=? c #\a) (char<=? c #\z)))
-  (define (name-char? c)
-    (or (lower-alpha? c) (and (char>=? c #\0) (char<=? c #\9)) (char=? c #\-)))
   (define (valid-name? sym)
-    (let ((s (symbol->string sym)))
-      (and (> (string-length s) 0)
-           (lower-alpha? (string-ref s 0))
-           (let loop ((i 1))
-             (or (>= i (string-length s))
-                 (and (name-char? (string-ref s i)) (loop (+ i 1)))))
-           (not (memq sym reserved-member-1)))))
+    (and (portable-name? sym)
+         (not (memq sym reserved-member-1))))
   ;; §10.1:480 restricts an error declaration's static reason to printable ASCII
   ;; plus LF. That is a DIFFERENT repertoire from valid-name?'s, over a string
   ;; rather than a symbol, so this cannot reuse that predicate -- it reuses the

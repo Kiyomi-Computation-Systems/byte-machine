@@ -220,7 +220,9 @@ cmake_minimum_required(VERSION 3.26)
 # is shared text between verify.sls and compile.sls, so each mutation anchors
 # on the definition that follows to stay unique per file), and the emitter's
 # final-newline CRLF injection. So 36 + 1 = 37 passes and 107 + 4 = 111
-# mutations.
+# mutations. [Milestone 6 Slice ⓪: the shared text became ONE body in
+# names.sls; the two verify-site pins moved there and the compile-site twin was
+# retired -- see the note at the pass.]
 #
 # Slice B's D6 task adds one more pass, Pass 38 (deterministic emission
 # against the committed golden): the writer's export line loses its exact
@@ -1054,6 +1056,15 @@ cmake_minimum_required(VERSION 3.26)
 # derived S2b row's count). Two shipped pins were re-anchored, the machine-name
 # and node-name grammar pins, whose `if` tests grew a conjunct; their REPLACEs
 # now drop the name check alone. No pass is added.
+#
+# Milestone 6 Slice ⓪ task 4, one name grammar: ONE added and ONE retired,
+# 483 + 1 - 1 = 483. Added: the runtime's callback-code grammar check (Pass 32),
+# the §9.3:423 deferral Milestone 5's completeness check named a receiver for.
+# Retired: "compile: any interior binding character is accepted", whose text
+# (compile.sls's copy of `name-char?`) no longer exists -- its observation is
+# the re-homed interior-character pin's, one file over. Two verify-site grammar
+# pins RE-HOMED from verify.sls to names.sls and one unit.compile pin re-anchored
+# from the inline loop onto the `portable-name?` call. No pass is added.
 #
 # Milestone 5 Slice ①b: TWO. `pass-declarations` never run -- eight census
 # fixtures then find nothing, caught by a comparison naming a missing code. And
@@ -3845,6 +3856,18 @@ byte_machine_mutation(
   REPLACE [[    (vector parser-error-tag 'machine (vector-ref entry 1) (vector-ref entry 0) #f]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the five call-site members read back: code")
+
+# Milestone 6 Slice ⓪: §9.3:423's grammar half at the runtime, the deferral
+# Milestone 5's completeness check left with a named receiver. The mutant is
+# the Milestone 5 constructor exactly -- `symbol?` alone -- and the lane's new
+# case refuses `BadCode` under the grammar it shares with verify.sls.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a callback failure code is not checked against the portable grammar"
+  FIND [[(unless (and (symbol? code) (portable-name? code))]]
+  REPLACE [[(unless (symbol? code)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "portable name grammar .§9.3:423.: BadCode refused -- expected a raise")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -7557,8 +7580,12 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: the binding grammar check is dropped"
-  FIND [[(and (> (string-length s) 0) (lower-alpha? (string-ref s 0))]]
-  REPLACE [[(and #t (lower-alpha? #\a)]]
+  # Re-anchored by Milestone 6 Slice ⓪: the grammar is one call into names.sls
+  # now, so the mutant drops that call rather than the length-and-first-char
+  # half of an inline loop. Same observation -- a grammar-invalid binding
+  # renders -- and the same expectation.
+  FIND [[(and (portable-name? sym)]]
+  REPLACE [[(and #t]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "grammar")
 
 byte_machine_mutation(
@@ -7715,9 +7742,21 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/common/identifier-repertoire-tests.sps")
 
+# Milestone 6 Slice ⓪ (design §4.12 item 2) RE-HOMED the two grammar pins below
+# from verify.sls onto names.sls, where the one `portable-name?` body now lives,
+# and RETIRED the third -- "compile: any interior binding character is
+# accepted", which mutated compile.sls's textually identical copy of
+# `name-char?`. There is no copy: valid-binding? calls the same body these two
+# mutate, so that mutant's text no longer exists and its observation (a binding
+# `a.b` accepted) is exactly the interior-character pin's, one FILE over. The
+# per-file anchor trick these two used ("anchor on the definition that follows,
+# to stay unique per file") is gone with the twin; each FIND is unique in
+# names.sls on its own. Both keep their verify-site expectations: the
+# identifier-repertoire lane still drives the verify site AND the compile site,
+# and the verify-site record is the first the harness prints.
 byte_machine_mutation(
-  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
-  LABEL "verify: a name with a non-lowercase first char is accepted"
+  FILE src/byte-machine/private/names.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
+  LABEL "names: a name with a non-lowercase first char is accepted"
   FIND [[(lower-alpha? (string-ref s 0))
            (let loop ((i 1))]]
   REPLACE [[#t
@@ -7725,22 +7764,11 @@ byte_machine_mutation(
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "every rejected name is refused: reject 9a")
 
 byte_machine_mutation(
-  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
-  LABEL "verify: any interior character is accepted"
-  FIND [[(or (lower-alpha? c) (and (char>=? c #\0) (char<=? c #\9)) (char=? c #\-)))
-  (define (valid-name? sym)]]
-  REPLACE [[#t)
-  (define (valid-name? sym)]]
+  FILE src/byte-machine/private/names.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
+  LABEL "names: any interior character is accepted"
+  FIND [[(or (lower-alpha? c) (and (char>=? c #\0) (char<=? c #\9)) (char=? c #\-)))]]
+  REPLACE [[#t)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "every rejected name is refused: reject a_b")
-
-byte_machine_mutation(
-  FILE src/byte-machine/compile.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
-  LABEL "compile: any interior binding character is accepted"
-  FIND [[(or (lower-alpha? c) (and (char>=? c #\0) (char<=? c #\9)) (char=? c #\-)))
-  (define (valid-binding? sym)]]
-  REPLACE [[#t)
-  (define (valid-binding? sym)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "every rejected binding is refused: reject a\\.b")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.verify.identifier-repertoire.chez.source

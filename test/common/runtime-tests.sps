@@ -473,6 +473,19 @@
       (lambda ()
         (check-raises "refused" (contract-violation? 'make-callback-failure 'code)
                       (lambda () (make-callback-failure "too-long" #f)))))
+    (harness-case "the code must satisfy the portable name grammar (§9.3:423)"
+      (lambda ()
+        ;; Milestone 6 Slice ⓪. Through Milestone 5 `symbol?` was the whole check
+        ;; and the grammar half was recorded as owed, because the grammar lived in
+        ;; verify.sls, which the runtime must not import. It is now (byte-machine
+        ;; private names)' `portable-name?`, the one body verify.sls and
+        ;; compile.sls check declared names and output bindings against, so an
+        ;; application code is refused for the same characters a node name is.
+        (check-raises "BadCode refused" (contract-violation? 'make-callback-failure 'code)
+                      (lambda () (make-callback-failure 'BadCode #f)))
+        (check-raises "a_b refused" (contract-violation? 'make-callback-failure 'code)
+                      (lambda () (make-callback-failure 'a_b #f)))
+        (check "ok-code-9 builds" (callback-failure? (make-callback-failure 'ok-code-9 #f)))))
     (harness-case "a failure is not one of the singletons, and they are not it"
       (lambda ()
         ;; §13:810 makes the successful outcomes allocation-free singletons and
