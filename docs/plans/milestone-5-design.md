@@ -875,6 +875,17 @@ pause, completion, error, EOF, and reset"; this slice discharges boundaries, pau
 and error, and Slice ④ discharges EOF and reset (§9). Neither slice discharges `:1589` whole,
 and saying so is how the milestone avoids each believing the other covered a leg.
 
+**Corrected in place 2026-09-05 by Slice ④, because a later slice works this paragraph as a
+checklist.** The allocation above is what was planned; it is not what happened. Slice ③ also
+shipped an EOF group and a reset group, and its oracle drives `parser-finish!` on all
+thirty-seven schedules — so it discharged parts of BOTH legs it disclaimed here. The safeguard
+failed in the direction the sentence does not anticipate: not each slice believing the other
+covered a leg, but one slice covering a leg it had disclaimed, leaving ④'s scope overstated on
+four surfaces until ④ measured it. Slice ④ closed the three SHAPES that remained (a span open
+at `parser-finish!` and closed on the EOF chain; a reset while parked between the span-end
+substeps; a reset of a poisoned parser with a span open) and re-covered nothing. **Read the
+allocation as a plan, and the tree as the record.**
+
 **The work.**
 
 - `make-span-start-node` and `make-span-end-node` (`§9.1:309-310`).

@@ -12,9 +12,9 @@ Milestone: 5, Gate 0 (milestone-5-design.md §4.1, §4.2)
 >   Consequences' warning that a domain-only cross-lane check "passes vacuously
 >   by construction" is what shaped the fixtures. Nothing above became false.
 > - **2026-09-05 (Milestone 5, Slice ④)** — **annotates the Consequences bullet
->   "What this hands to Slice ④"**: the discharge, and a correction to that
->   bullet's own citation into `milestone-5-design.md`, which two Appendix
->   rewrites moved. The obligation itself was read correctly and is met.
+>   "What this hands to Slice ④"** (its `milestone-5-design.md`:876-881 citation
+>   is wrong; §9's exemption boundary is at :980-985): the discharge, and the
+>   citation's correction. The obligation itself was read correctly and is met.
 
 ## Context
 
@@ -275,16 +275,26 @@ asserted as RETAINED and permitted, in both lanes
 (`test/common/retention-tests.sps`, "callback error detail may retain it too").
 A second arm holds the same failing path with `detail` `#f` and asserts the
 bytevector is gone, so the first arm is about `§13:799`'s third carrier rather
-than about the error record. Both are mutation-pinned.
+than about the error record. The retaining arm is mutation-pinned; the `#f`
+discriminator is not, and is not claimed to be — no mutant's recorded failure
+signature is that case's, and its control is the pair, not a pin.
 
-*The stale citation.* The bullet closes by pointing at
-`milestone-5-design.md`:876-881 for "the retention oracle's third layer". Slice ③
-rewrote that design's Appendix a second time and §9 moved: the exemption boundary
-is now at **:980-985**, and :876-881 lands in §8's work list. Nothing above is
-rewritten — the bullet's reasoning was right and its target moved. This is the
-failure mode a `file:line` into a document your own change does not control
-always has, and no link checker or grep can see it: the file exists and the
-number is a number.
+*The wrong citation, and the first diagnosis of it was also wrong.* The bullet
+points at `milestone-5-design.md`:876-881 for "the retention oracle's third
+layer". Today that lands in §8's work list; the exemption boundary is at
+**:980-985**. The first version of this note said Slice ③'s Appendix rewrites had
+moved it — **measured, that is impossible**: the Appendix heading has always sat
+BELOW §9 (960 at Gate 0, 1009 after Slice ②, 1042 after Slice ③), and an edit
+below a section cannot renumber it. The citation was **wrong when it was
+written**: at `79c18c7`, the commit that introduced it, "The exemption boundary"
+was at :898 and :876-881 already held §9's "Scope, as an allocation" paragraph —
+off by twenty-two lines on arrival. It reached :980 through growth in §§6-8.
 
-The bullet called itself "the deferral's second end", which is why the drift
-mattered: the second end had stopped pointing at the first.
+That distinction is the whole value of the correction. A citation that DRIFTED is
+an argument for re-measuring citations when the target changes; a citation that
+was **never right** is an argument for resolving one when you write it, which is
+a different discipline and the one that would have caught this. Nothing above
+this note is rewritten.
+
+The bullet called itself "the deferral's second end", which is why it mattered:
+the second end never pointed at the first.

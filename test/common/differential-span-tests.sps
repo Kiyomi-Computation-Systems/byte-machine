@@ -21,7 +21,7 @@
 ;;;   an empty one suppressed                      §14:834
 ;;;   a flush at a feed boundary, span still open  §14:833-834
 ;;;   a pause DURING the flush                     §14:837
-;;;   a pause between the span-end substeps        §14:838, §14:841-842
+;;;   a pause between the span-end substeps        §14:838, §14:841
 ;;;   an error with a span open                    §14:839
 ;;;
 ;;; The oracle over §22.5's schedule list is Task 6's. This file is the
@@ -401,7 +401,7 @@
                             (cadr (car r)))
                        (list '(98 99) '(100) 'complete)))))))
 
-(harness-group "a pause between the span-end substeps (§14:838, §14:841-842)"
+(harness-group "a pause between the span-end substeps (§14:838, §14:841)"
   (lambda ()
     (harness-case "the data substep pauses; resume delivers only the completion"
       (lambda ()
@@ -1012,17 +1012,45 @@
 ;;   3. Reset of a POISONED parser with a span open. `§12.2:698` makes reset the
 ;;      one operation a poisoned parser may run, and `parser-reset!` reaches
 ;;      `byte-machine-span-close/v1` only after its `busy` guard.
+;;
+;; *** WHERE EACH OF THE SIX LEGS LIVES. *** This mapping was written into Slice
+;; 4's commit message first, which is one end of a two-ended thing: the reader
+;; who needs it is looking at this file, not at `git log`.
+;;
+;;   boundaries  "a feed boundary flushes and the span stays open (§14:833-834)"
+;;               "the mark is a SLICE offset (§14:833)"
+;;   pause       "a pause DURING the flush commits the fragment (§14:837)"
+;;               "a pause between the span-end substeps (§14:838, §14:841)"
+;;   completion  "a span end delivers [mark,cursor) and exactly one completion"
+;;               "an empty fragment is suppressed (§14:834)"
+;;               "a span declaring no completion callback (§10.4:516)"
+;;   error       "an error with a span open (§14:839)"
+;;               "a FAILURE during the flush is a callback-domain error"
+;;               "the error path, per lane and across schedules"
+;;   EOF         "a span on the EOF chain (§12.4:729, §14:834)"           [3]
+;;               "a span open at finish, closed on the EOF chain"         [4]
+;;   reset       "reset clears span state (§12.5:739)"                    [3]
+;;               "reset while parked BETWEEN the span-end substeps"       [4]
+;;               "reset of a POISONED parser with a span open"            [4]
 
 ;; Gap 1 needs its own machine. `body`'s eof-target above is the `trunc` ERROR --
 ;; which is what makes the truncated-span cases work -- so it cannot also be a
-;; span end. Written out rather than parameterised for the reason the pair above
-;; is: one constructor serving two fixtures puts both on one `FIND` site.
+;; span end. Written out rather than parameterised because the difference is a
+;; NODE, not a value: `span-machine`'s parameter is one optional callback and
+;; everything else is shared, whereas this graph replaces an error terminal with
+;; a span end and adds a node. (An earlier version of this comment said the pair
+;; above was written out for the same reason and that a shared constructor would
+;; collapse two `FIND` sites. Both halves were false: `span-machine` IS
+;; parameterised, and this file is not a `FILE` in any `byte_machine_mutation`,
+;; so it has no `FIND` sites at all.)
 ;;
 ;; The only difference from `span-machine` that matters is `body`'s eof-target:
 ;; `bclose`, a span end whose next is `fin`. Pass 7 accepts it because the span
 ;; is closed BEFORE the finish terminal, and `fin` is reached with the span
 ;; inactive down every one of its three routes -- which is the lattice meeting at
 ;; a merge point (`0029`), not an accident of this graph.
+
+;; ---------------------------------------------------------------------------
 ;; The escape catcher, in the shape `differential-callback-tests.sps` uses: on a
 ;; poisoning escape neither lane RETURNS a result, so nothing a differential
 ;; normally compares exists. What is compared is the condition that escaped and
@@ -1087,6 +1115,18 @@
         ;; `bc`; `parser-finish!` then runs `bclose`, whose own fragment is
         ;; `[mark,0)` and is suppressed by `§14:834`, and the completion is the
         ;; only thing EOF adds.
+        ;; *** THE FRAGMENT IS OBSERVED BETWEEN THE TWO STEPS, not only at the
+        ;; end. *** `run` returns the trace after the whole script, so a lane
+        ;; that suppressed the boundary flush and delivered `[1,3)` from the EOF
+        ;; span end instead would produce an identical final trace, identical
+        ;; tuples and an identical inactive span -- every assertion below would
+        ;; pass. Driving the feed on its own first is what witnesses the "from
+        ;; the FEED" half of this case's name.
+        (let* ((la (make-lane cm-eof-ref '() callback-continue #t))
+               (mid (run la (list (list 'feed (bytes 65 98 99))))))
+          (check-equal "after the FEED alone, the fragment is already delivered"
+                       (cadr mid) (list (bytes 98 99)))
+          (check-equal "and the span is still open" (caddr mid) 'payload))
         (let ((r (both-eof (list (list 'feed (bytes 65 98 99)) (list 'finish))
                            '() callback-continue)))
           (check-equal "the lanes agree" (caddr r) #t)
@@ -1155,7 +1195,12 @@
                (p (car la))
                (a (run la (list (list 'feed (bytes 65 98 99 100 90))))))
           (check-equal "parked, span still active" (caddr a) 'payload)
-          (check-equal "paused-feed" (map car (car a)) '(paused))
+          ;; Two different values, and the first version of this case named one
+          ;; and asserted the other: `rfields` puts the result STATUS at index 0
+          ;; and the parser's LIFECYCLE at index 5.
+          (check-equal "the result status is paused" (map car (car a)) '(paused))
+          (check-equal "and the lifecycle is paused-feed"
+                       (list-tail (car (car a)) 5) '(paused-feed))
           (parser-reset! p)
           (check-equal "span cleared" (parser-active-span p) #f)
           (check-equal "lifecycle ready" (parser-lifecycle p) 'ready)

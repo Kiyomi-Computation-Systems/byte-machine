@@ -353,8 +353,9 @@
         ;; was fixed in Milestone 5 Slice ③. The MACHINE-ACTION half is still
         ;; wrong, measured: a field-action increment that overflows a `u8`,
         ;; reached over a reexecute edge, answers `(kind byte offset 1)` where
-        ;; the row says `boundary`. The accumulate overflow render ~10 lines
-        ;; above emits `(quote byte)` for the same reason.
+        ;; the row says `boundary`. The accumulate OVERFLOW render two lines
+        ;; above emits `(quote byte)` for the same reason -- not the non-digit
+        ;; reexecute render ten lines above it, which is a different rule.
         ;;
         ;; It is a one-line change in THIS lane and more than that in the
         ;; interpreted one -- see the same note at `interpret.sls`'s

@@ -68,9 +68,11 @@ nothing: a test holds a parser alive across a full garbage collection and checks
 that a weak reference to the bytevector it was fed reads /broken-weak-pointer/,
 in both lanes. That test is only worth its green if it can go red, so the same
 lane ships the fixture that retains on purpose and must read /retained/ — and
-three more arms for the three carriers the plan puts /outside/ the guarantee,
+arms for all three carriers the plan puts /outside/ the guarantee,
 because an application that keeps your input in its own callback closure, its
-user context, or a callback failure's detail has kept it by its own choice. The
+user context, or a callback failure's detail has kept it by its own choice — and
+one more that holds the same failing path with an empty detail and must read
+/gone/, so the third arm is about the carrier and not about the error record. The
 slice also closed the three fragment shapes nothing had covered — a span left
 open when =parser-finish!= is called and closed on the EOF chain, a reset while
 parked between the span-end substeps, and a reset of a poisoned parser with a

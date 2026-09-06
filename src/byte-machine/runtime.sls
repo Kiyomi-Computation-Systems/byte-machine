@@ -222,15 +222,21 @@
   ;; enforces that: `parser-finish!`'s paths call this constructor with `next`
   ;; repeating the absolute stream offset and `consumed` exactly 0. The record is
   ;; opaque (`§9.3:425`), so an internal origin slot would not be a public
-  ;; change -- the reason this was deferred is COST, measured 2026-09-05: `rg -l
-  ;; parser-result-next` over `test/` returns sixteen programs and
-  ;; `parser-finish!` appears at 83 sites in `test/common`, so enforcing it
-  ;; re-baselines a tuple in most of the differential programs.
+  ;; change -- the reason this was deferred is COST, RE-MEASURED here 2026-09-05
+  ;; rather than copied: `rg -l parser-result-next test/ --glob '*.sps'` returns
+  ;; **17** programs and `rg -o '\(parser-finish!' test/common/` returns **73**
+  ;; call sites across **16** files. (The parent plan's own paragraph says
+  ;; "sixteen programs" and "83 sites"; neither number is reproducible against
+  ;; the tree, at this commit or at the one that wrote them. The conclusion --
+  ;; enforcing this re-baselines a tuple in most of the differential programs --
+  ;; is unaffected, and is why it was deferred.)
   ;;
   ;; Milestone 5's close-out (Slice ④, 2026-09-05) disposed it as DEFERRED with
-  ;; the receiver named as "the next slice that changes this record's shape" --
-  ;; and put the note here rather than only in the parent plan, because that
-  ;; receiver opens this constructor and not §12.7's disposition list.
+  ;; the receiver named as "the next slice that changes this record's shape".
+  ;; The adjudication is in `docs/plans/byte-machine-implementation-plan.md`
+  ;; under the `### §12.3:711` disposition -- NOT under §12.7, which is the
+  ;; other close-out obligation. The note is here rather than only there because
+  ;; that receiver opens this constructor.
   (define (make-parser-result status next consumed stream-offset error)
     (vector parser-result-tag status next consumed stream-offset error))
   (define (parser-result? x) (tagged? parser-result-tag x))

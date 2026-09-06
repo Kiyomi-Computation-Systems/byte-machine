@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FIFTY-FOUR PASSES, BECAUSE FIFTY-FOUR DIFFERENT WITNESSES ARE NEEDED
+# FIFTY-FIVE PASSES, BECAUSE FIFTY-FIVE DIFFERENT WITNESSES ARE NEEDED
 # (46 through Milestone 3; Milestone 4 Slice ①a adds the member-3 drift
 # guard and the position-kind lane, and Slice ①b the field-access lane -- since
 # renamed byte-machine.differential.field, the only lane in which the field
@@ -25,7 +25,11 @@
 # on the same argument one kind later -- the differential lane over the two span
 # kinds, the only program that loads a generated library containing a span
 # state, and the only one that can see a span FRAGMENT at all, since no parser
-# result carries one. It is NOT a fifty-fifth: Slice ③'s verifier mutations run
+# result carries one. Slice ④ adds the FIFTY-FIFTH, and this one IS a separate
+# witness rather than a second reading of an existing lane: it is the only
+# program in the tree that observes what a parser still REACHES after
+# `parser-feed!` returns, which no result, no trace and no diagnostic can show.
+# It is NOT a fifty-sixth: Slice ③'s verifier mutations run
 # against that same lane, because its topology table is where §25:1590's set is
 # written down -- one witness read two ways, and a pass count that called it two
 # would be the banner claiming a witness the tree does not have.)
@@ -1220,7 +1224,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 55)
-set(EXPECTED_MUTATIONS 469)
+set(EXPECTED_MUTATIONS 471)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -9722,7 +9726,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # "Pass 49", and so does the Milestone 3 header ~460 lines above it: two
 # different passes reachable by one citation. The integers cannot be repaired by
 # renumbering either, because they do not index anything countable -- this file
-# has 44 `byte_machine_mutation_run` call sites and the suite reports 54 passes,
+# has 45 `byte_machine_mutation_run` call sites and the suite reports 55 passes,
 # the difference being helper functions that call `_run` once per case in a loop
 # and consume indices no header names. `EXPECTED_PASSES`, measured from the
 # harness, is the only authority. New headers name their slice.
@@ -11219,17 +11223,54 @@ byte_machine_mutation(
   EXPECT_OUTPUT_MATCHES "callback-inside want .span-active-at-pause. got .."
 )
 
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "runtime: reset refuses a POISONED parser instead of resetting it"
+  # Slice ④'s new reset leg. `§12.2:698` makes reset the ONE operation a poisoned
+  # parser may run -- every other cell in that row raises -- so this mutant is
+  # the plausible wrong reading of the row, not a strawman. Nothing else in the
+  # tree drives reset on a poisoned parser: the callback lane poisons a
+  # SPAN-LESS machine and never resets it, so this pin has no sibling.
+  #
+  # The recorded signature is a RAISE rather than a value mismatch, and the pin
+  # names the case, which is what keeps it from being a bare nonzero exit.
+  FIND [[    (when (eq? (parser-lifecycle parser) 'busy)
+      (byte-machine-contract-violation 'parser-reset! 'reentrancy]]
+  REPLACE [[    (when (memq (parser-lifecycle parser) '(busy poisoned))
+      (byte-machine-contract-violation 'parser-reset! 'reentrancy]]
+  EXPECT_STATUS 1
+  # The FAIL grammar is `FAIL <group>.<case>: <what>`, so the case name is
+  # followed by `: ` and the GROUP name is followed by a bare `.`. An earlier
+  # version of this pin put `.*:` between them and the suite rejected it as
+  # "caught by coincidence" -- the greedy wildcard swallowed the colons inside
+  # the group's own section references. Anchor on the case, which is unique.
+  EXPECT_OUTPUT_MATCHES "reset is accepted, clears the span, and the parser is reusable: case raised"
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "runtime: the FINISH path's span completion never closes the span"
+  # The interpreted finish path's own `byte-machine-span-close/v1`, which no
+  # mutation reached before: the two existing pins on that call are reset's
+  # (four-space indent) and the FEED loop's (fifteen). This is the thirteen-space
+  # one, and Slice ④'s EOF group is the first fixture whose span is closed by a
+  # node on the EOF chain after a feed opened it.
+  FIND [[          ((span-completion)
+           (let ((parts (op 'span-completion-parts node)))
+             (byte-machine-span-close/v1 parser)]]
+  REPLACE [[          ((span-completion)
+           (let ((parts (op 'span-completion-parts node)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the fragment comes from the feed and the completion from finish: the lanes agree -- expected #t, got #f"
+)
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 
 
-# Every pass above has now run exactly once, so the accumulated total is
-# final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FIFTY-FOUR PASSES"
-# header comment they restate -- so a whole pass, or a single mutation inside
-# one, silently going missing is a build failure here rather than a stale
-# comment nobody rereads.
 # --- Milestone 5 Slice ④: input retention (§25:1591) -------------------------
+#
+# Follows Slice ③'s span pass (the fifty-fourth) and is the FIFTY-FIFTH.
 #
 # The lane Slice ③'s liveness probe was brought forward FOR, and the first pass
 # in this file whose SPEC reads something no result and no trace can show: what
@@ -11243,11 +11284,14 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # are the application's to keep.
 #
 # Layer 2, the negative control, carries no mutant and does not need one: it is a
-# FIXTURE that retains on purpose, and fixtures in `test/common` are not mutation
-# targets anywhere in this file. Its control is the two-directional assertion --
-# layer 1 says "gone" and layer 2 says "retained" about the same probe, so an
-# instrument answering a constant fails one of them. The same argument
-# `liveness-probe-tests.sps` makes, for the same reason.
+# FIXTURE that retains on purpose, and `retention-tests.sps` is not a mutation
+# target. (Not "no fixture in `test/common` is" -- `property-differential-tests.sps`
+# is one, above. The narrower claim is the true one.) Its control is the
+# two-directional assertion: layer 1 says "gone" and layer 2 says "retained"
+# about the same FIXTURE SHAPE -- not, as an earlier version of this comment
+# said, about the same probe; they are two `retained?` calls over two fixtures
+# and two bytevectors. An instrument answering a constant still fails one of
+# them, which is the conclusion, but the reason is the shape and not the object.
 byte_machine_mutation_reset()
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
@@ -11286,7 +11330,13 @@ byte_machine_mutation(
   FIND [[    (vector callback-failure-tag code detail)]]
   REPLACE [[    (vector callback-failure-tag code #f)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "retained, and permitted -- expected ..interpreted . #t. .generated . #t.., got ..interpreted . #f."
+  # *** THE CASE NAME IS PART OF THE PIN. *** "retained, and permitted" is the
+  # `<what>` of TWO checks in this lane -- the user-context arm and this one --
+  # with byte-identical expected values, so a pin starting at the `<what>` also
+  # matches the OTHER arm's failure, including mutation 3's. The FAIL grammar is
+  # `FAIL <group>.<case>: <what> -- <detail>`, and this pass's own standard is
+  # that a sound pin resolves to exactly ONE (case, check) pair.
+  EXPECT_OUTPUT_MATCHES "a slot walk misses: retained, and permitted -- expected ..interpreted . #t. .generated . #t.., got ..interpreted . #f. .generated . #f."
 )
 
 byte_machine_mutation(
@@ -11301,11 +11351,17 @@ byte_machine_mutation(
   FIND [[                 user-context #f #f 0 #f)))]]
   REPLACE [[                 'not-the-input #f #f 0 #f)))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "user context may retain it, and does: retained, and permitted -- expected ..interpreted . #t"
+  EXPECT_OUTPUT_MATCHES "user context may retain it, and does: retained, and permitted -- expected ..interpreted . #t. .generated . #t.., got ..interpreted . #f. .generated . #t."
 )
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
+# Every pass above has now run exactly once, so the accumulated total is
+# final. Compared against the numbers declared at the top of this file --
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FIFTY-FIVE PASSES"
+# header comment they restate -- so a whole pass, or a single mutation inside
+# one, silently going missing is a build failure here rather than a stale
+# comment nobody rereads.
 byte_machine_mutation_totals(actual_passes actual_mutations)
 if(NOT actual_passes EQUAL EXPECTED_PASSES OR NOT actual_mutations EQUAL EXPECTED_MUTATIONS)
   message(FATAL_ERROR

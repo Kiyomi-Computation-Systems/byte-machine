@@ -90,12 +90,23 @@ At callback entry both executors expose **identical committed parser state**
   callbacks to mutate fields would bypass the closed IR (`§13:801`);
 - **stream offset and cursor** include every byte committed before the callback;
 - **`parser-state-name`** names the *source* callback or span node, never a
-  generated internal continuation (`§13:820`);
+  generated internal continuation (`§13:820`) — with the exception `§13:820`'s
+  own second sentence makes: at an **automatic feed-boundary fragment** there is
+  no callback or span node to name, and the runtime answers the input node the
+  executor stopped on;
 - **lifecycle is `busy`** (`§13:821`), so `parser-feed!`, `parser-finish!`,
   `parser-resume!` and `parser-reset!` all raise from inside a callback. Every
   *read* accessor answers normally;
-- **a span-data callback sees its span active**, with the mark already advanced
-  to the end of the fragment being delivered (`§13:822`);
+- **a span-data callback sees its span active** (`§13:822`). The plan's same
+  sentence adds "with the delivered mark already advanced to the fragment end",
+  and **the code does not do that** — `byte-machine-span-fragment-step/v1` reads
+  the mark as the fragment's *start* and leaves it alone, with a comment
+  recording that the advance was written, measured to fail nothing in either
+  lane, and deleted: every path out of a delivery either closes the span or
+  crosses a feed boundary, where `§14:833`'s re-anchor overwrites the mark. The
+  difference cannot reach you — `parser-span-mark` is not exported, so no
+  callback can observe the mark at all — but it is named here rather than
+  papered over;
 - **a span-complete callback sees that span inactive** (`§13:823`) — the span is
   closed before the completion callback runs, not after;
 - **no error is installed** until a callback returns failure (`§13:824`).
@@ -112,7 +123,7 @@ Four outcomes (`§13:803-808`):
 | `callback-continue` | proceed |
 | `callback-pause` | pause after this event is committed |
 | a declared branch key (symbol) | decision callbacks only |
-| `(make-callback-failure code detail)` | explicit failure; `detail` is optional |
+| `(make-callback-failure code detail)` | explicit failure. Two arguments always — `detail` is optional in the sense that `#f` is a legal value, not in the sense that it may be omitted |
 
 **Span and event callbacks accept only `continue`, `pause`, or failure**
 (`§13:812`); the branch keys are for decision callbacks. Anything else is a
@@ -162,8 +173,8 @@ boundaries remain observable (`§14:839`).
 
 Expected failures use the return value. **If a callback raises, or escapes
 non-locally, the parser is poisoned** (`§12.6:749`): the condition propagates out
-of `parser-feed!`, and the parser will refuse every further operation with
-`parser-poisoned` — except `parser-reset!`, which is the one operation a poisoned
+of `parser-feed!`, and the parser will refuse every further operation with the contract code
+`poisoned-parser` — except `parser-reset!`, which is the one operation a poisoned
 parser may run (`§12.2:698`).
 
 A reset clears span state, the pause continuation, the stored error, and the stop,
@@ -175,9 +186,12 @@ node.
 `§13:826` forbids an explicit pause node, or an event or decision callback
 invocation, on any reachable path where a span is active — only the active span's
 own data callback may pause before the span closes. **The verifier enforces
-this** (diagnostics `span-active-at-pause` and `span-active-at-exit`), and the
-plan says in as many words that the restriction is "what makes the no-retention
-contract possible without invoking unrelated callbacks after a pause request".
+this** — diagnostic `span-active-at-pause`; its sibling `span-active-at-exit`
+enforces the different rule at `§14:843` (no reachable path reaches a successful
+stop or finish with a span active), and the two arms carry those two citations
+separately in `verify.sls`. The plan says in as many words that the `:826`
+restriction is "what makes the no-retention contract possible without invoking
+unrelated callbacks after a pause request".
 
 So §2's guarantee is not independent of verification. A machine that reached this
 document without passing `verify-machine` has not earned it.
@@ -190,7 +204,7 @@ document without passing `verify-machine` has not earned it.
 |---|---|
 | no bytevector survives the return | `test/common/retention-tests.sps`, layer 1 |
 | the oracle can see retention at all | same file, layer 2 (the negative control) |
-| the three exemptions really carry | same file, layer 3 |
+| all three exemptions really carry | same file, layer 3 — user context, a callback closure, and callback error detail |
 | the weak-reference instrument discriminates | `test/common/liveness-probe-tests.sps` |
 | fragment rules, in both executors | `test/common/differential-span-tests.sps` |
 | pause, escape and poisoning | `test/common/differential-callback-tests.sps` |

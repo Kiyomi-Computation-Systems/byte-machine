@@ -1115,6 +1115,26 @@
   ;; so this list is a transcription and not a decision of this slice's.
   (define reserved-outcomes '(continue pause))
 
+  ;; *** AN OWNER-APPROVED CHECK IS MISSING FROM THIS PASS, and if you are here
+  ;; you are the receiver. *** `milestone-5-design.md` §4.12 item 2 -- "APPROVED
+  ;; 2026-09-04, scoped to Milestone 5's two new declaration families" -- asks for
+  ;; `§16.2:886`'s label-grammar check. It shipped nowhere. Measured at Milestone
+  ;; 5's close: nothing in this file reads `callback-declaration-source-label` or
+  ;; `span-declaration-source-label`, and `§10.1:480` puts labels under a
+  ;; DIFFERENT grammar from names -- printable ASCII plus LF, against
+  ;; `[a-z][a-z0-9-]*` -- so the two new declaration families carry an
+  ;; unvalidated field.
+  ;;
+  ;; The shape is `missing-span-declaration` below: one arm here, one diagnostic
+  ;; code, one row with its site count in `diagnostic-census-tests.sps`, one
+  ;; `verify-tests.sps` case, one mutation pin. The retrofit to the nine
+  ;; already-shipped kinds is explicitly NOT part of it (design §10).
+  ;;
+  ;; Deferred by Milestone 5's close-out (Slice ④, 2026-09-05); adjudicated in
+  ;; `docs/plans/byte-machine-implementation-plan.md`'s Milestone 5 close note,
+  ;; under "One approved scope item did NOT ship". It escaped every sweep because
+  ;; it is an APPROVAL with no receiver rather than a deferral -- which is why
+  ;; this comment exists.
   (define (pass-declarations m)
     (let ((cbs (machine-callbacks m)) (sps (machine-spans m)))
       (append

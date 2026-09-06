@@ -793,6 +793,42 @@
   pass. Before believing a liveness or reachability result, name what is still
   alive at the moment of measurement and check the subject is on that list.
 
+* **An APPROVAL with no receiver is invisible to every completeness sweep you
+  have.**
+  A milestone's close-out looks for two things: exit criteria, and obligations
+  that name a receiver ("owed by whoever next touches X", "Milestone 6 owes Y").
+  An owner's *approval* of a scope addition is neither. Milestone 5 approved
+  three items at its Gate 0; two shipped, and the third — a verifier check for a
+  field two new declaration families had just started carrying — shipped nowhere
+  and appeared in no slice plan, no exit criterion and no deferral list. It was
+  found only by a review asking a third question: **what did this milestone
+  approve that the tree does not contain?**
+  Ask that question at every close-out, against the design's own resolution
+  sections, and give every approved item a slice at the moment it is approved —
+  an approval that names no slice is a deferral nobody knows they are holding.
+
+
+* **The mutation suite prints "suite complete" on the way to FAILING.**
+  `byte_machine_mutation_run` emits its totals line and then, separately, raises
+  a `CMake Error` for a mutation caught "for the wrong reason" — a mutant that
+  exited nonzero but whose output did not match the pin. Slice ④ read a filtered
+  log for `suite complete|UNCAUGHT` three times, saw `(55 passes, 471 mutations)`
+  each time, and missed a wrong-reason error underneath it; the pin had been
+  broken from the moment it was written.
+  **Filter tool output for the FAILURE signatures, never for the success line.**
+  For this suite that means `CMake Error`, `wrong reason`, `UNCAUGHT`, and the
+  `tests passed` line — and the exit status, which is the only summary that
+  cannot be printed by a run that then fails.
+
+* **A pin's regex is matched against `FAIL <group>.<case>: <what>`, so `.*:`
+  between group and case is a trap.**
+  The group name in this repository routinely carries `§section:line`
+  references, and a greedy `.*:` swallows their colons. Anchor a pin on the CASE
+  name, which is followed by a literal `: `, and never on a wildcard bridging the
+  group. The suite catches this — it is what "caught by coincidence, not by the
+  decision this mutation names" means — but only after a full run.
+
+
 ## Closing ritual
 
 Run this when a branch's work is complete and reviewed. It is a ritual because

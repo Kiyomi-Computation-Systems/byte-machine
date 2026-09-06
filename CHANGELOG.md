@@ -47,9 +47,13 @@ the milestone: the input-retention oracle in both lanes, reachability-based
 rather than a slot walk — the parser is held alive across a full collection and
 only the fed bytevector is dropped, so what the weak reference measures is the
 runtime's retention and not the parser's own death. Its negative control is a
-fixture that retains on purpose and must read RETAINED, and three further arms
-cover `§13:799`'s application-owned carriers, including the callback error detail
-that a slot walk excluding only user context would report as a false violation.
+fixture that retains on purpose and must read RETAINED, and further arms cover
+all three of `§13:799`'s application-owned carriers — user context, a callback
+closure, and the callback error detail that a slot walk excluding only user
+context would report as a false violation. Layer 1 also probes the half of the
+feed surface a single terminal-status feed cannot reach: the boundary flush and
+`§14:833`'s mark re-anchor, both places where the caller's bytevector is in
+scope at a return.
 The slice also closed the three fragment shapes `§25:1589` still lacked — a span
 open at `parser-finish!` and closed on the EOF chain, a reset while parked
 between the span-end substeps, and a reset of a poisoned parser with a span open
