@@ -835,6 +835,26 @@
   decision this mutation names" means — but only after a full run.
 
 
+* **A predicate that calls another predicate nests its mutants by construction,
+  and the inner one's pins are the only real ones.**
+  `valid-label?` calls `valid-reason?`, so every mutant of `valid-label?`'s
+  symbol and string arms is strictly less destructive than the shipped
+  permissive-`reason-char?` mutant — measured, that mutant reddens all four label
+  cases and the reason case besides. Those arms therefore get **no pin**, and
+  that is a closed question rather than a coverage gap: their control is that
+  each is asserted in BOTH directions. What does get pinned is the part that is
+  *not* nested — here the absence arm, which decides before the inner predicate
+  is reached, and the per-family conjuncts, which the inner mutant cannot touch.
+  Before writing a pin, ask which shipped mutant already contains yours.
+
+* **`$` does not anchor a line in a mutation pin.** CMake's `MATCHES` anchors at
+  the end of the whole captured output, so `got ..$` matches nothing and the
+  suite reports the mutation "caught for the wrong reason". Assert the value's
+  own shape instead: `got .[)]` is what says the list is EMPTY, and it is what
+  separates a mutant that suppresses a finding from one that adds findings to the
+  same case.
+
+
 ## Closing ritual
 
 Run this when a branch's work is complete and reviewed. It is a ritual because

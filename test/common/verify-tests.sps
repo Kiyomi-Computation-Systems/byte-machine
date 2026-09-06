@@ -2731,13 +2731,6 @@
 ;; The bullet reads "reachable zero-progress cycles" and the pass applied NO
 ;; relation: measured by 0027 against the shipped file, neither `reached` nor
 ;; `byte-reached` occurred as an identifier anywhere in it.
-;;
-;; *** THIS IS A RELAXATION, and the ground the design gave for calling it
-;; benign does not hold. *** Design §3.2 item 4 said such a machine "is rejected
-;; by `unreachable-node` regardless". It is not: `pass-reachability` walks
-;; `all-out-targets`, which crosses an eof-target and then keeps taking byte
-;; edges, so it calls `t` reached. The machine below is 0027's own, and it is
-;; asserted BOTH ways -- the cycle is real, and no execution can enter it.
 
 ;; --- §16.2:886's label clause, Milestone 5 Slice ④ (design §4.12 item 2) -----
 ;;
@@ -2822,6 +2815,15 @@
         (check-equal "U+00E9"
                      (codes (label-machine (string->symbol "caf\xe9;") #f))
                      '(invalid-name))))
+    (harness-case "a nonportable STRING label is rejected too"
+      (lambda ()
+        ;; The string arm, which had a case asserting it ACCEPTS a portable
+        ;; string and nothing asserting it rejects a nonportable one -- an arm
+        ;; witnessed in one direction only. Both directions belong here for the
+        ;; same reason the liveness probe gives: either alone is satisfied by a
+        ;; constant.
+        (check-equal "a tab in a string label"
+                     (codes (label-machine "a\tb" #f)) '(invalid-name))))
     (harness-case "a label of the wrong SHAPE is rejected, not ignored"
       (lambda ()
         ;; No constructor validates this field and the plan gives it no type --
@@ -2871,6 +2873,13 @@
     (harness-case "and portable names on their own are clean"
       (lambda ()
         (check-equal "no diagnostics" (codes (named-machine 'on-data 'body)) '())))))
+
+;; *** THIS IS A RELAXATION, and the ground the design gave for calling it
+;; benign does not hold. *** Design §3.2 item 4 said such a machine "is rejected
+;; by `unreachable-node` regardless". It is not: `pass-reachability` walks
+;; `all-out-targets`, which crosses an eof-target and then keeps taking byte
+;; edges, so it calls `t` reached. The machine below is 0027's own, and it is
+;; asserted BOTH ways -- the cycle is real, and no execution can enter it.
 
 (harness-group "zero-progress cycles are gated on byte-reachability (§16.2:898)"
   (lambda ()

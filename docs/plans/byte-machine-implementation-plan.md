@@ -2319,7 +2319,7 @@ here. A deferral recorded only in this document is a deferral with one end.
 **One approved scope item nearly did not ship, and the way it nearly escaped is
 the part worth keeping.** `milestone-5-design.md` §4.12 **item 2** —
 `§16.2:886`'s label-grammar check, *"APPROVED 2026-09-04, scoped to Milestone 5's
-two new declaration families"*, reaffirmed at design `:1031`. Items 1 and 3
+two new declaration families"*, reaffirmed at design `:1049` (*"§4.12 is settled (owner, 2026-09-04): items 1-3 approved, item 4 declined. Slice plans may proceed on that basis"*). Items 1 and 3
 shipped; item 2 was in no slice plan, no exit criterion and no deferral list, and
 at close it was implemented nowhere: `§10.1:480` puts labels under a different
 grammar from names — printable ASCII plus LF, against `[a-z][a-z0-9-]*` — and two
@@ -2340,9 +2340,13 @@ already exactly `§10.1:480`'s, **folded into each family's existing name-clause
 bullet's reason clause, which reports once for a declaration bad in several ways
 and which `verify-tests.sps` witnesses. So: **no new diagnostic code, and the
 diagnostic census does not move** — `(invalid-name 6)` stays 6, measured by
-running it rather than assumed. Three mutation pins, each measured from a staged
-mutant, and the two of them that break different families are pinned on the cases
-that separate their record sets.
+running it rather than assumed. Four mutation pins, each measured from a staged mutant. The symbol and string
+arms carry NONE, and that is a finding rather than an omission: both call the
+shipped `valid-reason?`, so every mutant of them is nested by construction inside
+the two reason mutants already in the suite — measured, the permissive
+`reason-char?` mutant reddens all four label cases. A nesting by construction is
+a closed question; their control is that each arm is asserted in both
+directions.
 
 Three things it settles that `§4.12` item 2 did not, each recorded at the
 predicate. `#f` is absence and passes, since `§10.3:506` and `§10.4:517` both say
@@ -2360,11 +2364,24 @@ diagnostic report, a label's only consumer. `§16.2:886` requires the rejection
 either way; saying so at the site keeps the next reader from inheriting a
 stronger claim than the tree supports.
 
+**And the label clause is still missing on three kinds NO artifact excludes.**
+Design §10 keeps `§16.2:886`'s label grammar off "the nine already-shipped
+kinds", and §4.12 item 2 covers the two new declaration families. Milestone 5's
+own three new NODE kinds — span-start, span-end and callback — are neither, and
+they carry a `source-label` that nothing checks. Nor do the machine itself, the
+uint fields, the error declarations or either case kind, but those at least fall
+under §10's exclusion by age; the three new node kinds fall under nothing. Owed
+by **whoever next widens `pass-declarations`' label arms, and failing that by
+Milestone 6's close-out**; written at that arm in `verify.sls` as well as here.
+Not closed now because §4.12 item 2 does not authorise it and inventing scope at
+a close-out is how the item above got lost in the first place.
+
 **Two arms beside it were closed in the same commit.** `§16.2:886`'s name clause
 for the two families shipped in Slice ①b with no `verify-tests` case and no
 mutation pin, while `ir-tests.sps` asserted in prose that they were covered.
 Found while building the label clause next to them, and closed rather than
-recorded.
+recorded — a case AND a mutation pin for each family, after a first pass that
+pinned only one of the two while claiming both.
 
 **Also handed on:** `§27:1694`'s callback/span lifetime reference shipped as
 [docs/reference/callback-span-lifetime.md](../reference/callback-span-lifetime.md).
