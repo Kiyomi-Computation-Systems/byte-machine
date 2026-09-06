@@ -2,7 +2,8 @@
 ;;; message loop WITHOUT a span -- `idle` -> `len` -> `:` -> `body` -> `,` ->
 ;;; clear -> `idle` -- in the shape §21 needs (§21.3:1149-1150: completion resets
 ;;; the message field and loops to request start), plus the two smaller machines
-;;; the slice's oracles need and one the reached-declaration walk owes.
+;;; the slice's oracles need, one the reached-declaration walk owes, and -- from
+;;; Slice ② -- the same loop with `body` inside a span, in two variants.
 ;;;
 ;;; `idle`'s eof-target is the FINISH, so EOF between messages is `finished`,
 ;;; and `len`, `body` and `,` route EOF to the truncation error, so EOF after a
@@ -11,7 +12,8 @@
 ;;; the accumulate node cannot make. The entry reexecutes the first digit into
 ;;; `len` so the accumulator sees every digit; `len`'s non-digit edge reexecutes
 ;;; the `:` into a dispatch that consumes it, so the body starts exactly after
-;;; the colon. Slice ② wraps `body` in a span; nothing here changes for it.
+;;; the colon. Slice ② wraps `body` in a span (`make-counted-span-machine`, below)
+;;; and changes nothing in the four Slice ① machines.
 (library (byte-machine test counted-machine)
   (export make-counted-machine make-only-consumer-machine make-entry-zero-machine
           make-big-count-machine make-counted-span-machine)

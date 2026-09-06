@@ -6,9 +6,10 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ## [Unreleased]
 
-Milestones 0 through 5 (portability spike, minimal executable machine,
+Milestones 0 through 6 (portability spike, minimal executable machine,
 incremental execution and lifecycle, byte classes and sequences, fields and
-actions and branches, callbacks and poisoning and spans) have closed. Milestone 3 closed **2026-08-30** with Slice
+actions and branches, callbacks and poisoning and spans, counted consumption)
+have closed. Milestone 3 closed **2026-08-30** with Slice
 ③ (multiple alternatives, ambiguity, and cycle analysis), after Slices ① (byte
 classes) and ② (sequence dispatch and prefix lowering). Milestone 4 closed
 **2026-09-03** with Slice ③ (integer accumulation), after its Gate 0
@@ -68,7 +69,7 @@ and so invisible to both completeness sweeps. It reuses the shipped
 `valid-reason?` predicate, folded into each family's existing name check, so it
 adds no diagnostic code and does not move the census; the two name checks beside
 it, which had shipped with no test and no mutation pin, were closed with it.
-Milestone 6 (counted consumption) is in progress. Slice ⓪ closed **2026-09-06**
+Milestone 6 (counted consumption) closed **2026-09-06**. Slice ⓪ closed **2026-09-06**
 (Gate 0 discharged the same day as decision 0030 — a counted consume is
 input-reading with a zero-count route, amending decision 0023 item 3): `§16.2:886`'s
 label clause made **total** over all nineteen label carriers through the four

@@ -84,7 +84,7 @@ verifier now rejects a callback or span declaration whose optional diagnostic
 label falls outside the portable repertoire, which is a rule the plan has always
 required and nothing had ever enforced for any declaration.
 
-Milestone 6 (counted consumption) is in progress. Slice ⓪, a hardening slice,
+Milestone 6 (counted consumption) closed 2026-09-06. Slice ⓪, a hardening slice,
 closed 2026-09-06, and its Gate 0 discharged the same day as decision 0030 — a
 counted consume is an input-reading node with a zero-count route. The verifier's
 diagnostic-label check is now total: every construct that carries a label —

@@ -613,7 +613,7 @@
   ;; next narrows reachability, and failing that by MILESTONE 7 (§25:1615, the
   ;; generative and diagnostic hardening of the passes already introduced).
   ;; Handed on 2026-09-06 when Milestone 6 closed without narrowing it, and
-  ;; adjudicated at the parent plan's disposition "§25:1611 -- Milestone 6 hands
+  ;; adjudicated at the parent plan's disposition "§25:1611 — Milestone 6 hands
   ;; the reachability narrowing to Milestone 7", which carries the pricing from
   ;; Milestone 6's design §8.
   (define (pass-reachability m)

@@ -1,7 +1,8 @@
 # Milestone 6 Design — Counted consumption
 
-**Status: CLOSED 2026-09-06.** Slice ② delivered 2026-09-06 on `feat/m6-slice-2` (two commits: the
-counted-span lane with its retention arm, and the close-out; 114/114, 58 passes / 522 mutations)
+**Status: CLOSED 2026-09-06.** Slice ② delivered 2026-09-06 on `feat/m6-slice-2` (three commits: the
+counted-span lane with its retention arm, the close-out, and the whole-branch review's fixes;
+114/114, 58 passes / 522 mutations)
 and closed the milestone; the parent plan's "§25:1593-1609 — Milestone 6 closes, dispositioned
 against the tree" records every criterion, and "§25:1611 — Milestone 6 hands the reachability
 narrowing to Milestone 7" the one deferral. Before it: Slice ⓪ delivered 2026-09-06 (PR #77: four source commits — the three
@@ -43,10 +44,10 @@ re-measured at plan-writing time (§9).
 > oracle 4 is not "every hunk in those two files is a comment" but an EMPTY five-library diff
 > (the receiver notes it expected the close-out to rewrite were rewritten by ⓪ and ①); §4.11
 > item 5's precedent sentence (Milestone 5's Slice ⓪ "handing its generator work to Milestone
-> 7") described dispositions that record deliveries, not hand-offs — this milestone's `§25:1611`
+> 7") described a scoping record and a delivery, not hand-offs — this milestone's `§25:1611`
 > disposition is the first under that heading that hands something over; §8's reachability
-> bullet and the Exit table's `:1608` fragment clause and `:1609` span variant get their dates.
-> The Status header moved with it.
+> bullet and the Exit table's `:1608` fragment clause and `:1609` span variant get their dates,
+> and that bullet's "three test files" becomes the two it can name. The Status header moved with it.
 >
 > **2026-09-06, Slice ① delivered** — **corrects §4.10, §6, §9 and the appendix in place**, all
 > instructions, each where the slice measured what this document had derived: `count-next` is a
@@ -767,8 +768,8 @@ that defers names both ends.
    "generative and diagnostic hardening of all mandatory verification passes" (`§25:1615`),
    with both ends: the source note re-addressed to Milestone 7, and an appended disposition
    under the parent plan's `§25:1611` heading — Milestone 7's own subsection, the place its
-   designer reads first (the two Milestone 5 dispositions already there record deliveries;
-   this is the first that hands something over). **Deferred 2026-09-06 by Slice ②**, both ends
+   designer reads first (the two Milestone 5 dispositions already there are a scoping record
+   and a delivery; neither hands anything over, and this is the first that does). **Deferred 2026-09-06 by Slice ②**, both ends
    written: the note above `pass-reachability` names Milestone 7 and the adjudication, and
    "§25:1611 — Milestone 6 hands the reachability narrowing to Milestone 7" carries §8's pricing.
 
@@ -1031,7 +1032,7 @@ body fragment boundaries), exit `:1608`'s **fragment** clause and exit `:1609`'s
 variant** (two completion events in one feed's trace — ① discharges the criterion itself), and
 writes the milestone's close note as an appended disposition. It adds **no mechanism** (§4.8):
 every rule it exercises already runs at the `parser-feed!` seam or in the span-end substeps.
-**Delivered 2026-09-06** on `feat/m6-slice-2`, against `8ec814f`, as two commits; plan
+**Delivered 2026-09-06** on `feat/m6-slice-2`, against `8ec814f`, as three commits; plan
 `docs/plans/milestone-6-slice-2-implementation-plan.md` (PR #80 = `424d318`).
 
 **The work.**
@@ -1124,7 +1125,9 @@ that meets it — never reworded to match what shipped.
   `verify-tests.sps` fixture asserting that `unreachable-node` does **not** catch that family
   flips; and the matrix's pruning count ("exactly three cells prune the sink") moves, because a
   sink reached only through a placed node's EOF route stops being reached. That is a verifier
-  behaviour change with a re-baseline across three test files, in a milestone about a node kind.
+  behaviour change with a re-baseline in `verify-tests.sps` and `kind-position-census-tests.sps` at
+  least, in a milestone about a node kind. *(This bullet first said "three test files" and named
+  two; the count was not established. Corrected in place by Slice ②; Milestone 7 enumerates it.)*
   **Deferred to Milestone 7** (`§25:1615`), with both ends written by Slice ② on 2026-09-06: the
   note at `pass-reachability` re-addressed, and the appended disposition "§25:1611 — Milestone 6
   hands the reachability narrowing to Milestone 7".

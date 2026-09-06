@@ -480,9 +480,9 @@
     (harness-case "the counted machine verifies clean"
       (lambda ()
         (check-equal "no diagnostics" (map diagnostic-code (verification-diagnostics v-cret)) '())))
-    (harness-case "counted: the fed bytevector is gone while the parser is still alive, in both lanes"
+    (harness-case "counted: the one-feed probe with the parser still alive"
       (lambda ()
-        (check-equal "counted: gone in both lanes"
+        (check-equal "counted: one-feed buffer released, interpreted and generated"
                      (each-counted-lane (lambda (cm) (car (retained? cm plain))))
                      '((interpreted . #f) (generated . #f)))
         (check-equal "counted: and the span really ran"
@@ -492,7 +492,7 @@
                              (cons 'generated (list bcd 'complete)))))))
     (harness-case "counted: a span left open across a feed boundary retains neither buffer"
       (lambda ()
-        (check-equal "counted: neither, in both lanes"
+        (check-equal "counted: split probe, both buffers released"
                      (each-counted-lane (lambda (cm)
                                           (let ((r (retained-split? cm plain)))
                                             (list (car r) (cadr r)))))
@@ -508,6 +508,12 @@
         (check-equal "counted: stashing on the one-feed probe"
                      (each-counted-lane (lambda (cm) (car (retained? cm stashing))))
                      '((interpreted . #t) (generated . #t)))
+        ;; The control's trace, as layer 2 asserts for the plain machine: a
+        ;; fixture that answers RETAINED without having run the span would make
+        ;; the control vacuous.
+        (check-equal "counted: the stashing control really ran the span"
+                     (each-counted-lane (lambda (cm) (cadr (retained? cm stashing))))
+                     '((interpreted stashed complete) (generated stashed complete)))
         (check-equal "counted: the split control holds the flush's buffer and not the second"
                      (each-counted-lane (lambda (cm)
                                           (let ((r (retained-split? cm stashing-first)))

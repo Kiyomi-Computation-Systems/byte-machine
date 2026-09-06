@@ -1064,7 +1064,10 @@ cmake_minimum_required(VERSION 3.26)
 # of the completion event -- and the two count-completion-order mutants Slice ①
 # declared elsewhere are declared again here, pinned per lane on the per-feed
 # placement record. The retention lane's body-shaped arm adds no pin: the shipped
-# stored-bytevector pin reddens it (measured by the sweep).
+# stored-bytevector MUTANT reddens it (measured by the sweep), and the arm's labels
+# share no run of words with the shipped pin's regex, so that pin still resolves to
+# exactly one (case, check) pair -- the review caught a first draft whose label
+# "counted: gone in both lanes" made it resolve to two.
 #
 # Milestone 6 Slice ① task 3, the differential, the fifth golden and the two
 # structural witnesses: NINE more in TWO new passes plus one, 511 + 9 = 520, and
