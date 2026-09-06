@@ -2863,6 +2863,201 @@
                               'default-eof #f))
                      '(invalid-name))))))
 
+;; --- every label carrier (Milestone 6 Slice ⓪; §16.2:886) --------------------
+;;
+;; Nineteen constructors take a `source-label`. The two declaration families got
+;; their check in Milestone 5 Slice ④ (the group above); the other SEVENTEEN are
+;; driven here from one table, each built with the label under test and nothing
+;; else wrong, each asserted in BOTH directions -- an integer label is rejected
+;; under the carrier's own name (a byte case's or sequence case's under the
+;; OWNING NODE, because a case has no name), and a portable symbol and a portable
+;; string are accepted -- so an arm rejecting every carrier fails as loudly as
+;; one rejecting none.
+;;
+;; The rejection fixture is a wrong-SHAPE label, not a bad character, and that is
+;; a constraint the pins impose: every label conjunct is nested inside the
+;; shipped permissive-`reason-char?` mutant unless the fixture carries a value
+;; that mutant cannot accept, and `valid-label?`'s `(else #f)` rejects an
+;; integer without consulting the repertoire (the span-family pin's own measured
+;; reason, one group up).
+(define (labelled-machine name fields cbs sps errors nodes)
+  (make-machine name 'start fields cbs sps errors nodes 'default-eof #f))
+(define (plain-entry . eof)
+  (make-byte-dispatch-node 'start (list (case-to 'done)) (make-edge 'reject 'reexecute)
+                           (if (null? eof) #f (car eof)) #f))
+;; Byte 0 into the node under test, byte 1 into the stop, so `done` stays
+;; byte-reachable in every row -- a parked node's continuation cannot be the
+;; stop (§16.2:909), so the stop is reached from the entry instead.
+(define (entry-into target)
+  (make-byte-dispatch-node 'start
+                           (list (case-to target)
+                                 (make-byte-case (make-exact-byte-matcher 1)
+                                                 (make-edge 'done 'advance) #f))
+                           (make-edge 'reject 'reexecute) #f #f))
+(define done (make-stop-node 'done #f))
+(define reject (make-error-node 'reject 'rejected #f))
+(define count-field (make-uint-field 'count 8 0 #f))
+(define (with-nodes . ns) (labelled-machine 'labm '() '() '() errs ns))
+;; The span rows carry member3-drift-tests.sps's span shape, measured there: a
+;; consuming node INSIDE the span with its own EOF terminal (the shared `reject`
+;; is reached with no span open, and merging `(active sp)` with `none` at one
+;; node is a rejection), and a DISPATCH after the span end, never the stop,
+;; because a span end is a parked state (§16.2:909).
+(define span-chain-cbs (list (make-callback-declaration 'on-data 'span-data #t '() #f #f)))
+(define span-chain-sps (list (make-span-declaration 'sp 'on-data #f #f)))
+(define (span-nodes start-label end-label)
+  (list (entry-into 'ss)
+        (make-span-start-node 'ss 'sp 'sread start-label)
+        (make-byte-dispatch-node 'sread
+          (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'se 'reexecute) #f))
+          (make-edge 'sread 'advance) 'rej2 #f)
+        (make-error-node 'rej2 'rejected #f)
+        (make-span-end-node 'se 'sp 'after end-label)
+        (make-byte-dispatch-node 'after (list (case-to 'done)) (make-edge 'reject 'reexecute) #f #f)
+        done reject))
+
+;; (carrier expected-node build), build: label -> machine
+(define label-carrier-rows
+  (list
+   (list 'machine 'labm
+         (lambda (l) (make-machine 'labm 'start '() '() '() errs
+                                   (list (plain-entry) done reject) 'default-eof l)))
+   (list 'uint-field 'count
+         (lambda (l) (labelled-machine 'labm (list (make-uint-field 'count 8 0 l)) '() '() errs
+                                       (list (plain-entry) done reject))))
+   (list 'error-declaration 'rejected
+         (lambda (l) (labelled-machine 'labm '() '() '()
+                                       (list eof-decl
+                                             (make-error-declaration 'rejected 'unexpected-byte
+                                                                     "unexpected byte" l))
+                                       (list (plain-entry) done reject))))
+   (list 'byte-case 'start
+         (lambda (l) (with-nodes (make-byte-dispatch-node
+                                  'start
+                                  (list (make-byte-case (make-exact-byte-matcher 0)
+                                                        (make-edge 'done 'advance) l))
+                                  (make-edge 'reject 'reexecute) #f #f)
+                                 done reject)))
+   (list 'sequence-case 'start
+         (lambda (l) (with-nodes (make-sequence-dispatch-node
+                                  'start (list (make-sequence-case '(1) 'done l))
+                                  (make-edge 'reject 'reexecute) #f #f)
+                                 done reject)))
+   (list 'byte-dispatch 'start
+         (lambda (l) (with-nodes (make-byte-dispatch-node
+                                  'start (list (case-to 'done))
+                                  (make-edge 'reject 'reexecute) #f l)
+                                 done reject)))
+   (list 'sequence-dispatch 'start
+         (lambda (l) (with-nodes (make-sequence-dispatch-node
+                                  'start (list (make-sequence-case '(1) 'done #f))
+                                  (make-edge 'reject 'reexecute) #f l)
+                                 done reject)))
+   (list 'stop 'done
+         (lambda (l) (with-nodes (plain-entry) (make-stop-node 'done l) reject)))
+   (list 'error 'reject
+         (lambda (l) (with-nodes (plain-entry) done (make-error-node 'reject 'rejected l))))
+   (list 'finish 'fin
+         (lambda (l) (with-nodes (plain-entry 'fin) done reject (make-finish-node 'fin l))))
+   ;; A pause's continuation is the ERROR node and not the stop: a parser parked
+   ;; there resumes on that one edge, so a stop there is §16.2:909's finding.
+   (list 'pause 'p
+         (lambda (l) (with-nodes (entry-into 'p) (make-pause-node 'p 'reject l) done reject)))
+   (list 'field-action 'fa
+         (lambda (l) (labelled-machine 'labm (list count-field) '() '() errs
+                                       (list (entry-into 'fa)
+                                             (make-field-action-node 'fa 'clear '(count) 'done #f l)
+                                             done reject))))
+   (list 'field-branch 'fb
+         (lambda (l) (labelled-machine 'labm (list count-field) '() '() errs
+                                       (list (entry-into 'fb)
+                                             (make-field-branch-node 'fb 'zero '(count)
+                                                                     'done 'reject l)
+                                             done reject))))
+   (list 'integer-accumulate 'acc
+         (lambda (l) (labelled-machine 'labm (list count-field) '() '() errs
+                                       (list (entry-into 'acc)
+                                             (make-integer-accumulate-node
+                                              'acc 'count 10 'acc (make-edge 'done 'advance)
+                                              'reject #f l)
+                                             done reject))))
+   ;; The pause continuation is the ERROR node and not the stop: a byte-reachable
+   ;; callback is a parked state whose walk starts on that one edge, and a stop
+   ;; there is §16.2:909's finding -- the t2-hop row records the same choice.
+   (list 'callback 'cn
+         (lambda (l) (labelled-machine 'labm '()
+                                       (list (make-callback-declaration 'cb 'event #t '() #f #f))
+                                       '() errs
+                                       (list (entry-into 'cn)
+                                             (make-callback-node 'cn 'cb 'done '() 'reject l)
+                                             done reject))))
+   (list 'span-start 'ss
+         (lambda (l) (labelled-machine 'labm '() span-chain-cbs span-chain-sps errs
+                                       (span-nodes l #f))))
+   (list 'span-end 'se
+         (lambda (l) (labelled-machine 'labm '() span-chain-cbs span-chain-sps errs
+                                       (span-nodes #f l))))))
+
+(define (code+node m)
+  (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+       (verification-diagnostics (verify-machine m))))
+
+(harness-group "every label carrier is checked (§16.2:886, Milestone 6 Slice ⓪)"
+  (lambda ()
+    (harness-case "an integer label is rejected under the carrier's own name"
+      (lambda ()
+        ;; One check per row, LABELLED BY CARRIER, so a mutant dropping one arm's
+        ;; conjunct has a (case, check) pair of its own to be pinned on.
+        (let ((driven 0))
+          (for-each
+           (lambda (row)
+             (set! driven (+ driven 1))
+             (let ((carrier (car row)) (node (cadr row)) (build (caddr row)))
+               ;; `pass-fields` owns the field arm and reports under ITS code;
+               ;; the other three arms are `pass-names-valid`'s.
+               (check-equal (string-append (symbol->string carrier) ": integer label")
+                            (code+node (build 42))
+                            (list (cons (if (eq? carrier 'uint-field)
+                                            'invalid-field-declaration
+                                            'invalid-name)
+                                        node)))))
+           label-carrier-rows)
+          (check-equal "seventeen carriers driven" driven 17)
+          (check-equal "and the table has seventeen rows" (length label-carrier-rows) 17))))
+    (harness-case "a portable symbol and a portable string are accepted"
+      (lambda ()
+        ;; THE NEGATIVE CONTROL, per carrier: without it every rejection above is
+        ;; satisfied by an arm that rejects every label. The `#f` every fixture
+        ;; in the tree carries is asserted too, since an arm rejecting absence
+        ;; would redden the whole suite instead of this case.
+        (let ((driven 0))
+          (for-each
+           (lambda (row)
+             (set! driven (+ driven 1))
+             (let ((carrier (car row)) (build (caddr row)))
+               (check-equal (string-append (symbol->string carrier) ": portable labels")
+                            (append (codes (build #f))
+                                    (codes (build 'the-label))
+                                    (codes (build "Body: outer (bytes)")))
+                            '())))
+           label-carrier-rows)
+          (check-equal "seventeen carriers driven both ways" driven 17))))
+    (harness-case "a node bad in name, label AND a case label reports ONCE"
+      (lambda ()
+        ;; The fold's own assertion, and the reason the label clause and the
+        ;; case-label clause went into the name clause's `and` rather than into
+        ;; arms of their own: three faults on one node, one finding.
+        (check-equal "one finding, not three"
+                     (codes (make-machine 'labm 'Bad '() '() '() errs
+                              (list (make-byte-dispatch-node
+                                     'Bad
+                                     (list (make-byte-case (make-exact-byte-matcher 0)
+                                                           (make-edge 'done 'advance) 42))
+                                     (make-edge 'reject 'reexecute) #f 42)
+                                    done reject)
+                              'default-eof #f))
+                     '(invalid-name))))))
+
 (harness-group "declaration NAMES are checked too, which nothing witnessed (§16.2:886)"
   (lambda ()
     (harness-case "a nonportable callback name and a nonportable span name"

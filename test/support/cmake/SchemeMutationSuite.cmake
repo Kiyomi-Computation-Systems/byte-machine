@@ -1039,6 +1039,22 @@ cmake_minimum_required(VERSION 3.26)
 # One shipped pin was re-anchored: the edge-role census case is "every other
 # kind" now, the table having grown a callback row and two span rows.
 #
+# Milestone 5 Slice ④ and the close-out audit took the count from 466 to 476 at
+# their pins' own sites (the retention pass, the verify-rejections pass's four
+# label pins, and the audit's one), with no entry here.
+#
+# Milestone 6 Slice ⓪ tasks 2 and 3, §16.2:886's label clause made TOTAL: SEVEN
+# more, 476 + 7 = 483. Five in the verify-rejections pass, one per conjunct the
+# fold added -- the machine's label, a node's own label, a node's case labels,
+# an error declaration's label, a field's label -- each pinned on the carrier
+# row it stops rejecting, with a wrong-SHAPE label because every one of them is
+# otherwise nested inside the shipped permissive-`reason-char?` mutant. Two for
+# `node-source-label`, ir.sls's second per-kind census: an arm answering `#f`
+# (the ir pass, by comparison) and an arm DELETED (the census pass, by the
+# derived S2b row's count). Two shipped pins were re-anchored, the machine-name
+# and node-name grammar pins, whose `if` tests grew a conjunct; their REPLACEs
+# now drop the name check alone. No pass is added.
+#
 # Milestone 5 Slice ①b: TWO. `pass-declarations` never run -- eight census
 # fixtures then find nothing, caught by a comparison naming a missing code. And
 # the span section reusing the callback section's tag, which pins the section
@@ -1224,7 +1240,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 55)
-set(EXPECTED_MUTATIONS 476)
+set(EXPECTED_MUTATIONS 483)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -4154,8 +4170,11 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: the machine-name grammar check is suppressed"
-  FIND [[(if (valid-name? (machine-name m)) '()]]
-  REPLACE [[(if #t '()]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "an uppercase machine name is invalid-name: invalid-name")
+  # Re-anchored by Milestone 6 Slice ⓪, which folded the label conjunct into this
+  # arm's test: the FIND is the name conjunct alone, so the mutant drops the name
+  # check and nothing else.
+  FIND [[(valid-name? (machine-name m))]]
+  REPLACE [[#t]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "an uppercase machine name is invalid-name: invalid-name")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -4290,8 +4309,9 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: the node-name grammar check is suppressed"
-  FIND [[(if (valid-name? (node-name n)) #f]]
-  REPLACE [[(if #t #f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "an uppercase node name is invalid-name: invalid-name")
+  # Re-anchored by Milestone 6 Slice ⓪ for the same reason as the machine arm's.
+  FIND [[(valid-name? (node-name n))]]
+  REPLACE [[#t]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "an uppercase node name is invalid-name: invalid-name")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -6242,6 +6262,61 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the span -- expected ..invalid-name . Body.., got .[)]"
 )
+
+# --- Milestone 6 Slice ⓪: §16.2:886's label clause made TOTAL -----------------
+# Five conjuncts, one per arm the fold reached, each pinned on the carrier row
+# whose integer label it stops rejecting. The fixtures use a wrong-SHAPE label
+# because every one of these mutants is otherwise nested inside the permissive
+# `reason-char?` mutant above: `valid-label?`'s `(else #f)` rejects an integer
+# without consulting the repertoire, so the integer row is the record no reason
+# mutant can produce. `got .[)]` asserts the diagnostic list is EMPTY.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the machine's label is no longer checked"
+  FIND [[(valid-label? (machine-source-label m))]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "machine: integer label -- expected ..invalid-name . labm.., got .[)]")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a node's own label is no longer checked"
+  # Every node-kind row reddens; the pin is one of them. The case-label conjunct
+  # below keeps the byte-case and sequence-case rows GREEN under this mutant,
+  # which is what separates the two pins.
+  FIND [[(valid-label? (node-source-label n))]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "stop: integer label -- expected ..invalid-name . done.., got .[)]")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a node's case labels are no longer checked"
+  # The other half of the node arm: only the two case rows redden, under the
+  # OWNING node's name, and every node-kind row stays green.
+  FIND [[(for-all valid-label? (node-case-labels n))]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "byte-case: integer label -- expected ..invalid-name . start.., got .[)]")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an error declaration's label is no longer checked"
+  FIND [[(valid-label? (error-declaration-source-label e))]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "error-declaration: integer label -- expected ..invalid-name . rejected.., got .[)]")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a field's label is no longer checked"
+  # `pass-fields`' arm, the fourth of the fold's four; it reports under the field
+  # name and the CODE is `invalid-field-declaration`, so the expected list here
+  # differs from the four `invalid-name` rows above.
+  FIND [[(valid-label? (uint-field-source-label f))]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "uint-field: integer label -- expected ..invalid-field-declaration . count.., got .[)]")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -8691,6 +8766,21 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the two kinds are distinguishable")
 
+# Milestone 6 Slice ⓪: `node-source-label`'s arm for one kind answers ABSENCE.
+# Caught by comparison in the twelve-kind case (and again by the verifier lane's
+# stop row, under another SPEC). NOT pinned: an arm swapped for a same-slot
+# sibling's accessor -- `stop` and `finish` both store the label at slot 2 and
+# every `-source-label` accessor is an unguarded `vector-ref`, so that mutant is
+# observationally identical and would ship UNCAUGHT. The arm-DELETION mutant is
+# the census pass's, where the derived S2b row is what sees it.
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node-source-label answers #f for a stop node"
+  FIND [[((stop-node? x) (stop-node-source-label x))]]
+  REPLACE [[((stop-node? x) #f)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "each answers its own label -- expected .., got .stop.")
+
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -10621,6 +10711,22 @@ byte_machine_mutation(
         (span-start-node? x) (span-end-node? x) (stop-node? x)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the same twelve kinds -- expected")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls
+  SPEC byte-machine.unit.kind-position-census.chez.source
+  LABEL "ir: node-source-label loses an arm"
+  # Milestone 6 Slice ⓪'s S2b ratchet, the SECOND per-kind census in ir.sls the
+  # matrix derives from the file. Deleting an arm shrinks the cond's predicate
+  # set to eleven, and the row's count check says so by comparison -- before any
+  # fixture for a missing kind exists, which is the point of deriving it. The
+  # sibling `#f`-arm mutant in Pass 42 leaves the predicate set intact and cannot
+  # redden this row; the two are separate decisions.
+  FIND [[          ((stop-node? x) (stop-node-source-label x))
+          ((error-node? x) (error-node-source-label x))]]
+  REPLACE [[          ((error-node? x) (error-node-source-label x))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "and there are twelve of them -- expected 12, got 11")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls
