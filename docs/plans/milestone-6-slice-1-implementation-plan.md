@@ -29,7 +29,7 @@ a `file:line` is where to start reading, the construct name is the citation.
 
 ---
 
-## 1. Twelve findings that shape the work
+## 1. Thirteen findings that shape the work
 
 The design was measured at `b470665`; the tree moved twice since (Gate 0 added
 records only; Slice ⓪ added `node-source-label`, the names library, and label
@@ -89,8 +89,11 @@ pinned ("ir: an accumulate node's eof-target is unchecked") and is the **only**
 line in `ir.sls` with that operand order; `make-byte-dispatch-node` and
 `make-sequence-dispatch-node` write `(or (symbol? eof-target) (eq? eof-target #f))`.
 A counted-consume constructor that copies the accumulate line verbatim takes that
-FIND to two occurrences. The new constructor writes the dispatch order, which
-already occurs twice and is pinned by nothing.
+FIND to two occurrences. The new constructor writes the dispatch order; that
+line is pinned once too ("ir: make-sequence-dispatch-node accepts a malformed
+eof-target"), but by a **two-line** FIND that includes the following
+`byte-machine-contract-violation` line naming `make-sequence-dispatch-node`, so a
+third copy of the first line alone leaves that FIND at one site.
 
 ### F4 — the emitted arm cannot call `render-exhausted-preamble`, and must not re-render its lines
 
@@ -123,7 +126,7 @@ There is no `differential-accumulate-tests.sps`. The accumulate golden lane
 (`determinism-accumulate-tests.sps`, spec `determinism.accumulate`) is
 generated-lane only, and the both-lane accumulate coverage rides
 `field-access-tests.sps` (spec `differential.field`: `emit-and-load` at `:79`,
-`acc-mach`/`acc-lanes` at `:612`, `feed-split` at `:713`). The newest both-lane
+`acc-mach` at `:612`, `acc-lanes` at `:627`, `feed-split` at `:713`). The newest both-lane
 harness shape is `differential-span-tests.sps` (`generated` `:116`, `make-lane`
 `:161`, `rfields` `:169`, `run` `:177`, `both` `:204`). The new program,
 `test/common/differential-counted-tests.sps`, copies the span lane's shape — one
@@ -151,7 +154,8 @@ terminal kinds at the entry prune the sink). `diagnostic-census-tests.sps`:
 "nine checked" / "all nine emitted" → **ten** (`n`). `position-kind-tests.sps`:
 "seven cases ran" / "fourteen drives observed" → **9 / 18**. `verify-tests.sps`:
 "all seven kinds driven" (twice) and "seven kinds driven" → **eight**.
-`ir-tests.sps`: "twelve kinds driven" → **thirteen**. `normal-ir-tests.sps`: the
+`ir-tests.sps`: "twelve kinds driven" and "and the table has twelve rows" →
+**thirteen**. `normal-ir-tests.sps`: the
 layout-walk fixture list (`:793`) does not include `acc-machine` — accumulate has
 its own eleven-slot case — so the counted machine gets its own case on that
 precedent.
@@ -174,7 +178,9 @@ matrix's derived verdicts follow `expected-codes` unchanged.
 A counted consume at `hop` with `next` = `fin` is byte-reachable, so `§16.2:908`
 fires through `node-out-edges` — and nothing else does: with a `#f` eof-target
 the node is not parked, and in the `eof-only?` variant the walk from the entry
-classifies `hop` as `join(default-error, finish)` = `finish`, benign. So the row
+classifies `hop` as the join of `default-error` (the `#f` route) and `finish`
+(over `next`) — `eof-verdict-join` answers its first argument on equal rank, so
+`default-error`, tier 0, benign either way. So the row
 isolates `:908` exactly as the seven shipped kinds do (design §4.10). The
 edge-role census gains `((non-eof-into-finish cc next))` — one edge, one role.
 
@@ -184,7 +190,11 @@ edge-role census gains `((non-eof-into-finish cc next))` — one edge, one role.
 §7's oracle 3 — the completion event lands in the feed that delivered the last
 body byte, never in the delimiter's feed — is asserted here as **one** both-lane
 case over the span-wrapped body under the byte-at-a-time schedule, in the new
-differential program (Task 3). It is the third of the three ordering witnesses
+differential program (Task 3), with a **completion callback declared**: the
+recorder records `'complete` only through the `ondone` closure
+(`differential-span-tests.sps:154-167`), and a span with no completion callback
+records nothing a placement can be read from — the data callback receives `c` in
+the `c` feed under both readings. It is the third of the three ordering witnesses
 §6 names, and it is the one a symmetric wrong reading of 0030 item 2 hides from
 lane agreement; taking it now costs one case and tells Slice ② its oracle
 discriminates under AOT.
@@ -201,6 +211,35 @@ B). The differential lane, the committed golden with its determinism lanes and
 the two structural witnesses **read** commit B and add lanes only, so they are a
 third green commit (C) that keeps B reviewable. Task 5 corrects §9's bullet in
 place with this reason.
+
+### F13 — the runtime's counted arms run in the interpreted lane only, so their witnesses are the both-lane programs, and no single-file mutant makes the lanes agree
+
+`parser-feed-op!` and `parser-finish-op!` serve the `op` variant; the generated
+`/v2` lane calls the emitted `exec` (`runtime.sls:1052-1065`). Three consequences.
+(i) A mutation of the runtime's counted arm is witnessed only by a program that
+executes a machine carrying the kind through the interpreter — `differential.position-kind`
+(Task 2 adds two rows) or `differential.counted` (Task 3) — never by
+`unit.runtime`, whose stubs carry no such kind. (ii) Every `need-input` result
+the loop builds carries `#f` as `next` (`:1039`, `:1045`), so "which node the
+parser is parked on" is observed through `parser-state-name` or through the
+route the next `parser-finish!` takes, never through the result's `next`.
+(iii) Design §6's oracle 3 asks for "at least one mutant that makes both lanes
+agree on a wrong value"; with one `FILE` per mutation and an interpreter-only
+runtime arm, no mutant of this slice's code can make both lanes wrong the same
+way. What **is** achievable, and what the design's sentence is for, is the pin
+shape: every interpreter/emitter mutant declared in the differential pass is
+pinned on the **expected value's** failure record, never on lane disagreement.
+Task 5 corrects oracle 3 in place to say that. And the second ordering witness
+§6 names — "`parser-finish!` after `0:` reports the `,` dispatch's default EOF
+error" — cannot see the order: after `0:` a correct feed arm parks the parser
+on `,`, and the wrong-order feed arm parks it on `body` with count zero, where a
+correct **finish** arm transitions to `,` and reports the same error. The finish
+arm's `(0 . next)` route is reached only from a counted consume with a zero
+count that was never fed — the entry of a fresh parser (0030 item 6) — so its
+witness is a machine whose **entry** is a counted consume with field initial 0,
+`#f` eof-target and an **error node** for `next`: it verifies clean, and
+`parser-finish!` on a fresh parser reports that node's code in both lanes, while
+a finish arm that asks the EOF route first reports the default-EOF code.
 
 ### F12 — two Milestone 6 census comments and one obligation note are this slice's to correct
 
@@ -283,8 +322,8 @@ arm below is what turns them green; a commit between is red.
       `node-source-label` answer; `#f` `next` refused with
       `(contract-violation? 'make-counted-consume-node 'next)`; a non-symbol
       `eof-target` refused; `#f` `eof-target` accepted; the field reference **not**
-      checked here. `node-builders` (`:1033`) gains the kind and "twelve kinds
-      driven" becomes thirteen. `label-accessor-rows` (`:981`) is **not** touched —
+      checked here. `node-builders` (`:1033`) gains the kind and both "twelve kinds
+      driven" and "and the table has twelve rows" become thirteen. `label-accessor-rows` (`:981`) is **not** touched —
       it is the table of the nine carriers that had no accessor, and this kind is
       born with one.
 - [ ] **Step 4: The verifier's per-kind sites, every appendix row, in this order.**
@@ -404,10 +443,15 @@ arm below is what turns them green; a commit between is red.
         classified from its own name" (arm answers `(node-name n)` → the
         one-shot grammar's ACCEPTED fixture goes red with `eof-reachable-stop`).
       Then the seven REPORT-set re-anchors and the six `node?` re-anchors.
+      **Fourteen new mutations**; `set(EXPECTED_MUTATIONS 483)` becomes **497 in
+      this commit**, with a count-narrative entry beside the others — the
+      `release` preset runs the mutation lane, whose totals check is a
+      `FATAL_ERROR` on any other number, so a commit that adds pins without
+      moving the literal is a red commit.
 - [ ] **Step 8: Verify** — `cmake --build --preset dev && ctest --preset release
       --output-on-failure 2>&1 | rg -n 'CMake Error|wrong reason|UNCAUGHT|FAIL
       |tests passed'`: exactly one line, `100% tests passed, 0 tests failed out of
-      108`. `rg -n "\(cons '" src/byte-machine/verify.sls | rg -v ';;' | wc -l`
+      108`; the mutation lane's own line reads `55 passes, 497 mutations`. `rg -n "\(cons '" src/byte-machine/verify.sls | rg -v ';;' | wc -l`
       prints the pre-edit count **+ 1**. `rg -c -F "<each new or moved FIND>"
       <its FILE>` prints `1` for every pin touched.
 - [ ] **Step 9: Commit** — `feat(verify): the thirteenth kind, counted consume,
@@ -452,7 +496,7 @@ the census rows that read them (F11).
 - [ ] **Step 3: `interpret.sls`** (design §4.1, §4.6). `kind`'s `cond` (`:96`)
       gains `((counted-consume-node? n) 'counted-consume)`; `eof-target-of`
       (`:175`) gains an arm (its `else` is loud, so a parked counted consume
-      would raise out of `parser-finish!` without it); the message table (`:362`)
+      would raise out of `parser-finish!` without it); the message table (`(case msg …)` at `:362`)
       gains `count-step`, answering `(committed . target-or-#f)` and committing
       the subtraction into the field vector — width from `field-slot-and-width`
       (`:276`), `n = (min v (- end pos))`, `(vector-set! fv slot (- v n))`,
@@ -470,9 +514,12 @@ the census rows that read them (F11).
       parser next)` and `(loop pos pk)` — the position kind **carried through**
       (0030 item 3); on `(n . target)` with `n ≥ 1`: offset `+= n`,
       `current` := `target` or the node itself, then `(loop (+ pos n) 'boundary)`
-      if `target`, else the `need-input` result at `(+ pos n)`; on `(0 . #f)` —
-      positive count, no input — the `need-input` result at `pos`. Order in the
-      arm: the op decides; the arm never tests `(>= pos end)` before asking. In
+      if `target`, else the `need-input` result at `(+ pos n)` with `current`
+      left on the node (observed through `parser-state-name` and through the
+      route the next `parser-finish!` takes — never through the result's `next`,
+      which is `#f` for every `need-input`, F13); on `(0 . #f)` — positive
+      count, no input — the `need-input` result at `pos`. Order in the arm: the
+      op decides; the arm never tests `(>= pos end)` before asking. In
       `parser-finish-op!` (`:1186`): factor the `(accumulate dispatch)` arm's
       body into a local `take-eof-route!` (F5), keep that arm as a one-line call,
       and add `((counted-consume) …)`: ask `count-step` over an empty slice;
@@ -501,38 +548,55 @@ the census rows that read them (F11).
       renders and `n` is exercised; the exercised list gains `n` and both
       literals move to ten; the two `reserved-member-3` pins re-anchor onto the
       new list text. `position-kind-tests.sps`' `cases` (`:222`) gains two rows
-      (design §4.10): truncation at a parked counted consume during finish —
-      `eof` at the final offset; a zero-count transition into an error node over
-      a reexecute edge — `byte` at the current offset, carried; "seven cases ran"
-      / "fourteen drives observed" → 9 / 18. `runtime-tests.sps`'s six stub
+      (design §4.10), shaped so the runtime's feed-arm decisions are reachable
+      from them (F13): truncation at a parked counted consume during finish — a
+      partial body fed, then `parser-finish!` — `eof` at the final offset (the
+      offset advance and "parked on the node, not the successor" both show
+      here: a parser parked on `,` would take `,`'s route and report the
+      default-EOF error's node); and a zero-count transition into an error node
+      over a **reexecute** edge, the counted consume reached at the **end of the
+      slice** — `byte` at the current offset, carried (an arm that tests
+      exhaustion first returns `need-input` here and the row reports no error
+      at all); "seven cases ran" / "fourteen drives observed" → 9 / 18. `runtime-tests.sps`'s six stub
       tables owe **no arm** — no stub machine carries the kind — and a one-line
       comment at the first table says so, as the appendix row asks.
-- [ ] **Step 7: Pins** — normal-ir: "normal-ir: the counted-consume encode tag
-      collides with span-completion" (14 → 13, by fingerprint golden); "… a
-      counted consume's field name is dropped from the encoding"; "… successor
-      is dropped"; "… EOF routing is dropped" (each by the golden); "… lowers
-      the successor to state zero"; "… a counted consume's EOF edge is read as
-      absent" (`count-eof-of` → default). interpret: "interpret: count-step
-      tests exhaustion before the zero count" (the `(0 . next)` case moved after
-      the `pos`/`end` test — caught by the zero-count-over-empty-slice case);
-      "… commits `(- end pos)` instead of the min" (field goes negative — a
+- [ ] **Step 7: Pins, fifteen, each in the pass whose program reaches the
+      decision** (F13). unit.normal-ir, six: "normal-ir: the counted-consume
+      encode tag collides with span-completion" (14 → 13, by fingerprint
+      golden); "… a counted consume's field name is dropped from the encoding";
+      "… successor is dropped"; "… EOF routing is dropped" (each by the golden);
+      "… lowers the successor to state zero"; "… a counted consume's EOF edge is
+      read as absent" (`count-eof-of` → default). unit.interpret, four, all by
+      the direct `count-step` cases: "interpret: count-step tests exhaustion
+      before the zero count" (the `(0 . next)` answer moved after the `pos`/`end`
+      test — caught by the zero-count-over-empty-slice case); "… commits `(- end
+      pos)` instead of the min" (the field goes negative on surplus — a
       comparison catch); "… never subtracts"; "… answers the successor only when
       input is also exhausted" (the `n = v` test mutated to `(>= (+ pos n) end)`
-      — the count-completion-wins mutant). runtime: "runtime: the counted arm
-      does not advance the stream offset"; "… does not move `current` onto the
-      target"; "… parks `current` on the successor instead of the node when
-      input runs out" (`need-input`'s `next`); "… asks exhaustion before the op"
-      (the arm tests `(>= pos end)` first — caught by `parser-state-name` after
-      `0:`, Task 3). compile: "compile: the emitted counted arm tests exhaustion
-      before the zero count"; "… commits `(- end pos)`"; "… never subtracts";
-      "… continues only when input is also exhausted"; "compile:
-      reserved-member-3 loses the counted arm's `n`"; "compile: the reached
-      declaration walk ignores counted consume" (the only-consumer fixture,
-      Task 3, is what catches it — declare the pin in Task 3's pass). Every
-      interpreter/emitter pair is caught by the **expected value**, not by lane
-      disagreement (design §6 oracle 3).
+      — the count-completion-wins mutant, caught by the exact case). differential.position-kind,
+      three, by the two new rows: "runtime: the counted arm does not advance the
+      stream offset" (row 1's offset); "… parks `current` on the successor when
+      input runs out" (row 1 reports the default-EOF node instead of the
+      truncation); "… asks exhaustion before the op" (row 2 reports no error). A
+      mutant that leaves `current` on the counted node after a **completed**
+      commit is **not declared**: with the field at zero the node transitions to
+      the same successor on re-entry, so the mutant is inert, and a mutant that
+      leaves `current` there after a zero-count transition hangs both loops (the
+      runner has no timeout) — the comment at the arm says both. unit.compile,
+      two: "compile: the emitted counted arm tests exhaustion before the zero
+      count" is **not** here — it is witnessed only by an executing lane, so it
+      is declared in the position-kind pass beside the runtime's (row 2, the
+      generated lane) — and "compile: reserved-member-3 loses the counted arm's
+      `n`" (member3-drift) plus the two shipped `reserved-member-3` pins
+      re-anchored onto the new list text. So: 6 + 4 + 3 + 1 + 1 (the emitted
+      exhaustion-first pin in position-kind) = **fifteen**; `EXPECTED_MUTATIONS`
+      **497 → 512 in this commit**, with its narrative entry. The emitter's
+      `min`, subtraction and `n = v` decisions are pinned in Task 3's
+      differential pass on the expected value, where surplus and exact bodies
+      exist.
 - [ ] **Step 8: Verify** — the release filter prints exactly `100% tests passed,
-      0 tests failed out of 108`; `git diff --stat e81fdc4..HEAD -- test/fixtures/`
+      0 tests failed out of 108` and the mutation lane's line reads `55 passes,
+      512 mutations`; `git diff --stat e81fdc4..HEAD -- test/fixtures/`
       prints nothing (no golden yet; Task 3 adds one); every fingerprint literal
       in `normal-ir-tests.sps` other than the new one is unchanged (`git diff
       e81fdc4..HEAD -- test/common/normal-ir-tests.sps | rg '^-.*[0-9]{15,}'`
@@ -585,16 +649,20 @@ the census rows that read them (F11).
       count (`§12.5:738`); the two-message feed for `§25:1609` — `consumed`
       equal to the whole slice, the field reset action having run between the
       messages, both in one result; a `u64` count above `(greatest-fixnum)`
-      (`§15:856`); and the **two ordering witnesses** (0030 item 1): after `0:`,
-      `parser-state-name` names the `,` dispatch, not `body`, in both lanes, and
-      `parser-finish!` after `0:` reports the `,` dispatch's default EOF error,
-      not `body`'s truncation.
+      (`§15:856`); and the **two ordering witnesses** (0030 item 1, F13): after
+      `0:`, `parser-state-name` names the `,` dispatch, not `body`, in both lanes
+      (the feed order); and on a second machine whose **entry** is a counted
+      consume with field initial 0, `#f` eof-target and an error node for
+      `next` — verified clean — `parser-finish!` on a fresh parser reports that
+      error node's code in both lanes (the finish order; design §6's
+      "`parser-finish!` after `0:`" witness cannot see it, F13).
 - [ ] **Step 4: Slice ②'s oracle, one case (F10).** The same body wrapped in a
-      span with a data callback and no completion callback (`§21.3:1145`'s
-      shape), `3:abc,` fed byte-at-a-time, one recording closure **per lane**
-      with its own accumulator: the completion event is recorded during the feed
-      that delivered `c`, and the `,` feed records nothing — asserted as a value
-      per feed, and only then compared across lanes. If it does not
+      span with a data callback **and a completion callback** (the
+      with-completion variant design §7 names — the recorder records `'complete`
+      only through `ondone`), `3:abc,` fed byte-at-a-time, one recording closure
+      **per lane** with its own accumulator: the completion event is recorded
+      during the feed that delivered `c`, and the `,` feed records nothing —
+      asserted as a value per feed, and only then compared across lanes. If it does not
       discriminate under `.chez.aot`, stop: design §7's oracle needs redesigning
       before Slice ② is planned, and this plan's Task 5 records what was found.
 - [ ] **Step 5: The two structural witnesses** (`§25:1607`, design §4.7). In
@@ -610,27 +678,32 @@ the census rows that read them (F11).
       one thousand bytes fed in one slice produces **exactly one** `count-step`.
       A mutant rendering a per-byte self-loop fails the first; a mutant stepping
       one byte per message fails the second; both pass every behavioural lane.
-- [ ] **Step 6: Two new mutation passes and their pins** — a
-      `differential.counted` pass (SPEC `byte-machine.differential.counted.chez.source`)
-      carrying: "compile: the reached declaration walk ignores counted consume"
+- [ ] **Step 6: Two new mutation passes and their eight pins** — a
+      `differential.counted` pass (SPEC `byte-machine.differential.counted.chez.source`),
+      seven: "compile: the reached declaration walk ignores counted consume"
       (Task 2's decision, witnessed here by the only-consumer fixture — a raise
-      from `render-machine` on a verified machine); "interpret: the counted op
-      steps one byte per message" (a per-byte `count-step` — caught by the
-      counting witness, not by any tuple); "runtime: the counted arm asks
-      exhaustion before the op" (`parser-state-name` after `0:`); the
-      design's "both lanes agree on a wrong value" mutant — the subtraction
-      dropped in **both** `interpret.sls` and `compile.sls` in one declaration is
-      not possible (one FILE per mutation), so the pin is the interpreter's
-      alone with the expected field value as its regex, and the emitter's twin
-      is Task 2's. A `determinism.counted` pass (SPEC
-      `byte-machine.determinism.counted.chez.source`) with at least one
+      from `render-machine` on a verified machine); "compile: the emitted counted
+      arm commits `(- end pos)` instead of the min" (the surplus case's field
+      value, generated lane); "compile: the emitted counted arm never subtracts"
+      (the exact case's field value); "compile: the emitted counted arm continues
+      only when input is also exhausted" (the exact case's `next` and the
+      `:1609` two-message feed); "interpret: the counted op steps one byte per
+      message" (a per-byte `count-step` — caught by the counting witness, not by
+      any tuple); "runtime: the counted finish arm asks the EOF route before the
+      zero count" (the entry-zero machine's error code, F13); "compile: the
+      emitted counted arm renders a per-byte self-loop" (caught by the datum
+      walk in `compile-tests.sps` — declared under unit.compile, counted here).
+      Each pin's regex is the **expected value's** FAIL record for one lane, never
+      the lanes' disagreement (F13). A `determinism.counted` pass (SPEC
+      `byte-machine.determinism.counted.chez.source`), one: an
       **emitted-bytes-only** mutant — two independent bindings of the emitted
       `let*` reordered, behaviour identical, the golden the only thing that
-      notices — on Pass 50's precedent. `EXPECTED_PASSES` 55 → **57**.
+      notices — on Pass 50's precedent. `EXPECTED_PASSES` 55 → **57**;
+      `EXPECTED_MUTATIONS` **512 → 520 in this commit**, with its narrative
+      entry.
 - [ ] **Step 7: Verify** — the release filter prints exactly `100% tests passed,
       0 tests failed out of 112` (two determinism lanes, two differential lanes);
-      the mutation lane's totals line prints `57 passes` and a mutation count the
-      tree decides (Task 4); `git diff --stat e81fdc4..HEAD -- test/fixtures/`
+      the mutation lane's totals line prints `57 passes, 520 mutations`; `git diff --stat e81fdc4..HEAD -- test/fixtures/`
       lists exactly `generated-counted.golden.sls`; every shipped golden's last
       line is byte-identical to `e81fdc4`'s (`git diff e81fdc4..HEAD --
       test/fixtures/generated-{one-byte,pause,http-version,accumulate}.golden.sls`
@@ -643,9 +716,10 @@ the census rows that read them (F11).
 ## Task 4 — The pin sweep, both directions, once
 
 Re-judge every pin in every touched pass (unit.ir, unit.kind-position-census,
-verify.rejections, unit.normal-ir, unit.interpret, unit.runtime, unit.compile,
+verify.rejections, unit.normal-ir, unit.interpret, unit.compile,
 unit.member3-drift, differential.position-kind, differential.field, the two new
-passes) against every other mutant in its lane, **in both directions**, with a
+passes — `unit.runtime` is untouched: no counted-consume pin can live there,
+F13) against every other mutant in its lane, **in both directions**, with a
 control run on `e81fdc4`, using the runner's own rule (`byte_machine_mutation_verdict`)
 over each mutant's captured output — the Slice ⓪ sweep's method and script, its
 report in the ledger's directory. Expected: **0 self-failures**; collisions
@@ -658,10 +732,13 @@ REPORT-set pins to be the candidates here). Then the totals:
 ```bash
 rg -n '^set\(EXPECTED_(PASSES|MUTATIONS)' test/support/cmake/SchemeMutationSuite.cmake
 ```
-Expected: `set(EXPECTED_PASSES 57)` and an `EXPECTED_MUTATIONS` equal to the
-suite's own totals line — **483 plus the pins declared in Tasks 1-3** (at least
-thirty-six by the lists above; the tree's count wins over this sentence, and the
-count-narrative comment in the suite records the delta per task).
+Expected: `set(EXPECTED_PASSES 57)` and `set(EXPECTED_MUTATIONS 520)` — 483 +
+14 (Task 1) + 15 (Task 2) + 8 (Task 3), each literal moved **in its own commit**
+(a commit that adds pins without moving it is red, since `release` runs the
+mutation lane and its totals check is a `FATAL_ERROR`). If the tree's totals line
+disagrees, the arithmetic here is what is wrong and the tree wins — but every
+disagreement is named in the sweep report, because a miscount is how a pin goes
+undeclared.
 
 ---
 
@@ -676,11 +753,21 @@ count-narrative comment in the suite records the delta per task).
       `git diff -U0 -- docs/plans/byte-machine-implementation-plan.md | rg -c
       '^@@'` prints `1` and its old-side line is ≥ the file's last line before the
       edit.
-- [ ] **Step 2: The design, corrected in place** (instructions): the test-side
-      row for `position-table` says `count-next` is a **byte** position (F8);
-      the `verify.sls` row for `eof-successors` says the construct gains a `cond`
-      (F1); §9's "at most two commits" bullet becomes three green source commits
-      with F11's reason; §6's "Census rows" bullet gains the literals F7 lists;
+- [ ] **Step 2: The design, corrected in place** (instructions): the four
+      sites still carrying the withdrawn "both" derivation for `count-next` —
+      the test-side `position-table` row ("byte **and** EOF"), the
+      `expected-codes` row ("`count-next` is both"), the `self-expectations` row
+      ("`count-next`: both cycles"), and §6's fixture bullet ("the
+      self-targeting `next` (`zero-progress-cycle` and `eof-zero-progress-cycle`,
+      both)") — all say what F8 derives: a byte position, `zero-progress-cycle`
+      alone; §6's "the third EOF resolver" becomes the fourth (§4.4 and the
+      appendix already say so); §6's oracle 3 drops "at least one mutant that
+      makes both lanes agree on a wrong value" for F13's reason and keeps the pin
+      shape (expected value, never lane agreement); §6's second ordering witness
+      ("`parser-finish!` after `0:`") is replaced by the entry-zero machine
+      (F13); the `verify.sls` row for `eof-successors` says the construct gains a
+      `cond` (F1); §9's "at most two commits" bullet becomes three green source
+      commits with F11's reason; §6's "Census rows" bullet gains the literals F7 lists;
       the Appendix gains a row for `pass-eof` (`invalid-eof-target` resolution —
       DERIVED through `node-eof-target`), which the measurement found missing;
       and the Amendments block indexes the correction, each item saying the plan
@@ -691,9 +778,15 @@ count-narrative comment in the suite records the delta per task).
       stays one), the design's `Status:` header; and
       `docs/reference/callback-span-lifetime.md` §6 gains the one sentence design
       §4.10 owes (a bulk-consumed body changes no fragment boundary). Then:
-      `rg -n -i "milestone 6's close-out|less Milestone 6's counted consume|owed
-      also by Milestone 6" src/` prints exactly **one** line — `pass-reachability`'s
-      note, which Slice ② re-addresses.
+
+      ```bash
+      rg -n "less Milestone 6's|Milestone 6's counted consume|these TWELVE kinds|-- TWELVE\.|Milestone 6's close-out" src/byte-machine/
+      ```
+      Measured at `e81fdc4` this prints **five** lines (`normal-ir.sls:218`,
+      `:621`; `compile.sls:373`, `:537`; `verify.sls:587`). After commit B it
+      must print exactly **one** — `verify.sls`'s `pass-reachability` note, which
+      Slice ② re-addresses. A pattern that already printed one line before the
+      edit would pass whether or not the comments moved; this one cannot.
 - [ ] **Step 4: Commit** — `docs: Milestone 6 Slice ① delivered — the disposition,
       the appendix's corrections, four status surfaces`.
 
@@ -716,9 +809,10 @@ re-measured totals, and eight things checkable rather than asserted:
    `member3-drift`'s exercised-name assertion (ten), and `normal-ir-tests.sps`'s
    layout walk are all green with the thirteenth disjunct present (oracle 2).
 3. **The differential asserts values**: every case compares each lane against an
-   expected tuple and field value, and at least one declared mutant makes both
-   lanes agree on a wrong value while its pin is on the expected value's failure
-   (oracle 3).
+   expected tuple and field value, and every mutant declared in the
+   `differential.counted` pass is pinned on one lane's **expected-value** FAIL
+   record, never on the lanes' disagreement (oracle 3 as Task 5 corrects it,
+   F13).
 4. **Both structural witnesses** for `:1607` are red under their mutants and green
    on the tree, and neither is a differential.
 5. **The two 0030 machines**: the zero-count stop at the entry REJECTED with
