@@ -1219,8 +1219,8 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-set(EXPECTED_PASSES 54)
-set(EXPECTED_MUTATIONS 466)
+set(EXPECTED_PASSES 55)
+set(EXPECTED_MUTATIONS 469)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -9716,7 +9716,16 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Pass 49: parser-field-ref, across BOTH executors (Slice ①b tasks 6+7) ----
+# --- Milestone 5 Slice ①b tasks 6+7: parser-field-ref, across BOTH executors --
+#
+# *** THE INTEGER IS GONE FROM THIS HEADER ON PURPOSE (Slice ④). *** It read
+# "Pass 49", and so does the Milestone 3 header ~460 lines above it: two
+# different passes reachable by one citation. The integers cannot be repaired by
+# renumbering either, because they do not index anything countable -- this file
+# has 44 `byte_machine_mutation_run` call sites and the suite reports 54 passes,
+# the difference being helper functions that call `_run` once per case in a loop
+# and consume indices no header names. `EXPECTED_PASSES`, measured from the
+# harness, is the only authority. New headers name their slice.
 #
 # field-access-tests.sps is the only lane in which the field declarations are
 # observable at all, and it drives both executors, which reach them by different
@@ -11220,6 +11229,83 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.
+# --- Milestone 5 Slice ④: input retention (§25:1591) -------------------------
+#
+# The lane Slice ③'s liveness probe was brought forward FOR, and the first pass
+# in this file whose SPEC reads something no result and no trace can show: what
+# is still REACHABLE from a live parser after `parser-feed!` returns.
+#
+# Two of the three mutations below are the two halves of design §9's argument.
+# The first makes the runtime retain and layer 1 must see it. The other two make
+# an EXEMPT carrier stop carrying, and layer 3 must see that too -- because an
+# oracle asserting "nothing is reachable" would pass a runtime that quietly
+# dropped the application's own context, and `§13:799` says those three carriers
+# are the application's to keep.
+#
+# Layer 2, the negative control, carries no mutant and does not need one: it is a
+# FIXTURE that retains on purpose, and fixtures in `test/common` are not mutation
+# targets anywhere in this file. Its control is the two-directional assertion --
+# layer 1 says "gone" and layer 2 says "retained" about the same probe, so an
+# instrument answering a constant fails one of them. The same argument
+# `liveness-probe-tests.sps` makes, for the same reason.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/retention-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.retention.chez.source
+  LABEL "runtime: the fed bytevector is stored in the parser and survives the return"
+  # `§25:1591` itself. The stored-error slot is the one that makes this a
+  # UNIQUE witness rather than a duplicate of some other pass: it is not read on
+  # a successful stop, `parser-stored-error` is not exported, and no other lane
+  # in the tree looks at what a parser still reaches. Every other suite stays
+  # green under this mutant.
+  FIND [[       (parser-set-lifecycle! parser 'busy)
+       ;; §14:833: an open span "begins its next possible fragment at the next]]
+  REPLACE [[       (parser-set-lifecycle! parser 'busy)
+       (parser-set-stored-error! parser bv)
+       ;; §14:833: an open span "begins its next possible fragment at the next]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "gone in both lanes -- expected ..interpreted . #f. .generated . #f.., got ..interpreted . #t."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.retention.chez.source
+  LABEL "runtime: a callback failure's detail is dropped instead of carried"
+  # Layer 3's second carrier, and the arm design §9 says an oracle gets wrong:
+  # "an oracle that excludes only the user-context slot will report a false
+  # violation the first time a fixture callback fails with a detail holding its
+  # own slice." With the detail dropped the parser stops retaining and the arm
+  # reads "gone" -- which is the direction that looks like GOOD news.
+  FIND [[    (vector callback-failure-tag code detail)]]
+  REPLACE [[    (vector callback-failure-tag code #f)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "retained, and permitted -- expected ..interpreted . #t. .generated . #t.., got ..interpreted . #f."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.retention.chez.source
+  LABEL "runtime: the interpreted parser drops the user context"
+  # Layer 3's first carrier, and the mutant is deliberately ONE-LANE: only the
+  # `op` arm is edited, so the recorded `got` reads
+  # `((interpreted . #f) (generated . #t))`. That asymmetry is the assertion --
+  # the two lanes reach `user-context` by different routes (`make-parser` builds
+  # both vectors here, but only this arm's literal moves), and a pin that
+  # mutated both would not show it.
+  FIND [[                 user-context #f #f 0 #f)))]]
+  REPLACE [[                 'not-the-input #f #f 0 #f)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "user context may retain it, and does: retained, and permitted -- expected ..interpreted . #t"
+)
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 byte_machine_mutation_totals(actual_passes actual_mutations)
 if(NOT actual_passes EQUAL EXPECTED_PASSES OR NOT actual_mutations EQUAL EXPECTED_MUTATIONS)
   message(FATAL_ERROR

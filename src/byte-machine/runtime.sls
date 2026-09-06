@@ -216,6 +216,21 @@
 
   ;; --- parser result (immutable snapshot) ---
   (define parser-result-tag (tag 'byte-machine-parser-result))
+  ;; *** IF YOU ARE CHANGING THIS RECORD'S SHAPE, YOU HAVE INHERITED AN
+  ;; OBLIGATION. *** `§9.3:392-393` annotates `parser-result-next` and
+  ;; `parser-result-consumed` "feed-originated results only", and nothing
+  ;; enforces that: `parser-finish!`'s paths call this constructor with `next`
+  ;; repeating the absolute stream offset and `consumed` exactly 0. The record is
+  ;; opaque (`§9.3:425`), so an internal origin slot would not be a public
+  ;; change -- the reason this was deferred is COST, measured 2026-09-05: `rg -l
+  ;; parser-result-next` over `test/` returns sixteen programs and
+  ;; `parser-finish!` appears at 83 sites in `test/common`, so enforcing it
+  ;; re-baselines a tuple in most of the differential programs.
+  ;;
+  ;; Milestone 5's close-out (Slice ④, 2026-09-05) disposed it as DEFERRED with
+  ;; the receiver named as "the next slice that changes this record's shape" --
+  ;; and put the note here rather than only in the parent plan, because that
+  ;; receiver opens this constructor and not §12.7's disposition list.
   (define (make-parser-result status next consumed stream-offset error)
     (vector parser-result-tag status next consumed stream-offset error))
   (define (parser-result? x) (tagged? parser-result-tag x))

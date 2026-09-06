@@ -771,6 +771,28 @@
   tree rather than from a commit message, open the plan at every cited line, and
   narrow every "every", "the only" and "never" before writing it.
 
+* **A deferral is recorded where its RECEIVER will look, which for a role is the
+  source site.**
+  An obligation addressed to a STEP ("Milestone 6's counted consume owes X")
+  belongs in that step's plan. An obligation addressed to a ROLE — "whoever next
+  touches the field/accumulate emitted arms", "the next slice that changes this
+  record's shape" — belongs in the file that role will open, because that person
+  has no reason to open the parent plan. The parent plan is where a deferral is
+  ADJUDICATED; it is not where either receiver looks, and a disposition that
+  lives only there is a deferral with one end.
+  Milestone 5's close-out found two of these owed to it, both recorded only in
+  the plan, and wrote them into `compile.sls`, `interpret.sls` and `runtime.sls`
+  at the exact constructs the receiver would edit. Write both ends, and say in
+  the source note where the adjudication is, so the two cannot drift apart.
+
+* **A test that drops the subject along with the evidence proves nothing.**
+  The retention oracle's whole design is that the PARSER is held alive across the
+  collection and only the fed bytevector is dropped. A probe that let the parser
+  die too would report "not retained" about a runtime that stored the input in
+  every slot it has — the storage would have died with it — and every arm would
+  pass. Before believing a liveness or reachability result, name what is still
+  alive at the moment of measurement and check the subject is on that list.
+
 ## Closing ritual
 
 Run this when a branch's work is complete and reviewed. It is a ritual because

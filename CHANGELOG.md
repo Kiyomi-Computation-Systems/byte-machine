@@ -42,9 +42,22 @@ Slice ③ also fixed three reachable defects — a span end not treated as a par
 state, a span node naming an undeclared span, and §12.7:770's callback-failure
 half, which both lanes reported wrongly and no cross-lane comparison could see —
 closed two coverage holes in its own new test lane, and deleted five lines
-measured unable to change any outcome. Only Slice ④ (the retention oracle with
-its negative control, the EOF and reset fragment legs, and the callback/span
-lifetime reference) remains. No versioned release exists yet.
+measured unable to change any outcome. Slice ④ landed **2026-09-05** and closed
+the milestone: the input-retention oracle in both lanes, reachability-based
+rather than a slot walk — the parser is held alive across a full collection and
+only the fed bytevector is dropped, so what the weak reference measures is the
+runtime's retention and not the parser's own death. Its negative control is a
+fixture that retains on purpose and must read RETAINED, and three further arms
+cover `§13:799`'s application-owned carriers, including the callback error detail
+that a slot walk excluding only user context would report as a false violation.
+The slice also closed the three fragment shapes `§25:1589` still lacked — a span
+open at `parser-finish!` and closed on the EOF chain, a reset while parked
+between the span-end substeps, and a reset of a poisoned parser with a span open
+— shipped `§27:1694`'s callback/span lifetime reference as the first `§27`
+deliverable in the tree, and disposed the two obligations that named Milestone
+5's close-out as their receiver, writing each at the source construct its
+receiver will open. Milestone 6 (counted consumption) is next. No versioned
+release exists yet.
 
 ### Added
 

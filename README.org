@@ -15,7 +15,8 @@ project will use it to define and generate one.
 *Status: pre-release.* No versioned release exists yet — the target is =0.1.0=,
 and the API is not yet stable. Milestones 0 (portability and harness spike), 1
 (minimal executable machine), 2 (incremental execution and lifecycle), 3
-(byte classes and sequences) and 4 (fields, actions, and branches) have closed.
+(byte classes and sequences), 4 (fields, actions, and branches) and 5
+(callbacks, poisoning, and spans) have closed.
 Milestone 3 closed 2026-08-30 with Slice ③ (multiple alternatives, ambiguity,
 and cycle analysis), after Slices ① (byte classes) and ② (sequence dispatch and
 prefix lowering). Milestone 4 closed 2026-09-03 with Slice ③ (integer
@@ -24,8 +25,8 @@ parser-error seam), Slice ①b (field declaration, slot assignment and
 =parser-field-ref=), and Slice ② (field action and field branch). A machine can
 now declare unsigned integer fields, write them with zero-width actions and
 branches, and read them from the input stream with a checked
-integer-accumulate node. Milestone 5 (callbacks, poisoning, and spans) is in
-progress. Two hardening slices ran first and closed 2026-09-04 — Slice ⓪ (the
+integer-accumulate node. Milestone 5 (callbacks, poisoning, and spans) closed
+2026-09-05 with Slice ④. Two hardening slices ran first and closed 2026-09-04 — Slice ⓪ (the
 verifier's kind × position matrix and a diagnostic-code census derived from the
 source) and Slice ⓪b (the EOF walk cluster), which closed two holes in the
 verifier: a machine whose /entry/ is a =finish= terminal, and a machine whose
@@ -60,9 +61,25 @@ runtime and three rendered by the emitter — reported the wrong position kind w
 its node was reached by a reexecuting edge; only the boundary flush's own arm,
 which passed the literal, was already right. /Both lanes reported the same wrong
 value/, so the cross-lane comparison that was the only thing reading it had been
-satisfied throughout. Only Slice ④ (the retention oracle with its negative
-control, the EOF and reset fragment legs, and the callback/span lifetime
-reference) remains.
+satisfied throughout.
+
+Slice ④ closed the milestone 2026-09-05. A parser now demonstrates that it keeps
+nothing: a test holds a parser alive across a full garbage collection and checks
+that a weak reference to the bytevector it was fed reads /broken-weak-pointer/,
+in both lanes. That test is only worth its green if it can go red, so the same
+lane ships the fixture that retains on purpose and must read /retained/ — and
+three more arms for the three carriers the plan puts /outside/ the guarantee,
+because an application that keeps your input in its own callback closure, its
+user context, or a callback failure's detail has kept it by its own choice. The
+slice also closed the three fragment shapes nothing had covered — a span left
+open when =parser-finish!= is called and closed on the EOF chain, a reset while
+parked between the span-end substeps, and a reset of a poisoned parser with a
+span still open — and shipped the first of the plan's documentation
+deliverables, [[file:docs/reference/callback-span-lifetime.md][the callback and
+span lifetime reference]].
+
+Milestone 6 (counted consumption) is next.
+
 =src/byte-machine/= holds the construction API, the verifier, the normalizer and
 emitter, the reference interpreter, and the runtime, each exercised in both the
 source and ahead-of-time execution lanes. See

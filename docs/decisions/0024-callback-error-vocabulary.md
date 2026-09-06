@@ -11,6 +11,10 @@ Milestone: 5, Gate 0 (milestone-5-design.md §4.1, §4.2)
 >   "What this hands to Slice ②"**: the code half is implemented, and the
 >   Consequences' warning that a domain-only cross-lane check "passes vacuously
 >   by construction" is what shaped the fixtures. Nothing above became false.
+> - **2026-09-05 (Milestone 5, Slice ④)** — **annotates the Consequences bullet
+>   "What this hands to Slice ④"**: the discharge, and a correction to that
+>   bullet's own citation into `milestone-5-design.md`, which two Appendix
+>   rewrites moved. The obligation itself was read correctly and is met.
 
 ## Context
 
@@ -258,3 +262,29 @@ test at the invocation site: an event node declares no branch targets and a
 decision node declares exactly the keys §16.2:901's node half admits, so "does the
 returned symbol name a declared branch of THIS node" answers both, out of data
 both lanes already carry. No callback KIND crosses the seam.
+
+---
+
+**2026-09-05 (Milestone 5, Slice ④) — the "What this hands to Slice ④" bullet is
+discharged, and its own citation had gone stale.**
+
+*Discharged.* Slice ④'s retention oracle excludes neither carrier by enumeration:
+it is reachability-based, and it ships an explicit arm for the case this record
+warned about — a fixture callback failing with a detail holding its own slice,
+asserted as RETAINED and permitted, in both lanes
+(`test/common/retention-tests.sps`, "callback error detail may retain it too").
+A second arm holds the same failing path with `detail` `#f` and asserts the
+bytevector is gone, so the first arm is about `§13:799`'s third carrier rather
+than about the error record. Both are mutation-pinned.
+
+*The stale citation.* The bullet closes by pointing at
+`milestone-5-design.md`:876-881 for "the retention oracle's third layer". Slice ③
+rewrote that design's Appendix a second time and §9 moved: the exemption boundary
+is now at **:980-985**, and :876-881 lands in §8's work list. Nothing above is
+rewritten — the bullet's reasoning was right and its target moved. This is the
+failure mode a `file:line` into a document your own change does not control
+always has, and no link checker or grep can see it: the file exists and the
+number is a number.
+
+The bullet called itself "the deferral's second end", which is why the drift
+mattered: the second end had stopped pointing at the first.

@@ -347,6 +347,28 @@
                                      " (+ (* v " (num base) ") d))\n"
             "                              (loop (+ pos 1) " (num digit) " (+ off 1) (quote boundary)))\n"
             "                       (loop pos " (num over) " off (quote byte))))))))\n")))
+        ;; *** OWED HERE, AND THIS IS THE ARTIFACT THE RECEIVER OPENS. ***
+        ;; `§12.7:770`'s row reads "Zero-width machine action or callback
+        ;; failure | `boundary` at the current stream offset". The callback half
+        ;; was fixed in Milestone 5 Slice ③. The MACHINE-ACTION half is still
+        ;; wrong, measured: a field-action increment that overflows a `u8`,
+        ;; reached over a reexecute edge, answers `(kind byte offset 1)` where
+        ;; the row says `boundary`. The accumulate overflow render ~10 lines
+        ;; above emits `(quote byte)` for the same reason.
+        ;;
+        ;; It is a one-line change in THIS lane and more than that in the
+        ;; interpreted one -- see the same note at `interpret.sls`'s
+        ;; `field-step`, which is the other end. Then the fixtures:
+        ;; `position-kind-tests.sps` gains a row per producer, and every pin
+        ;; anchored on a `byte` verdict from a failed zero-width action has to be
+        ;; re-measured.
+        ;;
+        ;; Milestone 5's close-out (Slice ④, 2026-09-05) DEFERRED it rather than
+        ;; scheduling it, and wrote this note because the obligation is addressed
+        ;; to "whoever next touches these arms" -- a receiver who opens this file
+        ;; and has no reason to open the parent plan. Adjudicated at
+        ;; `byte-machine-implementation-plan.md` §12.7's disposition; owed also by
+        ;; Milestone 6's counted consume if it can fail a callback.
         ((field-action)
          (let* ((args (normal-field-arguments s))
                 (sw (field-slot-width fields (car args)))
