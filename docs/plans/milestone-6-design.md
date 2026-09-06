@@ -17,7 +17,7 @@ above it, and a `§section:line` moves if anything is ever *inserted* into the p
 body rather than appended to its dispositions section. Milestone 5 spent a slice correcting
 fifty-five `§14` citations that were one line too high, inherited from its own design — so this
 document cites `§14` by rule number as well as by line, and every `file:line` here is to be
-re-measured at plan-writing time (§10).
+re-measured at plan-writing time (§9).
 
 > **Amendments.** This document's amendment law, stated before there is anything to amend, is
 > `AGENTS.md`'s "Correct a stale instruction in place; annotate a stale record": a **record**
@@ -27,6 +27,25 @@ re-measured at plan-writing time (§10).
 > slice, a resolution a slice must implement — is corrected in place, because leaving a false
 > one is a landmine and what it used to say is in git. Later dated notes are indexed here,
 > newest first, each naming the section it amends.
+>
+> **2026-09-06, the review of the first draft (`c16f44f`).** Four read-only reviewers — spec
+> citations, tree claims, semantics, process — audited the draft before it left the branch, and
+> no *record* here has been amended; everything they moved was an **instruction** and was
+> corrected in place. Kept as a record because a reader should know what the first draft got
+> wrong. The one that mattered: **§4.2 item 3 parked the new kind in the `§16.2:909` set by
+> kind**, and the semantics reviewer showed that unnecessary (every parked origin whose count
+> may be zero already reaches the node through a walk that item 1's join classifies), inert in
+> pass 7, and an over-rejection of the ordinary one-shot "length, body, stop" grammar — because
+> a parser parked on a counted consume by `need-input` provably holds a positive count. The
+> corrected rule is the callback precedent: `parked-eof-start` gains an arm. §3.2, §4.2, §6,
+> the appendix, the Exit table and the Gate 0 plan all moved with it, and the four "both" rows
+> are four, not six. The rest: a `§11.2:642` citation that named `boundary` where only
+> `§12.7:769` does; a "third" resolver lambda that is the fourth; `member3-drift` credited with
+> an arm-count assertion it does not have; a receiver sentence attributed to `verify.sls` that
+> lives only in the parent plan; `count-next` derived as an EOF position when the host's `#f`
+> route keeps it byte-only; a proving machine whose entry could not tell idle EOF from a
+> partial length; three quotations that were not verbatim; and two census comments the
+> appendix had missed.
 
 **Governing plan.** The parent plan's `§25` "Milestone 6" subsection is authoritative. Its
 Scope list is `§25:1597-1603` and its Exit criteria are `§25:1607-1609`. **This document
@@ -63,15 +82,15 @@ input" and "zero-width" and gives each family a different answer; this kind need
 *both* families' consumers, and a site that files it under one family alone is silent, in
 exactly the way Milestone 4 Slice ③'s three verifier defects were silent. §3.1 measures that
 surface: **nineteen** node-kind branch-selection constructs in `verify.sls`, plus the kind
-tables in `interpret.sls`, `normal-ir.sls`, `compile.sls`, `runtime.sls` and eight test-side
-censuses. The appendix walks every one and states the kind's answer at each.
+tables in `interpret.sls`, `normal-ir.sls`, `compile.sls`, `runtime.sls` and ten test-side census
+files. The appendix walks every one and states the kind's answer at each.
 
 | Phase | Kind | Produces | Discharges |
 |---|---|---|---|
 | Gate 0 | decisions only | record `0030` | nothing; unblocks Slice ① |
 | Slice ⓪ *(conditional on §4.12)* | hardening | the label-grammar totality and a shared name-grammar library | no `§25` bullet; disposes two obligations whose fallback receiver is this milestone's close-out |
 | Slice ① | the node kind | constructor, verifier arms, lowering and tag 14, both executors, the emitted arm, the golden, the census rows | `§25:1597`, `:1598`, `:1601`, `:1602`, `:1603`; exit `:1607`, `:1609`, and `:1608`'s field/cursor/offset clauses |
-| Slice ② | span interaction + close | the span-enclosed fixtures, the per-feed placement oracle, the close note | `§25:1599`, `:1600`; exit `:1608`'s fragment clause; the milestone close note |
+| Slice ② | span interaction + close | the span-enclosed fixtures, the per-feed placement oracle, the close note | `§25:1599`, `:1600`; exit `:1608`'s fragment clause and `:1609`'s span variant; the milestone close note |
 
 **Dependency order.** Gate 0 before ①, because ①'s verifier arms implement `0030` and a slice
 that picks the parked-set rule by accident pins the wrong diagnostic in a fixture. ① before
@@ -152,7 +171,8 @@ record that "decides" one is spending a record on a sentence already written.
   source-label)` (`§9.1:311`), five parameters. `#f` as `eof-target` means the machine default
   EOF error, by the sentence that governs *every* input node: `§9.1:318` — "`#f` as an input
   node's `eof-target` means the machine default EOF error."
-- **The five sentences of semantics**, `§10.6:598-604`, verbatim in §4.1's table: consume up
+- **The six sentences of semantics** — `§10.6:598`'s lead and its five bullets `:600-604`,
+  paraphrased in §4.1's table and quoted in the Gate 0 plan: consume up
   to the remaining field value in bulk, subtracting exactly the committed count; a zero count
   transitions immediately without consuming input; input ending first consumes what is
   available and returns `need-input`; the count reaching zero first continues at the target
@@ -165,17 +185,18 @@ record that "decides" one is spending a record on a sentence already written.
   sentence but a consequence of `§10.6:600`, and §4.2 is where the two meet.
 - **The arithmetic**: `§15:872` — "Counted consume performs exact subtraction after determining
   the number of bytes it can commit." The committed count never exceeds the field's value, so
-  the subtraction cannot underflow and there is no error edge; this is why the constructor has
-  no `error` slot (`§9.1:311`), unlike a field action's.
+  the subtraction cannot underflow and there is nothing for an error edge to carry — an
+  inference, consistent with the constructor's shape: `§9.1:311` gives it no `error` slot,
+  unlike a field action's.
 - **The emitted lowering**: `§19.2:1013` — "Counted consume: bulk cursor movement using
   available/count minimum." That is the whole of the generated arm's arithmetic and §4.1 adds
   nothing to it.
 - **The position kind after a commit**: `§11.2:642` — an advance "commits the examined byte,
-  increments the cursor by one, increments the stream offset by one" — applied `n` times is a
-  boundary after the last committed byte, and the shipped rule for a zero-width step is that
-  the loop's kind is carried through unchanged (`runtime.sls`'s field-action arm and
-  `compile.sls`'s `zero-width-jump` both record it). Both halves of §4.1's position rule are
-  derived, not chosen.
+  increments the cursor by one, increments the stream offset by one" — applied `n` times, and
+  `§12.7:769`'s row, "Error edge after an advance | `boundary` after the committed byte": an
+  error reached after a nonzero commit is a boundary after the last committed byte. That is the
+  half of §4.1's position rule the plan settles; the zero-count half is a tree convention and
+  §4.1 item 3 derives it there, saying what it rests on.
 - **What `§21` will do with it**, so the fixtures are shaped by the consumer: `§21.3:1145` —
   "Fixed-length body data uses one span with no span-complete callback. Each nonempty chunk
   payload uses a separate body span with no span-complete callback"; `§21.3:1149` —
@@ -193,11 +214,14 @@ record that "decides" one is spending a record on a sentence already written.
 - **The generator is Milestone 7's** by name (`§25:1618-1619`), and `§22.6:1295`'s "as each
   feature becomes available" was not applied by Milestone 5 to callbacks or spans — measured,
   `rg -c -i 'callback|span'` over `test/support/harness/byte-machine/test/machine-gen.sls`
-  returns **0**. §9 records the property-lane decision on that precedent.
+  returns **0**. §8 records the property-lane decision on that precedent.
 
 **Where the parent stops settling.** It does not say what the verifier does with a node whose
-EOF behaviour depends on a field value it cannot see (§4.2). It does not say whether a
-counted consume's successor is a progress edge for `§16.2:898` (§4.2). It does not say whether
+EOF behaviour depends on a field value it cannot see (§4.2). It does not say how a verifier
+that cannot see the count should treat the successor for `§16.2:898` — `§11.4:654` decides the
+*direction* (a zero-count cycle "can run indefinitely without consuming input") and
+`§16.2:913` bounds it ("Normal consuming cycles, including the main HTTP message loop, are
+valid"), and §4.2 sits between the two. It does not say whether
 a counted consume with a `#f` eof-target is a parked state for `§16.2:909` — and the shipped
 proxy for "carries its own EOF route" says no, wrongly (§4.2). It does not define
 `§16.2:903`'s "incompatible" (§4.3). It does not say how `§25:1607` — a claim about *structure*
@@ -215,10 +239,12 @@ predicate definitions themselves, grouped by enclosing construct): **nineteen** 
 zero-progress REPORT set, `classify`, `parked-eof-start`, `§16.2:908`'s zero-hop entry clause,
 `§16.2:908`'s per-edge target test, `§16.2:909`'s parked-set membership, `pass-declarations`'
 node walk, `span-node-declaration-diagnostics`, pass 7's `parked?`, `span-transfer`, and
-`span-node-diagnostics`. Six of the nineteen arrived with Milestone 5. Every one gets an
-appendix row stating this kind's answer, and — because this kind sits in both families — **the
-appendix marks the six rows where the answer is "both"**, since those are the ones a reader
-filing the kind under "input-reading, like accumulate" would get wrong.
+`span-node-diagnostics`. Seven of the nineteen did not exist at Milestone 4's close (measured
+against `bafdbe1`). Every one gets an appendix row stating this kind's answer, and — because
+this kind sits in both families — **the appendix marks the four rows where the answer is
+"both"**, since those are the ones a reader filing the kind under "input-reading, like
+accumulate" would get wrong; a fifth row, `parked-eof-start`, is where the two families'
+answers must be kept apart.
 
 **The two ratchets Slice ⓪ of Milestone 5 built fire automatically here, and that is what they
 were for.** `kind-position-census-tests.sps`'s S2 row derives `node?`'s disjunct list from
@@ -235,7 +261,7 @@ symbols. §4.8 adds one.
 
 ### 3.2 Where the spec and the tree already disagree, or are about to
 
-Four things a slice would otherwise discover mid-task and report as its own regression.
+Five things a slice would otherwise discover mid-task and report as its own regression.
 
 1. **`§12.7:770`'s zero-width-machine-action half is still wrong in both lanes**, measured and
    deferred by Milestone 5's close-out with its receiver written at `compile.sls`'s
@@ -245,21 +271,34 @@ Four things a slice would otherwise discover mid-task and report as its own regr
    clause: it cannot. Slice ① adds a *sibling* arm to `render-state-arm`; it edits neither the
    field-action arm nor `field-step`, and its plan must say so, because "whoever next touches
    these arms" is the receiver and a plan that touches the file will be read as that person.
-2. **The two hand-written parked-set disjunctions already differ.** `pass-eof-execution`'s
-   `§16.2:909` membership lists `span-end-node?`; pass 7's `parked?` does not, and its own
-   comment records the difference as inert and warns that "the next kind that can pause has to
-   be added to BOTH". Counted consume cannot pause, but it **can be parked on** (a `need-input`
-   leaves `current` on it), and §4.2 puts it in both — by *kind*, not by the `(symbol?
-   (node-eof-target n))` proxy, which is item 3.
-3. **The parked-set proxy is wrong for this kind.** Both disjunctions admit an input-reading
-   node only when its eof-target is a *symbol*, on the reasoning that a `#f` route is the
-   default error, whose classification is always benign. A counted consume with a `#f`
-   eof-target and a zero count transitions to `next` during `parser-finish!` (`§10.6:600`), and
-   `next` can be a stop terminal — `§16.2:909`'s exact prohibition. Under the shipped proxy such
-   a machine verifies clean and `parser-finish!` answers `stopped`. This is not a defect in the
-   tree today, because no kind with both properties exists; it becomes one on the commit that
-   adds the constructor unless the same commit adds the arm. §4.2 item 3.
-4. **`compile.sls`'s reached-declaration walk is a hand-written kind list**, `'(dispatch
+2. **The two hand-written parked-set disjunctions already differ, and this kind joins neither
+   by kind.** `pass-eof-execution`'s `§16.2:909` membership lists `span-end-node?`; pass 7's
+   `parked?` does not, and its own comment records the difference as inert and warns that "the
+   next kind that can pause has to be added to BOTH". Counted consume cannot pause, and
+   although a `need-input` **can** leave `current` on it, a parser parked that way always holds
+   a positive count (§4.2 item 3), so its EOF behaviour from a parked state is its EOF route
+   alone and the existing `(symbol? (node-eof-target n))` clause admits it exactly when that
+   route is worth classifying. The first draft of this document put the kind in both sets by
+   kind; the review of that draft showed the disjunct unnecessary in one set, inert in the
+   other, and a source of over-rejection — §4.2 item 3 records the corrected rule.
+3. **The hole is the zero-count route at FLOW-THROUGH, and it is real.** A counted consume
+   reached during `parser-finish!` with a zero count — the entry of a fresh parser whose field
+   initial is zero, a pause or callback continuation, a node on an EOF chain — transitions to
+   `next` (`§10.6:600`), and `next` can be a stop terminal, `§16.2:909`'s exact prohibition. A
+   `classify` arm written on the dispatch pattern (hop to the eof-target; `#f` is the benign
+   default) never sees `next`, so such a machine verifies clean and `parser-finish!` answers
+   `stopped`. The fix is `classify`'s join over both routes (§4.2 item 1), which every parked
+   origin's walk reaches; it is **not** a new parked-set member, because the only parked state
+   with a possibly-zero count is the entry, which is already in the set. This is not a defect
+   in the tree today, because no kind with both properties exists; it becomes one on the
+   commit that adds the constructor unless the same commit adds the arm.
+4. **Decision 0023 item 3's "with each node classified as itself" has been false since
+   Milestone 5 Slice ②** and carries no note: `parked-eof-start` starts a byte-reachable
+   callback's walk at its pause continuation, one edge, because "a state an execution can be
+   parked on and the name the EOF walk starts at are two different questions" (its own
+   comment). §4.2 item 3 makes counted consume the second kind whose walk starts elsewhere,
+   and the Gate 0 plan's Task 2 records both deviations in 0023, since the first never was.
+5. **`compile.sls`'s reached-declaration walk is a hand-written kind list**, `'(dispatch
    accumulate)`, deciding which default-EOF declaration reaches the emitted `errs` table. It
    is the site of one of Milestone 4 Slice ③'s three defects, by that file's own comment, and a
    counted consume carries an EOF route in the same slot the two listed kinds do. A machine
@@ -273,8 +312,8 @@ walks `all-out-targets`, which crosses an eof-target and then keeps taking byte 
 node reachable only through an untakeable EOF edge counts as reached. Recorded in decisions
 0023 and 0027, design §4.5 of Milestone 5, the parent plan's dispositions, and — since PR #73
 — at `pass-reachability` itself, with the receiver "whoever next narrows reachability, and
-failing that Milestone 6's close-out". Counted consume adds a new instance class (a node
-reachable only as `CC →(eof) T →(byte) Z`) and does not narrow anything. §9 prices the
+failing that by Milestone 6's close-out". Counted consume adds a new instance class (a node
+reachable only as `CC →(eof) T →(byte) Z`) and does not narrow anything. §8 prices the
 narrowing and hands it on with both ends; Slice ①'s matrix rows must derive their verdicts
 under the **shipped** relation, because the matrix's own pruning reads the verifier's
 `unreachable-node` answer and a narrowed relation moves its "exactly three cells prune the
@@ -292,7 +331,8 @@ milestone; §4.12 collects the scope additions the parent plan does not name.
 
 ### 4.1 The executor contract: one order of tests, and the zero-count check comes first
 
-**The call.** `§10.6:598-604` states five sentences and no order of evaluation. Two orders are
+**The call.** `§10.6:598-604` states a lead sentence and five bullets, and no order of
+evaluation. Two orders are
 plausible for an implementer arriving with the shipped dispatch arm in hand — that arm opens
 with `(if (>= pos end) …)`, the exhausted-input test, and every input-reading arm in both lanes
 renders the same preamble first. A counted consume that opens the same way returns `need-input`
@@ -306,7 +346,7 @@ whole contract, both lanes, is this table:
 | `v > 0`, `pos ≥ end` | return `need-input` at `pos`; `current` stays here | take the EOF route: a named eof-target hops with `eof`; `#f` is the default EOF error at the node, `eof` at the final offset (`§12.7:771`) | — |
 | `v > 0`, `pos < end`, `n = min(v, end − pos)` | field `:= v − n`; cursor and offset `+= n`; **if `n = v`** continue at `next` with the remaining input (`§10.6:602`, and the exact case `§10.6:603`); **else** return `need-input` at `pos + n` | (unreachable: finish supplies no input) | `boundary` (`n ≥ 1` advances, `§11.2:642`) |
 
-Three things this table fixes that the five sentences leave open, each with its derivation:
+Three things this table fixes that those sentences leave open, each with its derivation:
 
 1. **Ordering.** The zero-count row is first because `§10.6:600` says "immediately" and
    `§11.1:638` lets an empty feed advance "already-pending zero-width continuations"; a counted
@@ -321,19 +361,25 @@ Three things this table fixes that the five sentences leave open, each with its 
    zero-width work before any input-dependent node can return `need-input`. An implementation
    that tests `pos + n ≥ end` before `n = v` is the wrong reading, and it is symmetric across
    lanes (§1).
-3. **Position kind.** After `n ≥ 1` committed bytes the kind is `boundary`; after a zero-count
-   transition the loop's kind is carried through, exactly as the shipped zero-width arms carry
-   it. The observable consequence is stated so a fixture can pin it: an error node reached
-   through a zero-count counted consume entered over a *reexecute* edge reports `byte` at the
-   current offset, as an error node reached through a field branch does today; through a
-   counted consume that committed anything, `boundary`. `§12.7:770` does not reach this — a
-   counted consume has no failure of its own (item §4.9).
+3. **Position kind.** After `n ≥ 1` committed bytes the kind is `boundary` (`§12.7:769`);
+   after a zero-count transition the loop's kind is carried through, exactly as the shipped
+   zero-width arms carry it (`runtime.sls`'s field-action arm and `compile.sls`'s
+   `zero-width-jump`). **The carried-kind half is a tree convention, not a plan sentence**, and
+   it is stated with its boundary: `§12.7`'s table has no row for an error node reached through
+   a *non-failing* zero-width route — a field branch's target today, a zero-count route here —
+   so the convention is what decides it, and the parent plan's `§12.7:770` disposition disputes
+   that convention **only for zero-width machine-action FAILURES**, which this kind cannot
+   produce (§4.9). The observable consequence is stated so a fixture can pin it: an error node
+   reached through a zero-count counted consume entered over a *reexecute* edge reports `byte`
+   at the current offset, as an error node reached through a field branch does today; through a
+   counted consume that committed anything, `boundary`.
 
 **What the interpreter's op answers.** One message per shape, on `accumulate-step`'s precedent:
 `(count-step node field-vector pos end)` answers `(committed . target)` — `committed` the
 bytes to advance, `target` the successor when the count reached zero and `#f` when input ran
-out first. The op **commits the subtraction into the field vector** (Milestone 4's shape: "the
-op RECEIVES the parser's field vector and COMMITS into it; the runtime only routes"). The
+out first. The op **commits the subtraction into the field vector** — `interpret.sls`'s own
+rule for its field messages, verbatim: "The op RECEIVES the parser's field vector and COMMITS
+into it; the runtime only routes the target it answers." The
 finish path asks the same message over an empty slice and reads only the target: `(0 . next)`
 is the zero-count transition and `(0 . #f)` means "take the EOF route", for which the existing
 `eof-target` message gains an arm. A dedicated `count-zero?` message was rejected because the
@@ -358,33 +404,54 @@ the wrong one.
 
 **Resolved, as one rule with four consequences.** *A counted consume's `next` is reached at EOF
 exactly when its count is zero, and by a feed without progress exactly when its count is zero;
-the verifier cannot decide either, so it treats `next` as both an EOF successor and a
-zero-progress edge, unconditionally, and treats the node as a parked state by kind.*
+the verifier cannot decide either at a node the EOF walk arrives at, so there it treats `next`
+as both an EOF successor and a zero-progress edge, unconditionally — while a node a parser is
+PARKED on by `need-input` provably holds a positive count, so its walk starts at its EOF route.*
 
 1. **EOF classification joins over both routes.** `eof-terminal`'s `classify` gives the kind an
    arm that is the join of the input-reading answer and the zero-width answer: `(eof-verdict-join
    (dispatch-arm eof-target) (join-over (list next)))`. A stop reachable through the zero-count
    route is `eof-reachable-stop`; a cycle through `next` is `eof-zero-progress-cycle`; the
    `#f`-route half is `default-error`, benign. Both halves read the same two helpers the
-   dispatch and zero-width arms already read, so the kind adds no third mechanism. Its resume
-   point is itself (`parked-eof-start` answers the node's own name, as for a dispatch).
+   dispatch and zero-width arms already read, so the kind adds no third mechanism. This arm is
+   the **flow-through** answer — the walk *arrived* at the node, so the count is unknown and
+   both routes are live; item 3 is the parked answer, and they differ.
 2. **`next` is an EOF successor for pass 7.** `eof-successors` — and through it pass 7's
    `eof-step` — answers `(list next)` for the kind, so the span dataflow follows the zero-count
    route at EOF as it follows a field action's `next`. Item 1 and this item read **one fact from
    one helper**: `classify`'s arm is written over `eof-successors` so the two consumers cannot
    disagree, which is the `zero-width-edges` "one census, two views" rule applied a kind later.
-3. **The node is parked by kind.** Both `§16.2:909` parked-set disjunctions — the one in
-   `pass-eof-execution` and pass 7's `parked?` — gain `(counted-consume-node? n)` as a
-   disjunct of its own, beside `pause-node?` and `callback-node?`, **not** through the existing
-   `(symbol? (node-eof-target n))` clause. §3.2 item 3 is the machine that clause admits wrongly:
-   a `#f` eof-target, a zero count, and a `next` naming a stop. The proxy was sound for every
-   kind whose `#f` route is the whole of its EOF behaviour; this is the first kind for which it
-   is not, and the record says so where the next kind's author will read it.
+3. **The parked set is unchanged, and `parked-eof-start` gains an arm: a parked counted
+   consume resumes on its EOF route.** Both `§16.2:909` disjunctions keep their
+   `(symbol? (node-eof-target n))` clause and gain no kind of their own. The ground is an
+   invariant of §4.1's table: only rows 2 and 3-partial return with `current` on the node, and
+   both leave the field **positive** — a zero count transitions away (row 1) and a completing
+   commit transitions away (row 3, `n = v`). Fields are written by machine nodes only
+   (`§13:801` makes callback access read-only) and `parser-reset!` moves `current` to the
+   entry, so a parser parked on a non-entry counted consume by `need-input` holds a positive
+   count at `parser-finish!` and takes its EOF route, never `next`. So a parked counted consume
+   is classified from its eof-target, exactly as `parked-eof-start` already starts a parked
+   callback's walk at its pause continuation — "a state an execution can be parked on and the
+   name the EOF walk starts at are two different questions", that construct's own words — with
+   the same exception for the **entry**, which a fresh parser is parked on without having
+   executed it and whose count is the field's initial, possibly zero: the entry starts at
+   itself and takes item 1's join. A `#f` eof-target is then benign for a parked node, exactly
+   as it is for a dispatch, so the proxy's exclusion is correct rather than accidental.
+
+   **The first draft of this document parked the kind by kind, and that was wrong in both
+   directions.** It caught nothing item 1 does not — every parked origin whose count may be
+   zero (the entry, a pause or callback continuation, a chain) already reaches the node through
+   a walk that item 1's join classifies — and it rejected legal machines: `… →(byte) body
+   (eof: truncation error; next: stop)` is the ordinary one-shot "length, body, stop" grammar,
+   and a walk from `body` joining over `next` reports `eof-reachable-stop` for a stop that no
+   EOF path reaches. The review of that draft constructed both machines; Slice ① owes both as
+   fixtures, the one-shot grammar asserted ACCEPTED.
 4. **`next` joins the zero-progress walk, and the kind joins the REPORT set.** `reexec-targets`
-   answers `(list next)` for the kind — the same shape as accumulate's overflow edge, "a
-   non-consuming route" — and the report set's kind list gains the predicate in the same
-   commit, on the rule `pass-zero-progress`'s own comment states: the walk and the report set
-   move together or the half-fix Milestone 3 Slice ② shipped returns.
+   answers `(list next)` for the kind — the same shape as accumulate's overflow edge, which
+   that arm's comment admits unconditionally because `§12.7:772` "makes it NON-CONSUMING" — and
+   the report set's kind list gains the predicate in the same commit, on the rule
+   `pass-zero-progress`'s own comment states: the walk and the report set move together or the
+   half-fix Milestone 3 Slice ② shipped returns.
 
    **This is a known over-rejection, priced.** The verifier already rejects every loop whose
    termination depends on a field value — `branch → decrement → branch` is a zero-progress
@@ -394,9 +461,14 @@ zero-progress edge, unconditionally, and treats the node as a parked state by ki
    The alternative — treating `next` as a progress edge because it *usually* follows a commit —
    accepts a machine that hangs both executors the first time its count is zero, and
    `§11.4:654` forbids exactly that: "Any reachable cycle that can run indefinitely without
-   consuming input is invalid." A grammar author who needs the rejected shape puts a
-   byte-consuming node in the loop; the record states the shape and the workaround so the first
-   author to hit it finds a sentence rather than a surprise.
+   consuming input is invalid." The verifier cannot see that `records` decrements, so it
+   cannot tell the terminating loop from the one that runs indefinitely, and it rejects both —
+   the conservatism it already applies to every value-terminated loop. **The bound on the
+   over-rejection is `§16.2:913`**: "Normal consuming cycles, including the main HTTP message
+   loop, are valid" — and every loop `§21` needs (the message loop, the chunk loop) carries a
+   byte dispatch that advances, so none of them is touched. A grammar author who needs the
+   rejected shape puts a byte-consuming node in the loop; the record states the shape and the
+   workaround so the first author to hit it finds a sentence rather than a surprise.
 
 **What does not change, and why each is a derivation rather than an omission.** `§16.2:908`'s
 derived block reads `node-out-edges`, which gains the kind's `next` as a byte edge with role
@@ -412,10 +484,11 @@ rather than trusting this paragraph.
 **Externally observable, which is why it is a record.** Which diagnostic a fixture emits for a
 stop behind a zero-count route, and whether a self-targeting `next` is a zero-progress cycle,
 are both verdicts a slice would pin in `verify-tests.sps` and in the matrix; a slice that picks
-the proxy by accident pins the hole. Decision 0023's sentence transfers unchanged — "a graph
-node no execution can occupy is not a state that originates a traversal" — and this record adds
-its converse: a node an execution *can* be parked on originates one even when its declared EOF
-route says nothing interesting.
+the dispatch-shaped arm by accident pins the hole, and one that parks the kind by kind pins an
+over-rejection. Decision 0023's sentence transfers unchanged — "a graph node no execution can
+occupy is not a state that originates a traversal" — and this record adds the distinction
+`parked-eof-start` already carries for callbacks: where a walk *starts* and what a node does
+when a walk *arrives* are two questions, and for this kind they have two answers.
 
 ### 4.3 `§16.2:903` has no content beyond field resolution in v0.1
 
@@ -451,12 +524,14 @@ new walk. Its state rides the shipped eleven-slot vector without widening: kind
 `counted-consume`; `arguments` the one-element list holding the field **name** (as
 accumulate's does; the emitter resolves name to slot through `field-slot-width`); `targets` the
 successor id; slot 6 the EOF routing in the shipped `(node . id)` / `(default . code)`
-convention, through a **third** resolver lambda beside `eof-of` and `acc-eof-of`, for the reason
-`acc-eof-of`'s comment gives (each reads a kind-specific accessor; a shared one would be a bare
-slot read from the wrong kind's vector); slot 7 the reason when the routing is `default`.
-`selector` is `#f`.
+convention, through a **fourth** resolver lambda beside `eof-of`, `acc-eof-of` and `seq-eof-of`,
+for the reason `acc-eof-of`'s comment gives (each reads a kind-specific accessor; a shared one
+would be a bare slot read from the wrong kind's vector); slot 7 the reason when the routing is
+`default`. `selector` is `#f`.
 
-The encoding writes **every part** (decision 0019 item 2): tag **14**, then the field name, the
+The encoding writes **every part** — the principle decision 0019 item 2 states for the error
+reason and Milestone 5 Slice ①b applied to every declaration part, "a datum the ABI carries must
+be in the fingerprint" (`AGENTS.md`): tag **14**, then the field name, the
 successor id, and the EOF routing through the shipped `put-eof-routing`. A different field, a
 different successor or a different EOF route is a different machine and must be a different
 fingerprint. Machines without the kind write no tag-14 record and encode byte-identically to
@@ -485,7 +560,10 @@ fails at configure ("SITES fails in both directions"). A `cond` with three claus
 exhausted, commit — renders no line the preamble renders. The same applies in
 `runtime.sls`: the finish loop's `(accumulate dispatch)` arm is the EOF-route body the kind
 needs after its zero-count test, and the two arms share it through a factored local (the
-`route-byte-step!` precedent, factored for exactly this reason) rather than by copying.
+`route-byte-step!` precedent, factored for exactly this reason) rather than by copying. And in
+`verify.sls`: `parked-eof-start`'s callback clause is pinned on its
+`(callback-node-pause-continuation n)` line, so the kind's arm is added as a sibling `cond`
+arm (or a second `if` clause) that leaves the callback clause's lines as they are.
 
 ### 4.6 The interpreter's `current` needs no new shape
 
@@ -498,8 +576,10 @@ census would otherwise read as owing an arm.
 
 ### 4.7 `§25:1607` is a claim about structure, and only a structural witness can see it
 
-**The call.** "counted consume does not dispatch once per body byte" is an exit criterion, and
-no behavioural comparison can witness it: an executor that consumed a body one byte per loop
+**The call.** "counted consume does not dispatch once per body byte" is an exit criterion — the
+executable form of `§3.1:56`'s goal, "Support efficient counted consumption for fixed-length
+and chunked bodies" — and no behavioural comparison can witness it: an executor that consumed a
+body one byte per loop
 iteration would return the same `next`, `consumed`, offset and field value as one that
 consumed it in bulk, deliver the same fragments at the same boundaries, and agree with the other
 lane on every schedule. The differential is blind to this criterion **by construction**, and a
@@ -575,8 +655,8 @@ are false:
   reexecute edge (`byte`, carried) is another. Both lanes, both rows.
 - **`t2-kinds` in `verify-tests.sps` gains the kind**, unlike the span kinds, which that file
   excludes with a stated reason: a counted consume whose `next` is a finish carries no second
-  finding — its zero-count EOF route reaches the same finish and classifies `finish`, benign —
-  so the row still isolates `§16.2:908`.
+  finding — the host's `#f` eof-target keeps the node out of the parked set, and a flow-through
+  join over a finish is tier 0, benign — so the row still isolates `§16.2:908`.
 - **A body is not a token.** `docs/reference/callback-span-lifetime.md` §6 already says
   fragment boundaries are feed boundaries; a bulk-consumed body changes nothing in that
   contract and the reference gains one sentence naming counted consume as a body's ordinary
@@ -584,9 +664,16 @@ are false:
 
 ### 4.11 Obligations addressed to this milestone, each disposed
 
-Five sites in the tree name Milestone 6 or its close-out as a receiver (measured: `rg -n -i
-'milestone 6' src/ docs/decisions/ docs/reference/` plus the parent plan's dispositions). Each
-is disposed here so the close-out has a sentence to check against, and every disposition below
+Five obligations name Milestone 6 or its close-out as a receiver. Measured: `rg -n -i 'milestone
+6' src/ docs/decisions/ docs/reference/` returns **four** `src/` sites and nothing else —
+`compile.sls`'s field-action note, `runtime.sls`'s `make-callback-failure` note, `verify.sls`'s
+`pass-reachability` note, and `normal-ir.sls`'s "Twelve node kinds lower here (§10.6's closed
+set, less Milestone 6's counted consume)", which is a **census comment** Slice ① corrects rather
+than an obligation (the appendix carries it); the fifth obligation, the label clause, names its
+receiver **only in the parent plan's Milestone 5 close note** — the `verify.sls` arm records the
+gap and points to the plan, and the plan's own claim that the receiver is "written at that arm
+in `verify.sls` as well as here" is half true (gap yes, receiver no). Each of the five is
+disposed here so the close-out has a sentence to check against, and every disposition below
 that defers names both ends.
 
 1. **`compile.sls` `field-action` arm — the `§12.7:770` constant, conditional.** Discharged by
@@ -605,7 +692,7 @@ that defers names both ends.
    recorded gap and the close-out defers as in item 3.
 5. **`verify.sls` `pass-reachability` — the over-approximation.** "Owed by whoever next
    narrows reachability, and failing that by Milestone 6's close-out." This milestone does not
-   narrow it; §9 prices the narrowing and **defers it to Milestone 7**, whose scope is
+   narrow it; §8 prices the narrowing and **defers it to Milestone 7**, whose scope is
    "generative and diagnostic hardening of all mandatory verification passes" (`§25:1615`),
    with both ends: the source note re-addressed to Milestone 7, and an appended disposition
    under the parent plan's `§25:1611` heading — the same shape Milestone 5's Slice ⓪ used to
@@ -633,16 +720,22 @@ completeness sweep you have").
    KIND WHOSE LABEL YOU HAD TO WRITE AN ACCESSOR TO READ." Milestone 6 adds a twentieth.
    **The work:** nine accessors plus a `node-source-label` dispatcher in `ir.sls` (a per-kind
    `cond` with a loud `else`, `node-name`'s shape); `valid-label?` folded into
-   `pass-names-valid`'s three existing `and`s — machine, node (with the node's case labels
-   walked under the same arm), error declaration — so the diagnostic census does **not** move
-   (`invalid-name` stays at six sites, a measurement to run rather than assume); three shipped
-   mutation `FIND`s re-anchored with their `REPLACE`s (the `valid-name?` calls at those three
-   arms are pinned at `SchemeMutationSuite.cmake`'s `pass-names-valid` mutations); one rejection
+   `pass-names-valid`'s three arms — the machine and node arms become `and`s, the
+   error-declaration arm already is one; the node arm walks the node's case labels too — and
+   into `pass-fields`' field-name arm, so the diagnostic census does **not** move
+   (`invalid-name` stays at six sites and `invalid-field-declaration` at two, measurements to
+   run rather than assume); the five shipped mutation `FIND`s anchored on those arms'
+   `valid-name?` calls (three in `pass-names-valid`, two in `pass-fields`, measured in
+   `SchemeMutationSuite.cmake`) re-read with their `REPLACE`s, each moving only if its text
+   does; one rejection
    case per carrier in `verify-tests.sps`, asserted in both directions with a wrong-*shape*
    label, because every label conjunct nests inside the shipped `reason-char?` mutant unless
    the fixture gives it a value that mutant cannot produce (`AGENTS.md`, "a predicate that
    calls another predicate nests its mutants by construction"); a derived totality check that
-   every `node?` disjunct answers `node-source-label`. **Recommended: approve.** The check is
+   every `node?` disjunct answers `node-source-label` — which sees node kinds only, so the five
+   non-node carriers (the machine, the uint field, the error declaration, both case kinds) are
+   enumerated by name in the fixture table, whose sentinel reads its own row count.
+   **Recommended: approve.** The check is
    one `§16.2` has required since the plan was written, the fallback receiver is this
    milestone, and the cheapest moment to make a per-carrier check total is the commit that adds
    a carrier.
@@ -650,7 +743,8 @@ completeness sweep you have").
    portable name grammar `[a-z][a-z0-9-]*` is written **twice** in `src/` — `verify.sls`'s
    `valid-name?` and `compile.sls`'s `valid-binding?`, each with its own `lower-alpha?` and
    `name-char?` — and `runtime.sls`'s `make-callback-failure` checks `symbol?` only, with a
-   note that the grammar "lives in a library the runtime does not import and must not". A third
+   note that "`valid-name?` lives in verify.sls, which this library does not import and must
+   not". A third
    copy in the runtime is the wrong fix and the note says why. **The work:** a new
    `src/byte-machine/private/names.sls` exporting the grammar predicate (grammar only — the
    reserved-set tests stay in `verify.sls` and `compile.sls`, since a callback code is never
@@ -723,11 +817,16 @@ over `conditions` alone; `interpret` over `ir`, `verify` and `runtime`):
 - **`ir.sls`**: `make-counted-consume-node` per §4.10's shape; predicate; five accessors;
   `node?`'s thirteenth disjunct; `node-name`'s arm. **`graph.sls`**: the constructor, and
   nothing else.
-- **`verify.sls`**, every row of the appendix, in one commit with the constructor — the
-  matrix's S2 row is red between the disjunct and the last arm, and a commit that lands in that
-  window is a red intermediate commit, which `AGENTS.md` forbids. The `§16.2:903` arm (§4.3);
+- **`verify.sls`**, every row of the appendix, in one commit with the constructor and the
+  verifier-side census rows — the matrix's S2 row is red between the disjunct and the last arm,
+  and a commit that lands in that window is a red intermediate commit, which `AGENTS.md`
+  forbids. **Each census row lands with the library it reads**: the matrix, `ir-tests`,
+  `verify-tests` and the diagnostic census read the verifier and belong to this commit; the
+  fingerprint golden, `position-kind-tests`, `member3-drift` and the differential lower, emit
+  or execute, so they belong to the commit that lands the normalizer, both executors and the
+  emitter — two commits, each green, or one. The `§16.2:903` arm (§4.3);
   `node-out-edges`' and `node-eof-target`'s arms; `eof-successors`' arm and `classify`'s join
-  over it (§4.2 items 1-2); both parked-set disjunctions by kind (§4.2 item 3);
+  over it (§4.2 items 1-2); `parked-eof-start`'s arm, with both parked-set disjunctions left as they are (§4.2 item 3);
   `reexec-targets` and the report set (§4.2 item 4). Fixtures in `verify-tests.sps`: the
   zero-count-route stop (`eof-reachable-stop` with a `#f` eof-target — §3.2 item 3's machine,
   asserted REJECTED); the self-targeting `next` (`zero-progress-cycle` and
@@ -754,15 +853,31 @@ over `conditions` alone; `interpret` over `ir`, `verify` and `runtime`):
 - **The golden**: `test/support/harness/byte-machine/test/counted-machine.sls` and
   `test/fixtures/generated-counted.golden.sls`, with the determinism pair of lanes and the
   golden-file environment variable in the mutation lane's registration, on the accumulate
-  precedent. The proving machine is a length-prefixed message loop **without a span** — `len`
-  (accumulate, base 10) → `:` → `body` (counted consume on `len`, eof-target a truncation
-  error) → `,` → clear `len` → `len`; `len`'s own eof-target is a finish, so idle EOF is
-  `finished` and mid-body EOF is the truncation error. Slice ② wraps the same body in a span.
+  precedent. The proving machine is a length-prefixed message loop **without a span** — `idle`
+  (a byte dispatch that reexecutes a digit into `len` and rejects anything else; its eof-target
+  is the finish, so EOF **between** messages is `finished`) → `len` (accumulate, base 10;
+  eof-target the truncation error, so EOF after a partial length is truncation, which
+  `§12.4:725`'s idle-versus-partial distinction requires and a machine whose entry is the
+  accumulate node cannot make) → `:` → `body` (counted consume on `len`, eof-target the
+  truncation error) → `,` → clear `len` → `idle`. Slice ② wraps the same body in a span.
+- **The ordering witness.** §4.1 item 1's order is not visible in the differential tuple for a
+  zero-length body: after `0:` both orders return `need-input` with the same `next`, `consumed`
+  and offset, one parked on `,` and the other on `body`. It **is** visible three ways, and
+  Slice ① asserts the first two in both lanes: `parser-state-name` after `0:` names the `,`
+  dispatch, not `body` (the generated lane answers from the state-name table); and
+  `parser-finish!` after `0:` reports the `,` dispatch's default EOF error, not `body`'s
+  truncation. The third — a completion event in the feed that delivered `0:` — is Slice ②'s.
+- **The only-consumer fixture** for the reached-declaration walk must carry **no error node
+  naming the default-EOF declaration or sharing its code and reason** — the walk puts every
+  error state's pair into the reached set first, and such a node would keep the declaration in
+  the table and mask the raise the fixture exists to witness.
 - **Census rows, every one red before green**: the matrix's kind row and its two positions
-  (`count-next`: byte and EOF; `count-eof-target`: EOF), with derived verdicts — a stop at
-  `count-next` is `eof-reachable-stop` **and** a finish there is `non-eof-into-finish`, the only
-  position besides `pause-continuation` and `callback-pause-continuation` that is both; the
-  self rows (`count-next` both cycles; `count-eof-target` the EOF cycle); the dangling rows; the
+  (`count-next`: a byte position and **not** an EOF one — the host's `#f` eof-target keeps a
+  byte-reachable counted consume out of the parked set, exactly as `callback-continue` is
+  byte-only; `count-eof-target`: EOF), with derived verdicts — a finish at `count-next` is
+  `non-eof-into-finish`, a stop at `count-eof-target` is `eof-reachable-stop`; the self rows
+  (`count-next`: `zero-progress-cycle` alone, since a parser parked there holds a positive
+  count; `count-eof-target`: the EOF cycle); the dangling rows; the
   absence census (a fourteenth constructor refusal for `next`, a fourth legally-absent EOF
   route); the A' role map (`next` gains `count-next`; the unlabelled set gains
   `count-eof-target`, so 17 + 4 becomes 18 + 5); `t2-kinds`; the edge-role label census; the
@@ -790,9 +905,12 @@ over `conditions` alone; `interpret` over `ir`, `verify` and `runtime`):
    means the encoding changed for a machine that contains no counted consume, and §4.4 says it
    cannot.
 2. **The kind is total across the census**, mechanically: the matrix's S2 row, the diagnostic
-   census, `member3-drift`'s arm count, and `normal-ir-tests.sps`'s layout walk are all green
-   at the slice's head with the thirteenth disjunct present. Any one of them red at the head is
-   a site the appendix missed, and the appendix gains the row before the fix lands.
+   census, `member3-drift`'s exercised-name assertion (which reddens if `n` joins
+   `reserved-member-3` without the fixture rendering the one arm that binds it — the file
+   asserts no arm count, only that every listed local is emitted), and `normal-ir-tests.sps`'s
+   layout walk are all green at the slice's head with the thirteenth disjunct present. Any one
+   of them red at the head is a site the appendix missed, and the appendix gains the row before
+   the fix lands.
 3. **The differential asserts values.** Every case in `differential-counted-tests.sps`
    compares each lane against an expected tuple and against the other lane; the mutation pass
    for the slice includes at least one mutant that makes both lanes agree on a wrong value —
@@ -800,9 +918,11 @@ over `conditions` alone; `interpret` over `ir`, `verify` and `runtime`):
    value's failure, not on lane disagreement.
 
 **Mutations this slice owes**, so the plan writes them from a list rather than from memory:
-constructor (`next` required, `#f` eof-target accepted); the `:903` arm; both parked-set
-disjuncts; `classify`'s join (each half separately — dropping the `next` half unreports the
-zero-count stop, dropping the eof half unreports the truncation-to-stop); `reexec-targets`'
+constructor (`next` required, `#f` eof-target accepted); the `:903` arm; `parked-eof-start`'s
+arm (mutated to answer the node itself, so the one-shot grammar's ACCEPTED fixture goes red
+with `eof-reachable-stop`); `classify`'s join (each half separately — dropping the `next` half
+unreports the flow-through zero-count stop, dropping the eof half unreports the
+truncation-to-stop); `reexec-targets`'
 arm; the report set; `node-out-edges`' arm; `node-eof-target`'s arm; the encode arm's four
 parts (by fingerprint golden); `lower-machine`'s successor and EOF resolution; the interpreter's
 `min` (mutated to `(- end pos)`, so the field goes negative — a comparison catch, not a crash),
@@ -817,9 +937,10 @@ mutants in its lane, and the sweep run in both directions.
 ## 7. Slice ② — Span interaction, pause at fragment boundaries, and the close
 
 **Scope, as an allocation.** Discharges `§25:1599` (span interaction) and `:1600` (pause at
-body fragment boundaries), exit `:1608`'s **fragment** clause, and writes the milestone's close
-note as an appended disposition. It adds **no mechanism** (§4.8): every rule it exercises
-already runs at the `parser-feed!` seam or in the span-end substeps.
+body fragment boundaries), exit `:1608`'s **fragment** clause and exit `:1609`'s **span
+variant** (two completion events in one feed's trace — ① discharges the criterion itself), and
+writes the milestone's close note as an appended disposition. It adds **no mechanism** (§4.8):
+every rule it exercises already runs at the `parser-feed!` seam or in the span-end substeps.
 
 **The work.**
 
@@ -839,7 +960,7 @@ already runs at the `parser-feed!` seam or in the span-end substeps.
   mid-body with the span open — no final fragment, no completion, the earlier flush observable
   (rule 10, `:839`). Every split point of `3:abc,` and `§22.5:1279-1283`'s empty, sub-slice and
   multi-split schedules; the coalesced trace invariant across schedules and the raw trace not
-  (`§22.5:1285-1287`, the shipped span differential's two groups); the error path compared
+  (`§22.5:1285-1287`, the shipped span differential's two cases); the error path compared
   exactly between lanes on one schedule only (`§22.5:1289`).
 - **The `§10.6:603` placement oracle**, which is this slice's reason to exist. For every
   schedule, the completion event is recorded in the **feed that delivered the last body byte**,
@@ -872,9 +993,12 @@ already runs at the `parser-feed!` seam or in the span-end substeps.
 3. **The placement value** (`§10.6:603`): per feed, per schedule, against a table derived from
    the schedule and the body length before the run — the one assertion in this milestone that
    lane agreement cannot stand in for.
-4. **No mechanism added**: `git diff --stat` between ①'s merge and ②'s head over
-   `src/byte-machine/runtime.sls` and `src/byte-machine/compile.sls` is empty. If it is not, §4.8
-   was wrong and this document is amended before the code lands.
+4. **No mechanism added**: between ①'s merge and ②'s head, the feed and finish wire-kind
+   `case`s in `src/byte-machine/runtime.sls` and `render-state-arm` in
+   `src/byte-machine/compile.sls` are byte-identical, and every hunk `git diff` shows in those
+   two files is a comment — the close-out rewrites the receiver notes at `make-callback-failure`
+   and the `field-action` arm (§4.11 items 1 and 3), which is prose. A code hunk means §4.8 was
+   wrong and this document is amended before the code lands.
 
 ---
 
@@ -887,12 +1011,12 @@ that meets it — never reworded to match what shipped.
 | Criterion | Allocated to | What will meet it |
 | --- | --- | --- |
 | **:1607** — "counted consume does not dispatch once per body byte" | **①** | §4.7's two structural witnesses: the datum walk over the emitted arm (one `min`, no `(+ pos 1)`) in `compile-tests.sps`, and the op-message count (one `count-step` per feed for a thousand-byte body) in `differential-counted-tests.sps`. Stated at close: the differential lanes are blind to this criterion by construction, and neither witness is a differential. |
-| **:1608** — "field, cursor, fragment, and offset results match the interpreter for every case" | **① and ②**, in clauses | ① discharges *field, cursor and offset* over `§22.3:1254`'s four cases × `§22.5:1278-1283`'s schedules, each lane against an expected value and against the other. ② discharges *fragment* over the span-enclosed machine's schedules, per-feed and coalesced, with the `§10.6:603` placement value. "Every case" is read as the four named cases under every schedule the shipped span differential drives; the property lane is not extended (§10). |
+| **:1608** — "field, cursor, fragment, and offset results match the interpreter for every case" | **① and ②**, in clauses | ① discharges *field, cursor and offset* over `§22.3:1254`'s four cases × `§22.5:1278-1283`'s schedules, each lane against an expected value and against the other. ② discharges *fragment* over the span-enclosed machine's schedules, per-feed and coalesced, with the `§10.6:603` placement value. "Every case" is read as the four named cases under every schedule the shipped span differential drives; the property lane is not extended (§8). |
 | **:1609** — "surplus bytes continue immediately into the next node/message" | **①**, with ②'s span variant | ①: one feed carrying `3:abc,0:,` reports `consumed` equal to the whole slice, the field reset action having run between the two messages, both in one result. ②: the same schedule with the span open records two completion events in one feed's trace. |
 
 ---
 
-## 9. Explicitly out of Milestone 6
+## 8. Explicitly out of Milestone 6
 
 - **The property generator is not extended with a counted-consume draw.** `§25:1618-1619`
   gives the bounded generators to Milestone 7 by name; Milestone 5 extended nothing for
@@ -926,12 +1050,14 @@ that meets it — never reworded to match what shipped.
 
 ---
 
-## 10. Handed to writing-plans
+## 9. Handed to writing-plans
 
 - **Gate 0 is one record, `0030`**, carrying §4.1 and §4.2 as two numbered decision groups
   under one Context, because both descend from one fact and a reader arriving at either would
-  need the other. Its Consequences must list the six "both" rows of the appendix by construct
-  name, and state the over-rejection of §4.2 item 4 with the workaround.
+  need the other. Its Consequences must list the four "both" rows of the appendix by construct
+  name plus `parked-eof-start`'s arm, state the over-rejection of §4.2 item 4 with the
+  workaround, and hand Slice ① the two machines §4.2 item 3 names — the flow-through zero-count
+  stop (REJECTED) and the one-shot "length, body, stop" grammar (ACCEPTED).
 - **§4.12 needs the owner's decision before Slice ⓪'s plan is written**, and the design's §5
   is corrected in place to say which items it carries. Slice ①'s plan can be written in parallel
   with Gate 0's execution; it must not be *dispatched* before `0030` exists.
@@ -941,8 +1067,14 @@ that meets it — never reworded to match what shipped.
 - **Re-run the appendix's four recognisers over `src/` and `test/common/`** before writing the
   Slice ① plan and reconcile against the table: a construct the recogniser finds and the table
   lacks is the finding, and the table is corrected in place — it is an instruction.
-- **Slice ①'s plan is one PR and lands the constructor, every verifier arm and the census rows
-  in one commit.** The S2 row makes any smaller unit a red intermediate commit.
+- **Slice ①'s plan is one PR with at most two commits, each green.** The S2 row forces the
+  constructor, every verifier arm and the verifier-side census rows into one commit; the
+  executor-side rows (the fingerprint golden, `position-kind-tests`, `member3-drift`, the
+  differential) force the normalizer, both executors and the emitter into one commit, because
+  each of them lowers, emits or executes a machine that carries the kind. A census row that
+  lands before the library it reads is a red intermediate commit.
+- **Decide whether Slice ② folds into ①**, with §2's cost stated: the `§10.6:603` placement
+  oracle would become one task among twenty that pass on lane agreement alone.
 - **Slice ②'s plan re-measures what ① shipped before allocating.** Milestone 5's Slice ③
   shipped both legs it disclaimed; §6's fragment clause is disclaimed the same way.
 - **The close-out asks three questions**, not two: which exit criteria are met, which
@@ -982,7 +1114,7 @@ own field and are invisible to every recogniser; a row may be **DERIVED**, meani
 it nothing because it reads a census listed elsewhere.
 
 **And one rule this kind adds:** a row marked **BOTH** is a site that partitions kinds into
-input-reading and zero-width and needs this kind in *both* partitions' answer. There are six, all in `verify.sls`.
+input-reading and zero-width and needs this kind in *both* partitions' answer. There are four, all in `verify.sls`; `parked-eof-start` is the fifth site the partition reaches, and there the kind takes the input-reading answer for a stated reason.
 
 ### `src/byte-machine/private/ir.sls`
 
@@ -1011,16 +1143,16 @@ input-reading and zero-width and needs this kind in *both* partitions' answer. T
 | `pass-names`' error-reference filter | no arm — names no error declaration |
 | `pass-field-operands` | an arm: `§16.2:903`, `invalid-field-operand` under the node's name (§4.3) |
 | `pass-overlap`, `pass-sequence-ambiguity` | no arm — no cases, no trie |
-| `reexec-targets` | **BOTH**: an arm answering `(list next)` — a non-consuming route, accumulate's overflow shape (§4.2 item 4) |
+| `reexec-targets` | **BOTH**: an arm answering `(list next)` — a route that can be taken without consuming, the shape the arm already gives accumulate's overflow edge (§4.2 item 4) |
 | the zero-progress REPORT set | **BOTH**: the predicate joins, in the same commit as the walk |
-| `classify` | **BOTH**: an arm joining `dispatch-arm` over the eof-target with `join-over` the `eof-successors` (§4.2 item 1) |
-| `parked-eof-start` | no arm — resume point is the node itself |
+| `classify` | **BOTH**: an arm joining `dispatch-arm` over the eof-target with `join-over` the `eof-successors` (§4.2 item 1) — the flow-through answer |
+| `parked-eof-start` | **an arm**: a non-entry counted consume starts its walk at its eof-target, the callback precedent, because a parser parked on it holds a positive count; the entry starts at itself (§4.2 item 3). The two questions this construct separates come apart for this kind a second time |
 | `§16.2:908`'s zero-hop entry clause and per-edge target | **DERIVED** through `node-out-edges` — check both still fire on a finish `next` |
-| `pass-eof-execution`'s parked-set membership | **BOTH**: a disjunct **by kind**, not through `(symbol? (node-eof-target n))` (§4.2 item 3) |
+| `pass-eof-execution`'s parked-set membership | **no disjunct** — the existing `(symbol? (node-eof-target n))` clause admits the kind when its EOF route is worth classifying; a `#f` route is benign for a parked node because the count is positive (§4.2 item 3). The first draft added one; it was unnecessary |
 | `pass-declarations`' node walk | no arm — names no callback or span (§4.9) |
 | `callback-node-diagnostics`, `span-node-declaration-diagnostics` | no arm |
-| `eof-successors` / pass 7's `eof-step` | **BOTH**: an arm answering `(list next)` (§4.2 item 2) — the one helper `classify`'s arm also reads |
-| pass 7's `parked?` | **BOTH**: the same disjunct by kind as the `:909` set — the second hand-written copy (§3.2 item 2) |
+| `eof-successors` / pass 7's `eof-step` | **BOTH**: an arm answering `(list next)` (§4.2 item 2) — the one helper `classify`'s arm also reads. `eof-step`'s comment, "disjoint by construction … `eof-successors` answers `'()` for every input-reading one", becomes false and is corrected in place; the `append` stays correct |
+| pass 7's `parked?` | **no disjunct**, as for the `:909` set. Adding one would be inert — a byte-reachable counted consume's `next` is already a byte edge, the span-end derivation in that construct's own comment — and an inert disjunct is a mutation nothing can catch |
 | `span-transfer` | **DERIVED**: the `else` is identity, which is `§10.6:604` |
 | `span-node-diagnostics` | **DERIVED**: the `else` answers nothing |
 | `eof-verdict-tiers` | **NOT a node-kind census** |
@@ -1047,9 +1179,10 @@ input-reading and zero-width and needs this kind in *both* partitions' answer. T
 | the normal-STATE vector and accessors | fits: `arguments`, `targets`, slot 6, slot 7 (§4.4) |
 | `normal-state-kind` | `counted-consume` |
 | `internal-blocks` and its consumers | **DERIVED**: the `else` skips a 1:1 kind |
+| the `else` guards' census comment above the trie ("Twelve node kinds lower here … less Milestone 6's counted consume") | **a census; it becomes thirteen**, and it names this milestone — corrected in place |
 | the EOF resolvers `eof-of` / `acc-eof-of` / `seq-eof-of` | a fourth sibling, not a widening (§4.4) |
 | the slot resolvers | none — names no callback or span |
-| `lower-machine`'s declared `cond` | an arm above the raising `else` |
+| `lower-machine`'s declared `cond` | an arm above the raising `else`, whose comment — "The repertoire is now these TWELVE kinds" — is a census and becomes thirteen |
 | the internal-state builder (phase two) | **invisible to recognisers**; not reached |
 | the debug-map walk | **DERIVED** through `name->id` |
 | `encode-normal`'s state arms | tag **14**, four parts (§4.4) |
