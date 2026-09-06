@@ -68,7 +68,7 @@ the `pass-reachability` comment in `verify.sls` (F8), a deferral's source end.
 
 ### F4 — the six rules over a counted body reuse the span lane's machinery, not its machine
 
-`differential-span-tests.sps` ships the recorder-per-lane (`recorder`, `:154`),
+`differential-span-tests.sps` ships the recorder-per-lane (`recorder`, `:146`),
 the lane runner (`make-lane`, `run`, `both`), `record-span` (feed a schedule,
 finish, return the trace), `coalesce`, and a schedule generator (`span-splits`,
 `span-pairs`, `span-others`, `all-schedules`, thirty-seven schedules over a
@@ -104,35 +104,50 @@ the second feed completes the count, closes the span and stops on `Z`. So the
 arm is a second machine (`retention-counted-machine`, defined inline as the
 shipped one is, so the retention lanes' `SOURCES` do not change) driven by the
 **same** probes: layer 1 (gone, both lanes, one feed and split), and layer 2's
-negative control on it (the `stashing` fixture must read RETAINED on the counted
-machine too, or the arm is not falsifiable). The shipped retention pins mutate the
-runtime, not a fixture, so they redden the new arm as well; the sweep confirms it.
+negative controls on it (`stashing` for the one-feed probe and `stashing-first`
+for the split probe must read RETAINED on the counted machine too, or the arm is
+not falsifiable). Design §7 asks for "the same three-layer oracle"; layer 3's
+carriers — user context, a callback closure, the failure detail — are
+application-owned and machine-independent, so the counted machine adds no arm
+there, and this is a stated deviation, not an omission. Of the three shipped
+retention pins only "runtime: the fed bytevector is stored in the parser and
+survives the return" can redden the counted arm; the sweep confirms that it does.
 
 ### F7 — the status surfaces, measured, and one of them is empty
 
 `README.org`'s Milestone 6 paragraph, `CHANGELOG.md`'s `[Unreleased]`, the parent
 plan's `Status:` line (one physical line; it stays one), the design's `Status:`
-header. Source comments naming Milestone 6 as a **receiver**: exactly one —
-`verify.sls`'s `pass-reachability` note, "failing that by Milestone 6's
-close-out" (`rg -n "Milestone 6's close-out" src/` prints one line at
-`8ec814f`); the other three `Milestone 6` mentions under `src/` are provenance
-("Milestone 6 Slice ①", "Milestone 6 design §4.9"), not receivers. The closed
-slice plans carry **no** status lines (`rg -n '^\*\*Status|^Status:'
-docs/plans/milestone-6-slice-*` prints nothing; neither do Milestone 5's), so
-that fifth surface is empty, and the close note says so rather than sweeping it.
+header — four. The fifth, the source comments naming Milestone 6 as a
+**receiver**: exactly one — `verify.sls`'s `pass-reachability` note, "failing
+that by Milestone 6's close-out" (`rg -n "Milestone 6's close-out" src/` prints
+one line at `8ec814f`); the other thirty-two `Milestone 6` mentions under `src/`
+(`rg -c`) are provenance ("Milestone 6 Slice ①", "Milestone 6 design §4.9"), not
+receivers. The sixth, the closed slice plans' own status lines: Milestone 6's two
+slice plans carry **none** (`rg -n '^\*\*Status|^Status:'
+docs/plans/milestone-6-slice-*` prints nothing), so there is nothing to move
+there; Milestone 5's ⓪ and ⓪b plans carry `**Status:** CLOSED 2026-09-04` lines
+that are already true. The close note says which surfaces were swept and which
+were empty.
 
 ### F8 — the reachability deferral needs both ends, and one of them is a heading that exists
 
 Design §8 and §4.11 item 5 defer narrowing `pass-reachability` to Milestone 7
 (`§25:1615`, "generative and diagnostic hardening of all mandatory verification
-passes"). Both ends: the source note at `verify.sls:601-613` re-addressed from
+passes"). Both ends: the source note above `pass-reachability` in `verify.sls`
+(thirteen comment lines at `8ec814f`; commit B rewrites its last sentence, so
+it is cited by construct) re-addressed from
 "Milestone 6's close-out" to Milestone 7, naming design §8's pricing (the
 narrowed set is `byte-reached` ∪ the EOF walk's visited set, decision 0027's
 family flips `unreachable-node`, one shipped fixture and the matrix's pruning
-count move); and an appended disposition under a `### §25:1611` heading — the
-shape Milestone 5's Slice ⓪ used to hand its generator work to Milestone 7
-(`byte-machine-implementation-plan.md`, "§25:1611 — Milestone 5 Slice ⓪,
-delivered"), the place Milestone 7's designer reads first.
+count move); and an appended disposition under a `### §25:1611` heading — parent-plan line
+1611 is `### Milestone 7: Verification and generative hardening`, and the two
+Milestone 5 dispositions already under that heading are where Milestone 7's
+designer reads first (they record what Slice ⓪ built and that Milestone 7 keeps
+its generator scope unchanged; neither hands anything over, so this is the first
+disposition under `§25:1611` that does). "Milestone 7's scope is unchanged" is
+true under one stated reading: `§25:1615`'s "generative and diagnostic hardening
+of all mandatory verification passes already introduced" already covers
+narrowing a pass, and the disposition says so rather than asserting it.
 
 ### F9 — the Exit table has two rows left to dispose
 
@@ -233,12 +248,11 @@ owner's go-ahead, and the closing ritual closes the milestone.
       2. rule 4 (`§14:833`): `3:ab` then `c,` — the flush delivers `ab` at the
          boundary, the span stays open (`parser-active-span` = `sp` between the
          feeds, `len` = 1), the second feed delivers `c` and the completion;
-      3. rule 5 (`§14:834`): `0:,` — no data callback at all, one completion, in
-         the feed that delivered `:`… no: in the feed that delivered the `0:`
-         **body's completion**, which under one feed is that feed; under
-         byte-at-a-time the completion lands in the `:` feed (the zero count
-         transitions at once — decision 0030 item 1) and the `,` feed records
-         nothing;
+      3. rule 5 (`§14:834`): `0:,` — no data callback at all and one completion.
+         In one feed the trace is `(complete)`; byte-at-a-time the per-feed
+         traces are `(() (complete) ())`: the `:` feed opens the span, takes the
+         zero-count route at once (decision 0030 item 1), suppresses the empty
+         fragment and fires the completion, and the `,` feed records nothing;
       4. rule 8 (`§14:837`, `§25:1600`): `3:ab` with the data callback answering
          `callback-pause` — the feed reports `paused` with the need-input tuple's
          cursor and offset, the fragment `ab` was committed, the span is open,
@@ -254,13 +268,17 @@ owner's go-ahead, and the closing ritual closes the milestone.
          in the trace.
 - [ ] **Step 4: The placement oracle, per schedule** (design §7 oracle 3; decision
       0030 item 2). For every schedule the generator produces over `3:abc,`, the
-      expected feed index of the completion is **derived before the run**: the
-      index of the slice that contains offset 4 (the last body byte, `c`); under
-      an empty or sub-slice schedule the same rule applies to the slice actually
-      containing that offset. The program records the trace per feed in each
-      lane and asserts: the completion appears exactly once, in that feed; no
-      feed after it records anything but the delimiter's silence; and the two
-      lanes' per-feed traces are equal. For the bare variant (F2): after the
+      expected feed index of the completion is **derived before the run**, in
+      STREAM offsets: summing the lengths of the preceding slices, the first
+      slice whose cumulative range covers stream offset 4 (the last body byte,
+      `c`) is the feed the completion must land in — never the slice's own
+      `start`/`end` arguments, which for a padded sub-slice schedule such as
+      `(padded 2 5) (padded 5 8)` name bytevector positions and would pick the
+      wrong feed. The program records the trace per feed in each lane and
+      asserts: the completion appears exactly once, in that feed; no feed after
+      it records anything but the delimiter's silence; `len` reads 0 from that
+      feed on and the remaining count before it; and the two lanes' per-feed
+      traces and per-feed counts are equal. For the bare variant (F2): after the
       feed containing offset 4, `parser-active-span` is `#f` in both lanes, and
       it was the span's name after every earlier feed that delivered a body
       byte.
@@ -300,11 +318,13 @@ owner's go-ahead, and the closing ritual closes the milestone.
       **gone** in both lanes, and the split probe (`A b` then `c d Z`, two
       bytevectors, the flush delivering `b` out of the first) reads **gone** for
       both buffers; layer 2's negative control on the counted machine reads
-      **RETAINED** in both lanes, and its trace shows the data callback fired
-      (`stashed complete`). The sentinel is the lane list's observed length.
-- [ ] **Step 3: Verify** — `ctest --preset release -R 'differential\.retention'`
-      (both lanes) green; the arm's checks are labelled "counted" so a red one
-      names its machine.
+      **RETAINED** in both lanes (`stashing` for the one-feed probe,
+      `stashing-first` for the split one), and its trace shows the data callback
+      fired (`stashed complete`). Layer 3 is not repeated (F6). The sentinel is
+      the lane list's observed length.
+- [ ] **Step 3: Verify** — `ctest --preset release -R 'unit\.retention'` prints
+      `100% tests passed, 0 tests failed out of 2`; the arm's checks are
+      labelled "counted" so a red one names its machine.
 
 ## Task 3 — The pass, the two pins, the totals, the sweep (commit A)
 
@@ -328,11 +348,14 @@ owner's go-ahead, and the closing ritual closes the milestone.
 - [ ] **Step 4: Commit A** — `test(counted-span): the fragment trace over every
       schedule, the placement per feed, and a body-shaped retention arm`.
 - [ ] **Step 5: The sweep**, both directions, over the touched passes (the new
-      one and retention), control on `8ec814f`, the Slice ① script; expected 0
-      self-failures, 0 collisions involving the two new pins beyond the by-construction
-      pair with Slice ①'s same-mutant declarations (a mutant declared under two
-      SPECs has, in each lane, only its own pin — the sweep judges within a
-      pass), and the shipped retention pins confirmed to redden the counted arm.
+      one and retention), control on `8ec814f`, the Slice ① script; expected
+      **0 self-failures** and **0 collisions** in the new pass (two mutants, two
+      ordered pairs; Slice ①'s declarations of the same mutants live in other
+      passes and are never judged against this pass's outputs), and the shipped
+      retention pin "runtime: the fed bytevector is stored in the parser and
+      survives the return" confirmed to redden the counted arm's layer-1 checks
+      (the detail and user-context pins exercise layer-3 cases the counted arm
+      does not have, and are expected NOT to).
 
 ## Task 4 — The close-out (commit B)
 
@@ -356,13 +379,18 @@ owner's go-ahead, and the closing ritual closes the milestone.
 - [ ] **Step 2: The deferral's two ends (F8).** `verify.sls`'s `pass-reachability`
       note: "Owed by whoever next narrows reachability, and failing that by
       Milestone 6's close-out" becomes "… and failing that by **Milestone 7**
-      (`§25:1615`), which Milestone 6's design §8 priced and handed on
-      2026-09-06" — a comment hunk, the only one under `src/`. The parent plan
+      (`§25:1615`); handed on 2026-09-06 and adjudicated at the parent plan's
+      `§25:1611` disposition, which carries Milestone 6's design §8 pricing" — a
+      comment hunk, the only one under `src/`, naming the adjudication so the
+      two cannot drift apart. The parent plan
       gains `### §25:1611 — Milestone 6 hands the reachability narrowing to
       Milestone 7`, appended, stating the pricing (the narrowed relation, the
       verdict change on decision 0027's family, the shipped fixture that flips,
       the matrix's pruning count) and that Milestone 7's scope is unchanged.
-- [ ] **Step 3: The design.** §7 gets its landing; the Exit table's `:1608`
+- [ ] **Step 3: The design.** §7 gets its landing, and its oracle 4 is corrected
+      in place (F3): not "every hunk in those two files is a comment" but "the
+      five-library diff is empty; the receiver notes it expected the close-out to
+      rewrite were rewritten by ⓪ and ①"; the Exit table's `:1608`
       fragment clause and `:1609` span variant get dated dispositions (F9);
       §4.11 item 5 records the hand-off; §8's reachability bullet says "deferred
       2026-09-06"; the Amendments block indexes the corrections; the Status
@@ -380,7 +408,9 @@ owner's go-ahead, and the closing ritual closes the milestone.
       ```bash
       git diff -U0 8ec814f..HEAD -- docs/plans/byte-machine-implementation-plan.md | rg '^@@'
       ```
-      Expected: exactly **three** hunks — line 3, and two appended at the foot.
+      Expected: exactly **two** hunks — line 3, and one at the foot: two
+      dispositions appended together are one contiguous addition. A third hunk
+      would mean an insertion, which the file forbids.
 - [ ] **Step 5: Commit B** — `docs: Milestone 6 closes — the disposition, the
       reachability hand-off, and four status surfaces`.
 
@@ -410,7 +440,8 @@ lessons into memory.
    and the `§25:1611` disposition exists; `rg "Milestone 6's close-out" src/`
    prints nothing.
 7. **The close note answers three questions**, and every exit criterion it marks
-   DISCHARGED names a case that exists (`rg -F` each case label into `test/common/`).
+   DISCHARGED names a case that exists: `rg -n -F '<label>' test/common/` prints
+   exactly one line per label named.
 
 ## Exit
 
