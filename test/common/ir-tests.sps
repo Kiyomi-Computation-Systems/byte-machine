@@ -978,6 +978,50 @@
 ;; whose sentinel reads the observed count is what says all nine ran.
 (define (edge-to t) (make-edge t 'advance))
 (define (case-on-0 t) (make-byte-case (make-exact-byte-matcher 0) (edge-to t) #f))
+;; --- the thirteenth kind (Milestone 6 Slice ①; §9.1:311; decision 0030) -------
+(harness-group "counted-consume nodes (Milestone 6 Slice ①)"
+  (lambda ()
+    (harness-case "a counted-consume node carries its five parts"
+      (lambda ()
+        (let ((n (make-counted-consume-node 'body 'len 'after 'trunc 'lbl)))
+          (check "predicate" (counted-consume-node? n))
+          (check-equal "name" (counted-consume-node-name n) 'body)
+          (check-equal "field" (counted-consume-node-field n) 'len)
+          (check-equal "next" (counted-consume-node-next n) 'after)
+          (check-equal "eof-target" (counted-consume-node-eof-target n) 'trunc)
+          (check-equal "label" (counted-consume-node-source-label n) 'lbl))))
+    (harness-case "it is a node and answers node-name and node-source-label"
+      (lambda ()
+        (let ((n (make-counted-consume-node 'body 'len 'after #f 'lbl)))
+          (check "node?" (node? n))
+          (check-equal "node-name" (node-name n) 'body)
+          (check-equal "node-source-label" (node-source-label n) 'lbl))))
+    (harness-case "the next is a mandatory symbol -- the fourteenth constructor refusal"
+      (lambda ()
+        ;; A count that reaches zero always has somewhere to go (§10.6:600,
+        ;; :602), so there is no #f arm, unlike the eof-target's.
+        (check-raises "absent" (contract-violation? 'make-counted-consume-node 'next)
+                      (lambda () (make-counted-consume-node 'body 'len #f #f #f)))
+        (check-raises "a number" (contract-violation? 'make-counted-consume-node 'next)
+                      (lambda () (make-counted-consume-node 'body 'len 7 #f #f)))))
+    (harness-case "the eof-target is a symbol or #f, #f meaning the machine default (§9.1:318)"
+      (lambda ()
+        (check-equal "absent"
+                     (counted-consume-node-eof-target (make-counted-consume-node 'b 'len 'a #f #f))
+                     #f)
+        (check-raises "a number" (contract-violation? 'make-counted-consume-node 'eof-target)
+                      (lambda () (make-counted-consume-node 'b 'len 'a 7 #f)))))
+    (harness-case "name and field are mandatory symbols"
+      (lambda ()
+        (check-raises "name" (contract-violation? 'make-counted-consume-node 'name)
+                      (lambda () (make-counted-consume-node "b" 'len 'a #f #f)))
+        (check-raises "field" (contract-violation? 'make-counted-consume-node 'field)
+                      (lambda () (make-counted-consume-node 'b "len" 'a #f #f)))))
+    (harness-case "the field reference is NOT checked here (decision 0020; §16.2:903 is the verifier's)"
+      (lambda ()
+        (check "an undeclared field name builds fine"
+               (counted-consume-node? (make-counted-consume-node 'b 'nosuch 'a #f #f)))))))
+
 (define label-accessor-rows
   ;; (name build accessor), build: label -> carrier
   (list
@@ -1047,11 +1091,12 @@
          (lambda (l) (make-integer-accumulate-node 'n 'f 10 't (edge-to 'u) 'e #f l)))
    (list 'callback (lambda (l) (make-callback-node 'n 'cb 't '() 'p l)))
    (list 'span-start (lambda (l) (make-span-start-node 'n 's 't l)))
-   (list 'span-end (lambda (l) (make-span-end-node 'n 's 't l)))))
+   (list 'span-end (lambda (l) (make-span-end-node 'n 's 't l)))
+   (list 'counted-consume (lambda (l) (make-counted-consume-node 'n 'f 't #f l)))))
 
 (harness-group "node-source-label answers for every node kind (Milestone 6 Slice ⓪)"
   (lambda ()
-    (harness-case "twelve kinds, one label each, and absence"
+    (harness-case "thirteen kinds, one label each, and absence"
       (lambda ()
         (let ((driven 0) (bad '()))
           (for-each
@@ -1063,8 +1108,8 @@
                             (eq? (node-source-label (build #f)) #f))
                  (set! bad (cons nm bad)))))
            node-builders)
-          (check-equal "twelve kinds driven" driven 12)
-          (check-equal "and the table has twelve rows" (length node-builders) 12)
+          (check-equal "thirteen kinds driven" driven 13)
+          (check-equal "and the table has thirteen rows" (length node-builders) 13)
           (check-equal "each answers its own label" bad '()))))
     (harness-case "a non-node is refused, as node-name refuses it"
       (lambda ()

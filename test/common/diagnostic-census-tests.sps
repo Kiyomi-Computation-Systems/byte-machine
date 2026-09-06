@@ -115,7 +115,7 @@
 (define pinned-sites
   '((invalid-shape 2) (duplicate-name 1) (duplicate-error-declaration 1)
     (missing-target 2) (missing-error-declaration 1) (invalid-field-declaration 2)
-    (invalid-field-operand 6) (overlapping-cases 1) (ambiguous-sequence-prefix 1)
+    (invalid-field-operand 7) (overlapping-cases 1) (ambiguous-sequence-prefix 1)
     (unreachable-node 1) (zero-progress-cycle 1) (invalid-eof-target 2)
     (non-eof-into-finish 2) (eof-reachable-stop 1) (eof-zero-progress-cycle 1)
     (invalid-name 6)

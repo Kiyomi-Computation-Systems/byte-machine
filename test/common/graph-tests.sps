@@ -144,4 +144,24 @@
                   'e #f)))
           (check "built" (and m #t)))))))
 
+(harness-group "the counted-consume constructor reaches grammar authors (Milestone 6 Slice ①)"
+  (lambda ()
+    ;; The same expand-time witness as the field-node group above: the
+    ;; constructor is in both lists or this program fails to load, and a machine
+    ;; carrying the kind builds through make-machine's node guard.
+    (harness-case "a machine carrying a counted consume builds through the facade"
+      (lambda ()
+        (let ((m (make-machine
+                  'm 'start (list (make-uint-field 'len 8 0 #f)) '() '()
+                  (list (make-error-declaration 'e 'c "r" #f))
+                  (list (make-byte-dispatch-node 'start
+                          (list (make-byte-case (make-exact-byte-matcher 0)
+                                                (make-edge 'body 'advance) #f))
+                          (make-edge 'err 'reexecute) #f #f)
+                        (make-counted-consume-node 'body 'len 'stop #f #f)
+                        (make-stop-node 'stop #f)
+                        (make-error-node 'err 'e #f))
+                  'e #f)))
+          (check "built" (and m #t)))))))
+
 (harness-finish)

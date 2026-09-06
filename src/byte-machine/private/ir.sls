@@ -73,6 +73,10 @@
           callback-node-name callback-node-callback
           callback-node-continue-target callback-node-branch-targets
           callback-node-pause-continuation callback-node-source-label
+          make-counted-consume-node counted-consume-node?
+          counted-consume-node-name counted-consume-node-field
+          counted-consume-node-next counted-consume-node-eof-target
+          counted-consume-node-source-label
           node? node-name node-source-label
           make-verification-result verification-result? verification-result-ok?
           verification-result-diagnostics verification-result-machine)
@@ -624,13 +628,41 @@
   (define (span-end-node-next n) (vector-ref n 3))
   (define (span-end-node-source-label n) (vector-ref n 4))
 
+  ;; --- counted consume (Milestone 6 Slice ①; §9.1:311, §10.6:596-604,
+  ;; §11.4:652). The thirteenth node kind, and the first that is INPUT-READING
+  ;; and ALSO has a route taken without consuming: a zero count transitions to
+  ;; `next` immediately (§10.6:600). Decision 0030 is where that one fact meets
+  ;; the verifier and both executors; here it is five parts and a shape. `next`
+  ;; is mandatory -- a count that reaches zero always has somewhere to go -- and
+  ;; `eof-target` follows the byte-dispatch convention, #f meaning the machine
+  ;; default EOF error (§9.1:318). No `error` slot, unlike a field action's:
+  ;; §15:872's subtraction cannot underflow, because the committed count never
+  ;; exceeds the field's value, so there is nothing for an error edge to carry.
+  ;; The FIELD REFERENCE is the verifier's (decision 0020 item 1; §16.2:903
+  ;; through pass-field-operands), as accumulate's is.
+  (define counted-consume-node-tag (tag 'byte-machine-counted-consume-node))
+  (define (make-counted-consume-node name field next eof-target source-label)
+    (require-symbol 'make-counted-consume-node 'name name)
+    (require-symbol 'make-counted-consume-node 'field field)
+    (require-symbol 'make-counted-consume-node 'next next)
+    (unless (or (symbol? eof-target) (eq? eof-target #f))
+      (byte-machine-contract-violation 'make-counted-consume-node
+                                       'invalid-argument 'eof-target))
+    (vector counted-consume-node-tag name field next eof-target source-label))
+  (define (counted-consume-node? x) (tagged? counted-consume-node-tag x))
+  (define (counted-consume-node-name n) (vector-ref n 1))
+  (define (counted-consume-node-field n) (vector-ref n 2))
+  (define (counted-consume-node-next n) (vector-ref n 3))
+  (define (counted-consume-node-eof-target n) (vector-ref n 4))
+  (define (counted-consume-node-source-label n) (vector-ref n 5))
+
   ;; --- node dispatch ---
   (define (node? x)
     (or (byte-dispatch-node? x) (sequence-dispatch-node? x) (stop-node? x)
         (error-node? x) (finish-node? x) (pause-node? x)
         (field-action-node? x) (field-branch-node? x)
         (integer-accumulate-node? x) (callback-node? x)
-        (span-start-node? x) (span-end-node? x)))
+        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))
   (define (node-name x)
     (cond ((byte-dispatch-node? x) (byte-dispatch-node-name x))
           ((sequence-dispatch-node? x) (sequence-dispatch-node-name x))
@@ -644,6 +676,7 @@
           ((callback-node? x) (callback-node-name x))
           ((span-start-node? x) (span-start-node-name x))
           ((span-end-node? x) (span-end-node-name x))
+          ((counted-consume-node? x) (counted-consume-node-name x))
           (else (byte-machine-contract-violation 'node-name 'invalid-argument 'node))))
   ;; Milestone 6 Slice ⓪. `node-name`'s shape -- one arm per kind above a raising
   ;; `else` -- for the one other field every node kind carries. It exists so that
@@ -668,6 +701,7 @@
           ((callback-node? x) (callback-node-source-label x))
           ((span-start-node? x) (span-start-node-source-label x))
           ((span-end-node? x) (span-end-node-source-label x))
+          ((counted-consume-node? x) (counted-consume-node-source-label x))
           (else (byte-machine-contract-violation 'node-source-label 'invalid-argument 'node))))
 
   ;; --- uint field descriptor (§9.1:283, §10.2:488-491) ---

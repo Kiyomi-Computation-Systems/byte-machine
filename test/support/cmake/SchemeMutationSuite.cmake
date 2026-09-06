@@ -1058,6 +1058,19 @@ cmake_minimum_required(VERSION 3.26)
 # and node-name grammar pins, whose `if` tests grew a conjunct; their REPLACEs
 # now drop the name check alone. No pass is added.
 #
+# Milestone 6 Slice ① task 1, the thirteenth kind and its two answers in the
+# verifier: FOURTEEN more, 483 + 14 = 497. Five in the ir pass (the mandatory
+# `next`, the eof-target check, `node?`'s disjunct, `node-name`'s arm,
+# `node-source-label`'s arm) and nine in the verify-rejections pass, one per
+# verifier decision 0030 names: `node-out-edges`' arm, `node-eof-target`'s arm,
+# the §16.2:903 field check, the zero-progress WALK arm and the REPORT-set
+# predicate (separated by the value-terminated loop's `got`), `eof-successors`'
+# arm (a raise), both halves of `classify`'s join, and `parked-eof-start`'s arm.
+# Fifteen shipped pins were re-anchored in the same commit -- six on `node?`'s
+# tail, seven on the REPORT set's predicate list, `parked-eof-start`'s, and the
+# two census ratchets whose expectations read thirteen now. Two of the
+# REPORT-set REPLACEs were narrowed to the one predicate their LABELs name.
+#
 # Milestone 6 Slice ⓪ task 4, one name grammar: ONE added and ONE retired,
 # 483 + 1 - 1 = 483. Added: the runtime's callback-code grammar check (Pass 32),
 # the §9.3:423 deferral Milestone 5's completeness check named a receiver for.
@@ -1252,7 +1265,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 55)
-set(EXPECTED_MUTATIONS 483)
+set(EXPECTED_MUTATIONS 497)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -4185,7 +4198,8 @@ byte_machine_mutation(
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
                                   (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n))
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[(if #f]]
   EXPECT_STATUS 1
@@ -4665,14 +4679,16 @@ byte_machine_mutation(
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
                                   (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n))
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[(if (and (or (byte-dispatch-node? n)
                                   (sequence-dispatch-node? n)
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
                                   (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n))
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
     # Re-pinned by Milestone 5 Slice ③. Its witness was an EOF-ONLY pause cycle,
   # which §16.2:898's new gate (decision 0027 item 3) excludes on purpose -- so
@@ -4926,13 +4942,15 @@ byte_machine_mutation(
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
                                   (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n))]]
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))]]
   REPLACE [[(if (and (memq (node-name n) br898)
                               (or (byte-dispatch-node? n) (pause-node? n)
                                   (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
                                   (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n))]]
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "and the sequence node itself are three zero-progress cycles: zero-progress-cycle count -- expected 3, got 2")
@@ -5314,9 +5332,12 @@ byte_machine_mutation(
   # the half-fix this pass exists to prevent.
   FIND [[                                  (integer-accumulate-node? n)
                                   (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n))
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
-  REPLACE [[                                  (callback-node? n))
+  REPLACE [[                                  (callback-node? n)
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
@@ -5414,11 +5435,13 @@ byte_machine_mutation(
   FIND [[                                  (field-action-node? n) (field-branch-node? n)
                                   (integer-accumulate-node? n)
                                   (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n))
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
   REPLACE [[                                  (integer-accumulate-node? n)
                                   (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n))
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
@@ -6364,6 +6387,115 @@ byte_machine_mutation(
   REPLACE [[#t]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "uint-field: integer label -- expected ..invalid-field-declaration . count.., got .[)]")
+
+# --- Milestone 6 Slice ① task 1: the thirteenth kind's nine verifier decisions --
+# Decision 0030 items 5-7, one pin per arm the appendix names. Two pairs share a
+# fixture and are separated by the `got`: the walk arm and the REPORT-set
+# predicate both redden the value-terminated loop, one to an EMPTY list and the
+# other to a list missing the counted node; the two halves of `classify`'s join
+# each unreport a different fixture.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a counted consume's next is not an out-edge"
+  FIND [[          ((counted-consume-node? n)
+           (list (cons 'next (counted-consume-node-next n))))]]
+  REPLACE [[          ((counted-consume-node? n) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the flow-through zero-count stop at the ENTRY is rejected .0030 item 5.: eof-reachable-stop, at the entry -- expected ..eof-reachable-stop . body.., got ..unreachable-node")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a counted consume's eof-target is read as absent"
+  FIND [[          ((counted-consume-node? n) (counted-consume-node-eof-target n))]]
+  REPLACE [[          ((counted-consume-node? n) #f)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a self-targeting eof-target is an EOF zero-progress cycle: eof-zero-progress-cycle, at the node -- expected ..eof-zero-progress-cycle . body.., got .[)]")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a counted consume's field reference is not checked"
+  FIND [[    (if (field-width-of fs (counted-consume-node-field n))]]
+  REPLACE [[    (if #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "undeclared: reported under the node -- expected ..invalid-field-operand . body.., got .[)]")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a counted consume's next is invisible to the zero-progress walk"
+  # The WALK half of 0030 item 7. Without it no node of the value-terminated
+  # loop reaches itself, so the loop's record is EMPTY -- the `got` that
+  # separates this pin from the REPORT-set pin below.
+  FIND [[              ((counted-consume-node? n) (list (counted-consume-node-next n)))]]
+  REPLACE [[              ((counted-consume-node? n) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "rejected: the three nodes of the loop -- expected .*, got .[)]")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the zero-progress REPORT set excludes the counted-consume kind"
+  # The REPORT half. The branch and the action still reach themselves through
+  # the counted node's `next`, so the loop's record loses exactly the counted
+  # node -- and the self-targeting-next fixture goes empty, which the walk pin
+  # above also produces; the loop record is what separates them.
+  FIND [[                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))]]
+  REPLACE [[                                  (span-start-node? n) (span-end-node? n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "rejected: the three nodes of the loop -- expected .*, got ..zero-progress-cycle . br. .zero-progress-cycle . dec..")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: eof-successors answers nothing for a counted consume"
+  # `join-over` raises on an empty list, so the arm's loss is a RAISE out of
+  # verification -- the accumulate-arm precedent's failure mode, pinned on the
+  # raise the same way.
+  FIND [[    (cond ((counted-consume-node? n) (list (counted-consume-node-next n)))
+          (else (zero-width-successors n))))]]
+  REPLACE [[    (cond ((counted-consume-node? n) '())
+          (else (zero-width-successors n))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the flow-through zero-count stop at the ENTRY is rejected .0030 item 5.: case raised")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: classify drops the next half of the counted join"
+  # A dispatch-shaped arm: the entry zero-count stop verifies CLEAN -- the hole
+  # 0030 item 5 closes.
+  FIND [[                 (eof-verdict-join (dispatch-arm (counted-consume-node-eof-target n) path)
+                                   (join-over (eof-successors n) path)))]]
+  REPLACE [[                 (dispatch-arm (counted-consume-node-eof-target n) path))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the flow-through zero-count stop at the ENTRY is rejected .0030 item 5.: eof-reachable-stop, at the entry -- expected ..eof-reachable-stop . body.., got .[)]")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: classify drops the eof half of the counted join"
+  # A zero-width-shaped arm: the self-targeting eof-target is no longer a cycle
+  # but the stop behind `next`, a DIFFERENT wrong verdict from the arm's absence.
+  FIND [[                 (eof-verdict-join (dispatch-arm (counted-consume-node-eof-target n) path)
+                                   (join-over (eof-successors n) path)))]]
+  REPLACE [[                 (join-over (eof-successors n) path))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a self-targeting eof-target is an EOF zero-progress cycle: eof-zero-progress-cycle, at the node -- expected ..eof-zero-progress-cycle . body.., got ..eof-reachable-stop . body..")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a parked counted consume is classified from its own name"
+  # 0030 item 6's arm answering the node itself: the one-shot "length, body,
+  # stop" grammar -- the design's first-draft rejection -- goes red.
+  FIND [[           (counted-consume-node-eof-target n))
+          (else (node-name n))))]]
+  REPLACE [[           (node-name n))
+          (else (node-name n))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the one-shot length, body, stop grammar is ACCEPTED .0030 item 6.: no diagnostics -- expected .., got .eof-reachable-stop.")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -8545,9 +8677,9 @@ byte_machine_mutation(
   # The two census sites every new kind must join. One mutation per site, so a
   # half-taught pair cannot pass.
   FIND [[        (integer-accumulate-node? x) (callback-node? x)
-        (span-start-node? x) (span-end-node? x)))]]
+        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))]]
   REPLACE [[        (callback-node? x)
-        (span-start-node? x) (span-end-node? x)))]]
+        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "integer-accumulate nodes.it is a node and answers node-name: node\\? -- expected a true value")
@@ -8653,10 +8785,10 @@ byte_machine_mutation(
   # unchanged -- this still drops the field-action disjunct.
   FIND [[        (field-action-node? x) (field-branch-node? x)
         (integer-accumulate-node? x) (callback-node? x)
-        (span-start-node? x) (span-end-node? x)))]]
+        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))]]
   REPLACE [[        (field-branch-node? x)
         (integer-accumulate-node? x) (callback-node? x)
-        (span-start-node? x) (span-end-node? x)))]]
+        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))]]
   EXPECT_STATUS 1
   # `?` is a regex metacharacter -- unescaped, `node? --` matches "nod --",
   # which no output contains, and the runner reports a wrong-reason catch.
@@ -8683,9 +8815,9 @@ byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
   LABEL "ir: node? does not admit a callback node"
   FIND [[        (integer-accumulate-node? x) (callback-node? x)
-        (span-start-node? x) (span-end-node? x)))]]
+        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))]]
   REPLACE [[        (integer-accumulate-node? x)
-        (span-start-node? x) (span-end-node? x)))]]
+        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))]]
   EXPECT_STATUS 1
   # `?` is a regex metacharacter -- unescaped, `node? --` matches "nod --", which
   # no output contains, and the runner reports a wrong-reason catch.
@@ -8758,8 +8890,8 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
   LABEL "ir: node? does not admit a span-start node"
-  FIND [[        (span-start-node? x) (span-end-node? x)))]]
-  REPLACE [[        (span-end-node? x)))]]
+  FIND [[        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))]]
+  REPLACE [[        (span-end-node? x) (counted-consume-node? x)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "and each carries all four parts -- expected .., got .span-start.")
@@ -8767,8 +8899,8 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
   LABEL "ir: node? does not admit a span-end node"
-  FIND [[        (span-start-node? x) (span-end-node? x)))]]
-  REPLACE [[        (span-start-node? x)))]]
+  FIND [[        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))]]
+  REPLACE [[        (span-start-node? x) (counted-consume-node? x)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "and each carries all four parts -- expected .., got .span-end.")
@@ -8833,6 +8965,59 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "each answers its own label -- expected .., got .stop.")
 
+
+# --- Milestone 6 Slice ① task 1: the thirteenth kind's constructor and dispatch --
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: a counted-consume node's next may be absent"
+  FIND [[    (require-symbol 'make-counted-consume-node 'next next)
+]]
+  REPLACE [[    ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "fourteenth constructor refusal: absent -- expected a raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: a counted-consume node's eof-target is unchecked"
+  # The `or` is written in the byte-dispatch operand order on purpose: the
+  # accumulate constructor's order is pinned at one site and a verbatim copy
+  # would take that FIND to two. This FIND is unique through its second line,
+  # which names this constructor.
+  FIND [[    (unless (or (symbol? eof-target) (eq? eof-target #f))
+      (byte-machine-contract-violation 'make-counted-consume-node]]
+  REPLACE [[    (unless #t
+      (byte-machine-contract-violation 'make-counted-consume-node]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "meaning the machine default .§9.1:318.: a number -- expected a raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node? does not admit a counted-consume node"
+  FIND [[        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))]]
+  REPLACE [[        (span-start-node? x) (span-end-node? x)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "counted-consume nodes .Milestone 6 Slice ①..it is a node and answers node-name and node-source-label: node\\? -- expected a true value")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node-name does not answer for a counted-consume node"
+  # `node-name`'s cond has a RAISING else, so the mutant crashes rather than
+  # answering wrongly; the pin is on the raise, as for every sibling arm.
+  FIND [[          ((counted-consume-node? x) (counted-consume-node-name x))
+]]
+  REPLACE [[          ]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "counted-consume nodes .Milestone 6 Slice ①..it is a node and answers node-name and node-source-label: case raised")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node-source-label answers #f for a counted-consume node"
+  FIND [[((counted-consume-node? x) (counted-consume-node-source-label x))]]
+  REPLACE [[((counted-consume-node? x) #f)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "each answers its own label -- expected .., got .counted-consume.")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -10758,11 +10943,11 @@ byte_machine_mutation(
   #
   # Measured caught by the matrix ALONE: no other lane in the tree notices.
   FIND [[        (integer-accumulate-node? x) (callback-node? x)
-        (span-start-node? x) (span-end-node? x)))]]
+        (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))]]
   REPLACE [[        (integer-accumulate-node? x) (callback-node? x)
-        (span-start-node? x) (span-end-node? x) (stop-node? x)))]]
+        (span-start-node? x) (span-end-node? x) (counted-consume-node? x) (stop-node? x)))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the same twelve kinds -- expected")
+  EXPECT_OUTPUT_MATCHES "the same thirteen kinds -- expected")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls
@@ -10782,7 +10967,7 @@ byte_machine_mutation(
           ((error-node? x) (error-node-source-label x))]]
   REPLACE [[          ((error-node? x) (error-node-source-label x))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "and there are twelve of them -- expected 12, got 11")
+  EXPECT_OUTPUT_MATCHES "and there are thirteen of them -- expected 13, got 12")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls
@@ -10858,10 +11043,13 @@ byte_machine_mutation(
   # reaches -- a legal `stopped` feed result and no EOF path. Measured: four
   # cells, across axes A and B; pinned on the axis-A record, which no other
   # mutant in this lane emits.
-  FIND [[    (if (and (callback-node? n) (not (eq? (node-name n) (machine-entry m))))
-        (callback-node-pause-continuation n)
-        (node-name n)))]]
-  REPLACE [[    (node-name n))]]
+  # Re-anchored by Milestone 6 Slice ①, which turned the `if` into a `cond` with
+  # a counted-consume arm; the mutant is still "a parked callback starts its
+  # walk at its own name".
+  FIND [[    (cond ((and (callback-node? n) (not (eq? (node-name n) (machine-entry m))))
+           (callback-node-pause-continuation n))]]
+  REPLACE [[    (cond ((and (callback-node? n) (not (eq? (node-name n) (machine-entry m))))
+           (node-name n))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "callback-branch stop want .. got .eof-reachable-stop")
 
@@ -10891,9 +11079,12 @@ byte_machine_mutation(
   # the EOF cycle and loses the feed one -- a record no other mutant here emits.
   FIND [[                                  (integer-accumulate-node? n)
                                   (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n))
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
-  REPLACE [[                                  (integer-accumulate-node? n))
+  REPLACE [[                                  (integer-accumulate-node? n)
+                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "callback-pause-continuation advance want")
@@ -10937,9 +11128,10 @@ byte_machine_mutation(
   # The half-fix Milestone 3 Slice ② shipped, two kinds later: the WALK finds
   # the cycle and nothing reports it, so a span node whose successor is itself
   # verifies clean and then hangs in both lanes.
-  FIND [[                                  (span-start-node? n) (span-end-node? n))
+  FIND [[                                  (span-start-node? n) (span-end-node? n)
+                                  (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
-  REPLACE [[                                  )
+  REPLACE [[                                                                    (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "span-start-next advance want")
