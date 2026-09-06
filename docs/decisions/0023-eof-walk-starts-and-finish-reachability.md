@@ -13,6 +13,14 @@ Milestone: 5, Slice ⓪b (milestone-5-slice-0b-implementation-plan.md)
 >   reachability answer those items fixed for the EOF checks to the span and
 >   callback restrictions and to `pass-zero-progress`. Nothing above it became
 >   false. See the note below.
+> - **2026-09-06 (Milestone 6)** — **amends item 3**: its closing clause, "with
+>   each node classified as itself", has two exceptions. `parked-eof-start` has
+>   started a byte-reachable callback's walk at its pause continuation since
+>   Milestone 5 Slice ② (unrecorded here until now), and
+>   [decision 0030](./0030-counted-consume-is-input-reading-with-a-zero-count-route.md)
+>   starts a parked counted consume's walk at its eof-target — in both cases
+>   because the state a parser is parked on and the name its walk starts at are
+>   different questions. The set itself is unchanged. See the foot of this file.
 
 ## Context
 
@@ -67,6 +75,11 @@ on** — the entry, every byte-reachable pause, and every byte-reachable node
 carrying its own EOF route — with each node classified as *itself*. Because it is
 a **set**, the entry appears exactly once, so a machine whose entry is also a
 dispatch with an eof-target reports one finding, not two.
+
+> **Amended 2026-09-06 (Milestone 6)** by
+> [decision 0030](./0030-counted-consume-is-input-reading-with-a-zero-count-route.md)
+> — "classified as itself" has two exceptions; see the dated note below. The
+> sentence above is left as decided.
 
 This **narrows** decision 0011 item 4(a)'s literal "an eof traversal reachable
 from *any state*": a graph node no execution can occupy is not a state that
@@ -134,3 +147,31 @@ agree on every machine: a byte-dispatch node reachable only as `E` →(eof) `T`
 set. Nothing above this note is wrong about that — this record raised the
 over-approximation and declined to fix it — but 0027 is where the first check
 whose verdict depends on the difference is named.
+
+## 2026-09-06 (Milestone 6) — item 3's "classified as itself" has two exceptions, and the first went unrecorded
+
+Item 3 ends "with each node classified as *itself*". Measured on 2026-09-06 against
+`d793b73`, `parked-eof-start` in `verify.sls` has not done that for every kind since
+Milestone 5 Slice ② (`0578bdf`): for a byte-reachable callback node that is not the
+entry it answers `(callback-node-pause-continuation n)`, one edge, and its own
+comment gives the reason — "a state an execution can be parked on" and "the name
+the EOF walk starts at" "are two different questions, and the callback node is the
+first kind where they come apart". That deviation was correct and carried no note
+here; this note is the first to record it.
+
+[Decision 0030](./0030-counted-consume-is-input-reading-with-a-zero-count-route.md)
+item 6 adds the second exception: a parked counted consume starts its walk at its
+eof-target, because a parser parked on a non-entry counted consume by `need-input`
+holds a positive count and takes its EOF route, never its zero-count successor. The
+machine that protects is the one-shot "length, body, stop" grammar — `… →(byte)
+body (eof: an error; next: a stop)` — which a walk from the parked node joining
+over `next` would reject with `eof-reachable-stop` for a stop no EOF path reaches.
+
+**What does not move.** The set's definition — "the set of states an execution can
+be PARKED on" — stands and admits the new kind. Its enumeration stands: the shipped
+proxy for "carrying its own EOF route", `(symbol? (node-eof-target n))` at both
+sites, is left exactly as it is, because a `#f` route is benign for a parked
+counted consume for the same reason it is benign for a parked dispatch. What 0030
+corrects is where a walk *starts* for one more kind; what a walk does when it
+*arrives* at that kind is its item 5's join, which is `classify`'s business and not
+this item's.

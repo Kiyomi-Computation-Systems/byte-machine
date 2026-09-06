@@ -337,6 +337,24 @@ are one record. §4.3-§4.9 stay in this design with no record; §4.10 is the li
 document deliberately does not decide; §4.11 disposes the obligations addressed to this
 milestone; §4.12 collects the scope additions the parent plan does not name.
 
+> **Gate 0 discharged 2026-09-06**, as one record, as §9 planned.
+>
+> | Record | Carries | Shape |
+> | --- | --- | --- |
+> | [0030](../decisions/0030-counted-consume-is-input-reading-with-a-zero-count-route.md) | §4.1, §4.2 | two numbered groups under one Context — the executor contract (items 1-4) and the verifier's two answers (items 5-7) |
+>
+> **The gate transcribed a design the review had already corrected**, so unlike Milestone 5's
+> it changed no stated reason while writing: §4.2 item 3's rule had been withdrawn and replaced
+> before the record was drafted (this document's Amendments block, the review entry). What the
+> gate added is the measurement the record's item 6 rests on — that in `runtime.sls` the only
+> return leaving `current` on an input-reading node is `need-input`, at `(>= pos end)` — and
+> the record's Context carries it.
+>
+> One record reaches back: `0030` **amends** decision 0023 item 3's closing clause, "with each
+> node classified as itself", which had been false for the callback node since Milestone 5
+> Slice ② with no note there; the note records both exceptions and leaves the set's definition
+> and its enumeration standing.
+
 ### 4.1 The executor contract: one order of tests, and the zero-count check comes first
 
 **The call.** `§10.6:598-604` states a lead sentence and five bullets, and no order of
@@ -1063,12 +1081,12 @@ that meets it — never reworded to match what shipped.
 
 ## 9. Handed to writing-plans
 
-- **Gate 0 is one record, `0030`**, carrying §4.1 and §4.2 as two numbered decision groups
-  under one Context, because both descend from one fact and a reader arriving at either would
-  need the other. Its Consequences must list the four "both" rows of the appendix by construct
-  name plus `parked-eof-start`'s arm, state the over-rejection of §4.2 item 4 with the
-  workaround, and hand Slice ① the two machines §4.2 item 3 names — the flow-through zero-count
-  stop (REJECTED) and the one-shot "length, body, stop" grammar (ACCEPTED).
+- **DISCHARGED 2026-09-06. Gate 0 is one record, `0030`** — "Counted consume is
+  input-reading with a zero-count route — the executor contract, and the verifier's two
+  answers" — carrying §4.1 and §4.2 as two numbered decision groups under one Context, exactly
+  as planned; the mapping is the blockquote under §4. Its Consequences name the four "both"
+  rows plus `parked-eof-start`'s arm, state §4.2 item 4's over-rejection with the workaround,
+  and hand Slice ① both machines §4.2 item 3 names. It amends decision 0023 item 3.
 - **§4.12 is settled (owner, 2026-09-06): items 1 and 2 approved.** Slice ⓪'s plan may
   proceed on that basis and is independent of Gate 0. Slice ①'s plan can be written in parallel
   with Gate 0's execution; it must not be *dispatched* before `0030` exists, and it is measured
