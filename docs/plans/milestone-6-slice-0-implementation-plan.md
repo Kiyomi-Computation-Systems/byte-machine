@@ -49,10 +49,15 @@ Five shipped mutations anchor on the four arms' `valid-name?` calls, all
 | "verify: every field name is reported as nonportable" | the same FIND | survives likewise; `REPLACE [[#f]]` still means "every field rejected" |
 
 `SITES` is asserted exactly at 1 in both directions, so a FIND that stops
-matching fails at CMake **configure** time, not as a test. Re-anchor a moving
-FIND together with its REPLACE, and read the pair afterwards asking what single
-decision separates them — the standing rule since Slice ③ shipped a re-anchored
-FIND whose REPLACE still carried pre-slice text.
+matching fails **inside the mutation lane at that pass's `_run`** — a
+`SEND_ERROR` from `MutationRunner.cmake`'s occurrence check, not a harness
+assertion, and not anything `cmake --preset` surfaces (the suite runs only as a
+`-P` script inside `byte-machine.harness.scheme-mutation.cmake.direct`). The lane
+still prints "suite complete" on the way to failing, which is why the
+failure-signature filter below exists. Re-anchor a moving FIND together with its
+REPLACE, and read the pair afterwards asking what single decision separates them
+— the standing rule since Slice ③ shipped a re-anchored FIND whose REPLACE still
+carried pre-slice text.
 
 ### F3 — case labels have no name of their own and report under the owning node
 
@@ -126,21 +131,25 @@ close note is a **record**, so this is a dated disposition appended beside it
   `(invalid-field-declaration 2)`. The fold adds no site and no constructor, so
   both rows stay — **run** the census rather than assume it.
 
-### F8 — the names library changes three FINDs' homes and one FIND's text
+### F8 — the names library moves two FINDs, re-anchors one, and retires one
 
 The grammar `[a-z][a-z0-9-]*` is written twice: `verify.sls`'s `lower-alpha?`,
 `name-char?`, `valid-name?` and `compile.sls`'s identical trio behind
-`valid-binding?`. Three shipped mutations anchor inside those bodies:
+`valid-binding?`. **Four** shipped mutations anchor inside those bodies — the
+design's §4.12 item 2 named two, and the census is four:
 
 | LABEL | FILE / SPEC | FIND (verbatim) | after Task 4 |
 | --- | --- | --- | --- |
 | "verify: a name with a non-lowercase first char is accepted" | `verify.sls` / `verify.identifier-repertoire` | `(lower-alpha? (string-ref s 0))` + `(let loop ((i 1))` | the text moves to `names.sls`; **FILE becomes `src/byte-machine/private/names.sls`**, SPEC unchanged |
-| "verify: any interior character is accepted" | `verify.sls` / `verify.identifier-repertoire` | `name-char?`'s body + `(define (valid-name? sym)` | moves to `names.sls`; the second line of the FIND is re-anchored on the line that follows the body **there** |
-| "compile: the binding grammar check is dropped" | `compile.sls` / `unit.compile` | `(and (> (string-length s) 0) (lower-alpha? (string-ref s 0))` | `compile.sls` keeps its FILE; the FIND becomes `valid-binding?`'s new `(portable-name? sym)` conjunct, whose `REPLACE` is `#t` |
+| "verify: any interior character is accepted" | `verify.sls` / `verify.identifier-repertoire` | `name-char?`'s body + `(define (valid-name? sym)` | moves to `names.sls`; the FIND's second line is re-anchored on the line that follows the body **there** |
+| "compile: any interior binding character is accepted" | `compile.sls` / `verify.identifier-repertoire` | the same `name-char?` body + `(define (valid-binding? sym)` | **RETIRED with its reason written in its place**: after Task 4 there is one `name-char?` and the row above already mutates it; a second declaration would be the same mutant twice, and its witness ("every rejected binding is refused: reject a\\.b") is still exercised by the surviving one, because the identifier-repertoire lane drives both consumers |
+| "compile: the binding grammar check is dropped" | `compile.sls` / `unit.compile` | `(and (> (string-length s) 0) (lower-alpha? (string-ref s 0))` | `compile.sls` keeps its FILE; the FIND becomes `valid-binding?`'s new `(portable-name? sym)` conjunct, whose `REPLACE` is `#t` — the CALL, which is the decision that stays in `compile.sls` |
 
 The identifier-repertoire lane already loads every library the emitter does
 (`BYTE_MACHINE_CORE_EMIT` ⊇ `BYTE_MACHINE_CORE_PRIVATE`), so a mutation whose
 FILE is the new library is witnessed by that lane without a new SPEC.
+`reason-char?` and `valid-reason?` use neither `lower-alpha?` nor `name-char?`
+(measured), so deleting the two from `verify.sls` strands nothing.
 
 ---
 
@@ -154,13 +163,13 @@ FILE is the new library is witnessed by that lane without a new SPEC.
    `make-callback-failure`, closing `§9.3:423` (Task 4).
 3. **Both obligations' second ends** written where their receivers will look:
    the source notes corrected in place, an appended parent-plan disposition, and
-   the design's appendix row for Slice ① (Tasks 5–6).
+   the design's appendix row for Slice ① (Tasks 2, 4 and 6).
 
 Three source commits, one PR, each green on its own: the accessors and the
 dispatcher (Task 1, which changes no verifier behaviour); the fold **with its
 re-anchored pins** (Tasks 2 and 3 — the fold moves two shipped `FIND`s, and a
-commit carrying the fold without their re-anchor fails the mutation lane at
-configure time, which is a red intermediate commit); and the names library with
+commit carrying the fold without their re-anchor fails the mutation lane at that
+pass's `_run`, which is a red intermediate commit); and the names library with
 its re-homed pins (Task 4). The pin sweep (Task 5) runs once after all three,
 because two of them move `FIND`s in `verify.sls`; the documentation commit
 (Task 6) closes the PR.
@@ -177,7 +186,8 @@ because two of them move `FIND`s in `verify.sls`; the documentation commit
   If a step needs a new site, the plan is wrong and stops.
 - **No `(cons 'SYM …)` form enters `verify.sls`** (F7).
 - **`SITES` is asserted exactly at 1 in both directions** and a broken FIND fails
-  at configure time. Re-anchor FIND and REPLACE together (F2). Before adding
+  inside the mutation lane at its pass's `_run` (F2). Re-anchor FIND and REPLACE
+  together. Before adding
   any line to `verify.sls` or `ir.sls`, check it does not duplicate a pinned
   line: every `-source-label` accessor is a one-line `vector-ref` and nine new
   ones must not collide with a pinned existing one (measured: no shipped FIND
@@ -220,10 +230,11 @@ because two of them move `FIND`s in `verify.sls`; the documentation commit
 rg -c -- '-source-label' test/support/cmake/SchemeMutationSuite.cmake
 rg -n 'define \(node-name' src/byte-machine/private/ir.sls
 ```
-Expected: the first prints a count — read each hit and confirm none is a `FIND`
-on an `ir.sls` accessor definition (measured 2026-09-06: every hit is inside the
-four `verify.sls` label-arm FINDs and their comments); the second prints one line,
-where `node-source-label` goes next.
+Expected: the first prints **`6`**, and every one of the six is inside the four
+M5 label-arm `FIND`/`REPLACE` bodies (`callback-declaration-source-label`,
+`span-declaration-source-label`), none on an `ir.sls` accessor definition
+(measured 2026-09-06); the second prints one line, where `node-source-label`
+goes next.
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -238,8 +249,12 @@ when built with `#f`; sentinel `driven` = **9**. A second case drives
 In `kind-position-census-tests.sps`, beside S2: a walk over `ir.sls` as a datum
 that finds `(define (node-source-label x) (cond …))` and collects each arm's
 predicate name, compared for set equality against `kind-predicates-in-source`.
-Expected literal in the check: "the same twelve kinds". **This row is the one that
-goes red when Slice ① adds the thirteenth disjunct without the arm.**
+The check label must be **distinct from S2's** — say "node-source-label's arms are
+the same twelve kinds" — because the shipped ratchet pin "ir: node? admits a kind
+the matrix's table does not cover" is anchored on `"the same twelve kinds --
+expected"`, and a second check printing that text would make one pin resolve to
+two `(case, check)` pairs. **This row is the one that goes red when Slice ① adds
+the thirteenth disjunct without the arm.**
 
 - [ ] **Step 3: Implement**
 
@@ -310,7 +325,7 @@ ctest --preset release -R 'verify\.rejections|diagnostic-census|kind-position-ce
 Expected: `100% tests passed` over **6** tests — the census lanes green is the
 measurement that no site moved.
 
-- [ ] **Step 5: Do not commit yet.** The fold has moved two shipped `FIND`s (F2), so the mutation lane fails at configure time until Task 3 re-anchors them; Tasks 2 and 3 are one commit.
+- [ ] **Step 5: Do not commit yet.** The fold has moved two shipped `FIND`s (F2), so the mutation lane fails at its verify.rejections pass's `_run` until Task 3 re-anchors them; Tasks 2 and 3 are one commit.
 
 ## Task 3 — Pins for the label work
 
@@ -340,25 +355,35 @@ span-family pin documents:
 4. the error-declaration arm's label conjunct;
 5. `pass-fields`' label conjunct.
 
-And **one in unit.ir's pass**: `node-source-label`'s arm for one kind answering
-`#f` (absence) — caught by comparison in `ir-tests.sps`'s twelve-kind case and
-again in `verify-tests.sps`'s row for that kind; pin on the `ir-tests` check.
-Do not pin an arm swapped for a same-slot sibling's accessor: measured, `stop`
-and `finish` both store the label at slot 2 and every `-source-label` accessor
-is an unguarded `vector-ref`, so that mutant is observationally identical and
-would ship `UNCAUGHT`. Say so in a comment beside the pin.
+And **two for `node-source-label`**. In unit.ir's pass: one arm answering `#f`
+(absence) — caught by comparison in `ir-tests.sps`'s twelve-kind case and again
+in `verify-tests.sps`'s row for that kind; pin on the `ir-tests` check. In the
+kind-position-census pass (the one that carries "ir: node? admits a kind the
+matrix's table does not cover"): one arm **deleted** — the predicate set shrinks
+to eleven, so Task 1's derived row reddens by comparison; pin on its distinct
+check label. The first mutant leaves the predicate set intact and cannot redden
+the derived row, which is why both exist. Do not pin an arm swapped for a
+same-slot sibling's accessor: measured, `stop` and `finish` both store the label
+at slot 2 and every `-source-label` accessor is an unguarded `vector-ref`, so
+that mutant is observationally identical and would ship `UNCAUGHT`. Say so in a
+comment beside the pins.
 
 - [ ] **Step 3: Judge each pin against its lane, both directions**
 
-Run the suite and then the sweep over the two passes touched; a new pin that
-matches an existing mutant's output, or an existing pin the new mutants match, is
-re-anchored before the commit.
+Run the **whole** selection — the fold changes `verify-machine`'s verdict for
+every lane that verifies a machine, and Task 2's filter cannot see one that
+carried a label it now rejects (measured: no fixture library under
+`test/support/harness/` passes a label, but the check is the run, not the
+search):
 
 ```bash
-ctest --preset release -R scheme-mutation --output-on-failure 2>&1 | rg -n 'CMake Error|wrong reason|UNCAUGHT|tests passed'
+ctest --preset release --output-on-failure 2>&1 | rg -n 'CMake Error|wrong reason|UNCAUGHT|tests passed'
 ```
-Expected: exactly one line, `100% tests passed, 0 tests failed out of 1`, and no
-other match.
+Expected: exactly one line, `100% tests passed, 0 tests failed out of 108`, and
+no other match. Then judge the new and moved pins against every other mutant in
+their two passes (Task 5 does the whole-slice sweep; this is the per-commit one):
+a new pin that matches an existing mutant's output, or an existing pin the new
+mutants match, is re-anchored before the commit.
 
 - [ ] **Step 4: Commit** — "feat(verify): §16.2:886's label clause over every carrier, with its pins" (Tasks 2 and 3 together).
 
@@ -374,8 +399,13 @@ other match.
 In `runtime-tests.sps`'s "callback failure values" group, beside "the code must
 be symbolic (§9.3:423)": a case asserting `(make-callback-failure 'BadCode #f)`
 and `(make-callback-failure 'a_b #f)` each raise `invalid-argument` for `'code`,
-and that `(make-callback-failure 'ok-code-9 #f)` builds. Run the runtime lanes;
-expected: **red** on the new case only.
+and that `(make-callback-failure 'ok-code-9 #f)` builds. Run the runtime lanes:
+
+```bash
+ctest --preset release -R 'unit\.runtime\.' --output-on-failure 2>&1 | rg -n 'tests passed|FAIL '
+```
+Expected: `0% tests passed, 2 tests failed out of 2`, and every `FAIL` line names
+the new case and no other.
 
 - [ ] **Step 2: The library**
 
@@ -400,6 +430,11 @@ constrains what the **generated** library imports; the runtime already imports
   **replace** the two comment paragraphs ("TYPE ONLY HERE …" and "*** RECEIVER
   …") with the fact — `§9.3:423`'s grammar half is enforced through
   `(byte-machine private names)`, closed by Milestone 6 Slice ⓪.
+- `test/common/identifier-repertoire-tests.sps`: its header and its comment on
+  the two sites ("verify's grammar", "compile's identical grammar", and the
+  short-circuit "on `(> (string-length s) 0)`") describe two copies; correct them
+  to the one predicate both sites now call. A retired concept's vocabulary is
+  swept, not only its name.
 
 - [ ] **Step 4: The manifests**
 
@@ -414,11 +449,16 @@ rg -c 'private/names\.sls' test/CMakeLists.txt
 ```
 Expected: **`2`**.
 
-- [ ] **Step 5: Re-home and re-anchor the three grammar mutations (F8), and add one**
+- [ ] **Step 5: Re-home two grammar mutations, re-anchor one, retire one (F8), and add one**
 
 - "verify: a name with a non-lowercase first char is accepted" and "verify: any
   interior character is accepted": `FILE src/byte-machine/private/names.sls`,
   FINDs on the grammar body **as written there**, SPEC unchanged.
+- "compile: any interior binding character is accepted": **retired** — delete the
+  declaration and leave a comment in its place stating why (one `name-char?`
+  remains and the verify-labelled mutation above already mutates it; the binding
+  witness `reject a\.b` still runs in the same lane). `AGENTS.md`: a mutation
+  whose decision a later fix subsumes is retired with the reason, never loosened.
 - "compile: the binding grammar check is dropped": FIND
   `(and (portable-name? sym)` in `compile.sls`, REPLACE `(and #t`; confirm
   `(portable-name? sym)` occurs **once** in `compile.sls`.
@@ -444,27 +484,37 @@ the predicate is imported, not re-exported.
 
 ## Task 5 — The pin sweep, both directions, once
 
-Both commits move FINDs in `verify.sls`. Re-judge every pin in the five touched
-passes against every other mutant in its lane, in both directions (a new pin
-matched by an old mutant is as much a collision as the reverse), and record any
-subsumed residue **in the tree beside the pin**, named by LABEL. Re-measure the
-totals from the harness:
+Two of the three source commits move FINDs in `verify.sls`. Re-judge every pin
+in the five touched passes (verify.rejections, unit.ir, kind-position-census,
+unit.runtime, identifier-repertoire, and unit.compile's re-anchored one) against
+every other mutant in its lane, **in both directions** — a new pin matched by an
+old mutant is as much a collision as the reverse — using the runner's own judge,
+`byte_machine_mutation_verdict` in `MutationRunner.cmake`, over each mutant's
+captured output, as the Milestone 4 and 5 sweeps did (their reports are in the
+ledger's directory). State the pair count and the collision count in the commit
+message; expected collisions among the pins this slice **added or moved**: **0**,
+and every pre-existing collision the sweep re-confirms is named. Record any
+subsumed residue **in the tree beside the pin**, named by LABEL. Then the totals:
 
 ```bash
-rg -n 'EXPECTED_PASSES|EXPECTED_MUTATIONS' test/support/cmake/SchemeMutationSuite.cmake | head -2
+rg -n '^set\(EXPECTED_(PASSES|MUTATIONS)' test/support/cmake/SchemeMutationSuite.cmake
 ```
-Expected: `EXPECTED_PASSES 55` unchanged; `EXPECTED_MUTATIONS` at the value the
-suite's own totals line reports, which is 476 plus the mutations Tasks 3 and 4
-added and minus none — state the number you measured, not this sentence.
+Expected: two lines, `set(EXPECTED_PASSES 55)` and `set(EXPECTED_MUTATIONS 482)`
+— 476, plus Task 3's seven (five conjuncts and two `node-source-label` mutants),
+plus Task 4's one, minus the one Task 4 retires — **and the suite's own totals
+line must print the same 482**; if the tree says otherwise the arithmetic here is
+what is wrong, and the tree wins.
 
 ## Task 6 — Both ends, and the design's appendix
 
 - [ ] **Step 1: The parent plan — one appended disposition, never an insertion**
 
 ```bash
-wc -l docs/plans/byte-machine-implementation-plan.md
+git diff -U0 -- docs/plans/byte-machine-implementation-plan.md | rg -c '^@@'
+git diff -U0 -- docs/plans/byte-machine-implementation-plan.md | rg -o '^@@ -[0-9]+' 
 ```
-Run before and after; the count grows only at the foot. Append under
+Expected after the edit: **`1`** hunk, and its old-side line number is **≥ 2424**
+(the file's last line today) — one hunk, at the foot. Append under
 `## Dated dispositions` a heading `### §16.2:886 and §9.3:423 — Milestone 6
 Slice ⓪, delivered`, dated, stating: the label clause is total over nineteen
 carriers, through four arms and one predicate, no new code, census unmoved;
@@ -482,13 +532,20 @@ Slice ① owes it, and the census's derived row reddens until it exists"; the
 `verify.sls` table gains "`node-case-labels` — no arm, the kind has no cases";
 the test-side table gains the `node-source-label` totality row under
 `kind-position-census-tests.sps`; §5's first paragraph gains the landing date and
-PR. The Amendments block indexes it.
+PR; §4.12 item 2's "two grammar-internal mutations … re-declared against the new
+`FILE`" is corrected to F8's census of four — two re-homed, one re-anchored **in
+`compile.sls`** because its decision is the call and not the grammar, one
+retired; §5's "one PR with two commits" becomes three source commits and a
+documentation commit, each green (§2); and §5's file list gains
+`kind-position-census-tests.sps` (Task 1's derived row). The Amendments block
+indexes it, and each correction says the plan measured what the design counted.
 
 - [ ] **Step 3: The four status surfaces, and the ones the ritual does not sweep**
 
 `README.org`'s status paragraph, `CHANGELOG.md`'s `[Unreleased]`, the parent
-plan's `Status:` line, the design's `Status:` header — Milestone 6 is **in
-progress** with Slice ⓪ closed — plus the source comments this slice retired
+plan's `Status:` line (**one physical line today; it must stay one**, or every
+`§section:line` below it moves), the design's `Status:` header — Milestone 6 is
+**in progress** with Slice ⓪ closed — plus the source comments this slice retired
 (Tasks 2 and 4 already corrected them; confirm none still names "Milestone 6's
 close-out" as a receiver):
 
