@@ -1,9 +1,8 @@
 # Milestone 6 Design — Counted consumption
 
 **Status: in progress.** Slice ⓪ delivered 2026-09-06 (PR #77: four source commits — the three
-planned and one the pin sweep required — and a documentation commit); Gate 0 is written as decision
-0030 on PR #76, open as of 2026-09-06, and this document's §4 and §9 discharge notes arrive with it;
-Slice ① is next. Milestone 5 closed 2026-09-06 with Slice ④ (PR #71 =
+planned and one the pin sweep required — and a documentation commit); Gate 0 discharged 2026-09-06 as decision 0030
+(PR #76 = `0247ece`; §4's blockquote and §9's first bullet carry the discharge); Slice ① is next. Milestone 5 closed 2026-09-06 with Slice ④ (PR #71 =
 `6bfa8ed`); its close-out audit (PR #72 = `6bc1aca`) and completeness check (PR #73 =
 `b470665`) followed the same day. This document is written against **`b470665`** on branch
 `docs/milestone-6-design`, `main` at the same commit, tree clean. Measured on 2026-09-06 by
