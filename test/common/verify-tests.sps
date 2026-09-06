@@ -2731,13 +2731,156 @@
 ;; The bullet reads "reachable zero-progress cycles" and the pass applied NO
 ;; relation: measured by 0027 against the shipped file, neither `reached` nor
 ;; `byte-reached` occurred as an identifier anywhere in it.
+
+;; --- §16.2:886's label clause, Milestone 5 Slice ④ (design §4.12 item 2) -----
 ;;
+;; The owner approved this on 2026-09-04 and no slice picked it up; Milestone 5's
+;; close-out found it and built it. `§16.2:886` requires the verifier to reject
+;; "nonportable names, codes, branch keys, labels, or reasons" -- the label half
+;; had never been implemented for anything.
+;;
+;; The two NAME arms these cases share were themselves unwitnessed until now: no
+;; verify-tests case, no mutation pin, while `ir-tests.sps` claimed coverage in
+;; prose. They are closed here rather than recorded, because a guard shown not to
+;; guard gets closed.
+(define (label-machine cb-label sp-label)
+  (make-machine 'labm 'start '()
+                (list (make-callback-declaration 'on-data 'span-data #t '() #f cb-label))
+                (list (make-span-declaration 'body 'on-data #f sp-label))
+                errs
+                (list (make-byte-dispatch-node 'start (list (case-to 'done))
+                                               (make-edge 'reject 'reexecute) #f #f)
+                      (make-stop-node 'done #f)
+                      (make-error-node 'reject 'rejected #f))
+                'default-eof #f))
+
+(define (named-machine cb-name sp-name)
+  (make-machine 'labm 'start '()
+                (list (make-callback-declaration cb-name 'span-data #t '() #f #f))
+                (list (make-span-declaration sp-name cb-name #f #f))
+                errs
+                (list (make-byte-dispatch-node 'start (list (case-to 'done))
+                                               (make-edge 'reject 'reexecute) #f #f)
+                      (make-stop-node 'done #f)
+                      (make-error-node 'reject 'rejected #f))
+                'default-eof #f))
+
+(harness-group "declaration labels are checked against §10.1:480 (§16.2:886)"
+  (lambda ()
+    (harness-case "THE NEGATIVE CONTROL: absent and portable labels are accepted"
+      (lambda ()
+        ;; First, deliberately. Without it every rejection below is satisfied by
+        ;; an arm that rejects every declaration -- and `#f` is the label every
+        ;; fixture in the tree actually carries, so an arm that rejected absence
+        ;; would redden the whole suite instead of this case, and the diagnosis
+        ;; would start somewhere else.
+        (check-equal "both absent" (codes (label-machine #f #f)) '())
+        (check-equal "both portable symbols"
+                     (codes (label-machine 'the-label 'other-label)) '())
+        (check-equal "a portable STRING is accepted too"
+                     (codes (label-machine "Span: body (outer)" #f)) '())
+        ;; §10.1:480 says nothing about length, and the empty reason is accepted
+        ;; on that ground already.
+        (check-equal "and the empty string" (codes (label-machine "" #f)) '())))
+    (harness-case "a nonportable CALLBACK label is rejected"
+      (lambda ()
+        ;; A tab is the sharp case: it is ASCII, it is invisible, and it is
+        ;; outside `§10.1:480`'s "printable ASCII plus LF" -- `reason-char?`'s
+        ;; range starts at space (0x20), so 0x09 fails. A test using a
+        ;; non-ASCII character would pass against a mutant that only checked the
+        ;; high bit.
+        (check-equal "one finding, on the callback"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine (label-machine (string->symbol "a\tb") #f))))
+                     '((invalid-name . on-data)))))
+    (harness-case "a nonportable SPAN label is rejected, and separately"
+      (lambda ()
+        ;; BOTH families, because each reads its own accessor and a fix reaching
+        ;; only one would be invisible to a single-family fixture -- the same
+        ;; argument Slice ③'s undeclared-span case makes.
+        (check-equal "one finding, on the span"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine (label-machine #f (string->symbol "a\tb")))))
+                     '((invalid-name . body)))))
+    (harness-case "DEL and a non-ASCII character are both rejected"
+      (lambda ()
+        ;; The two ends of the repertoire. `reason-char?` bounds at `#\~` (0x7E),
+        ;; so DEL (0x7F) is out -- a mutant widening the bound to 0x7F passes a
+        ;; high-bit test and fails this one.
+        (check-equal "DEL"
+                     (codes (label-machine (string->symbol (string (integer->char 127))) #f))
+                     '(invalid-name))
+        (check-equal "U+00E9"
+                     (codes (label-machine (string->symbol "caf\xe9;") #f))
+                     '(invalid-name))))
+    (harness-case "a nonportable STRING label is rejected too"
+      (lambda ()
+        ;; The string arm, which had a case asserting it ACCEPTS a portable
+        ;; string and nothing asserting it rejects a nonportable one -- an arm
+        ;; witnessed in one direction only. Both directions belong here for the
+        ;; same reason the liveness probe gives: either alone is satisfied by a
+        ;; constant.
+        (check-equal "a tab in a string label"
+                     (codes (label-machine "a\tb" #f)) '(invalid-name))))
+    (harness-case "a label of the wrong SHAPE is rejected, not ignored"
+      (lambda ()
+        ;; No constructor validates this field and the plan gives it no type --
+        ;; §10.3:506 and §10.4:517 say only "optional diagnostic label". A label
+        ;; the diagnostic reporter cannot render is not a machine that verified
+        ;; clean, so it is reported; that it is reported under a PORTABILITY code
+        ;; is the one judgment design §4.12 item 2 does not settle, and it is
+        ;; recorded at the predicate.
+        (check-equal "an integer" (codes (label-machine 42 #f)) '(invalid-name))))
+    (harness-case "a declaration bad in BOTH name and label reports ONCE"
+      (lambda ()
+        ;; The fold's own assertion, and the reason the label clause went into
+        ;; the name clause's `and` rather than into an arm of its own: Milestone
+        ;; 4 established the shape for the reason clause and `verify-tests.sps`
+        ;; witnesses it there. Two arms would report this declaration twice.
+        (check-equal "one finding, not two"
+                     (codes (make-machine 'labm 'start '()
+                              (list (make-callback-declaration
+                                     'Bad 'span-data #t '() #f (string->symbol "a\tb")))
+                              (list (make-span-declaration 'body 'Bad #f #f))
+                              errs
+                              (list (make-byte-dispatch-node 'start (list (case-to 'done))
+                                                             (make-edge 'reject 'reexecute) #f #f)
+                                    (make-stop-node 'done #f)
+                                    (make-error-node 'reject 'rejected #f))
+                              'default-eof #f))
+                     '(invalid-name))))))
+
+(harness-group "declaration NAMES are checked too, which nothing witnessed (§16.2:886)"
+  (lambda ()
+    (harness-case "a nonportable callback name and a nonportable span name"
+      (lambda ()
+        ;; These two arms shipped in Slice ①b and had no case and no pin until
+        ;; Milestone 5's close-out; `ir-tests.sps` asserted in PROSE that they
+        ;; were covered. Uppercase is the grammar's own boundary: `valid-name?`
+        ;; requires `[a-z]` first.
+        (check-equal "the callback"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine (named-machine 'Bad 'body))))
+                     '((invalid-name . Bad)))
+        (check-equal "the span"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine (named-machine 'on-data 'Body))))
+                     '((invalid-name . Body)))))
+    (harness-case "and portable names on their own are clean"
+      (lambda ()
+        (check-equal "no diagnostics" (codes (named-machine 'on-data 'body)) '())))))
+
 ;; *** THIS IS A RELAXATION, and the ground the design gave for calling it
 ;; benign does not hold. *** Design §3.2 item 4 said such a machine "is rejected
 ;; by `unreachable-node` regardless". It is not: `pass-reachability` walks
 ;; `all-out-targets`, which crosses an eof-target and then keeps taking byte
 ;; edges, so it calls `t` reached. The machine below is 0027's own, and it is
 ;; asserted BOTH ways -- the cycle is real, and no execution can enter it.
+
 (harness-group "zero-progress cycles are gated on byte-reachability (§16.2:898)"
   (lambda ()
     (harness-case "a BYTE-reachable pause cycle is still a zero-progress cycle"

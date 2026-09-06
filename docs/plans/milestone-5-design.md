@@ -1,6 +1,6 @@
 # Milestone 5 Design — Callbacks, poisoning, and spans
 
-**Status: in progress.** Gate 0 discharged 2026-09-04 (decisions 0024-0029, PR #56); Slice ①a landed 2026-09-04 (PR #58 = `87a99c9`); Slice ①b landed 2026-09-04 (PR #61 = `c011e35`); Slice ② landed 2026-09-05 (PR #65 = `0578bdf`), which also **rewrote this document's Appendix in place** — its stated recogniser could not find two rows the Appendix itself listed. Slice ③ landed 2026-09-05 (PR #68 = `b26065e`): the eleventh and twelfth node kinds, pass 7's span-state lattice, `§16.2:898`'s reachability gate, wire tags 11-13 and the second internal-state family, execution in both lanes with `§19.3:1024`'s boundary flush, and the oracle. It **rewrote this document's Appendix in place a second time** — nearly every line number in the table had moved (all but `zero-width-edges`, and three range rows whose start was unchanged), and the first correction's own diagnosis was wrong: the recognisers found both defect sites and one already had a row, so what failed was the checklist pass. It also **corrected §8's reset citation and §9's slot measurement in place** (sixteen slots, three of which can hold a bytevector, and why the conclusion survives), and **recorded in §9 that Slice ④'s liveness probe discriminates in both lanes**, measured through the real harness. Only Slice ④ remains.
+**Status: closed 2026-09-05 with Slice ④.** Gate 0 discharged 2026-09-04 (decisions 0024-0029, PR #56); Slice ①a landed 2026-09-04 (PR #58 = `87a99c9`); Slice ①b landed 2026-09-04 (PR #61 = `c011e35`); Slice ② landed 2026-09-05 (PR #65 = `0578bdf`), which also **rewrote this document's Appendix in place** — its stated recogniser could not find two rows the Appendix itself listed. Slice ③ landed 2026-09-05 (PR #68 = `b26065e`): the eleventh and twelfth node kinds, pass 7's span-state lattice, `§16.2:898`'s reachability gate, wire tags 11-13 and the second internal-state family, execution in both lanes with `§19.3:1024`'s boundary flush, and the oracle. It **rewrote this document's Appendix in place a second time** — nearly every line number in the table had moved (all but `zero-width-edges`, and three range rows whose start was unchanged), and the first correction's own diagnosis was wrong: the recognisers found both defect sites and one already had a row, so what failed was the checklist pass. It also **corrected §8's reset citation and §9's slot measurement in place** (sixteen slots, three of which can hold a bytevector, and why the conclusion survives), and **recorded in §9 that Slice ④'s liveness probe discriminates in both lanes**, measured through the real harness. Slice ④ closed the milestone 2026-09-05 (PR pending at the time of writing): the three-layer retention oracle in both lanes, the three uncovered SHAPES of `§25:1589`'s EOF and reset legs — ③ having already shipped both legs it disclaimed here, which is recorded in ④'s plan as F1 — `§27:1694`'s lifetime reference, and the close-out's two deferrals written at their receivers' source sites. §9's own open question about enumerating slots was decided against: the oracle is reachability-based.
 
 **Originally written when nothing had started:** Milestone 4 closed 2026-09-03 (its close note is a dated
 disposition in the parent plan, `§25:1568-1570`, written 2026-09-04). Milestone 5's two
@@ -634,6 +634,13 @@ approval was of a fact rather than a feeling.
    keys. So Milestone 5 adds two label-bearing families to a check that does not exist. **The
    proposal is the check for M5's two families only**; retrofitting the other nine is a separate
    question and is not proposed here.
+
+   **DISCHARGED 2026-09-05 by Slice ④, the close-out — and it had been dropped.** No slice plan
+   picked this item up, so it was in no exit criterion and on no deferral list, and it was found
+   only by the whole-branch review asking what the milestone had approved that the tree did not
+   contain. It ships as a second call site of `valid-reason?` folded into each family's existing
+   name-clause `and`: no new diagnostic code, and a census that does not move. See the parent
+   plan's Milestone 5 close note, "One approved scope item nearly did not ship".
 3. **APPROVED 2026-09-04, for Slice ④. `§27:1694`'s "callback/span lifetime reference" has no
    owner.** `§28:1725` lists explicit
    consumer documentation as one of four mitigations for the retention risk. The other three —
@@ -874,6 +881,17 @@ dataflow verification), exit criterion `§25:1590` (every invalid span topology 
 pause, completion, error, EOF, and reset"; this slice discharges boundaries, pause, completion
 and error, and Slice ④ discharges EOF and reset (§9). Neither slice discharges `:1589` whole,
 and saying so is how the milestone avoids each believing the other covered a leg.
+
+**Corrected in place 2026-09-05 by Slice ④, because a later slice works this paragraph as a
+checklist.** The allocation above is what was planned; it is not what happened. Slice ③ also
+shipped an EOF group and a reset group, and its oracle drives `parser-finish!` on all
+thirty-seven schedules — so it discharged parts of BOTH legs it disclaimed here. The safeguard
+failed in the direction the sentence does not anticipate: not each slice believing the other
+covered a leg, but one slice covering a leg it had disclaimed, leaving ④'s scope overstated on
+four surfaces until ④ measured it. Slice ④ closed the three SHAPES that remained (a span open
+at `parser-finish!` and closed on the EOF chain; a reset while parked between the span-end
+substeps; a reset of a poisoned parser with a span open) and re-covered nothing. **Read the
+allocation as a plan, and the tree as the record.**
 
 **The work.**
 

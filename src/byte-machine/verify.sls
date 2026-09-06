@@ -73,6 +73,43 @@
     (let loop ((i 0))
       (or (>= i (string-length s))
           (and (reason-char? (string-ref s i)) (loop (+ i 1))))))
+  ;; §16.2:886's LABEL clause, for Milestone 5's two new declaration families
+  ;; only (design §4.12 item 2, approved by the owner 2026-09-04; design §10
+  ;; excludes the nine already-shipped label-bearing kinds). It is a second CALL
+  ;; SITE of `valid-reason?` rather than a second predicate: §10.1:480 puts
+  ;; labels and reasons in ONE sentence under ONE repertoire, and a duplicated
+  ;; `reason-char?` would be two textually identical bodies -- the twinned-FIND
+  ;; trap this file already records.
+  ;;
+  ;; *** THE WARRANT IS §16.2:886, NOT §10.1:480'S STATED PURPOSE. *** :480
+  ;; qualifies itself -- "labels and reasons embedded in GENERATED OUTPUT" --
+  ;; and measured, a label is embedded in nothing: `compile.sls` reads no
+  ;; source-label at all, so unlike a nonportable reason (which since Slice ①a
+  ;; is an unparseable generated library) a nonportable label cannot corrupt
+  ;; emission today. What it can corrupt is §16.4:940's diagnostic report -- "node
+  ;; and edge/source label where applicable" -- and THAT REPORT DOES NOT EXIST
+  ;; YET: measured, nothing in `src/` reads a declaration's source-label except
+  ;; this pass, so today the field is carried and never consumed.
+  ;; :886 requires the rejection either way and that is the reason this ships;
+  ;; saying so here keeps the next reader from inheriting a stronger claim than
+  ;; the tree supports.
+  ;;
+  ;; THREE VALUE SHAPES, and the plan settles only the first. §10.3:506 and
+  ;; §10.4:517 say "optional diagnostic label" and give no type, and no
+  ;; constructor validates the field. Every label that PREDATES this check is a
+  ;; symbol (`ir-tests.sps`'s `the-label`) -- but "every label in the tree is a
+  ;; symbol" is not true and was written here once: this check's own fixtures
+  ;; carry string labels, which is what made the string arm worth asserting in
+  ;; both directions rather than leaving hypothetical. `#f` is absence and passes. A symbol or a
+  ;; string is checked against the repertoire. Anything else is REJECTED here
+  ;; rather than ignored -- a label the diagnostic reporter cannot render is not
+  ;; a machine that verified clean -- but that is a shape fault reported under a
+  ;; portability code, which is the one judgment §4.12 item 2 does not settle.
+  (define (valid-label? l)
+    (cond ((eq? l #f) #t)
+          ((symbol? l) (valid-reason? (symbol->string l)))
+          ((string? l) (valid-reason? l))
+          (else #f)))
 
   ;; --- helpers ---
   (define (lookup nodes name)
@@ -1141,17 +1178,58 @@
        ;; §16.2:886's name clause, both families. Before this slice, callback and
        ;; span names sat outside every grammar check in the tree: `pass-names`
        ;; and `pass-names-valid` read node names and error declarations only.
+       ;; *** THE LABEL CLAUSE IS FOLDED INTO THE NAME CLAUSE'S `and`, not added
+       ;; as its own arm. *** That is Milestone 4's shipped shape for the same
+       ;; bullet: `pass-names-valid`'s error-declaration arm tests name, code AND
+       ;; reason in one `and` so a declaration bad in three ways reports ONCE,
+       ;; and `verify-tests.sps` witnesses it ("one declaration bad in every
+       ;; field still yields a single finding"). Folding also leaves the
+       ;; diagnostic census unmoved, which is a measurement to RUN rather than an
+       ;; absence to assume: `(invalid-name 6)` stays 6.
+       ;;
+       ;; The counter-argument, declined rather than unnoticed: Slice ③ refused
+       ;; to reuse `missing-callback-declaration` for spans because a reader
+       ;; tracing a report back would look in the callback table for a name that
+       ;; was never there. Here the subject does not move: the diagnostic names
+       ;; the DECLARATION, which is in the right table either way, and that alone
+       ;; is the disanalogy.
+       ;;
+       ;; It does NOT name which field failed, and an earlier version of this
+       ;; comment claimed it did. The message is a static disjunction, so a
+       ;; label-only failure reports a node slot holding a perfectly PORTABLE
+       ;; name with the offending label nowhere in the record -- the same
+       ;; imprecision Milestone 4's "error name, code or reason is not portable"
+       ;; already carries. The fold is still right; that was a false reason.
+       ;;
+       ;; *** DO NOT EXTEND THESE TWO ARMS TO A KIND WHOSE LABEL YOU HAD TO
+       ;; WRITE AN ACCESSOR TO READ. *** Design §10 keeps `§16.2:886`'s label
+       ;; grammar off the nine already-shipped kinds, and `cbs`/`sps` are the
+       ;; two families §4.12 item 2 approved -- the ONLY two things this arm may
+       ;; reach.
+       ;;
+       ;; Everything else carrying a `source-label` is deliberately not here, and
+       ;; the list is longer than "the nine shipped node kinds": the machine
+       ;; itself, every uint field, every error declaration, both case kinds,
+       ;; and -- the ones NO artifact excludes, because they are neither the nine
+       ;; nor a declaration family -- MILESTONE 5'S OWN THREE NEW NODE KINDS,
+       ;; span-start, span-end and callback. That gap is real, and is recorded in
+       ;; the parent plan's Milestone 5 close note with a receiver; it is not
+       ;; closed by widening this arm, which §4.12 item 2 does not authorise.
        (filter values
                (map (lambda (cd)
-                      (if (valid-name? (callback-declaration-name cd)) #f
+                      (if (and (valid-name? (callback-declaration-name cd))
+                               (valid-label? (callback-declaration-source-label cd)))
+                          #f
                           (make-diagnostic 'invalid-name (callback-declaration-name cd)
-                                           "callback declaration name is not portable")))
+                                           "callback declaration name or label is not portable")))
                     cbs))
        (filter values
                (map (lambda (sd)
-                      (if (valid-name? (span-declaration-name sd)) #f
+                      (if (and (valid-name? (span-declaration-name sd))
+                               (valid-label? (span-declaration-source-label sd)))
+                          #f
                           (make-diagnostic 'invalid-name (span-declaration-name sd)
-                                           "span declaration name is not portable")))
+                                           "span declaration name or label is not portable")))
                     sps))
        ;; §16.2:886's branch-key clause and §16.2:901's declaration share:
        ;; a key that is not portable, or declared twice on one callback.

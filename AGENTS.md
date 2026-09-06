@@ -771,6 +771,90 @@
   tree rather than from a commit message, open the plan at every cited line, and
   narrow every "every", "the only" and "never" before writing it.
 
+* **A deferral is recorded where its RECEIVER will look, which for a role is the
+  source site.**
+  An obligation addressed to a STEP ("Milestone 6's counted consume owes X")
+  belongs in that step's plan. An obligation addressed to a ROLE — "whoever next
+  touches the field/accumulate emitted arms", "the next slice that changes this
+  record's shape" — belongs in the file that role will open, because that person
+  has no reason to open the parent plan. The parent plan is where a deferral is
+  ADJUDICATED; it is not where either receiver looks, and a disposition that
+  lives only there is a deferral with one end.
+  Milestone 5's close-out found two of these owed to it, both recorded only in
+  the plan, and wrote them into `compile.sls`, `interpret.sls` and `runtime.sls`
+  at the exact constructs the receiver would edit. Write both ends, and say in
+  the source note where the adjudication is, so the two cannot drift apart.
+
+* **A test that drops the subject along with the evidence proves nothing.**
+  The retention oracle's whole design is that the PARSER is held alive across the
+  collection and only the fed bytevector is dropped. A probe that let the parser
+  die too would report "not retained" about a runtime that stored the input in
+  every slot it has — the storage would have died with it — and every arm would
+  pass. Before believing a liveness or reachability result, name what is still
+  alive at the moment of measurement and check the subject is on that list.
+
+* **An APPROVAL with no receiver is invisible to every completeness sweep you
+  have.**
+  A milestone's close-out looks for two things: exit criteria, and obligations
+  that name a receiver ("owed by whoever next touches X", "Milestone 6 owes Y").
+  An owner's *approval* of a scope addition is neither. Milestone 5 approved
+  three items at its Gate 0; two shipped, and the third — a verifier check for a
+  field two new declaration families had just started carrying — shipped nowhere
+  and appeared in no slice plan, no exit criterion and no deferral list. It was
+  found only by a review asking a third question: **what did this milestone
+  approve that the tree does not contain?**
+  Ask that question at every close-out, against the design's own resolution
+  sections, and give every approved item a slice at the moment it is approved —
+  an approval that names no slice is a deferral nobody knows they are holding.
+  Milestone 5 built the dropped item rather than deferring it, and it cost less
+  than the deferral paragraph did: the check turned out to be a second call site
+  of a predicate already shipped, folded into an existing conjunction, with no
+  new diagnostic code and an unmoved census. **Price the item before deciding to
+  defer it** — the estimate that justified deferring this one was written before
+  anybody read the predicate it would reuse.
+
+
+* **The mutation suite prints "suite complete" on the way to FAILING.**
+  `byte_machine_mutation_run` emits its totals line and then, separately, raises
+  a `CMake Error` for a mutation caught "for the wrong reason" — a mutant that
+  exited nonzero but whose output did not match the pin. Slice ④ read a filtered
+  log for `suite complete|UNCAUGHT` three times, saw `(55 passes, 471 mutations)`
+  each time, and missed a wrong-reason error underneath it; the pin had been
+  broken from the moment it was written.
+  **Filter tool output for the FAILURE signatures, never for the success line.**
+  For this suite that means `CMake Error`, `wrong reason`, `UNCAUGHT`, and the
+  `tests passed` line — and the exit status, which is the only summary that
+  cannot be printed by a run that then fails.
+
+* **A pin's regex is matched against `FAIL <group>.<case>: <what>`, so `.*:`
+  between group and case is a trap.**
+  The group name in this repository routinely carries `§section:line`
+  references, and a greedy `.*:` swallows their colons. Anchor a pin on the CASE
+  name, which is followed by a literal `: `, and never on a wildcard bridging the
+  group. The suite catches this — it is what "caught by coincidence, not by the
+  decision this mutation names" means — but only after a full run.
+
+
+* **A predicate that calls another predicate nests its mutants by construction,
+  and the inner one's pins are the only real ones.**
+  `valid-label?` calls `valid-reason?`, so every mutant of `valid-label?`'s
+  symbol and string arms is strictly less destructive than the shipped
+  permissive-`reason-char?` mutant — measured, that mutant reddens all four label
+  cases and the reason case besides. Those arms therefore get **no pin**, and
+  that is a closed question rather than a coverage gap: their control is that
+  each is asserted in BOTH directions. What does get pinned is the part that is
+  *not* nested — here the absence arm, which decides before the inner predicate
+  is reached, and the per-family conjuncts, which the inner mutant cannot touch.
+  Before writing a pin, ask which shipped mutant already contains yours.
+
+* **`$` does not anchor a line in a mutation pin.** CMake's `MATCHES` anchors at
+  the end of the whole captured output, so `got ..$` matches nothing and the
+  suite reports the mutation "caught for the wrong reason". Assert the value's
+  own shape instead: `got .[)]` is what says the list is EMPTY, and it is what
+  separates a mutant that suppresses a finding from one that adds findings to the
+  same case.
+
+
 ## Closing ritual
 
 Run this when a branch's work is complete and reviewed. It is a ritual because

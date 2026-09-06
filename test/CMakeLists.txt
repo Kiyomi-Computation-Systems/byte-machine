@@ -1077,6 +1077,33 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-span-tests.sps"
   TIMEOUT 120)
 
+# --- Milestone 5 Slice ④: the input-retention oracle (§25:1591) --------------
+# The lane Slice ③'s liveness probe was brought forward FOR. Unlike that probe,
+# this one imports `byte-machine` source and drives a real parser, so it is
+# inside the mutation suite and carries pins -- do not copy the probe lane's
+# "imports no project source" exemption onto it.
+#
+# Both lanes, because a retention defect that appears only under AOT compilation
+# is exactly what the probe was measured in both lanes to rule out. `collect` is
+# not free: eight probes per lane, one full collection each.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.retention.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/retention-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/retention-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.retention.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/retention-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/retention-tests.sps"
+  TIMEOUT 120)
+
 byte_machine_add_scheme_lane(
   NAME byte-machine.example.one-byte.chez.source
   BACKEND chez

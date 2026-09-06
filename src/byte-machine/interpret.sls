@@ -397,6 +397,20 @@
            ((accumulate-step)
             (let* ((name (car args)) (fv (cadr args)) (byte (caddr args)))
               (accumulate-step (lookup nodes name) fv byte)))
+           ;; *** OWED HERE TOO, AND THIS IS THE HARDER END. *** `§12.7:770`'s
+           ;; machine-action half is still wrong (the emitted arms carry the
+           ;; other end of this note, at `compile.sls`'s `field-action`). The
+           ;; obstacle is right here: this shared arm cannot tell a SUCCESS jump
+           ;; from a FAILURE jump, so `field-step` has to say which route it
+           ;; took. That is a widened return -- exactly what the `accumulate-step`
+           ;; comment above declines to do for its own reason -- or a new
+           ;; executor message. Whoever takes it should read both comments
+           ;; together, because the argument for one message per shape is what
+           ;; makes the widened return the wrong first instinct.
+           ;;
+           ;; Deferred by Milestone 5's close-out (Slice ④, 2026-09-05); the
+           ;; adjudication is the §12.7 disposition in the parent plan, and this
+           ;; note exists because the receiver is a role, not a step.
            ((field-step)
             (let* ((name (car args)) (fv (cadr args))
                    (n (lookup nodes name)))

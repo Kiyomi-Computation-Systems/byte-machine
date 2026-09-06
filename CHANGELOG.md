@@ -42,9 +42,32 @@ Slice ③ also fixed three reachable defects — a span end not treated as a par
 state, a span node naming an undeclared span, and §12.7:770's callback-failure
 half, which both lanes reported wrongly and no cross-lane comparison could see —
 closed two coverage holes in its own new test lane, and deleted five lines
-measured unable to change any outcome. Only Slice ④ (the retention oracle with
-its negative control, the EOF and reset fragment legs, and the callback/span
-lifetime reference) remains. No versioned release exists yet.
+measured unable to change any outcome. Slice ④ landed **2026-09-05** and closed
+the milestone: the input-retention oracle in both lanes, reachability-based
+rather than a slot walk — the parser is held alive across a full collection and
+only the fed bytevector is dropped, so what the weak reference measures is the
+runtime's retention and not the parser's own death. Its negative control is a
+fixture that retains on purpose and must read RETAINED, and further arms cover
+all three of `§13:799`'s application-owned carriers — user context, a callback
+closure, and the callback error detail that a slot walk excluding only user
+context would report as a false violation. Layer 1 also probes the half of the
+feed surface a single terminal-status feed cannot reach: the boundary flush and
+`§14:833`'s mark re-anchor, both places where the caller's bytevector is in
+scope at a return.
+The slice also closed the three fragment shapes `§25:1589` still lacked — a span
+open at `parser-finish!` and closed on the EOF chain, a reset while parked
+between the span-end substeps, and a reset of a poisoned parser with a span open
+— shipped `§27:1694`'s callback/span lifetime reference as the first `§27`
+deliverable in the tree, and disposed the two obligations that named Milestone
+5's close-out as their receiver, writing each at the source construct its
+receiver will open. It also built `§16.2:886`'s **label-grammar check** for the
+two new declaration families — an owner approval from Gate 0 that no slice had
+picked up, found at close because it was neither a deferral nor an exit criterion
+and so invisible to both completeness sweeps. It reuses the shipped
+`valid-reason?` predicate, folded into each family's existing name check, so it
+adds no diagnostic code and does not move the census; the two name checks beside
+it, which had shipped with no test and no mutation pin, were closed with it. Milestone 6 (counted consumption) is next. No versioned
+release exists yet.
 
 ### Added
 

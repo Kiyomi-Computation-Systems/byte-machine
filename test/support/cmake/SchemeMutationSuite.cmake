@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FIFTY-FOUR PASSES, BECAUSE FIFTY-FOUR DIFFERENT WITNESSES ARE NEEDED
+# FIFTY-FIVE PASSES, BECAUSE FIFTY-FIVE DIFFERENT WITNESSES ARE NEEDED
 # (46 through Milestone 3; Milestone 4 Slice ①a adds the member-3 drift
 # guard and the position-kind lane, and Slice ①b the field-access lane -- since
 # renamed byte-machine.differential.field, the only lane in which the field
@@ -25,7 +25,11 @@
 # on the same argument one kind later -- the differential lane over the two span
 # kinds, the only program that loads a generated library containing a span
 # state, and the only one that can see a span FRAGMENT at all, since no parser
-# result carries one. It is NOT a fifty-fifth: Slice ③'s verifier mutations run
+# result carries one. Slice ④ adds the FIFTY-FIFTH, and this one IS a separate
+# witness rather than a second reading of an existing lane: it is the only
+# program in the tree that observes what a parser still REACHES after
+# `parser-feed!` returns, which no result, no trace and no diagnostic can show.
+# It is NOT a fifty-sixth: Slice ③'s verifier mutations run
 # against that same lane, because its topology table is where §25:1590's set is
 # written down -- one witness read two ways, and a pass count that called it two
 # would be the banner claiming a witness the tree does not have.)
@@ -1219,8 +1223,8 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-set(EXPECTED_PASSES 54)
-set(EXPECTED_MUTATIONS 466)
+set(EXPECTED_PASSES 55)
+set(EXPECTED_MUTATIONS 475)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -6145,6 +6149,81 @@ byte_machine_mutation(
     "an UNDECLARED span is rejected .*got ..missing-span-declaration . op.."
 )
 
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an ABSENT label is treated as a nonportable one"
+  # §16.2:886's LABEL clause, built by Milestone 5's close-out from design §4.12
+  # item 2 -- an owner approval no slice had picked up.
+  #
+  # *** THIS IS THE ARM THAT GETS THE PIN, and the symbol and string arms
+  # deliberately do NOT. *** Both of those call the shipped `valid-reason?`, so
+  # every mutant of them is NESTED BY CONSTRUCTION inside the two reason mutants
+  # above -- measured: the permissive `reason-char?` mutant reddens all four
+  # label cases and more. A nesting by construction is a closed question, not a
+  # coverage gap; their control is that each arm is asserted in BOTH directions
+  # (a portable label accepted, a nonportable one rejected).
+  #
+  # This mutant is not nested: absence is decided before `valid-reason?` is
+  # reached, so no reason mutant touches it. §10.3:506 and §10.4:517 both say
+  # "optional diagnostic label", and an arm that rejected absence would redden
+  # every fixture in the tree -- which is why the case it fails is the group's
+  # own negative control rather than one of its rejections.
+  FIND [[    (cond ((eq? l #f) #t)]]
+  REPLACE [[    (cond ((eq? l #f) #f)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "both absent -- expected .., got .invalid-name invalid-name."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the callback family stops checking its label, the span family does not"
+  # The per-family split, which one family's fixture cannot witness: each arm
+  # reads its own accessor. Pinned on the SHAPE case, and that choice is the
+  # measurement -- the permissive reason mutant leaves the shape case GREEN,
+  # because `valid-label?`'s `(else #f)` rejects an integer without consulting
+  # the repertoire at all. That is this mutant's unique record.
+  FIND [[                      (if (and (valid-name? (callback-declaration-name cd))
+                               (valid-label? (callback-declaration-source-label cd)))]]
+  REPLACE [[                      (if (and (valid-name? (callback-declaration-name cd))
+                               #t)]]
+  EXPECT_STATUS 1
+  # `got .[)]` and not `got ..`: a bare two-wildcard tail also matches the
+  # RESTRICTIVE reason mutant, which reddens this same case with a LONGER got
+  # list. Requiring a literal `)` as the second character is what asserts the
+  # list is EMPTY -- measured, `$` does not work here, because CMake's MATCHES
+  # anchors at the end of the whole captured output rather than the line.
+  EXPECT_OUTPUT_MATCHES "an integer -- expected .invalid-name., got .[)]"
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a callback declaration's NAME is no longer checked"
+  # Not this slice's arm -- Slice ①b's. It shipped with no case and no pin while
+  # `ir-tests.sps` asserted in prose that it was covered, and Milestone 5's
+  # close-out found it while building the label clause beside it. BOTH families
+  # get a pin, because each arm reads its own accessor and the earlier version of
+  # this pass pinned only one of the two while the close note claimed both.
+  FIND [[                      (if (and (valid-name? (callback-declaration-name cd))
+                               (valid-label? (callback-declaration-source-label cd)))
+                          #f]]
+  REPLACE [[                      (if (and #t
+                               (valid-label? (callback-declaration-source-label cd)))
+                          #f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the callback -- expected ..invalid-name . Bad.., got .[)]"
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a span declaration's NAME is no longer checked"
+  FIND [[                      (if (and (valid-name? (span-declaration-name sd))
+                               (valid-label? (span-declaration-source-label sd)))]]
+  REPLACE [[                      (if (and #t
+                               (valid-label? (span-declaration-source-label sd)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the span -- expected ..invalid-name . Body.., got .[)]"
+)
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 
@@ -9716,7 +9795,16 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Pass 49: parser-field-ref, across BOTH executors (Slice ①b tasks 6+7) ----
+# --- Milestone 5 Slice ①b tasks 6+7: parser-field-ref, across BOTH executors --
+#
+# *** THE INTEGER IS GONE FROM THIS HEADER ON PURPOSE (Slice ④). *** It read
+# "Pass 49", and so does the Milestone 3 header ~460 lines above it: two
+# different passes reachable by one citation. The integers cannot be repaired by
+# renumbering either, because they do not index anything countable -- this file
+# has 45 `byte_machine_mutation_run` call sites and the suite reports 55 passes,
+# the difference being helper functions that call `_run` once per case in a loop
+# and consume indices no header names. `EXPECTED_PASSES`, measured from the
+# harness, is the only authority. New headers name their slice.
 #
 # field-access-tests.sps is the only lane in which the field declarations are
 # observable at all, and it drives both executors, which reach them by different
@@ -11210,13 +11298,142 @@ byte_machine_mutation(
   EXPECT_OUTPUT_MATCHES "callback-inside want .span-active-at-pause. got .."
 )
 
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "runtime: reset refuses a POISONED parser instead of resetting it"
+  # Slice ④'s new reset leg. `§12.2:698` makes reset the ONE operation a poisoned
+  # parser may run -- every other cell in that row raises -- so this mutant is
+  # the plausible wrong reading of the row, not a strawman. Nothing else in the
+  # tree drives reset on a poisoned parser: the callback lane poisons a
+  # SPAN-LESS machine and never resets it, so this pin has no sibling.
+  #
+  # The recorded signature is a RAISE rather than a value mismatch, and the pin
+  # names the case, which is what keeps it from being a bare nonzero exit.
+  FIND [[    (when (eq? (parser-lifecycle parser) 'busy)
+      (byte-machine-contract-violation 'parser-reset! 'reentrancy]]
+  REPLACE [[    (when (memq (parser-lifecycle parser) '(busy poisoned))
+      (byte-machine-contract-violation 'parser-reset! 'reentrancy]]
+  EXPECT_STATUS 1
+  # The FAIL grammar is `FAIL <group>.<case>: <what>`, so the case name is
+  # followed by `: ` and the GROUP name is followed by a bare `.`. An earlier
+  # version of this pin put `.*:` between them and the suite rejected it as
+  # "caught by coincidence" -- the greedy wildcard swallowed the colons inside
+  # the group's own section references. Anchor on the case, which is unique.
+  EXPECT_OUTPUT_MATCHES "reset is accepted, clears the span, and the parser is reusable: case raised"
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "runtime: the FINISH path's span completion never closes the span"
+  # The interpreted finish path's own `byte-machine-span-close/v1`, which no
+  # mutation reached before: the two existing pins on that call are reset's
+  # (four-space indent) and the FEED loop's (fifteen). This is the thirteen-space
+  # one, and Slice ④'s EOF group is the first fixture whose span is closed by a
+  # node on the EOF chain after a feed opened it.
+  FIND [[          ((span-completion)
+           (let ((parts (op 'span-completion-parts node)))
+             (byte-machine-span-close/v1 parser)]]
+  REPLACE [[          ((span-completion)
+           (let ((parts (op 'span-completion-parts node)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the fragment comes from the feed and the completion from finish: the lanes agree -- expected #t, got #f"
+)
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 
 
+# --- Milestone 5 Slice ④: input retention (§25:1591) -------------------------
+#
+# Follows Slice ③'s span pass (the fifty-fourth) and is the FIFTY-FIFTH.
+#
+# The lane Slice ③'s liveness probe was brought forward FOR, and the first pass
+# in this file whose SPEC reads something no result and no trace can show: what
+# is still REACHABLE from a live parser after `parser-feed!` returns.
+#
+# Two of the three mutations below are the two halves of design §9's argument.
+# The first makes the runtime retain and layer 1 must see it. The other two make
+# an EXEMPT carrier stop carrying, and layer 3 must see that too -- because an
+# oracle asserting "nothing is reachable" would pass a runtime that quietly
+# dropped the application's own context, and `§13:799` says those three carriers
+# are the application's to keep.
+#
+# Layer 2, the negative control, carries no mutant and does not need one: it is a
+# FIXTURE that retains on purpose, and `retention-tests.sps` is not a mutation
+# target. (Not "no fixture in `test/common` is" -- `property-differential-tests.sps`
+# is one, above. The narrower claim is the true one.) Its control is the
+# two-directional assertion: layer 1 says "gone" and layer 2 says "retained"
+# about the same FIXTURE SHAPE -- not, as an earlier version of this comment
+# said, about the same probe; they are two `retained?` calls over two fixtures
+# and two bytevectors. An instrument answering a constant still fails one of
+# them, which is the conclusion, but the reason is the shape and not the object.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/retention-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.retention.chez.source
+  LABEL "runtime: the fed bytevector is stored in the parser and survives the return"
+  # `§25:1591` itself. The stored-error slot is the one that makes this a
+  # UNIQUE witness rather than a duplicate of some other pass: it is not read on
+  # a successful stop, `parser-stored-error` is not exported, and no other lane
+  # in the tree looks at what a parser still reaches. Every other suite stays
+  # green under this mutant.
+  FIND [[       (parser-set-lifecycle! parser 'busy)
+       ;; §14:833: an open span "begins its next possible fragment at the next]]
+  REPLACE [[       (parser-set-lifecycle! parser 'busy)
+       (parser-set-stored-error! parser bv)
+       ;; §14:833: an open span "begins its next possible fragment at the next]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "gone in both lanes -- expected ..interpreted . #f. .generated . #f.., got ..interpreted . #t."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.retention.chez.source
+  LABEL "runtime: a callback failure's detail is dropped instead of carried"
+  # Layer 3's second carrier, and the arm design §9 says an oracle gets wrong:
+  # "an oracle that excludes only the user-context slot will report a false
+  # violation the first time a fixture callback fails with a detail holding its
+  # own slice." With the detail dropped the parser stops retaining and the arm
+  # reads "gone" -- which is the direction that looks like GOOD news.
+  FIND [[    (vector callback-failure-tag code detail)]]
+  REPLACE [[    (vector callback-failure-tag code #f)]]
+  EXPECT_STATUS 1
+  # *** THE CASE NAME IS PART OF THE PIN. *** "retained, and permitted" is the
+  # `<what>` of TWO checks in this lane -- the user-context arm and this one --
+  # with byte-identical expected values, so a pin starting at the `<what>` also
+  # matches the OTHER arm's failure, including mutation 3's. The FAIL grammar is
+  # `FAIL <group>.<case>: <what> -- <detail>`, and this pass's own standard is
+  # that a sound pin resolves to exactly ONE (case, check) pair.
+  EXPECT_OUTPUT_MATCHES "a slot walk misses: retained, and permitted -- expected ..interpreted . #t. .generated . #t.., got ..interpreted . #f. .generated . #f."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.retention.chez.source
+  LABEL "runtime: the interpreted parser drops the user context"
+  # Layer 3's first carrier, and the mutant is deliberately ONE-LANE: only the
+  # `op` arm is edited, so the recorded `got` reads
+  # `((interpreted . #f) (generated . #t))`. That asymmetry is the assertion --
+  # the two lanes reach `user-context` by different routes (`make-parser` builds
+  # both vectors here, but only this arm's literal moves), and a pin that
+  # mutated both would not show it.
+  FIND [[                 user-context #f #f 0 #f)))]]
+  REPLACE [[                 'not-the-input #f #f 0 #f)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "user context may retain it, and does: retained, and permitted -- expected ..interpreted . #t. .generated . #t.., got ..interpreted . #f. .generated . #t."
+)
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FIFTY-FOUR PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FIFTY-FIVE PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.

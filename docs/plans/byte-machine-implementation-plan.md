@@ -1,6 +1,6 @@
 # Byte Machine Implementation Plan
 
-Status: milestones 0, 1, 2, 3, and 4 are closed — 0 on 2026-08-22 ([the spike](./milestone-0-portability-spike.md), [the close-out](./milestone-0-close-out.md), [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md)), 1 on 2026-08-23 ([milestone-1-design.md](./milestone-1-design.md)), 2 on 2026-08-29 ([milestone-2-design.md](./milestone-2-design.md)), and 3 on 2026-08-30 ([milestone-3-design.md](./milestone-3-design.md)); each of those four carries a dated close note under its own §25 subsection below, and each of those cites where its exit criteria are dispositioned. Milestone 3 was delivered as a Gate 0 plus three slices: Slice ① (byte classes) closed 2026-08-29, Slice ② (sequence dispatch and prefix lowering) closed 2026-08-30, and Slice ③ (multiple alternatives, ambiguity, and cycle analysis) closed 2026-08-30 with the milestone. Milestone 4 (fields, actions, and branches) closed 2026-09-03, delivered as a Gate 0 plus four slices: Gate 0 discharged 2026-08-31 (decisions 0018-0022), Slice ①a — the unversioned generated-ABI constructor, normalized encoding format 2, and the `parser-error` family — 2026-09-02, Slice ①b (field declarations, storage, and `parser-field-ref`) 2026-09-02, Slice ② (field action and field branch) 2026-09-03, and Slice ③ (integer accumulation) 2026-09-03 with the milestone; its close note is a dated disposition, not a §25 subsection. Milestone 5 (callbacks, poisoning, and spans) is in progress: two hardening slices ran first — Slice ⓪ (the verifier's kind × position matrix and the diagnostic-code census) and Slice ⓪b (the EOF walk cluster), both closed 2026-09-04 and both dispositioned below — then Gate 0 discharged 2026-09-04 as decisions 0024-0029, Slice ①a (the seam: ABI 4, `exec`'s two reserved parameters) landed 2026-09-04, and Slice ①b (callback and span declarations, binding resolution, five `§9.3` exports) landed 2026-09-04. Slice ② (the callback-invocation node: the tenth node kind, `§13:803-808`'s four outcomes through one shared classifier, `§12.2`'s `busy` and `poisoned` rows, `§12.6:749`'s `dynamic-wind` poisoning, and `parser-state-name` on generated ABI 5) landed 2026-09-05. Slice ③ (spans: the eleventh and twelfth node kinds, pass 7's span-state lattice over decision 0029's flat domain, `§16.2:898`'s reachability gate, wire tags 11-13 and the second internal-state family, `§14:831-843`'s fragment rules executing in both lanes behind `§19.3:1024`'s boundary flush, and the `§22.5` oracle) landed 2026-09-05. Slice ③ also shipped three behavioural fixes its own census and final review found — a span end that was not treated as a parked state, a span node naming an undeclared span that verified clean and then raised out of the normalizer, and `§12.7:770`'s callback-failure half, which BOTH LANES reported wrongly and the cross-lane comparison therefore could not see — plus two coverage holes closed in its own new lane; the zero-width-machine-action half of that same `§12.7:770` row is measured, still wrong, and dispositioned below with two receivers. Only Slice ④ (the retention oracle with its negative control, the EOF and reset fragment legs, and the callback/span lifetime reference) remains. Decisions amended by 0005 (Chez-only) via [chez-only-simplification.md](./chez-only-simplification.md) §2, and by 0006 (inline libraries)
+Status: milestones 0, 1, 2, 3, 4, and 5 are closed — 0 on 2026-08-22 ([the spike](./milestone-0-portability-spike.md), [the close-out](./milestone-0-close-out.md), [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md)), 1 on 2026-08-23 ([milestone-1-design.md](./milestone-1-design.md)), 2 on 2026-08-29 ([milestone-2-design.md](./milestone-2-design.md)), and 3 on 2026-08-30 ([milestone-3-design.md](./milestone-3-design.md)); each of those four carries a dated close note under its own §25 subsection below, and each of those cites where its exit criteria are dispositioned. Milestone 3 was delivered as a Gate 0 plus three slices: Slice ① (byte classes) closed 2026-08-29, Slice ② (sequence dispatch and prefix lowering) closed 2026-08-30, and Slice ③ (multiple alternatives, ambiguity, and cycle analysis) closed 2026-08-30 with the milestone. Milestone 4 (fields, actions, and branches) closed 2026-09-03, delivered as a Gate 0 plus four slices: Gate 0 discharged 2026-08-31 (decisions 0018-0022), Slice ①a — the unversioned generated-ABI constructor, normalized encoding format 2, and the `parser-error` family — 2026-09-02, Slice ①b (field declarations, storage, and `parser-field-ref`) 2026-09-02, Slice ② (field action and field branch) 2026-09-03, and Slice ③ (integer accumulation) 2026-09-03 with the milestone; its close note is a dated disposition, not a §25 subsection. Milestone 5 (callbacks, poisoning, and spans) closed 2026-09-05, delivered as a Gate 0 plus two hardening slices plus five slices; like Milestone 4's, its close note is a dated disposition rather than a §25 subsection. Two hardening slices ran first — Slice ⓪ (the verifier's kind × position matrix and the diagnostic-code census) and Slice ⓪b (the EOF walk cluster), both closed 2026-09-04 and both dispositioned below — then Gate 0 discharged 2026-09-04 as decisions 0024-0029, Slice ①a (the seam: ABI 4, `exec`'s two reserved parameters) landed 2026-09-04, and Slice ①b (callback and span declarations, binding resolution, five `§9.3` exports) landed 2026-09-04. Slice ② (the callback-invocation node: the tenth node kind, `§13:803-808`'s four outcomes through one shared classifier, `§12.2`'s `busy` and `poisoned` rows, `§12.6:749`'s `dynamic-wind` poisoning, and `parser-state-name` on generated ABI 5) landed 2026-09-05. Slice ③ (spans: the eleventh and twelfth node kinds, pass 7's span-state lattice over decision 0029's flat domain, `§16.2:898`'s reachability gate, wire tags 11-13 and the second internal-state family, `§14:831-843`'s fragment rules executing in both lanes behind `§19.3:1024`'s boundary flush, and the `§22.5` oracle) landed 2026-09-05. Slice ③ also shipped three behavioural fixes its own census and final review found — a span end that was not treated as a parked state, a span node naming an undeclared span that verified clean and then raised out of the normalizer, and `§12.7:770`'s callback-failure half, which BOTH LANES reported wrongly and the cross-lane comparison therefore could not see — plus two coverage holes closed in its own new lane; the zero-width-machine-action half of that same `§12.7:770` row is measured, still wrong, and dispositioned below with two receivers. Slice ④ (the retention oracle with its negative control, the measured remainder of the EOF and reset fragment legs, and §27:1694's callback/span lifetime reference — the first §27 deliverable in the tree) landed 2026-09-05 and closed the milestone. It also disposed the two obligations that named “Milestone 5's close-out” as their receiver — §12.7:770's zero-width-machine-action half and §9.3:392-393's parser-result enforcement — as deferred, with each written at the source construct its receiver will open rather than only here; and it built §16.2:886's label-grammar check for the two new declaration families, an owner-approved §4.12 item that no slice had picked up and that neither completeness sweep could see. Decisions amended by 0005 (Chez-only) via [chez-only-simplification.md](./chez-only-simplification.md) §2, and by 0006 (inline libraries)
 
 Date: 2026-08-15
 
@@ -2123,6 +2123,19 @@ close-out is to be checked against. Slices ③ and ④ do not qualify by default
 ③ adds spans and ④ the reference fixture and retention oracle, and neither
 changes the result record.
 
+**2026-09-05, Slice ④ — annotation, and the disposition this paragraph asked
+for.** Two things. *The descriptor above is wrong and is not rewritten:* ④ ships
+`§27:1694`'s callback/span lifetime **reference**, a document, not `§21`'s HTTP
+**reference fixture**, which is Milestone 8's; the conclusion the sentence draws
+— that ④ does not change the result record — is unaffected and correct. *The
+disposition:* Milestone 5's close-out **defers** the `§9.3:392-393` enforcement
+rather than scheduling it, on the cost measured above, and names the receiver as
+the next slice that changes `parser-result`'s shape. Following this milestone's
+own new standard, the obligation is now also written at
+`runtime.sls`'s `make-parser-result` — the construct that receiver opens — with a
+pointer back here. A deferral recorded only in the plan is a deferral with one
+end.
+
 Slice: `docs/plans/milestone-5-slice-2-implementation-plan.md`, Task 9.
 
 ### §12.7:770 and §16.2:899/:901 — Milestone 5 Slice ③'s census reconciliation, two readings recorded so they are not re-derived wrongly
@@ -2209,3 +2222,172 @@ owes `§12.7:770`'s constant rather than the loop's `pk`, and any declaration it
 names owes a `pass-declarations` arm.
 
 Slice: `docs/plans/milestone-5-slice-3-implementation-plan.md`, Task 8.
+
+### §25:1572-1591 — Milestone 5 closes, dispositioned against the tree
+
+**Milestone 5 (callbacks, poisoning, and spans) closed 2026-09-05** with Slice
+④. Written as a dated disposition rather than a `§25` subsection for the reason
+Milestone 4's close note gives: an insertion at `§25` renumbers every
+`§section:line` citation below it, and this milestone has just spent a slice
+correcting fifty-five citations that were one line too high. (They did not
+*move* — that commit's own message records them as inherited wrong from the
+milestone design, and they were `§14` citations above `§25`, which no `§25`
+insertion could have renumbered. The reason for not adding a subsection stands
+on its own: `§27:1694` and `§28:1725` do live below `§25`.)
+
+Delivered as **Gate 0 plus two hardening slices plus five slices**: Slice ⓪ (the
+verifier's kind × position matrix and the diagnostic-code census) and Slice ⓪b
+(the EOF walk cluster), both 2026-09-04; Gate 0 as decisions 0024-0029,
+2026-09-04; Slice ①a (the seam — ABI 4, `exec`'s two reserved parameters) and
+Slice ①b (callback and span declarations, binding resolution, five `§9.3`
+exports), 2026-09-04; Slice ② (the callback-invocation node), Slice ③ (the two
+span kinds), and Slice ④ (retention and the close-out), all 2026-09-05.
+
+**Each exit criterion against the tree, not against the slice plans that claimed
+to discharge it.**
+
+- **`:1588` — "callback order and exact-once delivery tests pass".** DISCHARGED
+  by Slice ②. `test/common/differential-callback-tests.sps`, both lanes: the four
+  outcomes through one shared classifier, `§13:814`'s commit-before-pause
+  asserted as one delivery at the pause and nothing re-delivered on resume, and
+  the escape path compared as
+  *(condition, lifecycle)* because neither lane returns a result there.
+- **`:1589` — "fragment tests cover boundaries, pause, completion, error, EOF,
+  and reset".** DISCHARGED across Slices ③ and ④. Design §8 allocated four legs
+  to ③ and EOF and reset to ④; measured at Slice ④'s open, ③ had shipped
+  **both** of the legs it disclaimed, and `record-span` drives `parser-finish!`
+  on all thirty-seven schedules. Three SHAPES were uncovered and ④ closed them:
+  a span open when `parser-finish!` is called and closed on the EOF chain (its
+  own fixture — `body`'s eof-target above is the truncation error and cannot also
+  be a span end); reset while parked between the span-end substeps, where
+  `§14:841` retains a completion-pending continuation; and reset of a poisoned
+  parser with a span open, `§12.2:698`'s one permitted operation. Every leg now
+  names a case, and the mapping is written into the test file's own header rather
+  than only into a commit message. Two of the three new groups carry their own
+  mutants in the span pass — reset refusing a poisoned parser, and the FINISH
+  path's span completion never closing the span, a call no mutation had reached
+  before. The third, reset while parked in `completion-pending`, does not: its
+  control is that it asserts the post-reset FRAGMENT SHAPE, which
+  `parser-active-span` cannot see, and no mutation of the shipped reset
+  distinguishes it from Slice ③'s mid-span reset case. Saying which two rather
+  than claiming three is the point.
+- **`:1590` — "every invalid span topology is rejected".** DISCHARGED by Slice
+  ③: an eleven-row table whose verdicts were derived from `§14:843` and
+  `§16.2:899` before it was run, with the row count as the sentinel and four
+  mutations that turn a REJECTED row green rather than a green row red.
+- **`:1591` — "parser input-retention tests demonstrate no bytevector reference
+  is stored by the runtime after return".** DISCHARGED by Slice ④,
+  `test/common/retention-tests.sps`, both lanes. Reachability-based rather than a
+  slot walk: the parser is held alive across a full collection and only the fed
+  bytevector is dropped, so what is measured is the RUNTIME'S retention and not
+  the parser's own death. Design §9's three layers all ship — liveness, the
+  negative control that must read RETAINED, and the exemption boundary with an
+  arm for **each of `§13:799`'s three carriers** — user context, a callback
+  closure that captured the input, and callback error detail. (The first version
+  of this lane covered two and hedged the third as one "a fixture can reach";
+  the hedge was false — a callback capturing `bv` is one line — and the review
+  that found it is why the arm exists.) A fourth arm holds the same failing path
+  with `detail` `#f` and reads GONE, so the detail arm is about the carrier and
+  not about the error record. Layer 1 additionally probes the half of the feed
+  surface a single terminal-status feed cannot reach: `span-boundary-flush!` and
+  `§14:833`'s mark re-anchor, both gated on a span left open across a feed
+  boundary, and both places where the caller's bytevector is in scope at a
+  return. The criterion was
+  **vacuously true as late as this milestone's Gate 0** — measured 2026-09-04, a
+  ten-slot parser with no slot able to hold a bytevector, which is the design's
+  "vacuously true today"; the criterion itself predates any parser at all; the parser is sixteen slots now and three of them can, all
+  three exempt, and the conclusion survives for a stated reason rather than by
+  luck.
+
+**Scope, `:1576-1584`.** All nine bullets are in the tree: declarations and
+indexed binding (①b), event and decision callbacks and the four outcomes (②),
+escape poisoning and the busy/reentrancy guards and callback-visible committed
+state (②), one active named span, the boundary flush and completion, pause-safe
+span internal continuations, and span dataflow verification (③).
+
+**What Milestone 5 does NOT leave silent.** Two obligations named "Milestone 5's
+close-out" as their receiver, and both are disposed rather than carried
+(`§9.3:392-393` under the `§12.3:711` heading above; `§12.7:770` here, this note
+being its disposition):
+`§12.7:770`'s zero-width-machine-action half and `§9.3:392-393`'s `parser-result`
+enforcement. Both are **deferred, not scheduled**, and — this milestone's own new
+standard — both are now written at the source constructs their receivers will
+open (`compile.sls`'s `field-action` arm, `interpret.sls`'s `field-step`, and
+`runtime.sls`'s `make-parser-result`), each pointing back to its adjudication
+here. A deferral recorded only in this document is a deferral with one end.
+
+**One approved scope item nearly did not ship, and the way it nearly escaped is
+the part worth keeping.** `milestone-5-design.md` §4.12 **item 2** —
+`§16.2:886`'s label-grammar check, *"APPROVED 2026-09-04, scoped to Milestone 5's
+two new declaration families"*, reaffirmed at design `:1049` (*"§4.12 is settled (owner, 2026-09-04): items 1-3 approved, item 4 declined. Slice plans may proceed on that basis"*). Items 1 and 3
+shipped; item 2 was in no slice plan, no exit criterion and no deferral list, and
+at close it was implemented nowhere: `§10.1:480` puts labels under a different
+grammar from names — printable ASCII plus LF, against `[a-z][a-z0-9-]*` — and two
+label-bearing families had been added to a check that did not exist.
+
+**Why it escaped every sweep.** It is not a deferral. Nobody owed it to anybody:
+it was an owner approval that no slice picked up, so it appears in no
+"obligations owed to the close-out" search and in no exit criterion. **An
+approval with no receiver is invisible to both of this milestone's completeness
+mechanisms.** It was found by a whole-branch review asking a third question —
+what did this milestone approve that the tree does not contain — and that
+question is now `AGENTS.md`'s.
+
+**DISCHARGED 2026-09-05, and it cost less than the deferral would have.** The
+check is a second call site of the shipped `valid-reason?`, whose repertoire is
+already exactly `§10.1:480`'s, **folded into each family's existing name-clause
+`and`** rather than added as its own arm — Milestone 4's shape for the same
+bullet's reason clause, which reports once for a declaration bad in several ways
+and which `verify-tests.sps` witnesses. So: **no new diagnostic code, and the
+diagnostic census does not move** — `(invalid-name 6)` stays 6, measured by
+running it rather than assumed. Four mutation pins, each measured from a staged mutant. The symbol and string
+arms carry NONE, and that is a finding rather than an omission: both call the
+shipped `valid-reason?`, so every mutant of them is nested by construction inside
+the two reason mutants already in the suite — measured, the permissive
+`reason-char?` mutant reddens all four label cases. A nesting by construction is
+a closed question; their control is that each arm is asserted in both
+directions.
+
+Three things it settles that `§4.12` item 2 did not, each recorded at the
+predicate. `#f` is absence and passes, since `§10.3:506` and `§10.4:517` both say
+only "optional diagnostic label". A label may be a **symbol** (every label in the
+tree is one) or a string. Anything else is rejected — a label the diagnostic
+reporter cannot render is not a machine that verified clean — but that is a shape
+fault reported under a portability code, and it is the one judgment left open.
+
+**And the warrant is narrower than `§10.1:480` reads.** That sentence qualifies
+itself: "labels and reasons embedded in **generated output**". Measured, a label
+is embedded in nothing — `compile.sls` reads no `source-label` — so unlike a
+nonportable reason, which since Slice ①a is an unparseable generated library, a
+nonportable label cannot corrupt emission today. What it corrupts is `§16.4:940`'s
+diagnostic report, a label's only consumer. `§16.2:886` requires the rejection
+either way; saying so at the site keeps the next reader from inheriting a
+stronger claim than the tree supports.
+
+**And the label clause is still missing on three kinds NO artifact excludes.**
+Design §10 keeps `§16.2:886`'s label grammar off "the nine already-shipped
+kinds", and §4.12 item 2 covers the two new declaration families. Milestone 5's
+own three new NODE kinds — span-start, span-end and callback — are neither, and
+they carry a `source-label` that nothing checks. Nor do the machine itself, the
+uint fields, the error declarations or either case kind, but those at least fall
+under §10's exclusion by age; the three new node kinds fall under nothing. Owed
+by **whoever next widens `pass-declarations`' label arms, and failing that by
+Milestone 6's close-out**; written at that arm in `verify.sls` as well as here.
+Not closed now because §4.12 item 2 does not authorise it and inventing scope at
+a close-out is how the item above got lost in the first place.
+
+**Two arms beside it were closed in the same commit.** `§16.2:886`'s name clause
+for the two families shipped in Slice ①b with no `verify-tests` case and no
+mutation pin, while `ir-tests.sps` asserted in prose that they were covered.
+Found while building the label clause next to them, and closed rather than
+recorded — a case AND a mutation pin for each family, after a first pass that
+pinned only one of the two while claiming both.
+
+**Also handed on:** `§27:1694`'s callback/span lifetime reference shipped as
+[docs/reference/callback-span-lifetime.md](../reference/callback-span-lifetime.md).
+It is the first thing in `docs/reference/`, which held only a `.gitkeep`, and so
+sets the shape for the reference deliverables that follow — not the first item on
+`§27`'s list to exist at all: `:1701`'s changelog has been in the tree for
+milestones, and `:1691`'s README quick start arguably has too.
+
+Slice: `docs/plans/milestone-5-slice-4-implementation-plan.md`.
