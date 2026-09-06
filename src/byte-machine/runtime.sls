@@ -1040,6 +1040,34 @@
                  (let ((r (op 'accumulate-step node (parser-field-values parser)
                               (bytevector-u8-ref bv pos))))
                    (route-byte-step! (car r) (cdr r) pos loop))))
+            ;; Counted consume (Milestone 6 Slice ①; decision 0030 items 1-3). The
+            ;; op decides -- this arm never tests `(>= pos end)` before asking,
+            ;; because a zero count transitions before exhaustion is looked at
+            ;; (§10.6:600) and only the op sees the count. Three answers: a zero
+            ;; count transitions to `next` with nothing consumed and the position
+            ;; kind CARRIED THROUGH (a zero-width step, the field-action arm's
+            ;; convention); a positive count over exhausted input parks here
+            ;; with need-input; a commit of n >= 1 bytes advances cursor and
+            ;; offset by n and then continues at `next` when the count reached
+            ;; zero -- count completion wins by construction, §10.6:603 -- or
+            ;; parks here with need-input at the new cursor, `current` still
+            ;; this node. There is no bulk primitive to share: route-byte-step!
+            ;; advances one byte.
+            ((counted-consume)
+             (let* ((r (op 'count-step node (parser-field-values parser) pos end))
+                    (n (car r)) (target (cdr r)))
+               (cond ((and (= n 0) target)
+                      (parser-set-current! parser target)
+                      (loop pos pk))
+                     ((= n 0)
+                      (make-parser-result 'need-input pos (- pos start) (parser-offset parser) #f))
+                     (else
+                      (parser-set-offset! parser (+ n (parser-offset parser)))
+                      (if target
+                          (begin (parser-set-current! parser target)
+                                 (loop (+ pos n) 'boundary))
+                          (make-parser-result 'need-input (+ pos n) (- (+ pos n) start)
+                                              (parser-offset parser) #f))))))
             ((dispatch)
              (if (>= pos end)
                  (make-parser-result 'need-input pos (- pos start) (parser-offset parser) #f)
@@ -1182,6 +1210,20 @@
       ;; EOF-target chain -- the hop below, and the default-EOF terminal, which
       ;; is reached by no jump at all once the chain is exhausted and so takes
       ;; its own constant.
+      ;; The EOF route an input-reading node takes at finish: hop to a named
+      ;; eof-target carrying `eof`, or terminate at the machine default-EOF
+      ;; error. Factored (Milestone 6 Slice ①) because the counted-consume arm
+      ;; needs this body after its zero-count test and a second textual copy
+      ;; would take any pin on it to two sites; each arm's CALL stays its own
+      ;; line -- route-byte-step!'s precedent in the feed loop.
+      (define (take-eof-route! node loop)
+        (let ((t (op 'eof-target node)))
+          (if t
+              (begin (parser-set-current! parser t) (loop t 'eof))
+              (begin (parser-set-lifecycle! parser 'error)
+                     (let ((e (parts->parser-error (op 'default-eof-value node) off 'eof)))
+                       (parser-set-stored-error! parser e)
+                       (make-parser-result 'error off 0 off e))))))
       (let loop ((node (parser-current parser)) (pk 'boundary))
         (case (op 'kind node)
           ((finish)
@@ -1307,14 +1349,19 @@
                         (make-parser-result 'error off 0 off e))))))))
           ;; At finish there is no input, so an accumulate node takes its own
           ;; declared EOF edge exactly as a dispatch node does (§10.6:569).
-          ((accumulate dispatch)
-           (let ((t (op 'eof-target node)))
-             (if t
-                 (begin (parser-set-current! parser t) (loop t 'eof))
-                 (begin (parser-set-lifecycle! parser 'error)
-                        (let ((e (parts->parser-error (op 'default-eof-value node) off 'eof)))
-                          (parser-set-stored-error! parser e)
-                          (make-parser-result 'error off 0 off e))))))
+          ((accumulate dispatch) (take-eof-route! node loop))
+          ;; Counted consume (Milestone 6 Slice ①): the same message over an
+          ;; empty slice, reading only the target (decision 0030 item 4). A
+          ;; zero count transitions to `next` -- the entry of a fresh parser with
+          ;; a zero initial, a pause continuation, a node on an EOF chain -- with
+          ;; the position kind carried; a positive count is a truncation and
+          ;; takes the EOF route (0030 item 6: a parser parked here by need-input
+          ;; always holds one).
+          ((counted-consume)
+           (let ((r (op 'count-step node (parser-field-values parser) 0 0)))
+             (if (cdr r)
+                 (begin (parser-set-current! parser (cdr r)) (loop (cdr r) pk))
+                 (take-eof-route! node loop))))
           (else (assertion-violation 'parser-finish! "unknown node kind" (op 'kind node)))))))
 
   ;; §12.1: resume changes lifecycle only -- no callback, no input, no executor

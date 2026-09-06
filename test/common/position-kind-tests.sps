@@ -197,6 +197,56 @@
           (make-error-node 'trunc 'rejected #f))
     'default-eof #f))
 
+;; Milestone 6 Slice ①'s three rows. Design §4.10 named two; the third separates
+;; the counted arm's ORDER (zero count before exhaustion, decision 0030 item 1)
+;; from its carried position kind (item 3), which one row cannot do: a reexecute
+;; edge leaves a byte unconsumed, so the node is never reached at the end of a
+;; slice, and an advance edge at the end of a slice carries `boundary` whatever
+;; the arm does. Each machine is the smallest that reaches the counted consume
+;; the way its row needs.
+(define cc-errs (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
+                      (make-error-declaration 'truncated 'eof "truncated body" #f)
+                      (make-error-declaration 'bad-body 'unexpected-byte "bad body" #f)))
+;; Row 1: a body of three, one byte fed, then finish -- truncation at a PARKED
+;; counted consume is `eof` at the final offset (§12.7:771). The offset catches
+;; an arm that does not advance it; the error's node catches an arm that parks
+;; `current` on the successor (which would finish through the stop instead).
+(define cc-trunc
+  (make-machine 'cctrunc 'start (list (make-uint-field 'len 8 3 #f)) '() '() cc-errs
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 0) (make-edge 'body 'advance) #f))
+            (make-edge 'reject 'reexecute) #f #f)
+          (make-counted-consume-node 'body 'len 'done 'trunc #f)
+          (make-stop-node 'done #f)
+          (make-error-node 'trunc 'truncated #f)
+          (make-error-node 'reject 'bad-body #f))
+    'default-eof #f))
+;; Row 2: a zero count reached over a REEXECUTE edge transitions into an error
+;; node with the position kind CARRIED (0030 item 3): `byte` at the unconsumed
+;; byte, exactly as through a field branch today.
+(define cc-zero-reexec
+  (make-machine 'cczero 'start (list (make-uint-field 'len 8 0 #f)) '() '() cc-errs
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 0) (make-edge 'body 'reexecute) #f))
+            (make-edge 'reject 'reexecute) #f #f)
+          (make-counted-consume-node 'body 'len 'bad #f #f)
+          (make-error-node 'bad 'bad-body #f)
+          (make-error-node 'reject 'bad-body #f))
+    'default-eof #f))
+;; Row 3: the same zero count reached at the END of the slice over an advance
+;; edge. An arm that tests exhaustion before asking the op returns need-input
+;; here and reports no error at all; the correct arm transitions and reports
+;; `boundary`, carried from the advance, at offset 1.
+(define cc-zero-end
+  (make-machine 'cczeroend 'start (list (make-uint-field 'len 8 0 #f)) '() '() cc-errs
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 0) (make-edge 'body 'advance) #f))
+            (make-edge 'reject 'reexecute) #f #f)
+          (make-counted-consume-node 'body 'len 'bad #f #f)
+          (make-error-node 'bad 'bad-body #f)
+          (make-error-node 'reject 'bad-body #f))
+    'default-eof #f))
+
 (define (feed-then-error cm bytes)
   (let* ((p (make-parser cm '() #f))
          (r (parser-feed! p (u8-list->bytevector bytes) 0 (length bytes))))
@@ -274,7 +324,20 @@
          'boundary 2
          (lambda () (interpreted spdone))
          (lambda () (generated spdone 'spdone-parser 'spdone "pk-spd.sls"))
-         'callback)))
+         'callback)
+   ;; --- Milestone 6 Slice ① ---
+   (list "truncation at a parked counted consume reports eof at the final offset"
+         (lambda (cm) (finish-error cm '(0 65))) 'eof 2
+         (lambda () (interpreted cc-trunc))
+         (lambda () (generated cc-trunc 'cctrunc-parser 'cctrunc "pk-cctrunc.sls")))
+   (list "a zero-count transition over a reexecute edge carries byte at the unconsumed byte"
+         (lambda (cm) (feed-then-error cm '(0))) 'byte 0
+         (lambda () (interpreted cc-zero-reexec))
+         (lambda () (generated cc-zero-reexec 'cczero-parser 'cczero "pk-cczero.sls")))
+   (list "a zero count at the end of a slice transitions before exhaustion is tested"
+         (lambda (cm) (feed-then-error cm '(0))) 'boundary 1
+         (lambda () (interpreted cc-zero-end))
+         (lambda () (generated cc-zero-end 'cczeroend-parser 'cczeroend "pk-cczeroend.sls")))))
 
 (harness-group "every position kind, in both executors"
   (lambda ()
@@ -315,8 +378,8 @@
                (check-equal (string-append name ": the lanes agree on the projection")
                             (project-error ie) (project-error ge))))
            cases)
-          (check-equal "seven cases ran" cases-run 7)
-          (check-equal "fourteen drives observed" drives 14))))))
+          (check-equal "ten cases ran" cases-run 10)
+          (check-equal "twenty drives observed" drives 20))))))
 
 ;; A pause whose CONTINUATION is an error node. Feed to the pause, resume, then
 ;; finish!: the finish loop reaches that error state on its first dispatch, by no
