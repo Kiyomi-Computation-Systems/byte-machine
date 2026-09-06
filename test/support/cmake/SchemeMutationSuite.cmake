@@ -6425,6 +6425,14 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a counted consume's next is not an out-edge"
+  # The Slice ① sweep, the OTHER direction: this mutant satisfies three shipped
+  # pins -- "verify: the :908 check is not gated on byte-reachability", "verify:
+  # the :908 gate is vacuous, so no byte edge into a finish is ever rejected" and
+  # "verify: the zero-width kinds report one role for all their edges" -- whose
+  # regexes are case-label prefixes over the t2 and edge-role rows; dropping one
+  # kind's out-edge is a per-kind subset of dropping the gate. Recorded, not
+  # fixed here: those pins are pre-existing and coarse, and this pin's own record
+  # is the entry fixture's, which none of them produce.
   FIND [[          ((counted-consume-node? n)
            (list (cons 'next (counted-consume-node-next n))))]]
   REPLACE [[          ((counted-consume-node? n) '())]]
@@ -6435,6 +6443,11 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a counted consume's eof-target is read as absent"
+  # The Slice ① sweep: also satisfied by "verify: the :909 start set enumerates a
+  # kind instead of deriving the EOF route" and "verify: an EOF cycle through
+  # pause continuations is not reported" -- both unpark or unreport the node this
+  # arm's route parks, so the self-eof fixture goes empty under them too. By
+  # construction: the route this arm answers is what the parked-set proxy reads.
   FIND [[          ((counted-consume-node? n) (counted-consume-node-eof-target n))]]
   REPLACE [[          ((counted-consume-node? n) #f)]]
   EXPECT_STATUS 1
@@ -6444,6 +6457,9 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a counted consume's field reference is not checked"
+  # The Slice ① sweep: also satisfied by "verify: pass-fields is never run" and
+  # "verify: the operand half is never run" -- pass containment, the nesting every
+  # pin inside pass-fields shares. By construction.
   FIND [[    (if (field-width-of fs (counted-consume-node-field n))]]
   REPLACE [[    (if #t]]
   EXPECT_STATUS 1
@@ -6455,10 +6471,15 @@ byte_machine_mutation(
   # The WALK half of 0030 item 7. Without it no node of the value-terminated
   # loop reaches itself, so the loop's record is EMPTY -- the `got` that
   # separates this pin from the REPORT-set pin below.
+  # The Slice ① sweep: also satisfied by "verify: zero-progress detection never
+  # fires" and "verify: the zero-progress WALK does not follow a zero-width node"
+  # -- the value-terminated loop runs through a branch and an action, so any
+  # mutant that breaks the walk at those kinds empties the same record. By
+  # construction of the fixture, which needs all three edges to close.
   FIND [[              ((counted-consume-node? n) (list (counted-consume-node-next n)))]]
   REPLACE [[              ((counted-consume-node? n) '())]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "rejected: the three nodes of the loop -- expected .*, got .[)]")
+  EXPECT_OUTPUT_MATCHES "rejected: the three nodes of the loop -- expected ..zero-progress-cycle . br. .zero-progress-cycle . body. .zero-progress-cycle . dec.., got .[)]")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -6472,7 +6493,7 @@ byte_machine_mutation(
   REPLACE [[                                  (span-start-node? n) (span-end-node? n))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "rejected: the three nodes of the loop -- expected .*, got ..zero-progress-cycle . br. .zero-progress-cycle . dec..")
+    "rejected: the three nodes of the loop -- expected ..zero-progress-cycle . br. .zero-progress-cycle . body. .zero-progress-cycle . dec.., got ..zero-progress-cycle . br. .zero-progress-cycle . dec..")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -6480,6 +6501,10 @@ byte_machine_mutation(
   # `join-over` raises on an empty list, so the arm's loss is a RAISE out of
   # verification -- the accumulate-arm precedent's failure mode, pinned on the
   # raise the same way.
+  # The Slice ① sweep, the OTHER direction: this mutant's raise satisfies the
+  # shipped pin "verify: eof-terminal chains through a pause continuation", whose
+  # regex is a case-raised record; the empty-join raise reaches that case too. The
+  # shipped pin is the coarse one; recorded.
   FIND [[    (cond ((counted-consume-node? n) (list (counted-consume-node-next n)))
           (else (zero-width-successors n))))]]
   REPLACE [[    (cond ((counted-consume-node? n) '())
@@ -6493,6 +6518,12 @@ byte_machine_mutation(
   LABEL "verify: classify drops the next half of the counted join"
   # A dispatch-shaped arm: the entry zero-count stop verifies CLEAN -- the hole
   # 0030 item 5 closes.
+  # The Slice ① sweep: also satisfied by "verify: an EOF-reachable stop terminal
+  # is accepted", "verify: default-error is promoted out of the benign tier",
+  # "verify: eof-reachable-stop is promoted into the benign tier" and "verify: the
+  # :909 walk does not start at the entry (D-1)" -- each unreports the entry
+  # zero-count stop by a tier or start-set change that sits above this arm in the
+  # walk. By construction.
   FIND [[                 (eof-verdict-join (dispatch-arm (counted-consume-node-eof-target n) path)
                                    (join-over (eof-successors n) path)))]]
   REPLACE [[                 (dispatch-arm (counted-consume-node-eof-target n) path))]]
@@ -6505,6 +6536,10 @@ byte_machine_mutation(
   LABEL "verify: classify drops the eof half of the counted join"
   # A zero-width-shaped arm: the self-targeting eof-target is no longer a cycle
   # but the stop behind `next`, a DIFFERENT wrong verdict from the arm's absence.
+  # The Slice ① sweep: also satisfied by "verify: an eof-target cycle is
+  # classified as a finish terminal" and "verify: cycle no longer outranks
+  # eof-reachable-stop in the join" -- both turn the self-eof cycle into the stop
+  # this half's absence turns it into. By construction (the join's ranking).
   FIND [[                 (eof-verdict-join (dispatch-arm (counted-consume-node-eof-target n) path)
                                    (join-over (eof-successors n) path)))]]
   REPLACE [[                 (join-over (eof-successors n) path))]]
@@ -7736,13 +7771,20 @@ byte_machine_mutation(
   FIND [[                (put-u8 p 14)]]
   REPLACE [[                (put-u8 p 13)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "a counted-consume machine's fingerprint is the measured golden value: fingerprint -- expected 8698736890881894294, got")
+  EXPECT_OUTPUT_MATCHES "a counted-consume machine's fingerprint is the measured golden value: fingerprint -- expected 8698736890881894294, got 16257961618954127535")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: a counted consume's field name is dropped from the encoding"
   # The accumulate arm writes the same put-symbol line; the FIND is unique
   # through its second line, which only this arm has.
+  # The Slice ① sweep: the three drift-pair pins here ("… field name …",
+  # "… successor …", "… EOF routing …") are also satisfied by "normal-ir: the
+  # FNV prime is changed" and "normal-ir: the byte is never mixed into the hash",
+  # which degenerate the hash so every pair collides; and the EOF-routing pin by
+  # "normal-ir: a counted consume's EOF edge is read as absent", which makes the
+  # node-routed variant encode as the base. By construction of a drift pair: any
+  # mutant that collapses two fingerprints satisfies a pin that expects them apart.
   FIND [[                (put-symbol p (car (normal-field-arguments s)))
                 (put-u32be p (car (normal-field-targets s)))]]
   REPLACE [[                (put-u32be p (car (normal-field-targets s)))]]
@@ -9159,6 +9201,9 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
   LABEL "ir: node-source-label answers #f for a counted-consume node"
+  # The Slice ① sweep: also satisfied by "ir: node? does not admit a
+  # counted-consume node" -- node-builders' one check conjoins node? with the
+  # label answer, so a kind node? refuses fails it the same way. By construction.
   FIND [[((counted-consume-node? x) (counted-consume-node-source-label x))]]
   REPLACE [[((counted-consume-node? x) #f)]]
   EXPECT_STATUS 1
@@ -12035,7 +12080,7 @@ byte_machine_mutation(
   FIND [[            "                (let ((n (min v (- end pos))))\n"]]
   REPLACE [[            "                (let ((n (- end pos)))\n"]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "generated: surplus into a rejection -- expected ..error 5 5 .*, got ..need-input")
+  EXPECT_OUTPUT_MATCHES "generated: surplus into a rejection -- expected ..error 5 5 .machine unexpected-byte .unexpected byte. reject 5 byte. error reject 0.., got ..need-input")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.counted.chez.source
@@ -12043,7 +12088,7 @@ byte_machine_mutation(
   FIND [[            "                  (vector-set! fieldv " slot " (- v n))\n"]]
   REPLACE [[            "                  (vector-set! fieldv " slot " v)\n"]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "generated: exact body -- expected .*comma 0.., got .*comma 3..")
+  EXPECT_OUTPUT_MATCHES "generated: exact body -- expected ..need-input 5 5 #f ready comma 0.., got ..need-input 5 5 #f ready comma 3..")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.counted.chez.source
@@ -12054,7 +12099,7 @@ byte_machine_mutation(
   FIND [[            "                  (if (= n v)\n"]]
   REPLACE [[            "                  (if (and (= n v) (< (+ pos n) end))\n"]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "generated: exact body -- expected .*comma 0.., got .*body 0..")
+  EXPECT_OUTPUT_MATCHES "generated: exact body -- expected ..need-input 5 5 #f ready comma 0.., got ..need-input 5 5 #f ready body 0..")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.counted.chez.source
