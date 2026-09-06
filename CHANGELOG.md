@@ -89,8 +89,8 @@ consumed one byte per step returns the same tuples as one consumed in bulk) and
 `:1608`'s field, cursor and offset clauses; a fifth committed golden and a
 both-lane differential over `§22.3:1254`'s cases and `§22.5`'s schedules join
 the suite. Slice ② (span interaction, pause at fragment boundaries, the
-close-out) is next; its `§10.6:603` placement oracle already discriminates, as
-one case here. No versioned release exists yet.
+close-out) is next; its `§10.6:603` placement oracle already holds here as one
+both-lane case, asserted as per-feed values. No versioned release exists yet.
 
 ### Added
 

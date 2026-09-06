@@ -1070,7 +1070,7 @@
                       (lambda () (sequence-case-source-label (case-on-0 't))))))))
 
 ;; `node-source-label` -- `node-name`'s shape for the other field every kind
-;; carries. Twelve kinds, one label each, from the kind x position census's own
+;; carries. Thirteen kinds, one label each, from the kind x position census's own
 ;; builder shapes; the census derives the cond's predicate set from ir.sls and
 ;; compares it to node?'s, so a missing arm fails there by comparison and here
 ;; by the else's raise.

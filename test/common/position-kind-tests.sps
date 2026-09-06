@@ -345,9 +345,10 @@
       (lambda ()
         ;; Sentinels read OBSERVED drives, never the driving list's own length:
         ;; the outer count proves every case ran, the inner one that each ran in
-        ;; both executors. FOURTEEN per process -- seven rows x two executors --
-        ;; and the paragraph said four and eight until the final review, having
-        ;; been left behind when the rows were added. Seven rows for three KINDS,
+        ;; both executors. TWENTY per process -- ten rows x two executors -- and
+        ;; the paragraph said four and eight until Milestone 5's final review,
+        ;; then fourteen until Milestone 6 Slice ① added three rows, having been
+        ;; left behind each time the rows were added. Ten rows for four KINDS,
         ;; because this table indexes PRODUCERS and not kinds: the accumulate row
         ;; is a second producer of `byte` (an unconsumed digit rather than a
         ;; reexecute mismatch), and the three callback-domain rows are three

@@ -1769,7 +1769,7 @@
 ;;
 ;; Decision 0021 item 5 split the kinds by "reads input" versus "zero-width", on
 ;; the reasoning that an input-reading node is always on the feed path. These
-;; twelve machines are the counterexample: all three input-reading kinds can be
+;; sixteen machines are the counterexample: all four input-reading kinds can be
 ;; EOF-only-reachable.
 (define (t2-hop kind)
   ;; The offender: a node of `kind` carrying a BYTE edge into the finish `fin`.
@@ -1849,7 +1849,7 @@
   (lambda ()
     (harness-case "an EOF-only-reachable byte edge into a finish is accepted"
       (lambda ()
-        ;; The half that fails today for the three input-reading kinds. The edge
+        ;; The half that fails today for the four input-reading kinds. The edge
         ;; is untakeable: once an execution takes an eof-target it can never feed
         ;; again, so no byte ever traverses it.
         (let ((seen 0) (bad '()))

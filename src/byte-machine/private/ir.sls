@@ -630,8 +630,10 @@
 
   ;; --- counted consume (Milestone 6 Slice ①; §9.1:311, §10.6:596-604,
   ;; §11.4:652). The thirteenth node kind, and the first that is INPUT-READING
-  ;; and ALSO has a route taken without consuming: a zero count transitions to
-  ;; `next` immediately (§10.6:600). Decision 0030 is where that one fact meets
+  ;; and ALSO has a route taken with no input present at all: a zero count
+  ;; transitions to `next` immediately (§10.6:600), at EOF and on an empty feed
+  ;; -- where accumulate's non-consuming overflow edge still needs a byte to
+  ;; examine. Decision 0030 is where that one fact meets
   ;; the verifier and both executors; here it is five parts and a shape. `next`
   ;; is mandatory -- a count that reaches zero always has somewhere to go -- and
   ;; `eof-target` follows the byte-dispatch convention, #f meaning the machine

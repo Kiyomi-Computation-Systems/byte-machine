@@ -62,7 +62,8 @@
     ;; rendered; finish, pause, span-start, span-end and span-completion were
     ;; not. All five are added here, so the row the design Appendix carries for
     ;; this fixture -- "must render EVERY emitted arm" -- is literally true at
-    ;; twelve of twelve rather than nearly true.
+    ;; twelve of twelve rather than nearly true. Milestone 6 Slice ① made it
+    ;; thirteen of thirteen: `cbody` below renders the counted-consume arm.
     ;;
     ;; The span arms are not inert: two render a `let` binding `o`, and
     ;; compile.sls's stated property that none of them binds a local beyond `o`

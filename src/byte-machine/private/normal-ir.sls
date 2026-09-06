@@ -577,9 +577,10 @@
                                         (list (id-of (integer-accumulate-node-digit-target n))
                                               (cons (id-of (edge-target nd)) (edge-mode nd))
                                               (id-of (integer-accumulate-node-overflow-error n))))))
-                             ;; Counted consume (Milestone 6 Slice ①), the second
-                             ;; INPUT-READING kind with an EOF route of its own,
-                             ;; and 1:1 like accumulate: `arguments` the field
+                             ;; Counted consume (Milestone 6 Slice ①), the fourth
+                             ;; INPUT-READING kind with an EOF route of its own
+                             ;; (after both dispatch kinds and accumulate), and
+                             ;; 1:1 like accumulate: `arguments` the field
                              ;; NAME (the emitter resolves name to slot),
                              ;; `targets` the one successor id, slot 6 the EOF
                              ;; routing in the shipped convention through its own

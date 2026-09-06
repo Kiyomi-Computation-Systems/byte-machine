@@ -899,7 +899,7 @@
                           ;; has somewhere to go, so `next` has no #f arm.
                           (lambda () (make-counted-consume-node 'cc 'n #f #f #f))))
           (check-equal "fourteen constructor refusals" refused 14)
-          ;; The three EOF routes, built rather than refused.
+          ;; The four EOF routes, built rather than refused.
           (for-each (lambda (th) (unless (raises? th) (set! accepted (+ accepted 1))))
                     (list (lambda () (make-byte-dispatch-node 'h
                                        (list (make-byte-case (make-exact-byte-matcher 0)

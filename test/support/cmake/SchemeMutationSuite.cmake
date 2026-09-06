@@ -1066,7 +1066,8 @@ cmake_minimum_required(VERSION 3.26)
 # runtime re-asking the op after a partial commit, caught only by the
 # count-step counter, and the finish arm asking the EOF route first, caught by
 # the entry-zero machine); one in unit.compile (the per-byte self-loop render,
-# caught only by the datum walk); one in the counted determinism pass (a quote
+# which every behavioural lane passes -- the datum walk catches it here, and the
+# counted golden would too, being bytes); one in the counted determinism pass (a quote
 # mark for `(quote …)`, caught only by the golden).
 #
 # Milestone 6 Slice ① task 2, the kind lowered, encoded and executed in both
@@ -8060,8 +8061,10 @@ byte_machine_mutation(
   LABEL "compile: the emitted counted arm renders a per-byte self-loop"
   # Behaviour-identical: one byte per iteration through the same state, the count
   # decremented each time, the zero-count and exhausted clauses unchanged -- so
-  # every behavioural lane passes, and only the datum walk over the emitted arm
-  # (no `min`, a `(+ pos 1)`) can see it. That is design §4.7's whole argument.
+  # every behavioural lane passes, and within this SPEC only the datum walk over
+  # the emitted arm (no `min`, a `(+ pos 1)`) can see it -- the committed counted
+  # golden, being bytes, would see the changed text too. That is design §4.7's
+  # argument: a differential is blind to it by construction.
   FIND [[            "                (let ((n (min v (- end pos))))\n"
             "                  (vector-set! fieldv " slot " (- v n))\n"
             "                  (if (= n v)\n"
