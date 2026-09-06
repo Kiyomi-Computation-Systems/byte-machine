@@ -2123,7 +2123,7 @@ close-out is to be checked against. Slices ③ and ④ do not qualify by default
 ③ adds spans and ④ the reference fixture and retention oracle, and neither
 changes the result record.
 
-**2026-09-05, Slice ④ — annotation, and the disposition this paragraph asked
+**2026-09-06, Slice ④ — annotation, and the disposition this paragraph asked
 for.** Two things. *The descriptor above is wrong and is not rewritten:* ④ ships
 `§27:1694`'s callback/span lifetime **reference**, a document, not `§21`'s HTTP
 **reference fixture**, which is Milestone 8's; the conclusion the sentence draws
@@ -2370,8 +2370,13 @@ Design §10 keeps `§16.2:886`'s label grammar off "the nine already-shipped
 kinds", and §4.12 item 2 covers the two new declaration families. Milestone 5's
 own three new NODE kinds — span-start, span-end and callback — are neither, and
 they carry a `source-label` that nothing checks. Nor do the machine itself, the
-uint fields, the error declarations or either case kind, but those at least fall
-under §10's exclusion by age; the three new node kinds fall under nothing. Owed
+uint fields, the error declarations or either case kind — and an earlier version
+of this note said "those at least fall under §10's exclusion by age", which is
+false. Design §10's exclusion names "the nine already-shipped **kinds**", and
+design `:106` defines the nine as `node?`'s nine node-kind disjuncts, so it
+reaches no non-node carrier at all. **EIGHT label carriers are excluded by
+nothing**, not three: the machine, uint fields, error declarations, both case
+kinds, and Milestone 5's own span-start, span-end and callback nodes. Owed
 by **whoever next widens `pass-declarations`' label arms, and failing that by
 Milestone 6's close-out**; written at that arm in `verify.sls` as well as here.
 Not closed now because §4.12 item 2 does not authorise it and inventing scope at
@@ -2383,6 +2388,31 @@ mutation pin, while `ir-tests.sps` asserted in prose that they were covered.
 Found while building the label clause next to them, and closed rather than
 recorded — a case AND a mutation pin for each family, after a first pass that
 pinned only one of the two while claiming both.
+
+**Four more things this milestone leaves open, found by a completeness check
+against the tree on 2026-09-06 and recorded here so none of them is silent.**
+Each now carries a note at the construct its receiver will open, which the first
+three did not.
+
+- **`§9.3:423`** — `make-callback-failure` must require "a symbolic code
+  satisfying the same portable ASCII name grammar"; it checks only `symbol?`. The
+  site was honest about the gap and named nobody. Receiver: whoever next gives
+  the runtime a shared portability predicate, failing that Milestone 6's
+  close-out. The real question is where that predicate should live, since
+  `verify.sls`'s `valid-name?` is in a library the runtime does not import.
+- **`pass-reachability` over-approximates** — it crosses an eof-target and keeps
+  taking byte edges, so a node reachable only through an untakeable EOF edge
+  still counts as reached. Recorded in decisions 0023 and 0027, design §4.5 and
+  this document, and — until now — in no source file, which is the failure this
+  milestone added a standard against. Decision 0027 says it is "handed to
+  nobody" and that "item 3's verdict change is the first thing that depends on
+  the answer"; Milestone 5 shipped that verdict change.
+- **`§16.2:911`** ("backend limits that would make emission incorrect") — named
+  in §4.11 as an orphan with no owner in any milestone, and still one.
+- **`§25:1590`'s universal is not established by the tree.** What ships is an
+  eleven-row enumerated table plus a fourteen-case lattice group, and the test
+  file says so at its own header. The generator that would make "every" literal
+  is Milestone 7's by name.
 
 **Also handed on:** `§27:1694`'s callback/span lifetime reference shipped as
 [docs/reference/callback-span-lifetime.md](../reference/callback-span-lifetime.md).

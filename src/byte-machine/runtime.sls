@@ -233,7 +233,7 @@
   ;; enforcing this re-baselines a tuple in most of the differential programs --
   ;; is unaffected, and is why it was deferred.)
   ;;
-  ;; Milestone 5's close-out (Slice ④, 2026-09-05) disposed it as DEFERRED with
+  ;; Milestone 5's close-out (Slice ④, 2026-09-06) disposed it as DEFERRED with
   ;; the receiver named as "the next slice that changes this record's shape".
   ;; The adjudication is in `docs/plans/byte-machine-implementation-plan.md`
   ;; under the `### §12.3:711` disposition -- NOT under §12.7, which is the
@@ -543,6 +543,17 @@
   ;; half. Recorded rather than silently narrowed: closing it means either
   ;; duplicating the grammar here or routing application codes through a check
   ;; that does not exist, and neither is this slice's to choose.
+  ;;
+  ;; *** RECEIVER, added by Milestone 5's completeness check 2026-09-06. *** The
+  ;; paragraph above was honest about the gap and named nobody, which makes it a
+  ;; deferral with one end -- the exact shape this milestone added a standard
+  ;; against. `§9.3:423` requires the code to satisfy the portable ASCII name
+  ;; grammar and this constructor checks only `symbol?`. Owed by **whoever next
+  ;; gives the runtime a shared portability predicate, and failing that by
+  ;; Milestone 6's close-out**; note that `verify.sls`'s `valid-name?` is the
+  ;; grammar in question but lives in a library the runtime does not import, so
+  ;; the real question is where that predicate should live rather than whether
+  ;; to copy it.
   (define (make-callback-failure code detail)
     (unless (symbol? code)
       (byte-machine-contract-violation 'make-callback-failure 'invalid-argument 'code))
