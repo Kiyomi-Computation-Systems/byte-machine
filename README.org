@@ -99,8 +99,16 @@ of a thousand bytes is one step in either lane — witnessed structurally, since
 behavioural comparison can tell bulk from byte-at-a-time — a zero count
 transitions before exhaustion is even asked, count completion wins when input
 runs out at the same byte, and the verifier treats the successor as both an EOF
-route and a non-consuming edge because it cannot see the count. What remains of
-the milestone is the span interaction and the close-out.
+route and a non-consuming edge because it cannot see the count. Slice ② closed
+the milestone the same day: the same body inside a span, with the fragment trace
+asserted feed by feed under forty-five schedules in both lanes — the completion
+event lands in the feed that delivered the last body byte, a value no comparison
+between the two executors could have seen, since a wrong reading is wrong in
+both — a body-shaped arm in the retention lane, and the close-out: every scope
+bullet and exit criterion dispositioned against the tree, nothing the milestone
+approved left unshipped, and the one thing it declined to do (narrowing the
+verifier's reachability pass) handed to Milestone 7 with both ends written.
+Milestone 7 (verification and generative hardening) is next.
 
 =src/byte-machine/= holds the construction API, the verifier, the normalizer and
 emitter, the reference interpreter, and the runtime, each exercised in both the

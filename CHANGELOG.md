@@ -88,9 +88,16 @@ zero-progress edge while a parser parked on the node resumes on its EOF route.
 consumed one byte per step returns the same tuples as one consumed in bulk) and
 `:1608`'s field, cursor and offset clauses; a fifth committed golden and a
 both-lane differential over `§22.3:1254`'s cases and `§22.5`'s schedules join
-the suite. Slice ② (span interaction, pause at fragment boundaries, the
-close-out) is next; its `§10.6:603` placement oracle already holds here as one
-both-lane case, asserted as per-feed values. No versioned release exists yet.
+the suite. Slice ② closed the milestone **2026-09-06**: `§25:1599` and `:1600`
+by the counted-span differential — the six `§14` fragment rules over a counted
+body, `§10.6:603`'s completion placement asserted per feed against a table
+derived from each of forty-five schedules before the run, same-schedule
+exactness, coalesced invariance and the error path — a body-shaped arm in the
+retention lane, and the close-out: the `§25:1593-1609` disposition against the
+tree, `§4.11`'s five obligations disposed, and the reachability narrowing handed
+to Milestone 7 under `§25:1611` with both ends written. No mechanism was added:
+the slice's source diff is one comment. Milestone 7 (verification and generative
+hardening) is next. No versioned release exists yet.
 
 ### Added
 

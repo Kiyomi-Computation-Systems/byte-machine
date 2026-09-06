@@ -1,12 +1,16 @@
 # Milestone 6 Design — Counted consumption
 
-**Status: in progress.** Slice ⓪ delivered 2026-09-06 (PR #77: four source commits — the three
+**Status: CLOSED 2026-09-06.** Slice ② delivered 2026-09-06 on `feat/m6-slice-2` (two commits: the
+counted-span lane with its retention arm, and the close-out; 114/114, 58 passes / 522 mutations)
+and closed the milestone; the parent plan's "§25:1593-1609 — Milestone 6 closes, dispositioned
+against the tree" records every criterion, and "§25:1611 — Milestone 6 hands the reachability
+narrowing to Milestone 7" the one deferral. Before it: Slice ⓪ delivered 2026-09-06 (PR #77: four source commits — the three
 planned and one the pin sweep required — and a documentation commit); Gate 0 discharged 2026-09-06 as decision 0030
 (PR #76 = `0247ece`; §4's blockquote and §9's first bullet carry the discharge); Slice ① delivered
 2026-09-06 on `feat/m6-slice-1` (three planned source commits, a documentation commit and the pin
 sweep's commit; 112/112, 57 passes /
 520 mutations) — the parent plan's disposition "§25:1597-1603 and §25:1607-1609 — Milestone 6 Slice ①,
-delivered" records it; Slice ② is next. Milestone 5 closed 2026-09-06 with Slice ④ (PR #71 =
+delivered" records it. Milestone 5 closed 2026-09-06 with Slice ④ (PR #71 =
 `6bfa8ed`); its close-out audit (PR #72 = `6bc1aca`) and completeness check (PR #73 =
 `b470665`) followed the same day. This document is written against **`b470665`** on branch
 `docs/milestone-6-design`, `main` at the same commit, tree clean. Measured on 2026-09-06 by
@@ -33,6 +37,16 @@ re-measured at plan-writing time (§9).
 > slice, a resolution a slice must implement — is corrected in place, because leaving a false
 > one is a landmine and what it used to say is in git. Later dated notes are indexed here,
 > newest first, each naming the section it amends.
+>
+> **2026-09-06, Slice ② delivered; the milestone closes** — **corrects §7, §4.11 and §8 in
+> place**, all instructions, each where the slice measured what this document had derived: §7's
+> oracle 4 is not "every hunk in those two files is a comment" but an EMPTY five-library diff
+> (the receiver notes it expected the close-out to rewrite were rewritten by ⓪ and ①); §4.11
+> item 5's precedent sentence (Milestone 5's Slice ⓪ "handing its generator work to Milestone
+> 7") described dispositions that record deliveries, not hand-offs — this milestone's `§25:1611`
+> disposition is the first under that heading that hands something over; §8's reachability
+> bullet and the Exit table's `:1608` fragment clause and `:1609` span variant get their dates.
+> The Status header moved with it.
 >
 > **2026-09-06, Slice ① delivered** — **corrects §4.10, §6, §9 and the appendix in place**, all
 > instructions, each where the slice measured what this document had derived: `count-next` is a
@@ -752,8 +766,11 @@ that defers names both ends.
    narrow it; §8 prices the narrowing and **defers it to Milestone 7**, whose scope is
    "generative and diagnostic hardening of all mandatory verification passes" (`§25:1615`),
    with both ends: the source note re-addressed to Milestone 7, and an appended disposition
-   under the parent plan's `§25:1611` heading — the same shape Milestone 5's Slice ⓪ used to
-   hand its generator work to Milestone 7, and the place Milestone 7's designer reads first.
+   under the parent plan's `§25:1611` heading — Milestone 7's own subsection, the place its
+   designer reads first (the two Milestone 5 dispositions already there record deliveries;
+   this is the first that hands something over). **Deferred 2026-09-06 by Slice ②**, both ends
+   written: the note above `pass-reachability` names Milestone 7 and the adjudication, and
+   "§25:1611 — Milestone 6 hands the reachability narrowing to Milestone 7" carries §8's pricing.
 
 `§16.2:911` ("backend limits that would make emission incorrect") remains an orphan with no
 owner in any milestone, as Milestone 5's §4.11 and close note record. Naming it is not
@@ -1014,6 +1031,8 @@ body fragment boundaries), exit `:1608`'s **fragment** clause and exit `:1609`'s
 variant** (two completion events in one feed's trace — ① discharges the criterion itself), and
 writes the milestone's close note as an appended disposition. It adds **no mechanism** (§4.8):
 every rule it exercises already runs at the `parser-feed!` seam or in the span-end substeps.
+**Delivered 2026-09-06** on `feat/m6-slice-2`, against `8ec814f`, as two commits; plan
+`docs/plans/milestone-6-slice-2-implementation-plan.md` (PR #80 = `424d318`).
 
 **The work.**
 
@@ -1066,12 +1085,13 @@ every rule it exercises already runs at the `parser-feed!` seam or in the span-e
 3. **The placement value** (`§10.6:603`): per feed, per schedule, against a table derived from
    the schedule and the body length before the run — the one assertion in this milestone that
    lane agreement cannot stand in for.
-4. **No mechanism added**: between ①'s merge and ②'s head, the feed and finish wire-kind
-   `case`s in `src/byte-machine/runtime.sls` and `render-state-arm` in
-   `src/byte-machine/compile.sls` are byte-identical, and every hunk `git diff` shows in those
-   two files is a comment — the close-out rewrites the receiver notes at `make-callback-failure`
-   and the `field-action` arm (§4.11 items 1 and 3), which is prose. A code hunk means §4.8 was
-   wrong and this document is amended before the code lands.
+4. **No mechanism added**: between ①'s merge and ②'s head, `git diff` over
+   `src/byte-machine/runtime.sls`, `compile.sls`, `interpret.sls`, `private/normal-ir.sls` and
+   `private/ir.sls` prints **nothing** — the receiver notes at `make-callback-failure` and the
+   `field-action` arm this oracle first expected the close-out to rewrite were rewritten by
+   Slices ⓪ and ① (§4.11 items 3 and 1), so the slice's only `src/` hunk is the deferral's
+   comment at `pass-reachability`. A code hunk means §4.8 was wrong and this document is amended
+   before the code lands. *(Corrected in place by Slice ②, which measured the diff empty.)*
 
 ---
 
@@ -1084,8 +1104,8 @@ that meets it — never reworded to match what shipped.
 | Criterion | Allocated to | What will meet it |
 | --- | --- | --- |
 | **:1607** — "counted consume does not dispatch once per body byte" | **①** | §4.7's two structural witnesses: the datum walk over the emitted arm (one `min`, no `(+ pos 1)`) in `compile-tests.sps`, and the op-message count (one `count-step` per feed for a thousand-byte body) in `differential-counted-tests.sps`. Stated at close: the differential lanes are blind to this criterion by construction, and neither witness is a differential. **Disposed 2026-09-06 (Slice ①):** both witnesses ship — `compile-tests.sps` "the counted arm consumes in bulk (§25:1607, a structural witness)" and `differential-counted-tests.sps` "the structural witness: one count-step per feed" — each with a mutant every behavioural lane passes. |
-| **:1608** — "field, cursor, fragment, and offset results match the interpreter for every case" | **① and ②**, in clauses | ① discharges *field, cursor and offset* over `§22.3:1254`'s four cases × `§22.5:1278-1283`'s schedules, each lane against an expected value and against the other. ② discharges *fragment* over the span-enclosed machine's schedules, per-feed and coalesced, with the `§10.6:603` placement value. "Every case" is read as the four named cases under every schedule the shipped span differential drives; the property lane is not extended (§8). **Disposed 2026-09-06 (Slice ①), the field, cursor and offset clauses:** every case in `differential-counted-tests.sps` asserts the count, the consumed length and the stream offset per lane against expected values, then across lanes; the fragment clause is Slice ②'s, its oracle validated as one case. |
-| **:1609** — "surplus bytes continue immediately into the next node/message" | **①**, with ②'s span variant | ①: one feed carrying `3:abc,0:,` reports `consumed` equal to the whole slice, the second message parsed to completion, both in one result. ②: the same schedule with the span open records two completion events in one feed's trace. **Disposed 2026-09-06 (Slice ①):** "surplus: 3:abc,0:, in one feed reports both messages in one result", consumed 9, the second message parsed to completion; the span variant is Slice ②'s. |
+| **:1608** — "field, cursor, fragment, and offset results match the interpreter for every case" | **① and ②**, in clauses | ① discharges *field, cursor and offset* over `§22.3:1254`'s four cases × `§22.5:1278-1283`'s schedules, each lane against an expected value and against the other. ② discharges *fragment* over the span-enclosed machine's schedules, per-feed and coalesced, with the `§10.6:603` placement value. "Every case" is read as the four named cases under every schedule the shipped span differential drives; the property lane is not extended (§8). **Disposed 2026-09-06 (Slice ①), the field, cursor and offset clauses:** every case in `differential-counted-tests.sps` asserts the count, the consumed length and the stream offset per lane against expected values, then across lanes; the fragment clause is Slice ②'s, its oracle validated as one case. **Disposed 2026-09-06 (Slice ②), the fragment clause:** `differential-counted-span-tests.sps` — identical per-feed traces in both lanes under forty-five schedules, coalesced traces invariant, the completion's placement per feed against a table derived from each schedule. |
+| **:1609** — "surplus bytes continue immediately into the next node/message" | **①**, with ②'s span variant | ①: one feed carrying `3:abc,0:,` reports `consumed` equal to the whole slice, the second message parsed to completion, both in one result. ②: the same schedule with the span open records two completion events in one feed's trace. **Disposed 2026-09-06 (Slice ①):** "surplus: 3:abc,0:, in one feed reports both messages in one result", consumed 9, the second message parsed to completion; the span variant is Slice ②'s. **Disposed 2026-09-06 (Slice ②), the span variant:** "§25:1609's span variant: two messages in one feed, two completions in one trace" — `((data 3) complete complete)` in both lanes. |
 
 ---
 
@@ -1105,8 +1125,9 @@ that meets it — never reworded to match what shipped.
   flips; and the matrix's pruning count ("exactly three cells prune the sink") moves, because a
   sink reached only through a placed node's EOF route stops being reached. That is a verifier
   behaviour change with a re-baseline across three test files, in a milestone about a node kind.
-  **Deferred to Milestone 7** (`§25:1615`), with both ends written by Slice ②: the note at
-  `pass-reachability` re-addressed, and an appended disposition under `§25:1611`.
+  **Deferred to Milestone 7** (`§25:1615`), with both ends written by Slice ② on 2026-09-06: the
+  note at `pass-reachability` re-addressed, and the appended disposition "§25:1611 — Milestone 6
+  hands the reachability narrowing to Milestone 7".
 - **`§16.2:911`** — an orphan with no owner in any milestone (§4.11).
 - **Additional field types** and any "incompatible field" content beyond resolution —
   `§29:1754` (§4.3).
