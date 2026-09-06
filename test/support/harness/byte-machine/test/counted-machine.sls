@@ -14,7 +14,7 @@
 ;;; the colon. Slice ② wraps `body` in a span; nothing here changes for it.
 (library (byte-machine test counted-machine)
   (export make-counted-machine make-only-consumer-machine make-entry-zero-machine
-          make-big-count-machine)
+          make-big-count-machine make-counted-span-machine)
   (import (rnrs)
           (byte-machine graph))
 
@@ -99,6 +99,57 @@
                         (make-error-declaration 'empty 'unexpected-byte "empty body rejected" #f))
                   (list (make-counted-consume-node 'body 'len 'bad #f #f)
                         (make-error-node 'bad 'empty #f))
+                  'default-eof #f))
+
+  ;; Slice ②'s machine: the same loop with `body` wrapped in a span --
+  ;; `:` -> `open` -> `body` -> `close` -> `,` -- §21.3:1145's fixed-body shape.
+  ;; TWO variants, because the emitter renders two span-completion arms and only
+  ;; one is a call (§10.4:516 makes the completion callback optional): `complete?`
+  ;; declares `on-done` and names it in the span. The machine NAME differs per
+  ;; variant so both generated libraries can be resident at once. `body`'s EOF
+  ;; route is its OWN truncation node: the shared one is reached with no span
+  ;; open, and pass 7 rejects one node carrying both states.
+  (define (make-counted-span-machine complete?)
+    (make-machine (if complete? 'spanfull 'spanbare) 'idle
+                  (list (make-uint-field 'len 32 0 #f))
+                  (append (list (make-callback-declaration 'on-data 'span-data #t '() #f #f))
+                          (if complete?
+                              (list (make-callback-declaration 'on-done 'span-complete #t '() #f #f))
+                              '()))
+                  (list (make-span-declaration 'sp 'on-data (if complete? 'on-done #f) #f))
+                  (decls)
+                  (list
+                   (make-byte-dispatch-node
+                    'idle
+                    (list (make-byte-case (make-byte-range-matcher 48 57)
+                                          (make-edge 'len 'reexecute) #f))
+                    (make-edge 'reject 'reexecute)
+                    'fin #f)
+                   (make-integer-accumulate-node
+                    'len 'len 10 'len
+                    (make-edge 'colon 'reexecute)
+                    'over 'trunc #f)
+                   (make-byte-dispatch-node
+                    'colon
+                    (list (make-byte-case (make-exact-byte-matcher 58)
+                                          (make-edge 'open 'advance) #f))
+                    (make-edge 'reject 'reexecute)
+                    'trunc #f)
+                   (make-span-start-node 'open 'sp 'body #f)
+                   (make-counted-consume-node 'body 'len 'close 'trunc2 #f)
+                   (make-span-end-node 'close 'sp 'comma #f)
+                   (make-byte-dispatch-node
+                    'comma
+                    (list (make-byte-case (make-exact-byte-matcher 44)
+                                          (make-edge 'clear 'advance) #f))
+                    (make-edge 'reject 'reexecute)
+                    'trunc #f)
+                   (make-field-action-node 'clear 'clear '(len) 'idle #f #f)
+                   (make-finish-node 'fin #f)
+                   (make-error-node 'trunc 'truncated #f)
+                   (make-error-node 'trunc2 'truncated #f)
+                   (make-error-node 'over 'too-long #f)
+                   (make-error-node 'reject 'rejected #f))
                   'default-eof #f))
 
   ;; A u64 count above the fixnum range: the subtraction is bignum arithmetic

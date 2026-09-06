@@ -1113,6 +1113,32 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-counted-tests.sps"
   TIMEOUT 120)
 
+# --- Milestone 6 Slice ②: the counted body inside a span, both lanes ----------
+# The fragment trace with per-feed event placement over every schedule: the six
+# §14 rules over a counted body, §10.6:603's placement asserted against a table
+# derived from the schedule before the run, §22.5's exactness and coalesced
+# invariance, the error path, and §25:1609's span variant. No mechanism is added
+# by the slice; this lane is its oracle. Both lanes list counted-machine.sls.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.counted-span.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-counted-span-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/counted-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-counted-span-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.counted-span.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-counted-span-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/counted-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-counted-span-tests.sps"
+  TIMEOUT 120)
+
 # --- Milestone 5 Slice ④: the input-retention oracle (§25:1591) --------------
 # The lane Slice ③'s liveness probe was brought forward FOR. Unlike that probe,
 # this one imports `byte-machine` source and drives a real parser, so it is
