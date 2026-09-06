@@ -78,7 +78,11 @@ open when =parser-finish!= is called and closed on the EOF chain, a reset while
 parked between the span-end substeps, and a reset of a poisoned parser with a
 span still open — and shipped the first of the plan's documentation
 deliverables, [[file:docs/reference/callback-span-lifetime.md][the callback and
-span lifetime reference]].
+span lifetime reference]]. Closing the milestone also turned up a check the
+project had approved at the milestone's design gate and then simply lost: the
+verifier now rejects a callback or span declaration whose optional diagnostic
+label falls outside the portable repertoire, which is a rule the plan has always
+required and nothing had ever enforced for any declaration.
 
 Milestone 6 (counted consumption) is next.
 

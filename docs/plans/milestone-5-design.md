@@ -634,6 +634,13 @@ approval was of a fact rather than a feeling.
    keys. So Milestone 5 adds two label-bearing families to a check that does not exist. **The
    proposal is the check for M5's two families only**; retrofitting the other nine is a separate
    question and is not proposed here.
+
+   **DISCHARGED 2026-09-05 by Slice ④, the close-out — and it had been dropped.** No slice plan
+   picked this item up, so it was in no exit criterion and on no deferral list, and it was found
+   only by the whole-branch review asking what the milestone had approved that the tree did not
+   contain. It ships as a second call site of `valid-reason?` folded into each family's existing
+   name-clause `and`: no new diagnostic code, and a census that does not move. See the parent
+   plan's Milestone 5 close note, "One approved scope item nearly did not ship".
 3. **APPROVED 2026-09-04, for Slice ④. `§27:1694`'s "callback/span lifetime reference" has no
    owner.** `§28:1725` lists explicit
    consumer documentation as one of four mitigations for the retention risk. The other three —

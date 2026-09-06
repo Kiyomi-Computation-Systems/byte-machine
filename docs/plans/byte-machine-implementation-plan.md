@@ -1,6 +1,6 @@
 # Byte Machine Implementation Plan
 
-Status: milestones 0, 1, 2, 3, 4, and 5 are closed — 0 on 2026-08-22 ([the spike](./milestone-0-portability-spike.md), [the close-out](./milestone-0-close-out.md), [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md)), 1 on 2026-08-23 ([milestone-1-design.md](./milestone-1-design.md)), 2 on 2026-08-29 ([milestone-2-design.md](./milestone-2-design.md)), and 3 on 2026-08-30 ([milestone-3-design.md](./milestone-3-design.md)); each of those four carries a dated close note under its own §25 subsection below, and each of those cites where its exit criteria are dispositioned. Milestone 3 was delivered as a Gate 0 plus three slices: Slice ① (byte classes) closed 2026-08-29, Slice ② (sequence dispatch and prefix lowering) closed 2026-08-30, and Slice ③ (multiple alternatives, ambiguity, and cycle analysis) closed 2026-08-30 with the milestone. Milestone 4 (fields, actions, and branches) closed 2026-09-03, delivered as a Gate 0 plus four slices: Gate 0 discharged 2026-08-31 (decisions 0018-0022), Slice ①a — the unversioned generated-ABI constructor, normalized encoding format 2, and the `parser-error` family — 2026-09-02, Slice ①b (field declarations, storage, and `parser-field-ref`) 2026-09-02, Slice ② (field action and field branch) 2026-09-03, and Slice ③ (integer accumulation) 2026-09-03 with the milestone; its close note is a dated disposition, not a §25 subsection. Milestone 5 (callbacks, poisoning, and spans) closed 2026-09-05, delivered as a Gate 0 plus two hardening slices plus five slices; like Milestone 4's, its close note is a dated disposition rather than a §25 subsection. Two hardening slices ran first — Slice ⓪ (the verifier's kind × position matrix and the diagnostic-code census) and Slice ⓪b (the EOF walk cluster), both closed 2026-09-04 and both dispositioned below — then Gate 0 discharged 2026-09-04 as decisions 0024-0029, Slice ①a (the seam: ABI 4, `exec`'s two reserved parameters) landed 2026-09-04, and Slice ①b (callback and span declarations, binding resolution, five `§9.3` exports) landed 2026-09-04. Slice ② (the callback-invocation node: the tenth node kind, `§13:803-808`'s four outcomes through one shared classifier, `§12.2`'s `busy` and `poisoned` rows, `§12.6:749`'s `dynamic-wind` poisoning, and `parser-state-name` on generated ABI 5) landed 2026-09-05. Slice ③ (spans: the eleventh and twelfth node kinds, pass 7's span-state lattice over decision 0029's flat domain, `§16.2:898`'s reachability gate, wire tags 11-13 and the second internal-state family, `§14:831-843`'s fragment rules executing in both lanes behind `§19.3:1024`'s boundary flush, and the `§22.5` oracle) landed 2026-09-05. Slice ③ also shipped three behavioural fixes its own census and final review found — a span end that was not treated as a parked state, a span node naming an undeclared span that verified clean and then raised out of the normalizer, and `§12.7:770`'s callback-failure half, which BOTH LANES reported wrongly and the cross-lane comparison therefore could not see — plus two coverage holes closed in its own new lane; the zero-width-machine-action half of that same `§12.7:770` row is measured, still wrong, and dispositioned below with two receivers. Slice ④ (the retention oracle with its negative control, the measured remainder of the EOF and reset fragment legs, and §27:1694's callback/span lifetime reference — the first §27 deliverable in the tree) landed 2026-09-05 and closed the milestone. It also disposed the two obligations that named “Milestone 5's close-out” as their receiver — §12.7:770's zero-width-machine-action half and §9.3:392-393's parser-result enforcement — as deferred, with each written at the source construct its receiver will open rather than only here. Decisions amended by 0005 (Chez-only) via [chez-only-simplification.md](./chez-only-simplification.md) §2, and by 0006 (inline libraries)
+Status: milestones 0, 1, 2, 3, 4, and 5 are closed — 0 on 2026-08-22 ([the spike](./milestone-0-portability-spike.md), [the close-out](./milestone-0-close-out.md), [decision 0007](../decisions/0007-milestone-0-closes-at-the-harness.md)), 1 on 2026-08-23 ([milestone-1-design.md](./milestone-1-design.md)), 2 on 2026-08-29 ([milestone-2-design.md](./milestone-2-design.md)), and 3 on 2026-08-30 ([milestone-3-design.md](./milestone-3-design.md)); each of those four carries a dated close note under its own §25 subsection below, and each of those cites where its exit criteria are dispositioned. Milestone 3 was delivered as a Gate 0 plus three slices: Slice ① (byte classes) closed 2026-08-29, Slice ② (sequence dispatch and prefix lowering) closed 2026-08-30, and Slice ③ (multiple alternatives, ambiguity, and cycle analysis) closed 2026-08-30 with the milestone. Milestone 4 (fields, actions, and branches) closed 2026-09-03, delivered as a Gate 0 plus four slices: Gate 0 discharged 2026-08-31 (decisions 0018-0022), Slice ①a — the unversioned generated-ABI constructor, normalized encoding format 2, and the `parser-error` family — 2026-09-02, Slice ①b (field declarations, storage, and `parser-field-ref`) 2026-09-02, Slice ② (field action and field branch) 2026-09-03, and Slice ③ (integer accumulation) 2026-09-03 with the milestone; its close note is a dated disposition, not a §25 subsection. Milestone 5 (callbacks, poisoning, and spans) closed 2026-09-05, delivered as a Gate 0 plus two hardening slices plus five slices; like Milestone 4's, its close note is a dated disposition rather than a §25 subsection. Two hardening slices ran first — Slice ⓪ (the verifier's kind × position matrix and the diagnostic-code census) and Slice ⓪b (the EOF walk cluster), both closed 2026-09-04 and both dispositioned below — then Gate 0 discharged 2026-09-04 as decisions 0024-0029, Slice ①a (the seam: ABI 4, `exec`'s two reserved parameters) landed 2026-09-04, and Slice ①b (callback and span declarations, binding resolution, five `§9.3` exports) landed 2026-09-04. Slice ② (the callback-invocation node: the tenth node kind, `§13:803-808`'s four outcomes through one shared classifier, `§12.2`'s `busy` and `poisoned` rows, `§12.6:749`'s `dynamic-wind` poisoning, and `parser-state-name` on generated ABI 5) landed 2026-09-05. Slice ③ (spans: the eleventh and twelfth node kinds, pass 7's span-state lattice over decision 0029's flat domain, `§16.2:898`'s reachability gate, wire tags 11-13 and the second internal-state family, `§14:831-843`'s fragment rules executing in both lanes behind `§19.3:1024`'s boundary flush, and the `§22.5` oracle) landed 2026-09-05. Slice ③ also shipped three behavioural fixes its own census and final review found — a span end that was not treated as a parked state, a span node naming an undeclared span that verified clean and then raised out of the normalizer, and `§12.7:770`'s callback-failure half, which BOTH LANES reported wrongly and the cross-lane comparison therefore could not see — plus two coverage holes closed in its own new lane; the zero-width-machine-action half of that same `§12.7:770` row is measured, still wrong, and dispositioned below with two receivers. Slice ④ (the retention oracle with its negative control, the measured remainder of the EOF and reset fragment legs, and §27:1694's callback/span lifetime reference — the first §27 deliverable in the tree) landed 2026-09-05 and closed the milestone. It also disposed the two obligations that named “Milestone 5's close-out” as their receiver — §12.7:770's zero-width-machine-action half and §9.3:392-393's parser-result enforcement — as deferred, with each written at the source construct its receiver will open rather than only here; and it built §16.2:886's label-grammar check for the two new declaration families, an owner-approved §4.12 item that no slice had picked up and that neither completeness sweep could see. Decisions amended by 0005 (Chez-only) via [chez-only-simplification.md](./chez-only-simplification.md) §2, and by 0006 (inline libraries)
 
 Date: 2026-08-15
 
@@ -2316,36 +2316,55 @@ open (`compile.sls`'s `field-action` arm, `interpret.sls`'s `field-step`, and
 `runtime.sls`'s `make-parser-result`), each pointing back to its adjudication
 here. A deferral recorded only in this document is a deferral with one end.
 
-**One approved scope item did NOT ship, and it is recorded here because nothing
-else would have recorded it.** `milestone-5-design.md` §4.12 **item 2** —
+**One approved scope item nearly did not ship, and the way it nearly escaped is
+the part worth keeping.** `milestone-5-design.md` §4.12 **item 2** —
 `§16.2:886`'s label-grammar check, *"APPROVED 2026-09-04, scoped to Milestone 5's
-two new declaration families"*, and reaffirmed at design `:1031` (*"items 1-3
-approved … Slice plans may proceed on that basis"*). Items 1 and 3 shipped
-(`ir.sls`'s collection guards; this milestone's reference document). Item 2
-shipped nowhere: measured at close, `rg 'label' src/byte-machine/verify.sls`
-returns three hits, all comments about `§16.4:940`'s *diagnostic edge* label, and
-no pass reads `callback-declaration-source-label` or its span sibling. `§10.1:480`
-puts labels under a different grammar from names — printable ASCII plus LF,
-against `[a-z][a-z0-9-]*` — so two label-bearing families were added to a check
-that does not exist.
+two new declaration families"*, reaffirmed at design `:1031`. Items 1 and 3
+shipped; item 2 was in no slice plan, no exit criterion and no deferral list, and
+at close it was implemented nowhere: `§10.1:480` puts labels under a different
+grammar from names — printable ASCII plus LF, against `[a-z][a-z0-9-]*` — and two
+label-bearing families had been added to a check that did not exist.
 
-**Why it escaped every sweep, which is the part worth keeping.** It is not a
-deferral. Nobody owed it to anybody: it was an owner approval that no slice plan
-picked up, so it appears in no "obligations owed to the close-out" search and in
-no exit criterion. **An approval with no receiver is invisible to both of this
-milestone's completeness mechanisms.** The close-out sweep that found it was a
-whole-branch review asking "what did the milestone approve that the tree does not
-contain" — a question neither the exit-criteria walk nor the deferral sweep asks.
+**Why it escaped every sweep.** It is not a deferral. Nobody owed it to anybody:
+it was an owner approval that no slice picked up, so it appears in no
+"obligations owed to the close-out" search and in no exit criterion. **An
+approval with no receiver is invisible to both of this milestone's completeness
+mechanisms.** It was found by a whole-branch review asking a third question —
+what did this milestone approve that the tree does not contain — and that
+question is now `AGENTS.md`'s.
 
-**Disposition: DEFERRED, receiver named.** The cost is contained and measured
-against Slice ③'s `missing-span-declaration`, which is the exact template: one
-`pass-declarations` arm, one diagnostic code, one row in the
-`diagnostic-census-tests.sps` census with its site count, one `verify-tests.sps`
-case, and a mutation pin. It is owed by **whoever next edits `pass-declarations`,
-and failing that by Milestone 6's close-out**, and — this milestone's own standard
-— the obligation is written at `verify.sls`'s `pass-declarations` as well as here.
-Deferring an owner-approved item is a choice, and this paragraph is what the next
-close-out is to be checked against.
+**DISCHARGED 2026-09-05, and it cost less than the deferral would have.** The
+check is a second call site of the shipped `valid-reason?`, whose repertoire is
+already exactly `§10.1:480`'s, **folded into each family's existing name-clause
+`and`** rather than added as its own arm — Milestone 4's shape for the same
+bullet's reason clause, which reports once for a declaration bad in several ways
+and which `verify-tests.sps` witnesses. So: **no new diagnostic code, and the
+diagnostic census does not move** — `(invalid-name 6)` stays 6, measured by
+running it rather than assumed. Three mutation pins, each measured from a staged
+mutant, and the two of them that break different families are pinned on the cases
+that separate their record sets.
+
+Three things it settles that `§4.12` item 2 did not, each recorded at the
+predicate. `#f` is absence and passes, since `§10.3:506` and `§10.4:517` both say
+only "optional diagnostic label". A label may be a **symbol** (every label in the
+tree is one) or a string. Anything else is rejected — a label the diagnostic
+reporter cannot render is not a machine that verified clean — but that is a shape
+fault reported under a portability code, and it is the one judgment left open.
+
+**And the warrant is narrower than `§10.1:480` reads.** That sentence qualifies
+itself: "labels and reasons embedded in **generated output**". Measured, a label
+is embedded in nothing — `compile.sls` reads no `source-label` — so unlike a
+nonportable reason, which since Slice ①a is an unparseable generated library, a
+nonportable label cannot corrupt emission today. What it corrupts is `§16.4:940`'s
+diagnostic report, a label's only consumer. `§16.2:886` requires the rejection
+either way; saying so at the site keeps the next reader from inheriting a
+stronger claim than the tree supports.
+
+**Two arms beside it were closed in the same commit.** `§16.2:886`'s name clause
+for the two families shipped in Slice ①b with no `verify-tests` case and no
+mutation pin, while `ir-tests.sps` asserted in prose that they were covered.
+Found while building the label clause next to them, and closed rather than
+recorded.
 
 **Also handed on:** `§27:1694`'s callback/span lifetime reference shipped as
 [docs/reference/callback-span-lifetime.md](../reference/callback-span-lifetime.md).

@@ -60,7 +60,13 @@ between the span-end substeps, and a reset of a poisoned parser with a span open
 — shipped `§27:1694`'s callback/span lifetime reference as the first `§27`
 deliverable in the tree, and disposed the two obligations that named Milestone
 5's close-out as their receiver, writing each at the source construct its
-receiver will open. Milestone 6 (counted consumption) is next. No versioned
+receiver will open. It also built `§16.2:886`'s **label-grammar check** for the
+two new declaration families — an owner approval from Gate 0 that no slice had
+picked up, found at close because it was neither a deferral nor an exit criterion
+and so invisible to both completeness sweeps. It reuses the shipped
+`valid-reason?` predicate, folded into each family's existing name check, so it
+adds no diagnostic code and does not move the census; the two name checks beside
+it, which had shipped with no test and no mutation pin, were closed with it. Milestone 6 (counted consumption) is next. No versioned
 release exists yet.
 
 ### Added

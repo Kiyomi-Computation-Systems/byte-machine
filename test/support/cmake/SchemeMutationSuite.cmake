@@ -1224,7 +1224,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 55)
-set(EXPECTED_MUTATIONS 471)
+set(EXPECTED_MUTATIONS 474)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -6147,6 +6147,53 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "an UNDECLARED span is rejected .*got ..missing-span-declaration . op.."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a symbol label is not checked against the repertoire at all"
+  # §16.2:886's LABEL clause, built by Milestone 5's close-out from design §4.12
+  # item 2 -- an owner approval that no slice had picked up. Every label in the
+  # tree is a SYMBOL, so this arm is the one that does the work.
+  #
+  # Pinned on the SPAN case, not the callback one: the mutation below breaks the
+  # callback family only, and both mutants redden "a nonportable CALLBACK label".
+  # The span case is what separates them, which is the whole reason the fixture
+  # places a label on each family.
+  FIND [[          ((symbol? l) (valid-reason? (symbol->string l)))]]
+  REPLACE [[          ((symbol? l) #t)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "one finding, on the span -- expected ..invalid-name . body.., got .."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the callback family stops checking its label, the span family does not"
+  # The per-family split, which one family's fixture cannot witness: each arm
+  # reads its own accessor. Pinned on the SHAPE case, which the mutation above
+  # leaves GREEN -- its `(else #f)` still rejects an integer -- so the two
+  # mutants' record sets are neither identical nor nested.
+  FIND [[                      (if (and (valid-name? (callback-declaration-name cd))
+                               (valid-label? (callback-declaration-source-label cd)))]]
+  REPLACE [[                      (if (and (valid-name? (callback-declaration-name cd))
+                               #t)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "an integer -- expected .invalid-name., got .."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a span declaration's NAME is no longer checked"
+  # Not this slice's arm -- Slice ①b's, and it shipped with no case and no pin
+  # while `ir-tests.sps` asserted in prose that it was covered. Milestone 5's
+  # close-out found it while building the label clause beside it and closed it,
+  # because a guard shown not to guard gets closed rather than recorded.
+  FIND [[                      (if (and (valid-name? (span-declaration-name sd))
+                               (valid-label? (span-declaration-source-label sd)))]]
+  REPLACE [[                      (if (and #t
+                               (valid-label? (span-declaration-source-label sd)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the span -- expected ..invalid-name . Body.., got .."
 )
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")

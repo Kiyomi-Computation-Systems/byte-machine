@@ -806,6 +806,12 @@
   Ask that question at every close-out, against the design's own resolution
   sections, and give every approved item a slice at the moment it is approved —
   an approval that names no slice is a deferral nobody knows they are holding.
+  Milestone 5 built the dropped item rather than deferring it, and it cost less
+  than the deferral paragraph did: the check turned out to be a second call site
+  of a predicate already shipped, folded into an existing conjunction, with no
+  new diagnostic code and an unmoved census. **Price the item before deciding to
+  defer it** — the estimate that justified deferring this one was written before
+  anybody read the predicate it would reuse.
 
 
 * **The mutation suite prints "suite complete" on the way to FAILING.**
