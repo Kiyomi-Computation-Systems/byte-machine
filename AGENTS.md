@@ -837,6 +837,39 @@
   group. The suite catches this — it is what "caught by coincidence, not by the
   decision this mutation names" means — but only after a full run.
 
+* **`.*` between `expected` and `got` bridges to a LATER record, and a regex that
+  ends at `got` is satisfied by every mutant that moves the value.**
+  CMake's `.` matches a newline, so `expected .*, got X` is satisfied by any
+  mutant whose output carries `got X` in any later FAIL record — Milestone 6
+  Slice ①'s sweep found five such pins, one of them satisfied by a different
+  mutant's `got`. And a pin that stops at `-- expected 8698736890881894294, got`
+  names no `got` at all, so twenty unrelated mutants satisfied it. Spell the
+  expected list in full with `.` for each literal paren, and pin the MEASURED
+  `got` — taken by staging the mutant in a scratch copy and running the real
+  launcher, never recomputed by hand.
+
+* **A pin must resolve exactly ONCE in its own mutant's output, and nothing that
+  runs by default counts.**
+  A new check label that CONTAINS a shipped label — Milestone 6 Slice ② wrote
+  "counted: gone in both lanes" beside the shipped "gone in both lanes" — makes
+  the shipped pin's regex match two records of its own mutant's output. The lane
+  is green, the mutation lane says caught (`MATCHES` asks whether, not how many),
+  and the two-direction sweep is clean (it judges each pin against OTHER
+  mutants). Only the whole-branch review saw it. Before committing a label in a
+  lane that has pins, embed it in every pin's literal core and pick one that
+  shares no run of words with any; after a sweep, count each pin's matches in
+  its own mutant's output (`re.findall`, DOTALL) and require 1.
+
+* **R6RS leaves `map`'s application order unspecified; drive anything sequenced
+  with `for-each` or a named `let`.**
+  A feed schedule expressed as `(map feed! slices)` ran the slices out of order
+  under Chez, and BOTH lanes reported the same impossible result — no callbacks
+  at all — so the differential "agreed" on the test's own error while a scratch
+  driver showed the runtime behaving correctly. `map` is for pure lists; a feed,
+  a resume, a finish, or any step whose effect the next step reads goes through
+  `for-each` or an explicit loop, and when two lanes agree on an impossible
+  value, suspect the test's ordering before the runtime.
+
 
 * **A predicate that calls another predicate nests its mutants by construction,
   and the inner one's pins are the only real ones.**
