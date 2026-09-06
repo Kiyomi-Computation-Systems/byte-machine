@@ -23,7 +23,8 @@
           diagnostic? diagnostic-code diagnostic-node diagnostic-message
           diagnostic-edge)
   (import (rnrs)
-          (byte-machine private ir))
+          (byte-machine private ir)
+          (byte-machine private names))
 
   ;; --- diagnostics ---
   (define diagnostic-tag (vector 'byte-machine-diagnostic))
@@ -43,20 +44,18 @@
   (define (diagnostic-edge d) (vector-ref d 4))
 
   ;; --- name grammar [a-z][a-z0-9-]* and reserved-set member 1 ---
+  ;; The grammar is (byte-machine private names)' `portable-name?` since
+  ;; Milestone 6 Slice ⓪ -- one body shared with compile.sls's binding check and
+  ;; runtime.sls's callback-code check, where this file's copy was one of two
+  ;; textually identical bodies through Milestone 5. Member 1 stays here: which
+  ;; reserved set applies is a property of the site, and a declared NAME is
+  ;; barred from the R6RS syntactic keywords only.
   (define reserved-member-1
     '(library import export define define-syntax let let* letrec lambda quote
       if begin set! cond case and or when unless do quasiquote unquote))
-  (define (lower-alpha? c) (and (char>=? c #\a) (char<=? c #\z)))
-  (define (name-char? c)
-    (or (lower-alpha? c) (and (char>=? c #\0) (char<=? c #\9)) (char=? c #\-)))
   (define (valid-name? sym)
-    (let ((s (symbol->string sym)))
-      (and (> (string-length s) 0)
-           (lower-alpha? (string-ref s 0))
-           (let loop ((i 1))
-             (or (>= i (string-length s))
-                 (and (name-char? (string-ref s i)) (loop (+ i 1)))))
-           (not (memq sym reserved-member-1)))))
+    (and (portable-name? sym)
+         (not (memq sym reserved-member-1))))
   ;; §10.1:480 restricts an error declaration's static reason to printable ASCII
   ;; plus LF. That is a DIFFERENT repertoire from valid-name?'s, over a string
   ;; rather than a symbol, so this cannot reuse that predicate -- it reuses the
@@ -73,11 +72,16 @@
     (let loop ((i 0))
       (or (>= i (string-length s))
           (and (reason-char? (string-ref s i)) (loop (+ i 1))))))
-  ;; §16.2:886's LABEL clause, for Milestone 5's two new declaration families
-  ;; only (design §4.12 item 2, approved by the owner 2026-09-04; design §10
-  ;; excludes the nine already-shipped label-bearing kinds). It is a second CALL
-  ;; SITE of `valid-reason?` rather than a second predicate: §10.1:480 puts
-  ;; labels and reasons in ONE sentence under ONE repertoire, and a duplicated
+  ;; §16.2:886's LABEL clause. Milestone 5 Slice ④ built it for its two new
+  ;; declaration families only (design §4.12 item 2, 2026-09-04); Milestone 6
+  ;; Slice ⓪ made it TOTAL over every `source-label` in the tree -- nineteen
+  ;; carriers, checked at four arms in two passes: `pass-names-valid`'s machine
+  ;; arm, its node arm (the node's own label AND its byte or sequence cases'
+  ;; labels, reported under the owning node because a case has no name), its
+  ;; error-declaration arm, and `pass-fields`' field arm, beside the two
+  ;; declaration arms in `pass-declarations`. It is a second CALL SITE of
+  ;; `valid-reason?` rather than a second predicate: §10.1:480 puts labels and
+  ;; reasons in ONE sentence under ONE repertoire, and a duplicated
   ;; `reason-char?` would be two textually identical bodies -- the twinned-FIND
   ;; trap this file already records.
   ;;
@@ -339,11 +343,16 @@
                          (cons (make-diagnostic 'invalid-field-declaration fname
                                                 "duplicate field name") out)
                          out)))))
+       ;; Milestone 6 Slice ⓪ folds §16.2:886's label clause into this arm's
+       ;; test, the shape the error-declaration arm of `pass-names-valid` set:
+       ;; one finding for a field bad in name or label, and no new emission site.
        (filter values
                (map (lambda (f)
-                      (if (valid-name? (uint-field-name f)) #f
+                      (if (and (valid-name? (uint-field-name f))
+                               (valid-label? (uint-field-source-label f)))
+                          #f
                           (make-diagnostic 'invalid-field-declaration (uint-field-name f)
-                                           "field name is not portable")))
+                                           "field name or label is not portable")))
                     fs))
        (pass-field-operands m fs))))
 
@@ -1111,24 +1120,51 @@
        ;; one kind's special case.
        )))
 
+  ;; The labels a node carries BESIDE its own: its byte cases' or sequence cases'.
+  ;; A case has no name (§9.1:290, :298), so its label is checked under the
+  ;; owning node, inside that node's one finding. A per-kind `cond` -- a census
+  ;; a new kind must answer, with "no cases" being an answer -- built with `map`
+  ;; and no `(cons 'x ...)` form, because the kind x position census collects
+  ;; every quoted-symbol `cons` in this file as an edge role.
+  (define (node-case-labels n)
+    (cond ((byte-dispatch-node? n)
+           (map byte-case-source-label (byte-dispatch-node-cases n)))
+          ((sequence-dispatch-node? n)
+           (map sequence-case-source-label (sequence-dispatch-node-cases n)))
+          (else '())))
+
   ;; PASS 7: generated-name safety (member 1) — machine, node, error names/codes.
+  ;; Milestone 6 Slice ⓪ folds §16.2:886's label clause into each arm's `and`:
+  ;; the machine's label, every node's own label and its case labels through
+  ;; `node-source-label` and `node-case-labels`, and every error declaration's
+  ;; label. One finding per carrier however many ways it is bad -- the shape the
+  ;; error-declaration arm already had -- and no new emission site, so the
+  ;; diagnostic census reads the same six `invalid-name` sites it read before.
   (define (pass-names-valid m)
     (append
-     (if (valid-name? (machine-name m)) '()
-         (list (make-diagnostic 'invalid-name (machine-name m) "machine name is not portable")))
+     (if (and (valid-name? (machine-name m))
+              (valid-label? (machine-source-label m)))
+         '()
+         (list (make-diagnostic 'invalid-name (machine-name m)
+                                "machine name or label is not portable")))
      (filter values
              (map (lambda (n)
-                    (if (valid-name? (node-name n)) #f
-                        (make-diagnostic 'invalid-name (node-name n) "node name is not portable")))
+                    (if (and (valid-name? (node-name n))
+                             (valid-label? (node-source-label n))
+                             (for-all valid-label? (node-case-labels n)))
+                        #f
+                        (make-diagnostic 'invalid-name (node-name n)
+                                         "node name, label or case label is not portable")))
                   (machine-nodes m)))
      (filter values
              (map (lambda (e)
                     (if (and (valid-name? (error-declaration-name e))
                              (valid-name? (error-declaration-code e))
-                             (valid-reason? (error-declaration-reason e)))
+                             (valid-reason? (error-declaration-reason e))
+                             (valid-label? (error-declaration-source-label e)))
                         #f
                         (make-diagnostic 'invalid-name (error-declaration-name e)
-                                         "error name, code or reason is not portable")))
+                                         "error name, code, reason or label is not portable")))
                   (machine-errors m)))))
 
   ;; --- PASS 6b: callback and span DECLARATIONS (Milestone 5 Slice ①b) ---------
@@ -1214,22 +1250,18 @@
        ;; imprecision Milestone 4's "error name, code or reason is not portable"
        ;; already carries. The fold is still right; that was a false reason.
        ;;
-       ;; *** DO NOT EXTEND THESE TWO ARMS TO A KIND WHOSE LABEL YOU HAD TO
-       ;; WRITE AN ACCESSOR TO READ. *** Design §10 keeps `§16.2:886`'s label
-       ;; grammar off the nine already-shipped kinds, and `cbs`/`sps` are the
-       ;; two families §4.12 item 2 approved -- the ONLY two things this arm may
-       ;; reach.
-       ;;
-       ;; Everything else carrying a `source-label` is deliberately not here, and
-       ;; the list is longer than "the nine shipped node kinds": the machine
-       ;; itself, every uint field, every error declaration, both case kinds, and
-       ;; Milestone 5's own span-start, span-end and callback nodes. **EIGHT of
-       ;; those are excluded by NOTHING**: design §10's exclusion names "the nine
-       ;; already-shipped KINDS" and design `:106` defines the nine as `node?`'s
-       ;; nine node-kind disjuncts, so it reaches no non-node carrier -- the
-       ;; close note said otherwise once and is corrected. That gap is real, and is recorded in
-       ;; the parent plan's Milestone 5 close note with a receiver; it is not
-       ;; closed by widening this arm, which §4.12 item 2 does not authorise.
+       ;; These two arms check the two DECLARATION families' labels, and they are
+       ;; no longer the only label checks in the file. Through Milestone 5 they
+       ;; were: that milestone's §4.12 item 2 authorised the two new families
+       ;; only, and every other carrier -- the machine, every uint field, every
+       ;; error declaration, both case kinds, and all twelve node kinds -- stored a
+       ;; label nothing read (nine of them had no accessor at all). Milestone 6
+       ;; Slice ⓪ closed that gap where each carrier's NAME is already checked:
+       ;; `pass-names-valid` (machine, node with its cases, error declaration) and
+       ;; `pass-fields` (field), each as a conjunct of the existing `and`, so the
+       ;; diagnostic census did not move. The parent plan's dated disposition
+       ;; "§16.2:886 and §9.3:423 -- Milestone 6 Slice ⓪, delivered" records the
+       ;; closure; its Milestone 5 close note records the gap.
        (filter values
                (map (lambda (cd)
                       (if (and (valid-name? (callback-declaration-name cd))

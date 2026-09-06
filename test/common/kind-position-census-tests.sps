@@ -439,6 +439,60 @@
                               (map car kind-table))))
               (check-equal "the same twelve kinds" from-source from-table))))))))
 
+;; --- S2b: `node-source-label` is total over `node?`'s closed set (Milestone 6
+;; Slice ⓪) ---------------------------------------------------------------------
+;; `node-source-label` is a per-kind `cond` in ir.sls, and a per-kind cond is a
+;; census: a thirteenth `node?` disjunct with no arm there would fall into the
+;; raising `else` -- caught by a raise on the first fixture that reaches it, which
+;; is the weaker catch. This row derives the cond's predicate set from the same
+;; file S2 reads and compares it to `node?`'s disjuncts, so the omission fails by
+;; COMPARISON, and before any fixture exists for the new kind.
+;;
+;; The check label is deliberately NOT S2's "the same twelve kinds": the shipped
+;; ratchet pin "ir: node? admits a kind the matrix's table does not cover" is
+;; anchored on that text, and a second check printing it would make one pin
+;; resolve to two (case, check) pairs.
+(define (node-source-label-predicates-in-source)
+  ;; Find `(define (node-source-label x) (cond ((p1? x) ...) ... (else ...)))`
+  ;; and return the predicate names, `else` excluded.
+  (let ((datum (call-with-input-file
+                   (string-append source-root "/byte-machine/private/ir.sls")
+                 read)))
+    (let loop ((x datum))
+      (cond ((not (pair? x)) #f)
+            ((and (pair? (car x)) (eq? (caar x) 'define)
+                  (pair? (cdar x)) (pair? (cadar x))
+                  (eq? (car (cadar x)) 'node-source-label))
+             (let ((body (caddar x)))
+               (if (and (pair? body) (eq? (car body) 'cond))
+                   (let arms ((cs (cdr body)) (acc '()))
+                     (cond ((null? cs) (reverse acc))
+                           ((and (pair? (car cs)) (pair? (caar cs))
+                                 (symbol? (car (caar cs))))
+                            (arms (cdr cs) (cons (car (caar cs)) acc)))
+                           (else (arms (cdr cs) acc))))
+                   #f)))
+            (else (or (loop (car x)) (loop (cdr x))))))))
+
+(harness-group "node-source-label is total over ir.sls's closed set (S2b)"
+  (lambda ()
+    (harness-case "the cond's arms and node?'s disjuncts are the same set"
+      (lambda ()
+        (let ((arms (node-source-label-predicates-in-source))
+              (preds (kind-predicates-in-source)))
+          (check "node-source-label's cond was found" (and arms (pair? arms)))
+          (check "node?'s disjunct list was found" (and preds (pair? preds)))
+          (when (and arms (pair? arms) preds (pair? preds))
+            (let ((sorted (lambda (l) (list-sort (lambda (a b)
+                                                   (string<? (symbol->string a)
+                                                             (symbol->string b)))
+                                                 l))))
+              (check-equal "node-source-label's arm predicates equal node?'s disjuncts"
+                           (sorted arms) (sorted preds))
+              ;; The size too: two lists that both lost the same predicate would
+              ;; still agree with each other.
+              (check-equal "and there are twelve of them" (length arms) 12))))))))
+
 
 ;; --- axis A': the POSITION drift row (Milestone 5 Slice ①a task 5) -----------
 ;;

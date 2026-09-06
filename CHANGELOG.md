@@ -67,7 +67,16 @@ picked up, found at close because it was neither a deferral nor an exit criterio
 and so invisible to both completeness sweeps. It reuses the shipped
 `valid-reason?` predicate, folded into each family's existing name check, so it
 adds no diagnostic code and does not move the census; the two name checks beside
-it, which had shipped with no test and no mutation pin, were closed with it. Milestone 6 (counted consumption) is next. No versioned
+it, which had shipped with no test and no mutation pin, were closed with it.
+Milestone 6 (counted consumption) is in progress. Slice ⓪ closed **2026-09-06**
+(Gate 0 discharged the same day as decision 0030 — a counted consume is
+input-reading with a zero-count route, amending decision 0023 item 3): `§16.2:886`'s
+label clause made **total** over all nineteen label carriers through the four
+arms that already check names — one finding per carrier, no new diagnostic code,
+the census unmoved — with a derived totality row for the new per-kind
+`node-source-label` census site; and one portable-name grammar,
+`(byte-machine private names)`, shared by the verifier, the emitter and the
+runtime, which closes `§9.3:423`'s grammar half at `make-callback-failure`. No versioned
 release exists yet.
 
 ### Added

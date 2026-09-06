@@ -17,7 +17,8 @@
           (byte-machine verify)
           (only (byte-machine private ir) machine-name machine-errors
                 error-declaration-code error-declaration-reason)
-          (byte-machine private normal-ir))
+          (byte-machine private normal-ir)
+          (byte-machine private names))
 
   (define c-tag (vector 'byte-machine-compilation))
   ;; (vector c-tag ok? diagnostics machine normal) ; normal #f when not ok
@@ -112,17 +113,17 @@
   (define reserved-member-3
     '(exec loop pos st off b bv start end state offset finish? fieldv errs pk
       v r d o psr cbv))
-  (define (lower-alpha? c) (and (char>=? c #\a) (char<=? c #\z)))
-  (define (name-char? c)
-    (or (lower-alpha? c) (and (char>=? c #\0) (char<=? c #\9)) (char=? c #\-)))
+  ;; The grammar half is (byte-machine private names)' `portable-name?` since
+  ;; Milestone 6 Slice ⓪ (design §4.12 item 2): one body with verify.sls's
+  ;; name check and runtime.sls's callback-code check, where this file carried
+  ;; the second of two identical copies through Milestone 5. The three reserved
+  ;; sets stay here -- an output BINDING is barred from all three, a declared
+  ;; name from member 1 alone, and that difference is this site's.
   (define (valid-binding? sym)
-    (let ((s (symbol->string sym)))
-      (and (> (string-length s) 0) (lower-alpha? (string-ref s 0))
-           (let loop ((i 1)) (or (>= i (string-length s))
-                                 (and (name-char? (string-ref s i)) (loop (+ i 1)))))
-           (not (memq sym reserved-member-1))
-           (not (memq sym reserved-member-2))
-           (not (memq sym reserved-member-3)))))
+    (and (portable-name? sym)
+         (not (memq sym reserved-member-1))
+         (not (memq sym reserved-member-2))
+         (not (memq sym reserved-member-3))))
 
   (define (validate-binding binding)
     (unless (symbol? binding)

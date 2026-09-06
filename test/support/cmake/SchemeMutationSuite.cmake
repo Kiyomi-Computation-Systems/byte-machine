@@ -220,7 +220,9 @@ cmake_minimum_required(VERSION 3.26)
 # is shared text between verify.sls and compile.sls, so each mutation anchors
 # on the definition that follows to stay unique per file), and the emitter's
 # final-newline CRLF injection. So 36 + 1 = 37 passes and 107 + 4 = 111
-# mutations.
+# mutations. [Milestone 6 Slice ⓪: the shared text became ONE body in
+# names.sls; the two verify-site pins moved there and the compile-site twin was
+# retired -- see the note at the pass.]
 #
 # Slice B's D6 task adds one more pass, Pass 38 (deterministic emission
 # against the committed golden): the writer's export line loses its exact
@@ -1039,6 +1041,32 @@ cmake_minimum_required(VERSION 3.26)
 # One shipped pin was re-anchored: the edge-role census case is "every other
 # kind" now, the table having grown a callback row and two span rows.
 #
+# Milestone 5 Slice ④ and the close-out audit took the count from 466 to 476 at
+# their pins' own sites, with no entry here: Slice ④'s nine (466 + 9 = 475) are
+# the verify-rejections pass's four label pins, three in the retention pass and
+# two in the span-oracle pass; the audit's one makes 476.
+#
+# Milestone 6 Slice ⓪ tasks 2 and 3, §16.2:886's label clause made TOTAL: SEVEN
+# more, 476 + 7 = 483. Five in the verify-rejections pass, one per conjunct the
+# fold added -- the machine's label, a node's own label, a node's case labels,
+# an error declaration's label, a field's label -- each pinned on the carrier
+# row it stops rejecting, with a wrong-SHAPE label because every one of them is
+# otherwise nested inside the shipped permissive-`reason-char?` mutant. Two for
+# `node-source-label`, ir.sls's second per-kind census: an arm answering `#f`
+# (the ir pass, by comparison) and an arm DELETED (the census pass, by the
+# derived S2b row's count). Two shipped pins were re-anchored, the machine-name
+# and node-name grammar pins, whose `if` tests grew a conjunct; their REPLACEs
+# now drop the name check alone. No pass is added.
+#
+# Milestone 6 Slice ⓪ task 4, one name grammar: ONE added and ONE retired,
+# 483 + 1 - 1 = 483. Added: the runtime's callback-code grammar check (Pass 32),
+# the §9.3:423 deferral Milestone 5's completeness check named a receiver for.
+# Retired: "compile: any interior binding character is accepted", whose text
+# (compile.sls's copy of `name-char?`) no longer exists -- its observation is
+# the re-homed interior-character pin's, one file over. Two verify-site grammar
+# pins RE-HOMED from verify.sls to names.sls and one unit.compile pin re-anchored
+# from the inline loop onto the `portable-name?` call. No pass is added.
+#
 # Milestone 5 Slice ①b: TWO. `pass-declarations` never run -- eight census
 # fixtures then find nothing, caught by a comparison naming a missing code. And
 # the span section reusing the callback section's tag, which pins the section
@@ -1224,7 +1252,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 55)
-set(EXPECTED_MUTATIONS 476)
+set(EXPECTED_MUTATIONS 483)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -3830,6 +3858,18 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the five call-site members read back: code")
 
+# Milestone 6 Slice ⓪: §9.3:423's grammar half at the runtime, the deferral
+# Milestone 5's completeness check left with a named receiver. The mutant is
+# the Milestone 5 constructor exactly -- `symbol?` alone -- and the lane's new
+# case refuses `BadCode` under the grammar it shares with verify.sls.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a callback failure code is not checked against the portable grammar"
+  FIND [[(unless (and (symbol? code) (portable-name? code))]]
+  REPLACE [[(unless (symbol? code)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "portable name grammar .§9.3:423.: BadCode refused -- expected a raise")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 33: the verifier's decisions (Milestone 1 Phase 2) -----------------
@@ -4154,8 +4194,11 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: the machine-name grammar check is suppressed"
-  FIND [[(if (valid-name? (machine-name m)) '()]]
-  REPLACE [[(if #t '()]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "an uppercase machine name is invalid-name: invalid-name")
+  # Re-anchored by Milestone 6 Slice ⓪, which folded the label conjunct into this
+  # arm's test: the FIND is the name conjunct alone, so the mutant drops the name
+  # check and nothing else.
+  FIND [[(valid-name? (machine-name m))]]
+  REPLACE [[#t]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "an uppercase machine name is invalid-name: invalid-name")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -4290,8 +4333,9 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: the node-name grammar check is suppressed"
-  FIND [[(if (valid-name? (node-name n)) #f]]
-  REPLACE [[(if #t #f]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "an uppercase node name is invalid-name: invalid-name")
+  # Re-anchored by Milestone 6 Slice ⓪ for the same reason as the machine arm's.
+  FIND [[(valid-name? (node-name n))]]
+  REPLACE [[#t]] EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "an uppercase node name is invalid-name: invalid-name")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -6155,6 +6199,25 @@ byte_machine_mutation(
   # §16.2:886's LABEL clause, built by Milestone 5's close-out from design §4.12
   # item 2 -- an owner approval no slice had picked up.
   #
+  # Milestone 6 Slice ⓪ made the clause TOTAL, and this mutant's blast radius
+  # grew with it: every fixture in this lane carries `#f` labels, so an arm that
+  # rejects absence now reddens nearly every case here, where before the fold it
+  # reddened the two declaration-family cases alone. The Slice ⓪ sweep measured
+  # the consequence -- NINE shipped pins in this pass are satisfied by this
+  # mutant's output that were satisfied by nothing else before. By LABEL:
+  #   "verify: default-error is promoted out of the benign tier"
+  #   "verify: eof-reachable-stop is promoted into the benign tier"
+  #   "verify: unresolved is promoted out of the benign tier"
+  #   "verify: every :908 finding is labelled `case` regardless of which edge produced it"
+  #   "verify: the :908 check reads only the first of a node's out-targets"
+  #   "verify: node-out-targets returns the roles instead of the targets"
+  #   "verify: the :909 walk does not start at the entry (D-1)"
+  #   "verify: the entry being a finish terminal is not rejected (Slice ⓪b, OQ-2)"
+  #   "verify: the zero-progress report is not gated on byte-reachability"
+  # A nesting by construction, in the pass-fields-never-run shape, and not a
+  # weakness in any of the nine: each still catches its own mutant for its
+  # declared reason (0 self-failures), and this pin still catches this one.
+  #
   # *** THIS IS THE ARM THAT GETS THE PIN, and the symbol and string arms
   # deliberately do NOT. *** Both of those call the shipped `valid-reason?`, so
   # every mutant of them is NESTED BY CONSTRUCTION inside the two reason mutants
@@ -6242,6 +6305,65 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the span -- expected ..invalid-name . Body.., got .[)]"
 )
+
+# --- Milestone 6 Slice ⓪: §16.2:886's label clause made TOTAL -----------------
+# Five conjuncts, one per arm the fold reached, each pinned on the carrier row
+# whose integer label it stops rejecting. The fixtures use a wrong-SHAPE label
+# because every one of these mutants is otherwise nested inside the permissive
+# `reason-char?` mutant above: `valid-label?`'s `(else #f)` rejects an integer
+# without consulting the repertoire, so the integer row is the record no reason
+# mutant can produce. `got .[)]` asserts the diagnostic list is EMPTY.
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the machine's label is no longer checked"
+  FIND [[(valid-label? (machine-source-label m))]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "machine: integer label -- expected ..invalid-name . labm.., got .[)]")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a node's own label is no longer checked"
+  # Every node-kind row reddens; the pin is one of them. The case-label conjunct
+  # below keeps the byte-case and sequence-case rows GREEN under this mutant,
+  # which is what separates the two pins.
+  FIND [[(valid-label? (node-source-label n))]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "stop: integer label -- expected ..invalid-name . done.., got .[)]")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a node's case labels are no longer checked"
+  # The other half of the node arm: only the two case rows redden, under the
+  # OWNING node's name, and every node-kind row stays green.
+  FIND [[(for-all valid-label? (node-case-labels n))]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "byte-case: integer label -- expected ..invalid-name . start.., got .[)]")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: an error declaration's label is no longer checked"
+  FIND [[(valid-label? (error-declaration-source-label e))]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "error-declaration: integer label -- expected ..invalid-name . rejected.., got .[)]")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a field's label is no longer checked"
+  # `pass-fields`' arm, the fourth of the fold's four; it reports under the field
+  # name and the CODE is `invalid-field-declaration`, so the expected list here
+  # differs from the four `invalid-name` rows above. The Slice ⓪ sweep found
+  # this pin also satisfied by "pass-fields is never run" -- a nesting BY
+  # CONSTRUCTION shared with all eight pins inside that pass (the sweep names
+  # them), not a collision this pin introduced: a pass that never runs produces
+  # every failure any conjunct inside it can.
+  FIND [[(valid-label? (uint-field-source-label f))]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "uint-field: integer label -- expected ..invalid-field-declaration . count.., got .[)]")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -7482,8 +7604,12 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: the binding grammar check is dropped"
-  FIND [[(and (> (string-length s) 0) (lower-alpha? (string-ref s 0))]]
-  REPLACE [[(and #t (lower-alpha? #\a)]]
+  # Re-anchored by Milestone 6 Slice ⓪: the grammar is one call into names.sls
+  # now, so the mutant drops that call rather than the length-and-first-char
+  # half of an inline loop. Same observation -- a grammar-invalid binding
+  # renders -- and the same expectation.
+  FIND [[(and (portable-name? sym)]]
+  REPLACE [[(and #t]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "grammar")
 
 byte_machine_mutation(
@@ -7640,9 +7766,21 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/common/identifier-repertoire-tests.sps")
 
+# Milestone 6 Slice ⓪ (design §4.12 item 2) RE-HOMED the two grammar pins below
+# from verify.sls onto names.sls, where the one `portable-name?` body now lives,
+# and RETIRED the third -- "compile: any interior binding character is
+# accepted", which mutated compile.sls's textually identical copy of
+# `name-char?`. There is no copy: valid-binding? calls the same body these two
+# mutate, so that mutant's text no longer exists and its observation (a binding
+# `a.b` accepted) is exactly the interior-character pin's, one FILE over. The
+# per-file anchor trick these two used ("anchor on the definition that follows,
+# to stay unique per file") is gone with the twin; each FIND is unique in
+# names.sls on its own. Both keep their verify-site expectations: the
+# identifier-repertoire lane still drives the verify site AND the compile site,
+# and the verify-site record is the first the harness prints.
 byte_machine_mutation(
-  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
-  LABEL "verify: a name with a non-lowercase first char is accepted"
+  FILE src/byte-machine/private/names.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
+  LABEL "names: a name with a non-lowercase first char is accepted"
   FIND [[(lower-alpha? (string-ref s 0))
            (let loop ((i 1))]]
   REPLACE [[#t
@@ -7650,22 +7788,11 @@ byte_machine_mutation(
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "every rejected name is refused: reject 9a")
 
 byte_machine_mutation(
-  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
-  LABEL "verify: any interior character is accepted"
-  FIND [[(or (lower-alpha? c) (and (char>=? c #\0) (char<=? c #\9)) (char=? c #\-)))
-  (define (valid-name? sym)]]
-  REPLACE [[#t)
-  (define (valid-name? sym)]]
+  FILE src/byte-machine/private/names.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
+  LABEL "names: any interior character is accepted"
+  FIND [[(or (lower-alpha? c) (and (char>=? c #\0) (char<=? c #\9)) (char=? c #\-)))]]
+  REPLACE [[#t)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "every rejected name is refused: reject a_b")
-
-byte_machine_mutation(
-  FILE src/byte-machine/compile.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
-  LABEL "compile: any interior binding character is accepted"
-  FIND [[(or (lower-alpha? c) (and (char>=? c #\0) (char<=? c #\9)) (char=? c #\-)))
-  (define (valid-binding? sym)]]
-  REPLACE [[#t)
-  (define (valid-binding? sym)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "every rejected binding is refused: reject a\\.b")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.verify.identifier-repertoire.chez.source
@@ -8690,6 +8817,21 @@ byte_machine_mutation(
   REPLACE [[  (define span-end-node-tag span-start-node-tag)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the two kinds are distinguishable")
+
+# Milestone 6 Slice ⓪: `node-source-label`'s arm for one kind answers ABSENCE.
+# Caught by comparison in the twelve-kind case (and again by the verifier lane's
+# stop row, under another SPEC). NOT pinned: an arm swapped for a same-slot
+# sibling's accessor -- `stop` and `finish` both store the label at slot 2 and
+# every `-source-label` accessor is an unguarded `vector-ref`, so that mutant is
+# observationally identical and would ship UNCAUGHT. The arm-DELETION mutant is
+# the census pass's, where the derived S2b row is what sees it.
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: node-source-label answers #f for a stop node"
+  FIND [[((stop-node? x) (stop-node-source-label x))]]
+  REPLACE [[((stop-node? x) #f)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "each answers its own label -- expected .., got .stop.")
 
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
@@ -10621,6 +10763,26 @@ byte_machine_mutation(
         (span-start-node? x) (span-end-node? x) (stop-node? x)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the same twelve kinds -- expected")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls
+  SPEC byte-machine.unit.kind-position-census.chez.source
+  LABEL "ir: node-source-label loses an arm"
+  # Milestone 6 Slice ⓪'s S2b ratchet, the SECOND per-kind census in ir.sls the
+  # matrix derives from the file. Deleting an arm shrinks the cond's predicate
+  # set to eleven, and the row's count check says so by comparison -- before any
+  # fixture for a missing kind exists, which is the point of deriving it. The
+  # sibling `#f`-arm mutant in the ir pass leaves the predicate set intact and
+  # cannot redden this row; the two are separate decisions. S2b's set-equality
+  # check is labelled "arm predicates equal node?'s disjuncts" and NOT "the same
+  # twelve kinds": the slice's first label contained the ratchet pin's substring
+  # and the sweep found that pin satisfied by this mutant -- the exact resolution
+  # the plan's F2 warned about, caught by the sweep and not by the lane.
+  FIND [[          ((stop-node? x) (stop-node-source-label x))
+          ((error-node? x) (error-node-source-label x))]]
+  REPLACE [[          ((error-node? x) (error-node-source-label x))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "and there are twelve of them -- expected 12, got 11")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls

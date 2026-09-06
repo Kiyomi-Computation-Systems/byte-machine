@@ -1,6 +1,8 @@
 # Milestone 6 Design — Counted consumption
 
-**Status: proposed, nothing started.** Milestone 5 closed 2026-09-06 with Slice ④ (PR #71 =
+**Status: in progress.** Slice ⓪ delivered 2026-09-06 (PR #77: four source commits — the three
+planned and one the pin sweep required — and a documentation commit); Gate 0 discharged 2026-09-06 as decision 0030
+(PR #76 = `0247ece`; §4's blockquote and §9's first bullet carry the discharge); Slice ① is next. Milestone 5 closed 2026-09-06 with Slice ④ (PR #71 =
 `6bfa8ed`); its close-out audit (PR #72 = `6bc1aca`) and completeness check (PR #73 =
 `b470665`) followed the same day. This document is written against **`b470665`** on branch
 `docs/milestone-6-design`, `main` at the same commit, tree clean. Measured on 2026-09-06 by
@@ -27,6 +29,14 @@ re-measured at plan-writing time (§9).
 > slice, a resolution a slice must implement — is corrected in place, because leaving a false
 > one is a landmine and what it used to say is in git. Later dated notes are indexed here,
 > newest first, each naming the section it amends.
+>
+> **2026-09-06, Slice ⓪ delivered (PR #77)** — **corrects §4.12 item 2, §5 and the appendix in
+> place**, all instructions, each where the plan measured what the design had counted: the
+> grammar-body mutations the names library touches are **four**, not two (two re-homed, one
+> re-anchored in `compile.sls`, one retired); the slice landed as four source commits (the three
+> planned and one the pin sweep required) and a documentation commit, not two commits; `kind-position-census-tests.sps` joins §5's file list;
+> and the `ir.sls`, `verify.sls` and test-side tables gain the `node-source-label`,
+> `node-case-labels` and S2b rows Slice ① now owes. The Status header moved with it.
 >
 > **2026-09-06, the owner's decision on §4.12** — **annotates §4.12, §5, §2, §4.11 and §9**:
 > items 1 and 2 approved and in scope as Slice ⓪. §4.12's heading and preamble, §5's
@@ -780,10 +790,13 @@ next artifact this milestone writes.
    emitted and `reserved-member-1` is about emitted identifiers); both existing copies replaced
    by imports; `make-callback-failure` calling it, with a runtime-lane case and a mutation pin;
    `BYTE_MACHINE_CORE_PRIVATE` and the runtime's own source manifest in `test/CMakeLists.txt`
-   gaining the file (the build-time fingerprint manifests then recompute themselves); the two
-   grammar-internal mutations now anchored on `verify.sls` and `compile.sls`
-   (`SchemeMutationSuite.cmake`, "a name with a non-lowercase first char is accepted" and "the
-   binding grammar check is dropped") re-declared against the new `FILE`. **Recommended:
+   gaining the file (the build-time fingerprint manifests then recompute themselves); and the
+   grammar-body mutations, which the plan measured as **four** rather than the two first counted
+   here (its F8): two **re-homed** to `names.sls` ("a name with a non-lowercase first char is
+   accepted" and "any interior character is accepted"), one **re-anchored in `compile.sls`**
+   ("the binding grammar check is dropped" — its decision is the call, not the grammar), and one
+   **retired** ("compile: any interior binding character is accepted", the same mutant twice once
+   the two copies are one body). **Recommended:
    approve.** It closes a `§9.3` sentence that has been false since Milestone 5 Slice ①b, the
    fallback receiver is this milestone, and the library is where the third reader of the grammar
    — the runtime — was always going to have to get it.
@@ -795,14 +808,19 @@ next artifact this milestone writes.
 **Scope, as an allocation.** Discharges **no `§25` bullet.** It carries §4.12 items 1 and 2,
 **both approved by the owner on 2026-09-06** — a hardening slice on the Milestone 5 Slice ⓪/⓪b
 precedent, before the milestone's own scope. It is independent of Gate 0; Slice ① depends on
-it only in that ①'s new label carrier joins a check that is already total.
+it only in that ①'s new label carrier joins a check that is already total. **Delivered
+2026-09-06** on `feat/m6-slice-0` (PR #77), against `d793b73`, with the parent plan's
+disposition "§16.2:886 and §9.3:423 — Milestone 6 Slice ⓪, delivered".
 
-**The work** is §4.12's, in two tasks that touch disjoint code: the label totality edits
-`ir.sls`, `verify.sls`, `ir-tests.sps`, `verify-tests.sps` and the pins on `pass-names-valid`;
-the names library adds a file, edits `verify.sls`'s and `compile.sls`'s grammar definitions,
-`runtime.sls`'s `make-callback-failure`, `runtime-tests.sps`, two CMake manifests and two
-mutation declarations. Both change `verify.sls`, so they land as **one PR** with two commits
-and one pin sweep.
+**The work** is §4.12's, as three planned source commits that touch disjoint code, a fourth the pin
+sweep required (S2b's check label moved off the shipped ratchet pin's substring), and one
+documentation commit, each green (§2): the accessors and `node-source-label` edit `ir.sls`, `ir-tests.sps` and
+`kind-position-census-tests.sps` (the derived S2b totality row); the label fold edits
+`verify.sls`, `verify-tests.sps` and the pins on `pass-names-valid` and `pass-fields`; the names
+library adds a file, edits `verify.sls`'s and `compile.sls`'s grammar definitions,
+`runtime.sls`'s `make-callback-failure`, `runtime-tests.sps`, two CMake manifests and four
+mutation declarations (§4.12 item 2). Three of the four change `verify.sls`, so they land as
+**one PR** with one pin sweep after the last planned commit — which is what found the fourth.
 
 **Oracle.** *Label totality:* the diagnostic census does not move (`invalid-name` at six
 sites, `verify.sls` read as a datum), and one machine per carrier, nineteen carriers (Slice ① adds the twentieth under the total check), reports
@@ -1153,6 +1171,7 @@ input-reading and zero-width and needs this kind in *both* partitions' answer. T
 | the library `export` list | constructor, predicate, five accessors |
 | `node?` | the thirteenth disjunct — S2 reads the count |
 | `node-name` | one arm above the raising `else` |
+| `node-source-label` (Slice ⓪) | one arm above the raising `else`; Slice ① owes it. The census's derived S2b row in `kind-position-census-tests.sps` reddens at "node-source-label's arm predicates equal node?'s disjuncts" until the arm exists; once it does, the literal "and there are twelve of them" reddens until Slice ① moves it to thirteen — the same ratchet S2 carries. Measured by control: a thirteenth `node?` disjunct with no arm fails the set check and leaves the count check green |
 | the per-kind tag/constructor/predicate/accessor block | one block, thirteen |
 | `make-machine`'s `(for-all node? nodes)` | **DERIVED** from `node?` |
 | `matcher?`, `field-operations`, `field-predicates`, `accumulate-bases`, the callback kind set | **NOT node-kind censuses**; no arm |
@@ -1171,6 +1190,8 @@ input-reading and zero-width and needs this kind in *both* partitions' answer. T
 | `node-out-edges` | an arm: `(next . target)` with role `next` — the byte edge taken after a commit |
 | `node-eof-target` | an arm: its own eof-target, `#f` meaning the default |
 | `pass-names`' error-reference filter | no arm — names no error declaration |
+| `node-case-labels` (Slice ⓪) | **no arm** — the kind has no cases; the `else` answers `'()` |
+| `pass-names-valid`'s node arm (`§16.2:886`, Slice ⓪) | **DERIVED** through `node-source-label` and `node-case-labels`: the kind's label is checked the moment its `node-source-label` arm exists. Until then that dispatcher's loud `else` raises out of this pass for any machine carrying the kind — the verifier raises, it does not verify clean. `pass-fields`' field arm reads `uint-field-source-label` and is no node-kind site |
 | `pass-field-operands` | an arm: `§16.2:903`, `invalid-field-operand` under the node's name (§4.3) |
 | `pass-overlap`, `pass-sequence-ambiguity` | no arm — no cases, no trie |
 | `reexec-targets` | **BOTH**: an arm answering `(list next)` — a route that can be taken without consuming, the shape the arm already gives accumulate's overflow edge (§4.2 item 4) |
@@ -1251,6 +1272,7 @@ input-reading and zero-width and needs this kind in *both* partitions' answer. T
 | | `self-expectations` | `count-next`: both cycles; `count-eof-target`: the EOF cycle |
 | | the dangling group, the absence census | `missing-target` / `invalid-eof-target`; refusals 13 → 14, legally-absent routes 3 → 4 |
 | | "exactly three cells prune the sink" | re-measured, not assumed |
+| | the `node-source-label` totality row (S2b, Slice ⓪) | **DERIVED** — reads the arm predicates out of `ir.sls` as a datum and compares them with `node?`'s disjuncts; red at "node-source-label's arm predicates equal node?'s disjuncts" until the arm exists; with it, the literal "and there are twelve of them" is red until moved to thirteen, as S2's is |
 | `verify-tests.sps` | `t2-kinds` / `t2-hop` | a row (§4.10) |
 | | the edge-ROLE label census | `next` asserted for the kind |
 | `diagnostic-census-tests.sps` | `pinned-sites`, `code-fixtures` | `(invalid-field-operand 7)`; no new code, so no new fixture row |

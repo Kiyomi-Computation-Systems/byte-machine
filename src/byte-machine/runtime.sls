@@ -48,7 +48,8 @@
           byte-machine-span-open/v1 byte-machine-span-fragment-step/v1
           byte-machine-span-close/v1)
   (import (rnrs)
-          (byte-machine private conditions))
+          (byte-machine private conditions)
+          (byte-machine private names))
 
   (define (tag sym) (vector sym))
   (define (tagged? t x) (and (vector? x) (> (vector-length x) 0) (eq? (vector-ref x 0) t)))
@@ -534,28 +535,21 @@
   ;; outcomes allocation-free singletons and says in the same breath that "error
   ;; detail allocation is allowed on the exceptional path".
   (define callback-failure-tag (tag 'byte-machine-callback-failure))
-  ;; TYPE ONLY HERE, AND THE GRAMMAR HALF IS ENFORCED NOWHERE. §9.3:423 requires
-  ;; the code to satisfy the portable ASCII name grammar; `symbol?` is the house
-  ;; constructor-side check and `valid-name?` lives in verify.sls, which this
-  ;; library does not import and must not -- the runtime is downstream of
-  ;; verification. An application's callback code is not a machine declaration
-  ;; and reaches no verifier pass, so nothing in the tree checks the grammar
-  ;; half. Recorded rather than silently narrowed: closing it means either
-  ;; duplicating the grammar here or routing application codes through a check
-  ;; that does not exist, and neither is this slice's to choose.
-  ;;
-  ;; *** RECEIVER, added by Milestone 5's completeness check 2026-09-06. *** The
-  ;; paragraph above was honest about the gap and named nobody, which makes it a
-  ;; deferral with one end -- the exact shape this milestone added a standard
-  ;; against. `§9.3:423` requires the code to satisfy the portable ASCII name
-  ;; grammar and this constructor checks only `symbol?`. Owed by **whoever next
-  ;; gives the runtime a shared portability predicate, and failing that by
-  ;; Milestone 6's close-out**; note that `verify.sls`'s `valid-name?` is the
-  ;; grammar in question but lives in a library the runtime does not import, so
-  ;; the real question is where that predicate should live rather than whether
-  ;; to copy it.
+  ;; TYPE AND GRAMMAR, both here since Milestone 6 Slice ⓪. §9.3:423 requires
+  ;; the code to satisfy the portable ASCII name grammar; through Milestone 5
+  ;; this constructor checked `symbol?` alone and recorded the grammar half as
+  ;; owed, because the grammar lived in verify.sls, which this library does not
+  ;; import and must not -- the runtime is downstream of verification. The
+  ;; receiver Milestone 5's completeness check named ("whoever next gives the
+  ;; runtime a shared portability predicate") is (byte-machine private names):
+  ;; `portable-name?` is the one body verify.sls and compile.sls check declared
+  ;; names and output bindings against, and an application code is now refused
+  ;; for the same characters a node name is. No reserved set applies here -- a
+  ;; callback code is never emitted as an identifier (§10.1:480's last sentence
+  ;; keeps the detail unemitted, and the code travels as a datum), so the
+  ;; grammar is the whole of §9.3:423's requirement at this site.
   (define (make-callback-failure code detail)
-    (unless (symbol? code)
+    (unless (and (symbol? code) (portable-name? code))
       (byte-machine-contract-violation 'make-callback-failure 'invalid-argument 'code))
     (vector callback-failure-tag code detail))
   (define (callback-failure? x) (tagged? callback-failure-tag x))

@@ -84,7 +84,16 @@ verifier now rejects a callback or span declaration whose optional diagnostic
 label falls outside the portable repertoire, which is a rule the plan has always
 required and nothing had ever enforced for any declaration.
 
-Milestone 6 (counted consumption) is next.
+Milestone 6 (counted consumption) is in progress. Slice ⓪, a hardening slice,
+closed 2026-09-06, and its Gate 0 discharged the same day as decision 0030 — a
+counted consume is an input-reading node with a zero-count route. The verifier's
+diagnostic-label check is now total: every construct that carries a label —
+nineteen, where Milestone 5 had checked two — is held to the portable repertoire,
+through the same four checks that already read each construct's name, so no new
+diagnostic was added. And the portable name grammar lives in one library shared
+by the verifier, the emitter and the runtime, which means an application's
+callback failure code is finally checked against it, as the plan has always
+required.
 
 =src/byte-machine/= holds the construction API, the verifier, the normalizer and
 emitter, the reference interpreter, and the runtime, each exercised in both the

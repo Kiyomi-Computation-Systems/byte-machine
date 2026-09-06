@@ -1,6 +1,10 @@
 ;;; D7 (parent §22.9, §20): the emitted identifier repertoire, proved exhaustively.
-;;; Machine names go through verify's [a-z][a-z0-9-]* grammar; output bindings go
-;;; through compile's identical grammar plus the reserved set. Diagnostics and
+;;; Machine names and output bindings go through ONE [a-z][a-z0-9-]* grammar,
+;;; (byte-machine private names)' `portable-name?` (Milestone 6 Slice ⓪; two
+;;; textually identical copies in verify.sls and compile.sls through Milestone
+;;; 5), verify adding reserved member 1 and compile all three reserved sets. Both
+;;; sites are still driven here, because a shared body proves nothing about a
+;;; site that stopped calling it. Diagnostics and
 ;;; conditions are checked by category, never by prose (parent §22.10). The LF
 ;;; proof reads raw emitted bytes; the real Windows CRLF trap rides to M9 (this
 ;;; cell cannot exhibit it).
@@ -40,7 +44,7 @@
 
 ;; Accepted repertoire: leading [a-z], interior [a-z0-9-], including a trailing
 ;; hyphen (a name-char) and digits after the first position. Both sites agree
-;; on this grammar-only core.
+;; on this grammar-only core, and since Milestone 6 Slice ⓪ by construction.
 (define accepted '(a z ab a1 a-b abc-123 zzz9 a- one-byte))
 ;; 'start' satisfies the grammar and is not a member-1 keyword, so it is a
 ;; valid machine/node NAME (verify-site) -- but compile.sls reserves it as a
@@ -53,7 +57,8 @@
 ;; (ambiguous with number syntax) nor |...| escape syntax in this mode, so
 ;; those candidates are built with string->symbol rather than as literals.
 ;; The empty symbol's rejection is retained as by-inspection coverage, not a
-;; mutation witness: valid-name?/valid-binding? short-circuit their `and` on
+;; mutation witness: `portable-name?` (behind both valid-name? and
+;; valid-binding?) short-circuits its `and` on
 ;; (> (string-length s) 0) before ever indexing into s, so any mutation that
 ;; relaxes that length guard makes the very next (string-ref s 0) raise on
 ;; this candidate -- a crash, not an acceptance, i.e. "caught for the wrong
