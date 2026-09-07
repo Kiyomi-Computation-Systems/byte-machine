@@ -96,8 +96,21 @@ A constructor that delegates (`(define (make-diagnostic code node message)
 (make-diagnostic* code node message …))`) puts a *second* unquoted-code form in scope per
 delegation, and the identity fails by the number of delegations. **Each of the four
 constructors therefore builds its vector inline.** This is not a style preference: it is
-the census's arithmetic, and it is the reason the four bodies are near-identical by
-design.
+the census's arithmetic.
+
+**Proven by construction, not by reading.** Staging exactly that refactor in a scratch copy
+— one `make-diagnostic*` builder with `make-diagnostic` and `make-diagnostic/edge` both
+delegating to it — and running `diagnostic-census-tests.sps` through the real
+`chez-source.ss` launcher gives status 1 on one case, with the record
+
+```
+FAIL … every emitted code is a quoted symbol: quoted sites plus one header per constructor
+     -- expected 61, got 59
+```
+
+off by exactly the two delegating calls. A reviewer who thinks the shared builder is
+tidier can re-run that in a minute; the plan's job is to make sure nobody discovers it in
+Task 3 with the record already half-written.
 
 ### F4 — `make-diagnostic/edge`'s only call site is a path site, so 0032 item 3 and item 4 cannot both be followed literally
 
