@@ -120,8 +120,9 @@ pass a non-empty list, by code:
   Context) pass `(list subject)`, and `invalid-span-callback`'s two among them add
   the callback the span names;
 - `missing-error-declaration` — `(error-node-error-name n)`, the undeclared error;
-- five of the seven `invalid-field-operand` sites — the field name, `(car args)`;
-  the unknown-selector and wrong-arity arms fire before any operand is read
+- five of the seven `invalid-field-operand` sites — the field name: `(car args)` in
+  the operand walk's three arms, the node's own field accessor in the accumulate and
+  counted-consume arms; the unknown-selector and wrong-arity arms fire before any operand is read
   ("nothing can be read out of `arguments` before arity is known", the arm's own
   comment) and pass `'()`;
 - `missing-callback-declaration` and the three `invalid-callback-invocation` sites at
@@ -131,10 +132,12 @@ pass a non-empty list, by code:
 Every other site is untouched: `make-diagnostic` and `make-diagnostic/edge` keep
 their arities and fill the new slots with `'()` and `#f`; the sites that carry a
 declaration list or a path call new constructors whose names begin `make-diagnostic`,
-so the census counts them without an edit. About thirty sites gain an argument; the
-rest keep their text, and with it their pins — 19 `FIND` blocks and 8 `REPLACE`
-blocks contain `make-diagnostic '` (Context) — and Slice ①'s plan reconciles by LABEL
-the ones whose site moves.
+so the census counts them without an edit. About thirty sites gain a `declarations` argument and the twelve
+path-bearing sites (item 4) a path — forty-two of fifty-six; the fourteen that keep
+their text keep their pins. Of the 27 pin lines that contain `make-diagnostic '`
+(Context), eleven sit at path-bearing sites, six at sites that gain a declaration
+list and ten at unchanged sites (measured by code and node expression); Slice ①'s
+plan reconciles by LABEL every pin whose site moves.
 
 **4. The path policy**, total over the census — eight codes, twelve emission sites,
 and `#f` everywhere else:

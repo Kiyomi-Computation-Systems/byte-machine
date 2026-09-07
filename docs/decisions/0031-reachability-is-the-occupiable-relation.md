@@ -47,7 +47,7 @@ gate and again above `span-flow`'s `eof-nodes`.
   PLUS a dispatch/sequence node's eof-target (for reachability only)"), the one call
   `(reach-from m all-out-targets)` in `pass-reachability`, and four comment lines —
   `reach-from`'s header, `pass-reachability`'s note, `pass-zero-progress`'s note, and
-  `parked?`'s. `reach-from` is a visited-set DFS from the entry over whatever edge
+  the edge-relation comment above `eof-step`. `reach-from` is a visited-set DFS from the entry over whatever edge
   function it is handed, "shared by pass-reachability and byte-reached, which differ
   only in which edge function they walk"; `byte-reached` is `(reach-from m
   node-out-targets)`.
@@ -99,20 +99,24 @@ release selection minus the mutation lane: 113 lanes, 111 pass, and
 "reproduced the three cases byte for byte". Measured against that run:
 
 - **Effect (a) occurs**, in a fixture the pricing did not name: "a node no execution
-  can occupy contributes no state (0029 item 3)" builds 0027's Context machine with a
-  distinct `Z` — `cl` on `t`'s byte edge, then `exit`, `done` and `fin` behind it —
+  can occupy contributes no state (0029 item 3)" builds 0027's Context machine's shape with a
+  span end as `Z` — `cl` on `t`'s byte edge, then `exit`, `done` and `fin` behind it —
   and answers `unreachable-node` four times where it answered nothing.
 - **Effect (b) does not occur.** The fixture named — "and `unreachable-node` does NOT
   catch it, which is why the gate is not benign", under `§16.2:898`'s gate group —
-  builds 0027's Context machine as written, where `Z` **is** `T`: `t`'s case edge is
-  a `reexecute` self-loop. `t` is occupiable — the entry is parked, its eof-target is
-  `t`, the EOF walk visits it — so the check "t is not reported unreachable" holds
-  under both relations.
+  builds a **collapsed** variant of 0027's Context machine: `t` plays both `T` and `Z`,
+  its case edge a `reexecute` self-loop and its eof-target an error node, so in the
+  fixture `Z = T`. `t` is occupiable — the entry is parked, its eof-target is `t`, the
+  EOF walk visits it — so the check "t is not reported unreachable" holds under both
+  relations. 0027's machine **as written** has `Z` distinct from `T` — a third node
+  carrying the `reexecute` self-loop, and a finish node as `T`'s eof-target — and that
+  machine is in the family; the 0029 item 3 case is its shape.
 - **Effect (c) does not occur.** No builder in the matrix's `kind-table` names an
   eof-target (every input-reading builder passes `#f`), and the sink `ee` is in
-  `byte-reached` in every cell that keeps it — through the host's fallback edge
-  `(make-edge 'ee 'reexecute)` where there is a host, and through the placed node's
-  own out-targets at the entry position — so a walk that drops only nodes reached
+  `byte-reached` in every cell that keeps it — through a byte edge of the host where there is
+  one (its fallback at twenty positions; its case or alternative edge at
+  `dispatch-fallback` and `sequence-mismatch`, where the fallback is the position
+  under test), and through the placed node's own out-targets at the entry position — so a walk that drops only nodes reached
   through an eof-target cannot touch it. The count stays 3;
   `unit.kind-position-census` passed in both modes under the prototype.
 - **The other two cases** the pricing did not name: the `t2-kinds` accept case ("an
@@ -152,8 +156,8 @@ through a dead byte edge of `T`, transitively: a node behind such a `Z`'s own
 eof-target is in the family too (the third case's `exit`, `done` and `fin`). Every
 such `Z` gains `unreachable-node`; nothing else does. Not in the family, and why:
 
-- `Z = T`, a self-loop — `T` is occupiable through the EOF route, measured on 0027's
-  Context machine (effect (b) above).
+- `Z = T`, a self-loop — `T` is occupiable through the EOF route, measured on the
+  `§16.2:898` gate fixture, a collapsed variant of 0027's machine (effect (b) above).
 - `T` a counted consume — `next` is an EOF successor of the node (decision 0030 item
   5), so the walk visits `Z` behind it.
 - `T` any zero-width kind — the walk flows through its continuation.
@@ -207,10 +211,11 @@ one set. Slice ⓪ builds the one procedure; it does not change which nodes
 
 **5. What the three cases assert afterwards**, decided here so Slice ⓪ does not
 improvise and no fixture is rewritten to hide the narrowing. Each keeps the property
-it tests and gains the narrowing's witness, in the shape the shipped case already has:
+it tests and gains the narrowing's witness, in a shape the file already has:
 
-- **The `t2-kinds` accept case** collects every `(code . node)` per kind into `bad`
-  and asserts the whole set: empty for pause, field-action, field-branch, callback and
+- **The `t2-kinds` accept case** collects every code per kind into `bad` today;
+  afterwards it collects `(code . node)` pairs — its reject sibling's shape — and
+  asserts the whole set: empty for pause, field-action, field-branch, callback and
   counted-consume; exactly `((unreachable-node . fin))` for byte-dispatch,
   sequence-dispatch and integer-accumulate. A derived set, three kinds — the same
   three item 2 names — and the case's `§16.2:908` property, no `non-eof-into-finish`

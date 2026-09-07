@@ -246,13 +246,18 @@ originates a traversal.
 
 Item 3's verdict change — the `§16.2:898` gate — was recorded above as "the first
 thing that depends on the answer". The answer is now given, and 0031's Context
-records what it does to that gate's fixture: nothing. The machine this record's
-Context derives has `Z` equal to `T` (a `reexecute` self-loop on `t`), and `t` is
-occupiable through the EOF route, so "and `unreachable-node` does NOT catch it"
-stays true under the narrowed walk. The family the narrowing rejects is `Z`
-**distinct from** `T` — measured by the Milestone 7 design's prototype as three cases
-in `verify-tests.sps`, one of them this record's machine with a distinct `Z` behind
-`t`'s byte edge (the 0029 item 3 span case).
+records what it does to that gate's fixture: nothing. The fixture collapses this
+record's Context machine into two nodes — `t` plays both `T` and `Z`, its case edge a
+`reexecute` self-loop, its eof-target an error node — and `t` is occupiable through
+the EOF route, so "and `unreachable-node` does NOT catch it" stays true under the
+narrowed walk. This record's machine **as written** — `Z` a third node, distinct from
+`T` — is the family the narrowing rejects: measured by the Milestone 7 design's
+prototype as three cases in `verify-tests.sps`, one of them this shape with a span
+end as `Z` behind `t`'s byte edge (the 0029 item 3 span case). So the Context's
+"after the gate it verifies clean, and no other check replaces that finding" stops
+being true when Slice ⓪ lands — `unreachable-node` at `Z` replaces it, which is what
+"narrowing `pass-reachability` would shrink the family to empty" foresaw; Slice ⓪'s
+documentation commit marks that sentence at its site.
 
 **What does not move.** Item 1 — the relation, and its two consumers, now three;
 item 3 — `pass-zero-progress`'s gate stays `byte-reached` alone, for the reason item

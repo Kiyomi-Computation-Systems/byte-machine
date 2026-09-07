@@ -1,6 +1,6 @@
 # Milestone 7 Design — Verification and generative hardening
 
-**Status: Gate 0 discharged 2026-09-06 as decisions 0031-0033 (PR pending; §4's blockquote and
+**Status: Gate 0 discharged 2026-09-06 as decisions 0031-0033 (PR #85; §4's blockquote and
 §11's first bullet carry the discharge); Slice ⓪ next.** Before it: the design merged 2026-09-06
 as PR #83 = `8edceb1`, and §4.12 was settled by the owner the same day (items 1-3 approved).
 Written against **`5ac363a`** (`main` = PR #82, which added only
@@ -35,6 +35,12 @@ measurement can be re-taken, and Slice ⓪ re-takes it before anything lands.
 > slice, a resolution a slice must implement — is corrected in place, because leaving a false
 > one is a landmine and what it used to say is in git. Later dated notes are indexed here,
 > newest first, each naming the section it amends.
+>
+> **2026-09-06, Gate 0 discharged** — **annotates §3.2 item 1 and corrects §4.1, §4.2 and §11 in
+> place**: the whole-gate review found two stated reasons false against the tree — the
+> `§16.2:898` fixture is a collapsed variant of 0027's machine, not that machine "where `Z` is
+> `T`"; and the diagnostic widening changes forty-two of fifty-six sites, not "about thirty" —
+> both corrected in the records and here; §4's blockquote records all three corrected reasons.
 >
 > **2026-09-06, the owner's decision on §4.12** — **annotates §4.12, §9 and §11**: items 1, 2
 > and 3 approved ("Merge 83, approve all three, and do the Gate 0 plan"). §4.12's heading and
@@ -369,7 +375,9 @@ Seven things a slice would otherwise discover mid-task and report as its own reg
    **Effect (b) does not occur.** The fixture named — `§16.2:898`'s group, "and `unreachable-node`
    does NOT catch it" — builds 0027's Context machine where `Z` *is* `T` (a `reexecute`
    self-loop on `t`), and `t` is occupiable: the entry is parked, its eof-target is `t`, the EOF
-   walk visits it. The family the narrowing rejects is `Z` **distinct from** `T` and reachable
+   walk visits it. *(Annotated 2026-09-06, Gate 0 discharged — the fixture is a collapsed
+   two-node variant of 0027's machine, `t` playing both `T` and `Z`; 0027's machine as written
+   has a distinct `Z` and is in the family. Decision 0031's Context states it that way.)* The family the narrowing rejects is `Z` **distinct from** `T` and reachable
    over `all-out-targets` only through a dead byte edge of `T` — transitively, so `fin` behind
    `exit`'s eof-target in the third case is in it — with `T` one of the three kinds whose byte
    edges are dead at EOF. **Effect (c) does not occur** either: no builder in the matrix's `kind-table` gives its
@@ -468,13 +476,20 @@ parent plan does not name, for the owner.
 > | [0032](../decisions/0032-diagnostic-record-seven-fields-and-path-policy.md) | §4.2, with §3.1's slot census as its Context | six numbered items — the shape and the four accessors; the stamping in `verify-machine`; the `declarations` list per site; the path policy as the table, eight codes at twelve sites; the shape rule for tests; the census row |
 > | [0033](../decisions/0033-property-suite-contract.md) | §4.3, with §4.4's Layer 3 table and §4.7's fixture shape | five numbered items — validity is the verifier's verdict; the counters and the floor; the seed; the fixture; the three-layer comparison with its qualifiers |
 >
-> **As performed.** No resolution was split or merged, and no decision changed. One stated
-> reason was re-checked against the tree and written in its checkable form: §3.2 item 1 accounts
-> for effect (c) with "no builder in the matrix's `kind-table` gives its placed node an EOF route
-> to the sink"; `0031` states it as *no placed node names an eof-target — every input-reading
-> builder passes `#f` — and the sink `ee` is `byte-reached` in every cell that keeps it*, which
-> is the fact the unmoved count rests on, since the zero-width builders' continuations to `ee`
-> are routes the EOF walk takes and "EOF route" reads as false for them. One measurement was
+> **As performed.** No resolution was split or merged, and no decision changed. Three stated
+> reasons were re-checked against the tree and corrected — one while writing, two by the
+> whole-gate review. (1) §3.2 item 1 accounts for effect (c) with "no builder in the matrix's
+> `kind-table` gives its placed node an EOF route to the sink"; `0031` states it as *no placed
+> node names an eof-target — every input-reading builder passes `#f` — and the sink `ee` is
+> `byte-reached` in every cell that keeps it*, which is the fact the unmoved count rests on,
+> since the zero-width builders' continuations to `ee` are routes the EOF walk takes and "EOF
+> route" reads as false for them. (2) §3.2 item 1 and §4.1 said the `§16.2:898` fixture "builds
+> 0027's Context machine where `Z` is `T`"; the fixture is a collapsed two-node variant, and
+> 0027's machine as written has a distinct `Z` and is in the family — `0031`'s Context and item
+> 2 say so, §3.2 is annotated and §4.1 corrected in place. (3) §4.2 item 2 said "the rest keep
+> their text and their pins"; the twelve path-bearing sites change too — forty-two of
+> fifty-six — and eleven of the 27 pin lines sit at them (`0032` item 3; §4.2 corrected in
+> place). One measurement was
 > guarded rather than re-taken: `git diff --stat 5ac363a..HEAD -- src/ test/` printed nothing, so
 > every record cites the prototype run of §3.2 item 1 and PR #83's reproduction of it. Two
 > records carry Context this document left implicit: `0031` reads `pass-eof-execution`'s walk
@@ -544,7 +559,8 @@ EOF — byte-dispatch, sequence-dispatch, integer-accumulate — and `Z` is a no
 `T`** reachable over `all-out-targets` only through a dead byte edge of `T` — transitively: a node
 behind such a `Z`'s own eof-target is in the family too. `Z` gains `unreachable-node`. Not in the family, and
 the design says so because each is a shape a reader will try: `Z = T` (a self-loop — `T` is
-occupiable through the EOF route, measured on 0027's Context machine); `T` a counted consume
+occupiable through the EOF route, measured on the `§16.2:898` gate fixture, a collapsed
+variant of 0027's machine); `T` a counted consume
 (`next` is an EOF successor, decision 0030 item 5, so `Z` behind it is visited); `T` any
 zero-width kind (the walk flows through it); `Z` reachable by any other route. Measured effect on
 the tree: **three cases in `verify-tests.sps`, both modes, nothing else** (§3.2 item 1) — the
@@ -626,9 +642,11 @@ test reads, and four new accessors exported: `diagnostic-severity`, `diagnostic-
    slots with `'()` and `#f`, and the sites that carry a declaration list or a path call new
    constructors whose names begin `make-diagnostic`, so the census counts them. The slot is a
    list because `invalid-span-callback` can name a span and a callback at once. About thirty
-   sites gain an argument; the rest keep their text and their pins (19 `FIND` blocks and 8
-   `REPLACE` blocks in the suite contain `make-diagnostic '` — 27 lines — measured); Slice ①
-   lists the moving sites by code.
+   sites gain a `declarations` argument and the twelve path-bearing sites (item 3) a path —
+   forty-two of fifty-six; the fourteen that keep their text keep their pins (of the 27 pin
+   lines containing `make-diagnostic '`, eleven are at path-bearing sites, six at
+   declaration-gaining sites, ten at unchanged sites — measured); Slice ① lists the moving
+   sites by code.
 3. **A path is carried by the codes a walk produces, and by no other.** "When useful" is
    read as "when the finding is about a path" — a diagnostic about a *place* (a duplicate, a
    bad name, an overlap, a dangling target, an unreachable node) has no path to give, and a
