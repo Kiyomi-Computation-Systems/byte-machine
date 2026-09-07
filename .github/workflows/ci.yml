@@ -18,6 +18,9 @@ name: CI
 #
 # A newer run on the same PR (or ref) cancels the one in flight (`concurrency`).
 #
+# The Chez build is CACHED between runs -- about ten of the job's twelve
+# minutes. The steps say how the key is formed and when to discard a cache.
+#
 # Docs-only changes are skipped on push and pull_request. `paths-ignore` fires
 # only when EVERY changed file matches, so a commit touching one source file and
 # ten markdown files still runs -- the failure mode is a needless run, never a
@@ -71,21 +74,58 @@ jobs:
       BYTE_MACHINE_EXPECT_OS: linux
       BYTE_MACHINE_EXPECT_ARCH: amd64
       CHEZ_VERSION: "10.4.1"
+      # Part of the cache key. Bump it to discard every cached build -- when the
+      # configure flags below change, or a restored binary misbehaves. The Chez
+      # version and the runner image are in the key already.
+      CHEZ_CACHE_SCHEMA: "1"
     steps:
       - uses: actions/checkout@v4
+      # ImageOS (e.g. ubuntu24) names the runner image. A binary built against
+      # one image's libc and ncurses must not be restored on another, and the
+      # `env` context cannot see a runner variable, so it is read into an output.
+      - name: Name the runner image
+        id: image
+        run: echo "os=${ImageOS:-unknown}" >> "$GITHUB_OUTPUT"
+      - name: Restore the Chez Scheme an earlier run built
+        id: chez
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/chez
+          key: chez-${{ env.CHEZ_VERSION }}-${{ runner.arch }}-${{ steps.image.outputs.os }}-s${{ env.CHEZ_CACHE_SCHEMA }}
+      # Cache miss only. The install goes under $HOME/chez, no sudo, so the whole
+      # tree is one directory the cache can carry; the prefix is baked into the
+      # binary at configure time and $HOME is the same on every hosted runner,
+      # so a restored tree runs where it was built.
       - name: Build and install Chez Scheme from source (>= floor)
+        if: steps.chez.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libx11-dev libncurses-dev uuid-dev git
           git clone --depth 1 --branch "v${CHEZ_VERSION}" https://github.com/cisco/ChezScheme.git
           cd ChezScheme
-          ./configure --threads
+          ./configure --threads --installprefix="$HOME/chez"
           make -j"$(nproc)"
-          sudo make install
-      - name: Record the runtime identity
+          make install
+      # Saved right after the build, not by a post step at the end of the job: a
+      # test failure later in this run must not cost the next run the build.
+      - name: Save the build for the next run
+        if: steps.chez.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/chez
+          key: chez-${{ env.CHEZ_VERSION }}-${{ runner.arch }}-${{ steps.image.outputs.os }}-s${{ env.CHEZ_CACHE_SCHEMA }}
+      - name: Put Chez on the PATH
+        run: echo "$HOME/chez/bin" >> "$GITHUB_PATH"
+      # On a cache hit nothing was apt-installed, so a restored binary missing a
+      # shared library fails HERE, first and loudly, not inside a test. If it
+      # does: `apt-get install` that library on the hit path, or bump
+      # CHEZ_CACHE_SCHEMA after an image change.
+      - name: Record the runtime identity, and refuse a restored binary missing a library
         run: |
           scheme --version
           echo '(display (machine-type))(newline)' | scheme -q
+          missing=$(ldd "$(command -v scheme)" | grep -c 'not found' || true)
+          test "$missing" -eq 0
       - name: Configure and build
         run: |
           cmake --preset dev
