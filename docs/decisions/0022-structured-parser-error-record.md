@@ -12,6 +12,12 @@ Milestone: 4, Gate 0 (milestone-4-design.md §4.5)
 >   declared. Raised as an open question by Slice ①a's whole-branch review and
 >   resolved before ①b, because 0019 point 5 makes the golden it moves a STOP
 >   condition for every later slice.
+> - **2026-09-06 (Milestone 7 Gate 0)** — **annotates the "It deliberately touches
+>   nothing else" bullet**: "that is Milestone 7 (§25:1616)" is
+>   [decision 0032](./0032-diagnostic-record-seven-fields-and-path-policy.md),
+>   implemented by Milestone 7's Slice ①; `§16.4:945`'s comparison rule, which the
+>   bullet invokes, is unchanged. Nothing above became false; this bullet is the
+>   whole note.
 
 ## Context
 

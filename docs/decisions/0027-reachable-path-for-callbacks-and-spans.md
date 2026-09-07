@@ -11,6 +11,11 @@ Milestone: 5, Gate 0 (milestone-5-design.md §4.5)
 >   and item 1's relation is now consumed by a second pass. Nothing above became
 >   false; the note records the measurement item 3 predicted and one thing it did
 >   not predict.
+> - **2026-09-06 (Milestone 7 Gate 0)** — **amends the Consequences bullet
+>   "Handed to nobody: `pass-reachability`"**:
+>   [decision 0031](./0031-reachability-is-the-occupiable-relation.md) hands it
+>   to Milestone 7's Slice ⓪, which implements the walk over item 1's relation.
+>   See the foot of this file.
 
 ## Context
 
@@ -183,6 +188,12 @@ measurement of a run. Slice ③ owes it a fixture with an asserted verdict.
   says it "must not be read as closed"; it is still not closed, and item 3's
   verdict change is the first thing that depends on the answer.
 
+  > **Amended 2026-09-06 (Milestone 7 Gate 0)** by
+  > [decision 0031](./0031-reachability-is-the-occupiable-relation.md) —
+  > `pass-reachability` is decided to walk item 1's relation, and Slice ⓪
+  > implements it; see the dated note below. The sentence above is left as
+  > decided.
+
 - **This disposes of design §3.2's fourth divergence** — `pass-zero-progress`'s
   missing gate — in the direction §3.2 asked for ("Resolve it with §4.5"), but
   not on §3.2's stated reason. The record above replaces that reason.
@@ -216,3 +227,41 @@ warning about the parked-set SHAPE ("what does not transfer is the parked-set
 shape … and is not a definition of reachability") is the sentence that was
 right; what was missing is that the shape has to be re-derived for every kind
 that can pause, and nothing in the tree derives it from anything.
+
+## 2026-09-06 (Milestone 7 Gate 0) — `pass-reachability` is handed to Slice ⓪, and item 1's relation gets its third consumer
+
+[Decision 0031](./0031-reachability-is-the-occupiable-relation.md) decides that
+`pass-reachability` reads item 1's relation — `byte-reached` plus the EOF walk from
+the parked set — computed once and shared with pass 7, and that `all-out-targets`
+retires. Milestone 7's Slice ⓪ implements it. This note is written at a Gate 0
+commit, where `verify.sls` still walks `all-out-targets`: the walk is *decided*, not
+yet shipped, and the "Handed to nobody" bullet above is false from 0031 onward
+because the hand-off now has a receiver.
+
+The sentence transferred is the one beneath the Consequences' relations table: the
+second relation "is the one that means 'an execution can be here'". 0031 takes it as
+the meaning of "unreachable" in `§16.2:897`, on the ground item 2 already transferred
+from decision 0023 item 3 — a graph node no execution can occupy is not a state that
+originates a traversal.
+
+Item 3's verdict change — the `§16.2:898` gate — was recorded above as "the first
+thing that depends on the answer". The answer is now given, and 0031's Context
+records what it does to that gate's fixture: nothing. The fixture collapses this
+record's Context machine into two nodes — `t` plays both `T` and `Z`, its case edge a
+`reexecute` self-loop, its eof-target an error node — and `t` is occupiable through
+the EOF route, so "and `unreachable-node` does NOT catch it" stays true under the
+narrowed walk. This record's machine **as written** — `Z` a third node, distinct from
+`T` — is the family the narrowing rejects: measured by the Milestone 7 design's
+prototype as three cases in `verify-tests.sps`, one of them this shape with a span
+end as `Z` behind `t`'s byte edge (the 0029 item 3 span case). So the Context's
+"after the gate it verifies clean, and no other check replaces that finding" stops
+being true when Slice ⓪ lands — `unreachable-node` at `Z` replaces it, which is what
+"narrowing `pass-reachability` would shrink the family to empty" foresaw; Slice ⓪'s
+documentation commit marks that sentence at its site.
+
+**What does not move.** Item 1 — the relation, and its two consumers, now three;
+item 3 — `pass-zero-progress`'s gate stays `byte-reached` alone, for the reason item
+3 gives; the relations table's second row. The table's first row describes
+`all-out-targets` as retained, which is true of the tree at this note's commit and
+stops being true when Slice ⓪ lands; it is a record of the tree on 2026-09-04 and is
+left as decided.

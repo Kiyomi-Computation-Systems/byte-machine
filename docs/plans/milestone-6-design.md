@@ -39,6 +39,10 @@ re-measured at plan-writing time (§9).
 > one is a landmine and what it used to say is in git. Later dated notes are indexed here,
 > newest first, each naming the section it amends.
 >
+> **2026-09-06, Milestone 7 Gate 0** — **annotates §8's reachability bullet** (a record): two of
+> its three predicted effects do not occur and the third occurs in fixtures it did not name; see
+> the note under the bullet.
+>
 > **2026-09-06, Slice ② delivered; the milestone closes** — **corrects §7, §4.11 and §8 in
 > place**, all instructions, each where the slice measured what this document had derived: §7's
 > oracle 4 is not "every hunk in those two files is a comment" but an EMPTY five-library diff
@@ -1131,6 +1135,15 @@ that meets it — never reworded to match what shipped.
   **Deferred to Milestone 7** (`§25:1615`), with both ends written by Slice ② on 2026-09-06: the
   note at `pass-reachability` re-addressed, and the appended disposition "§25:1611 — Milestone 6
   hands the reachability narrowing to Milestone 7".
+
+  *(Annotated 2026-09-06, Milestone 7 Gate 0 — measured by the Milestone 7 design's prototype at
+  `5ac363a` and reproduced by its review: of the three effects above, the `verify-tests.sps`
+  fixture named does **not** flip — its `Z` is `T`, occupiable through the EOF route — and the
+  matrix's pruning count does **not** move — no placed node names an eof-target, and the sink is
+  byte-reached in every cell that keeps it; the family does gain `unreachable-node`, in three
+  cases the bullet did not name: the `t2-kinds` accept case, the join's `default-error` case, and
+  the 0029 item 3 span case. One file, three cases; `milestone-7-design.md` §3.2 item 1 carries
+  the enumeration and decision 0031 the resolution.)*
 - **`§16.2:911`** — an orphan with no owner in any milestone (§4.11).
 - **Additional field types** and any "incompatible field" content beyond resolution —
   `§29:1754` (§4.3).

@@ -1,7 +1,9 @@
 # Milestone 7 Design — Verification and generative hardening
 
-**Status: MERGED 2026-09-06 as PR #83 = `8edceb1`; §4.12 settled by the owner the same day (items
-1-3 approved); Gate 0 next.** Written against **`5ac363a`** (`main` = PR #82, which added only
+**Status: Gate 0 discharged 2026-09-06 as decisions 0031-0033 (PR #85; §4's blockquote and
+§11's first bullet carry the discharge); Slice ⓪ next.** Before it: the design merged 2026-09-06
+as PR #83 = `8edceb1`, and §4.12 was settled by the owner the same day (items 1-3 approved).
+Written against **`5ac363a`** (`main` = PR #82, which added only
 `AGENTS.md` bullets on top of Milestone 6's close at `0920b13`) on branch
 `docs/milestone-7-design`, tree clean. Measured on 2026-09-06 by running the complete selection
 and reading the suite's own declared totals: `release` **114/114** (134.71 s); Scheme mutation
@@ -33,6 +35,12 @@ measurement can be re-taken, and Slice ⓪ re-takes it before anything lands.
 > slice, a resolution a slice must implement — is corrected in place, because leaving a false
 > one is a landmine and what it used to say is in git. Later dated notes are indexed here,
 > newest first, each naming the section it amends.
+>
+> **2026-09-06, Gate 0 discharged** — **annotates §3.2 item 1 and corrects §4.1, §4.2 and §11 in
+> place**: the whole-gate review found two stated reasons false against the tree — the
+> `§16.2:898` fixture is a collapsed variant of 0027's machine, not that machine "where `Z` is
+> `T`"; and the diagnostic widening changes forty-two of fifty-six sites, not "about thirty" —
+> both corrected in the records and here; §4's blockquote records all three corrected reasons.
 >
 > **2026-09-06, the owner's decision on §4.12** — **annotates §4.12, §9 and §11**: items 1, 2
 > and 3 approved ("Merge 83, approve all three, and do the Gate 0 plan"). §4.12's heading and
@@ -367,7 +375,9 @@ Seven things a slice would otherwise discover mid-task and report as its own reg
    **Effect (b) does not occur.** The fixture named — `§16.2:898`'s group, "and `unreachable-node`
    does NOT catch it" — builds 0027's Context machine where `Z` *is* `T` (a `reexecute`
    self-loop on `t`), and `t` is occupiable: the entry is parked, its eof-target is `t`, the EOF
-   walk visits it. The family the narrowing rejects is `Z` **distinct from** `T` and reachable
+   walk visits it. *(Annotated 2026-09-06, Gate 0 discharged — the fixture is a collapsed
+   two-node variant of 0027's machine, `t` playing both `T` and `Z`; 0027's machine as written
+   has a distinct `Z` and is in the family. Decision 0031's Context states it that way.)* The family the narrowing rejects is `Z` **distinct from** `T` and reachable
    over `all-out-targets` only through a dead byte edge of `T` — transitively, so `fin` behind
    `exit`'s eof-target in the third case is in it — with `T` one of the three kinds whose byte
    edges are dead at EOF. **Effect (c) does not occur** either: no builder in the matrix's `kind-table` gives its
@@ -458,6 +468,48 @@ slice asserts; §4.10 is the list of things this document deliberately does not 
 disposes the obligations addressed to this milestone; §4.12 collects the scope additions the
 parent plan does not name, for the owner.
 
+> **Gate 0 discharged 2026-09-06**, as three records, as §11 planned.
+>
+> | Record | Carries | Shape |
+> | --- | --- | --- |
+> | [0031](../decisions/0031-reachability-is-the-occupiable-relation.md) | §4.1, with §3.2 item 1's measurement as its Context | five numbered items — the relation and its one procedure; the family, exactly, with what is not in it; `all-out-targets`' retirement and the three mutations it names by LABEL; one parked set, as a derivation with a measurement; what the three cases assert afterwards |
+> | [0032](../decisions/0032-diagnostic-record-seven-fields-and-path-policy.md) | §4.2, with §3.1's slot census as its Context | six numbered items — the shape and the four accessors; the stamping in `verify-machine`; the `declarations` list per site; the path policy as the table, eight codes at twelve sites; the shape rule for tests; the census row |
+> | [0033](../decisions/0033-property-suite-contract.md) | §4.3, with §4.4's Layer 3 table and §4.7's fixture shape | five numbered items — validity is the verifier's verdict; the counters and the floor; the seed; the fixture; the three-layer comparison with its qualifiers |
+>
+> **As performed.** No resolution was split or merged, and no decision changed. Three stated
+> reasons were re-checked against the tree and corrected — one while writing, two by the
+> whole-gate review. (1) §3.2 item 1 accounts for effect (c) with "no builder in the matrix's
+> `kind-table` gives its placed node an EOF route to the sink"; `0031` states it as *no placed
+> node names an eof-target — every input-reading builder passes `#f` — and the sink `ee` is
+> `byte-reached` in every cell that keeps it*, which is the fact the unmoved count rests on,
+> since the zero-width builders' continuations to `ee` are routes the EOF walk takes and "EOF
+> route" reads as false for them. (2) §3.2 item 1 and §4.1 said the `§16.2:898` fixture "builds
+> 0027's Context machine where `Z` is `T`"; the fixture is a collapsed two-node variant, and
+> 0027's machine as written has a distinct `Z` and is in the family — `0031`'s Context and item
+> 2 say so, §3.2 is annotated and §4.1 corrected in place. (3) §4.2 item 2 said "the rest keep
+> their text and their pins"; the twelve path-bearing sites change too — forty-two of
+> fifty-six — and eleven of the 27 pin lines sit at them (`0032` item 3; §4.2 corrected in
+> place). One measurement was
+> guarded rather than re-taken: `git diff --stat 5ac363a..HEAD -- src/ test/` printed nothing, so
+> every record cites the prototype run of §3.2 item 1 and PR #83's reproduction of it. Two
+> records carry Context this document left implicit: `0031` reads `pass-eof-execution`'s walk
+> (from `parked-eof-start`'s answer) and `span-flow`'s (from `eof-step` of the parked node) as
+> two procedures today and states their equality as a derivation the review measured, where
+> §4.1 says only that the walk is `span-flow`'s `eof-nodes` verbatim; `0033` counts
+> `machine-gen.sls`'s constraints by the file's own bullets — two rejection-driven rules, one
+> reachability rule, four accumulate coverage pins — and names all six of Pass 39's mutations,
+> which §4.3 does not.
+>
+> **Five records and one closed design reach back**, under `docs/decisions/README.md`'s
+> convention: `0031` **amends** decision 0027's "Handed to nobody: `pass-reachability`" bullet
+> and decision 0023's second Consequence (a header bullet, a site marker and a foot note in
+> each) and **annotates** 0023's third Consequence (a site marker, the same note); `0032`
+> **annotates** decisions 0020 and 0022 at their "Milestone 7" sentences (a header bullet only,
+> each); `0031`'s Context **annotates** decision 0030's `§12.7:772` citation (a header bullet
+> only, creating that record's Amendments block); and Milestone 6's design §8 pricing bullet, a
+> record in a closed design, carries a dated note indexed in that document's Amendments block.
+> Nothing above any note is rewritten.
+
 ### 4.1 `pass-reachability` walks the occupiable relation — the one hand-off, closed first
 
 **The call.** `§16.2:897` says "unreachable nodes" and `§16.4:947` makes them errors; neither
@@ -507,7 +559,8 @@ EOF — byte-dispatch, sequence-dispatch, integer-accumulate — and `Z` is a no
 `T`** reachable over `all-out-targets` only through a dead byte edge of `T` — transitively: a node
 behind such a `Z`'s own eof-target is in the family too. `Z` gains `unreachable-node`. Not in the family, and
 the design says so because each is a shape a reader will try: `Z = T` (a self-loop — `T` is
-occupiable through the EOF route, measured on 0027's Context machine); `T` a counted consume
+occupiable through the EOF route, measured on the `§16.2:898` gate fixture, a collapsed
+variant of 0027's machine); `T` a counted consume
 (`next` is an EOF successor, decision 0030 item 5, so `Z` behind it is visited); `T` any
 zero-width kind (the walk flows through it); `Z` reachable by any other route. Measured effect on
 the tree: **three cases in `verify-tests.sps`, both modes, nothing else** (§3.2 item 1) — the
@@ -589,9 +642,11 @@ test reads, and four new accessors exported: `diagnostic-severity`, `diagnostic-
    slots with `'()` and `#f`, and the sites that carry a declaration list or a path call new
    constructors whose names begin `make-diagnostic`, so the census counts them. The slot is a
    list because `invalid-span-callback` can name a span and a callback at once. About thirty
-   sites gain an argument; the rest keep their text and their pins (19 `FIND` blocks and 8
-   `REPLACE` blocks in the suite contain `make-diagnostic '` — 27 lines — measured); Slice ①
-   lists the moving sites by code.
+   sites gain a `declarations` argument and the twelve path-bearing sites (item 3) a path —
+   forty-two of fifty-six; the fourteen that keep their text keep their pins (of the 27 pin
+   lines containing `make-diagnostic '`, eleven are at path-bearing sites, six at
+   declaration-gaining sites, ten at unchanged sites — measured); Slice ① lists the moving
+   sites by code.
 3. **A path is carried by the codes a walk produces, and by no other.** "When useful" is
    read as "when the finding is about a path" — a diagnostic about a *place* (a duplicate, a
    bad name, an overlap, a dangling target, an unreachable node) has no path to give, and a
@@ -1256,13 +1311,15 @@ that meets it — never reworded to match what shipped.
 
 ## 11. Handed to writing-plans
 
-- **Gate 0 is three records, `0031`-`0033`**, carrying §4.1, §4.2 and §4.3 respectively; `0031`
-  **amends** decision 0027's "Handed to nobody" bullet and 0023's second Consequence (both
-  become false) and **annotates** 0023's third, with header bullets and site markers per
-  `docs/decisions/README.md`, and puts a dated note in Milestone 6's design §8; `0032` annotates 0020 and
-  0022 at their "Milestone 7" sentences. Every reason in a record is checked against the code
-  and the spec, not against this document — the sentence `AGENTS.md` puts in the reviewer's
-  prompt verbatim.
+- **Gate 0 is discharged** (2026-09-06; §4's blockquote carries the discharge as performed):
+  three records — `0031` "Reachability is the occupiable relation — `pass-reachability` walks
+  it, `all-out-targets` retires, and the family whose verdict changes" (§4.1); `0032` "The
+  diagnostic record carries `§16.4`'s seven fields, and the path has a policy" (§4.2); `0033`
+  "The property suite's contract — the verifier decides validity, every draw proves it ran,
+  the seed comes from the environment, and a failure is a file" (§4.3) — with the notes into
+  decisions 0027, 0023, 0020, 0022 and 0030 and into Milestone 6's design §8 in the tree.
+  Every reason in a record was checked against the code and the spec, not against this
+  document — the sentence `AGENTS.md` puts in the reviewer's prompt verbatim.
 - **§4.12 is settled (owner, 2026-09-06): items 1-3 approved.** Each lands in Slice ④'s plan;
   the two parent-plan dispositions (items 1 and 2) are appended by Slice ④ with the witnesses'
   measurements, never before them.
