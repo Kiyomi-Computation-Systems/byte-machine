@@ -1058,6 +1058,52 @@ cmake_minimum_required(VERSION 3.26)
 # and node-name grammar pins, whose `if` tests grew a conjunct; their REPLACEs
 # now drop the name check alone. No pass is added.
 #
+# Milestone 7 Slice ⓪, decision 0031 (reachability is the occupiable relation):
+# ONE retired, FOUR re-anchored, ONE re-shaped, THREE re-pinned and THREE added,
+# 522 - 1 + 3 = 524, and no pass is added (58 stays 58).
+#
+# The retired one is "a sequence node's eof-target does not feed reachability
+# (arm 2, all-out-targets)": its FIND was that procedure's definition, which
+# this slice deletes. Its decision is witnessed in both directions by the new
+# group's sequence-dispatch pair; the tombstone at its site says so.
+#
+# The four re-anchored ones are the §16.2:909 membership's -- the entry
+# disjunct, the byte-reachability gate, the derived EOF-route test and the span
+# end -- which move onto the ONE `parked?` the slice unifies. Each mutant now
+# reaches three consumers instead of one, so each was re-measured; all four are
+# still caught by their shipped pins, with the failing-case counts re-confirmed.
+#
+# The re-shaped one is "pass 7's EOF half keeps taking byte edges", whose
+# REPLACE named `all-out-targets`. An unbound identifier is a raise, not a
+# comparison, so the retired walk is reproduced inline.
+#
+# THREE pins moved without their FIND moving, which a census by FIND location
+# cannot see: the narrowing changed what those mutants PRODUCE. "a zero-width
+# node's targets are not out-targets" (its fixture's zero-width node is the
+# ENTRY, hence parked, so the EOF walk rescues it -- a second machine was added
+# where the node is byte-reached instead); "the :908 check is not gated on
+# byte-reachability" (its pin read a case label this slice renames); and "a
+# counted consume's next is not an out-edge" (its pin read an entry-stop record
+# the narrowing emptied). Each is re-pinned on a whole measured record.
+#
+# The three added: `occupiable` mutated back to the retired walk, and the two
+# `parked?` disjuncts that had NO pin before the unification. The pause disjunct
+# is pinned in this pass on a CONJUNCTION of two records (neither is unique
+# alone; the intersection of their containing sets is empty). The CALLBACK
+# disjunct is declared in the kind-position-census pass instead, because
+# `verify-tests.sps` passes with that disjunct gone -- measured on both the
+# pre-0031 tree and the unified one -- and a mutation is witnessed only by its
+# own SPEC lane's program.
+#
+# *** ONE OF THE THREE IS SUBSUMED EXCEPT ON ONE FIXTURE, and the fixture is the
+# finding. *** "pass 4 walks the retired relation" removes a SUBSET of what
+# "reachability never reports an unreachable node" removes, on every machine --
+# whole-set containment, so every family-only check they share is satisfied by
+# both. The separating case is `an orphan beside the family`, which carries a
+# node dead under both relations beside one dead only under the narrowing: the
+# walk mutant leaves the orphan reported and the emission mutant leaves nothing.
+# Count, don't witness.
+#
 # Milestone 6 Slice ② task 3, the counted-span differential: TWO more in ONE new
 # pass, 520 + 2 = 522 and 57 + 1 = 58. The slice adds no mechanism, so its lane
 # witnesses one decision no other lane does -- decision 0030 item 2's placement
@@ -1301,7 +1347,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 58)
-set(EXPECTED_MUTATIONS 522)
+set(EXPECTED_MUTATIONS 524)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -4836,32 +4882,23 @@ byte_machine_mutation(
   EXPECT_OUTPUT_MATCHES
     "a node reached only through the sequence eof-target is reachable: no unreachable-node -- expected 0, got 2")
 
-byte_machine_mutation(
-  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: a sequence node's eof-target does not feed reachability (arm 2, all-out-targets)"
-  # Re-anchored in Fix wave 1 (Important 3): all-out-targets' own inline cond
-  # was extracted into the shared node-eof-target helper (also used by arm 4
-  # and arm 7 below), so the FIND text this mutation targets moved from the
-  # inline cond to the call site. REPLACE reproduces the old byte-dispatch-
-  # only behaviour by gating the call, not by inlining the old cond again.
-  FIND [[  (define (all-out-targets n)
-    (append (node-out-targets n)
-            (let ((t (node-eof-target n)))
-              (if (symbol? t) (list t) '()))))]]
-  REPLACE [[  (define (all-out-targets n)
-    (append (node-out-targets n)
-            (if (byte-dispatch-node? n)
-                (let ((t (node-eof-target n)))
-                  (if (symbol? t) (list t) '()))
-                '())))]]
-  # Comparison-caught: the finish node reached only via the sequence node's
-  # eof-target goes unreached, so pass-reachability's own unreachable-node
-  # diagnostic fires where the test expects none -- a clean, single-case
-  # witness. Re-measured against the refactored source: byte-identical output
-  # to the pre-refactor mutation (no other case in this file is affected).
-  EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES
-    "a node reached only through the sequence eof-target is reachable: no unreachable-node -- expected 0, got 1")
+# RETIRED by Milestone 7 Slice ⓪ (decision 0031), and this tombstone is the
+# reason rather than a weakened pin.
+#
+# LABEL was "verify: a sequence node's eof-target does not feed reachability
+# (arm 2, all-out-targets)". Its FIND was `all-out-targets`' definition, which
+# decision 0031 deleted: `pass-reachability` now walks `occupiable`, and the
+# only reader of `node-eof-target` for a reachability walk is `eof-step`.
+#
+# The decision it named -- a sequence node's eof-target feeds reachability --
+# is witnessed twice over, in both directions. The ACCEPTED half is the shipped
+# case "a node reached only through the sequence eof-target is reachable",
+# which this mutation's own pin read and which still passes. The REJECTED half
+# is new: the "reachability is the occupiable relation (decision 0031)" group's
+# sequence-dispatch pair, where the node behind that eof-target's dead byte
+# edge is reported `unreachable-node` and the same machine with it
+# byte-reachable verifies clean. AGENTS.md: a mutation whose decision a later
+# fix subsumes is retired with the reason, never weakened until it is green.
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -5387,8 +5424,9 @@ byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: an accumulate's byte targets are not out-targets"
   # Three of its four explicit targets are byte out-targets; the fourth,
-  # eof-target, belongs to node-eof-target so that all-out-targets adds it for
-  # reachability and the :908 filter does not see it.
+  # eof-target, belongs to node-eof-target so that `eof-step` -- which is what
+  # reads it for the reachability walk since decision 0031 -- adds it and the
+  # :908 filter does not see it.
   # Re-anchored at Slice ⓪b task 5: node-out-targets is now a derived view of
   # node-out-edges, whose arms yield (role . target) pairs.
   FIND [[          ((integer-accumulate-node? n)
@@ -5432,11 +5470,18 @@ byte_machine_mutation(
                (span-start-node? n) (span-end-node? n))
            '())]]
   EXPECT_STATUS 1
-  # A CONJUNCTION, for the mirror of the reason above: the reachability record
-  # is shared with the helper-arm mutation and the :908 record with ":908 never
-  # fires", and only the pair belongs to this arm alone.
+  # RE-PINNED by Milestone 7 Slice ⓪, on a fixture this mutant can still reach.
+  # The old pin was a conjunction whose first half was the case's "nothing
+  # unreachable" check on a machine whose field-action node IS THE ENTRY -- and
+  # decision 0031 makes the entry a parked node, so `eof-step` (which reads
+  # `zero-width-edges` directly) visits its successors on the EOF walk and the
+  # check no longer reddens under this mutant. Strengthened, not loosened: the
+  # entry fixture keeps its own check, and the case gained a SECOND machine
+  # where the zero-width node is reached by a byte edge from the entry instead
+  # -- nothing is parked there, so the arm under test is the only route to the
+  # stop. One whole measured record, no `.*`.
   EXPECT_OUTPUT_MATCHES
-    "a zero-width node's targets are out-targets, so they are reachable: nothing unreachable.*a byte-reachable zero-width node into a finish is non-eof-into-finish: non-eof-into-finish")
+    "the zero-width census .Slice ② task 3..a zero-width node's targets are out-targets, so they are reachable: and reachable through a zero-width node the entry only reaches by a byte edge -- expected .., got ..unreachable-node . after..")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -5752,8 +5797,19 @@ byte_machine_mutation(
   REPLACE [[                       (if #t
                            (filter values]]
   EXPECT_STATUS 1
+  # RE-PINNED by Milestone 7 Slice ⓪. The old pin was the case-label prefix
+  # "...: none rejected", which Task 2 renamed when the case was re-baselined --
+  # and which the suite's own note on "verify: a counted consume's next is not
+  # an out-edge" already recorded as coarse enough for three mutants to satisfy.
+  # This is the whole measured `expected ... got ...` record of the renamed
+  # check, so it stops being a prefix: under this mutant every one of the eight
+  # kinds gains `non-eof-into-finish` at `hop`, beside the three
+  # `unreachable-node`s the narrowing puts there. The case's sibling check "no
+  # kind reports non-eof-into-finish for the untakeable edge" is §16.2:908 in
+  # isolation and also reddens; either separates this mutant, and the whole-list
+  # record is the stronger of the two.
   EXPECT_OUTPUT_MATCHES
-    "an EOF-only-reachable byte edge into a finish is accepted: none rejected")
+    "§16.2:908 is gated on byte-reachability, for every kind .Slice ⓪b..an EOF-only-reachable byte edge into a finish is accepted: the finish behind a dead byte edge is unreachable for the three input-reading kinds, and nothing else is reported -- expected ..byte-dispatch .unreachable-node . fin.. .sequence-dispatch .unreachable-node . fin.. .integer-accumulate .unreachable-node . fin..., got ..byte-dispatch .unreachable-node . fin. .non-eof-into-finish . hop.. .sequence-dispatch .unreachable-node . fin. .non-eof-into-finish . hop.. .integer-accumulate .unreachable-node . fin. .non-eof-into-finish . hop.. .pause .non-eof-into-finish . hop.. .field-action .non-eof-into-finish . hop.. .field-branch .non-eof-into-finish . hop.. .callback .non-eof-into-finish . hop.. .counted-consume .non-eof-into-finish . hop...")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -5836,8 +5892,12 @@ byte_machine_mutation(
   # The defect this slice exists for. Without the entry in the start set, a
   # machine whose entry is itself a stop -- or a zero-width node leading to one --
   # verifies with ZERO diagnostics and `parser-finish!` returns `stopped`.
-  FIND [[                                (or (eq? (node-name n) (machine-entry m))]]
-  REPLACE [[                                (or #f]]
+  # Re-anchored by Milestone 7 Slice ⓪ (decision 0031): the §16.2:909
+  # membership and `span-flow`'s copy are ONE `parked?` now, so this FIND
+  # moved onto that procedure and the mutant reaches all three consumers
+  # (pass 6, pass 7, `occupiable`). The decision it names is unchanged.
+  FIND [[         (or (eq? (node-name n) (machine-entry m))]]
+  REPLACE [[         (or #f]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "an entry whose own EOF path reaches a stop is rejected: each rejected exactly once, at the entry")
@@ -5848,8 +5908,12 @@ byte_machine_mutation(
   # The parked set is parkable states, not graph nodes. Ungated, nodes no
   # execution can occupy start walks -- which is the over-approximation decision
   # 0011 item 4(a)'s literal words invite and this slice narrows.
-  FIND [[                       (if (and (memq (node-name n) br909)]]
-  REPLACE [[                       (if (and #t]]
+  # Re-anchored by Milestone 7 Slice ⓪ (decision 0031): the §16.2:909
+  # membership and `span-flow`'s copy are ONE `parked?` now, so this FIND
+  # moved onto that procedure and the mutant reaches all three consumers
+  # (pass 6, pass 7, `occupiable`). The decision it names is unchanged.
+  FIND [[    (and (memq (node-name n) br)]]
+  REPLACE [[    (and #t]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "an EOF chain of pauses that cycles is a zero-progress EOF cycle")
 
@@ -5859,8 +5923,12 @@ byte_machine_mutation(
   # The census this slice removed, reinstated as a mutant. Narrowing the derived
   # disjunct back to one kind is exactly the shape that lost sequence nodes and
   # then accumulate nodes their walks, twice, in two different slices.
-  FIND [[                                    (symbol? (node-eof-target n))))]]
-  REPLACE [[                                    (byte-dispatch-node? n)))]]
+  # Re-anchored by Milestone 7 Slice ⓪ (decision 0031): the §16.2:909
+  # membership and `span-flow`'s copy are ONE `parked?` now, so this FIND
+  # moved onto that procedure and the mutant reaches all three consumers
+  # (pass 6, pass 7, `occupiable`). The decision it names is unchanged.
+  FIND [[             (symbol? (node-eof-target n)))))]]
+  REPLACE [[             (byte-dispatch-node? n))))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "an eof chain that cycles through a sequence node is an EOF cycle")
 
@@ -5877,8 +5945,14 @@ byte_machine_mutation(
                                                      "an EOF path cycles without reaching a terminal")))]]
   REPLACE [[                             ((cycle) '())]]
   EXPECT_STATUS 1
+  # RE-ANCHORED (the incumbent half of Milestone 7 Slice ⓪'s two-direction
+  # sweep). The pin was the bare check label "…AT A PAUSE NODE: at least one, at
+  # a pause", which this slice's new "the parked set loses the pause disjunct"
+  # also reddens -- and which two shipped mutants already satisfied on the merge
+  # base. Re-anchored on a CONJUNCTION of two whole measured records no sibling
+  # produces together; measured collision set: EMPTY, where the base's was two.
   EXPECT_OUTPUT_MATCHES
-    "an eof-zero-progress-cycle is reported AT A PAUSE NODE: at least one, at a pause")
+    "EOF terminals and eof-target verification .§16.2..an eof-target cycle is rejected .eof-zero-progress-cycle.: has eof-zero-progress-cycle -- expected a true value.*the thirteenth kind in the verifier census .Milestone 6 Slice ①..a self-targeting eof-target is an EOF zero-progress cycle: eof-zero-progress-cycle, at the node -- expected ..eof-zero-progress-cycle . body.., got .[)]")
 
 # --- Milestone 5 Slice ⓪b task 5: §16.4:940's edge/source label --------------
 
@@ -5939,7 +6013,18 @@ byte_machine_mutation(
   REPLACE [[    '((finish unresolved error)                 ; the chain terminates
       (eof-reachable-stop default-error)        ; §16.2:909]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "a `default-error` sibling does not mask the stop")
+  # RE-ANCHORED by Milestone 7 Slice ⓪. The pin was a bare CASE-NAME prefix,
+  # which twelve mutants satisfied on the merge base and which the re-baselined
+  # join expectation would have taken to fourteen. Re-anchored on a conjunction
+  # of two whole measured records. Residue, measured and named: "verify: an
+  # EOF-reachable stop terminal is accepted" and "verify: eof-reachable-stop is
+  # promoted into the benign tier" still satisfy it -- both stop
+  # `eof-reachable-stop` being reported at all, so every check this mutant
+  # reddens they redden too. The subset relation was computed in BOTH
+  # directions; it holds one way only, so this is subsumption rather than
+  # under-anchoring, and the merge-base control shows both.
+  EXPECT_OUTPUT_MATCHES
+    "a benign EOF verdict never outranks a stop in a join .Slice ⓪b..a `default-error` sibling does not mask the stop: eof-reachable-stop survives the join -- expected ..unreachable-node . rj2. .eof-reachable-stop . s0.., got ..unreachable-node . rj2...*the thirteenth kind in the verifier census .Milestone 6 Slice ①..the flow-through zero-count stop at the ENTRY is rejected .0030 item 5.: eof-reachable-stop, at the entry -- expected ..eof-reachable-stop . body.., got .[)]")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -6146,9 +6231,9 @@ byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: pass 7's EOF half keeps taking byte edges"
   # Decision 0029 item 3 takes 0027's relation rather than minting a third, and
-  # 0027 rejects `all-out-targets` BY NAME: that walk crosses an eof-target and
-  # then keeps taking byte edges, which describes no execution. This mutant is
-  # that walk, and the fixture is the machine 0027's own Context derives.
+  # 0027 rejects by name the walk that crosses an eof-target and then keeps
+  # taking byte edges, which describes no execution. This mutant is that walk,
+  # and the fixture is the machine 0027's own Context derives.
   #
   # *** ITS FIRST FORM SHIPPED UNCAUGHT AND THE SUITE SAID SO. *** It removed a
   # `(memq to live)` filter -- which turned out to be vacuous, because `live` is
@@ -6156,10 +6241,25 @@ byte_machine_mutation(
   # construction. The filter was deleted rather than documented, and the
   # decision it was meant to witness is witnessed here, where the two relations
   # actually differ.
+  #
+  # RE-SHAPED by Milestone 7 Slice ⓪: the REPLACE called `all-out-targets`,
+  # which decision 0031 deleted -- an unbound identifier is a raise, not a
+  # comparison, and the mutant would have been caught by where it happened to
+  # crash rather than by the decision it names. The retired walk is reproduced
+  # INLINE here; this and the tombstone above are the only two places the name
+  # survives, both saying it is history.
   FIND [[                              (map (lambda (t) (cons (node-name n) t)) (eof-step n))]]
-  REPLACE [[                              (map (lambda (t) (cons (node-name n) t)) (all-out-targets n))]]
+  REPLACE [[                              (map (lambda (t) (cons (node-name n) t))
+                                   (append (node-out-targets n)
+                                           (let ((t (node-eof-target n)))
+                                             (if (symbol? t) (list t) '()))))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the span end on the untakeable byte edge is not reported")
+  # RE-MEASURED with the re-shaped REPLACE and with the case's re-baselined
+  # expectation: the mutant reports the unmatched end at `cl` beside the four
+  # `unreachable-node`s decision 0031 puts there, so the whole `got` is pinned
+  # rather than the bare check label the shipped pin carried.
+  EXPECT_OUTPUT_MATCHES
+    "the span-state lattice .§16.2:899, :900, :907..a node no execution can occupy contributes no state .0029 item 3.: the span end on the untakeable byte edge is not reported -- expected ..unreachable-node . cl. .unreachable-node . exit. .unreachable-node . done. .unreachable-node . fin.., got ..invalid-span-state . cl. .unreachable-node . cl. .unreachable-node . exit. .unreachable-node . done. .unreachable-node . fin..")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -6218,9 +6318,13 @@ byte_machine_mutation(
   # continues into a stop verifies clean -- and `parser-finish!` after a
   # span-data pause answers `stopped` from it, which is the outcome the whole
   # check exists to forbid.
-  FIND [[                                    (span-end-node? n)
-                                    (symbol? (node-eof-target n))))]]
-  REPLACE [[                                    (symbol? (node-eof-target n))))]]
+  # Re-anchored by Milestone 7 Slice ⓪ (decision 0031): the §16.2:909
+  # membership and `span-flow`'s copy are ONE `parked?` now, so this FIND
+  # moved onto that procedure and the mutant reaches all three consumers
+  # (pass 6, pass 7, `occupiable`). The decision it names is unchanged.
+  FIND [[             (span-end-node? n)
+             (symbol? (node-eof-target n)))))]]
+  REPLACE [[             (symbol? (node-eof-target n)))))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "a span end continuing into a STOP is rejected .*one finding, at the span end -- expected ..eof-reachable-stop . cl.., got .."
@@ -6449,8 +6553,18 @@ byte_machine_mutation(
            (list (cons 'next (counted-consume-node-next n))))]]
   REPLACE [[          ((counted-consume-node? n) '())]]
   EXPECT_STATUS 1
+  # RE-PINNED by Milestone 7 Slice ⓪. The old pin read the entry-stop fixture's
+  # `got ..unreachable-node`, and the narrowing emptied it: the entry there is a
+  # counted consume, so it is PARKED, and its walk visits `next`'s target
+  # through `eof-successors` (0030 item 5) -- nothing in that machine is
+  # unreachable any more. The decision this mutation names -- `next` is a BYTE
+  # out-edge -- is still observable through the §16.2:908 block, which reads
+  # `node-out-edges`: with the arm gone, the byte-reachable counted consume
+  # whose `next` is the finish stops being `non-eof-into-finish` and is reported
+  # `unreachable-node` instead. That is the measured record below, and it is
+  # unique to this mutant across the pass.
   EXPECT_OUTPUT_MATCHES
-    "the flow-through zero-count stop at the ENTRY is rejected .0030 item 5.: eof-reachable-stop, at the entry -- expected ..eof-reachable-stop . body.., got ..unreachable-node")
+    "§16.2:908 is gated on byte-reachability, for every kind .Slice ⓪b..a BYTE-reachable byte edge into a finish is rejected at its source node: each rejected exactly once, at `hop` -- expected .., got ..counted-consume .unreachable-node . fin...")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -6571,6 +6685,55 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the one-shot length, body, stop grammar is ACCEPTED .0030 item 6.: no diagnostics -- expected .., got .eof-reachable-stop.")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: pass 4 walks the retired relation instead of the occupiable one"
+  # Decision 0031's own decision, as a mutant: `pass-reachability` reads
+  # `occupiable` and not the walk that crosses an eof-target and then keeps
+  # taking byte edges. The retired walk is reproduced inline because 0031
+  # deleted the name.
+  #
+  # Comparison-caught, not raise-caught: the mutant verifies the whole `E
+  # ->(eof) T ->(byte) Z` family clean, so the new group's three REJECTED
+  # checks and its transitive one fail with `got ()` against a non-empty
+  # expectation, and the three re-baselined cases fail with the pre-0031
+  # verdicts.
+  FIND [[    (let ((nodes (machine-nodes m)) (reached (occupiable m)))]]
+  REPLACE [[    (let ((nodes (machine-nodes m)) (reached (reach-from m (lambda (n) (append (node-out-targets n) (let ((t (node-eof-target n))) (if (symbol? t) (list t) '())))))))]]
+  EXPECT_STATUS 1
+  # SUBSUMED except for one record, and that record is why the fixture exists.
+  # Measured on this tree: every OTHER check this mutant reddens is also
+  # reddened by "verify: reachability never reports an unreachable node", whose
+  # suppression of the emission is a superset of this walk's widening on every
+  # machine -- whole-set containment, so no family-only check can separate them.
+  # The separating fixture is `an orphan beside the family`, which carries a
+  # node dead under BOTH relations beside one dead only under the narrowing:
+  # this mutant leaves the orphan reported, the emission mutant leaves nothing,
+  # and the two `got` lists differ. AGENTS.md's count-don't-witness remedy.
+  EXPECT_OUTPUT_MATCHES
+    "reachability is the occupiable relation .decision 0031..an orphan beside the family, so the two ways of breaking pass 4 differ: both unoccupiable nodes, the family's and the orphan's -- expected ..unreachable-node . z. .unreachable-node . orphan.., got ..unreachable-node . orphan..")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the parked set loses the pause disjunct"
+  # One of the two disjuncts that had NO pin before decision 0031 unified the
+  # two hand-written copies: every shipped `(pause-node? n)` FIND sat in
+  # `pass-zero-progress`, `zero-width-edges`, `node-out-edges`,
+  # `parked-eof-start` or `span-transfer`, and none in the membership.
+  # Measured: a byte-reachable pause stops starting a walk, so the counted
+  # case whose stop sits behind a pause continuation loses its finding.
+  FIND [[             (pause-node? n)
+             (callback-node? n)]]
+  REPLACE [[             (callback-node? n)]]
+  EXPECT_STATUS 1
+  # A CONJUNCTION of two whole records, because neither is unique alone: the
+  # first is shared with "verify: an EOF-reachable stop terminal is accepted"
+  # and the second with three cycle/out-target mutants, and the intersection of
+  # those containing sets is empty. Measured; the `.*` joins two complete
+  # records and never sits between an `expected` and its own `got`.
+  EXPECT_OUTPUT_MATCHES
+    "pause nodes .Slice 3..a byte-reachable pause into a stop would leak stopped through EOF .§16.2:909.: rejected -- expected a true value.*an EOF cycle through pause continuations is attributed to the pause .Slice ⓪..an eof-zero-progress-cycle is reported AT A PAUSE NODE: at least one, at a pause -- expected a true value")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -11339,7 +11502,13 @@ byte_machine_mutation(
                                   (counted-consume-node? n))
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "callback-pause-continuation advance want")
+  # RE-ANCHORED by Milestone 7 Slice ⓪: the pin was the bare cell prefix
+  # "callback-pause-continuation advance want", which this slice's new "the
+  # parked set loses the callback disjunct" also emits (it moves the same cell's
+  # verdict). The whole measured axis-B record is unique to this mutant --
+  # collision set EMPTY, as on the merge base.
+  EXPECT_OUTPUT_MATCHES
+    "every position pointed at itself .axis B..each self-reference matches its derived verdict: each matches its derivation -- expected .., got ..callback-pause-continuation advance want .eof-zero-progress-cycle zero-progress-cycle. got .eof-zero-progress-cycle.. .callback-branch advance want .zero-progress-cycle. got ... .callback-continue advance want .zero-progress-cycle. got ....")
 
 # Milestone 5 Slice ③ task 1: the span kinds' single successors. Each arm is its
 # own mutation because axis C names the position that failed.
@@ -11387,6 +11556,27 @@ byte_machine_mutation(
                               (reaches-self? (node-name n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "span-start-next advance want")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls
+  SPEC byte-machine.unit.kind-position-census.chez.source
+  LABEL "verify: the parked set loses the callback disjunct"
+  # The parked set's OTHER unpinned disjunct, and its only witness is in THIS
+  # lane -- `verify-tests.sps` passes with the disjunct gone (measured on both
+  # the pre-0031 tree and the unified one), so a pin declared in Pass 33 would
+  # ship UNCAUGHT. A mutation is witnessed only by its own SPEC lane's program
+  # (AGENTS.md), so it is declared here, where the axis-A cell
+  # `(callback-pause-continuation stop)` loses its `eof-reachable-stop`.
+  FIND [[             (callback-node? n)
+             (span-end-node? n)]]
+  REPLACE [[             (span-end-node? n)]]
+  EXPECT_STATUS 1
+  # The axis-A cell, measured. The axis-B self cell moves too
+  # (`(callback-pause-continuation advance)` loses `eof-zero-progress-cycle`),
+  # and one record is enough: this pin resolves once in this mutant's own FAIL
+  # records and no other mutant in the pass satisfies it.
+  EXPECT_OUTPUT_MATCHES
+    "every kind in every position agrees with §16.2 .axis A..the product is driven and every cell matches its derived verdict: and every one matches §16.2 -- expected .., got ..callback-pause-continuation stop want .eof-reachable-stop. got ....")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
