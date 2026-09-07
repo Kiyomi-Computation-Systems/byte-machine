@@ -108,7 +108,13 @@ both — a body-shaped arm in the retention lane, and the close-out: every scope
 bullet and exit criterion dispositioned against the tree, nothing the milestone
 approved left unshipped, and the one thing it declined to do (narrowing the
 verifier's reachability pass) handed to Milestone 7 with both ends written.
-Milestone 7 (verification and generative hardening) is next.
+Milestone 7 (verification and generative hardening) is in progress: its Gate 0
+discharged 2026-09-06 as decisions 0031-0033, and Slice ⓪ closed 2026-09-07.
+The verifier's reachability pass now walks the relation an execution can
+actually occupy — byte flow, then EOF routes from the states a parser can be
+parked on — in one procedure shared with the two passes that already read it,
+so a node standing behind an edge no execution can take is reported as
+unreachable rather than silently accepted.
 
 =src/byte-machine/= holds the construction API, the verifier, the normalizer and
 emitter, the reference interpreter, and the runtime, each exercised in both the

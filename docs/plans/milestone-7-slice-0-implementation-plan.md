@@ -857,3 +857,57 @@ The `§25:1611` hand-off is discharged under `§25:1615`; "unreachable" quantifi
 what an execution can occupy, in one procedure with three consumers; Slice ① starts
 against a `verify.sls` whose walks are settled and edits only emission sites and the
 record.
+
+---
+
+## 2026-09-07 — disposition: what shipped, and the two instructions above that were wrong
+
+Delivered as PR #89. Every step above ran; the numbers in the body are the
+predictions this plan made and are left as written, because a work order that
+has closed is the record of what was asked. What shipped differs from it in
+three places, and two of those are this plan being wrong rather than the work
+diverging.
+
+1. **Task 4 Step 1's retirement was wrong, and the whole-branch review measured
+   it so.** The step retires "verify: a sequence node's eof-target does not feed
+   reachability (arm 2, all-out-targets)" on the ground that "the decision it
+   named … is witnessed by the new group's sequence-dispatch pair". It is not:
+   in that pair `T`'s own eof-target is the error node, which is already
+   byte-reached, so `occupiable` answers the same with or without
+   `node-eof-target`'s sequence arm — what the pair witnesses is that the walk
+   does not take `T`'s BYTE edge. Measured with the block deleted, the shipped
+   case "a node reached only through the sequence eof-target is reachable" was
+   still reddened by two mutants, both naming the byte half and both emitting
+   `got 2` where the retired one emitted `got 1`. The decision was RELOCATED by
+   decision 0031, not subsumed. Shipped: the mutation is **re-anchored onto
+   `eof-step`**, the procedure that reads `node-eof-target` for the walk now, and
+   its `got 1` record is unique across the pass. Nothing retires.
+   Consequence for the arithmetic: `EXPECTED_MUTATIONS` is 522 + 3 = **525**,
+   not 522 − 1 + 3 = 524, and the census is five re-anchored rather than one
+   retired and four.
+
+2. **Task 4 Step 2b's third bullet names a case that does not exist.** It says
+   to pin "verify: a counted consume's next is not an out-edge" on a case
+   "verify: a counted consume whose next is a finish … in the Milestone 6 Slice ①
+   group; read its label from the file". `rg` finds no such case, and the mutant
+   reddens no case by that name. The property the bullet describes — a
+   byte-reachable counted consume whose `next` is a finish stops being
+   `non-eof-into-finish` — is carried by the `§16.2:908` reject case "a
+   BYTE-reachable byte edge into a finish is rejected at its source node", whose
+   measured record is what the pin now reads.
+
+3. **Task 4 Step 7's expectation "0 collisions among the pins this slice added,
+   moved or re-shaped" is not reachable and its second clause is the operative
+   one.** Four of those pins carry inherited collisions the merge-base control
+   also shows. Measured, both directions, against a `733b32e` control:
+   **0 self-failures**, collisions **288 → 249** with **0 new** and 39 closed,
+   the 24 remaining on touched pins all present in the control, and every one of
+   the fifteen touched pins matching **exactly once** among its own mutant's
+   `FAIL ` records. The sweep also found three shipped INCUMBENT pins newly
+   satisfied by a changed mutant — the direction the step names but the
+   expectation does not budget for — all three re-anchored on whole measured
+   records.
+
+Everything else ran as written. `release` 114/114 in both Chez modes; mutation
+suite 58 passes / 525 mutations; census 30 codes over 56 sites with
+`(unreachable-node 1)`; matrix pruning count 3; both design §4.9 gates empty.

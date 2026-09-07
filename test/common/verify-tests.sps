@@ -712,8 +712,9 @@
 ;;
 ;; The seven extended, each with an arm here: node-out-targets; node-eof-target
 ;; -- the site Task 1's own fix wave collapsed three near-duplicate accessors
-;; into, exercised by arms 2 and 4 below through its two different callers,
-;; all-out-targets and pass-eof respectively; reexec-targets; eof-terminal;
+;; into, exercised by arms 2 and 4 below through two different callers, which
+;; since decision 0031 are `eof-step` (the reachability and pass-7 walk, where
+;; the retired walk used to read it) and pass-eof; reexec-targets; eof-terminal;
 ;; pass-eof-execution's two filters (§16.2:908 and :909); and
 ;; pass-zero-progress's REPORT guard, which Slice ② deliberately left out and
 ;; Slice ③ added (§25:1533) -- covered by the two zero-progress cases below,
@@ -773,7 +774,8 @@
                                  (make-stop-node 'stop #f)
                                  (make-error-node 'reject 'rejected #f)))
                           'missing-target))))
-    ;; arm 2 -- all-out-targets: a node reachable ONLY through the sequence eof-target
+    ;; arm 2 -- the reachability walk (`eof-step` since decision 0031): a node
+    ;; reachable ONLY through the sequence eof-target
     (harness-case "a node reached only through the sequence eof-target is reachable"
       (lambda ()
         (check-equal "no unreachable-node"
@@ -1311,7 +1313,33 @@
                                 (make-stop-node 'after #f)
                                 (make-error-node 'oops 'rejected #f))
                           'act))))
-          (check "nothing unreachable" (not (memq 'unreachable-node cs))))))
+          (check "nothing unreachable" (not (memq 'unreachable-node cs))))
+        ;; *** A SECOND MACHINE, because the narrowing rescued the first one
+        ;; from the mutant that witnessed this arm. *** `act` above is the
+        ;; ENTRY, so decision 0031 makes it a parked node, and `eof-step` reads
+        ;; `zero-width-edges` DIRECTLY rather than through `node-out-targets` --
+        ;; the entry's EOF walk therefore visits `after` and `oops` even when
+        ;; the arm under test yields nothing. Here `act` is reached by a BYTE
+        ;; edge from the entry instead, so nothing is parked but the entry
+        ;; (whose own EOF route is #f), no EOF walk runs, and `after` -- a stop
+        ;; nothing else names -- is occupiable only through the zero-width edge
+        ;; this arm supplies. Asserted as the whole (code . node) list so the
+        ;; mutant's record can be pinned rather than described.
+        (check-equal "and reachable through a zero-width node the entry only reaches by a byte edge"
+                     (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                          (verification-diagnostics
+                           (verify-machine
+                            (zw-machine
+                             (list (make-byte-dispatch-node 'start
+                                     (list (make-byte-case (make-exact-byte-matcher 0)
+                                                           (make-edge 'act 'advance) #f))
+                                     (make-edge 'oops 'reexecute) #f #f)
+                                   (make-field-action-node 'act 'increment '(count)
+                                                           'after 'oops #f)
+                                   (make-stop-node 'after #f)
+                                   (make-error-node 'oops 'rejected #f))
+                             'start))))
+                     '())))
     (harness-case "a byte-reachable zero-width node into a finish is non-eof-into-finish"
       (lambda ()
         ;; §16.2:908 forbids non-EOF control flow into a finish terminal, and a
@@ -1852,16 +1880,49 @@
         ;; The half that fails today for the four input-reading kinds. The edge
         ;; is untakeable: once an execution takes an eof-target it can never feed
         ;; again, so no byte ever traverses it.
-        (let ((seen 0) (bad '()))
+        ;;
+        ;; *** RE-BASELINED by Milestone 7 Slice ⓪ (decision 0031 item 5), and
+        ;; the property this case owns is unchanged. *** §16.2:908 is what it
+        ;; asserts -- no kind reports `non-eof-into-finish` for an edge no byte
+        ;; can traverse -- and that is now its own check, total over `t2-kinds`
+        ;; so it cannot pass by not running. What moved is a SECOND fact about
+        ;; the same sixteen machines: `pass-reachability` now walks the
+        ;; occupiable relation, so for the three kinds whose byte edges are dead
+        ;; at EOF -- byte-dispatch, sequence-dispatch, integer-accumulate, whose
+        ;; `hop` carries no EOF route of its own and therefore no EOF successor
+        ;; -- `fin` sits behind that dead edge and is a dead node under
+        ;; §16.2:897 (0031 item 2; 0023's second Consequence, amended). The
+        ;; other five keep `fin` occupiable: a pause, a field-action and a
+        ;; field-branch continue into it zero-width, a callback's outcome
+        ;; reaches it, and a counted consume's `next` is an EOF successor
+        ;; (0030 item 5).
+        (let ((seen 0) (bad '()) (into-finish '()))
           (for-each (lambda (k)
                       (set! seen (+ seen 1))
-                      (let ((ds (map diagnostic-code
+                      (let ((ds (map (lambda (d) (cons (diagnostic-code d)
+                                                       (diagnostic-node d)))
                                      (verification-diagnostics
                                       (verify-machine (t2-machine k #t))))))
+                        (set! into-finish
+                              (cons (cons k (and (assq 'non-eof-into-finish ds) #t))
+                                    into-finish))
                         (unless (null? ds) (set! bad (cons (cons k ds) bad)))))
                     t2-kinds)
           (check-equal "all eight kinds driven" seen 8)
-          (check-equal "none rejected" bad '()))))
+          ;; The §16.2:908 property, asserted per kind rather than as an empty
+          ;; list: a total answer over `t2-kinds` fails if the loop stops early
+          ;; as well as if a verdict flips.
+          (check-equal "no kind reports non-eof-into-finish for the untakeable edge"
+                       (reverse into-finish)
+                       '((byte-dispatch . #f) (sequence-dispatch . #f)
+                         (integer-accumulate . #f) (pause . #f)
+                         (field-action . #f) (field-branch . #f)
+                         (callback . #f) (counted-consume . #f)))
+          (check-equal "the finish behind a dead byte edge is unreachable for the three input-reading kinds, and nothing else is reported"
+                       (reverse bad)
+                       '((byte-dispatch (unreachable-node . fin))
+                         (sequence-dispatch (unreachable-node . fin))
+                         (integer-accumulate (unreachable-node . fin)))))))
     (harness-case "a BYTE-reachable byte edge into a finish is rejected at its source node"
       (lambda ()
         ;; The reverse-direction pin: the gate must not become vacuous. Asserted
@@ -2237,6 +2298,13 @@
         ;; X is a dispatch with NO eof-target, so `dispatch-arm` answers
         ;; `default-error` -- the verdict whose promotion above `cycle` was
         ;; measured to accept a machine that never terminates.
+        ;;
+        ;; Re-baselined by Milestone 7 Slice ⓪ (decision 0031 item 5): `rj2` is
+        ;; reachable only through `x`'s dead fallback edge -- `x` is itself
+        ;; EOF-only-reachable and carries no EOF route, so no execution can take
+        ;; that edge -- and `pass-reachability` now says so. The join this case
+        ;; owns is untouched: `eof-reachable-stop` still survives it, and the
+        ;; order is `verify-machine`'s `append` order, pass 4 before pass 6.
         (check-equal "eof-reachable-stop survives the join"
                      (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
                           (verification-diagnostics
@@ -2250,7 +2318,7 @@
                                      (make-edge 'rj2 'reexecute) #f #f)
                                    (make-error-node 'rj2 'rejected #f))
                              'x))))
-                     '((eof-reachable-stop . s0)))))
+                     '((unreachable-node . rj2) (eof-reachable-stop . s0)))))
     (harness-case "an UNRESOLVED sibling does not mask the stop"
       (lambda ()
         ;; The sixth verdict, and the one the tier group did not cover until the
@@ -2713,26 +2781,49 @@
         ;; shape that separates the two relations. *** The entry's byte edges go
         ;; to the error node and its EOF route goes to `t`; `t` is reachable ONLY
         ;; that way, and `cl` -- an unmatched span end -- hangs off `t`'s BYTE
-        ;; edge. `pass-reachability` walks `all-out-targets`, so it crosses the
-        ;; eof-target and then keeps taking byte edges and calls `cl` reached.
-        ;; No execution can: once an execution takes an eof-target it can never
-        ;; feed again (§12.2's finish-ready row), so `cl`'s byte edge is
-        ;; untakeable and pass 7 must not report its unmatched end.
+        ;; edge. No execution can occupy `cl`: once an execution takes an
+        ;; eof-target it can never feed again (§12.2's finish-ready row), so
+        ;; `cl`'s byte edge is untakeable and pass 7 must not report its
+        ;; unmatched end.
+        ;;
+        ;; Re-baselined by Milestone 7 Slice ⓪ (decision 0031 item 5). Until then
+        ;; `pass-reachability` walked a relation that crossed the eof-target and
+        ;; then kept taking byte edges and called `cl` reached; it
+        ;; now walks the occupiable relation, so `cl` and everything behind it --
+        ;; `exit`, `done`, `fin` -- are reported `unreachable-node`, in
+        ;; machine-node order. The property this case owns is the OTHER half and
+        ;; is unchanged: whatever pass 4 says about the node domain, pass 7 must
+        ;; not report an unmatched end there. The second check below asserts that
+        ;; half on its own, so a span code appearing here fails a check whose
+        ;; label says span.
         ;;
         ;; An orphan with no in-edges at all does NOT test this -- it receives
         ;; no state under either relation -- which is what the first draft of
         ;; this case used, and its mutation shipped UNCAUGHT and said so.
-        (check-equal "the span end on the untakeable byte edge is not reported"
-                     (codes (span-machine
-                             (append (list (make-byte-dispatch-node 'start
-                                             (list (case-to 'reject))
-                                             (make-edge 'reject 'reexecute) 't #f)
-                                           (make-byte-dispatch-node 't
-                                             (list (case-to 'cl))
-                                             (make-edge 'reject 'reexecute) 'reject #f)
-                                           (make-span-end-node 'cl 'body 'exit #f))
-                                     (span-tail/exit))))
-                     '())))))
+        (let ((ds (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+                       (verification-diagnostics
+                        (verify-machine
+                         (span-machine
+                          (append (list (make-byte-dispatch-node 'start
+                                          (list (case-to 'reject))
+                                          (make-edge 'reject 'reexecute) 't #f)
+                                        (make-byte-dispatch-node 't
+                                          (list (case-to 'cl))
+                                          (make-edge 'reject 'reexecute) 'reject #f)
+                                        (make-span-end-node 'cl 'body 'exit #f))
+                                  (span-tail/exit))))))))
+          (check-equal "the span end on the untakeable byte edge is not reported"
+                       ds
+                       '((unreachable-node . cl) (unreachable-node . exit)
+                         (unreachable-node . done) (unreachable-node . fin)))
+          ;; Derived, not a literal census of span codes: anything pass 7 (or
+          ;; any other pass) had to say about this machine would appear here.
+          ;; Seeded so it cannot pass by never being computed.
+          (let ((others 'seed))
+            (set! others (filter (lambda (c) (not (eq? c 'unreachable-node)))
+                                 (map car ds)))
+            (check-equal "and pass 7 says nothing about the span: pass 4 is the only reporter here"
+                         others '())))))))
 
 ;; --- §16.2:898's reachability gate (Milestone 5 Slice ③, decision 0027 item 3)
 ;;
@@ -3090,10 +3181,18 @@
 
 ;; *** THIS IS A RELAXATION, and the ground the design gave for calling it
 ;; benign does not hold. *** Design §3.2 item 4 said such a machine "is rejected
-;; by `unreachable-node` regardless". It is not: `pass-reachability` walks
-;; `all-out-targets`, which crosses an eof-target and then keeps taking byte
-;; edges, so it calls `t` reached. The machine below is 0027's own, and it is
-;; asserted BOTH ways -- the cycle is real, and no execution can enter it.
+;; by `unreachable-node` regardless". It is not, and it still is not after
+;; decision 0031 narrowed `pass-reachability` -- for a different and now true
+;; reason. `t` is the entry's eof-target, so it is OCCUPIABLE: the EOF walk
+;; starts at the parked entry and visits it. What no execution can take here is
+;; an EDGE, `t`'s own self-loop, and `unreachable-node` quantifies over nodes.
+;; The machine below is a COLLAPSED VARIANT of 0027's -- decision 0031's words,
+;; and Milestone 7's Gate 0 corrected the design for calling it that machine.
+;; 0027's machine as written has `Z` a third node, distinct from `T`; here `t`
+;; plays both, its case edge the self-loop. That is exactly why it does not
+;; flip: the family the narrowing rejects needs a `Z` the walk cannot reach, and
+;; this fixture has none. It is asserted BOTH ways -- the cycle is real, and no
+;; execution can enter it.
 
 (harness-group "zero-progress cycles are gated on byte-reachability (§16.2:898)"
   (lambda ()
@@ -3179,6 +3278,164 @@
                                    (make-error-node 'reject 'rejected #f))
                              'default-eof))))
                      '((zero-progress-cycle . t)))))))
+
+;; --- reachability is the occupiable relation (decision 0031) -----------------
+;;
+;; `pass-reachability` walks byte-reached ∪ the EOF walk from the parked set --
+;; the relation §16.2:908/:909 and pass 7 already use -- and no longer the walk
+;; decision 0031 retired, which crossed an eof-target and then kept taking byte
+;; edges. The family whose verdict changes is `E ->(eof) T ->(byte) Z`: T
+;; reachable only through an EOF route and one of the three kinds whose byte
+;; edges are dead at EOF, Z distinct from T and reachable only through such an
+;; edge. Each kind is asserted BOTH ways -- Z dead, rejected by name; the same
+;; machine with Z also byte-reachable from the entry, accepted -- and the two
+;; shapes a reader will try are ACCEPTED controls: Z = T (a self-loop; T is
+;; occupiable through the EOF route) and T a counted consume (its `next` is an
+;; EOF successor, decision 0030 item 5).
+
+;; Z: a byte-dispatch whose case and fallback edges land on the error node and
+;; which carries NO EOF route of its own. It has no finding of its own under
+;; either relation -- `unreachable-node` when only T's dead byte edge reaches
+;; it, nothing when the entry also reaches it by a byte edge -- so what the
+;; cases below read is the RELATION and not a second property of Z.
+(define occ-z
+  (make-byte-dispatch-node 'z (list (case-to 'reject))
+                           (make-edge 'reject 'reexecute) #f #f))
+
+;; T: the node the entry reaches ONLY as its eof-target, in each of the three
+;; kinds whose byte edges are dead at EOF. Each carries its own EOF route (to
+;; the error node), so the EOF walk leaves T by that route and never by the
+;; edge to Z -- which is the whole of why Z is unoccupiable.
+(define (occ-t kind)
+  (case kind
+    ((byte-dispatch)
+     (make-byte-dispatch-node 't
+       (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'z 'advance) #f))
+       (make-edge 'reject 'reexecute) 'reject #f))
+    ((sequence-dispatch)
+     (make-sequence-dispatch-node 't (list (make-sequence-case '(1) 'z #f))
+       (make-edge 'reject 'reexecute) 'reject #f))
+    ((integer-accumulate)
+     (make-integer-accumulate-node 't 'n 10 'z (make-edge 'reject 'advance)
+                                   'reject 'reject #f))
+    (else (assertion-violation 'occ-t "no such kind" kind))))
+
+;; The entry: byte edges to the error node, EOF route to T. The ACCEPTED twin
+;; adds ONE byte case reaching Z directly -- the only difference between the two
+;; halves of every pair below, so the pair isolates "Z is byte-reachable".
+(define (occ-entry z-byte-reachable?)
+  (make-byte-dispatch-node 'start
+    (cons (case-to 'reject)
+          (if z-byte-reachable?
+              (list (make-byte-case (make-exact-byte-matcher 1)
+                                    (make-edge 'z 'advance) #f))
+              '()))
+    (make-edge 'reject 'reexecute) 't #f))
+
+(define (occ-machine nodes)
+  (make-machine 'occ 'start (list (make-uint-field 'n 8 0 #f)) '() '() errs
+                nodes 'default-eof #f))
+
+(define (occ-findings m)
+  (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
+       (verification-diagnostics (verify-machine m))))
+
+(define occ-reject (make-error-node 'reject 'rejected #f))
+
+(harness-group "reachability is the occupiable relation (decision 0031)"
+  (lambda ()
+    (harness-case "per input-reading kind, both ways"
+      (lambda ()
+        ;; The labels are built from the kind's own name, so the three pairs are
+        ;; six distinct (case, check) records and a pin can name one of them.
+        (let ((driven 0))
+          (for-each
+           (lambda (k)
+             (set! driven (+ driven 1))
+             (let ((name (symbol->string k)))
+               (check-equal (string-append name ": Z reachable only through T's dead byte edge is unreachable")
+                            (occ-findings
+                             (occ-machine (list (occ-entry #f) (occ-t k)
+                                                occ-z occ-reject)))
+                            '((unreachable-node . z)))
+               (check-equal (string-append name ": the same machine with Z byte-reachable from the entry verifies clean")
+                            (occ-findings
+                             (occ-machine (list (occ-entry #t) (occ-t k)
+                                                occ-z occ-reject)))
+                            '())))
+           '(byte-dispatch sequence-dispatch integer-accumulate))
+          ;; The sentinel reads the loop's own counter, not the expectation: a
+          ;; kind dropped from the list above takes this check red.
+          (check-equal "all three input-reading kinds driven" driven 3))))
+    (harness-case "and transitively, through Z's own EOF route"
+      (lambda ()
+        ;; Z here carries an EOF route to a finish nothing else names. The
+        ;; retired walk reached both; the occupiable relation reaches neither,
+        ;; and they are reported in machine-node order.
+        (check-equal "Z and the finish behind its EOF route are both unreachable"
+                     (occ-findings
+                      (occ-machine
+                       (list (occ-entry #f) (occ-t 'byte-dispatch)
+                             (make-byte-dispatch-node 'z (list (case-to 'reject))
+                                                      (make-edge 'reject 'reexecute) 'fin #f)
+                             (make-finish-node 'fin #f)
+                             occ-reject)))
+                     '((unreachable-node . z) (unreachable-node . fin)))))
+    (harness-case "an orphan beside the family, so the two ways of breaking pass 4 differ"
+      (lambda ()
+        ;; *** COUNT, DON'T WITNESS (AGENTS.md). *** Every check above that
+        ;; expects a FINDING -- the three REJECTED halves and the transitive
+        ;; case; not the three ACCEPTED twins, which answer `()` under both, nor
+        ;; the sentinel -- is reddened by "pass 4 walks the retired relation"
+        ;; AND by "pass 4 never reports an unreachable node at all", with the
+        ;; identical `got ()` --
+        ;; the second mutant suppresses a SUPERSET of what the first suppresses,
+        ;; on every machine, so no check whose expectation is a family finding
+        ;; alone can tell them apart. This machine carries BOTH kinds of
+        ;; unoccupiable node: `z`, dead only under the narrowing, and `orphan`,
+        ;; an error node with no in-edge at all, dead under either relation. The
+        ;; retired walk therefore leaves `orphan` reported and the suppressed
+        ;; emission leaves nothing, and the two mutants produce different `got`
+        ;; lists from this one check.
+        (check-equal "both unoccupiable nodes, the family's and the orphan's"
+                     (occ-findings
+                      (occ-machine
+                       (list (occ-entry #f) (occ-t 'byte-dispatch) occ-z
+                             (make-error-node 'orphan 'rejected #f)
+                             occ-reject)))
+                     '((unreachable-node . z) (unreachable-node . orphan)))))
+    (harness-case "control: Z is T itself"
+      (lambda ()
+        ;; The first shape a reader will try, and it is NOT the family: T is
+        ;; occupiable through the entry's EOF route, so an edge back to itself
+        ;; reaches nothing new. `verify-tests.sps`'s §16.2:898 gate fixture has
+        ;; exactly this shape, which is why the pricing that predicted it would
+        ;; flip was wrong (0031's Context).
+        (check-equal "T's self-loop reaches nothing the EOF walk has not visited"
+                     (occ-findings
+                      (occ-machine
+                       (list (occ-entry #f)
+                             (make-byte-dispatch-node 't
+                               (list (make-byte-case (make-exact-byte-matcher 1)
+                                                     (make-edge 't 'advance) #f))
+                               (make-edge 'reject 'reexecute) 'reject #f)
+                             occ-reject)))
+                     '())))
+    (harness-case "control: a counted consume as T"
+      (lambda ()
+        ;; The fourth input-reading kind is NOT in the family: decision 0030
+        ;; item 5 makes a counted consume's `next` an EOF successor, so the walk
+        ;; from the entry visits Z through it. Z stays a dispatch with a #f EOF
+        ;; route -- `default-error`, tier 0 -- because a STOP there would be
+        ;; `eof-reachable-stop` at the entry and this control would stop being
+        ;; about reachability.
+        (check-equal "the counted consume's next is visited on the EOF walk"
+                     (occ-findings
+                      (occ-machine
+                       (list (occ-entry #f)
+                             (make-counted-consume-node 't 'n 'z 'reject #f)
+                             occ-z occ-reject)))
+                     '())))))
 
 ;; --- the thirteenth kind in the verifier census (Milestone 6 Slice ①) ---------
 ;;

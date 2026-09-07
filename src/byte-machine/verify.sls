@@ -245,17 +245,13 @@
           ;; Milestone 6 Slice ①: the fourth input-reading kind, same convention.
           ((counted-consume-node? n) (counted-consume-node-eof-target n))
           (else #f)))
-  ;; byte out-targets PLUS a dispatch/sequence node's eof-target (for
-  ;; reachability only).
-  (define (all-out-targets n)
-    (append (node-out-targets n)
-            (let ((t (node-eof-target n)))
-              (if (symbol? t) (list t) '()))))
-
-  ;; Visited-set DFS from the machine's entry, following whatever edge
-  ;; function `targets` selects (node-out-targets, all-out-targets, ...).
-  ;; Returns the reached node names. Shared by pass-reachability and
-  ;; byte-reached, which differ only in which edge function they walk.
+  ;; Visited-set DFS from the machine's entry, following whatever edge function
+  ;; `targets` selects. Returns the reached node names. Since decision 0031 it
+  ;; has ONE caller, `byte-reached`; the parameter stays because it is what
+  ;; names the walk -- a DFS over an edge function, with the edge function at
+  ;; the call site rather than inlined here -- and because the EOF half of
+  ;; occupiability is a different shape of walk (`eof-visited`, seeded from a
+  ;; SET of parked nodes rather than from the entry).
   (define (reach-from m targets)
     (let ((nodes (machine-nodes m)) (reached '()))
       (let visit ((name (machine-entry m)))
@@ -598,26 +594,25 @@
                 (machine-nodes m))))
 
   ;; PASS 4: reachability from entry.
-  ;; *** THIS PASS OVER-APPROXIMATES, and until now that was recorded in four
-  ;; documents and no source file. *** It walks `all-out-targets`, which crosses
-  ;; an eof-target and then keeps taking byte edges, so a node reachable only
-  ;; through an EOF edge no execution can take still counts as reached and
-  ;; `unreachable-node` does not fire. Recorded in decisions 0023 and 0027,
-  ;; design §4.5, and the parent plan's §16.2 disposition; decision 0027 says it
-  ;; is "handed to nobody" and that "item 3's verdict change is the first thing
-  ;; that depends on the answer" -- and Milestone 5 shipped that verdict change.
+  ;; *** "UNREACHABLE" QUANTIFIES OVER WHAT AN EXECUTION CAN OCCUPY. *** The
+  ;; pass walks `occupiable` -- byte-reached plus the EOF walk from the parked
+  ;; set, the relation §16.2:908/:909 and pass 7 already read -- so a node
+  ;; reachable only through an edge no execution can take is reported here.
+  ;; Decided in decision 0031 and adjudicated at the parent plan's disposition
+  ;; "§25:1611", which carries the pricing this narrowing was measured against.
   ;;
-  ;; Written here by Milestone 5's completeness check (2026-09-06) because a
-  ;; relaxation known to four documents and to no reader of this procedure is
-  ;; the failure mode this milestone added a standard against. Owed by whoever
-  ;; next narrows reachability, and failing that by MILESTONE 7 (§25:1615, the
-  ;; generative and diagnostic hardening of the passes already introduced).
-  ;; Handed on 2026-09-06 when Milestone 6 closed without narrowing it, and
-  ;; adjudicated at the parent plan's disposition "§25:1611 — Milestone 6 hands
-  ;; the reachability narrowing to Milestone 7", which carries the pricing from
-  ;; Milestone 6's design §8.
+  ;; The family whose verdict this changed (0031 item 2) is `E ->(eof) T
+  ;; ->(byte) Z`: T reachable only as an eof-target and one of the three kinds
+  ;; whose byte edges are dead at EOF -- byte-dispatch, sequence-dispatch,
+  ;; integer-accumulate, the kinds with no EOF successor of their own -- and Z
+  ;; distinct from T behind such an edge. A counted consume as T is NOT in it:
+  ;; its `next` is an EOF successor (decision 0030 item 5). Until 0031 the pass
+  ;; walked a relation that crossed an eof-target and then kept taking byte
+  ;; edges; that over-approximation was recorded in four documents and no source
+  ;; file until Milestone 5's completeness check wrote it here, and `eof-step`'s
+  ;; own comment carries the retired walk's shape.
   (define (pass-reachability m)
-    (let ((nodes (machine-nodes m)) (reached (reach-from m all-out-targets)))
+    (let ((nodes (machine-nodes m)) (reached (occupiable m)))
       (filter values
               (map (lambda (n)
                      (if (memq (node-name n) reached) #f
@@ -645,9 +640,13 @@
   ;; *** It is a RELAXATION, and the ground the design gave for calling it
   ;; benign does not hold. *** Design §3.2 item 4 said such a machine "is
   ;; rejected by `unreachable-node` regardless"; 0027 records that it is not,
-  ;; because `pass-reachability` walks `all-out-targets`, which crosses an
-  ;; eof-target and then keeps taking byte edges. The fixture in verify-tests
-  ;; asserts the machine both ways.
+  ;; and it still is not after decision 0031 narrowed `pass-reachability` --
+  ;; for a different and now true reason. The machine's `t` is the entry's
+  ;; eof-target, so it is OCCUPIABLE (the EOF walk starts at the parked entry
+  ;; and visits it), and its self-loop is the only edge no execution can take.
+  ;; 0031's Context calls this effect (b): narrowing the relation does not reach
+  ;; this shape, because the unreachable thing here is an edge and not a node.
+  ;; The fixture in verify-tests asserts the machine both ways.
   (define (pass-zero-progress m)
     (let ((nodes (machine-nodes m)) (br898 (byte-reached m)))
       (define (reexec-targets n)
@@ -739,7 +738,7 @@
               ;; overflow-error names a target NODE" -- and nothing anywhere
               ;; constrains that target's kind. ***
               ;;
-              ;; So the overflow edge joins unconditionally: §12.7:772 makes it
+              ;; So the overflow edge joins unconditionally: §12.7:773 makes it
               ;; NON-CONSUMING and §15:870 leaves the field unchanged, so an
               ;; overflow-error naming its own accumulate node re-reads the same
               ;; byte forever. Neither runtime loop guards against that. The
@@ -1165,22 +1164,7 @@
        (let ((br909 (byte-reached m)))
          (apply append
                 (map (lambda (n)
-                       (if (and (memq (node-name n) br909)
-                                (or (eq? (node-name n) (machine-entry m))
-                                    (pause-node? n)
-                                    ;; Slice ②: a callback that returned pause
-                                    ;; parks the parser exactly as a pause node
-                                    ;; does. `parked-eof-start` above is where
-                                    ;; its start differs from its name.
-                                    (callback-node? n)
-                                    ;; Slice ③, and NOT in its first shape: a
-                                    ;; span end's data callback parks the parser
-                                    ;; on that node's completion substep, so it
-                                    ;; belongs in this set for the same reason
-                                    ;; the callback node does. `parked-eof-start`
-                                    ;; carries the difference again.
-                                    (span-end-node? n)
-                                    (symbol? (node-eof-target n))))
+                       (if (parked? m n br909)
                            (case (eof-terminal m (parked-eof-start m n))
                              ((eof-reachable-stop)
                               (list (make-diagnostic 'eof-reachable-stop (node-name n)
@@ -1610,8 +1594,10 @@
   ;; So the edge relation here is the one whose transitive closure IS 0027's
   ;; relation: byte edges while input can still arrive, then eof routes and
   ;; zero-width continuations, and never a byte edge after an eof-target. It is
-  ;; deliberately not `all-out-targets`, which crosses an eof-target and then
-  ;; keeps taking byte edges -- 0027 rejects that walk by name.
+  ;; deliberately not the walk 0027 rejected by name and 0031 retired, which
+  ;; crossed an eof-target and then kept taking byte edges. Since 0031
+  ;; `pass-reachability` reads this relation too, through `eof-visited` and
+  ;; `occupiable`.
   ;;
   ;; A node's EOF successors: its own eof route when it has one (the four
   ;; input-reading kinds), and its zero-width continuations otherwise. Both
@@ -1626,29 +1612,59 @@
     (let ((t (node-eof-target n)))
       (append (if (symbol? t) (list t) '()) (eof-successors n))))
 
-  ;; The parked set, in the shape §16.2:909's own block uses: the entry, every
-  ;; byte-reachable pause, every byte-reachable callback (Slice ②), and every
-  ;; byte-reachable node carrying its own EOF route.
-  ;;
-  ;; *** THIS IS THE SECOND HAND-WRITTEN COPY OF THAT DISJUNCTION, and the two
-  ;; already differ. *** `pass-eof-execution`'s membership also lists
-  ;; `span-end-node?` -- a span-data callback's pause parks the parser on that
-  ;; node's completion substep -- and this one does not, because it was written
-  ;; while the slice still believed a span end was not a parked state and only
-  ;; the other site was corrected.
-  ;;
-  ;; The difference is INERT, and that is a derivation rather than luck: a
-  ;; byte-reachable span end's `next` is already a byte out-edge, so `span-flow`'s
-  ;; byte half carries it and seeding an EOF walk there would add a duplicate
-  ;; edge to a relation that is joined, not counted. It is written down because
-  ;; the next kind that can pause has to be added to BOTH, and a reader who
-  ;; "fixes" this omission should know they changed nothing.
+  ;; THE parked set: §16.2:909's start set, decision 0023 item 3's "states an
+  ;; execution can be PARKED on", in ONE procedure with three consumers --
+  ;; `pass-eof-execution` (which nodes start a walk), `span-flow` (which nodes
+  ;; seed pass 7's EOF edges) and `occupiable` (decision 0031: which nodes an
+  ;; execution can occupy). Byte-reachable, and one of: the entry (a fresh
+  ;; parser sits here without having executed it); a pause; a callback (its
+  ;; pause outcome parks the parser -- `parked-eof-start` says where its walk
+  ;; starts); a span end (its data callback's pause parks the parser on the
+  ;; completion substep, Milestone 5 Slice ③); or a node carrying its own EOF
+  ;; route -- the derived `symbol?` test over `node-eof-target`, which every
+  ;; input-reading kind satisfies (written without its parens here, so it adds
+  ;; no hit: `rg -n "symbol\? \(node-eof-target n\)"` over this file printed
+  ;; THREE before the unification -- 0031's own count, two code sites plus one
+  ;; comment inside `parked-eof-start` -- and prints TWO after it, the one
+  ;; surviving code site and that comment).
+  ;; Until decision 0031 this disjunction was written twice by hand and the
+  ;; copies differed by `span-end-node?` -- inert for pass 7 and for
+  ;; occupiability alike, because a byte-reachable span end's `next` is already
+  ;; a byte out-edge (measured either way). The next kind that can pause joins
+  ;; the SET here and nowhere else -- but if its walk starts somewhere other
+  ;; than its own name, `parked-eof-start` above needs an arm too, as the
+  ;; callback and the counted consume each did.
   (define (parked? m n br)
     (and (memq (node-name n) br)
          (or (eq? (node-name n) (machine-entry m))
              (pause-node? n)
              (callback-node? n)
+             (span-end-node? n)
              (symbol? (node-eof-target n)))))
+
+  ;; The EOF half of decision 0027 item 1's relation as a VISITED SET: a DFS
+  ;; over eof routes from the parked set, never taking a byte edge -- once an
+  ;; execution takes an eof-target it can never feed again (§12.2's
+  ;; finish-ready row). Factored out of `span-flow` by decision 0031 so that
+  ;; pass 7 and `pass-reachability` read one walk: one census, two views.
+  (define (eof-visited m nodes br)
+    (let walk ((frontier (apply append
+                                (map (lambda (n) (if (parked? m n br) (eof-step n) '()))
+                                     nodes)))
+               (seen '()))
+      (cond ((null? frontier) seen)
+            ((memq (car frontier) seen) (walk (cdr frontier) seen))
+            (else
+             (let ((n (lookup nodes (car frontier))))
+               (walk (append (if n (eof-step n) '()) (cdr frontier))
+                     (cons (car frontier) seen)))))))
+
+  ;; Decision 0031: the nodes an execution can OCCUPY -- byte-reached, plus
+  ;; every node the EOF walk from the parked set visits. `pass-reachability`
+  ;; reads it, and "unreachable" (§16.2:897) means "unoccupiable".
+  (define (occupiable m)
+    (let* ((nodes (machine-nodes m)) (br (byte-reached m)))
+      (append br (eof-visited m nodes br))))
 
   ;; 0027 item 1's relation, as its EDGE LIST. The occupiable set is this list's
   ;; closure from the entry, so the pass needs no separate node filter: a node no
@@ -1665,22 +1681,7 @@
                                    (node-out-targets n))
                               '()))
                         nodes)))
-           (eof-nodes
-            ;; A DFS over eof routes from the parked set, never taking a byte
-            ;; edge: once an execution takes an eof-target it can never feed
-            ;; again (§12.2's finish-ready row), which is the sentence
-            ;; `pass-eof-execution` already records at its own gate.
-            (let walk ((frontier (apply append
-                                        (map (lambda (n)
-                                               (if (parked? m n br) (eof-step n) '()))
-                                             nodes)))
-                       (seen '()))
-              (cond ((null? frontier) seen)
-                    ((memq (car frontier) seen) (walk (cdr frontier) seen))
-                    (else
-                     (let ((n (lookup nodes (car frontier))))
-                       (walk (append (if n (eof-step n) '()) (cdr frontier))
-                             (cons (car frontier) seen)))))))
+           (eof-nodes (eof-visited m nodes br))
            (eof-edges
             (apply append
                    (map (lambda (n)

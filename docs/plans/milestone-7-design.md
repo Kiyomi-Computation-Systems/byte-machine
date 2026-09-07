@@ -1,7 +1,7 @@
 # Milestone 7 Design — Verification and generative hardening
 
 **Status: Gate 0 discharged 2026-09-06 as decisions 0031-0033 (PR #85; §4's blockquote and
-§11's first bullet carry the discharge); Slice ⓪ next.** Before it: the design merged 2026-09-06
+§11's first bullet carry the discharge); Slice ⓪ delivered 2026-09-07 (PR #89); Slice ① next.** Before it: the design merged 2026-09-06
 as PR #83 = `8edceb1`, and §4.12 was settled by the owner the same day (items 1-3 approved).
 Written against **`5ac363a`** (`main` = PR #82, which added only
 `AGENTS.md` bullets on top of Milestone 6's close at `0920b13`) on branch
@@ -35,6 +35,19 @@ measurement can be re-taken, and Slice ⓪ re-takes it before anything lands.
 > slice, a resolution a slice must implement — is corrected in place, because leaving a false
 > one is a landmine and what it used to say is in git. Later dated notes are indexed here,
 > newest first, each naming the section it amends.
+>
+> **2026-09-07, Slice ⓪ delivered (PR #89)** — **corrects §5's Pins paragraph in place and
+> annotates §5's scope**: the paragraph named three mutations by LABEL and delegated the rest
+> to one `rg` over `(symbol? (node-eof-target n))`, which under-listed the work three ways —
+> two pins under the same membership that the search cannot see, three whose `FIND` does not
+> move but whose observation the narrowing changes, and one whose only witness is in another
+> SPEC lane. The measured census (one retired, four re-anchored, one re-shaped, five `FIND`s
+> unchanged, three re-pinned, three added, three incumbents re-anchored by the sweep) replaces
+> it — corrected once more the same day, when the whole-branch review measured the retirement's
+> stated reason false: nothing retires, and the arm-2 mutation re-anchors onto `eof-step`. §5's "each caught by the case that disjunct's kind already has" is corrected: true of the
+> pause, false of the callback, whose witness is `unit.kind-position-census`'s axis-A cell.
+> §3.2 item 1's measurement is a record and is untouched — the slice re-took it verbatim at its
+> own base. The plan measured what the design derived.
 >
 > **2026-09-06, Gate 0 discharged** — **annotates §3.2 item 1 and corrects §4.1, §4.2 and §11 in
 > place**: the whole-gate review found two stated reasons false against the tree — the
@@ -1068,6 +1081,12 @@ no `§25` bullet of its own. Depends on Gate 0 (decision 0031). Everything in it
 by the prototype in §3.2 item 1, and the slice's first task is to re-take that measurement at
 its own base commit before changing anything.
 
+**Delivered 2026-09-07 as PR #89**, base `733b32e` (`src/` and `test/` byte-identical to
+`5ac363a`, so §3.2 item 1's measurement re-took verbatim: 111 of 113 lanes, the same two lanes
+and the same three cases, nothing else). `release` **114/114**; mutation suite **58 passes /
+525 mutations**; diagnostic census unmoved at **30 codes over 56 sites** with
+`(unreachable-node 1)`; matrix pruning count **3**.
+
 **The work**, one source file and one test program, plus pins:
 
 - **`verify.sls`.** `occupiable`, factored out of `span-flow`'s `eof-nodes` so both read one
@@ -1085,19 +1104,43 @@ its own base commit before changing anything.
   `Z` behind a counted consume's `next`), with the rejected node asserted by name.
 - **The census and the matrix** do not move (§3.2 item 1, measured) and the slice asserts
   that by running them rather than assuming it.
-- **Pins.** By LABEL, the mutations whose `FIND` or `REPLACE` names a construct this slice
-  deletes or moves: "verify: a sequence node's eof-target does not feed reachability (arm 2,
-  all-out-targets)" — its `FIND` is `all-out-targets`' definition and it retires with the
-  reason written in its place — `AGENTS.md`'s rule that a mutation whose decision a later fix
-  subsumes is retired with the reason, never weakened until green — its decision now pinned by
-  the new group's sequence-dispatch pair; the Slice ③ mutation whose `REPLACE` rewrites `span-flow`'s edge list over
-  `all-out-targets` — re-shaped to an inline equivalent, since an unbound identifier is a raise
-  and not a comparison; "verify: reachability never reports an unreachable node" — re-read with
-  its `REPLACE`, unmoved if its `FIND` survives; and every mutation whose `FIND` includes either
-  parked-set disjunction (`rg -n -F "(symbol? (node-eof-target n))"` against the suite before
-  editing, and by LABEL in the plan). New pins: `occupiable` mutated back to the retired walk
-  (the family's REJECTED fixtures go green — a comparison catch); the unified `parked?` losing
-  each disjunct in turn, each caught by the case that disjunct's kind already has.
+- **Pins.** *Corrected in place 2026-09-07 against what the slice measured; the paragraph
+  below is the shipped census, and the sentence it replaces under-listed the work three ways.*
+  The design named three mutations by LABEL and delegated the rest to
+  `rg -n -F "(symbol? (node-eof-target n))"` against the suite — which finds the *enumerated*
+  and *span-end* pins and misses the D-1 entry pin and the byte-reachability gate, two under
+  the same membership. It also named nothing for the mutations whose `FIND` does **not** move
+  but whose OBSERVATION the narrowing changes, and nothing for the disjunct whose only witness
+  lives in another SPEC lane. Measured, by lexing every `byte_machine_mutation(` block whose
+  `FILE` is `verify.sls` (137 at the base) and locating each whole `FIND` in the source:
+  **eleven** land in the constructs this slice edits — **five re-anchor**: four onto the
+  unified `parked?` (`FIND` and `REPLACE` together, each re-measured: failing-check counts
+  2, 2→4, 5→6, 1) and one, the `all-out-targets` arm-2 mutation, onto **`eof-step`**;
+  **one re-shapes its `REPLACE`** (the Slice ③ `span-flow` mutation, whose `REPLACE` named the
+  deleted procedure — an unbound identifier is a raise and not a comparison); and **five
+  `FIND`s stay**. *Nothing retires.* The slice's first draft retired the arm-2 mutation on
+  this section's own reading — that its decision was subsumed by the new group's
+  sequence-dispatch pair — and the whole-branch review measured that false: in that pair `T`'s
+  eof-target is the error node, already byte-reached, so the walk answers the same with or
+  without `node-eof-target`'s sequence arm. The decision was RELOCATED by 0031, not subsumed:
+  `eof-step` is the reader now, and the mutation is anchored there, emitting the same
+  separating `got 1` it always did. **Three more move without their `FIND` moving** and
+  no census by `FIND` location can see them: the zero-width out-targets arm (its fixture's
+  zero-width node is the ENTRY, hence parked, so the EOF walk rescues it — a second machine
+  was added where the node is byte-reached instead), the `§16.2:908` gate (its pin read a case
+  label this slice renames — the CHECK label, not the case name, which is unchanged), and the
+  counted consume's `next` (its pin read an entry-stop record the narrowing empties). **Three are added**: `occupiable` mutated back to the retired
+  walk, and the unified `parked?` losing each of the two previously unpinned disjuncts.
+  "each caught by the case that disjunct's kind already has" is true of the **pause** —
+  Milestone 6 Slice ①'s "the same through a pause continuation is rejected at the pause" —
+  and **false of the callback**: `verify-tests.sps` passes with that disjunct gone, on the
+  pre-0031 tree and on the unified one alike, and its witness is
+  `unit.kind-position-census`'s axis-A cell `(callback-pause-continuation stop)`, so that
+  mutation is declared in the census lane's pass. A mutation is witnessed only by its own SPEC
+  lane's program. Finally, the two-direction sweep found **three shipped incumbents** newly
+  satisfied by a changed mutant, all three bare prefixes — two of a case or check label, and
+  one of a `got` VALUE in the census — re-anchored on whole measured records.
+  `EXPECTED_MUTATIONS` 522 + 3 = **525**, measured; `EXPECTED_PASSES` stays 58.
 
 **Oracle.** *The verdict change is exactly the family:* the release selection minus the
 mutation lane fails at the three named cases and nowhere else on the unmodified tests, before
