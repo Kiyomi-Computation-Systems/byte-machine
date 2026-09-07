@@ -43,8 +43,11 @@ Both wrappers' `FILE` is `${LAUNCHER}` / `${launcher_file}`, so **no wrapper exp
 `verify.sls` mutation** and the census of 140 is total over the file this slice edits. That
 is the boundary this finding's every count carries. (A lexer that skips `#` comments but
 not `message()` strings reports 516 and cannot close the gap; the first draft of this
-finding did exactly that, and the arithmetic is what caught it.) `rg -n -F diagnostic-tag` and `rg -n -F diagnostic-edge` over the suite print
-nothing.
+finding did exactly that, and the arithmetic is what caught it.)
+
+`rg -n -F diagnostic-tag` and `rg -n -F diagnostic-edge` over the suite both print nothing,
+which is the same fact from the other side: no mutation anywhere names the record's tag or
+its edge accessor.
 
 So the shape of the record is unpinned today. Every decision in this slice's item 1 —
 which slots exist, in what order, what each constructor leaves in the ones it does not
