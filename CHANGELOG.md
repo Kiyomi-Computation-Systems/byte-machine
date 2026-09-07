@@ -97,8 +97,7 @@ exactness, coalesced invariance and the error path — a body-shaped arm in the
 retention lane, and the close-out: the `§25:1593-1609` disposition against the
 tree, `§4.11`'s five obligations disposed, and the reachability narrowing handed
 to Milestone 7 under `§25:1611` with both ends written. No mechanism was added:
-the slice's source diff is one comment. Milestone 7 (verification and generative
-hardening) is next. No versioned release exists yet.
+the slice's source diff is one comment. Milestone 7 (verification and generative hardening) is **in progress**. Its Gate 0 discharged **2026-09-06** as decisions 0031-0033 (PR #85), and Slice ⓪ closed **2026-09-07**: `pass-reachability` walks the occupiable relation — `byte-reached` plus the EOF walk from the parked set — so "unreachable" quantifies over what an execution can occupy rather than over a walk that crossed an eof-target and then kept taking byte edges. The parked set is one procedure with three consumers, `all-out-targets` is retired, and the `E →(eof) T →(byte) Z` family it was hiding is rejected and pinned both ways for each of the three kinds it can hold. No diagnostic code and no emission site were added and the census did not move. No versioned release exists yet.
 
 ### Added
 

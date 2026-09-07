@@ -16,6 +16,10 @@ Milestone: 5, Gate 0 (milestone-5-design.md §4.5)
 >   [decision 0031](./0031-reachability-is-the-occupiable-relation.md) hands it
 >   to Milestone 7's Slice ⓪, which implements the walk over item 1's relation.
 >   See the foot of this file.
+> - **2026-09-07 (Milestone 7 Slice ⓪)** — **amends the Context's "after the gate
+>   it verifies clean"**: Slice ⓪ landed the narrowing, so `unreachable-node` at
+>   `Z` now replaces the finding that sentence says nothing replaces. The
+>   sentence is marked at its site and the note is at the foot of this file.
 
 ## Context
 
@@ -142,6 +146,10 @@ execution can enter. Derived by reading `verify.sls`:
 > (`:772-773`). Today `pass-zero-progress` reports `zero-progress-cycle` at `Z`
 > and the machine is rejected; after the gate it verifies clean, and no other
 > check replaces that finding.
+>
+> **2026-09-07 (Milestone 7 Slice ⓪): "after the gate it verifies clean, and no
+> other check replaces that finding" is amended — a note at the foot of this file
+> reaches back into this paragraph.**
 
 So the gate is a **verdict change on a constructible machine family**, not a pure
 consistency fix. It is still the right change — `§16.2:898` says *reachable*, and
@@ -265,3 +273,29 @@ item 3 — `pass-zero-progress`'s gate stays `byte-reached` alone, for the reaso
 `all-out-targets` as retained, which is true of the tree at this note's commit and
 stops being true when Slice ⓪ lands; it is a record of the tree on 2026-09-04 and is
 left as decided.
+
+## 2026-09-07 (Milestone 7 Slice ⓪) — the narrowing landed, and `unreachable-node` at `Z` is the check that replaces the finding
+
+Slice ⓪ (`46da756`, PR #89) narrowed `pass-reachability` to decision 0031's
+occupiable relation. The Context's machine **as written** — `Z` a third node,
+distinct from `T` — is now rejected with `unreachable-node` at `Z`, so its
+sentence "after the gate it verifies clean, and no other check replaces that
+finding" is false from that commit. This is what the paragraph below it foresaw
+("narrowing `pass-reachability` would shrink the family to empty"), and what the
+2026-09-06 note above predicted Slice ⓪ would mark.
+
+**Where it is asserted.** In `verify-tests.sps`: the group "reachability is the
+occupiable relation (decision 0031)" builds this exact machine for each of the
+three kinds `T` may be — byte-dispatch, sequence-dispatch, integer-accumulate —
+and asserts `((unreachable-node . z))` and, for the same machine with `Z` also
+byte-reachable from the entry, `()`. The shipped case "a node no execution can
+occupy contributes no state (0029 item 3)" is this record's machine with a span
+end as `Z`, and it was re-baselined in the same commit to `cl` and the three
+nodes behind it.
+
+**What stays true.** Item 3's gate is unchanged and `unreachable-node` still does
+NOT catch the `§16.2:898` fixture, for the reason 0031's Context gives and this
+file's 2026-09-06 note records: that fixture collapses `T` and `Z` into one node,
+which is occupiable through the EOF route. The relations table's first row, which
+describes `all-out-targets` as retained, is a record of the tree on 2026-09-04 and
+is left as decided; the procedure it names no longer exists.

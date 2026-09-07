@@ -712,8 +712,9 @@
 ;;
 ;; The seven extended, each with an arm here: node-out-targets; node-eof-target
 ;; -- the site Task 1's own fix wave collapsed three near-duplicate accessors
-;; into, exercised by arms 2 and 4 below through its two different callers,
-;; all-out-targets and pass-eof respectively; reexec-targets; eof-terminal;
+;; into, exercised by arms 2 and 4 below through two different callers, which
+;; since decision 0031 are `eof-step` (the reachability and pass-7 walk, where
+;; the retired walk used to read it) and pass-eof; reexec-targets; eof-terminal;
 ;; pass-eof-execution's two filters (§16.2:908 and :909); and
 ;; pass-zero-progress's REPORT guard, which Slice ② deliberately left out and
 ;; Slice ③ added (§25:1533) -- covered by the two zero-progress cases below,
@@ -773,7 +774,8 @@
                                  (make-stop-node 'stop #f)
                                  (make-error-node 'reject 'rejected #f)))
                           'missing-target))))
-    ;; arm 2 -- all-out-targets: a node reachable ONLY through the sequence eof-target
+    ;; arm 2 -- the reachability walk (`eof-step` since decision 0031): a node
+    ;; reachable ONLY through the sequence eof-target
     (harness-case "a node reached only through the sequence eof-target is reachable"
       (lambda ()
         (check-equal "no unreachable-node"
@@ -2785,8 +2787,8 @@
         ;; unmatched end.
         ;;
         ;; Re-baselined by Milestone 7 Slice ⓪ (decision 0031 item 5). Until then
-        ;; `pass-reachability` walked `all-out-targets`, which crossed the
-        ;; eof-target and then kept taking byte edges and called `cl` reached; it
+        ;; `pass-reachability` walked a relation that crossed the eof-target and
+        ;; then kept taking byte edges and called `cl` reached; it
         ;; now walks the occupiable relation, so `cl` and everything behind it --
         ;; `exit`, `done`, `fin` -- are reported `unreachable-node`, in
         ;; machine-node order. The property this case owns is the OTHER half and
@@ -3179,10 +3181,13 @@
 
 ;; *** THIS IS A RELAXATION, and the ground the design gave for calling it
 ;; benign does not hold. *** Design §3.2 item 4 said such a machine "is rejected
-;; by `unreachable-node` regardless". It is not: `pass-reachability` walks
-;; `all-out-targets`, which crosses an eof-target and then keeps taking byte
-;; edges, so it calls `t` reached. The machine below is 0027's own, and it is
-;; asserted BOTH ways -- the cycle is real, and no execution can enter it.
+;; by `unreachable-node` regardless". It is not, and it still is not after
+;; decision 0031 narrowed `pass-reachability` -- for a different and now true
+;; reason. `t` is the entry's eof-target, so it is OCCUPIABLE: the EOF walk
+;; starts at the parked entry and visits it. What no execution can take here is
+;; an EDGE, `t`'s own self-loop, and `unreachable-node` quantifies over nodes.
+;; The machine below is 0027's own, and it is asserted BOTH ways -- the cycle is
+;; real, and no execution can enter it.
 
 (harness-group "zero-progress cycles are gated on byte-reachability (§16.2:898)"
   (lambda ()
@@ -3272,8 +3277,8 @@
 ;; --- reachability is the occupiable relation (decision 0031) -----------------
 ;;
 ;; `pass-reachability` walks byte-reached ∪ the EOF walk from the parked set --
-;; the relation §16.2:908/:909 and pass 7 already use -- and no longer
-;; `all-out-targets`, which crossed an eof-target and then kept taking byte
+;; the relation §16.2:908/:909 and pass 7 already use -- and no longer the walk
+;; decision 0031 retired, which crossed an eof-target and then kept taking byte
 ;; edges. The family whose verdict changes is `E ->(eof) T ->(byte) Z`: T
 ;; reachable only through an EOF route and one of the three kinds whose byte
 ;; edges are dead at EOF, Z distinct from T and reachable only through such an
