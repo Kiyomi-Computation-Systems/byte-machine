@@ -26,19 +26,24 @@ the slice's own base before anything is edited.
 
 ### F1 — the record's own region carries no pins, so this slice writes the first ones
 
-Lexing all 516 `byte_machine_mutation(` blocks in `SchemeMutationSuite.cmake` and locating
+Lexing every `byte_machine_mutation(` block in `SchemeMutationSuite.cmake` and locating
 each `FIND` in `verify.sls`: **140** have `FILE src/byte-machine/verify.sls`, every one of
-them resolves (0 count mismatches against its declared `SITES`), and **none** lands in
-lines 1–60 — the export list, `diagnostic-tag`, the two constructors and the four
+them resolves (0 count mismatches, and no `verify.sls` pin declares `SITES` at all, so
+every one is asserted at 1), and the lowest `FIND` anchor is line **70** — so **none**
+lands in lines 1–60, the export list, `diagnostic-tag`, the two constructors and the four
 accessors.
 
-*Blocks, not mutations, and the gap is measured rather than shrugged at:* the lane declares
-525 and the lexer finds 516 blocks. The nine are two helper functions
-(`byte_machine_slice3_launcher_pass`, `byte_machine_slice5b_launcher_pass`) that each wrap
-one `byte_machine_mutation(` call and are invoked several times — their `FILE` is
-`${LAUNCHER}` and `${launcher_file}`, so **none of the nine is a `verify.sls` mutation** and
-the census of 140 is total over the file this slice edits. That is the boundary this
-finding's every count carries. `rg -n -F diagnostic-tag` and `rg -n -F diagnostic-edge` over the suite print
+*Blocks, mutations, and the gap, reconciled exactly, because a census whose own total does
+not close is a census.* `rg -o 'byte_machine_mutation\('` prints **519**; three of those are
+inside `#` comments and one is inside a `message()` string, so there are **515** real
+blocks. Of those, **513** stand alone and **2** sit inside the bodies of the wrapper
+functions `byte_machine_slice3_launcher_pass` and `byte_machine_slice5b_launcher_pass`,
+which are invoked **9** and **3** times. 513 + 12 = **525** = `EXPECTED_MUTATIONS`, exactly.
+Both wrappers' `FILE` is `${LAUNCHER}` / `${launcher_file}`, so **no wrapper expansion is a
+`verify.sls` mutation** and the census of 140 is total over the file this slice edits. That
+is the boundary this finding's every count carries. (A lexer that skips `#` comments but
+not `message()` strings reports 516 and cannot close the gap; the first draft of this
+finding did exactly that, and the arithmetic is what caught it.) `rg -n -F diagnostic-tag` and `rg -n -F diagnostic-edge` over the suite print
 nothing.
 
 So the shape of the record is unpinned today. Every decision in this slice's item 1 —
@@ -92,11 +97,25 @@ where `census-total` counts **every** form whose car is any `define`d name begin
 symbol. The difference is exactly the constructors' own `define` headers, whose `code`
 parameter is unquoted — one per constructor, which is what the identity says.
 
-A constructor that delegates (`(define (make-diagnostic code node message)
-(make-diagnostic* code node message …))`) puts a *second* unquoted-code form in scope per
-delegation, and the identity fails by the number of delegations. **Each of the four
-constructors therefore builds its vector inline.** This is not a style preference: it is
-the census's arithmetic.
+A constructor that delegates to **another `make-diagnostic…`-named** procedure
+(`(define (make-diagnostic code node message) (make-diagnostic* code node message …))`)
+puts a *second* unquoted-code form in scope per delegation, and the identity fails by the
+number of delegations.
+
+**The constraint is on the NAME, not on inlining**, and getting that distinction wrong in
+either direction costs something. A shared builder called **`diagnostic-vector`** — outside
+the `make-diagnostic` prefix — is invisible to `diagnostic-constructors`, keeps the
+identity exactly, and replaces four near-identical nine-slot vector literals with one. That
+is the shape this slice ships, and `stamp-diagnostic` (Task 3 Step 4) is the same exception
+for the same reason. What is forbidden is a shared builder *whose name begins
+`make-diagnostic`*. The comment above the four constructors says which half of that is
+load-bearing, because "build it inline" is the wrong lesson to leave for the next author.
+
+A second hazard in the same recogniser, and it fails silently: `diagnostic-constructors`
+matches the `(define (name . args) …)` shape. A constructor written
+`(define make-diagnostic/path (lambda …))` is **not** collected, the identity still holds,
+and only `pinned-sites`' per-code counts notice the sites that vanished. Every new
+constructor uses the `(define (name …) …)` form.
 
 **Proven by construction, not by reading.** Staging exactly that refactor in a scratch copy
 — one `make-diagnostic*` builder with `make-diagnostic` and `make-diagnostic/edge` both
@@ -177,8 +196,8 @@ mistaken for a bug: `eof-terminal` binds a fresh `done` per call and `walk` is e
 memoised path is a genuine path *from `start`*. What the memo fixes is *which* of several
 such paths is reported — decision 0032 item 5's "the first path that settled a verdict".
 
-### F7 — twenty-three of the hundred and forty pins move, and the other hundred and
-seventeen keep their `FIND`s
+### F7 — twenty-four of the hundred and forty pins move, and the other hundred and
+sixteen keep their `FIND`s
 
 Measured by locating every verify.sls `FIND` in the source and intersecting its line span
 with the constructs this slice edits. **Design §11 asks Slice ①'s plan for exactly this
@@ -214,7 +233,7 @@ and still satisfies its pin — while the mutant now differs from the baseline i
 so the failure it produces isolates nothing. That is the half of re-anchoring the suite
 does not report.
 
-**Moving because the zero-progress report block is restructured (8):**
+**Moving because the zero-progress report block is restructured (9):**
 
 14. `verify: zero-progress detection never fires`
 15. `verify: a pause-only zero-progress cycle is not flagged`
@@ -226,18 +245,26 @@ does not report.
     `SPEC byte-machine.unit.kind-position-census.chez.source`, not the verify lane — a
     mutation is witnessed only by its own SPEC lane's program)
 21. `verify: the zero-progress REPORT set excludes the span kinds`
+22. `verify: the zero-progress REPORT set excludes the counted-consume kind`
 
-**Moving because `classify`'s terminal arms return a pair (2):**
+Number 22 is the one this census got wrong on its first pass, and the correction is the
+reason the whole family is stated as a measurement rather than a reading. Its `FIND` stops
+one line short of the `(reaches-self? …)` call, which looks like immunity — and is not.
+Lines 785–792 are the `(or …)` disjuncts, **aligned under the `(memq` on line 784**, so any
+edit that moves 784 re-indents all of them, and F9 promises exactly that edit. Stopping
+short of 792 protects a pin from an edit confined to 792; it protects nothing from a
+re-indent of the lines the pin actually anchors on. Measured: with the restructure staged,
+its `FIND` occurs **0** times.
 
-22. `verify: an eof-target cycle is classified as a finish terminal`
-23. `verify: an EOF-reachable stop terminal is accepted`
+**Moving because the EOF walk's answer becomes a pair (2):**
+
+23. `verify: an eof-target cycle is classified as a finish terminal` — in `walk`'s cycle
+    arm, not in `classify`
+24. `verify: an EOF-reachable stop terminal is accepted` — in `classify`'s stop arm
 
 **Not moving, and each for a reason worth writing down**, because a reader would expect
 several of them to:
 
-- `verify: the zero-progress REPORT set excludes the counted-consume kind` — its `FIND`
-  stops one line short of the `(reaches-self? …)` call, so it is the one member of that
-  family the restructure does not touch.
 - `verify: the EOF walk keeps no completed-set` — `((assq name done) => cdr)` is unchanged
   text: the memo's value becomes a two-element list and `=> cdr` delivers it unaltered.
   (Its *verdict* may change; see F6.)
@@ -278,10 +305,17 @@ at `make-verification-result`; the `:908` gate's parent map bound as a `let*` si
 > `count=0  verify: every :908 finding is labelled \`case\` regardless of which edge produced it`
 
 So the four `verify: pass-X is never run` pins, both `:908` gate pins, the out-targets pin
-and the entry pin all still resolve exactly once, and the single casualty is the one F7
-predicts. The remaining twenty-two moving pins are the emission-site, zero-progress and
-`classify` families, which the prototype does not stage because their shape is the work of
-Tasks 3 and 4.
+and the entry pin all still resolve exactly once.
+
+*Then the zero-progress block was staged too*, in the `let`-binding shape F9 settles on, and
+the same 140 judged again:
+
+> 10 of 140 not exactly once — the `(car re))` pin, and **all nine** of the zero-progress
+> family including `verify: the zero-progress REPORT set excludes the counted-consume kind`
+
+which is how number 22 above was found. The remaining fourteen moving pins are the
+emission-site and EOF-walk families, whose shape is the work of Tasks 3 and 4 and which the
+prototype does not stage.
 
 ### F8 — `verify-machine`'s stamp binds beside `ds`, not above it
 
@@ -306,33 +340,44 @@ two shapes are equally clear; the one that does not churn four pins for nothing 
 preferred, and this sentence is why. Measured on the prototype in F7: all four `FIND`s
 still occur exactly once.
 
-### F9 — the eight zero-progress pins move because one walk must not become two
+### F9 — the nine zero-progress pins move because one walk must not become two
 
 `reaches-self?` answers `#t`/`#f` from a frontier walk with a `seen` set and no parent
 links. Decision 0032 item 4 wants the cycle itself. Two shapes were weighed:
 
 - **one walk that returns the cycle** — the `if`'s test must then bind its value, so the
-  block's head and the alignment of the `(or …)` disjuncts change, and eight pins
-  re-anchor;
+  block's head **and the alignment of the `(or …)` disjuncts** change, and **nine** pins
+  re-anchor. The disjunct realignment is the half that is easy to miss: seven of the nine
+  `FIND`s anchor on those continuation lines rather than on the head, and one of them
+  (`…excludes the counted-consume kind`) does not touch the `reaches-self?` line at all —
+  it moves purely because its two lines shift four columns. Measured on the prototype in
+  F7, not reasoned;
 - **a second walk** (`reaches-self?` unchanged, a `cycle-path` beside it called only when a
-  finding fires) — the eight `FIND`s survive untouched.
+  finding fires) — all nine `FIND`s survive untouched.
 
 The second is rejected. It is a **second census of the same relation**, which is the
 failure mode this file has spent three slices removing ("*** ONE census, two views ***"
 at `node-out-edges`; decision 0031 collapsing two hand-written parked sets), and the two
 walks would disagree silently: the diagnostic would carry an empty or wrong path while the
-finding itself stayed right, and nothing would be red. Eight mechanical re-anchors are
-cheaper than a permanent drift surface.
+finding itself stayed right, and nothing would be red. Nine mechanical re-anchors are
+cheaper than a permanent drift surface — and the price is stated at nine rather than eight
+because the first draft of this finding put it at eight and the prototype corrected it.
 
 Since the contract changes, the procedure is **renamed** `self-cycle` — a name ending in
 `?` that answers a list is a live comment that lies. Measured blast radius:
-`rg -n 'reaches-self' src/ test/` finds three sites in `verify.sls` (a comment at the
-`reexec-targets` header, the definition, the call) and one comment in
-`test/support/harness/byte-machine/test/machine-gen.sls`; all four are live comments or
-code and are corrected in place. Four of the eight `FIND`s already contain the old name,
-so the rename adds no pin churn beyond what the restructure costs.
+`rg -n 'reaches-self' src/ test/` prints **17 lines across three files** —
+`verify.sls` **3** (a comment inside `reexec-targets`' *body*, the definition, the call),
+`machine-gen.sls` **2** (one comment spanning two lines), and
+`SchemeMutationSuite.cmake` **12**: eleven inside `FIND`/`REPLACE` bracket arguments, which
+move with the nine pins anyway, plus **one prose comment** at `cmake:5020` explaining an
+opposite-constant choice in terms of "`reaches-self?`". That comment is a live instruction
+and no other step in this plan would have touched it — the first draft of this finding
+counted four sites in two files and missed it.
 
-Each of the eight `REPLACE`s reproduces the whole block minus one disjunct. They are
+**Six** of the nine family `FIND`s and **five** of their `REPLACE`s already carry the old
+name, so the rename adds no pin churn beyond what the restructure costs.
+
+Each of the nine `REPLACE`s reproduces the whole block minus one disjunct. They are
 regenerated **from the post-edit source**, mechanically, and each is re-measured — not
 hand-edited from the old text, which is how a `REPLACE` silently starts changing two
 things.
@@ -347,9 +392,17 @@ verify-driving program run through the real `chez-source.ss` launcher —
 `verify-tests.sps` (172 cases, 274 checks), `diagnostic-census-tests.sps`,
 `kind-position-census-tests.sps`, `position-kind-tests.sps`, `graph-tests.sps`,
 `interpret-tests.sps`, `compile-tests.sps`, `ir-tests.sps`, `normal-ir-tests.sps` — **all
-nine exit 0 with zero `FAIL` records.** When two ranks tie the two verdicts are the same
-symbol, so the two operators return observationally identical answers and nothing in the
-tree can tell them apart.
+nine exit 0 with zero `FAIL` records.**
+
+*Why* nothing can tell them apart is worth stating correctly, because the obvious reason is
+false. `eof-verdict-tiers`' first tier has **four** members — `finish`, `unresolved`,
+`error`, `default-error` — so a tie there can hold two *different* symbols, and
+`finish` vs `error` from a field-branch join is constructible. The operators are
+indistinguishable for a reason one step downstream instead: the sole consumer is
+`pass-eof-execution`'s `case`, whose arms are `((eof-reachable-stop) …)`, `((cycle) …)` and
+`(else '())`, so **every tier-0 verdict is silent** whichever one wins. Tiers 1 and 2 have
+one member each, so a tie there really is the same symbol. Both routes end in "no
+observable difference", and only the second is true of the code.
 
 With a path travelling beside the verdict, a tie *within* tier 1 or tier 2 returns a
 different path for each operand. So `>=` → `>` becomes a comparison catch, and 0032 item
@@ -491,7 +544,7 @@ shipped before.
   table** (14 / 30 / 11 / 1) whose sum is asserted against the existing 56, which is what
   makes the declarations change census-shaped rather than a case per site somebody thought
   of.
-- **`SchemeMutationSuite.cmake`** — twenty-three re-anchored by LABEL, each `FIND` with its
+- **`SchemeMutationSuite.cmake`** — twenty-four re-anchored by LABEL, each `FIND` with its
   `REPLACE`; the declared survivor re-measured (F6); the new pins of Task 6;
   `EXPECTED_MUTATIONS` re-measured.
 - **Documentation** — decision 0032's items 3 **and 4** corrected with their dated notes
@@ -615,16 +668,20 @@ expected result that can fail.
       (neither construct is recognisable without lexing the other — balancing parens from
       `byte_machine_mutation(` truncates the body and reports a false *absent*), keep those
       whose `FILE` is `verify.sls`, and locate each `FIND` in the source.
-      **Expected, as literals:** **140** blocks, **0** `FIND`-count mismatches against
-      declared `SITES`, and the **23** LABELs of F7 — no more, no fewer. A LABEL in the
+      **Expected, as literals:** **140** blocks, **0** `FIND`-count mismatches (no
+      `verify.sls` pin declares `SITES`, so every one is asserted at 1), and the **24**
+      LABELs of F7 — no more, no fewer. A LABEL in the
       tree that is not in F7's list, or the reverse, is a finding: correct this plan before
       Task 2 begins.
 - [ ] **Step 5.** Re-run F7's three-shape prototype in the scratch worktree (the
       `verify-machine` sibling binding, the `:908` `let*` sibling, `make-diagnostic/edge`'s
       fifth argument) and judge all 140 `FIND`s against the result.
-      **Expected, as a literal:** exactly **1** not-exactly-once, and it is
-      `verify: every :908 finding is labelled \`case\` regardless of which edge produced it`
-      at count **0**.
+      **Expected, as literals:** with the three shapes alone, exactly **1**
+      not-exactly-once — `verify: every :908 finding is labelled \`case\` regardless of which
+      edge produced it`, at count **0**. Then stage the zero-progress restructure too and
+      re-judge: **10**, the same pin plus **all nine** of the family, the counted-consume
+      one included (F7 number 22). A count of 9 there means the restructure preserved an
+      alignment it should not have.
 - [ ] **Step 6.** Baseline the suite: `cmake --preset dev && ctest --preset release`, then
       the mutation lane's own totals, filtered for `CMake Error`, `wrong reason`,
       `UNCAUGHT` and `tests passed`.
@@ -737,6 +794,11 @@ Task 6 Steps 6–8's empty-path mutants comparison catches too.
       contains `path`, the per-site constructor from the walk. The path-bearing **code**
       set is declared, because it is the policy of decision 0032 item 4 and not a property
       of the source — the comment says so and cites it.
+      **The four `define` headers are subtracted by name**, the way the shipped identity
+      already does it: `walk-diagnostics` counts every form whose car is a constructor, so
+      a naive per-constructor tally is **15 / 31 / 12 / 2 = 60**, and only the same
+      by-name subtraction brings it to 56. The row's whole arithmetic rests on that
+      sentence.
       **Expected, as literals, inside the test:** the per-constructor site counts
       `make-diagnostic` **14**, `make-diagnostic/declarations` **30**,
       `make-diagnostic/path` **11**, `make-diagnostic/edge` **1**, summing to **56**; the
@@ -747,6 +809,11 @@ Task 6 Steps 6–8's empty-path mutants comparison catches too.
       regex makes that pin resolve to two records of its own mutant's output, and the lane,
       the mutation runner and the two-direction sweep are all green while it happens.
       **Expected, as a literal:** **no hit**, for every new label against every pin.
+      One collision is already loaded and waiting: `verify-tests.sps:1284` carries the check
+      label `"a zero-width self-cycle is a zero-progress cycle"`, and `cmake:5576` pins that
+      label's text. Any new label containing the run *self-cycle* — which F9's rename makes
+      a natural thing to write — resolves that pin twice, and the lane, the runner and the
+      two-direction sweep all stay green while it happens. Check that one first.
 
 **Exit:** every case exists; every loop asserts an observed count; Step 1's `8/8` and
 Step 9's "no hit" recorded.
@@ -839,7 +906,9 @@ Step 9's "no hit" recorded.
       **0**.
 - [ ] **Step 3. `reach-from`** returns an alist of `(name . parent)`, `#f` at the entry;
       `byte-reached` becomes `(map car (reach-from m node-out-targets))`; the `:908` block
-      binds the alist as a `let*` sibling of `br908` (F7, measured) and builds the path as
+      calls `reach-from` **once** and derives both —
+      `(let* ((rp (reach-from m node-out-targets)) (br908 (map car rp))) …)`, not
+      `byte-reached` beside a second walk (F7, measured) and builds the path as
       entry → source → the offending edge's target; the zero-hop entry clause carries the
       one-element path. **Two live comments in `reach-from`'s header are now false and are
       corrected in place**: "Returns the reached node names", and "Since decision 0031 it
@@ -890,10 +959,10 @@ implementer reading a green expectation would treat a correct signal as breakage
       closing paren** — and the fifth argument moves that paren onto a new line.
       **Expected, as a literal:** `(car re)` occurs **1** time in the post-edit source, so
       the re-anchor is unambiguous; the `REPLACE` loses the same paren.
-- [ ] **Step 3.** Regenerate the eight zero-progress `REPLACE`s **from the post-edit
+- [ ] **Step 3.** Regenerate the nine zero-progress `REPLACE`s **from the post-edit
       source** (F9), mechanically: take the new block, delete the named disjunct, and diff
       the generated text against what the `REPLACE` declares.
-      **Expected, as a literal:** the diff prints **nothing**, eight times. Never
+      **Expected, as a literal:** the diff prints **nothing**, nine times. Never
       hand-edited from the old text, which is how a `REPLACE` silently starts changing two
       things. `verify: the zero-progress REPORT set excludes the callback kind` stays in
       the census lane's pass — a mutation is witnessed only by its own SPEC lane's program.
@@ -914,18 +983,23 @@ implementer reading a green expectation would treat a correct signal as breakage
         silently either way.
       **Expected, as a literal:** the staged run's exit status, recorded, and the block
       edited to match it.
+      *One fixture that will not serve:* Task 2 Step 7's join fixture is designed to
+      **avoid** a memo hit (two distinct stops, F10), so it cannot double as the separator
+      here. Separating memo from no-memo needs a fixture where a memo hit changes the
+      **winning** operand's path — a different machine, and if none is found that is the
+      "still surviving" disposition with its reason.
 - [ ] **Step 6.** Run the mutation lane.
       **Expected, as literals:** no `CMake Error`, no `wrong reason`, no `UNCAUGHT`, no
       stale-survivor `SEND_ERROR`; exit **0**; `58 passes / 525 mutations` — this task adds
       no mutation and moves no count.
-- [ ] **Step 7.** For each of the twenty-three, re-measure the `got` it pins by staging the
+- [ ] **Step 7.** For each of the twenty-four, re-measure the `got` it pins by staging the
       mutant in a scratch copy and running the real launcher. A `got` digest is never
       recomputed by hand.
-      **Expected, as a literal:** twenty-three measured values, written **into the suite
+      **Expected, as a literal:** twenty-four measured values, written **into the suite
       file** as the pins themselves — not into a session note, which is git-ignored and is
       therefore not a record.
 
-**Exit:** Step 6's `58 / 525` and exit 0; twenty-three pins carrying measured `got`s;
+**Exit:** Step 6's `58 / 525` and exit 0; twenty-four pins carrying measured `got`s;
 the survivor's block matching its measured outcome.
 
 ---
@@ -1004,7 +1078,7 @@ pass, before its `_run`, with `EXPECT_STATUS 1`.
       DOTALL `findall`. **Expected, as a literal:** **1**, for every pin.
 - [ ] **Step 16.** Commit Tasks 2–6 as one commit:
       `feat(verify): the diagnostic record carries §16.4's seven fields, and eight codes carry a path`.
-      The body names the verdict-invariance result, the census totals, the twenty-three
+      The body names the verdict-invariance result, the census totals, the twenty-four
       pins by LABEL, the eleven added, the survivor's disposition and the sweep numbers.
 
 **Exit:** the lane green at `58` passes and the measured mutation count; Step 14's `0`;
@@ -1122,10 +1196,11 @@ Run at the head of the source commit and **again after the review's fix wave**.
 1. `cmake --preset dev && ctest --preset release` — `100% tests passed, 0 tests failed out
    of 114`, both Chez modes.
 2. `ctest --preset release -E scheme-mutation` — `0 tests failed out of 113`.
-3. The mutation lane — `58` passes and the measured mutation count (predicted **536**),
-   filtered for `CMake Error`, `wrong reason`, `UNCAUGHT`, stale-survivor and
-   `tests passed`, plus the exit status, which is the only summary a run that then fails
-   cannot print.
+3. The mutation lane — **exit 0**, `58` passes, and the mutation count Task 6 Step 13
+   recorded (predicted **536**; write the recorded number here, because "as measured"
+   cannot fail). Filtered for `CMake Error`, `wrong reason`, `UNCAUGHT` and the
+   stale-survivor error, each expected **0 occurrences**; the exit status is the only
+   summary a run that then fails cannot print, which is why it leads.
 4. The diagnostic census — thirty codes over fifty-six sites, `(unreachable-node 1)`, the
    per-constructor table `14 / 30 / 11 / 1`, twelve path-carrying sites, four constructors.
 5. The kind × position matrix — green, pruning count **3** (this is the `(cons 'SYM …)`
@@ -1151,7 +1226,7 @@ Run at the head of the source commit and **again after the review's fix wave**.
 - No verdict moved: `git diff -U0 -- test/common/verify-tests.sps | rg -c '^-[^-]'` is
   **0**, so the 129 shipped accessor reads passed with nothing edited to accommodate the
   widening.
-- The twenty-three moved pins are re-anchored by LABEL with their `REPLACE`s, the eleven
+- The twenty-four moved pins are re-anchored by LABEL with their `REPLACE`s, the eleven
   new pins are measured, and the declared survivor is disposed rather than inherited.
 - The design's §16.2 ledger was worked as the path policy's checklist and every row it
   carries is one the tree can follow.
