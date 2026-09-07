@@ -310,9 +310,15 @@ things.
 
 `eof-verdict-join` is `(if (>= (eof-verdict-rank a) (eof-verdict-rank b)) a b)`, and
 decision 0032 item 5 rests its determinism claim on the `>=` — "a tie in the join keeps its
-left operand". Today that claim has **no witness**: when two ranks tie the two verdicts are
-the same symbol, so `>=` and `>` return observationally identical answers and no fixture
-can tell them apart.
+left operand". Today that claim has **no witness**, and this is measured rather than
+argued: with `>=` changed to `>` in a staged copy of `src/` and `test/` and every
+verify-driving program run through the real `chez-source.ss` launcher —
+`verify-tests.sps` (172 cases, 274 checks), `diagnostic-census-tests.sps`,
+`kind-position-census-tests.sps`, `position-kind-tests.sps`, `graph-tests.sps`,
+`interpret-tests.sps`, `compile-tests.sps`, `ir-tests.sps`, `normal-ir-tests.sps` — **all
+nine exit 0 with zero `FAIL` records.** When two ranks tie the two verdicts are the same
+symbol, so the two operators return observationally identical answers and nothing in the
+tree can tell them apart.
 
 With a path travelling beside the verdict, a tie *within* tier 1 or tier 2 returns a
 different path for each operand. So `>=` → `>` becomes a comparison catch, and 0032 item
@@ -714,7 +720,10 @@ separating fixture is named beside the pin, in the tree.
       element assertion is a comparison catch and this is the pin for 0032 item 5's
       "starting at the walk's start".
 - [ ] **Step 5.** *The EOF verdict join keeps the right operand on a tie* — `>=` → `>`,
-      on F10's fixture.
+      on F10's fixture. Measured at plan time: this mutant is **uncaught in all nine**
+      verify-driving programs today, so the pin closes a real gap rather than restating a
+      catch some other lane already has. Expected after the fixture lands: caught, with the
+      `got` naming the route through the *second* stop node.
 - [ ] **Step 6.** *The zero-progress cycle path is empty* — `self-cycle`'s success arm
       returns `'()`. Separated from the shipped "zero-progress detection never fires" by
       asserting the finding **count** beside the path.
