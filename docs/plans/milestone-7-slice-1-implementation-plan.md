@@ -264,7 +264,22 @@ several of them to:
   `verify: top flows onward instead of stopping at the merge` — `cond` heads, unchanged.
 
 Four of those "not moving" entries are only true under a specific shape of the edit. Those
-shapes are Global Constraints below, not suggestions.
+shapes are Global Constraints below, not suggestions — **and three of them were staged in a
+scratch copy and measured** rather than argued.
+
+*The prototype:* `verify-machine`'s machine name bound as a sibling of `ds` with the stamp
+at `make-verification-result`; the `:908` gate's parent map bound as a `let*` sibling of
+`br908`; and `make-diagnostic/edge`'s call site given a fifth argument. Judging **all 140**
+`verify.sls` `FIND`s against the result:
+
+> 140 verify.sls pins judged against the 3-shape prototype; **1** not exactly once:
+> `count=0  verify: every :908 finding is labelled \`case\` regardless of which edge produced it`
+
+So the four `verify: pass-X is never run` pins, both `:908` gate pins, the out-targets pin
+and the entry pin all still resolve exactly once, and the single casualty is the one F7
+predicts. The remaining twenty-two moving pins are the emission-site, zero-progress and
+`classify` families, which the prototype does not stage because their shape is the work of
+Tasks 3 and 4.
 
 ### F8 — `verify-machine`'s stamp binds beside `ds`, not above it
 
@@ -286,7 +301,8 @@ stamping at the result:
 
 `(null? ds)` is computed on the unstamped list and stamping cannot change emptiness. The
 two shapes are equally clear; the one that does not churn four pins for nothing is
-preferred, and this sentence is why.
+preferred, and this sentence is why. Measured on the prototype in F7: all four `FIND`s
+still occur exactly once.
 
 ### F9 — the eight zero-progress pins move because one walk must not become two
 
