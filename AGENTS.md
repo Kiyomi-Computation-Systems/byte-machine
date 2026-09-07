@@ -273,6 +273,38 @@
   moment. What was actually wrong was in a different file — a prior slice's plan.
   Name precisely which artifact is wrong; they are not interchangeable. Keep the
   retraction rather than deleting it, because the failure is the instructive part.
+* **RETIRING a mutation is the one edit a clean sweep cannot see, and "another
+  fixture already witnesses it" is a coverage claim, not a collision claim.**
+  The sweep judges the pins that exist against the mutants that exist; delete a
+  pin and it reports on one fewer of each, silently, and every remaining pin
+  still resolves. Milestone 7 Slice ⓪'s plan retired "a sequence node's
+  eof-target does not feed reachability" on the ground that a new group's
+  sequence-dispatch pair witnessed its decision — and that pair answers the same
+  with and without the arm, because the node the pair builds has its eof-target
+  on a node the byte walk already reached. The suite was green, the sweep was
+  clean, and the decision had no mutant naming it: the two survivors that
+  reddened its case both name the BYTE half and emit `got 2` where the retired
+  one emitted `got 1`. Before retiring a mutation on a replacement witness,
+  STAGE THE DELETION and measure — which mutants still redden the case the
+  retiring one owned, and does the replacement fixture separate the arm at all?
+  A decision that a refactor RELOCATES is re-anchored onto its new reader; only
+  one a later fix makes unobservable is retired. Both endings need the
+  measurement, and only one of them needs a tombstone.
+* **When one mutant WIDENS a relation and another DELETES the emission that
+  reads it, the second contains the first by construction — and the separating
+  fixture carries one of each kind.**
+  A walk-widening mutant reports strictly fewer findings; an emission-deleting
+  mutant reports none. So every check whose expectation is a finding of that
+  code reddens under both, with the identical `got`, and the widening mutant has
+  ZERO unique records — measured, not guessed, and it looks exactly like
+  subsumption you have to accept. It is not: build one machine carrying an
+  instance that is positive under BOTH relations (here a node with no in-edge at
+  all) beside one positive under only the narrow relation. The widening mutant
+  then still reports the first and the emission mutant reports nothing, so the
+  two `got` lists differ and one record separates them. This is
+  count-don't-witness with the two things named: the fixture must contain an
+  instance each mutant treats differently, not two instances of the same kind.
+
 * **A whole-pass sweep re-judges the pins that EXIST; it cannot notice a decision no pin names.**
   A clean sweep answers "do my pins still identify their own mutants", never
   "is every decision here pinned" — and it reads like the second. Milestone 4
