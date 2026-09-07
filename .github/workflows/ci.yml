@@ -1,21 +1,25 @@
 name: CI
 
-# CI runs ON DEMAND, not on every push. On 2026-09-07 the month's GitHub Actions
-# minutes ran out: two jobs -- one on a macOS runner, billed at ten times a
-# Linux minute -- ran on every push to every PR and on every merge, about sixty
-# billed minutes a run. What runs when, now:
+# CI is ONE Linux job, run on demand. On 2026-09-07 the month's GitHub Actions
+# minutes ran out: a macOS job (billed at ten times a Linux minute) and a Linux
+# job that built Chez from source ran on every push to every PR and on every
+# merge, about sixty billed minutes a run. The macOS job is gone -- Apple
+# silicon is the platform every slice is measured on locally, with the
+# `release` preset and the mutation lane, before it merges -- and the Linux job,
+# the platform nobody here develops on, is what CI is for. What runs when:
 #
-#   push to `main`     the Linux job only (the platform nobody here develops on;
-#                      macOS is exercised locally on every slice).
-#   pull_request       NOTHING until the PR carries a label: `ci` runs the Linux
-#                      job, `ci-macos` runs both. Only the `labeled` event is
-#                      subscribed, so a later push to the PR re-runs nothing --
-#                      remove and re-add the label, or dispatch, when the branch
-#                      is ready for its run.
-#   workflow_dispatch  the Linux job on any ref; `macos=true` adds the macOS job:
-#                      `gh workflow run ci.yml --ref <branch> -f macos=true`.
+#   push to `main`     the Linux job.
+#   pull_request       NOTHING until the PR carries the `ci` label. Only the
+#                      `labeled` event is subscribed, so a later push to the PR
+#                      re-runs nothing -- remove and re-add the label, or
+#                      dispatch, when the branch is final.
+#   workflow_dispatch  the Linux job on any ref:
+#                      `gh workflow run ci.yml --ref <branch>`.
 #
 # A newer run on the same PR (or ref) cancels the one in flight (`concurrency`).
+#
+# The Chez build is CACHED between runs -- about ten of the job's twelve
+# minutes. The steps say how the key is formed and when to discard a cache.
 #
 # Docs-only changes are skipped on push and pull_request. `paths-ignore` fires
 # only when EVERY changed file matches, so a commit touching one source file and
@@ -53,11 +57,6 @@ on:
       - 'docs/**'
       - 'LICENSE'
   workflow_dispatch:
-    inputs:
-      macos:
-        description: 'Also run the macOS arm64 job (billed at ten times a Linux minute)'
-        type: boolean
-        default: false
 
 # One run per PR, or per ref outside a PR; a newer run cancels the older one.
 concurrency:
@@ -65,63 +64,68 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  macos-arm64:
-    # On demand only: the `ci-macos` label on a PR, or a dispatch with
-    # macos=true. Never on a push to `main`: this runner bills at ten times a
-    # Linux minute, and Apple silicon is the platform every slice is measured
-    # on locally before it merges.
-    if: >-
-      (github.event_name == 'pull_request' && github.event.label.name == 'ci-macos')
-      || (github.event_name == 'workflow_dispatch' && inputs.macos == true)
-    runs-on: macos-14           # Apple silicon runner (arm64)
-    env:
-      BYTE_MACHINE_EXPECT_OS: darwin
-      BYTE_MACHINE_EXPECT_ARCH: arm64
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Chez Scheme
-        run: brew install chezscheme
-      - name: Record the runtime identity
-        run: |
-          chez --version
-          echo '(display (machine-type))(newline)' | chez -q
-      - name: Configure and build
-        run: |
-          cmake --preset dev
-          cmake --build --preset dev
-      - name: Test (pr, then full)
-        run: |
-          ctest --preset pr --output-on-failure
-          ctest --preset release --output-on-failure
-
   linux-amd64:
     # Every push to `main` and every dispatch; on a PR only once it is labelled
-    # `ci` or `ci-macos`. Any other label added to a PR triggers the workflow
-    # (the `labeled` event carries every label) and this condition skips it.
-    if: >-
-      github.event_name != 'pull_request'
-      || github.event.label.name == 'ci'
-      || github.event.label.name == 'ci-macos'
+    # `ci`. Any other label added to a PR triggers the workflow (the `labeled`
+    # event carries every label) and this condition skips it.
+    if: github.event_name != 'pull_request' || github.event.label.name == 'ci'
     runs-on: ubuntu-latest       # x86-64 (amd64)
     env:
       BYTE_MACHINE_EXPECT_OS: linux
       BYTE_MACHINE_EXPECT_ARCH: amd64
       CHEZ_VERSION: "10.4.1"
+      # Part of the cache key. Bump it to discard every cached build -- when the
+      # configure flags below change, or a restored binary misbehaves. The Chez
+      # version and the runner image are in the key already.
+      CHEZ_CACHE_SCHEMA: "1"
     steps:
       - uses: actions/checkout@v4
+      # ImageOS (e.g. ubuntu24) names the runner image. A binary built against
+      # one image's libc and ncurses must not be restored on another, and the
+      # `env` context cannot see a runner variable, so it is read into an output.
+      - name: Name the runner image
+        id: image
+        run: echo "os=${ImageOS:-unknown}" >> "$GITHUB_OUTPUT"
+      - name: Restore the Chez Scheme an earlier run built
+        id: chez
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/chez
+          key: chez-${{ env.CHEZ_VERSION }}-${{ runner.arch }}-${{ steps.image.outputs.os }}-s${{ env.CHEZ_CACHE_SCHEMA }}
+      # Cache miss only. The install goes under $HOME/chez, no sudo, so the whole
+      # tree is one directory the cache can carry; the prefix is baked into the
+      # binary at configure time and $HOME is the same on every hosted runner,
+      # so a restored tree runs where it was built.
       - name: Build and install Chez Scheme from source (>= floor)
+        if: steps.chez.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libx11-dev libncurses-dev uuid-dev git
           git clone --depth 1 --branch "v${CHEZ_VERSION}" https://github.com/cisco/ChezScheme.git
           cd ChezScheme
-          ./configure --threads
+          ./configure --threads --installprefix="$HOME/chez"
           make -j"$(nproc)"
-          sudo make install
-      - name: Record the runtime identity
+          make install
+      # Saved right after the build, not by a post step at the end of the job: a
+      # test failure later in this run must not cost the next run the build.
+      - name: Save the build for the next run
+        if: steps.chez.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/chez
+          key: chez-${{ env.CHEZ_VERSION }}-${{ runner.arch }}-${{ steps.image.outputs.os }}-s${{ env.CHEZ_CACHE_SCHEMA }}
+      - name: Put Chez on the PATH
+        run: echo "$HOME/chez/bin" >> "$GITHUB_PATH"
+      # On a cache hit nothing was apt-installed, so a restored binary missing a
+      # shared library fails HERE, first and loudly, not inside a test. If it
+      # does: `apt-get install` that library on the hit path, or bump
+      # CHEZ_CACHE_SCHEMA after an image change.
+      - name: Record the runtime identity, and refuse a restored binary missing a library
         run: |
           scheme --version
           echo '(display (machine-type))(newline)' | scheme -q
+          missing=$(ldd "$(command -v scheme)" | grep -c 'not found' || true)
+          test "$missing" -eq 0
       - name: Configure and build
         run: |
           cmake --preset dev

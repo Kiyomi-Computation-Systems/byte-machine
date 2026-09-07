@@ -33,15 +33,16 @@
 ### Testing & mutation discipline
 
 * **Use TDD / test-driven development**
-* **CI runs on demand, and a macOS minute costs ten Linux minutes.** On
-  2026-09-07 the month's GitHub Actions budget was gone: both jobs ran on every
-  push to every PR and on every merge, about sixty billed minutes a run. Now a
-  PR runs nothing until it carries the `ci` label (Linux) or `ci-macos` (both),
-  and a later push does not re-run — re-label or `gh workflow run ci.yml --ref
-  <branch>` when the branch is final; a push to `main` runs Linux only. The
-  local `release` preset and the mutation lane on Apple silicon are the
-  measurement every slice already takes before it merges; CI's irreplaceable
-  job is the Linux one. `.github/workflows/ci.yml`'s header is the rule.
+* **CI is one Linux job, run on demand, and its Chez build is cached.** On
+  2026-09-07 the month's GitHub Actions budget was gone: a macOS job (billed at
+  ten times a Linux minute) and a Linux job that built Chez from source ran on
+  every push to every PR and on every merge, about sixty billed minutes a run.
+  The macOS job is gone — Apple silicon is the platform every slice is measured
+  on locally, with the `release` preset and the mutation lane, before it merges
+  — and the Linux job runs only when a PR carries the `ci` label (a later push
+  does not re-run: re-label, or `gh workflow run ci.yml --ref <branch>`, when
+  the branch is final) and on every push to `main`. `.github/workflows/ci.yml`'s
+  header is the rule, and its steps say when the Chez cache must be discarded.
 * **Give every decision a mutation its spec catches.**
   A test that passes whether the code is right or wrong is worse than no test.
   Every decision in a module gets a mutation that breaks it, and the owning
