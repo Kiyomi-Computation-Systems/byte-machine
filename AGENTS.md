@@ -33,6 +33,15 @@
 ### Testing & mutation discipline
 
 * **Use TDD / test-driven development**
+* **CI runs on demand, and a macOS minute costs ten Linux minutes.** On
+  2026-09-07 the month's GitHub Actions budget was gone: both jobs ran on every
+  push to every PR and on every merge, about sixty billed minutes a run. Now a
+  PR runs nothing until it carries the `ci` label (Linux) or `ci-macos` (both),
+  and a later push does not re-run — re-label or `gh workflow run ci.yml --ref
+  <branch>` when the branch is final; a push to `main` runs Linux only. The
+  local `release` preset and the mutation lane on Apple silicon are the
+  measurement every slice already takes before it merges; CI's irreplaceable
+  job is the Linux one. `.github/workflows/ci.yml`'s header is the rule.
 * **Give every decision a mutation its spec catches.**
   A test that passes whether the code is right or wrong is worse than no test.
   Every decision in a module gets a mutation that breaks it, and the owning
@@ -918,7 +927,10 @@ each step is easy to skip and each one left undone costs someone else later.
 
 1. **Squash merge the PR.** One commit per branch on `main`. The granular
    history — the review trail, the fixes, the plan corrections they forced —
-   stays readable in the PR.
+   stays readable in the PR. CI is on demand (the bullet in *Testing & mutation
+   discipline* below): a PR touching `src/`, `test/` or CMake gets the `ci`
+   label once its branch is final and merges after that run is green; a
+   docs-only PR needs no run at all.
 2. **Catch up local `main`.** Fetch and fast-forward, so the next branch starts
    from what was actually merged rather than from where this one began.
 3. **Clean up branches.** Delete the merged branch locally and on the remote.

@@ -1,8 +1,25 @@
 name: CI
 
-# Docs-only changes are skipped on both triggers. `paths-ignore` fires only when
-# EVERY changed file matches, so a commit touching one source file and ten
-# markdown files still runs -- the failure mode is a needless run, never a
+# CI runs ON DEMAND, not on every push. On 2026-09-07 the month's GitHub Actions
+# minutes ran out: two jobs -- one on a macOS runner, billed at ten times a
+# Linux minute -- ran on every push to every PR and on every merge, about sixty
+# billed minutes a run. What runs when, now:
+#
+#   push to `main`     the Linux job only (the platform nobody here develops on;
+#                      macOS is exercised locally on every slice).
+#   pull_request       NOTHING until the PR carries a label: `ci` runs the Linux
+#                      job, `ci-macos` runs both. Only the `labeled` event is
+#                      subscribed, so a later push to the PR re-runs nothing --
+#                      remove and re-add the label, or dispatch, when the branch
+#                      is ready for its run.
+#   workflow_dispatch  the Linux job on any ref; `macos=true` adds the macOS job:
+#                      `gh workflow run ci.yml --ref <branch> -f macos=true`.
+#
+# A newer run on the same PR (or ref) cancels the one in flight (`concurrency`).
+#
+# Docs-only changes are skipped on push and pull_request. `paths-ignore` fires
+# only when EVERY changed file matches, so a commit touching one source file and
+# ten markdown files still runs -- the failure mode is a needless run, never a
 # skipped one. Kept as an ignore-list rather than a `paths:` allow-list for that
 # reason: a new top-level source directory would silently lose CI under an
 # allow-list, and gain it here.
@@ -12,11 +29,11 @@ name: CI
 # (verified 2026-08-29). If that ever stops being true -- a doc that is parsed,
 # a fixture moved under docs/ -- remove it from this list.
 #
-# Safe today because `main` carries no branch protection: a skipped workflow
-# reports no check at all, which would leave a PR permanently pending if these
-# jobs were ever made REQUIRED status checks. If you add branch protection,
-# either drop this block or add a docs-only job that reports the same check
-# names.
+# Safe today because `main` carries no branch protection: a skipped or
+# never-triggered workflow reports no check at all, which would leave a PR
+# permanently pending if these jobs were ever made REQUIRED status checks. If
+# you add branch protection, either drop the gating or add a job that reports
+# the same check names on every PR.
 # The two lists below are deliberately duplicated rather than shared via a YAML
 # anchor: anchors are not a documented part of GitHub's workflow schema, and the
 # failure mode of a parser that ignores one would be CI silently not running.
@@ -29,14 +46,33 @@ on:
       - 'docs/**'
       - 'LICENSE'
   pull_request:
+    types: [labeled]
     paths-ignore:
       - '**/*.md'
       - '**/*.org'
       - 'docs/**'
       - 'LICENSE'
+  workflow_dispatch:
+    inputs:
+      macos:
+        description: 'Also run the macOS arm64 job (billed at ten times a Linux minute)'
+        type: boolean
+        default: false
+
+# One run per PR, or per ref outside a PR; a newer run cancels the older one.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   macos-arm64:
+    # On demand only: the `ci-macos` label on a PR, or a dispatch with
+    # macos=true. Never on a push to `main`: this runner bills at ten times a
+    # Linux minute, and Apple silicon is the platform every slice is measured
+    # on locally before it merges.
+    if: >-
+      (github.event_name == 'pull_request' && github.event.label.name == 'ci-macos')
+      || (github.event_name == 'workflow_dispatch' && inputs.macos == true)
     runs-on: macos-14           # Apple silicon runner (arm64)
     env:
       BYTE_MACHINE_EXPECT_OS: darwin
@@ -59,6 +95,13 @@ jobs:
           ctest --preset release --output-on-failure
 
   linux-amd64:
+    # Every push to `main` and every dispatch; on a PR only once it is labelled
+    # `ci` or `ci-macos`. Any other label added to a PR triggers the workflow
+    # (the `labeled` event carries every label) and this condition skips it.
+    if: >-
+      github.event_name != 'pull_request'
+      || github.event.label.name == 'ci'
+      || github.event.label.name == 'ci-macos'
     runs-on: ubuntu-latest       # x86-64 (amd64)
     env:
       BYTE_MACHINE_EXPECT_OS: linux
