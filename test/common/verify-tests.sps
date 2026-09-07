@@ -3186,8 +3186,13 @@
 ;; reason. `t` is the entry's eof-target, so it is OCCUPIABLE: the EOF walk
 ;; starts at the parked entry and visits it. What no execution can take here is
 ;; an EDGE, `t`'s own self-loop, and `unreachable-node` quantifies over nodes.
-;; The machine below is 0027's own, and it is asserted BOTH ways -- the cycle is
-;; real, and no execution can enter it.
+;; The machine below is a COLLAPSED VARIANT of 0027's -- decision 0031's words,
+;; and Milestone 7's Gate 0 corrected the design for calling it that machine.
+;; 0027's machine as written has `Z` a third node, distinct from `T`; here `t`
+;; plays both, its case edge the self-loop. That is exactly why it does not
+;; flip: the family the narrowing rejects needs a `Z` the walk cannot reach, and
+;; this fixture has none. It is asserted BOTH ways -- the cycle is real, and no
+;; execution can enter it.
 
 (harness-group "zero-progress cycles are gated on byte-reachability (§16.2:898)"
   (lambda ()
@@ -3378,9 +3383,12 @@
                      '((unreachable-node . z) (unreachable-node . fin)))))
     (harness-case "an orphan beside the family, so the two ways of breaking pass 4 differ"
       (lambda ()
-        ;; *** COUNT, DON'T WITNESS (AGENTS.md). *** Every check above is
-        ;; reddened by "pass 4 walks the retired relation" AND by "pass 4 never
-        ;; reports an unreachable node at all", with the identical `got ()` --
+        ;; *** COUNT, DON'T WITNESS (AGENTS.md). *** Every check above that
+        ;; expects a FINDING -- the three REJECTED halves and the transitive
+        ;; case; not the three ACCEPTED twins, which answer `()` under both, nor
+        ;; the sentinel -- is reddened by "pass 4 walks the retired relation"
+        ;; AND by "pass 4 never reports an unreachable node at all", with the
+        ;; identical `got ()` --
         ;; the second mutant suppresses a SUPERSET of what the first suppresses,
         ;; on every machine, so no check whose expectation is a family finding
         ;; alone can tell them apart. This machine carries BOTH kinds of

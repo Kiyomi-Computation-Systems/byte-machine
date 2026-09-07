@@ -1622,13 +1622,18 @@
   ;; starts); a span end (its data callback's pause parks the parser on the
   ;; completion substep, Milestone 5 Slice ③); or a node carrying its own EOF
   ;; route -- the derived `symbol?` test over `node-eof-target`, which every
-  ;; input-reading kind satisfies (written without its parens here, so the count
-  ;; 0031 states stays 2: one code site, one comment in `parked-eof-start`).
+  ;; input-reading kind satisfies (written without its parens here, so it adds
+  ;; no hit: `rg -n "symbol\? \(node-eof-target n\)"` over this file printed
+  ;; THREE before the unification -- 0031's own count, two code sites plus one
+  ;; comment inside `parked-eof-start` -- and prints TWO after it, the one
+  ;; surviving code site and that comment).
   ;; Until decision 0031 this disjunction was written twice by hand and the
   ;; copies differed by `span-end-node?` -- inert for pass 7 and for
   ;; occupiability alike, because a byte-reachable span end's `next` is already
-  ;; a byte out-edge (measured either way). The next kind that can pause is
-  ;; added HERE and nowhere else.
+  ;; a byte out-edge (measured either way). The next kind that can pause joins
+  ;; the SET here and nowhere else -- but if its walk starts somewhere other
+  ;; than its own name, `parked-eof-start` above needs an arm too, as the
+  ;; callback and the counted consume each did.
   (define (parked? m n br)
     (and (memq (node-name n) br)
          (or (eq? (node-name n) (machine-entry m))

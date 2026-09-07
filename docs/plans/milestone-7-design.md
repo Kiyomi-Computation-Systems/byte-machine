@@ -43,7 +43,8 @@ measurement can be re-taken, and Slice ⓪ re-takes it before anything lands.
 > move but whose observation the narrowing changes, and one whose only witness is in another
 > SPEC lane. The measured census (one retired, four re-anchored, one re-shaped, five `FIND`s
 > unchanged, three re-pinned, three added, three incumbents re-anchored by the sweep) replaces
-> it. §5's "each caught by the case that disjunct's kind already has" is corrected: true of the
+> it — corrected once more the same day, when the whole-branch review measured the retirement's
+> stated reason false: nothing retires, and the arm-2 mutation re-anchors onto `eof-step`. §5's "each caught by the case that disjunct's kind already has" is corrected: true of the
 > pause, false of the callback, whose witness is `unit.kind-position-census`'s axis-A cell.
 > §3.2 item 1's measurement is a record and is untouched — the slice re-took it verbatim at its
 > own base. The plan measured what the design derived.
@@ -1083,7 +1084,7 @@ its own base commit before changing anything.
 **Delivered 2026-09-07 as PR #89**, base `733b32e` (`src/` and `test/` byte-identical to
 `5ac363a`, so §3.2 item 1's measurement re-took verbatim: 111 of 113 lanes, the same two lanes
 and the same three cases, nothing else). `release` **114/114**; mutation suite **58 passes /
-524 mutations**; diagnostic census unmoved at **30 codes over 56 sites** with
+525 mutations**; diagnostic census unmoved at **30 codes over 56 sites** with
 `(unreachable-node 1)`; matrix pruning count **3**.
 
 **The work**, one source file and one test program, plus pins:
@@ -1112,19 +1113,23 @@ and the same three cases, nothing else). `release` **114/114**; mutation suite *
   but whose OBSERVATION the narrowing changes, and nothing for the disjunct whose only witness
   lives in another SPEC lane. Measured, by lexing every `byte_machine_mutation(` block whose
   `FILE` is `verify.sls` (137 at the base) and locating each whole `FIND` in the source:
-  **eleven** land in the constructs this slice edits — **one retires** (the
-  `all-out-targets` arm-2 mutation, with the reason written in its place, `AGENTS.md`'s rule
-  that a mutation whose decision a later fix subsumes is retired rather than weakened; its
-  decision is now pinned by the new group's sequence-dispatch pair), **four re-anchor** onto
-  the unified `parked?` (`FIND` and `REPLACE` together, each re-measured: failing-check counts
-  2, 2→4, 5→6, 1), **one re-shapes its `REPLACE`** (the Slice ③ `span-flow` mutation, whose
-  `REPLACE` named the deleted procedure — an unbound identifier is a raise and not a
-  comparison), and **five `FIND`s stay**. **Three more move without their `FIND` moving** and
+  **eleven** land in the constructs this slice edits — **five re-anchor**: four onto the
+  unified `parked?` (`FIND` and `REPLACE` together, each re-measured: failing-check counts
+  2, 2→4, 5→6, 1) and one, the `all-out-targets` arm-2 mutation, onto **`eof-step`**;
+  **one re-shapes its `REPLACE`** (the Slice ③ `span-flow` mutation, whose `REPLACE` named the
+  deleted procedure — an unbound identifier is a raise and not a comparison); and **five
+  `FIND`s stay**. *Nothing retires.* The slice's first draft retired the arm-2 mutation on
+  this section's own reading — that its decision was subsumed by the new group's
+  sequence-dispatch pair — and the whole-branch review measured that false: in that pair `T`'s
+  eof-target is the error node, already byte-reached, so the walk answers the same with or
+  without `node-eof-target`'s sequence arm. The decision was RELOCATED by 0031, not subsumed:
+  `eof-step` is the reader now, and the mutation is anchored there, emitting the same
+  separating `got 1` it always did. **Three more move without their `FIND` moving** and
   no census by `FIND` location can see them: the zero-width out-targets arm (its fixture's
   zero-width node is the ENTRY, hence parked, so the EOF walk rescues it — a second machine
   was added where the node is byte-reached instead), the `§16.2:908` gate (its pin read a case
-  label this slice renames), and the counted consume's `next` (its pin read an entry-stop
-  record the narrowing empties). **Three are added**: `occupiable` mutated back to the retired
+  label this slice renames — the CHECK label, not the case name, which is unchanged), and the
+  counted consume's `next` (its pin read an entry-stop record the narrowing empties). **Three are added**: `occupiable` mutated back to the retired
   walk, and the unified `parked?` losing each of the two previously unpinned disjuncts.
   "each caught by the case that disjunct's kind already has" is true of the **pause** —
   Milestone 6 Slice ①'s "the same through a pause continuation is rejected at the pause" —
@@ -1133,9 +1138,9 @@ and the same three cases, nothing else). `release` **114/114**; mutation suite *
   `unit.kind-position-census`'s axis-A cell `(callback-pause-continuation stop)`, so that
   mutation is declared in the census lane's pass. A mutation is witnessed only by its own SPEC
   lane's program. Finally, the two-direction sweep found **three shipped incumbents** newly
-  satisfied by a changed mutant, all three bare case- or check-label prefixes, re-anchored on
-  whole measured records. `EXPECTED_MUTATIONS` 522 − 1 + 3 = **524**, measured; `EXPECTED_PASSES`
-  stays 58.
+  satisfied by a changed mutant, all three bare prefixes — two of a case or check label, and
+  one of a `got` VALUE in the census — re-anchored on whole measured records.
+  `EXPECTED_MUTATIONS` 522 + 3 = **525**, measured; `EXPECTED_PASSES` stays 58.
 
 **Oracle.** *The verdict change is exactly the family:* the release selection minus the
 mutation lane fails at the three named cases and nowhere else on the unmodified tests, before

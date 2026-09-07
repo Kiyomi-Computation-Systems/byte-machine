@@ -276,8 +276,8 @@ left as decided.
 
 ## 2026-09-07 (Milestone 7 Slice ⓪) — the narrowing landed, and `unreachable-node` at `Z` is the check that replaces the finding
 
-Slice ⓪ (`46da756`, PR #89) narrowed `pass-reachability` to decision 0031's
-occupiable relation. The Context's machine **as written** — `Z` a third node,
+Slice ⓪ (PR #89, source commit `46da756` plus its review fixes) narrowed
+`pass-reachability` to decision 0031's occupiable relation. The Context's machine **as written** — `Z` a third node,
 distinct from `T` — is now rejected with `unreachable-node` at `Z`, so its
 sentence "after the gate it verifies clean, and no other check replaces that
 finding" is false from that commit. This is what the paragraph below it foresaw

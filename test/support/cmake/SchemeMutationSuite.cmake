@@ -1059,13 +1059,19 @@ cmake_minimum_required(VERSION 3.26)
 # now drop the name check alone. No pass is added.
 #
 # Milestone 7 Slice ⓪, decision 0031 (reachability is the occupiable relation):
-# ONE retired, FOUR re-anchored, ONE re-shaped, THREE re-pinned and THREE added,
-# 522 - 1 + 3 = 524, and no pass is added (58 stays 58).
+# FIVE re-anchored, ONE re-shaped, THREE re-pinned, THREE added and THREE
+# shipped INCUMBENTS re-anchored, 522 + 3 = 525, and no pass is added (58 stays
+# 58). Nothing is retired: the first draft retired one and the whole-branch
+# review measured its reason false.
 #
-# The retired one is "a sequence node's eof-target does not feed reachability
-# (arm 2, all-out-targets)": its FIND was that procedure's definition, which
-# this slice deletes. Its decision is witnessed in both directions by the new
-# group's sequence-dispatch pair; the tombstone at its site says so.
+# The fifth re-anchor is "a sequence node's eof-target does not feed
+# reachability", whose FIND was `all-out-targets`' definition. That procedure is
+# deleted, but its decision is RELOCATED and not subsumed: `eof-step` is what
+# reads `node-eof-target` for the walk now, and the mutation moves onto it. The
+# tombstone this slice first wrote in its place claimed the new group's
+# sequence-dispatch pair witnessed the decision; measured, that pair answers the
+# same with or without `node-eof-target`'s sequence arm, because `T`'s own
+# eof-target there is already byte-reached. The full reason is at the site.
 #
 # The four re-anchored ones are the §16.2:909 membership's -- the entry
 # disjunct, the byte-reachability gate, the derived EOF-route test and the span
@@ -1094,6 +1100,14 @@ cmake_minimum_required(VERSION 3.26)
 # `verify-tests.sps` passes with that disjunct gone -- measured on both the
 # pre-0031 tree and the unified one -- and a mutation is witnessed only by its
 # own SPEC lane's program.
+#
+# THREE SHIPPED INCUMBENTS were re-anchored by the other direction of the pin
+# sweep -- an existing pin that a CHANGED mutant newly satisfies. All three were
+# bare prefixes: two case- or check-label prefixes ("...AT A PAUSE NODE: at
+# least one, at a pause" and "a `default-error` sibling does not mask the stop")
+# and one a fragment of a `got` VALUE in the census ("callback-pause-continuation
+# advance want"). Each is re-anchored on whole measured records at its own site;
+# the sweep report records the collision counts.
 #
 # *** ONE OF THE THREE IS SUBSUMED EXCEPT ON ONE FIXTURE, and the fixture is the
 # finding. *** "pass 4 walks the retired relation" removes a SUBSET of what
@@ -1347,7 +1361,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 58)
-set(EXPECTED_MUTATIONS 524)
+set(EXPECTED_MUTATIONS 525)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -4882,23 +4896,52 @@ byte_machine_mutation(
   EXPECT_OUTPUT_MATCHES
     "a node reached only through the sequence eof-target is reachable: no unreachable-node -- expected 0, got 2")
 
-# RETIRED by Milestone 7 Slice ⓪ (decision 0031), and this tombstone is the
-# reason rather than a weakened pin.
+# RE-ANCHORED, NOT RETIRED, by Milestone 7 Slice ⓪ (decision 0031) — and the
+# first draft of this slice DID retire it, on a reason the whole-branch review
+# measured false.
 #
-# LABEL was "verify: a sequence node's eof-target does not feed reachability
-# (arm 2, all-out-targets)". Its FIND was `all-out-targets`' definition, which
-# decision 0031 deleted: `pass-reachability` now walks `occupiable`, and the
-# only reader of `node-eof-target` for a reachability walk is `eof-step`.
-#
-# The decision it named -- a sequence node's eof-target feeds reachability --
-# is witnessed twice over, in both directions. The ACCEPTED half is the shipped
-# case "a node reached only through the sequence eof-target is reachable",
-# which this mutation's own pin read and which still passes. The REJECTED half
-# is new: the "reachability is the occupiable relation (decision 0031)" group's
-# sequence-dispatch pair, where the node behind that eof-target's dead byte
-# edge is reported `unreachable-node` and the same machine with it
-# byte-reachable verifies clean. AGENTS.md: a mutation whose decision a later
-# fix subsumes is retired with the reason, never weakened until it is green.
+# The plan said the decision this mutation names — a sequence node's eof-target
+# feeds the reachability walk — was subsumed by the new "reachability is the
+# occupiable relation" group's sequence-dispatch pair. It is not. In that pair
+# `T`'s own eof-target is the error node, which is already byte-reached, so the
+# walk's answer is identical with or without `node-eof-target`'s sequence arm;
+# what the pair witnesses is that the walk does not take `T`'s BYTE edge.
+# Measured over the whole pass: with this block deleted, the shipped case
+# "a node reached only through the sequence eof-target is reachable" was still
+# reddened by two mutants — "a sequence node's case and mismatch targets are not
+# out-targets (arm 1)" and "node-out-targets returns the roles instead of the
+# targets" — and BOTH name the byte half, each emitting `got 2` where this one
+# emits `got 1`. The decision was RELOCATED by 0031, not subsumed: `eof-step` is
+# what reads `node-eof-target` for the walk now, so the mutation moves there.
+# AGENTS.md: before deleting a mutation, ask what its REPLACE still changes in
+# the surviving tree and whether any input can reach it.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a sequence node's eof-target does not feed reachability (arm 2, eof-step)"
+  # Originally anchored on `all-out-targets`' definition and re-anchored twice
+  # since: in Fix wave 1 onto the shared `node-eof-target` helper's call site,
+  # and by Milestone 7 Slice ⓪ onto `eof-step`, which decision 0031 made the one
+  # reader of that helper for the reachability and pass-7 walks. The REPLACE
+  # reproduces the old byte-dispatch-only behaviour by gating the contribution,
+  # not by narrowing the helper — so the mutant differs from the baseline in
+  # exactly one thing, which kind's EOF route the walk follows.
+  FIND [[  (define (eof-step n)
+    (let ((t (node-eof-target n)))
+      (append (if (symbol? t) (list t) '()) (eof-successors n))))]]
+  REPLACE [[  (define (eof-step n)
+    (let ((t (node-eof-target n)))
+      (append (if (and (byte-dispatch-node? n) (symbol? t)) (list t) '())
+              (eof-successors n))))]]
+  EXPECT_STATUS 1
+  # Comparison-caught, and the record is UNIQUE across the pass: this mutant
+  # emits `got 1` on that case where the two mutants naming the BYTE half emit
+  # `got 2`, which is exactly the separation the pre-0031 anchoring had. It also
+  # reddens three cases whose kinds lose their EOF route for the same reason
+  # (two accumulate, one counted) -- the decision reaches them, so this is a
+  # discrimination and not a crash.
+  EXPECT_OUTPUT_MATCHES
+    "sequence dispatch reaches every verifier arm.a node reached only through the sequence eof-target is reachable: no unreachable-node -- expected 0, got 1")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
