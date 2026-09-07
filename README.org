@@ -124,6 +124,12 @@ source and ahead-of-time execution lanes. See
 The Chez pin is a floor recording what has actually been verified, not a guess
 at what would work; lowering it needs CI evidence from the older release.
 
+CI (GitHub Actions, =.github/workflows/ci.yml=) runs on demand: a pull request
+runs nothing until it carries the =ci= label (the Linux job) or =ci-macos=
+(both jobs); a push to =main= runs the Linux job; =gh workflow run ci.yml
+--ref <branch> -f macos=true= runs either on any branch. Docs-only changes never
+run it.
+
 ** Building and testing
 
 #+begin_src bash
