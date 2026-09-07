@@ -1,6 +1,7 @@
 # Milestone 7 Design — Verification and generative hardening
 
-**Status: DRAFT 2026-09-06.** Written against **`5ac363a`** (`main` = PR #82, which added only
+**Status: MERGED 2026-09-06 as PR #83 = `8edceb1`; §4.12 settled by the owner the same day (items
+1-3 approved); Gate 0 next.** Written against **`5ac363a`** (`main` = PR #82, which added only
 `AGENTS.md` bullets on top of Milestone 6's close at `0920b13`) on branch
 `docs/milestone-7-design`, tree clean. Measured on 2026-09-06 by running the complete selection
 and reading the suite's own declared totals: `release` **114/114** (134.71 s); Scheme mutation
@@ -32,6 +33,11 @@ measurement can be re-taken, and Slice ⓪ re-takes it before anything lands.
 > slice, a resolution a slice must implement — is corrected in place, because leaving a false
 > one is a landmine and what it used to say is in git. Later dated notes are indexed here,
 > newest first, each naming the section it amends.
+>
+> **2026-09-06, the owner's decision on §4.12** — **annotates §4.12, §9 and §11**: items 1, 2
+> and 3 approved ("Merge 83, approve all three, and do the Gate 0 plan"). §4.12's heading and
+> each item record the decision and its date; the receiving slice on each item was already
+> named. Slice ④'s allocation (§9) and §11's bullet stand as written, with the approval noted.
 
 **Governing plan.** The parent plan's `§25` "Milestone 7" subsection is authoritative
 (`§25:1611`). Its Scope list is `§25:1615-1621` and its Exit criteria are `§25:1625-1627`.
@@ -458,8 +464,9 @@ parent plan does not name, for the owner.
 says over which relation. The tree has two (decision 0027's Consequences table): `all-out-targets`
 — byte edges and eof-targets mixed freely, read by `pass-reachability` alone — and the
 *occupiable* relation — `byte-reached` plus the EOF walk from the parked set — read by `§16.2:908`,
-`:909`, pass 7 and `pass-zero-progress`'s gate. 0027 item 1 defines the second and its
-Consequences table says it "is the one that means 'an execution can be here'"; 0023's third Consequence raised the first as an
+`:909`, pass 7 and `pass-zero-progress`'s gate. 0027 item 1 defines the second, and the sentence
+beneath its Consequences' relations table says it "is the one that means 'an execution can be
+here'"; 0023's third Consequence raised the first as an
 over-approximation and forbade reading it as closed; Milestone 6 priced narrowing it and handed
 it here.
 
@@ -509,11 +516,13 @@ executable lane stays green because no executable fixture holds a dead node.
 
 **What the three fixtures assert afterwards, decided here so Slice ⓪ does not improvise.** Each
 is re-baselined to the property it tests and gains the narrowing's witness, never rewritten to
-hide it: the `t2-kinds` accept case asserts **no `non-eof-into-finish`** for all eight kinds and
-`unreachable-node` at `fin` for exactly `(byte-dispatch sequence-dispatch integer-accumulate)`
-— a derived set, three kinds, the same three §3.2 names; the join case asserts the
-`(eof-reachable-stop . s0)` pair present and `(unreachable-node . rj2)` present; the 0029 item 3
-case asserts no span code and `unreachable-node` at each of `cl`, `exit`, `done`, `fin`. Slice ⓪
+hide it: the `t2-kinds` accept case asserts the whole `(code . node)` set per kind — empty for pause,
+field-action, field-branch, callback and counted-consume, exactly `((unreachable-node . fin))`
+for byte-dispatch, sequence-dispatch and integer-accumulate — a derived set, three kinds, the
+same three §3.2 names, in the shape the shipped case already has (it collects every code per
+kind); the join case asserts the whole list `((unreachable-node . rj2) (eof-reachable-stop .
+s0))`, the shipped `check-equal`'s shape; the 0029 item 3 case asserts no span code and
+`unreachable-node` at each of `cl`, `exit`, `done`, `fin`. Slice ⓪
 also adds the family's canonical pair for each of the three kinds — `Z` distinct, REJECTED;
 the same machine with `Z` also reachable by a byte edge from the entry, ACCEPTED — and the two
 controls the paragraph above names (self-loop; counted consume), ACCEPTED.
@@ -580,8 +589,9 @@ test reads, and four new accessors exported: `diagnostic-severity`, `diagnostic-
    slots with `'()` and `#f`, and the sites that carry a declaration list or a path call new
    constructors whose names begin `make-diagnostic`, so the census counts them. The slot is a
    list because `invalid-span-callback` can name a span and a callback at once. About thirty
-   sites gain an argument; the rest keep their text and their pins (27 `FIND`s in the suite
-   contain `make-diagnostic '`, measured); Slice ① lists the moving sites by code.
+   sites gain an argument; the rest keep their text and their pins (19 `FIND` blocks and 8
+   `REPLACE` blocks in the suite contain `make-diagnostic '` — 27 lines — measured); Slice ①
+   lists the moving sites by code.
 3. **A path is carried by the codes a walk produces, and by no other.** "When useful" is
    read as "when the finding is about a path" — a diagnostic about a *place* (a duplicate, a
    bad name, an overlap, a dangling target, an unreachable node) has no path to give, and a
@@ -615,8 +625,8 @@ reports (§4.7) and any future diagnostic renderer will read. Record **0032**.
 ### 4.3 The property contract: the verifier decides validity, every draw proves it ran, and a failure is a file
 
 **The call.** `§22.6:1295` says "bounded small verified machines"; it does not say who
-guarantees *verified*. The shipped generator guarantees it by construction with five
-hand-written constraints that mirror verifier rules (§2). `§22.6:1293` says print the seed; it
+guarantees *verified*. The shipped generator guarantees it by construction with
+hand-written constraints — three verifier rules and four one-byte coverage pins (§2). `§22.6:1293` says print the seed; it
 does not say where the seed comes from. `§25:1627` says failure fixtures "can be saved without
 external tooling"; it does not say what a fixture is or where it goes. All three are contracts
 a developer will rely on and a pin will be measured against.
@@ -804,7 +814,7 @@ not:
 | `:897` unreachable | an independent walk implementing 0027 item 1's sentence | `unreachable-node` |
 | `:908` byte edge into a finish | a byte-edge walk from the entry, the entry itself included (0023 item 2), reporting at the source node (0023 item 4) | `non-eof-into-finish` |
 | `:909` EOF path to a stop | the EOF walk from 0023 item 3's parked set, each start at `parked-eof-start`'s answer (0023's 2026-09-06 note; 0030 item 6), under 0023 item 5's tiers: a start whose walk reaches a cycle reports the cycle and not the stop | `eof-reachable-stop` and `eof-zero-progress-cycle`, compared jointly per start |
-| `:898` zero-progress | the edge rule the tree records as a deliberate over-rejection of `§11.4:654`: a cycle of reexecute edges, pause continuations, zero-width successors, accumulate overflow edges (`§12.7:773`; `verify.sls`'s own comment cites `:772`, a blank line, which Slice ⓪ corrects in place) and counted `next` (0030 item 7), digit edges excluded (`§10.6:566`), reported on byte-reached nodes only (0027 item 3) | `zero-progress-cycle` |
+| `:898` zero-progress | the edge rule the tree records as a deliberate over-rejection of `§11.4:654`: a cycle of reexecute edges, pause continuations, zero-width successors, accumulate overflow edges (`§12.7:773`; `reexec-targets`' accumulate comment in `verify.sls` and decision 0030's Context both cite `:772`, a blank line — Slice ⓪ corrects the comment in passing and Gate 0 annotates the record) and counted `next` (0030 item 7), digit edges excluded (`§10.6:566`), reported on byte-reached nodes only (0027 item 3) | `zero-progress-cycle` |
 
 **The drive.** Free draws — §4.4's generator with its structural steering off, plus every draw
 the property lane rejected — and per machine, per rule, the oracle's `(code . node)` set equals
@@ -931,9 +941,9 @@ the first draft of this list missed (item 6).
 1. **`pass-reachability`'s note and the parent's `§25:1611` hand-off.** Closed by Slice ⓪
    under decision 0031; the note is corrected in place (an instruction) to say what the pass
    walks and who decided it, and the parent's disposition gets a dated annotation carrying
-   §3.2 item 1's corrected accounting — a record, so annotated and not rewritten — and
-   Milestone 6's design §8 bullet, the pricing's source, gets a dated note indexed in that
-   document's Amendments block.
+   §3.2 item 1's corrected accounting — a record, so annotated and not rewritten. The notes
+   into decisions 0023 and 0027 and into Milestone 6's design §8 (the pricing's source) are
+   Gate 0's, written with record 0031, so they are in the tree before Slice ⓪ starts.
 2. **The diagnostic record's widening**, deferred here by Milestone 3's design §8, Milestone
    4's design §4.6 and §9, and decisions 0020 and 0022. Closed by Slice ① under 0032; the two
    decision records get annotating notes (nothing above them becomes false).
@@ -962,22 +972,23 @@ the first draft of this list missed (item 6).
    gate is what proves this milestone touched neither; the property lane's header names the
    first as the agreed-wrong value it cannot see.
 
-### 4.12 Scope additions — for the owner
+### 4.12 Scope additions — settled by the owner 2026-09-06
 
-Items 1 and 2 are dispositions of `§16.2` bullets: the work is a slice's under this
+**All three items are approved** (owner, 2026-09-06, on merging PR #83). Items 1 and 2 are
+dispositions of `§16.2` bullets: the work is a slice's under this
 milestone's own scope either way, and what the owner decides is whether the parent plan's
 appended dispositions record the finding. Item 3 keeps a shipped over-rejection. Each is
 priced, with a recommendation, and names its slice (`AGENTS.md`, "an approval with no receiver
 is invisible to every completeness sweep you have").
 
-1. **Dispose `§16.2:910` as discharged by construction, with Slice ④'s structural witness as
-   its pin (Slice ④, under `§25:1617`).** Measured (§3.2 item 3): every declared name is emitted as data; the binding is
+1. **APPROVED 2026-09-06. Dispose `§16.2:910` as discharged by construction, with Slice ④'s
+   structural witness as its pin (Slice ④, under `§25:1617`).** Measured (§3.2 item 3): every declared name is emitted as data; the binding is
    the one caller-chosen identifier and is refused against all three members. The work is one
    test group reading an emitted library as a datum (Slice ④) and one appended parent-plan
    disposition under `§16.2` naming the witness. **Recommended: approve.** Declining leaves a
    `§16.2` bullet with no check and no statement that none is needed.
-2. **Dispose `§16.2:911` for v0.1 under decision 0005, with a witness that compiles the
-   largest emittable machine.** No lane compiles a generated library with `compile-file`
+2. **APPROVED 2026-09-06. Dispose `§16.2:911` for v0.1 under decision 0005, with a witness
+   that compiles the largest emittable machine.** No lane compiles a generated library with `compile-file`
    (§3.2 item 4). The work: one lane that renders a machine declaring every construct at the
    generator's bounds and a hand-built maximal dispatch (256 exact cases, and the same over a
    complement matcher) and runs `compile-file` on the result under the AOT launcher's
@@ -986,8 +997,8 @@ is invisible to every completeness sweep you have").
    identifier length and source size, `case` arity, literal size — and that none is reachable
    by a v0.1 machine. If the witness finds one, `:911` gains a check and a code and this item
    becomes a slice of its own. **Recommended: approve.** Slice ④ carries it; it is one lane.
-3. **Keep `reserved-member-1`'s exclusion on declared names, and record that it has no
-   warrant.** Relaxing it is a verdict change (a node may then be named `lambda`) with no
+3. **APPROVED 2026-09-06. Keep `reserved-member-1`'s exclusion on declared names, and record
+   that it has no warrant.** Relaxing it is a verdict change (a node may then be named `lambda`) with no
    consumer asking and a pin sweep to pay; keeping it costs nothing and rejects nothing a
    grammar needs. The work is a comment at `valid-name?` and a sentence in the `§16.2:910`
    disposition. **Recommended: keep, and record (Slice ④, beside item 1's disposition).** Approving item 1 without this leaves the
@@ -1039,8 +1050,8 @@ the re-baseline — re-taken, not assumed, because the base commit has moved sin
 prototype. *Nothing else moved:* census `(unreachable-node 1)`, matrix pruning count 3,
 every executable lane green, every golden byte-identical. *Both ends:* the `verify.sls` note
 names 0031; the parent's `§25:1611` hand-off gets its dated annotation with the corrected
-accounting; 0023 and 0027 get their notes with header bullets and site markers per
-`docs/decisions/README.md`.
+accounting; 0023's, 0027's and Milestone 6's design §8's notes are Gate 0's (record 0031) and
+are already in the tree, and this slice's plan verifies them rather than writing them.
 
 ---
 
@@ -1094,8 +1105,9 @@ execution lanes) under the new lane names. Depends on Gate 0 (decision 0033) and
 
 - **`machine-gen.sls`**, rewritten to §4.4's draw: the declaration draws, the worklist over
   open slots, every kind and every matcher, the scripted callbacks, the EOF-route draw, the
-  bounds; and its own totality rows against `ir.sls` read as a datum. The five hand-written
-  constraints go, with their comments; what replaces them is the verifier.
+  bounds; and its own totality rows against `ir.sls` read as a datum. The hand-written
+  constraints go, with their comments — the three verifier rules and the four coverage pins §2
+  counts; what replaces the rules is the verifier.
 - **`(byte-machine test property-driver)`**, new: the trial — feed, pause protocol, finish,
   optional reset — the three comparison layers, and the counters, as one library the lane
   reads now and the fixture reads in Slice ③.
@@ -1251,9 +1263,9 @@ that meets it — never reworded to match what shipped.
   0022 at their "Milestone 7" sentences. Every reason in a record is checked against the code
   and the spec, not against this document — the sentence `AGENTS.md` puts in the reviewer's
   prompt verbatim.
-- **§4.12 is the owner's**: items 1-3 recommended approve/approve/keep. Each approved item
-  lands in Slice ④'s plan the day it is approved; a declined one is recorded declined in this
-  section and in the close note.
+- **§4.12 is settled (owner, 2026-09-06): items 1-3 approved.** Each lands in Slice ④'s plan;
+  the two parent-plan dispositions (items 1 and 2) are appended by Slice ④ with the witnesses'
+  measurements, never before them.
 - **Re-measure every `file:line`, every count and the prototype in §3.2 item 1 at plan-writing
   time.** They were measured at `5ac363a`. Slice ⓪'s plan re-takes the narrowing measurement
   at its own base before listing the cases it re-baselines; Slice ①'s plan lists by LABEL every
