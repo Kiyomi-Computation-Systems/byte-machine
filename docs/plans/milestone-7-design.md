@@ -1,7 +1,9 @@
 # Milestone 7 Design — Verification and generative hardening
 
-**Status: MERGED 2026-09-06 as PR #83 = `8edceb1`; §4.12 settled by the owner the same day (items
-1-3 approved); Gate 0 next.** Written against **`5ac363a`** (`main` = PR #82, which added only
+**Status: Gate 0 discharged 2026-09-06 as decisions 0031-0033 (PR pending; §4's blockquote and
+§11's first bullet carry the discharge); Slice ⓪ next.** Before it: the design merged 2026-09-06
+as PR #83 = `8edceb1`, and §4.12 was settled by the owner the same day (items 1-3 approved).
+Written against **`5ac363a`** (`main` = PR #82, which added only
 `AGENTS.md` bullets on top of Milestone 6's close at `0920b13`) on branch
 `docs/milestone-7-design`, tree clean. Measured on 2026-09-06 by running the complete selection
 and reading the suite's own declared totals: `release` **114/114** (134.71 s); Scheme mutation
@@ -457,6 +459,41 @@ Decision-only: no product code, no tests, no CMake. **The next free decision num
 slice asserts; §4.10 is the list of things this document deliberately does not decide; §4.11
 disposes the obligations addressed to this milestone; §4.12 collects the scope additions the
 parent plan does not name, for the owner.
+
+> **Gate 0 discharged 2026-09-06**, as three records, as §11 planned.
+>
+> | Record | Carries | Shape |
+> | --- | --- | --- |
+> | [0031](../decisions/0031-reachability-is-the-occupiable-relation.md) | §4.1, with §3.2 item 1's measurement as its Context | five numbered items — the relation and its one procedure; the family, exactly, with what is not in it; `all-out-targets`' retirement and the three mutations it names by LABEL; one parked set, as a derivation with a measurement; what the three cases assert afterwards |
+> | [0032](../decisions/0032-diagnostic-record-seven-fields-and-path-policy.md) | §4.2, with §3.1's slot census as its Context | six numbered items — the shape and the four accessors; the stamping in `verify-machine`; the `declarations` list per site; the path policy as the table, eight codes at twelve sites; the shape rule for tests; the census row |
+> | [0033](../decisions/0033-property-suite-contract.md) | §4.3, with §4.4's Layer 3 table and §4.7's fixture shape | five numbered items — validity is the verifier's verdict; the counters and the floor; the seed; the fixture; the three-layer comparison with its qualifiers |
+>
+> **As performed.** No resolution was split or merged, and no decision changed. One stated
+> reason was re-checked against the tree and written in its checkable form: §3.2 item 1 accounts
+> for effect (c) with "no builder in the matrix's `kind-table` gives its placed node an EOF route
+> to the sink"; `0031` states it as *no placed node names an eof-target — every input-reading
+> builder passes `#f` — and the sink `ee` is `byte-reached` in every cell that keeps it*, which
+> is the fact the unmoved count rests on, since the zero-width builders' continuations to `ee`
+> are routes the EOF walk takes and "EOF route" reads as false for them. One measurement was
+> guarded rather than re-taken: `git diff --stat 5ac363a..HEAD -- src/ test/` printed nothing, so
+> every record cites the prototype run of §3.2 item 1 and PR #83's reproduction of it. Two
+> records carry Context this document left implicit: `0031` reads `pass-eof-execution`'s walk
+> (from `parked-eof-start`'s answer) and `span-flow`'s (from `eof-step` of the parked node) as
+> two procedures today and states their equality as a derivation the review measured, where
+> §4.1 says only that the walk is `span-flow`'s `eof-nodes` verbatim; `0033` counts
+> `machine-gen.sls`'s constraints by the file's own bullets — two rejection-driven rules, one
+> reachability rule, four accumulate coverage pins — and names all six of Pass 39's mutations,
+> which §4.3 does not.
+>
+> **Five records and one closed design reach back**, under `docs/decisions/README.md`'s
+> convention: `0031` **amends** decision 0027's "Handed to nobody: `pass-reachability`" bullet
+> and decision 0023's second Consequence (a header bullet, a site marker and a foot note in
+> each) and **annotates** 0023's third Consequence (a site marker, the same note); `0032`
+> **annotates** decisions 0020 and 0022 at their "Milestone 7" sentences (a header bullet only,
+> each); `0031`'s Context **annotates** decision 0030's `§12.7:772` citation (a header bullet
+> only, creating that record's Amendments block); and Milestone 6's design §8 pricing bullet, a
+> record in a closed design, carries a dated note indexed in that document's Amendments block.
+> Nothing above any note is rewritten.
 
 ### 4.1 `pass-reachability` walks the occupiable relation — the one hand-off, closed first
 
@@ -1256,13 +1293,15 @@ that meets it — never reworded to match what shipped.
 
 ## 11. Handed to writing-plans
 
-- **Gate 0 is three records, `0031`-`0033`**, carrying §4.1, §4.2 and §4.3 respectively; `0031`
-  **amends** decision 0027's "Handed to nobody" bullet and 0023's second Consequence (both
-  become false) and **annotates** 0023's third, with header bullets and site markers per
-  `docs/decisions/README.md`, and puts a dated note in Milestone 6's design §8; `0032` annotates 0020 and
-  0022 at their "Milestone 7" sentences. Every reason in a record is checked against the code
-  and the spec, not against this document — the sentence `AGENTS.md` puts in the reviewer's
-  prompt verbatim.
+- **Gate 0 is discharged** (2026-09-06; §4's blockquote carries the discharge as performed):
+  three records — `0031` "Reachability is the occupiable relation — `pass-reachability` walks
+  it, `all-out-targets` retires, and the family whose verdict changes" (§4.1); `0032` "The
+  diagnostic record carries `§16.4`'s seven fields, and the path has a policy" (§4.2); `0033`
+  "The property suite's contract — the verifier decides validity, every draw proves it ran,
+  the seed comes from the environment, and a failure is a file" (§4.3) — with the notes into
+  decisions 0027, 0023, 0020, 0022 and 0030 and into Milestone 6's design §8 in the tree.
+  Every reason in a record was checked against the code and the spec, not against this
+  document — the sentence `AGENTS.md` puts in the reviewer's prompt verbatim.
 - **§4.12 is settled (owner, 2026-09-06): items 1-3 approved.** Each lands in Slice ④'s plan;
   the two parent-plan dispositions (items 1 and 2) are appended by Slice ④ with the witnesses'
   measurements, never before them.
