@@ -1,6 +1,7 @@
 # Milestone 7 Design — Verification and generative hardening
 
-**Status: DRAFT 2026-09-06.** Written against **`5ac363a`** (`main` = PR #82, which added only
+**Status: MERGED 2026-09-06 as PR #83 = `8edceb1`; §4.12 settled by the owner the same day (items
+1-3 approved); Gate 0 next.** Written against **`5ac363a`** (`main` = PR #82, which added only
 `AGENTS.md` bullets on top of Milestone 6's close at `0920b13`) on branch
 `docs/milestone-7-design`, tree clean. Measured on 2026-09-06 by running the complete selection
 and reading the suite's own declared totals: `release` **114/114** (134.71 s); Scheme mutation
@@ -32,6 +33,11 @@ measurement can be re-taken, and Slice ⓪ re-takes it before anything lands.
 > slice, a resolution a slice must implement — is corrected in place, because leaving a false
 > one is a landmine and what it used to say is in git. Later dated notes are indexed here,
 > newest first, each naming the section it amends.
+>
+> **2026-09-06, the owner's decision on §4.12** — **annotates §4.12, §9 and §11**: items 1, 2
+> and 3 approved ("Merge 83, approve all three, and do the Gate 0 plan"). §4.12's heading and
+> each item record the decision and its date; the receiving slice on each item was already
+> named. Slice ④'s allocation (§9) and §11's bullet stand as written, with the approval noted.
 
 **Governing plan.** The parent plan's `§25` "Milestone 7" subsection is authoritative
 (`§25:1611`). Its Scope list is `§25:1615-1621` and its Exit criteria are `§25:1625-1627`.
@@ -962,22 +968,23 @@ the first draft of this list missed (item 6).
    gate is what proves this milestone touched neither; the property lane's header names the
    first as the agreed-wrong value it cannot see.
 
-### 4.12 Scope additions — for the owner
+### 4.12 Scope additions — settled by the owner 2026-09-06
 
-Items 1 and 2 are dispositions of `§16.2` bullets: the work is a slice's under this
+**All three items are approved** (owner, 2026-09-06, on merging PR #83). Items 1 and 2 are
+dispositions of `§16.2` bullets: the work is a slice's under this
 milestone's own scope either way, and what the owner decides is whether the parent plan's
 appended dispositions record the finding. Item 3 keeps a shipped over-rejection. Each is
 priced, with a recommendation, and names its slice (`AGENTS.md`, "an approval with no receiver
 is invisible to every completeness sweep you have").
 
-1. **Dispose `§16.2:910` as discharged by construction, with Slice ④'s structural witness as
-   its pin (Slice ④, under `§25:1617`).** Measured (§3.2 item 3): every declared name is emitted as data; the binding is
+1. **APPROVED 2026-09-06. Dispose `§16.2:910` as discharged by construction, with Slice ④'s
+   structural witness as its pin (Slice ④, under `§25:1617`).** Measured (§3.2 item 3): every declared name is emitted as data; the binding is
    the one caller-chosen identifier and is refused against all three members. The work is one
    test group reading an emitted library as a datum (Slice ④) and one appended parent-plan
    disposition under `§16.2` naming the witness. **Recommended: approve.** Declining leaves a
    `§16.2` bullet with no check and no statement that none is needed.
-2. **Dispose `§16.2:911` for v0.1 under decision 0005, with a witness that compiles the
-   largest emittable machine.** No lane compiles a generated library with `compile-file`
+2. **APPROVED 2026-09-06. Dispose `§16.2:911` for v0.1 under decision 0005, with a witness
+   that compiles the largest emittable machine.** No lane compiles a generated library with `compile-file`
    (§3.2 item 4). The work: one lane that renders a machine declaring every construct at the
    generator's bounds and a hand-built maximal dispatch (256 exact cases, and the same over a
    complement matcher) and runs `compile-file` on the result under the AOT launcher's
@@ -986,8 +993,8 @@ is invisible to every completeness sweep you have").
    identifier length and source size, `case` arity, literal size — and that none is reachable
    by a v0.1 machine. If the witness finds one, `:911` gains a check and a code and this item
    becomes a slice of its own. **Recommended: approve.** Slice ④ carries it; it is one lane.
-3. **Keep `reserved-member-1`'s exclusion on declared names, and record that it has no
-   warrant.** Relaxing it is a verdict change (a node may then be named `lambda`) with no
+3. **APPROVED 2026-09-06. Keep `reserved-member-1`'s exclusion on declared names, and record
+   that it has no warrant.** Relaxing it is a verdict change (a node may then be named `lambda`) with no
    consumer asking and a pin sweep to pay; keeping it costs nothing and rejects nothing a
    grammar needs. The work is a comment at `valid-name?` and a sentence in the `§16.2:910`
    disposition. **Recommended: keep, and record (Slice ④, beside item 1's disposition).** Approving item 1 without this leaves the
@@ -1251,9 +1258,9 @@ that meets it — never reworded to match what shipped.
   0022 at their "Milestone 7" sentences. Every reason in a record is checked against the code
   and the spec, not against this document — the sentence `AGENTS.md` puts in the reviewer's
   prompt verbatim.
-- **§4.12 is the owner's**: items 1-3 recommended approve/approve/keep. Each approved item
-  lands in Slice ④'s plan the day it is approved; a declined one is recorded declined in this
-  section and in the close note.
+- **§4.12 is settled (owner, 2026-09-06): items 1-3 approved.** Each lands in Slice ④'s plan;
+  the two parent-plan dispositions (items 1 and 2) are appended by Slice ④ with the witnesses'
+  measurements, never before them.
 - **Re-measure every `file:line`, every count and the prototype in §3.2 item 1 at plan-writing
   time.** They were measured at `5ac363a`. Slice ⓪'s plan re-takes the narrowing measurement
   at its own base before listing the cases it re-baselines; Slice ①'s plan lists by LABEL every
