@@ -631,7 +631,7 @@ re-shaped / added), and the sweep's numbers.
 ## Task 5 — Both ends, and the status surfaces
 
 **Files:**
-- Modify: `docs/plans/byte-machine-implementation-plan.md` (append only), `docs/plans/milestone-7-design.md`, `CHANGELOG.md`, `README.org`; `docs/decisions/0031-…` only if Task 1 contradicted it.
+- Modify: `docs/plans/byte-machine-implementation-plan.md` (append only), `docs/plans/milestone-7-design.md`, `CHANGELOG.md`, `README.org`, `docs/decisions/0027-reachable-path-for-callbacks-and-spans.md` (a dated note, header bullet and site marker); `docs/decisions/0031-…` only if Task 1 contradicted it.
 
 - [ ] **Step 1: The parent plan — one appended paragraph, never an insertion**
 
@@ -670,14 +670,28 @@ unification removes; the Status header moves ("Slice ⓪ delivered <date> (PR #N
 Slice ① next"). The Amendments block indexes the §5 correction, newest first, saying
 the plan measured what the design derived.
 
-- [ ] **Step 3: Decision 0031 — only if Task 1 disagreed**
+- [ ] **Step 3: Decision 0027's Context sentence gets its marker; decision 0031 only if Task 1 disagreed**
 
-If Task 1 Step 2 reproduced the three cases and nothing else, 0031 is untouched: its
-Context states the measurement with its commit, and this slice's commit message and
-the parent's paragraph record the re-take. If Task 1 found a difference, 0031 gets a
-dated note headed `## <date> (Milestone 7 Slice ⓪) — …` with a header bullet
-(`docs/decisions/README.md`), verb **amends** if a sentence of its Context or item 2
-became false, **annotates** otherwise; the site marker where required.
+Decision 0027's Context derives the family's machine (`E`, `T`, a distinct `Z` with a
+`reexecute` self-loop) and says of it: "Today `pass-zero-progress` reports
+`zero-progress-cycle` at `Z` and the machine is rejected; after the gate it verifies
+clean, and no other check replaces that finding." Once Task 3 lands, `unreachable-node`
+at `Z` replaces it — which the same paragraph foresaw ("narrowing `pass-reachability`
+would shrink the family to empty"), and which 0027's Gate 0 note (2026-09-06) says
+this slice marks. So 0027 gets: a header bullet `**<date> (Milestone 7 Slice ⓪)** —
+**amends the Context's "after the gate it verifies clean"**: … see the foot of this
+file`; a one-line site marker directly under that blockquote paragraph at its
+indentation, followed by a blank line; and a short foot note headed `## <date>
+(Milestone 7 Slice ⓪) — …` naming the commit that landed the walk and the fixture
+that asserts the new verdict (the 0029 item 3 case and the new group). Then run
+`docs/decisions/README.md`'s invariant loop: silent.
+
+Decision 0031: if Task 1 Step 2 reproduced the three cases and nothing else, it is
+untouched — its Context states the measurement with its commit, and this slice's
+commit message and the parent's paragraph record the re-take. If Task 1 found a
+difference, 0031 gets a dated note headed `## <date> (Milestone 7 Slice ⓪) — …` with
+a header bullet, verb **amends** if a sentence of its Context or item 2 became false,
+**annotates** otherwise; the site marker where required.
 
 - [ ] **Step 4: The status surfaces the ritual does not sweep**
 
