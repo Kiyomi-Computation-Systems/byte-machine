@@ -1,19 +1,20 @@
 name: CI
 
-# CI runs ON DEMAND, not on every push. On 2026-09-07 the month's GitHub Actions
-# minutes ran out: two jobs -- one on a macOS runner, billed at ten times a
-# Linux minute -- ran on every push to every PR and on every merge, about sixty
-# billed minutes a run. What runs when, now:
+# CI is ONE Linux job, run on demand. On 2026-09-07 the month's GitHub Actions
+# minutes ran out: a macOS job (billed at ten times a Linux minute) and a Linux
+# job that built Chez from source ran on every push to every PR and on every
+# merge, about sixty billed minutes a run. The macOS job is gone -- Apple
+# silicon is the platform every slice is measured on locally, with the
+# `release` preset and the mutation lane, before it merges -- and the Linux job,
+# the platform nobody here develops on, is what CI is for. What runs when:
 #
-#   push to `main`     the Linux job only (the platform nobody here develops on;
-#                      macOS is exercised locally on every slice).
-#   pull_request       NOTHING until the PR carries a label: `ci` runs the Linux
-#                      job, `ci-macos` runs both. Only the `labeled` event is
-#                      subscribed, so a later push to the PR re-runs nothing --
-#                      remove and re-add the label, or dispatch, when the branch
-#                      is ready for its run.
-#   workflow_dispatch  the Linux job on any ref; `macos=true` adds the macOS job:
-#                      `gh workflow run ci.yml --ref <branch> -f macos=true`.
+#   push to `main`     the Linux job.
+#   pull_request       NOTHING until the PR carries the `ci` label. Only the
+#                      `labeled` event is subscribed, so a later push to the PR
+#                      re-runs nothing -- remove and re-add the label, or
+#                      dispatch, when the branch is final.
+#   workflow_dispatch  the Linux job on any ref:
+#                      `gh workflow run ci.yml --ref <branch>`.
 #
 # A newer run on the same PR (or ref) cancels the one in flight (`concurrency`).
 #
@@ -53,11 +54,6 @@ on:
       - 'docs/**'
       - 'LICENSE'
   workflow_dispatch:
-    inputs:
-      macos:
-        description: 'Also run the macOS arm64 job (billed at ten times a Linux minute)'
-        type: boolean
-        default: false
 
 # One run per PR, or per ref outside a PR; a newer run cancels the older one.
 concurrency:
@@ -65,43 +61,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  macos-arm64:
-    # On demand only: the `ci-macos` label on a PR, or a dispatch with
-    # macos=true. Never on a push to `main`: this runner bills at ten times a
-    # Linux minute, and Apple silicon is the platform every slice is measured
-    # on locally before it merges.
-    if: >-
-      (github.event_name == 'pull_request' && github.event.label.name == 'ci-macos')
-      || (github.event_name == 'workflow_dispatch' && inputs.macos == true)
-    runs-on: macos-14           # Apple silicon runner (arm64)
-    env:
-      BYTE_MACHINE_EXPECT_OS: darwin
-      BYTE_MACHINE_EXPECT_ARCH: arm64
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Chez Scheme
-        run: brew install chezscheme
-      - name: Record the runtime identity
-        run: |
-          chez --version
-          echo '(display (machine-type))(newline)' | chez -q
-      - name: Configure and build
-        run: |
-          cmake --preset dev
-          cmake --build --preset dev
-      - name: Test (pr, then full)
-        run: |
-          ctest --preset pr --output-on-failure
-          ctest --preset release --output-on-failure
-
   linux-amd64:
     # Every push to `main` and every dispatch; on a PR only once it is labelled
-    # `ci` or `ci-macos`. Any other label added to a PR triggers the workflow
-    # (the `labeled` event carries every label) and this condition skips it.
-    if: >-
-      github.event_name != 'pull_request'
-      || github.event.label.name == 'ci'
-      || github.event.label.name == 'ci-macos'
+    # `ci`. Any other label added to a PR triggers the workflow (the `labeled`
+    # event carries every label) and this condition skips it.
+    if: github.event_name != 'pull_request' || github.event.label.name == 'ci'
     runs-on: ubuntu-latest       # x86-64 (amd64)
     env:
       BYTE_MACHINE_EXPECT_OS: linux
