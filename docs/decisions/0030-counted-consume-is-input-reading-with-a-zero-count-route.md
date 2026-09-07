@@ -4,6 +4,17 @@ Date: 2026-09-06
 Status: accepted
 Milestone: 6, Gate 0 (milestone-6-design.md §4.1, §4.2)
 
+> **Amendments** — later notes at the foot of this file reach back into the text
+> above them. Nothing above a note is rewritten.
+>
+> - **2026-09-06 (Milestone 7 Gate 0)** — **annotates the Context's `§12.7:772`
+>   citation**: that line of the parent plan is blank, and the sentence it cites —
+>   "Integer-overflow nodes reject and do not consume the overflowing digit" — is
+>   `§12.7:773`. `reexec-targets`' comment in `verify.sls` carries the same
+>   citation, and Milestone 7's Slice ⓪ corrects it there
+>   ([decision 0031](./0031-reachability-is-the-occupiable-relation.md), Context).
+>   Nothing above became false; this bullet is the whole note.
+
 ## Context
 
 Decided against `main` at `d793b73` (the Milestone 6 design and the Slice ⓪ plan

@@ -21,6 +21,12 @@ Milestone: 5, Slice ⓪b (milestone-5-slice-0b-implementation-plan.md)
 >   starts a parked counted consume's walk at its eof-target — in both cases
 >   because the state a parser is parked on and the name its walk starts at are
 >   different questions. The set itself is unchanged. See the foot of this file.
+> - **2026-09-06 (Milestone 7 Gate 0)** — **amends the second Consequences bullet
+>   and annotates the third**:
+>   [decision 0031](./0031-reachability-is-the-occupiable-relation.md) narrows
+>   `pass-reachability` to the relation items 1 and 3 use, which the third bullet
+>   left open; "verifies clean" in the second bullet is no longer what its three
+>   families do. Milestone 7's Slice ⓪ implements it. See the foot of this file.
 
 ## Context
 
@@ -113,11 +119,25 @@ loud raise.
 - **Three machine families become legal** — an EOF-only-reachable dispatch,
   sequence or accumulate node with a byte edge into a finish. They carry
   accept-side fixtures, because "verifies clean" is what the defect looked like.
+
+  > **Amended 2026-09-06 (Milestone 7 Gate 0)** by
+  > [decision 0031](./0031-reachability-is-the-occupiable-relation.md) — the
+  > three families stay legal under `§16.2:908`, and "verifies clean" is no
+  > longer what they do; see the dated note at the foot of this file. The
+  > sentence above is left as decided.
+
 - **An over-approximation becomes visible and is NOT fixed here.**
   `pass-reachability` walks `all-out-targets`, so a node reachable only through
   an untakeable EOF edge counts as reached; the old `:908` filter was answering
   the "unreachable nodes" question by accident. That is its own §16.2 question
   and must not be read as closed by this record.
+
+  > **Annotated 2026-09-06 (Milestone 7 Gate 0)** by
+  > [decision 0031](./0031-reachability-is-the-occupiable-relation.md) — the
+  > question this bullet leaves open is answered there, and Milestone 7's Slice
+  > ⓪ implements the answer; see the dated note at the foot of this file. The
+  > sentence above was true when written and is left as decided.
+
 - Decision **0021 is annotated, not corrected** — two of its sentences were never
   true, which `AGENTS.md` sends to annotation. Decision **0011 needs no
   amendment**; item 4(b) already states the rule this record implements.
@@ -175,3 +195,44 @@ counted consume for the same reason it is benign for a parked dispatch. What 003
 corrects is where a walk *starts* for one more kind; what a walk does when it
 *arrives* at that kind is its item 5's join, which is `classify`'s business and not
 this item's.
+
+## 2026-09-06 (Milestone 7 Gate 0) — the over-approximation is closed by decision 0031, and "verifies clean" stops being true for three kinds
+
+[Decision 0031](./0031-reachability-is-the-occupiable-relation.md) decides that
+`pass-reachability` reads the relation items 1 and 3 fixed for the EOF checks —
+`byte-reached` plus the EOF walk from the parked set — and that `all-out-targets`
+retires. Milestone 7's Slice ⓪ implements it. This note is written at a Gate 0
+commit, where `verify.sls` still walks `all-out-targets`, so the third Consequences
+bullet describes the tree as it stands today and stops describing it once Slice ⓪
+lands.
+
+**The family whose verdict changes, exactly** (0031 item 2): `E →(eof) T →(byte) Z`,
+with `T` reachable only through an EOF route and one of byte-dispatch,
+sequence-dispatch or integer-accumulate — the kinds whose byte edges are dead at
+EOF — and `Z` distinct from `T`, reachable over `all-out-targets` only through a dead
+byte edge of `T`, transitively. `Z` gains `unreachable-node`. Not in it: `Z = T` (a
+self-loop; `T` is occupiable through the EOF route), `T` a counted consume (`next` is
+an EOF successor, decision 0030 item 5), `T` a zero-width kind (the walk flows
+through it), and any `Z` reachable by another route.
+
+**Why the second bullet is false for exactly its three kinds.** The bullet names
+dispatch, sequence and accumulate nodes, and those are the three kinds of the
+family. Their byte edge into a finish is still not a `§16.2:908` violation, so the
+families stay legal under that rule; but the finish behind that dead edge is a `Z`,
+and under 0031 it is `unreachable-node` unless it has another route. "Verifies
+clean" was what the defect looked like and is not what the fix produces: the
+accept-side fixture keeps its `:908` half and gains a `:897` finding. The fixture
+that carries it — `verify-tests.sps`'s "an EOF-only-reachable byte edge into a
+finish is accepted", driven over the eight kinds of `t2-kinds` — keeps its finish
+occupiable for the other five kinds (pause, field-action, field-branch, callback,
+counted consume), because the EOF walk flows through their zero-width successors,
+and through a counted consume's `next`; those five are the fixture's, not this
+record's, and nothing about them moves. Measured by the Milestone 7 design's
+prototype: `expected (), got ((integer-accumulate unreachable-node)
+(sequence-dispatch unreachable-node) (byte-dispatch unreachable-node))`.
+
+**Item 3's sentence is 0031's ground, transferred to its third consumer.** "A graph
+node no execution can occupy is not a state that originates a traversal" was stated
+here for the `§16.2:909` start set, transferred by decision 0027 to path membership
+for the span and callback rules, and is transferred once more by 0031 to the meaning
+of "unreachable" in `§16.2:897`. Item 3 itself does not move.

@@ -12,6 +12,12 @@ Milestone: 4, Gate 0 (milestone-4-design.md §4.3)
 >   `EXPECT_SURVIVES` this item instructs Slice ①b to declare is **not declared**.
 >   Both premises were measured false and the check is pinned in both directions.
 >   See the foot of this file.
+> - **2026-09-06 (Milestone 7 Gate 0)** — **annotates the "Not touched" bullet**:
+>   "widening it to §16.4's seven fields is Milestone 7" is
+>   [decision 0032](./0032-diagnostic-record-seven-fields-and-path-policy.md),
+>   implemented by Milestone 7's Slice ①. The field name stays in the `node`
+>   slot, as the bullet says, and gains a `declarations` entry beside it. Nothing
+>   above became false; this bullet is the whole note.
 
 ## Context
 
