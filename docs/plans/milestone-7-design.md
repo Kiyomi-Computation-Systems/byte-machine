@@ -744,6 +744,14 @@ a developer will rely on and a pin will be measured against.
    `cmake/ByteMachineTesting.cmake` does `file(MAKE_DIRECTORY)` and no more; the FAIL-CONTEXT line
    already prints it as `artifacts=`) — and the check's detail names the file. Slice ③ adds
    the minimized twin beside it.
+
+   > **Corrected 2026-09-11 (Slice ③ Task 4 Step 3 / F11, measured against `harness.sls:400`).**
+   > `artifacts=` is NOT the fixture's path: `harness-failure-context` fixes it at
+   > `(adapter-environment-variable "BYTE_MACHINE_TEST_TMPDIR")` (or `"(none)"` when unset) — the
+   > DIRECTORY fixtures land in, not the file. The harness exposes no per-check setter, and this
+   > slice does not add one (a design sentence is not made true by widening the harness). So the
+   > fixture's own path is named in the CHECK DETAIL, and `artifacts=` names only the directory —
+   > which is what this item's "already prints it as `artifacts=`" is corrected to mean.
 5. **The comparison is the nine members of `§22.4:1264-1272` plus the invariant layer**, per
    schedule, with `§22.5:1285-1289`'s across-schedule rules — the shipped fixed-machine
    differentials' oracles, applied to drawn machines (§4.4).
@@ -988,6 +996,18 @@ ships a probe: a machine and a *wrong* second lane — a compiled machine whose 
 lie about one member — driven through the saver and the minimizer, then the saved fixture
 loaded and run in-process and asserted to fail, and the minimized one asserted smaller and
 still failing. A saver that writes a fixture which passes is the defect to pin.
+
+> **Corrected 2026-09-11 (Slice ③, measured).** Two phrases above were refined by the build:
+> (1) "written with the harness's own writer" names no export — `harness.sls` has no general
+> datum writer (only an internal `with-output-to-string`+`write` at `:149`). The printer instead
+> BUILDS a datum (a list of `§9.1` constructor-call forms) and the saver writes THAT with `write`;
+> it never `write`s the tagged-vector machine. (2) The deliberate-failure probe's fixture is
+> SELF-CONTAINED and emits no generated lane: F7's lie can only wrap the message-dispatch op,
+> which is the INTERPRETER variant's (the generated variant's slot 2 is a step function of a
+> different arity — measured, wrapping it raises "incorrect number of arguments"), so the probe
+> builds both lanes from the interpreter and writes not one byte. A fixture reproducing a REAL
+> interpreter/generated disagreement would build one lane by emission (to a writable directory);
+> the probe is not that, so "without external tooling" (`§25:1627`) is the stronger for it.
 
 ### 4.8 `§16.2:910` has one producer, already refused, and the finding needs a witness
 
@@ -1311,6 +1331,14 @@ fixtures saved without external tooling). Depends on ②.
   set.
 - **The saver**, in the property driver: on the first disagreement per machine, the fixture
   program written to `BYTE_MACHINE_TEST_TMPDIR` and its path in the check detail.
+  > **Corrected 2026-09-11 (Slice ③ / F1).** "In the property driver" is split: the driver
+  > stays a FUNCTIONAL CORE (F18) — its `fixture-text` RETURNS the fixture program as a string
+  > and does no I/O — and the LANE supplies the `on-first-disagreement` closure that writes the
+  > string and returns its path, which `run-machine` threads into `fixture-path`. The port is
+  > opened in the lane, not the driver. Also (Slice ③ Task 8): a printer arm emitting another
+  > KIND's constructor is caught by the round trip at VERIFY (the reprinted machine does not
+  > verify, so `render-machine` raises) — one step earlier than "by fingerprint"; a fingerprint
+  > MISMATCH catches a subtler emission that still verifies.
 - **The minimizer**, in the driver: §4.7's reductions, oracles and bound; the minimized
   fixture written beside the raw one.
 - **`property-fixture-tests.sps`**, new, both lanes: the deliberate-failure probe — a lying
@@ -1500,8 +1528,11 @@ assertions in `verify-tests.sps`.
 generator's draw tables (kinds, matchers, operations, predicates, callback kinds — hand-written
 and exported in `machine-gen.sls`, with the property program's totality rows comparing them to
 `ir.sls`'s closed sets [note 2026-09-11 (3)]); the catalogue's entry table (keyed by `§16.2` bullet, its code union compared
-with the census); the oracle's rule table; the printer's arm table (derived from `node?` and
-`matcher?`); the census's path-policy row; `role->positions` and `t2-kinds` in the existing
+with the census); the oracle's rule table; the printer's arm table (`node-print-arm-table` /
+`matcher-print-arm-table`, HAND-WRITTEN and exported in `machine-print.sls` [Slice ③], with the
+fixture program's totality rows comparing it to `node?` and `matcher?`'s disjuncts read from
+`ir.sls` — hand-written, NOT derived, or the row would compare `ir.sls` to itself and close
+nothing, S2/F4); the census's path-policy row; `role->positions` and `t2-kinds` in the existing
 files, unchanged.
 
 ---
