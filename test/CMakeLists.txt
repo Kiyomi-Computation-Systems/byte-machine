@@ -1611,9 +1611,16 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-gen.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/property-driver.sls"
           ${BYTE_MACHINE_CORE_EMIT}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${CMAKE_SOURCE_DIR}/test/common/property-differential-tests.sps"
+  # BYTE_MACHINE_SOURCE_ROOT: the totality rows read ir.sls as a datum and every
+  # shipped datum reader raises when it is unset (this is NOT decision 0033 item
+  # 3's "the registrations pass nothing" -- that clause is about the SEED). Under
+  # the mutation suite the variable is set process-wide, so the failure appears
+  # only under an ordinary ctest run -- the harder direction to notice.
+  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
   TIMEOUT 180)
 
 byte_machine_add_scheme_lane(
@@ -1623,9 +1630,11 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-gen.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/property-driver.sls"
           ${BYTE_MACHINE_CORE_EMIT}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${CMAKE_SOURCE_DIR}/test/common/property-differential-tests.sps"
+  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
   TIMEOUT 180)
 
 # --- Milestone 1 Phase 3 Slice B: member-2 runtime-export drift guard ---------

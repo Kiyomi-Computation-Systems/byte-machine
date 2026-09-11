@@ -4,6 +4,14 @@ Date: 2026-09-06
 Status: accepted
 Milestone: 7, Gate 0 (milestone-7-design.md §4.3)
 
+> **2026-09-11 (Slice ② implementation):** four items are corrected by the dated
+> Notes at the foot — item 2 (the counters become ten, and the field counter's
+> witness changed off the draw), item 5 row 1 (the lifecycle table permits a sticky
+> `stopped` from `parser-finish!`; the hole is the `(ready|finish-ready, finish!)`
+> pair), item 5 row 6 (a third inapplicability condition, no bound completion
+> callback), and item 4 (the fixture and saver are Slice ③'s, not ②'s). The items
+> and the Context stand as the record.
+
 ## Context
 
 Decided against `main` at `50516af` — the Milestone 7 design (PR #83) and its Gate 0
@@ -167,3 +175,45 @@ header will say so; drawing the shape does not make this milestone the receiver.
 - **Not decided here**: the corruption catalogue's shape (design §4.5); the
   independent oracle's scope (§4.6); the bounds — machines per seed, node budget,
   input length, schedule count (§4.10, a plan's numbers).
+
+## Notes (2026-09-11, Milestone 7 Slice ② implementation)
+
+Four items above were instructions the implemented tree corrects; the items stand as
+the record of what was decided, and these notes carry what the slice found. The
+Context is a measurement of the tree 0033 was decided against and is untouched.
+
+- **Item 2 (the counters).** "The shipped eight stay, each with the two halves the
+  shipped lane has" could not hold: the shipped eight are five agreed and three
+  interpreter-only, and `finished` and `field` have no twin, so the set is **ten**,
+  not eight (48 keys, 96 checks). And one of the eight — "at least one generated
+  machine declares a field" — read **the draw** (`(pair? fnames)`), which this same
+  item forbids, so its **witness changed** to a field value read back through
+  `parser-field-ref` from both parsers and differing from its declared initial; its
+  **label survives** unchanged.
+- **Item 5, row 1 (the lifecycle table).** "A `stopped` from `parser-finish!`, which
+  no row permits" is wrong: `§12.2:695` permits exactly that for the **sticky** arm.
+  The invariant is keyed on **`(lifecycle-before, operation)`**, never on the status
+  alone, and the `§16.2:909` hole is the pair `(ready | finish-ready, finish!) →
+  stopped` — a verifier-completeness property, reported as a hole, not a runtime
+  event. `poisoned` and `busy` are not driven by a script from
+  `{continue, pause, key, failure}` and the row says so rather than asserting them
+  vacuously.
+- **Item 5, row 6 (the span content invariant).** The row needs a **third
+  inapplicability condition** — no bound span-complete callback — because there is
+  **no public observation of a span's start offset** and the completion callback's
+  reported end offset is the only anchor available; without a completion callback
+  the end anchor is dropped and conjuncts (i) content and (ii) contiguity stand.
+  (The `finished next 5 consumed 0 offset 5` digest is a value whose command is
+  nowhere and whose fixture this slice does not write, so row 2's arithmetic is
+  asserted as a **relation**, not by repeating that digest.) Also: item 5 files
+  `§22.5:1285` under "Across schedules", but the sentence reads "for the same
+  schedule" — the driver puts it in **Layer 1**, with the design and the shipped
+  tree — and row 2's Source column drops `§11.1`, which design §4.4 carries and the
+  driver keeps.
+- **Item 4 (the fixture and the saver are Slice ③'s).** The reproduction fixture,
+  the saver, and the failing-machine path in a check's detail are **Slice ③'s**
+  (0033's own Consequences hand "the saver (item 4)" to ③, and design §8 puts it
+  there). Slice ② ships the driver **shaped so ③ can add the saver without
+  re-shaping it** — the `on-first-disagreement` parameter, the at-most-once-per-machine
+  rule in the driver, and `check-fail` as the only assertion whose detail the caller
+  chooses — and writes **no fixture**. Item 4 is not this slice's obligation.

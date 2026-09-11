@@ -114,12 +114,24 @@ The verifier's reachability pass now walks the relation an execution can
 actually occupy — byte flow, then EOF routes from the states a parser can be
 parked on — in one procedure shared with the two passes that already read it,
 so a node standing behind an edge no execution can take is reported as
-unreachable rather than silently accepted. Slice ① closed 2026-09-10: the
+unreachable rather than silently accepted. Slice ① closed 2026-09-11 (PR #92): the
 diagnostic record now carries =§16.4='s seven fields — severity, machine name,
 declaration names and a representative graph path join the code, node, edge and
 message — and eight of the verifier's codes report the path their finding is
 about. No verdict changed: every machine accepted or rejected before is accepted
 or rejected still.
+
+Slice ② is in progress: a generator now draws random machines over every one of
+the thirteen node kinds and runs each through the reference interpreter and the
+compiled executor, comparing them at three layers — the per-schedule result
+tuple, the fragment and callback traces normalized across every way of splitting
+the input, and a set of oracle invariants no single lane supplies (the lifecycle
+table, cursor arithmetic, field bounds, and the span-content anchor). A property
+test drives sixty-four machines per seed under a committed default seed, asserts
+that only verifier-accepted machines reach an executor, that every construct is
+observed in both lanes, and that the generator draws from exactly the closed
+sets =ir.sls= defines. No file under =src/= changes: this slice is entirely
+test-side.
 
 =src/byte-machine/= holds the construction API, the verifier, the normalizer and
 emitter, the reference interpreter, and the runtime, each exercised in both the

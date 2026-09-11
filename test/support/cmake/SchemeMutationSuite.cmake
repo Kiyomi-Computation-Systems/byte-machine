@@ -6,7 +6,7 @@
 # decision in the runner is broken in turn on a staged copy, and the self-tests
 # must fail.
 #
-# FIFTY-FIVE PASSES, BECAUSE FIFTY-FIVE DIFFERENT WITNESSES ARE NEEDED
+# FIFTY-EIGHT PASSES, BECAUSE FIFTY-EIGHT DIFFERENT WITNESSES ARE NEEDED
 # (46 through Milestone 3; Milestone 4 Slice ①a adds the member-3 drift
 # guard and the position-kind lane, and Slice ①b the field-access lane -- since
 # renamed byte-machine.differential.field, the only lane in which the field
@@ -33,6 +33,17 @@
 # against that same lane, because its topology table is where §25:1590's set is
 # written down -- one witness read two ways, and a pass count that called it two
 # would be the banner claiming a witness the tree does not have.)
+#
+# Milestone 6 adds the FIFTY-SIXTH through FIFTY-EIGHTH: the counted-consume
+# differential and the counted body inside a span, the lanes that load a
+# generated library containing a counted-consume state and observe a counted
+# fragment. (This banner sat at FIFTY-FIVE through Milestone 6; corrected to
+# FIFTY-EIGHT by Milestone 7 Slice ②, which found it the way the FORTY-NINE claim
+# above was found — by reading the constant it enforces, EXPECTED_PASSES = 58.)
+# Milestone 7's slices ⓪, ① and ② add NO pass: ⓪ and ① re-anchor and widen
+# existing passes, and Slice ②'s new mutations join the existing Pass 39 (the
+# property differential), so the property generator and its three comparison
+# layers are witnessed there rather than by a fifty-ninth.
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -538,15 +549,20 @@ cmake_minimum_required(VERSION 3.26)
 # machine-gen.sls: pause-drawn? is hard-wired to #f, so no case is ever
 # offered `pausep` as a target and no generated machine ever includes one.
 # paused-count's own assertion fails, at 0, exactly when this line is
-# mutated. Pinned to "observes a pause", the assertion's own words and
-# otherwise unused in this program.
+# mutated. Pinned to the assertion's own words. (Slice ② correction: the phrase
+# "observes a pause" is no longer unique -- the driver now carries BOTH an
+# "agreed trial observes a pause" and an "interpreter alone observes a pause"
+# label, so this pin is re-anchored, LABEL 3 below, on the full interpreter-only
+# label plus its detail, not the bare substring.)
 #
 # The third new mutation targets the eof draw's own probability line, the
 # same way: eof? is hard-wired to #f, so no dispatch node's eof-target is
 # ever `done` and no generated machine ever reaches `finished`.
 # finished-count's own assertion fails, at 0, exactly when this line is
-# mutated. Pinned to "idle-completion finish", the assertion's own words and
-# otherwise unused in this program.
+# mutated. Pinned to the assertion's own words. (Slice ② correction: as with the
+# pause phrase above, "idle-completion finish" now appears in both an "agreed
+# trial" and an "interpreter alone" label, so this pin is re-anchored, LABEL 4
+# below, on the full interpreter-only label plus its detail.)
 #
 # So passes stay at 38 and 156 + 3 = 159 mutations.
 #
@@ -1361,7 +1377,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 58)
-set(EXPECTED_MUTATIONS 536)
+set(EXPECTED_MUTATIONS 557)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -8556,6 +8572,50 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # comment above EXPECTED_PASSES/EXPECTED_MUTATIONS for why each is
 # witnessable only via a new anti-vacuity assertion, not the lane's
 # pre-existing checks.
+#
+# --- Slice ② Task 11 sweep (2026-09-11, scratchpad sweep.py over all 27 property
+# mutations; re-run after any change here). RESULT: the per-pin match-count matrix
+# has an all-ONE diagonal (every pin matches its own mutant's output exactly once)
+# and an all-ZERO off-diagonal EXCEPT four cells -- the floor check
+# ("the accepted count is at least the floor") co-firing on the four floor-dropping
+# removals (exact-byte, byte-set, integer-accumulate, mask-none). That containment
+# is BY CONSTRUCTION: a draw that drops acceptance below 32 always trips the floor,
+# and holding the floor at 32 (the owner's call) makes it unavoidable; each dropper
+# is still uniquely discriminated by its own totality-row pin (member-specific
+# got-list), so no mutant lacks a unique witness. counted-consume was moved off its
+# fragile counter onto its totality node row to clear the only other collisions
+# (sequence-dispatch and clear-mask removals incidentally zero the counted-consume
+# counter). Base control (Task 1 Step 8, diagonal 40/1/2/1/1/1 with three inherited
+# off-diagonal cells pause/accp/init x bytetest): those three are ABSENT at HEAD
+# (the F13 re-anchors fixed them, confirmed -- the re-anchored pins show zero
+# off-diagonal); the four HEAD cells are introduced-by-construction (the four
+# mutations do not exist at the base), so the base was not independently rebuilt --
+# noted for the Task 13 review. Step 3 literals: the property verify command is the
+# only "--program …/property-differential-tests.sps" in this file (its
+# set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND …) just below), MutationRunner ignores SPEC when VERIFY_COMMAND is set (48
+# set() sites), so a pin is judged only against this program's output. Step 4 label
+# audit: no check label is matched by any pin except its owner. Step 0: both
+# retirements below re-confirmed over the full set -- `accp` survives only in a
+# header comment and the fixed `'n 8 25` field is gone, so neither mutation has a
+# FIND site; verdict RETIRE, unchanged from Task 9.
+#
+# WHAT A CLEAN SWEEP DOES NOT SAY (AGENTS.md): a whole-pass sweep re-judges the pins
+# that EXIST; it cannot notice a decision no pin names -- not the two retirements
+# above, and not a construct in the rewritten generator that no pin covers. The
+# per-member pins here are a REPRESENTATIVE subset, not one-per-member: the eight
+# structural node kinds (byte-dispatch, stop, error, field-action, field-branch,
+# callback, span-start, span-end), five of seven field operations (clear, increment,
+# decrement, add, set-mask), five of seven field predicates (zero, nonzero, range,
+# mask-any, mask-all), one of four callback outcomes (continue), and the derived
+# accumulate-overflow / declares-field counters have NO dedicated mutation pin. For
+# a DRAWN family every one of those removals is still caught by its totality row's
+# set-equal (source-vs-table), and for the two DECLARED families with no draw table
+# (span events, schedule shapes) the totality row compares the driver's family to a
+# cited literal, unexercisable by a table removal. "Not a counter" is exact only for
+# byte-dispatch/stop/error/field-action/field-branch, whose counters are fed
+# unconditionally (entry, fixed terminals, coverage prefix); removing callback,
+# span-start or span-end WOULD also zero their counters, since the coverage segment
+# that feeds them is gated on the draw table -- but no pin removes them either way.
 byte_machine_mutation_reset()
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
@@ -8566,102 +8626,363 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/common/property-differential-tests.sps")
 
+# Milestone 7 Slice ②: the property lane is rewritten over the driver
+# ((byte-machine test property-driver)) and the generator now draws over every
+# §10.6 construct. Four of the six mutations below re-anchor onto the new
+# constructs (their decisions still exist); two are RETIRED (their decisions no
+# longer exist -- a later fix made them unobservable, not a refactor that
+# relocated them), with tombstones at the site. LABELs decided by F13.
+
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.property.differential.chez.source
   LABEL "compile: the dispatch byte test is inverted, diverging from the oracle"
   FIND [[(number->string (car tr)) ") "]]
-  # The brief's own draft used `modulo`; compile.sls imports only (rnrs),
-  # which exports `mod` (not the Chez/R5RS `modulo`), so `modulo` here is an
-  # unbound identifier -- confirmed by reproducing by hand: the mutated
-  # library raised "unbound identifier modulo" at load time and the verify
-  # command exited 255, not the deliberate status-1 harness failure this
-  # mutation is supposed to witness (MutationRunner.cmake's "wrong reason"
-  # check catches exactly this). `mod` is what (rnrs base) actually exports,
-  # confirmed the same way: the same repro then failed cleanly on all 40
-  # generated machines with "byte agreement" in the output and status 1.
+  # The emitted dispatch's `case` key is the source byte, unshifted, so the
+  # generated executor agrees with the interpreter oracle; inverting it diverges
+  # on every machine. RE-ANCHORED (F13 LABEL 1): compile.sls is unchanged by this
+  # slice, so FIND/REPLACE stand; only the pin moves. The rewritten lane's Layer-1
+  # comparison fails per machine as "machine <i> (seed <s>) byte agreement", and
+  # the pin now names ONE accepted machine index (machine 0 is accepted at seed
+  # 20260823, re-measured after the rewrite) with its parens escaped, so it
+  # matches exactly one record. The whole-machine "byte agreement" substring would
+  # match all 36.
   REPLACE [[(number->string (mod (+ 1 (car tr)) 256)) ") "]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "byte agreement")
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[machine 0 \(seed 20260823\) byte agreement]])
 
 byte_machine_mutation(
-  FILE test/common/property-differential-tests.sps
+  FILE test/support/harness/byte-machine/test/property-driver.sls
   SPEC byte-machine.property.differential.chez.source
   LABEL "property-differential: resume-pair! stops calling parser-resume!"
+  # RE-ANCHORED (F13 LABEL 2): the pause protocol moved into the driver, so the
+  # resume site relocated from property-differential-tests.sps to property-driver.sls.
+  # Skipping the real resume leaves both parsers at paused-feed; the driver's next
+  # feed then trips runtime.sls's lifecycle-violation guard. The drive runs inside
+  # the lane's accounting harness-case, so the raise is recorded as "case raised"
+  # with the condition's own detail (status 1), not an uncaught exit-255. Pinned to
+  # the measured detail tuple "paused-feed feed" -- metacharacter-free, and printed
+  # by nothing else in this program.
   FIND [[(list (parser-resume! pr) (parser-resume! pg))]]
   REPLACE [[(list 'feed-ready 'feed-ready)]]
-  # Measured: skipping the real resume leaves both parsers at paused-feed;
-  # the driver's own next feed call (feed-loop!'s post-resume re-feed) then
-  # trips runtime.sls's own lifecycle-violation guard, which the driver does
-  # not catch, so harness-case's guard records it as "case raised" with the
-  # condition's own description:
-  #   code: lifecycle-violation who*: parser-feed! detail: (paused-feed feed)
-  # Pinned to the measured detail tuple, not the bare code: "paused-feed
-  # feed" is metacharacter-free (a literal substring under CMake MATCHES)
-  # and specific to this one lifecycle/op pair, whereas the code alone would
-  # also match a lifecycle-violation raised for any other reason. Printed by
-  # nothing else in this program's output.
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "paused-feed feed")
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/machine-gen.sls
   SPEC byte-machine.property.differential.chez.source
-  LABEL "machine-gen: the pause draw's coin is hard-wired to false"
-  FIND [[(pause-drawn? (= pausei 0))]]
-  REPLACE [[(pause-drawn? #f)]]
-  # No case ever offers pausep as a target, so no generated machine ever
-  # includes one; property-differential-tests.sps's paused-count assertion
-  # (added alongside the pause/resume/finish schedule, Task 6) fails at 0.
-  # Pinned to the assertion's own words, unique to this one check.
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "observes a pause")
-
-byte_machine_mutation(
-  FILE test/support/harness/byte-machine/test/machine-gen.sls
-  SPEC byte-machine.property.differential.chez.source
-  LABEL "machine-gen: the eof draw's coin is hard-wired to false"
-  FIND [[(eof? (= eofi 0))]]
-  REPLACE [[(eof? #f)]]
-  # No dispatch node's eof-target is ever `done`, so no generated machine
-  # ever reaches `finished`; property-differential-tests.sps's
-  # finished-count assertion (added by Task 6's review-fix round, mirroring
-  # paused-count) fails at 0. Pinned to the assertion's own words, unique to
-  # this one check.
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "idle-completion finish")
-
-# Slice ③ task 8: the accumulate DRAW. Two mutations, both against the
-# generator rather than the library under test, because what this task added to
-# the property lane is a draw and the thing that can rot is the draw's ability to
-# reach the node's arms at all. A generator that silently stops producing
-# accumulate work would leave every assertion below it passing.
-
-byte_machine_mutation(
-  FILE test/support/harness/byte-machine/test/machine-gen.sls
-  SPEC byte-machine.property.differential.chez.source
-  LABEL "machine-gen: the pinned accumulate case advances instead of reexecuting"
-  # byte-trial feeds ONE byte to a fresh pair. Advancing consumes it at the
-  # dispatch, so `accp` is entered with the slice already exhausted and answers
-  # need-input; the trial then finishes and takes the node's EOF route. The node
-  # is reached on every trial and its digit arm never runs once -- the exact
-  # shape of vacuity the three counters were added for.
-  FIND [[(make-edge 'accp 'reexecute)]]
-  REPLACE [[(make-edge 'accp 'advance)]]
+  LABEL "machine-gen: the pause node kind is dropped from the draw table"
+  # RE-ANCHORED (F13 LABEL 3): the generator no longer has a pause "coin"; it
+  # draws node kinds from node-kind-draw-table, and the coverage segment's pause
+  # node is gated on that table too. Removing `pause` from the table means no
+  # generated machine can reach a pause node, so the interpreter-only pause
+  # counter reads zero. Pinned to the full interpreter-only label plus the detail
+  # (F11) -- the half no cross-lane divergence can zero, and not the bare
+  # "observes a pause" substring, which matches two labels.
+  FIND [[error finish pause]]
+  REPLACE [[error finish]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES
-    "at least one generated machine's trial commits a digit -- expected a true value")
+  EXPECT_OUTPUT_MATCHES [[the interpreter alone observes a pause -- expected a true value]])
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/machine-gen.sls
   SPEC byte-machine.property.differential.chez.source
-  LABEL "machine-gen: the accumulate field's initial is one below the only workable value"
-  # 25 is the ONLY u8 initial at which a single digit can go either way: at 24
-  # even `9` fits (249), at 26 even `0` does not (260). One below and the
-  # overflow arm becomes unreachable in a one-byte trial while the digit arm
-  # still runs -- so the accumulate draw keeps looking healthy and has lost a
-  # third of its reach. Caught by the overflow counter alone.
-  FIND [[(make-uint-field 'n 8 25 #f)]]
-  REPLACE [[(make-uint-field 'n 8 24 #f)]]
+  LABEL "machine-gen: the eof route stops offering a finish terminal"
+  # RE-ANCHORED (F13 LABEL 4): the eof draw's `done`/finish member is now the
+  # `tfin` finish terminal offered by eof-route!. F7: the EOF route is the only
+  # accepted producer of a REACHABLE finish, so removing it zeros the finish
+  # counter. Pinned to the full interpreter-only label plus the detail (F11).
+  FIND [[((= r 1) (use-term! 'tfin))]]
+  REPLACE [[((= r 1) (use-term! 'terr))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES
-    "at least one generated machine's trial overflows the field -- expected a true value")
+  EXPECT_OUTPUT_MATCHES [[the interpreter alone observes an idle-completion finish -- expected a true value]])
 
+# --- RETIRED (F13 LABELs 5 and 6): two decisions the rewrite made UNOBSERVABLE,
+# not a refactor that relocated them (AGENTS.md: "only one a later fix makes
+# unobservable is retired"). Tombstones, so the next reader does not re-add them.
+#
+# RETIRED: "machine-gen: the pinned accumulate case advances instead of
+# reexecuting". The construct is gone: there is no `accp`, no pinned digit case,
+# and every inbound mode is drawn. The mutation's OWN stated reason -- "byte-trial
+# feeds ONE byte to a fresh pair, so advancing consumes it and accp is entered
+# with the slice exhausted" -- no longer holds: §4.4 keeps the 256 single-byte
+# trials AND adds eight drawn inputs of length 0-6 under every split point, so an
+# advance inbound edge leaves the accumulate node a byte to read and the digit arm
+# runs either way. The decision the pin named (reexecute is load-bearing) is
+# unobservable because the premise that made it load-bearing is removed. Not
+# re-anchored: no construct in the new generator carries it.
+#
+# RETIRED: "machine-gen: the accumulate field's initial is one below the only
+# workable value". `(make-uint-field 'n 8 25 #f)` is gone: §4.4 draws one or two
+# uint fields at drawn widths and drawn initials, so there is no chosen constant
+# to move by one. Not a re-anchor in either direction: forcing a drawn initial to
+# 0 does NOT zero the overflow counter (six base-10 digits overflow a u8 from 0,
+# and inputs run to six bytes), and forcing it to (- (expt 2 width) 1) zeros the
+# COMMIT counter instead -- a different decision. Both would be new pins with new
+# decisions, not this one relocated.
+
+# --- Slice ② additions (Task 10): pins for the new counters. Each removes what
+# PRODUCES an observed value and is caught by a failed COMPARISON. Placed between
+# Pass 39's reset() and its run() so they join Pass 39 (F16), not Pass 40. Pins
+# are the interpreter-only half's full label plus the detail (F11). The node kinds
+# produced by fixed terminals, the entry, or the coverage prefix/segment
+# (byte-dispatch, stop, error, field-action, field-branch, callback, span-start/-end,
+# and the span-event/callback-outcome families they gate) need per-construct
+# mutations and are tracked as remaining work ("cover every construct"). The six
+# Layer-3 invariant pins are below -- each inverts one row of check-invariants and
+# reddens the driver's single Layer-3 oracle check, whose detail names the row.
+
+byte_machine_mutation(
+  FILE test/common/property-differential-tests.sps
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "property-differential: the verifier filter is dropped, executing rejected draws"
+  FIND [[(verification-ok? v)]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES [[no draw reached an executor unverified]])
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-gen.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "machine-gen: the entry names a node that is never built (rejects everything)"
+  FIND [[(make-machine 'gen 'cova]]
+  REPLACE [[(make-machine 'gen 'no-such-entry]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES [[the accepted count is at least the floor]])
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-gen.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "machine-gen: the sequence-dispatch node kind is dropped from the draw table"
+  FIND [[byte-dispatch sequence-dispatch]]
+  REPLACE [[byte-dispatch]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the interpreter alone reaches node kind sequence-dispatch -- expected a true value]])
+
+# counted-consume is pinned on its TOTALITY node row, not its counter: the
+# counted-consume counter is fragile -- removing sequence-dispatch OR clear-mask
+# from a draw table shifts the free draw and incidentally zeros it, so a counter
+# pin here would also be satisfied by those two mutants (measured in the Task 11
+# sweep). The totality row's member-specific got-list is unique to this removal.
+# sequence-dispatch's own counter is NOT fragile this way (measured 0 off-diagonal),
+# so it keeps its counter pin above.
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-gen.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "machine-gen: the counted-consume node kind is dropped from the draw table"
+  FIND [[span-end counted-consume]]
+  REPLACE [[span-end]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the node-kind draw table covers exactly ir.sls.s node. kinds -- expected .byte-dispatch callback error field-action field-branch finish integer-accumulate pause sequence-dispatch span-end span-start stop., got .byte-dispatch callback counted-consume error field-action field-branch finish integer-accumulate pause sequence-dispatch span-end span-start stop.]])
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/property-driver.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "property-driver: the callback script never answers pause"
+  FIND [[((1) 'pause)]]
+  REPLACE [[((1) 'continue)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the interpreter alone observes callback outcome pause -- expected a true value]])
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/property-driver.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "property-driver: the callback script never answers a declared branch key"
+  FIND [[((2) (if (pair? keys) (car keys) 'continue))]]
+  REPLACE [[((2) 'continue)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the interpreter alone observes callback outcome declared-branch-key -- expected a true value]])
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/property-driver.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "property-driver: the callback script never answers an explicit failure"
+  FIND [[(else (cons 'boom #f))]]
+  REPLACE [[(else 'continue)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the interpreter alone observes callback outcome explicit-failure -- expected a true value]])
+
+# The counter set is a FIXED literal list in the driver, decoupled from the
+# generator's draw tables, so removing a matcher/operation/predicate from a draw
+# table leaves its counter CHECK standing to read zero (caught by comparison).
+# The matcher coverage dispatch covmd and the coverage accumulate covacc make
+# these robust -- the removal zeros ONLY the intended counter without the free
+# draw shifting a different one. Members whose removal HOLDS the floor are pinned
+# on their COUNTER label here (byte-range/byte-complement/store/equal, measured
+# 37-40 accepted). Members whose removal DROPS the floor (exact-byte 30, byte-set
+# 17, mask-none 31, integer-accumulate 28) cannot use a counter label -- the floor
+# fails first and the counter case is skipped (F12) -- so they are pinned on the
+# TOTALITY row below (Task 7 Step 2), whose source-vs-table comparison catches any
+# draw-table member removal INDEPENDENT of the floor. clear-mask holds the floor
+# but its removal incidentally zeros the counted-consume counter (a draw-shift
+# fragility this slice does not carry robust coverage for), so it too is pinned on
+# a totality row -- and counted-consume itself is pinned on its totality node row
+# above for the same reason, so no counter pin is left for the clear-mask (or
+# sequence-dispatch) fragility to collide with. Each totality pin's regex carries
+# the member-specific got-list, so it matches only its own removal. The Task 11
+# sweep's ONLY remaining off-diagonal is the shared floor check co-firing on the
+# four floor-droppers -- a by-construction containment (a sub-floor draw always
+# trips the floor), each dropper still discriminated by its own totality pin.
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-gen.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "machine-gen: the byte-range matcher kind is dropped from the draw table"
+  FIND [['(exact-byte byte-set byte-range byte-complement)]]
+  REPLACE [['(exact-byte byte-set byte-complement)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the interpreter alone matches matcher byte-range -- expected a true value]])
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-gen.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "machine-gen: the byte-complement matcher kind is dropped from the draw table"
+  FIND [['(exact-byte byte-set byte-range byte-complement)]]
+  REPLACE [['(exact-byte byte-set byte-range)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the interpreter alone matches matcher byte-complement -- expected a true value]])
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-gen.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "machine-gen: the store field operation is dropped from the draw table"
+  FIND [['(store clear increment decrement add set-mask clear-mask)]]
+  REPLACE [['(clear increment decrement add set-mask clear-mask)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the interpreter alone runs field operation store -- expected a true value]])
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-gen.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "machine-gen: the equal field predicate is dropped from the draw table"
+  FIND [['(equal zero nonzero range mask-any mask-all mask-none)]]
+  REPLACE [['(zero nonzero range mask-any mask-all mask-none)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the interpreter alone evaluates field predicate equal -- expected a true value]])
+
+# The floor-dropping / fragile removals, pinned on the TOTALITY rows (Task 7 Step
+# 2). The row's set-equal fails source-vs-table on the removed member; the got-list
+# (sorted by the row) names which member is gone, so each pin matches only its own
+# removal. `.` stands in for parens and for the `?` in `node?`; no `.*`.
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-gen.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "machine-gen: the exact-byte matcher kind is dropped from the draw table"
+  FIND [['(exact-byte byte-set byte-range byte-complement)]]
+  REPLACE [['(byte-set byte-range byte-complement)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the matcher draw table covers exactly ir.sls.s matcher kinds -- expected .byte-complement byte-range byte-set., got .byte-complement byte-range byte-set exact-byte.]])
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-gen.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "machine-gen: the byte-set matcher kind is dropped from the draw table"
+  FIND [['(exact-byte byte-set byte-range byte-complement)]]
+  REPLACE [['(exact-byte byte-range byte-complement)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the matcher draw table covers exactly ir.sls.s matcher kinds -- expected .byte-complement byte-range exact-byte., got .byte-complement byte-range byte-set exact-byte.]])
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-gen.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "machine-gen: the integer-accumulate node kind is dropped from the draw table"
+  FIND [[field-branch integer-accumulate callback]]
+  REPLACE [[field-branch callback]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the node-kind draw table covers exactly ir.sls.s node. kinds -- expected .byte-dispatch callback counted-consume error field-action field-branch finish pause sequence-dispatch span-end span-start stop., got .byte-dispatch callback counted-consume error field-action field-branch finish integer-accumulate pause sequence-dispatch span-end span-start stop.]])
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-gen.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "machine-gen: the mask-none field predicate is dropped from the draw table"
+  FIND [['(equal zero nonzero range mask-any mask-all mask-none)]]
+  REPLACE [['(equal zero nonzero range mask-any mask-all)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the field-predicate draw table covers exactly ir.sls.s field-predicates -- expected .equal mask-all mask-any nonzero range zero., got .equal mask-all mask-any mask-none nonzero range zero.]])
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-gen.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "machine-gen: the clear-mask field operation is dropped from the draw table"
+  FIND [['(store clear increment decrement add set-mask clear-mask)]]
+  REPLACE [['(store clear increment decrement add set-mask)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the field-operation draw table covers exactly ir.sls.s field-operations -- expected .add clear decrement increment set-mask store., got .add clear clear-mask decrement increment set-mask store.]])
+
+# One callback-kind removal, so the callback-kind totality row is exercised too
+# (the node/matcher/operation/predicate totality rows each already have a removal
+# pin; without this the callback-kind row would be the only draw-table totality row
+# no mutation proves load-bearing). Holds the floor; caught by the row's set-equal.
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-gen.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "machine-gen: the event callback kind is dropped from the draw table"
+  FIND [['(event decision span-data span-complete)]]
+  REPLACE [['(decision span-data span-complete)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the callback-kind draw table covers exactly make-callback-declaration.s kinds -- expected .decision span-complete span-data., got .decision event span-complete span-data.]])
+
+# The six Layer-3 invariant pins (Task 5 Step 3 / Task 10 Step 3). Each inverts one
+# row's comparison in check-invariants; the row then reports a violation on the
+# drawn machines, folded into the driver's inv-verdict and asserted by the SINGLE
+# lane check "no accepted machine's trial violated a Layer-3 invariant". That check
+# is a check-equal, so its FAIL detail carries the verdict -- (invariant IDX (rowN
+# ...)) -- and each pin's regex names its own row, matching exactly that one record
+# (a second, undiscriminating record -- the fixture "layers" case's boolean check --
+# also reddens; the pin does not match it). Rows read the tuple independently and
+# hold on every drawn trial, so inverting one reddens exactly itself. `.` stands in
+# for each paren, the suite's convention; no `.*` between `expected` and `got`.
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/property-driver.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "property-driver: Layer-3 row 1 (the lifecycle x operation table) inverted"
+  FIND [[(if (eq? st life) #f]]
+  REPLACE [[(if (not (eq? st life)) #f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[no accepted machine's trial violated a Layer-3 invariant -- expected none, got .invariant [0-9]+ .row1]])
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/property-driver.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "property-driver: Layer-3 row 2 (the feed cursor arithmetic) inverted"
+  FIND [[(if (= cn (- nx (step-start s))) #f]]
+  REPLACE [[(if (not (= cn (- nx (step-start s)))) #f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[no accepted machine's trial violated a Layer-3 invariant -- expected none, got .invariant [0-9]+ .row2]])
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/property-driver.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "property-driver: Layer-3 row 3 (sticky feeds consume nothing) inverted"
+  FIND [[(= (tup-consumed t) 0)]]
+  REPLACE [[(not (= (tup-consumed t) 0))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[no accepted machine's trial violated a Layer-3 invariant -- expected none, got .invariant [0-9]+ .row3]])
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/property-driver.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "property-driver: Layer-3 row 4 (fields stay in [0, 2^width)) inverted"
+  FIND [[(or (< x 0) (>= x (expt 2 w)))]]
+  REPLACE [[(not (or (< x 0) (>= x (expt 2 w))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[no accepted machine's trial violated a Layer-3 invariant -- expected none, got .invariant [0-9]+ .row4]])
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/property-driver.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "property-driver: Layer-3 row 5 (finished from a feed only if already finished) inverted"
+  FIND [[(and (eq? (step-op s) 'feed) (not (eq? (step-life s) 'finished)))]]
+  REPLACE [[(not (and (eq? (step-op s) 'feed) (not (eq? (step-life s) 'finished))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[no accepted machine's trial violated a Layer-3 invariant -- expected none, got .invariant [0-9]+ .row5]])
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/property-driver.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "property-driver: Layer-3 row 6 (the span end anchor) inverted"
+  FIND [[(not (= (cadr (last-elt frags)) coff))]]
+  REPLACE [[(= (cadr (last-elt frags)) coff)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[no accepted machine's trial violated a Layer-3 invariant -- expected none, got .invariant [0-9]+ .row6]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -10107,9 +10428,10 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 #   property-differential-tests.sps (cases=2 failed-cases=1 checks=83
 #   failures=30, both mutants): NOT byte classes -- machine-gen.sls builds no
 #   class at all (`rg byte-class` over that file returns nothing). Its nodes
-#   are make-byte-dispatch-node over 1 to 4 randomly drawn make-byte-case /
-#   make-exact-byte-matcher pairs (machine-gen.sls:83, :96, :120-131), so a
-#   many-arm state is whatever that draw happened to produce.
+#   are make-byte-dispatch-node over 1 to 2 randomly drawn byte cases across all
+#   four matcher kinds (machine-gen.sls's free draw and its coverage prefix; line
+#   citations dropped -- the Slice ② rewrite moved them, so construct names, not
+#   numbers), so a many-arm state is whatever that draw happened to produce.
 # Both routes reach a many-arm state without a shared PREFIX, and both run
 # under their own SPEC, so neither can witness this pass's mutations. What is
 # specific to this lane is the arm count arising from a BRANCHING PREFIX, which
@@ -10708,7 +11030,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # "Pass 49", and so does the Milestone 3 header ~460 lines above it: two
 # different passes reachable by one citation. The integers cannot be repaired by
 # renumbering either, because they do not index anything countable -- this file
-# has 45 `byte_machine_mutation_run` call sites and the suite reports 55 passes,
+# has 46 `byte_machine_mutation_run` call sites and the suite reports 58 passes,
 # the difference being helper functions that call `_run` once per case in a loop
 # and consume indices no header names. `EXPECTED_PASSES`, measured from the
 # harness, is the only authority. New headers name their slice.
@@ -12589,7 +12911,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # Every pass above has now run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
-# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FIFTY-FIVE PASSES"
+# see EXPECTED_PASSES and EXPECTED_MUTATIONS, and the "FIFTY-EIGHT PASSES"
 # header comment they restate -- so a whole pass, or a single mutation inside
 # one, silently going missing is a build failure here rather than a stale
 # comment nobody rereads.
