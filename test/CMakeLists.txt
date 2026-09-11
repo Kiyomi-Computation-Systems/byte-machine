@@ -1637,6 +1637,45 @@ byte_machine_add_scheme_lane(
   ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
   TIMEOUT 180)
 
+# --- Milestone 7 Slice ③: the printer, the fixture saver, and the minimizer ----
+# The fixture lane. SOURCES gains machine-print.sls beside machine-gen.sls and
+# property-driver.sls; the driver does NOT import machine-print, so machine-print
+# is in only THIS lane's manifest, not the differential's (Task 7 Step 1).
+# BYTE_MACHINE_SOURCE_ROOT for the same reason as the differential lane: the
+# printer's totality rows read ir.sls as a datum and the reader raises when it is
+# unset (NOT the seed clause of decision 0033 item 3). No seed is passed. TIMEOUT
+# is set from the measured wall-clock (~1 s registered; ~0.5 s in source by hand)
+# plus a wide margin, NOT copied from the differential's 180.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.property.fixture.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/property-fixture-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-gen.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/property-driver.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-print.sls"
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/property-fixture-tests.sps"
+  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
+  TIMEOUT 60)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.property.fixture.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/property-fixture-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-gen.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/property-driver.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-print.sls"
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/property-fixture-tests.sps"
+  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
+  TIMEOUT 60)
+
 # --- Milestone 1 Phase 3 Slice B: member-2 runtime-export drift guard ---------
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.reserved-drift.chez.source
