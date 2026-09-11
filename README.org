@@ -133,6 +133,17 @@ observed in both lanes, and that the generator draws from exactly the closed
 sets =ir.sls= defines. No file under =src/= changes: this slice is entirely
 test-side.
 
+Slice ③ closed 2026-09-11 (PR #97): a machine can now be saved as a failing test.
+A printer renders any built machine as the ordinary constructor calls that rebuild
+it — total over every node and matcher kind, and proved so by a round trip that is
+byte-identical through the compiler. When a drawn machine's two lanes disagree, a
+saver writes a self-contained program that a person runs with the shipped launcher
+and nothing else: it exits non-zero while the disagreement is present and zero once
+it is fixed. A minimizer then shrinks that program — dropping nodes, cases, bytes
+and feeds — to the smallest trial that still disagrees, and writes it beside the
+first. The slice proves all three against a deliberate failure and pins them with a
+new mutation pass; it too changes no file under =src/=.
+
 =src/byte-machine/= holds the construction API, the verifier, the normalizer and
 emitter, the reference interpreter, and the runtime, each exercised in both the
 source and ahead-of-time execution lanes. See

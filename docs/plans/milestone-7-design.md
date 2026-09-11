@@ -1,7 +1,7 @@
 # Milestone 7 Design — Verification and generative hardening
 
 **Status: Gate 0 discharged 2026-09-06 as decisions 0031-0033 (PR #85; §4's blockquote and
-§11's first bullet carry the discharge); Slice ⓪ delivered 2026-09-07 (PR #89); Slice ① delivered 2026-09-11 (PR #92); Slice ② (the generator over every construct and the property differential suite) delivered 2026-09-11 (PR #95); Slice ③ next.** Before it: the design merged 2026-09-06
+§11's first bullet carry the discharge); Slice ⓪ delivered 2026-09-07 (PR #89); Slice ① delivered 2026-09-11 (PR #92); Slice ② (the generator over every construct and the property differential suite) delivered 2026-09-11 (PR #95); Slice ③ (the printer, the fixture saver, and the minimizer) delivered 2026-09-11 (PR #97); Slice ④ next.** Before it: the design merged 2026-09-06
 as PR #83 = `8edceb1`, and §4.12 was settled by the owner the same day (items 1-3 approved).
 Written against **`5ac363a`** (`main` = PR #82, which added only
 `AGENTS.md` bullets on top of Milestone 6's close at `0920b13`) on branch
