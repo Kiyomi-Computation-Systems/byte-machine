@@ -32,7 +32,7 @@
 
 (library (byte-machine test property-driver)
   (export schedules-for schedules-per-input
-          run-machine run-machine-verdict
+          run-machine run-machine-verdict run-one-trial
           make-counter-set observe-counters counter-ref counter-keys counter-labels family-members
           counter-agreed-label counter-interp-label
           make-rejection* rejection? rejection-index rejection-machine
@@ -469,14 +469,15 @@
       ;; row 6's content check. Returns (values bad new-state).
       (define (one-schedule schedule shape phase idx input s)
         (let-values (((script s2) (draw-script manifest s)))
-          (let-values (((rl gl sr sg bad) (run-schedule ref-cm gen-cm (manifest-callbacks manifest) schedule fnames bound script)))
+          (let-values (((bad inv-v rl gl sr sg)
+                        (schedule-outcome m ref-cm gen-cm (manifest-callbacks manifest)
+                                          fnames bound script schedule input)))
             (observe-lane! m manifest rl sr note-ref!)
             (observe-lane! m manifest gl sg note-gen!)
             (when shape (note-schedule-shape! shape sr note-ref!) (note-schedule-shape! shape sg note-gen!))
             (if (not (eq? bad 'none))
                 (fail! phase idx bad)
-                (let-values (((v3 app) (check-invariants m sr input ((lane-sreader rl)))))
-                  (unless (eq? v3 'none) (inv-fail! idx v3))))
+                (unless (eq? inv-v 'none) (inv-fail! idx inv-v)))
             (values bad s2))))
       (define (byte-sweep s)
         (let loop ((b 0) (s s))
@@ -503,6 +504,50 @@
         (values counters verdict inv-verdict #f s2))))
   (define (run-machine-verdict m ref-cm gen-cm manifest inputs state)
     (let-values (((c v iv fp s) (run-machine m ref-cm gen-cm manifest inputs state (make-counter-set) #f))) v))
+
+  ;; The shared single-schedule body (Task 3 Step 3: ONE body, and its consumers
+  ;; are run-machine's one-schedule and run-one-trial). Runs ONE schedule on a
+  ;; fresh lane pair and returns
+  ;;   (values bad inv-v rl gl sr sg)
+  ;; bad   = the FIRST Layer-1 cross-lane disagreement descriptor (run-schedule's
+  ;;         own `bad`), 'none if the lanes agreed through the whole schedule;
+  ;; inv-v = the Layer-3 oracle verdict on the ref lane, computed ONLY when the
+  ;;         lanes agreed -- a disagreement short-circuits it, exactly as the lane's
+  ;;         fold does -- and 'none otherwise;
+  ;; rl gl sr sg = the lanes and their step lists, for the caller's observation.
+  ;; The disagreement rule (Layer 1) and the agreement-gated Layer-3 oracle live
+  ;; HERE and nowhere else, so the lane and the fixture cannot drift (F2 / Task 3
+  ;; Step 5: run-one-trial and run-machine fold the identical (bad, inv-v) for any
+  ;; schedule, so their verdicts agree by construction rather than by coincidence).
+  (define (schedule-outcome m ref-cm gen-cm cbs fnames bound script schedule input)
+    (let-values (((rl gl sr sg bad)
+                  (run-schedule ref-cm gen-cm cbs schedule fnames bound script)))
+      (if (not (eq? bad 'none))
+          (values bad 'none rl gl sr sg)
+          (let-values (((v3 app) (check-invariants m sr input ((lane-sreader rl)))))
+            (values 'none v3 rl gl sr sg)))))
+
+  ;; run-one-trial (Slice ③, F2): the single-trial entry the fixture asserts on and
+  ;; the minimizer uses as a boolean oracle. ONE machine, ONE script, ONE schedule,
+  ;; ONE input; the field names and callback declarations come from the MACHINE
+  ;; through `ir`, NOT from a manifest -- the fixture asserts one trial and no
+  ;; counter, so it needs no decoder, so it needs no manifest, so `make-manifest`
+  ;; stays unexported and this is a NEW export rather than a changed run-machine
+  ;; signature (F1's instruction). Returns the trial's disagreement verdict: the
+  ;; Layer-1 cross-lane `bad` when the lanes disagree (the probe's case -- a lying
+  ;; compiled lane against an honest reference), else the Layer-3 oracle verdict on
+  ;; agreement, 'none when neither fires. It shares schedule-outcome with the lane,
+  ;; so for the same schedule its verdict is what run-machine folds (Task 3 Step 5).
+  ;; `input` is the logical bytevector the schedule was sliced from: the Layer-3
+  ;; content/anchor row reads it, and the minimizer shrinks it and re-derives the
+  ;; schedule from it before each call.
+  (define (run-one-trial m ref-cm gen-cm script schedule input)
+    (let ((fnames (map uint-field-name (machine-fields m)))
+          (cbs (machine-callbacks m)))
+      (let-values (((bad inv-v rl gl sr sg)
+                    (schedule-outcome m ref-cm gen-cm cbs fnames
+                                      (map callback-declaration-name cbs) script schedule input)))
+        (if (not (eq? bad 'none)) bad inv-v))))
   ;; Bind every declared callback (required ones MUST be bound; optionals MAY be).
   ;; §4.4's "optional callbacks bound in half the draws" governs which PATHS run,
   ;; not the 96 counters, so binding all is valid here; the coverage segment's
