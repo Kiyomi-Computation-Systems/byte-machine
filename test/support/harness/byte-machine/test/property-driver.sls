@@ -33,6 +33,7 @@
 (library (byte-machine test property-driver)
   (export schedules-for schedules-per-input
           run-machine run-machine-verdict run-one-trial
+          fixture-text
           make-counter-set observe-counters counter-ref counter-keys counter-labels family-members
           counter-agreed-label counter-interp-label
           make-rejection* rejection? rejection-index rejection-machine
@@ -449,15 +450,18 @@
   ;; agreement"); `inv-verdict` is the FIRST Layer-3 ORACLE violation on the ref lane
   ;; -- kept SEPARATE, because a Layer-3 violation is not a lane disagreement and
   ;; must not redden an agreement label. Both are "at most once per machine".
-  ;; on-first-disagreement is #f in this slice and fixture-path is always #f: the
-  ;; parameter and the fixture-path return are DEFERRED shaping for Slice ③ (0033
-  ;; item 4), which adds the saver that turns a first disagreement into a written
-  ;; fixture. Slice ③ adds only the call site; this signature does not change.
+  ;; on-first-disagreement is the SAVER (Slice ③, 0033 item 4): when non-#f,
+  ;; run-machine calls it ONCE, at the first Layer-1 disagreement per machine, as
+  ;; (on-first-disagreement m script schedule input verdict), and threads its return
+  ;; into the `fixture-path` value. #f stays legal and is what run-machine-verdict
+  ;; and any caller wanting no fixture passes; fixture-path is then #f. Slice ③
+  ;; added only this call site -- the argument list and the five return values are
+  ;; unchanged (F1), so a caller that passes #f folds byte-identically to before.
   (define (run-machine m ref-cm gen-cm manifest inputs state counters on-first-disagreement)
     (let ((fnames (map uint-field-name (manifest-fields manifest)))
           (bound (all-bound manifest))
           (ed (entry-dispatch m))
-          (ref-keys '()) (gen-keys '()) (verdict 'none) (inv-verdict 'none))
+          (ref-keys '()) (gen-keys '()) (verdict 'none) (inv-verdict 'none) (fixture-path #f))
       (define (note-ref! k) (unless (memq k ref-keys) (set! ref-keys (cons k ref-keys))))
       (define (note-gen! k) (unless (memq k gen-keys) (set! gen-keys (cons k gen-keys))))
       (define (fail! phase idx bad) (when (eq? verdict 'none) (set! verdict (list phase idx bad))))
@@ -476,7 +480,17 @@
             (observe-lane! m manifest gl sg note-gen!)
             (when shape (note-schedule-shape! shape sr note-ref!) (note-schedule-shape! shape sg note-gen!))
             (if (not (eq? bad 'none))
-                (fail! phase idx bad)
+                ;; The saver fires HERE, at the first Layer-1 disagreement per
+                ;; machine -- `first?` reads fail!'s own "only when verdict is 'none"
+                ;; rule (Task 4 Step 7), so on-first-disagreement is called at most
+                ;; once per machine and writes at most one file, whatever later
+                ;; schedules do. Its return (a fixture path, or whatever the closure
+                ;; yields) is threaded into run-machine's fixture-path value (F1).
+                (let ((first? (eq? verdict 'none)))
+                  (fail! phase idx bad)
+                  (when (and first? on-first-disagreement)
+                    (set! fixture-path
+                          (on-first-disagreement m script schedule input verdict))))
                 (unless (eq? inv-v 'none) (inv-fail! idx inv-v)))
             (values bad s2))))
       (define (byte-sweep s)
@@ -501,7 +515,7 @@
       (let* ((s1 (byte-sweep state))
              (s2 (let iloop ((ins inputs) (s s1)) (if (null? ins) s (iloop (cdr ins) (input-sweep (car ins) s))))))
         (observe-counters counters ref-keys gen-keys)
-        (values counters verdict inv-verdict #f s2))))
+        (values counters verdict inv-verdict fixture-path s2))))
   (define (run-machine-verdict m ref-cm gen-cm manifest inputs state)
     (let-values (((c v iv fp s) (run-machine m ref-cm gen-cm manifest inputs state (make-counter-set) #f))) v))
 
@@ -548,6 +562,68 @@
                     (schedule-outcome m ref-cm gen-cm cbs fnames
                                       (map callback-declaration-name cbs) script schedule input)))
         (if (not (eq? bad 'none)) bad inv-v))))
+
+  ;; fixture-text (Slice ③ saver, F1/F5/F6): the PURE core of the saver. It returns
+  ;; the fixture PROGRAM as a string and does no I/O (F18: the driver is a functional
+  ;; core); the LANE's closure writes the string to a file and returns its path,
+  ;; which run-machine threads into fixture-path. It takes an already-printed
+  ;; `machine-datum` (the lane calls (byte-machine test machine-print)'s print-machine
+  ;; and passes the result) so the driver does not import machine-print -- that keeps
+  ;; machine-print out of the differential lane's SOURCES and in only the fixture
+  ;; lane's (Task 7 Step 1). The single case asserts the
+  ;; two lanes AGREE, so the fixture FAILS -- exit 1 -- exactly when the disagreement
+  ;; is present, and exits 0 once it is fixed (§4.7's "exits 1 on the disagreement
+  ;; and 0 when fixed"; the polarity P3 measured as "FAIL … the lanes agree").
+  ;;   m script schedule input : the trial to reproduce.
+  ;;   gen-file    : basename the fixture emits its generated lane to, BESIDE itself
+  ;;                 (F6: Chez does not register a `(library …)` form through eval,
+  ;;                 so the fixture writes a .sls into BYTE_MACHINE_TEST_TMPDIR when
+  ;;                 set else ".", and loads it -- the launcher runs it from that dir).
+  ;;   invocation  : the F5 header comment (already ";;"-prefixed, newline-terminated)
+  ;;                 the lane computed from (command-line-arguments): the exact
+  ;;                 provenance-unset `chez … chez-source.ss … --program <this file>`.
+  ;;   preamble    : extra top-level forms ('() for an honest saver; the probe's
+  ;;                 `perturb` definition otherwise).
+  ;;   gen-expr    : the datum bound to `gen`, with `gen-honest` in scope --
+  ;;                 `gen-honest` for an honest saver, the lying slot-2 wrapper (F7)
+  ;;                 for the probe.
+  (define (fixture-text machine-datum script schedule input gen-file invocation preamble gen-expr)
+    (let ((forms
+           (append
+            (list
+             '(import (rnrs) (rnrs eval) (only (chezscheme) load)
+                      (byte-machine test harness) (byte-machine test property-driver)
+                      (byte-machine graph) (byte-machine verify) (byte-machine interpret)
+                      (byte-machine runtime) (byte-machine compile))
+             (list 'define 'machine machine-datum)
+             (list 'define 'script (list 'quote script))
+             (list 'define 'schedule (list 'quote schedule))
+             (list 'define 'input input)
+             '(define gen-dir
+                (let ((d (adapter-environment-variable "BYTE_MACHINE_TEST_TMPDIR")))
+                  (if (and d (not (string=? d ""))) d ".")))
+             (list 'define 'gen-file-path (list 'string-append 'gen-dir "/" gen-file))
+             '(call-with-port (open-file-output-port gen-file-path (file-options no-fail))
+                (lambda (p) (emit-machine (compile-machine machine '()) 'gen-parser p)))
+             '(load gen-file-path)
+             '(define gen-honest (eval 'gen-parser (environment '(generated gen)))))
+            preamble
+            (list
+             (list 'define 'gen gen-expr)
+             '(define ref (make-interpreted-machine (verify-machine machine)))
+             '(harness-begin "fixture")
+             '(harness-group "reproduction"
+                (lambda ()
+                  (harness-case "the saved trial reproduces the disagreement"
+                    (lambda ()
+                      (check-equal "the two lanes agree on this trial"
+                                   (run-one-trial machine ref gen script schedule input)
+                                   'none)))))
+             '(harness-finish)))))
+      (call-with-string-output-port
+       (lambda (port)
+         (put-string port invocation)
+         (for-each (lambda (f) (write f port) (newline port) (newline port)) forms)))))
   ;; Bind every declared callback (required ones MUST be bound; optionals MAY be).
   ;; §4.4's "optional callbacks bound in half the draws" governs which PATHS run,
   ;; not the 96 counters, so binding all is valid here; the coverage segment's
