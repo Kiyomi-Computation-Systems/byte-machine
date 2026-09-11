@@ -36,6 +36,17 @@ measurement can be re-taken, and Slice ⓪ re-takes it before anything lands.
 > one is a landmine and what it used to say is in git. Later dated notes are indexed here,
 > newest first, each naming the section it amends.
 >
+> **2026-09-10, Slice ① implemented** — **corrects §4.2 item 3's table and §6 in place**:
+> `reaches-self?` is renamed `self-cycle` (its contract now returns the cycle, F9); §6's
+> `eof-terminal` return is a two-element `(verdict path)` list, not the `(verdict . path)`
+> pair §6 named (F13); and §6's Oracle "122 accessor reads" is 129 at the slice's base (F14).
+> The **Appendix — the `§16.2` ledger**'s "Path (①)" column was worked row by row as the path
+> policy's checklist (Task 1 Step 7): every row held — its `8` codes over `12` sites are the
+> tree's, and each stated shape (the cycle; entry → node; the EOF walk's stack; entry → source
+> → finish) is one the slice produced. A checklist worked and held is a result, so the ledger
+> is unedited. §6's measurements are records and untouched; decision 0032's own instruction
+> corrections are noted in that record. The plan measured what the design derived.
+>
 > **2026-09-07, Slice ⓪ delivered (PR #89)** — **corrects §5's Pins paragraph in place and
 > annotates §5's scope**: the paragraph named three mutations by LABEL and delegated the rest
 > to one `rg` over `(symbol? (node-eof-target n))`, which under-listed the work three ways —
@@ -669,7 +680,7 @@ test reads, and four new accessors exported: `diagnostic-severity`, `diagnostic-
    | Code | Path carried | Produced by |
    |---|---|---|
    | `eof-reachable-stop`, `eof-zero-progress-cycle` | the EOF walk's stack from `parked-eof-start`'s answer for the reporting node — the node itself, a parked callback's pause continuation, a parked counted consume's eof-target — to the stop, or around the cycle | `eof-terminal`'s `walk` — `path` already exists as the DFS stack; the walk returns the verdict and its path as a two-element `list` — never a `(cons 'verdict …)`, since the matrix's `edge-roles-in-source` collects every `(cons 'SYM …)` in `verify.sls` as an edge role and would go red — and `eof-verdict-join` keeps the surviving verdict's path, its left operand on a tie |
-   | `zero-progress-cycle` | the cycle, from the reporting node back to itself | `reaches-self?` gains parent links |
+   | `zero-progress-cycle` | the cycle, from the reporting node back to itself | `self-cycle` returns the cycle *(renamed from `reaches-self?`, Slice ① F9)* |
    | `non-eof-into-finish` | the byte path from the entry to the source node, then the offending edge's target | `reach-from` gains a parent map; the zero-hop entry clause carries the one-element path |
    | `invalid-span-state`, `inconsistent-span-state`, `span-active-at-pause`, `span-active-at-exit` | a path from the entry to the node over `span-flow`'s edge relation | a parent map computed once from the edge list, before the fixpoint |
    | every other code | `#f` | — |
@@ -1165,8 +1176,11 @@ sweep is about shape alone.
   machine stamped in `verify-machine`'s one `map`; `declarations` passed at the sites §4.2
   item 2 lists, through constructors named `make-diagnostic…` so the census counts them;
   paths at the sites §4.2 item 3's table names — `eof-terminal`'s `walk` returning
-  `(verdict . path)` with the join keeping the survivor's, `reaches-self?` and `reach-from`
-  gaining parent maps, `pass-spans` computing a parent map from its edge list before the
+  the verdict and its path as a two-element `(verdict path)` list *(corrected from
+  `(verdict . path)`, Slice ① F13: a `(cons 'verdict …)` pair would enter the kind ×
+  position matrix's edge-role vocabulary and redden it)* with the join keeping the
+  survivor's, `self-cycle` *(renamed from `reaches-self?`, F9)* and `reach-from` gaining
+  parent maps, `pass-spans` computing a parent map from its edge list before the
   fixpoint. No pass changes a verdict.
 - **`verify-tests.sps`.** For each path-bearing code, one case asserting the path's shape —
   first element, last element, membership of the offending node — on a fixture whose path is
@@ -1184,8 +1198,9 @@ sweep is about shape alone.
   case); each parent map replaced by an empty path; the join keeping the loser's path.
 
 **Oracle.** *Shape only:* every existing assertion in the tree passes unchanged before the new
-cases are added — 122 accessor reads and the census's counts — so the widening is proven
-invisible to what shipped. *Total:* the census's path row is green with the twelve
+cases are added — 129 accessor reads *(corrected from 122, Slice ① F14: Slice ⓪ added cases
+between decision 0032's measurement at `50516af` and this slice's base)* and the census's
+counts — so the widening is proven invisible to what shipped. *Total:* the census's path row is green with the twelve
 path-bearing sites and red when any one is made pathless. *Public:* the four accessors are
 exported, the CHANGELOG names them, and `reserved-drift-tests.sps` stays green (the runtime's
 export set is untouched).
