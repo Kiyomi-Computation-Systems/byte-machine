@@ -690,21 +690,37 @@ has a recorded match count of 1 against its own mutant.
 
 ## Task 11 — The whole-branch review, and the close
 
-- [ ] **Step 1.** Review the **whole branch**, not the tasks: every task passing tells you nothing
+- [x] **Step 1.** Review the **whole branch**, not the tasks: every task passing tells you nothing
       about the seams. The question is which invariant has no owner.
-- [ ] **Step 2.** Reviewers are told to check what the code **does** against the code, never
+- [x] **Step 2.** Reviewers are told to check what the code **does** against the code, never
       against this plan's prose — a decision can be right while its stated reason is false.
       Put `AGENTS.md`'s sentence in the reviewer's prompt **verbatim**; do not paraphrase it, and
       do not invent constraints, which are indistinguishable from real ones and block fixable
       findings.
-- [ ] **Step 3.** Specific seams to name in the prompt: the driver's functional core after the
+- [x] **Step 3.** Specific seams to name in the prompt: the driver's functional core after the
       saver lands (F1); `run-one-trial` and `run-machine` sharing one body (Task 3 Step 3); the
       fixture's import list against the lane's (§8's "imports only what the lane imports"); the
       printer's arm table against `node?` after any rebase.
-- [ ] **Step 4.** Full release selection, both Chez modes; full mutation lane; both new lanes.
+- [x] **Step 4.** Full release selection, both Chez modes; full mutation lane; both new lanes.
       Record every total.
 - [ ] **Step 5.** Ask the owner before running the closing ritual. Merging `main` is gated; the
       agent performs the squash-merge itself once the owner says go.
+
+**Measured 2026-09-11 — the whole-branch review, three read-only agents, `AGENTS.md`'s sentence
+verbatim, seams from Step 3 named in each prompt.** No correctness defects in any of the three
+(driver / printer+fixture / CMake+pins). Every seam clean: the driver stays a functional core
+(`fixture-text` returns a string, no I/O); `run-one-trial` and `run-machine` fold the identical
+`(bad, inv-v)` via the shared `schedule-outcome`; `run-machine`'s signature and five returns are
+unchanged, `#f` callers fold byte-identically; `rename-targets` renames every node-target slot and
+no declaration/field/callback/span reference (checked per kind against `ir.sls`); the minimizer
+terminates by a strict `tuple-size` decrease with a fresh error sink per removal; every printer arm
+is constructor/accessor/order-correct; the fixture's import list is a strict subset of the lane's.
+Four LOW notes folded, all comment-only (commit on `feat/m7-slice-3`): the stale `smaller?` comment;
+the `tmpdir`-fallback rationale; the M1 pin's seed coupling; the fixture-lane timeout prose. One
+invariant left **documented, not enforced** (harmless — an unused compile): nothing asserts
+`machine-print.sls` stays out of the differential lanes' `SOURCES`; the design intent (the driver
+does not import machine-print) is stated in `fixture-text`. Step 5 (owner ask) is the stop point:
+the agent asks before the ritual and merges only on the go-ahead.
 
 **Exit:** review clean or every finding dispositioned; all suites green; owner asked.
 
@@ -715,19 +731,42 @@ has a recorded match count of 1 against its own mutant.
 Run from the repository root at the branch's tip. Each command's expected output is a literal or
 an exact count, never a description.
 
-- [ ] `git diff --stat main..HEAD -- src/` → **empty** (design §4.9's gate).
-- [ ] `git diff --stat main..HEAD -- test/fixtures` → **empty**.
-- [ ] Full release selection, **Chez source** → record `N/N`; the base is 114/114 and this slice
-      adds two lanes.
-- [ ] Full release selection, **Chez AOT** → same count as source.
-- [ ] Mutation lane → record passes/mutations; the base is 58/557 and Task 8 Step 4 states the
-      new pair.
-- [ ] `byte-machine.property.fixture.chez.source` and `.aot` → pass; record each wall-clock.
-- [ ] The printer's derived totality row → **13** node kinds and **4** matcher kinds, set-equal.
-- [ ] The round trip → byte-identical over **every** accepted machine; record the accepted count.
-- [ ] **Task 6 Step 8, by hand** — the raw fixture through its own header command exits **1**;
-      with the lie removed, **0**. Paste both transcripts here.
-- [ ] Per-pin match count for every pin this slice adds or touches → **1**.
+**Measured 2026-09-11 on `feat/m7-slice-3` (7 commits; the folded tree after the whole-branch
+review), reconfigured then run through `ctest --preset release`.**
+
+- [x] `git diff --stat main..HEAD -- src/` → **empty** (design §4.9's gate). Held at every task.
+- [x] `git diff --stat main..HEAD -- test/fixtures` → **empty** (this slice writes no committed
+      golden; the probe fixtures are written at run time to the per-lane tmp dir).
+- [x] Full release selection (both Chez modes, `ctest --preset release`) → **`100% tests passed,
+      0 tests failed out of 116`** (114 base + the two fixture lanes). The source and aot lanes of
+      every pair pass; the count is the combined total.
+- [x] Mutation lane → **59 passes / 561 mutations** (base 58/557; +1 pass, +4 mutations = three
+      caught + one survivor, Task 8 Step 4).
+- [x] `byte-machine.property.fixture.chez.source` **0.56 s** and `…​.aot` **0.28 s** → both pass.
+- [x] The printer's derived totality row → **13** node kinds and **4** matcher kinds, set-equal
+      to `node?` / `matcher?` read from `ir.sls` as a datum.
+- [x] The round trip → byte-identical over **every accepted machine**; accepted count **36** of 64
+      (floor 32), all 36 round-tripped.
+- [x] **Task 6 Step 8, by hand** — the raw fixture through its own header command exits **1**;
+      with the lie removed (`perturb` → identity), **0**:
+
+      ```
+      # raw (the lie present) — from the tmp directory, provenance unset:
+      byte-machine-harness: summary suite=fixture … cases=1 failed-cases=1 checks=1 failures=1 … status=1
+      RAW EXIT=1
+
+      # the same fixture with the lie removed (perturb returns r):
+      byte-machine-harness: summary suite=fixture … cases=1 failed-cases=0 checks=1 failures=0 … status=0
+      FIXED EXIT=0
+
+      # the minimized fixture (strictly smaller: input 3→2 bytes), lie present:
+      byte-machine-harness: summary suite=fixture … cases=1 failed-cases=1 checks=1 failures=1 … status=1
+      MIN EXIT=1
+      ```
+
+- [x] Per-pin match count for every pin this slice adds → **1** (Task 9 sweep, measured): the
+      3×3 mutant×regex matrix is a clean diagonal (baseline all-zero; pin1 R1=1/R2=0/R3=0,
+      pin2 0/1/0, pin3 0/0/1); the bound is a declared survivor (no FAIL record).
 
 ---
 
