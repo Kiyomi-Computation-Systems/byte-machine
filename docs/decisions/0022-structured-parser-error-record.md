@@ -468,3 +468,20 @@ UNCAUGHT. Measured while landing this change.
 Slice ①a's plan
 ([milestone-4-slice-1a-implementation-plan.md](../plans/milestone-4-slice-1a-implementation-plan.md)),
 under the whole-branch review section, carries the original reproduction.
+
+## 2026-09-11 (Milestone 7 Slice ②) — item 7's open shape is now drawn on purpose
+
+Item 7's amendment notes that an error declaration present in the source `errs`
+table but **absent from the encoding's reached-declaration table** is a shape the
+tree carried but no fixture exercised. Milestone 7 Slice ②'s generator can draw it
+on purpose: its free/structural draw supplies orphan and dangling error
+declarations (`unreferenced-error-declaration` and the dangling-target codes) as
+rejection material, under the generator's `orphan-prob` / `dangling-prob` steering.
+The property lane of Slice ② does **not** exercise this: it runs `property-steering`,
+whose `orphan-prob` and `dangling-prob` are **0**, and it counts rejections as a
+bare total, not by code — the by-code rejection ledger (`make-rejection*`,
+`rejection-codes`) is exported from the driver but **not called in this slice**.
+Both are turned on by **Slice ④**, whose corruption catalogue and independent
+oracle drive `free-steering` (`§4.6`) and consume the ledger. Recorded here so the
+next reader of 0022 finds where the shape is produced and where it is consumed,
+rather than re-deriving the shipped generator's avoidance of it.

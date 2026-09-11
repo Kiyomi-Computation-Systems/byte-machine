@@ -1,7 +1,7 @@
 # Milestone 7 Design — Verification and generative hardening
 
 **Status: Gate 0 discharged 2026-09-06 as decisions 0031-0033 (PR #85; §4's blockquote and
-§11's first bullet carry the discharge); Slice ⓪ delivered 2026-09-07 (PR #89); Slice ① next.** Before it: the design merged 2026-09-06
+§11's first bullet carry the discharge); Slice ⓪ delivered 2026-09-07 (PR #89); Slice ① delivered 2026-09-11 (PR #92); Slice ② next (the generator over every construct and the property differential suite).** Before it: the design merged 2026-09-06
 as PR #83 = `8edceb1`, and §4.12 was settled by the owner the same day (items 1-3 approved).
 Written against **`5ac363a`** (`main` = PR #82, which added only
 `AGENTS.md` bullets on top of Milestone 6's close at `0920b13`) on branch
@@ -766,21 +766,33 @@ Design-internal; no record. The shape a plan implements.
 **The draw.** A machine is built from the entry outward over a worklist of open target slots,
 with a node budget (≤ 8 nodes beyond the fixed terminals), each slot filled by a fresh node of
 a drawn kind (opening its own slots), an existing node (a back-edge), or a terminal; budget
-exhaustion forces terminals. Kinds are drawn uniformly from `node?`'s thirteen disjuncts, read
-from `ir.sls` at run time — the S2 technique, the matrix's row that derives `node?`'s
-disjuncts from the source file and compares them with a table's keys — so a fourteenth kind
-reddens the generator's own
-totality row before any fixture exists for it. Declarations are drawn first: one or two uint
+exhaustion forces terminals. Kinds are drawn by **round-robin over a single global advancing
+cycle** (started at 0, module-level, so the draw is reproducible across processes), not
+uniformly [note 2026-09-11 (2)]: at 64 draws under the committed
+seed a uniform draw leaves `clear` absent entirely and five more operations at exactly one
+machine, and decision 0033 item 2 requires each counter *observed*, which is strictly rarer
+than present. The kinds live in a **hand-written draw table in `machine-gen.sls`, exported**
+[note 2026-09-11 (3)]; the **totality rows, in the property program**, derive `node?`'s closed
+set from `ir.sls` and compare it to that table's keys, so a fourteenth kind reddens a totality
+row before any fixture exists for it — and were the generator to draw from a list read out of
+`ir.sls` during generation, the row would compare `ir.sls` against `ir.sls` and close nothing.
+Declarations are drawn first: one or two uint
 fields at drawn widths and initials; one or two callbacks of drawn kind with drawn keys and
 `required?`; one or two span declarations (`§10.4:519` limits *active* spans to one, not
-declarations, and wrong-end and overlap need two names), each naming a span-data callback and,
-in half the draws, a completion callback, with span nodes drawn as a matched start/end pair
-whose end has a private error sink and a non-terminal successor — an unmatched draw is
-rejected by pass 7 nearly always, and a shared sink joins `none` with `(active s)` (decision
-0029 item 2; measured during this design's review); the error declarations every machine
-needs plus one or two more. Field nodes draw an operation or predicate from `ir.sls`'s closed
+declarations, and wrong-end and overlap need two names), each naming a span-data callback and
+— on a **single machine-level coin**, so every span in a machine gets a completion callback or
+none [note 2026-09-11 (5)] — a completion callback, with span nodes drawn as a matched
+start/end pair. The end carries **no** error sink: `make-span-end-node`'s parameter list is
+`name span next source-label` (`src/byte-machine/private/ir.sls:620`), with no error slot, so
+the pair's private error sink attaches to the **body** [note 2026-09-11 (1)] — start → one
+advancing one-case byte dispatch carrying its own private EOF error node → end, the shape
+`counted-machine.sls` already ships (measured: 0/0/4 fragment machines, acceptance 1160 vs
+1128). An unmatched draw is rejected by pass 7 nearly always, and the shared sink joins `none`
+with `(active s)` (decision 0029 item 2; measured during this design's review); the error
+declarations every machine needs plus one or two more. Field nodes draw an operation or predicate from `ir.sls`'s closed
 lists with operands inside the width; sequence nodes draw one to three alternatives of length
-one to three; dispatches draw one to four cases over all four matcher kinds; every input-reading
+one to three; dispatches draw one to two cases over all four matcher kinds (a **bound**, not a
+steering — §4.10's Bounds bullet) [note 2026-09-11 (4)]; every input-reading
 node draws its EOF route from `{#f, a finish, an error, an existing node}`; counted consume and
 accumulate name a drawn field. Nothing else is forced to be valid: the span steering is
 coverage steering, and the verifier still decides.
@@ -797,9 +809,10 @@ and Layer 3's span row exclude those draws. Span-data and completion callbacks r
 
 **The inputs and schedules.** Per accepted machine: the 256 single-byte trials the shipped lane
 runs (§22.7's all-byte coverage of the entry dispatch, kept as is), then eight drawn inputs of
-length 0-6 driven under every split point, leading and trailing empty feeds, one sub-slice, one
-padded bytevector, and four seeded multi-split schedules — `§22.5:1278-1283`, the sixth bullet
-finally random and printed. After the feeds, `parser-finish!`, and on half the trials a
+length 0-6 driven under **every split point and every split-point pair**, leading and trailing
+empty feeds, one sub-slice, one padded bytevector, and four seeded multi-split schedules —
+`§22.5:1278-1283`'s **six** shapes [note 2026-09-11 (6)], the sixth finally random and printed.
+After the feeds, `parser-finish!`, and on half the trials a
 `parser-reset!` followed by one more feed (`§22.4:1272`).
 
 **Layer 1 — the lanes agree, per schedule** (`§22.4:1264-1272`, `§22.5:1285`): status, `next`,
@@ -830,6 +843,25 @@ A trial that violates an invariant in one lane fails whether or not the other la
 satisfies every invariant — the position kind of a failed zero-width action reached over a
 reexecute edge (`§12.7:770`'s open half) is the one in the tree today — is invisible to all
 three layers, and the lane's header will name it.
+
+> **Note 2026-09-11 (Slice ② implementation — six corrections in place above, one a
+> tightening).** §4.4 is design-internal; §4.6 makes it the only specification Slice ④ has of
+> the free mode, so a sentence the shipped generator contradicts is an instruction, corrected
+> here, not a record. (1) The span pairing's "private error sink" is on the **body**, not the
+> end: `make-span-end-node` has no error slot, so the pair is start → an advancing one-case
+> byte dispatch with its own EOF error node → end. The pairing sentence stands; the sink clause
+> already presupposed a node reached with a span open. (2) Kinds draw by **round-robin over a
+> single global advancing cycle**, not uniformly: a uniform draw leaves `clear` unobserved at the committed seed,
+> and 0033 item 2 needs *observed*. (3) The draw tables are **hand-written, exported tables in
+> `machine-gen.sls`**, and the totality rows live in the **property program**, comparing
+> `ir.sls`'s set to those keys — a generator that drew from a runtime-read `ir.sls` list would
+> close nothing. (4) Dispatches draw **one to two** cases, a **bound** (added to §4.10's Bounds
+> bullet), not a steering. (5) The completion callback is a **single machine-level coin** (per
+> span it produces `unreferenced-callback-declaration`); the "one or two span declarations"
+> count and "optional callbacks bound in half the draws" (below) stand. (6) The schedule set is
+> **six** shapes, not five — `§22.5:1282` split-point **pairs** were absent; the sixth's "random
+> and printed" deliberately departs from three shipped comments preferring a literal. The
+> design Appendix's matching stale draw-tables line is corrected the same way as (3).
 
 ### 4.5 The corruption catalogue — positive and negative, total over the code set
 
@@ -984,9 +1016,12 @@ No executor, emitter, normalizer, runtime or ABI change: `git diff 5ac363a..HEAD
 ### 4.10 Resolutions that stay in this design and get no record
 
 - **Bounds.** Sixty-four machines per seed set (forty today), a node budget of eight, inputs of
-  at most six bytes, eight inputs per machine, four seeded multi-split schedules — chosen so
-  both lanes stay under the shipped 180 s timeout with margin; the shipped lane runs in under a
-  second and emission dominates.
+  at most six bytes, eight inputs per machine, four seeded multi-split schedules, and **one to
+  two dispatch cases** (added 2026-09-11 [note (4)] — F3 classifies the case count as a bound,
+  not a steering, so it belongs in this list) — chosen so both lanes stay under the shipped
+  180 s timeout with margin. Measured 2026-09-11 (Task 8 Step 4, via ctest): the source lane
+  ~4 s and the AOT lane ~4 s, both far under the timeout — the earlier "runs in under a second"
+  measured no AOT lane, which had no measurement anywhere in the tree, and emission dominates.
 - **Lane names.** `byte-machine.property.differential.chez.{source,aot}` keep their names (the
   registrations are cited by the mutation suite's Pass 39); the catalogue and the oracle are
   `byte-machine.property.rejections.chez.{source,aot}`; the reproduction probe is
@@ -995,7 +1030,15 @@ No executor, emitter, normalizer, runtime or ABI change: `git diff 5ac363a..HEAD
 - **The generator's own totality rows** live in the property program: kinds from `node?`,
   matchers from `matcher?`, operations and predicates from `field-operations` and
   `field-predicates`, callback kinds from `make-callback-declaration`'s `memq` — each read from
-  `ir.sls` as a datum and compared with the draw tables' keys.
+  `ir.sls` as a datum and compared with the draw tables' keys. (Note 2026-09-11: the callback-kind
+  `memq` had **no shipped source reader** — `rg -n "'memq" test/` printed nothing before this
+  slice's own extractor added the term — so this slice
+  writes the third extractor (F18), a walk to `(define (make-callback-declaration …) …)` finding
+  the `(memq VAR '(…))` form; the other four reuse the diagnostic-/kind-census readers' shape.
+  §7's registration table places these rows in `machine-gen.sls`; this slice follows §4.10 and
+  keeps them in the **property program**, because a row inside a library reads `ir.sls` at run
+  time and fails by a raise rather than a comparison, and the S2 operand argument needs the draw
+  table declared on the other side of the comparison from `ir.sls`.)
 - **`BYTE_MACHINE_PROPERTY_SEED` parsing.** `string->number` on the trimmed value; anything
   that is not an exact non-negative integer is a loud `assertion-violation`, not a fallback to
   the default — a typo that silently ran the default seed would report the wrong seed in every
@@ -1230,7 +1273,10 @@ execution lanes) under the new lane names. Depends on Gate 0 (decision 0033) and
   the 256 single-byte trials kept; the drawn inputs under `§22.5`'s schedules; the
   across-schedule invariants; the invariant layer.
 - **CMake.** The two registrations keep their names and gain `property-driver.sls` in their
-  manifests; the timeout is measured, not guessed.
+  manifests; the timeout is measured, not guessed. (Note 2026-09-11: both registrations also
+  gain `ENVIRONMENT BYTE_MACHINE_SOURCE_ROOT=…/src` (F20), which this bullet did not name — the
+  totality rows read `ir.sls` as a datum and a census that silently read the wrong tree would
+  report every source-side mutation caught for nothing.)
 - **Pins.** Pass 39's six mutations are each a claim about a draw that no longer exists in
   that form ("machine-gen: the pause draw's coin is hard-wired to false", "machine-gen: the
   accumulate field's initial is one below the only workable value"); each is **retired with its reason** or re-anchored on the new draw that carries the
@@ -1451,8 +1497,9 @@ assertions in `verify-tests.sps`.
 | `:913` | normal consuming cycles are valid | the accept side of `:898` | — | `verify-tests.sps` (the message loop) | — | the generator's back-edges through an advancing byte edge, ACCEPTED, counted | — |
 
 **Test-side censuses this milestone adds**, so the next kind's slice finds them: the
-generator's draw tables (kinds, matchers, operations, predicates, callback kinds, each derived
-from `ir.sls`); the catalogue's entry table (keyed by `§16.2` bullet, its code union compared
+generator's draw tables (kinds, matchers, operations, predicates, callback kinds — hand-written
+and exported in `machine-gen.sls`, with the property program's totality rows comparing them to
+`ir.sls`'s closed sets [note 2026-09-11 (3)]); the catalogue's entry table (keyed by `§16.2` bullet, its code union compared
 with the census); the oracle's rule table; the printer's arm table (derived from `node?` and
 `matcher?`); the census's path-policy row; `role->positions` and `t2-kinds` in the existing
 files, unchanged.
