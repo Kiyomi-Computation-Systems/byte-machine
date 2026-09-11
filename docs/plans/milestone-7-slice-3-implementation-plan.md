@@ -361,30 +361,90 @@ against the public API, and has no reader but `load`).
 
 ## Task 1 — Re-take every measurement at the slice's own base
 
-- [ ] **Step 1.** Confirm the base: `git rev-parse --short HEAD`, `git status --porcelain`
+- [x] **Step 1.** Confirm the base: `git rev-parse --short HEAD`, `git status --porcelain`
       (empty), `git log --oneline -1 main`. Record the SHA; every later citation is relative to it.
-- [ ] **Step 2.** Re-run the full release selection in **both** Chez modes and record the totals.
+      **Measured 2026-09-11:** branch `docs/m7-slice-3-plan`, `HEAD` = `23d9c2a`, tree clean;
+      `main` = `6c832c4`. The branch adds only this plan doc (`git diff --stat main..HEAD` =
+      one file, 690 insertions), so the `src/` and `test/` tree every citation names is
+      byte-for-byte `main` at **`6c832c4`** — the SHA all later citations are relative to.
+- [x] **Step 2.** Re-run the full release selection in **both** Chez modes and record the totals.
       The merged-tree numbers to reproduce or correct: **114/114 both modes**.
-- [ ] **Step 3.** Re-run the mutation lane and record: the merged-tree numbers are **58 passes /
+      **Measured 2026-09-11 at `6c832c4`** (`ctest --preset release -V`, which registers both the
+      `.chez.source` and `.chez.aot` lanes): **`100% tests passed, 0 tests failed out of 114`**,
+      total test time 253.42 s. Reproduces.
+- [x] **Step 3.** Re-run the mutation lane and record: the merged-tree numbers are **58 passes /
       557 mutations**, with `EXPECTED_MUTATIONS 557` at `test/support/cmake/SchemeMutationSuite.cmake:1380`.
       Record the exact line number at this base — Task 8 edits it.
-- [ ] **Step 4.** Re-take every `file:line` cited in §1 F1–F11 and correct any that moved. The
+      **Measured 2026-09-11 at `6c832c4`:** the Scheme mutation suite reports
+      **`scheme mutation suite complete (58 passes, 557 mutations)`** (exit 0) — reproduces.
+      `EXPECTED_MUTATIONS 557` is at **`SchemeMutationSuite.cmake:1380`** and `EXPECTED_PASSES 58`
+      at **`:1379`** (Task 8 Step 4 edits :1380). The CMake *spec* mutation suite
+      (`byte-machine-spec … 1 pass, 72 mutations`) is separate and unrelated to this arithmetic.
+- [x] **Step 4.** Re-take every `file:line` cited in §1 F1–F11 and correct any that moved. The
       set: `property-driver.sls` :3-9, :53, :359, :387, :391, :453-456, :472, :504-505, :510,
       :515, :530; `machine-gen.sls` :108-110, :205-214; `property-differential-tests.sps` :73-76,
       :78-83, :165-175; `ir.sls` :10-11, :193-195, :662-667, :862-864; `graph.sls`'s export list;
       `runtime.sls` :12-13, :73-76, :440; `interpret.sls` :384-386, :445-453;
       `harness.sls` :454, :509, :530, :711-723, :724.
-- [ ] **Step 5.** Re-take the property lanes' wall-clock through `ctest` in both modes (design
+      **Measured 2026-09-11 at `6c832c4`:** every one reproduces exactly — **none moved**
+      (expected: the branch tree is `main` content). Spot-confirmations worth keeping: `node?`
+      has thirteen disjuncts and `matcher?` four (`ir.sls` :662-667 / :193-195, F4); `run-machine`'s
+      signature is `(m ref-cm gen-cm manifest inputs state counters on-first-disagreement)` with
+      `on-first-disagreement` the **eighth** arg at `property-driver.sls:456`, and its verdict
+      fold returns `fixture-path` as the **fourth** of five values (`:505`, F1/F2);
+      `make-manifest` is **not** in `machine-gen.sls:108-110`'s export list (nine accessors, no
+      constructor, F2); `graph.sls` exports the whole construction surface plus the matcher and
+      `sequence-*` accessor families and **no other node accessors** (F3); `make-parser` reads the
+      op at `(vector-ref compiled-machine 2)` (`runtime.sls:440`, F7); the provenance skip on
+      unset `BYTE_MACHINE_FINGERPRINT_FILES` is `harness.sls:711-724` (F5); `harness.sls`'s only
+      datum writer is the internal `with-output-to-string`+`write` at `:149` (Task 2 Step 6).
+- [x] **Step 5.** Re-take the property lanes' wall-clock through `ctest` in both modes (design
       §4.9's note says ~4 s each at a 180 s timeout). Task 7 sets the new lane's timeout relative
       to this, and a base that has drifted changes that arithmetic.
-- [ ] **Step 6 (F8).** Measure repeated same-named library load directly. Write a throwaway
+      **Measured 2026-09-11 at `6c832c4`** (from the same `ctest --preset release -V` run):
+      `byte-machine.property.differential.chez.source` **Passed 4.26 sec**,
+      `…​.chez.aot` **Passed 4.08 sec**, both against a 180 s `TIMEOUT`. No drift from §4.9's note;
+      Task 7's fixture-lane timeout is set from Task 5 Step 8's measurement, not from these.
+- [x] **Step 6 (F8).** Measure repeated same-named library load directly. Write a throwaway
       program that emits **two different** machines to two files, both declaring `(generated gen)`,
       loads them in order, and asserts the second `(eval 'gen-parser (environment '(generated
       gen)))` behaves as the **second** machine on an input the two disagree on. Record the result
       verbatim. **If the second load does not win, stop**: §4.7's minimizer is unbuildable as
       specified and the finding goes to the owner before any code is written.
-- [ ] **Step 7.** Re-run design §4.9's gate (`git diff --stat main..HEAD -- src/`) and record that
-      it is empty at the base.
+      **Measured 2026-09-11 at `6c832c4` — RESULT: PASS, the second load wins; the minimizer is
+      buildable as specified, no escalation.** Two one-dispatch machines (accept `0x41` vs accept
+      `0x42`), each named `gen` so each emits `(library (generated gen) (export gen-parser) …)`
+      through `emit-machine`/`compile-machine` exactly as `emit-and-load` does
+      (`property-differential-tests.sps:78-83`), written to two files, run through the source
+      launcher with provenance unset (F5's `env -u`). Verbatim:
+
+      ```
+      load A -> gen-parser(0x41) = stopped
+      load B -> gen-parser(0x41) = error
+
+      first load resolved to A?  #t
+      SECOND LOAD WINS (B)?       #t
+
+      F8 RESULT: PASS -- second same-named load wins; minimizer buildable
+      EXIT=0
+      ```
+
+      After `(load fileA)`, `(eval 'gen-parser (environment '(generated gen)))` drives `0x41` →
+      `stopped` (machine A accepts); after `(load fileB)` under the **same** library name a fresh
+      `environment` lookup drives `0x41` → `error` (machine B rejects). The later `load` shadows
+      the earlier binding, so the minimizer's up-to-64 re-emissions-under-one-name inside one
+      reduction loop resolve to the current candidate, not a stale one. **Two incidental findings
+      for later tasks:** (a) the emitted **library name is `(generated <machine-name>)`** — the
+      `'gen-parser` argument to `emit-machine` is only the *export* name; the lane works because
+      `gen-machine` names every drawn machine `'gen` (`machine-gen.sls:729`), so Task 4's saver
+      must emit the machine under a name whose `(generated …)` form the fixture re-loads.
+      (b) machine names must be **portable** (`invalid-name` rejects the capital in `'mA`), so the
+      saver emitting a machine named `gen` stays legal. Throwaway lives at `scratchpad/f8-probe.sps`,
+      outside the tree.
+- [x] **Step 7.** Re-run design §4.9's gate (`git diff --stat main..HEAD -- src/`) and record that
+      it is empty at the base. **Measured 2026-09-11:** empty — the whole branch diff is one file,
+      `docs/plans/milestone-7-slice-3-implementation-plan.md` (690 insertions), and nothing under
+      `src/`.
 
 **Exit:** every number in §1 either reproduces or is corrected in place, with the correcting
 command written beside it.
