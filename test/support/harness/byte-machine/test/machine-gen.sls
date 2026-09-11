@@ -14,8 +14,8 @@
 ;;;   - a case that targets `start` is forced to mode `advance`. `reexecute`
 ;;;     would make `start` a reexecute-only self-loop -- a zero-progress
 ;;;     cycle that (byte-machine verify)'s pass-zero-progress rejects, since a
-;;;     case with (target . start) is by itself enough to make `reaches-self?`
-;;;     true for the entry node (`reaches-self?` in `pass-zero-progress`,
+;;;     case with (target . start) is by itself enough to make `self-cycle`
+;;;     report the entry node (`self-cycle` in `pass-zero-progress`,
 ;;;     verify.sls -- named rather than cited by line, because the two line
 ;;;     ranges this comment used to carry had both drifted onto `pass-names`).
 ;;;   - the FIRST generated case always targets `stop` (with `advance`, so it

@@ -21,27 +21,83 @@
   (export verify-machine verification-ok? verification-diagnostics
           verification-machine
           diagnostic? diagnostic-code diagnostic-node diagnostic-message
-          diagnostic-edge)
+          diagnostic-edge diagnostic-severity diagnostic-machine
+          diagnostic-declarations diagnostic-path)
   (import (rnrs)
           (byte-machine private ir)
           (byte-machine private names))
 
   ;; --- diagnostics ---
+  ;; §16.4:937-943's seven fields in nine slots (decision 0032 item 1, Milestone 7
+  ;; Slice ①): tag, code, node, message, edge, severity, machine, declarations,
+  ;; path. The first five predate this slice. `edge` is §16.4:940's "edge/source
+  ;; label where applicable", `#f` when it does not apply, so two findings from
+  ;; one node -- a `case` edge and a `fallback` edge into the same finish terminal
+  ;; -- stop being the identical record. `severity` (:938), `machine` (:939),
+  ;; `declarations` (:942) and `path` (:943) are new this slice and exported
+  ;; beside the four shipped accessors; the 129 shipped reads of the four
+  ;; (test/common/*.sps at this base) index slots 1-4 and are unmoved.
   (define diagnostic-tag (vector 'byte-machine-diagnostic))
-  ;; §16.4:940 asks for "node and edge/source label where applicable". The label
-  ;; half was implemented nowhere: three arguments at every call site. The record
-  ;; now carries it, `#f` when it does not apply, so two findings from one node --
-  ;; a `case` edge and a `fallback` edge into the same finish terminal -- stop
-  ;; being the identical record.
-  (define (make-diagnostic code node message) (vector diagnostic-tag code node message #f))
-  (define (make-diagnostic/edge code node message edge)
-    (vector diagnostic-tag code node message edge))
+  ;; *** ONE builder, and the load-bearing constraint is the NAME, not inlining
+  ;; (decision 0032 item 1; F3). *** `diagnostic-census-tests.sps` derives its
+  ;; constructor set from every `(define (make-diagnostic... ) ...)` in this file
+  ;; and asserts `quoted-sites + one-header-per-constructor = total`. A shared
+  ;; builder whose name BEGAN `make-diagnostic` would put a second unquoted-code
+  ;; header in scope per delegation and fail that identity by the delegation
+  ;; count -- measured: staging one `make-diagnostic*` that `make-diagnostic` and
+  ;; `make-diagnostic/edge` both delegate to gives `expected 61, got 59`, off by
+  ;; exactly the two calls. `diagnostic-vector` is OUTSIDE that prefix, so it is
+  ;; invisible to the census and folds four near-identical nine-slot literals into
+  ;; one. "Build it inline" is the wrong lesson to leave here: the four
+  ;; constructors and `stamp-diagnostic` all route through this builder, and none
+  ;; of them -- nor this one -- may be renamed into the `make-diagnostic` family.
+  (define (diagnostic-vector code node message edge severity machine declarations path)
+    (vector diagnostic-tag code node message edge severity machine declarations path))
+  ;; The four constructors, each a `(define (name ...) ...)` -- NOT a
+  ;; `(define name (lambda ...))`, which `diagnostic-constructors` does not
+  ;; collect, so a site under it would drop out of the per-code census silently.
+  ;; Unfilled slots are `#f` (edge, severity, machine, path) or `'()`
+  ;; (declarations); severity and machine are stamped once in `verify-machine`
+  ;; (item 2), so no constructor fills them.
+  (define (make-diagnostic code node message)
+    (diagnostic-vector code node message #f #f #f '() #f))
+  ;; §16.4:940's edge label and, since this slice, a path (decision 0032 item 4):
+  ;; its one call site -- the §16.2:908 per-edge block -- is a path site, so a
+  ;; four-argument arity would leave it dead. Item 3's "keeps its arity" clause is
+  ;; corrected in decision 0032 (F4).
+  (define (make-diagnostic/edge code node message edge path)
+    (diagnostic-vector code node message edge #f #f '() path))
+  (define (make-diagnostic/declarations code node message declarations)
+    (diagnostic-vector code node message #f #f #f declarations #f))
+  (define (make-diagnostic/path code node message path)
+    (diagnostic-vector code node message #f #f #f '() path))
   (define (diagnostic? x)
     (and (vector? x) (> (vector-length x) 0) (eq? (vector-ref x 0) diagnostic-tag)))
   (define (diagnostic-code d) (vector-ref d 1))
   (define (diagnostic-node d) (vector-ref d 2))
   (define (diagnostic-message d) (vector-ref d 3))
   (define (diagnostic-edge d) (vector-ref d 4))
+  (define (diagnostic-severity d) (vector-ref d 5))
+  (define (diagnostic-machine d) (vector-ref d 6))
+  (define (diagnostic-declarations d) (vector-ref d 7))
+  (define (diagnostic-path d) (vector-ref d 8))
+  ;; Stamp §16.4:938's severity and :939's machine name onto a diagnostic, ONCE,
+  ;; in `verify-machine` (decision 0032 item 2). Severity is the constant `error`
+  ;; -- warnings are a policy §16.4:947 defers, and a record that carries the
+  ;; field is what makes adding one a change to one constant. The machine name is
+  ;; a single value `(and (machine? machine) (machine-name machine))`, applied to
+  ;; the whole list: `#f` exactly for `pass-schema`'s not-a-machine arm, because
+  ;; `verify-machine` runs every other pass only under `(machine? machine)`, so a
+  ;; diagnostic with no machine name is exactly one about something that is not a
+  ;; machine -- true by construction, including `pass-schema`'s version arm, which
+  ;; is reached only when `(machine? machine)` already holds (F5). Its name is NOT
+  ;; a `make-diagnostic…`, or the census would count every stamp as an emission
+  ;; site; it routes through `diagnostic-vector` for the same reason the
+  ;; constructors do.
+  (define (stamp-diagnostic d machine-name)
+    (diagnostic-vector (diagnostic-code d) (diagnostic-node d) (diagnostic-message d)
+                       (diagnostic-edge d) 'error machine-name
+                       (diagnostic-declarations d) (diagnostic-path d)))
 
   ;; --- name grammar [a-z][a-z0-9-]* and reserved-set member 1 ---
   ;; The grammar is (byte-machine private names)' `portable-name?` since
@@ -246,20 +302,31 @@
           ((counted-consume-node? n) (counted-consume-node-eof-target n))
           (else #f)))
   ;; Visited-set DFS from the machine's entry, following whatever edge function
-  ;; `targets` selects. Returns the reached node names. Since decision 0031 it
-  ;; has ONE caller, `byte-reached`; the parameter stays because it is what
-  ;; names the walk -- a DFS over an edge function, with the edge function at
-  ;; the call site rather than inlined here -- and because the EOF half of
-  ;; occupiability is a different shape of walk (`eof-visited`, seeded from a
-  ;; SET of parked nodes rather than from the entry).
+  ;; `targets` selects. Returns a `(name . parent)` alist -- the DFS tree, `#f`
+  ;; the parent at the entry -- so `byte-reached` reads the keys and the §16.2:908
+  ;; block reads a path back to the entry from it (decision 0032 item 4). Since
+  ;; Slice ① it has TWO callers, `byte-reached` and that block; the parameter
+  ;; stays because it is what names the walk -- a DFS over an edge function, with
+  ;; the edge function at the call site rather than inlined here -- and because
+  ;; the EOF half of occupiability is a different shape of walk (`eof-visited`,
+  ;; seeded from a SET of parked nodes rather than from the entry).
   (define (reach-from m targets)
-    (let ((nodes (machine-nodes m)) (reached '()))
-      (let visit ((name (machine-entry m)))
+    (let ((nodes (machine-nodes m)) (parents '()))
+      (let visit ((name (machine-entry m)) (parent #f))
         (let ((n (lookup nodes name)))
-          (when (and n (not (memq name reached)))
-            (set! reached (cons name reached))
-            (for-each visit (targets n)))))
-      reached))
+          (when (and n (not (assq name parents)))
+            (set! parents (cons (cons name parent) parents))
+            (for-each (lambda (t) (visit t name)) (targets n)))))
+      parents))
+  ;; The path from the entry to `name` over `reach-from`'s alist, entry first.
+  ;; `name` is a key by construction -- the §16.2:908 block passes only `br908`
+  ;; members, which are exactly `reach-from`'s keys -- so the walk terminates at
+  ;; the entry (parent `#f`); a guard for a non-member would be a guard that
+  ;; cannot guard, which this file deletes rather than documents.
+  (define (parent-path parents name)
+    (let loop ((name name) (acc '()))
+      (let ((parent (cond ((assq name parents) => cdr) (else #f))))
+        (if parent (loop parent (cons name acc)) (cons name acc)))))
 
   ;; PASS 1: schema.
   ;; PASS 1: §16.2:884 — invalid descriptor shapes AND unsupported IR versions.
@@ -290,8 +357,8 @@
          (if (null? es) (reverse out)
              (loop (cdr es) (cons (car es) seen)
                    (if (memq (car es) seen)
-                       (cons (make-diagnostic 'duplicate-error-declaration (car es)
-                                              "duplicate error declaration name") out)
+                       (cons (make-diagnostic/declarations 'duplicate-error-declaration (car es)
+                                              "duplicate error declaration name" (list (car es))) out)
                        out))))
        (apply append
               (map (lambda (n)
@@ -306,8 +373,8 @@
        (apply append
               (map (lambda (n)
                      (if (and (error-node? n) (not (memq (error-node-error-name n) enames)))
-                         (list (make-diagnostic 'missing-error-declaration (node-name n)
-                                                "error node names an undeclared error"))
+                         (list (make-diagnostic/declarations 'missing-error-declaration (node-name n)
+                                                "error node names an undeclared error" (list (error-node-error-name n))))
                          '()))
                    nodes)))))
 
@@ -345,8 +412,8 @@
              (let ((fname (uint-field-name (car rest))))
                (scan (cdr rest) (cons fname fseen)
                      (if (memq fname fseen)
-                         (cons (make-diagnostic 'invalid-field-declaration fname
-                                                "duplicate field name") out)
+                         (cons (make-diagnostic/declarations 'invalid-field-declaration fname
+                                                "duplicate field name" (list fname)) out)
                          out)))))
        ;; Milestone 6 Slice ⓪ folds §16.2:886's label clause into this arm's
        ;; test, the shape the error-declaration arm of `pass-names-valid` set:
@@ -356,8 +423,8 @@
                       (if (and (valid-name? (uint-field-name f))
                                (valid-label? (uint-field-source-label f)))
                           #f
-                          (make-diagnostic 'invalid-field-declaration (uint-field-name f)
-                                           "field name or label is not portable")))
+                          (make-diagnostic/declarations 'invalid-field-declaration (uint-field-name f)
+                                           "field name or label is not portable" (list (uint-field-name f)))))
                     fs))
        (pass-field-operands m fs))))
 
@@ -416,15 +483,15 @@
         (let ((width (field-width-of fs (car args))))
           (cond
            ((not width)
-            (list (make-diagnostic 'invalid-field-operand name
-                                   "operand names no declared field")))
+            (list (make-diagnostic/declarations 'invalid-field-operand name
+                                   "operand names no declared field" (list (car args)))))
            (else
             (append
              (filter values
                      (map (lambda (v)
                             (if (operand-in-width? v width) #f
-                                (make-diagnostic 'invalid-field-operand name
-                                                 "operand is outside the field's declared width")))
+                                (make-diagnostic/declarations 'invalid-field-operand name
+                                                 "operand is outside the field's declared width" (list (car args)))))
                           (cdr args)))
              ;; `low <= high` for `range` -- decision 0020 item 2 names this as
              ;; the consequence that looks wrong to a reader of 0017, which
@@ -435,8 +502,8 @@
                       (operand-in-width? (cadr args) width)
                       (operand-in-width? (caddr args) width)
                       (> (cadr args) (caddr args)))
-                 (list (make-diagnostic 'invalid-field-operand name
-                                        "range low exceeds high"))
+                 (list (make-diagnostic/declarations 'invalid-field-operand name
+                                        "range low exceeds high" (list (car args))))
                  '())))))))))
 
   ;; Slice ③'s accumulate share (D3). A SIBLING ARM, not a
@@ -453,8 +520,8 @@
   (define (accumulate-operand-diagnostics fs n)
     (if (field-width-of fs (integer-accumulate-node-field n))
         '()
-        (list (make-diagnostic 'invalid-field-operand (node-name n)
-                               "accumulate names no declared field"))))
+        (list (make-diagnostic/declarations 'invalid-field-operand (node-name n)
+                               "accumulate names no declared field" (list (integer-accumulate-node-field n))))))
 
   ;; §16.2:903, Milestone 6 Slice ①: "counted consume using an incompatible
   ;; field". Its own arm beside accumulate's and not folded into it -- Milestone
@@ -468,8 +535,8 @@
   (define (counted-operand-diagnostics fs n)
     (if (field-width-of fs (counted-consume-node-field n))
         '()
-        (list (make-diagnostic 'invalid-field-operand (node-name n)
-                               "counted consume names no declared field"))))
+        (list (make-diagnostic/declarations 'invalid-field-operand (node-name n)
+                               "counted consume names no declared field" (list (counted-consume-node-field n))))))
 
   (define (pass-field-operands m fs)
     (apply append
@@ -680,7 +747,7 @@
               ;; not the load-bearing property.
               ;;
               ;; KNOWN, DELIBERATE OVER-REJECTION, inherited not introduced:
-              ;; reaches-self? is a pure edge walk and never asks whether the
+              ;; self-cycle is a pure edge walk and never asks whether the
               ;; arm closing the cycle is reachable for any byte. A sequence
               ;; node whose alternatives' first bytes cover all 256 values has a
               ;; dead root fallback and cannot loop, yet is reported. Measured:
@@ -765,14 +832,28 @@
               ;; byte dispatch in it is untouched).
               ((counted-consume-node? n) (list (counted-consume-node-next n)))
               (else '())))
-      (define (reaches-self? start)
-        (let loop ((frontier (reexec-targets (lookup nodes start))) (seen '()))
+      ;; The cycle from `start` back to itself, or #f (was `reaches-self?`, F9): a
+      ;; frontier walk that carries parent routes, so a finding can report the
+      ;; cycle (decision 0032 item 4) rather than only a yes/no. Each frontier
+      ;; entry is `(name . route)` -- a VARIABLE car, safe under F13's
+      ;; `(cons 'SYM …)` trap -- with `route` the reexecute path from a first hop
+      ;; to `name`, most-recent-first. Reaching `start` again closes the cycle
+      ;; with `start` at both ends; a self-loop is the two-element `(start start)`.
+      ;; A name ending in `?` that answers a list would be a comment that lies,
+      ;; hence the rename.
+      (define (self-cycle start)
+        (let loop ((frontier (map (lambda (t) (cons t (list t)))
+                                  (reexec-targets (lookup nodes start))))
+                   (seen '()))
           (cond ((null? frontier) #f)
-                ((eq? (car frontier) start) #t)
-                ((memq (car frontier) seen) (loop (cdr frontier) seen))
-                (else (let ((n (lookup nodes (car frontier))))
-                        (loop (append (if n (reexec-targets n) '()) (cdr frontier))
-                              (cons (car frontier) seen)))))))
+                ((eq? (caar frontier) start) (cons start (reverse (cdar frontier))))
+                ((memq (caar frontier) seen) (loop (cdr frontier) seen))
+                (else
+                 (let ((route (cdar frontier)) (n (lookup nodes (caar frontier))))
+                   (loop (append (map (lambda (t) (cons t (cons t route)))
+                                      (if n (reexec-targets n) '()))
+                                 (cdr frontier))
+                         (cons (caar frontier) seen)))))))
       (filter values
               (map (lambda (n)
                      ;; The REPORT set, extended in the SAME commit as the walk
@@ -780,19 +861,22 @@
                      ;; M3 Slice ② shipped and Slice ③ closed: the walk finds the
                      ;; cycle, nothing reports it, verify returns ok with zero
                      ;; diagnostics, and the machine fails to terminate in both
-                     ;; lanes.
-                     (if (and (memq (node-name n) br898)
-                              (or (byte-dispatch-node? n) (pause-node? n)
-                                  (sequence-dispatch-node? n)
-                                  (field-action-node? n) (field-branch-node? n)
-                                  (integer-accumulate-node? n)
-                                  (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n)
-                                  (counted-consume-node? n))
-                              (reaches-self? (node-name n)))
-                         (make-diagnostic 'zero-progress-cycle (node-name n)
-                                          "a zero-progress cycle (reexecute edges, pause continuations, field actions and branches, accumulate overflow edges) makes no progress")
-                         #f))
+                     ;; lanes. `self-cycle`'s returned cycle is bound here (F9's
+                     ;; one-walk shape) and rides into the diagnostic as its path.
+                     (let ((cyc (and (memq (node-name n) br898)
+                                     (or (byte-dispatch-node? n) (pause-node? n)
+                                         (sequence-dispatch-node? n)
+                                         (field-action-node? n) (field-branch-node? n)
+                                         (integer-accumulate-node? n)
+                                         (callback-node? n)
+                                         (span-start-node? n) (span-end-node? n)
+                                         (counted-consume-node? n))
+                                     (self-cycle (node-name n)))))
+                       (if cyc
+                           (make-diagnostic/path 'zero-progress-cycle (node-name n)
+                                                 "a zero-progress cycle (reexecute edges, pause continuations, field actions and branches, accumulate overflow edges) makes no progress"
+                                                 cyc)
+                           #f)))
                    nodes))))
 
   ;; PASS 6: EOF shape — the machine default eof error names a declared error;
@@ -801,8 +885,8 @@
     (let ((nodes (machine-nodes m)))
       (append
        (if (memq (machine-default-eof-error m) (error-names m)) '()
-           (list (make-diagnostic 'invalid-eof-target (machine-default-eof-error m)
-                                  "machine default eof error names no declared error")))
+           (list (make-diagnostic/declarations 'invalid-eof-target (machine-default-eof-error m)
+                                  "machine default eof error names no declared error" (list (machine-default-eof-error m)))))
        (apply append
               (map (lambda (n)
                      (let ((t (node-eof-target n)))
@@ -883,8 +967,22 @@
   ;; eof-reachable-stop` -- a cycle is the non-termination neither runtime loop
   ;; guards against, so it must survive a join -- and leaves the rest unfixed;
   ;; the order above is this slice's call within that constraint.
+  ;;
+  ;; Since Slice ① each operand is a `(verdict path)` pair, so the rank reads its
+  ;; `car` and the whole surviving pair is returned -- keeping the path beside its
+  ;; verdict. The pair handling lives HERE, not at the call sites, so `join-over`
+  ;; and the counted-consume join keep their FINDs (F7). `>=` keeps the LEFT
+  ;; operand on a tie (decision 0032 item 5). Before the path travelled with the
+  ;; verdict `>=` vs `>` was unwitnessable -- but NOT because a tie held one symbol:
+  ;; tier 0 has four members (`finish` `unresolved` `error` `default-error`), so a
+  ;; rank-0 tie can hold two DIFFERENT symbols. It was unwitnessable because
+  ;; `pass-eof-execution`'s `case` acts only on `eof-reachable-stop` and `cycle`, so
+  ;; every rank-0 verdict is silent whichever wins (F10 states this reason and marks
+  ;; the "same symbol" one false). A tie inside a SINGLETON tier -- two
+  ;; `eof-reachable-stop`s via distinct nodes -- returns the same symbol with a
+  ;; different PATH, which the widening makes a comparison catch (Task 6 Step 5).
   (define (eof-verdict-join a b)
-    (if (>= (eof-verdict-rank a) (eof-verdict-rank b)) a b))
+    (if (>= (eof-verdict-rank (car a)) (eof-verdict-rank (car b))) a b))
 
   ;; The nodes an EOF walk continues to. Empty at a terminal; one for a pause or
   ;; a dispatch with a symbolic eof-target; TWO for the zero-width field kinds,
@@ -904,15 +1002,25 @@
 
   (define (eof-terminal m start)
     (let ((nodes (machine-nodes m)) (done '()))
+      ;; Every verdict travels beside its path as a two-element `list` -- never a
+      ;; `(cons 'verdict …)` pair, which `edge-roles-in-source` would collect as a
+      ;; role and redden the kind x position matrix on its baseline (decision 0032
+      ;; item 4; F13). The path runs from the walk's `start` (its tail) to the
+      ;; verdict's node. `(reverse path)` occurs ONCE, here, so Task 6's "the path
+      ;; is not reversed" mutation is a single site (SITES=1): all six
+      ;; verdict-producing sites -- this walk's `cycle`, `dispatch-arm`'s
+      ;; `default-error`, and `classify`'s `unresolved`/`finish`/`error`/
+      ;; `eof-reachable-stop` -- route through it.
+      (define (verdict v path) (list v (reverse path)))
       (define (walk name path)
-        (cond ((memq name path) 'cycle)
+        (cond ((memq name path) (verdict 'cycle (cons name path)))
               ((assq name done) => cdr)
               (else
                (let ((v (classify name (cons name path))))
                  (set! done (cons (cons name v) done))
                  v))))
       (define (dispatch-arm t path)
-        (if (symbol? t) (walk t path) 'default-error))
+        (if (symbol? t) (walk t path) (verdict 'default-error path)))
       (define (join-over names path)
         (let loop ((ns names) (acc #f))
           (if (null? ns)
@@ -931,10 +1039,10 @@
                       (if acc (eof-verdict-join acc v) v))))))
       (define (classify name path)
         (let ((n (lookup nodes name)))
-          (cond ((not n) 'unresolved)             ; pass-eof reports missing target
-                ((finish-node? n) 'finish)
-                ((error-node? n) 'error)
-                ((stop-node? n) 'eof-reachable-stop)
+          (cond ((not n) (verdict 'unresolved path)) ; pass-eof reports missing target
+                ((finish-node? n) (verdict 'finish path))
+                ((error-node? n) (verdict 'error path))
+                ((stop-node? n) (verdict 'eof-reachable-stop path))
                 ;; Kept as two arms rather than routed through node-eof-target:
                 ;; every other arm here is one predicate per kind, and merging
                 ;; these two would be the only merged arm in an otherwise
@@ -986,7 +1094,7 @@
   ;; -- dispatch case/fallback edges plus reached-pause continuations --
   ;; excluding eof-targets. An eof-only-reachable pause legally continues into
   ;; a finish node (decision 0011); a byte-reachable one must not (§16.2:908).
-  (define (byte-reached m) (reach-from m node-out-targets))
+  (define (byte-reached m) (map car (reach-from m node-out-targets)))
 
   ;; *** "A state an execution can be parked on" and "the name the EOF walk
   ;; starts at" are two different questions, and the callback node is the first
@@ -1105,10 +1213,17 @@
        ;; out-targets, so the per-edge loop below cannot also fire on it.
        (let ((en (lookup nodes (machine-entry m))))
          (if (and en (finish-node? en))
-             (list (make-diagnostic 'non-eof-into-finish (machine-entry m)
-                                    "the entry is a finish terminal"))
+             ;; The zero-hop path is the entry alone (decision 0032 item 4).
+             (list (make-diagnostic/path 'non-eof-into-finish (machine-entry m)
+                                         "the entry is a finish terminal"
+                                         (list (machine-entry m))))
              '()))
-       (let ((br908 (byte-reached m)))
+       ;; `reach-from` is called ONCE and both halves are derived from its parent
+       ;; alist (F7, measured): `br908` is its key set (`byte-reached`), and the
+       ;; offending edge's path is entry → source → target over the same alist.
+       ;; `rp` binds as a `let*` sibling of `br908`, adding no nesting level, so
+       ;; the body's indentation -- and the two `:908` gate pins -- do not move.
+       (let* ((rp (reach-from m node-out-targets)) (br908 (map car rp)))
          (apply append
                 (map (lambda (n)
                        (if (memq (node-name n) br908)
@@ -1119,7 +1234,9 @@
                                                 (make-diagnostic/edge
                                                  'non-eof-into-finish (node-name n)
                                                  "a byte edge targets a finish terminal"
-                                                 (car re))
+                                                 (car re)
+                                                 (append (parent-path rp (node-name n))
+                                                         (list (cdr re))))
                                                 #f)))
                                         (node-out-edges n)))
                            '()))
@@ -1164,15 +1281,22 @@
        (let ((br909 (byte-reached m)))
          (apply append
                 (map (lambda (n)
+                       ;; `eof-terminal` answers a `(verdict path)` pair since
+                       ;; Slice ①; the verdict `case`s exactly as before and the
+                       ;; path rides into the diagnostic (decision 0032 item 4).
                        (if (parked? m n br909)
-                           (case (eof-terminal m (parked-eof-start m n))
-                             ((eof-reachable-stop)
-                              (list (make-diagnostic 'eof-reachable-stop (node-name n)
-                                                     "an EOF path reaches a stop terminal")))
-                             ((cycle)
-                              (list (make-diagnostic 'eof-zero-progress-cycle (node-name n)
-                                                     "an EOF path cycles without reaching a terminal")))
-                             (else '()))
+                           (let* ((r (eof-terminal m (parked-eof-start m n)))
+                                  (path (cadr r)))
+                             (case (car r)
+                               ((eof-reachable-stop)
+                                (list (make-diagnostic/path 'eof-reachable-stop (node-name n)
+                                                            "an EOF path reaches a stop terminal"
+                                                            path)))
+                               ((cycle)
+                                (list (make-diagnostic/path 'eof-zero-progress-cycle (node-name n)
+                                                            "an EOF path cycles without reaching a terminal"
+                                                            path)))
+                               (else '())))
                            '()))
                      nodes)))
        ;; The D4(b)/(d) pause blocks that stood here are SUBSUMED (Slice ⓪b):
@@ -1226,8 +1350,8 @@
                              (valid-reason? (error-declaration-reason e))
                              (valid-label? (error-declaration-source-label e)))
                         #f
-                        (make-diagnostic 'invalid-name (error-declaration-name e)
-                                         "error name, code, reason or label is not portable")))
+                        (make-diagnostic/declarations 'invalid-name (error-declaration-name e)
+                                         "error name, code, reason or label is not portable" (list (error-declaration-name e)))))
                   (machine-errors m)))))
 
   ;; --- PASS 6b: callback and span DECLARATIONS (Milestone 5 Slice ①b) ---------
@@ -1273,8 +1397,8 @@
              (let ((cn (callback-declaration-name (car cs))))
                (cloop (cdr cs) (cons cn cseen)
                       (if (memq cn cseen)
-                          (cons (make-diagnostic 'duplicate-callback-declaration cn
-                                                 "duplicate callback declaration name")
+                          (cons (make-diagnostic/declarations 'duplicate-callback-declaration cn
+                                                 "duplicate callback declaration name" (list cn))
                                 cout)
                           cout)))))
        ;; §16.2:885, spans. `pseen`/`pout`.
@@ -1283,8 +1407,8 @@
              (let ((pn (span-declaration-name (car ps))))
                (ploop (cdr ps) (cons pn pseen)
                       (if (memq pn pseen)
-                          (cons (make-diagnostic 'duplicate-span-declaration pn
-                                                 "duplicate span declaration name")
+                          (cons (make-diagnostic/declarations 'duplicate-span-declaration pn
+                                                 "duplicate span declaration name" (list pn))
                                 pout)
                           pout)))))
        ;; §16.2:886's name clause, both families. Before this slice, callback and
@@ -1330,16 +1454,16 @@
                       (if (and (valid-name? (callback-declaration-name cd))
                                (valid-label? (callback-declaration-source-label cd)))
                           #f
-                          (make-diagnostic 'invalid-name (callback-declaration-name cd)
-                                           "callback declaration name or label is not portable")))
+                          (make-diagnostic/declarations 'invalid-name (callback-declaration-name cd)
+                                           "callback declaration name or label is not portable" (list (callback-declaration-name cd)))))
                     cbs))
        (filter values
                (map (lambda (sd)
                       (if (and (valid-name? (span-declaration-name sd))
                                (valid-label? (span-declaration-source-label sd)))
                           #f
-                          (make-diagnostic 'invalid-name (span-declaration-name sd)
-                                           "span declaration name or label is not portable")))
+                          (make-diagnostic/declarations 'invalid-name (span-declaration-name sd)
+                                           "span declaration name or label is not portable" (list (span-declaration-name sd)))))
                     sps))
        ;; §16.2:886's branch-key clause and §16.2:901's declaration share:
        ;; a key that is not portable, or declared twice on one callback.
@@ -1352,14 +1476,14 @@
                              (kloop (cdr ks) (cons k kseen)
                                     (cond
                                      ((memq k kseen)
-                                      (cons (make-diagnostic 'duplicate-branch-key
+                                      (cons (make-diagnostic/declarations 'duplicate-branch-key
                                                              (callback-declaration-name cd)
-                                                             "branch key declared twice")
+                                                             "branch key declared twice" (list (callback-declaration-name cd)))
                                             kout))
                                      ((not (valid-name? k))
-                                      (cons (make-diagnostic 'invalid-name
+                                      (cons (make-diagnostic/declarations 'invalid-name
                                                              (callback-declaration-name cd)
-                                                             "branch key is not portable")
+                                                             "branch key is not portable" (list (callback-declaration-name cd)))
                                             kout))
                                      (else kout)))))))
                    cbs))
@@ -1369,9 +1493,9 @@
                      (filter values
                              (map (lambda (k)
                                     (if (memq k reserved-outcomes)
-                                        (make-diagnostic 'reserved-branch-key
+                                        (make-diagnostic/declarations 'reserved-branch-key
                                                          (callback-declaration-name cd)
-                                                         "branch key collides with a reserved outcome")
+                                                         "branch key collides with a reserved outcome" (list (callback-declaration-name cd)))
                                         #f))
                                   (callback-declaration-branch-keys cd))))
                    cbs))
@@ -1386,9 +1510,9 @@
                         (if (and (eq? k 'decision) (not req)
                                  (not (and (symbol? db)
                                            (memq db (callback-declaration-branch-keys cd)))))
-                            (make-diagnostic 'invalid-callback-declaration
+                            (make-diagnostic/declarations 'invalid-callback-declaration
                                              (callback-declaration-name cd)
-                                             "optional decision callback has no valid default branch")
+                                             "optional decision callback has no valid default branch" (list (callback-declaration-name cd)))
                             #f)))
                     cbs))
        ;; A non-decision callback declaring branch keys or a default branch:
@@ -1399,9 +1523,9 @@
                       (if (and (not (eq? (callback-declaration-kind cd) 'decision))
                                (or (pair? (callback-declaration-branch-keys cd))
                                    (symbol? (callback-declaration-default-branch cd))))
-                          (make-diagnostic 'invalid-callback-declaration
+                          (make-diagnostic/declarations 'invalid-callback-declaration
                                            (callback-declaration-name cd)
-                                           "only a decision callback may declare branch keys")
+                                           "only a decision callback may declare branch keys" (list (callback-declaration-name cd)))
                           #f))
                     cbs))
        ;; §16.2:890 and §16.2:892. A span names its two callbacks BY NAME, so
@@ -1417,23 +1541,23 @@
                             (cc (if (symbol? cn) (find-callback cbs cn) #f)))
                        (append
                         (if dd '()
-                            (list (make-diagnostic 'missing-callback-declaration
+                            (list (make-diagnostic/declarations 'missing-callback-declaration
                                                    (span-declaration-name sd)
-                                                   "span data callback names no declaration")))
+                                                   "span data callback names no declaration" (list (span-declaration-name sd) dn))))
                         (if (or (not dd) (eq? (callback-declaration-kind dd) 'span-data))
                             '()
-                            (list (make-diagnostic 'invalid-span-callback
+                            (list (make-diagnostic/declarations 'invalid-span-callback
                                                    (span-declaration-name sd)
-                                                   "span data callback is not of kind span-data")))
+                                                   "span data callback is not of kind span-data" (list (span-declaration-name sd) dn))))
                         (if (or (not (symbol? cn)) cc) '()
-                            (list (make-diagnostic 'missing-callback-declaration
+                            (list (make-diagnostic/declarations 'missing-callback-declaration
                                                    (span-declaration-name sd)
-                                                   "span completion callback names no declaration")))
+                                                   "span completion callback names no declaration" (list (span-declaration-name sd) cn))))
                         (if (or (not cc) (eq? (callback-declaration-kind cc) 'span-complete))
                             '()
-                            (list (make-diagnostic 'invalid-span-callback
+                            (list (make-diagnostic/declarations 'invalid-span-callback
                                                    (span-declaration-name sd)
-                                                   "span completion callback is not of kind span-complete"))))))
+                                                   "span completion callback is not of kind span-complete" (list (span-declaration-name sd) cn)))))))
                    sps))
        ;; A callback of a span kind that no span names is unreachable: nothing
        ;; can ever invoke it, because only a span declaration reaches one.
@@ -1441,9 +1565,9 @@
                (map (lambda (cd)
                       (if (and (memq (callback-declaration-kind cd) '(span-data span-complete))
                                (not (span-referencing sps (callback-declaration-name cd))))
-                          (make-diagnostic 'unreferenced-callback-declaration
+                          (make-diagnostic/declarations 'unreferenced-callback-declaration
                                            (callback-declaration-name cd)
-                                           "span callback is named by no span")
+                                           "span callback is named by no span" (list (callback-declaration-name cd)))
                           #f))
                     cbs))
        ;; *** §16.2:901's NODE half (Milestone 5 Slice ②). *** ①b shipped the
@@ -1494,8 +1618,8 @@
   (define (span-node-declaration-diagnostics sps n)
     (let ((s (if (span-start-node? n) (span-start-node-span n) (span-end-node-span n))))
       (if (find-span sps s) '()
-          (list (make-diagnostic 'missing-span-declaration (node-name n)
-                                 "span node names an undeclared span")))))
+          (list (make-diagnostic/declarations 'missing-span-declaration (node-name n)
+                                 "span node names an undeclared span" (list s))))))
   (define (find-span sps nm)
     (cond ((null? sps) #f)
           ((eq? (span-declaration-name (car sps)) nm) (car sps))
@@ -1515,15 +1639,15 @@
         ;; the declaration, so this arm answers alone rather than reporting four
         ;; findings about a name that resolves to nothing.
         ((not cd)
-         (list (make-diagnostic 'missing-callback-declaration nm
-                                "callback node names no declaration")))
+         (list (make-diagnostic/declarations 'missing-callback-declaration nm
+                                "callback node names no declaration" (list cn))))
         ;; §10.6:584 invokes "one named event or decision callback". A span
         ;; callback is reached only through a span declaration (§10.4:515-516),
         ;; never through a node, so naming one here is an invocation that can
         ;; never be what it says.
         ((not (memq (callback-declaration-kind cd) '(event decision)))
-         (list (make-diagnostic 'invalid-callback-invocation nm
-                                "callback node invokes a span callback")))
+         (list (make-diagnostic/declarations 'invalid-callback-invocation nm
+                                "callback node invokes a span callback" (list cn))))
         (else
          (append
           ;; DUPLICATED. Before the undeclared/missing arms below, so a key
@@ -1545,8 +1669,8 @@
           (filter values
                   (map (lambda (k)
                          (if (memq k (callback-declaration-branch-keys cd)) #f
-                             (make-diagnostic 'invalid-callback-invocation nm
-                                              "branch key is not declared by the callback")))
+                             (make-diagnostic/declarations 'invalid-callback-invocation nm
+                                              "branch key is not declared by the callback" (list cn))))
                        keys))
           ;; MISSING. §10.6:585 lets a decision "select only among statically
           ;; declared branch keys", so a declared key with no target on this
@@ -1558,8 +1682,8 @@
           (filter values
                   (map (lambda (k)
                          (if (memq k keys) #f
-                             (make-diagnostic 'invalid-callback-invocation nm
-                                              "callback declares a branch key this node gives no target")))
+                             (make-diagnostic/declarations 'invalid-callback-invocation nm
+                                              "callback declares a branch key this node gives no target" (list cn))))
                        (callback-declaration-branch-keys cd))))))))
 
   ;; --- PASS 7: span-state dataflow (§16.3:925, decision 0029) ---------------
@@ -1706,28 +1830,34 @@
 
   ;; 0029's Consequences table, transcribed rather than re-derived. `top` never
   ;; reaches here: the caller reports it at the merge and stops propagating,
-  ;; which is what keeps this total.
-  (define (span-node-diagnostics n state)
+  ;; which is what keeps this total. `path` is the entry→node path the caller
+  ;; computed once from the span-flow parent map (decision 0032 item 4); every
+  ;; finding here rides it.
+  (define (span-node-diagnostics n state path)
     (cond
       ((span-start-node? n)
        (let ((s (span-start-node-span n)))
          (cond ((eq? state 'none) '())
                ((and (pair? state) (eq? (cadr state) s))
-                (list (make-diagnostic 'invalid-span-state (node-name n)
-                                       "span re-entry: this span is already open")))
+                (list (make-diagnostic/path 'invalid-span-state (node-name n)
+                                            "span re-entry: this span is already open"
+                                            path)))
                ((pair? state)
-                (list (make-diagnostic 'invalid-span-state (node-name n)
-                                       "span overlap: another span is already open")))
+                (list (make-diagnostic/path 'invalid-span-state (node-name n)
+                                            "span overlap: another span is already open"
+                                            path)))
                (else '()))))
       ((span-end-node? n)
        (let ((s (span-end-node-span n)))
          (cond ((and (pair? state) (eq? (cadr state) s)) '())
                ((pair? state)
-                (list (make-diagnostic 'invalid-span-state (node-name n)
-                                       "wrong end: a different span is open")))
+                (list (make-diagnostic/path 'invalid-span-state (node-name n)
+                                            "wrong end: a different span is open"
+                                            path)))
                ((eq? state 'none)
-                (list (make-diagnostic 'invalid-span-state (node-name n)
-                                       "unmatched end: no span is open")))
+                (list (make-diagnostic/path 'invalid-span-state (node-name n)
+                                            "unmatched end: no span is open"
+                                            path)))
                (else '()))))
       ;; §16.2:900. §13:826's exception -- "Only the active span's own data
       ;; callback may pause before the span closes" -- cannot apply to a NODE:
@@ -1736,19 +1866,40 @@
       ;; and the runtime's flush, never through a callback node. So every pause
       ;; node and every callback node is rejected with a span open.
       ((and (pair? state) (or (pause-node? n) (callback-node? n)))
-       (list (make-diagnostic 'span-active-at-pause (node-name n)
-                              "a pause or callback invocation is reachable with a span active")))
+       (list (make-diagnostic/path 'span-active-at-pause (node-name n)
+                                   "a pause or callback invocation is reachable with a span active"
+                                   path)))
       ;; §16.2:907's span half and 0029 item 4. Only the SUCCESSFUL terminals:
       ;; §14:839 contemplates a span still open at an error terminal, which is
       ;; why decision 0023 item 5 kept `finish` distinguished from `error`.
       ((and (pair? state) (or (stop-node? n) (finish-node? n)))
-       (list (make-diagnostic 'span-active-at-exit (node-name n)
-                              "a successful terminal is reachable with a span active")))
+       (list (make-diagnostic/path 'span-active-at-exit (node-name n)
+                                   "a successful terminal is reachable with a span active"
+                                   path)))
       (else '())))
+
+  ;; A parent map over an edge list, BFS from the entry, `#f` at the entry
+  ;; (decision 0032 item 4). `pass-spans` seeds its in-state at the entry and
+  ;; propagates only along `edges`, so a node that carries any state is reachable
+  ;; from the entry over exactly this relation (F11) -- it is therefore a key, and
+  ;; a node with no path here can produce no span finding. `span-flow` is not
+  ;; touched: this reads the edge list it already returns.
+  (define (edge-parents entry edges)
+    (let loop ((frontier (list entry)) (parents (list (cons entry #f))))
+      (if (null? frontier) parents
+          (let across ((succ (map cdr (filter (lambda (e) (eq? (car e) (car frontier)))
+                                               edges)))
+                       (rest (cdr frontier)) (parents parents))
+            (cond ((null? succ) (loop rest parents))
+                  ((assq (car succ) parents) (across (cdr succ) rest parents))
+                  (else (across (cdr succ) (append rest (list (car succ)))
+                                (cons (cons (car succ) (car frontier)) parents))))))))
 
   (define (pass-spans m)
     (let* ((nodes (machine-nodes m))
            (edges (span-flow m))
+           ;; The entry→node path for every span finding, over `edges` (F11).
+           (parents (edge-parents (machine-entry m) edges))
            ;; The in-state map, as an association list rebuilt each round. A
            ;; node no execution can occupy contributes no state to a join and
            ;; receives none (0029 item 3), so it never appears here at all.
@@ -1809,10 +1960,12 @@
                                     ;; an innocent node and falling silent would
                                     ;; be unsound.
                                     ((eq? st 'top)
-                                     (list (make-diagnostic 'inconsistent-span-state
-                                                            (node-name n)
-                                                            "incoming edges disagree about the active span")))
-                                    (else (span-node-diagnostics n st)))))
+                                     (list (make-diagnostic/path 'inconsistent-span-state
+                                                                 (node-name n)
+                                                                 "incoming edges disagree about the active span"
+                                                                 (parent-path parents (node-name n)))))
+                                    (else (span-node-diagnostics
+                                           n st (parent-path parents (node-name n)))))))
                           nodes))
               (round next (- fuel 1)))))))
 
@@ -1831,6 +1984,13 @@
             ((eq? (span-declaration-complete-callback (car ps)) nm) #t)
             (else (sloop (cdr ps))))))
 
+  ;; `nm` binds as a SIBLING of `ds`, not a `let*` step above it (F8): reading
+  ;; only `machine`, it re-indents no line of the `append`, so the four
+  ;; `verify: pass-X is never run` pins that anchor on `(pass-fields machine)` and
+  ;; its siblings keep their single-line FINDs. `(null? ds)` is computed on the
+  ;; UNSTAMPED list -- stamping fills severity/machine and cannot change emptiness
+  ;; -- and the one `map` stamps every diagnostic with the machine name (decision
+  ;; 0032 item 2).
   (define (verify-machine machine)
     (let ((ds (append (pass-schema machine)
                       (if (machine? machine)
@@ -1845,8 +2005,11 @@
                                   (pass-eof machine)
                                   (pass-eof-execution machine)
                                   (pass-names-valid machine))
-                          '()))))
-      (make-verification-result (null? ds) ds machine)))
+                          '())))
+          (nm (and (machine? machine) (machine-name machine))))
+      (make-verification-result (null? ds)
+                                (map (lambda (d) (stamp-diagnostic d nm)) ds)
+                                machine)))
 
   (define (verification-ok? v) (verification-result-ok? v))
   (define (verification-diagnostics v) (verification-result-diagnostics v))

@@ -1361,7 +1361,7 @@ cmake_minimum_required(VERSION 3.26)
 # and it is the DELTA that has to agree).
 
 set(EXPECTED_PASSES 58)
-set(EXPECTED_MUTATIONS 525)
+set(EXPECTED_MUTATIONS 536)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -4292,16 +4292,16 @@ byte_machine_mutation(
   # zero-width kinds and reflowed onto three lines. Third re-anchor of the same
   # decision; the REPLACE and the pin are still unchanged, which is what says the
   # decision has not moved even though its text keeps doing so.
-  FIND [[(if (and (memq (node-name n) br898)
-                              (or (byte-dispatch-node? n) (pause-node? n)
-                                  (sequence-dispatch-node? n)
-                                  (field-action-node? n) (field-branch-node? n)
-                                  (integer-accumulate-node? n)
-                                  (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n)
-                                  (counted-consume-node? n))
-                              (reaches-self? (node-name n)))]]
-  REPLACE [[(if #f]]
+  FIND [[(and (memq (node-name n) br898)
+                                     (or (byte-dispatch-node? n) (pause-node? n)
+                                         (sequence-dispatch-node? n)
+                                         (field-action-node? n) (field-branch-node? n)
+                                         (integer-accumulate-node? n)
+                                         (callback-node? n)
+                                         (span-start-node? n) (span-end-node? n)
+                                         (counted-consume-node? n))
+                                     (self-cycle (node-name n)))]]
+  REPLACE [[#f]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "a reexecute self-loop is a zero-progress cycle: zero-progress-cycle")
 
@@ -4492,8 +4492,8 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: an EOF-reachable stop terminal is accepted"
-  FIND [[((stop-node? n) 'eof-reachable-stop)]]
-  REPLACE [[((stop-node? n) 'finish)]]
+  FIND [[((stop-node? n) (verdict 'eof-reachable-stop path))]]
+  REPLACE [[((stop-node? n) (verdict 'finish path))]]
   # Task 3 whole-pass audit: bare "eof-reachable-stop" is a diagnostic CODE and
   # was measured matching TWO other mutants -- "eof-terminal chains through a
   # pause continuation" and "a byte-reachable pause's continuation chain is an
@@ -4515,8 +4515,8 @@ byte_machine_mutation(
   # DFS `path` stack (decision 0021 item 2's two structures), so the shipped FIND
   # went to zero sites. The decision is unchanged -- re-entering the current path
   # is a cycle -- and so is its signature.
-  FIND [[        (cond ((memq name path) 'cycle)]]
-  REPLACE [[        (cond ((memq name path) 'finish)]]
+  FIND [[(cond ((memq name path) (verdict 'cycle (cons name path)))]]
+  REPLACE [[(cond ((memq name path) (verdict 'finish (cons name path)))]]
   # Task 3 whole-pass audit: bare "eof-zero-progress-cycle" is a diagnostic
   # CODE and was measured matching "eof-terminal chains through a pause
   # continuation" and "a pause's byte-reachability gate is not checked
@@ -4773,23 +4773,23 @@ byte_machine_mutation(
   # as the two sibling pins: the guard gained the two zero-width kinds. The edit
   # this LABEL claims is unchanged -- drop only the pause clause -- and so is the
   # nesting it records.
-  FIND [[(if (and (memq (node-name n) br898)
-                              (or (byte-dispatch-node? n) (pause-node? n)
-                                  (sequence-dispatch-node? n)
-                                  (field-action-node? n) (field-branch-node? n)
-                                  (integer-accumulate-node? n)
-                                  (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n)
-                                  (counted-consume-node? n))
-                              (reaches-self? (node-name n)))]]
-  REPLACE [[(if (and (or (byte-dispatch-node? n)
-                                  (sequence-dispatch-node? n)
-                                  (field-action-node? n) (field-branch-node? n)
-                                  (integer-accumulate-node? n)
-                                  (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n)
-                                  (counted-consume-node? n))
-                              (reaches-self? (node-name n)))]]
+  FIND [[(and (memq (node-name n) br898)
+                                     (or (byte-dispatch-node? n) (pause-node? n)
+                                         (sequence-dispatch-node? n)
+                                         (field-action-node? n) (field-branch-node? n)
+                                         (integer-accumulate-node? n)
+                                         (callback-node? n)
+                                         (span-start-node? n) (span-end-node? n)
+                                         (counted-consume-node? n))
+                                     (self-cycle (node-name n)))]]
+  REPLACE [[(and (or (byte-dispatch-node? n)
+                                         (sequence-dispatch-node? n)
+                                         (field-action-node? n) (field-branch-node? n)
+                                         (integer-accumulate-node? n)
+                                         (callback-node? n)
+                                         (span-start-node? n) (span-end-node? n)
+                                         (counted-consume-node? n))
+                                     (self-cycle (node-name n)))]]
     # Re-pinned by Milestone 5 Slice ③. Its witness was an EOF-ONLY pause cycle,
   # which §16.2:898's new gate (decision 0027 item 3) excludes on purpose -- so
   # the clause is now witnessed by a BYTE-reachable pause cycle, which is what a
@@ -5017,7 +5017,7 @@ byte_machine_mutation(
   # measured either claim.
   # `(if #t` rather than `(if #f`, per AGENTS.md's opposite-constant rule:
   # `(if #f` reproduces arm 3's own deletion and would be a second copy of it,
-  # while `(if #t` makes reaches-self? true for the advance fixture and is
+  # while `(if #t` makes self-cycle report the advance fixture and is
   # caught by a failed comparison on a case that passes in the baseline.
   #
   # MEASURED, not predicted. Baseline cases=57 checks=77 failures=0 status=0;
@@ -5056,21 +5056,21 @@ byte_machine_mutation(
   # measured, none predicted. Comparison-caught: the count check fails outright
   # rather than depending on where a mutant happens to crash.
   # RE-ANCHORED by Slice ② task 2's census, same reflow as the sibling pin.
-  FIND [[(if (and (memq (node-name n) br898)
-                              (or (byte-dispatch-node? n) (pause-node? n)
-                                  (sequence-dispatch-node? n)
-                                  (field-action-node? n) (field-branch-node? n)
-                                  (integer-accumulate-node? n)
-                                  (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n)
-                                  (counted-consume-node? n))]]
-  REPLACE [[(if (and (memq (node-name n) br898)
-                              (or (byte-dispatch-node? n) (pause-node? n)
-                                  (field-action-node? n) (field-branch-node? n)
-                                  (integer-accumulate-node? n)
-                                  (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n)
-                                  (counted-consume-node? n))]]
+  FIND [[(and (memq (node-name n) br898)
+                                     (or (byte-dispatch-node? n) (pause-node? n)
+                                         (sequence-dispatch-node? n)
+                                         (field-action-node? n) (field-branch-node? n)
+                                         (integer-accumulate-node? n)
+                                         (callback-node? n)
+                                         (span-start-node? n) (span-end-node? n)
+                                         (counted-consume-node? n))]]
+  REPLACE [[(and (memq (node-name n) br898)
+                                     (or (byte-dispatch-node? n) (pause-node? n)
+                                         (field-action-node? n) (field-branch-node? n)
+                                         (integer-accumulate-node? n)
+                                         (callback-node? n)
+                                         (span-start-node? n) (span-end-node? n)
+                                         (counted-consume-node? n))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "and the sequence node itself are three zero-progress cycles: zero-progress-cycle count -- expected 3, got 2")
@@ -5115,7 +5115,7 @@ byte_machine_mutation(
   # assertion-violation instead of by the wrong classification this pin names.
   FIND [[                ((sequence-dispatch-node? n)
                  (dispatch-arm (sequence-dispatch-node-eof-target n) path))]]
-  REPLACE [[                ((sequence-dispatch-node? n) 'default-error)]]
+  REPLACE [[                ((sequence-dispatch-node? n) (verdict 'default-error path))]]
   # Comparison-caught: with the arm removed, eof-terminal falls to its
   # `(else 'unknown)` the moment the walk reaches a sequence node, so a cycle
   # that must pass back OUT through that node's own eof-target is never
@@ -5288,8 +5288,8 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: the duplicate-field diagnostic does not name the field"
-  FIND [[(make-diagnostic 'invalid-field-declaration fname]]
-  REPLACE [[(make-diagnostic 'invalid-field-declaration #f]]
+  FIND [[(make-diagnostic/declarations 'invalid-field-declaration fname]]
+  REPLACE [[(make-diagnostic/declarations 'invalid-field-declaration #f]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the duplicate diagnostic names the offending FIELD: the field name -- expected \\(count\\), got \\(#f\\)")
@@ -5297,8 +5297,8 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: the nonportable-field diagnostic does not name the field"
-  FIND [[(make-diagnostic 'invalid-field-declaration (uint-field-name f)]]
-  REPLACE [[(make-diagnostic 'invalid-field-declaration #f]]
+  FIND [[(make-diagnostic/declarations 'invalid-field-declaration (uint-field-name f)]]
+  REPLACE [[(make-diagnostic/declarations 'invalid-field-declaration #f]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the nonportable diagnostic names the offending FIELD: the field name -- expected \\(Count\\), got \\(#f\\)")
@@ -5386,7 +5386,7 @@ byte_machine_mutation(
 ]]
   REPLACE [[              ]]
   EXPECT_SURVIVES
-    "measured, not assumed: this mutant passes the whole verify lane unchanged. The completed-set is decision 0021 item 2's SECOND structure and its job is complexity, not correctness -- the path stack alone already answers every verdict correctly, because the only path-dependent answer is `cycle` and a re-visit off the current path re-derives the same verdict rather than a different one. What the set buys is that a diamond costs one visit instead of two, and a chain of k diamonds costs k instead of 2^k, which is exactly the defect 0021 item 2 names in the algorithm it rejects. No assertion over verdicts can see a difference, because there is none. A TIMING witness was considered and declined: a chain of ~25 branch nodes makes the mutant take 2^25 walks and blow the lane's TIMEOUT, but a catch that depends on how fast the host is is not a catch this suite can state, and the project has recorded before that a nonzero exit is not proof. Reopening condition: if a later slice gives the walk a verdict that DOES depend on which path reached a node, the memo stops being sound and this mutation stops being a survivor -- it becomes a bug detector, and must be re-measured then rather than inherited."
+    "measured, not assumed: this mutant passes the whole verify lane unchanged. The completed-set is decision 0021 item 2's SECOND structure and its job is complexity, not correctness -- the path stack alone already answers every verdict correctly, because the only path-dependent answer is `cycle` and a re-visit off the current path re-derives the same verdict rather than a different one. What the set buys is that a diamond costs one visit instead of two, and a chain of k diamonds costs k instead of 2^k, which is exactly the defect 0021 item 2 names in the algorithm it rejects. No assertion over verdicts can see a difference, because there is none. A TIMING witness was considered and declined: a chain of ~25 branch nodes makes the mutant take 2^25 walks and blow the lane's TIMEOUT, but a catch that depends on how fast the host is is not a catch this suite can state, and the project has recorded before that a nonzero exit is not proof. Reopening condition: if a later slice gives the walk a verdict that DOES depend on which path reached a node, the memo stops being sound and this mutation stops being a survivor -- it becomes a bug detector, and must be re-measured then rather than inherited. 2026-09-10 (Milestone 7 Slice ①): the condition FIRED and this was re-measured, not inherited. The walk now answers a `(verdict path)` pair, so which route reached a node IS observable -- but the mutant STILL SURVIVES (verify-tests 184/184, status 0 with the line deleted). Why no fixture separates it: `eof-verdict-join` folds its operands left-to-right and keeps the LEFT on a tie (decision 0032 item 5), so the winning operand's path is always the one computed first, before any node it shares with a later operand is memoised; the memo can only ever return a stale path to a LOSING right operand. A re-convergent fixture (a parked node whose two eof-successors both reach one node that then reaches a stop) was reasoned through and reports the same path with the memo present or absent, because the left branch wins the tie and its path is fresh either way. The reopening condition is now satisfied at the path level and the answer is the same: sound, and unwitnessed, for the same structural reason as before -- one level deeper."
   )
 
 # Slice ② task 3 adds FIVE for the zero-width census. Two of them are the
@@ -5450,15 +5450,15 @@ byte_machine_mutation(
   # the accumulate node being flagged, narrowing a walk stops that AND every node
   # whose cycle runs through one. Kept because shipping one without the other is
   # the half-fix this pass exists to prevent.
-  FIND [[                                  (integer-accumulate-node? n)
-                                  (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n)
-                                  (counted-consume-node? n))
-                              (reaches-self? (node-name n)))]]
-  REPLACE [[                                  (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n)
-                                  (counted-consume-node? n))
-                              (reaches-self? (node-name n)))]]
+  FIND [[                                         (integer-accumulate-node? n)
+                                         (callback-node? n)
+                                         (span-start-node? n) (span-end-node? n)
+                                         (counted-consume-node? n))
+                                     (self-cycle (node-name n)))]]
+  REPLACE [[                                         (callback-node? n)
+                                         (span-start-node? n) (span-end-node? n)
+                                         (counted-consume-node? n))
+                                     (self-cycle (node-name n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the input-reading kind in the verifier census \\(Slice ③\\).an accumulate whose NONDIGIT edge reexecutes into itself is a zero-progress cycle: zero-progress-cycle")
@@ -5560,17 +5560,17 @@ byte_machine_mutation(
   # decisions and shipping only one of them is the defect this pass exists to
   # prevent -- a `store`-into-itself machine that verifies clean and then hangs.
   # Re-anchored by Slice ③ task 2: the guard gained its sixth disjunct.
-  FIND [[                                  (field-action-node? n) (field-branch-node? n)
-                                  (integer-accumulate-node? n)
-                                  (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n)
-                                  (counted-consume-node? n))
-                              (reaches-self? (node-name n)))]]
-  REPLACE [[                                  (integer-accumulate-node? n)
-                                  (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n)
-                                  (counted-consume-node? n))
-                              (reaches-self? (node-name n)))]]
+  FIND [[                                         (field-action-node? n) (field-branch-node? n)
+                                         (integer-accumulate-node? n)
+                                         (callback-node? n)
+                                         (span-start-node? n) (span-end-node? n)
+                                         (counted-consume-node? n))
+                                     (self-cycle (node-name n)))]]
+  REPLACE [[                                         (integer-accumulate-node? n)
+                                         (callback-node? n)
+                                         (span-start-node? n) (span-end-node? n)
+                                         (counted-consume-node? n))
+                                     (self-cycle (node-name n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "a zero-width self-cycle is a zero-progress cycle: zero-progress-cycle")
@@ -5983,10 +5983,11 @@ byte_machine_mutation(
   # walk; only the code it lives in moved. Recorded rather than silently
   # re-pinned, because a pin that changes anchor without changing decision is
   # exactly what a reader needs told.
-  FIND [[                             ((cycle)
-                              (list (make-diagnostic 'eof-zero-progress-cycle (node-name n)
-                                                     "an EOF path cycles without reaching a terminal")))]]
-  REPLACE [[                             ((cycle) '())]]
+  FIND [[                               ((cycle)
+                                (list (make-diagnostic/path 'eof-zero-progress-cycle (node-name n)
+                                                            "an EOF path cycles without reaching a terminal"
+                                                            path)))]]
+  REPLACE [[                               ((cycle) '())]]
   EXPECT_STATUS 1
   # RE-ANCHORED (the incumbent half of Milestone 7 Slice ⓪'s two-direction
   # sweep). The pin was the bare check label "…AT A PAUSE NODE: at least one, at
@@ -6005,8 +6006,8 @@ byte_machine_mutation(
   # A constant label is the failure mode a label invites: present, plausible, and
   # carrying no information. It passes any check that merely asserts the slot is
   # non-#f, which is why the fixtures assert the whole (code node edge) triple.
-  FIND [[                                                 (car re))]]
-  REPLACE [[                                                 'case)]]
+  FIND [[                                                 (car re)]]
+  REPLACE [[                                                 'case]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "a byte-dispatch's case and fallback into one finish are two distinguishable findings")
@@ -6181,9 +6182,9 @@ byte_machine_mutation(
   # and there is no opposite constant to try -- `(and #t (not cd))` is the
   # baseline. Measured: `Exception in vector-ref: #f is not a vector`.
   FIND [[        ((not cd)
-         (list (make-diagnostic 'missing-callback-declaration nm]]
+         (list (make-diagnostic/declarations 'missing-callback-declaration nm]]
   REPLACE [[        ((and #f (not cd))
-         (list (make-diagnostic 'missing-callback-declaration nm]]
+         (list (make-diagnostic/declarations 'missing-callback-declaration nm]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the resolution arm answers ALONE: case raised")
@@ -6195,8 +6196,9 @@ byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: span RE-ENTRY is accepted"
   FIND [[               ((and (pair? state) (eq? (cadr state) s))
-                (list (make-diagnostic 'invalid-span-state (node-name n)
-                                       "span re-entry: this span is already open")))]]
+                (list (make-diagnostic/path 'invalid-span-state (node-name n)
+                                            "span re-entry: this span is already open"
+                                            path)))]]
   REPLACE [[               ((and (pair? state) (eq? (cadr state) s)) '())]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "span RE-ENTRY: a second start for the same span")
@@ -6205,8 +6207,9 @@ byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: span OVERLAP is accepted"
   FIND [[               ((pair? state)
-                (list (make-diagnostic 'invalid-span-state (node-name n)
-                                       "span overlap: another span is already open")))]]
+                (list (make-diagnostic/path 'invalid-span-state (node-name n)
+                                            "span overlap: another span is already open"
+                                            path)))]]
   REPLACE [[               ((pair? state) '())]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "span OVERLAP: a start for a different span while one is open")
@@ -6215,8 +6218,9 @@ byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a WRONG END is accepted"
   FIND [[               ((pair? state)
-                (list (make-diagnostic 'invalid-span-state (node-name n)
-                                       "wrong end: a different span is open")))]]
+                (list (make-diagnostic/path 'invalid-span-state (node-name n)
+                                            "wrong end: a different span is open"
+                                            path)))]]
   REPLACE [[               ((pair? state) '())]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "WRONG END: closing a span that is not the one open")
@@ -6225,8 +6229,9 @@ byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: an UNMATCHED END is accepted"
   FIND [[               ((eq? state 'none)
-                (list (make-diagnostic 'invalid-span-state (node-name n)
-                                       "unmatched end: no span is open")))]]
+                (list (make-diagnostic/path 'invalid-span-state (node-name n)
+                                            "unmatched end: no span is open"
+                                            path)))]]
   REPLACE [[               ((eq? state 'none) '())]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "UNMATCHED END: closing with nothing open")
@@ -6237,9 +6242,9 @@ byte_machine_mutation(
   # Decision 0029 item 2, whose whole Context is the argument that this is a
   # rejection of its own and not a paraphrase of §14:843's fourth property.
   FIND [[                                    ((eq? st 'top)
-                                     (list (make-diagnostic 'inconsistent-span-state]]
+                                     (list (make-diagnostic/path 'inconsistent-span-state]]
   REPLACE [[                                    ((and #f (eq? st 'top))
-                                     (list (make-diagnostic 'inconsistent-span-state]]
+                                     (list (make-diagnostic/path 'inconsistent-span-state]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "INCONSISTENT: two branches disagree at a merge")
 
@@ -6312,8 +6317,8 @@ byte_machine_mutation(
   # half -- the machine 0027's Context derives, which `unreachable-node` does
   # NOT catch either, which is why the gate is not the benign no-op design §3.2
   # item 4 called it.
-  FIND [[                     (if (and (memq (node-name n) br898)]]
-  REPLACE [[                     (if (and #t]]
+  FIND [[                     (let ((cyc (and (memq (node-name n) br898)]]
+  REPLACE [[                     (let ((cyc (and #t]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "an unoccupiable zero-progress cycle is accepted")
 
@@ -6657,9 +6662,9 @@ byte_machine_mutation(
   # the counted node's `next`, so the loop's record loses exactly the counted
   # node -- and the self-targeting-next fixture goes empty, which the walk pin
   # above also produces; the loop record is what separates them.
-  FIND [[                                  (span-start-node? n) (span-end-node? n)
-                                  (counted-consume-node? n))]]
-  REPLACE [[                                  (span-start-node? n) (span-end-node? n))]]
+  FIND [[                                         (span-start-node? n) (span-end-node? n)
+                                         (counted-consume-node? n))]]
+  REPLACE [[                                         (span-start-node? n) (span-end-node? n))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "rejected: the three nodes of the loop -- expected ..zero-progress-cycle . br. .zero-progress-cycle . body. .zero-progress-cycle . dec.., got ..zero-progress-cycle . br. .zero-progress-cycle . dec..")
@@ -6743,7 +6748,7 @@ byte_machine_mutation(
   # expectation, and the three re-baselined cases fail with the pre-0031
   # verdicts.
   FIND [[    (let ((nodes (machine-nodes m)) (reached (occupiable m)))]]
-  REPLACE [[    (let ((nodes (machine-nodes m)) (reached (reach-from m (lambda (n) (append (node-out-targets n) (let ((t (node-eof-target n))) (if (symbol? t) (list t) '())))))))]]
+  REPLACE [[    (let ((nodes (machine-nodes m)) (reached (map car (reach-from m (lambda (n) (append (node-out-targets n) (let ((t (node-eof-target n))) (if (symbol? t) (list t) '()))))))))]]
   EXPECT_STATUS 1
   # SUBSUMED except for one record, and that record is why the fixture exists.
   # Measured on this tree: every OTHER check this mutant reddens is also
@@ -6777,6 +6782,104 @@ byte_machine_mutation(
   # records and never sits between an `expected` and its own `got`.
   EXPECT_OUTPUT_MATCHES
     "pause nodes .Slice 3..a byte-reachable pause into a stop would leak stopped through EOF .§16.2:909.: rejected -- expected a true value.*an EOF cycle through pause continuations is attributed to the pause .Slice ⓪..an eof-zero-progress-cycle is reported AT A PAUSE NODE: at least one, at a pause -- expected a true value")
+
+# --- Milestone 7 Slice ①: the diagnostic record's four new fields ------------
+# Eleven mutations. Each EXPECT_OUTPUT_MATCHES is measured from the staged
+# mutant (never predicted) and pins a single-firing record: a case-name tail,
+# a check label, and the measured got in full. The nine below run on the verify
+# lane; the two census mutations (a path site made pathless, a path site
+# relabelled out of the set) live in the diagnostic-census pass, because a
+# mutation is witnessed only by its own SPEC lane's program.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the stamping map is dropped, so severity and machine are #f"
+  # Decision 0032 item 2: no map, no stamp. Separated from the constant and warning mutations below by its got #f (they give a symbol).
+  FIND [[(map (lambda (d) (stamp-diagnostic d nm)) ds)]]
+  REPLACE [[ds]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "non-machine severity -- expected error, got #f")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the machine stamp answers a constant instead of the machine name"
+  # NOT #f (which would be a subset of the dropped-map mutant, subsumed by construction) -- a wrong NAME, so its got separates it. Pinned on the single-finding case so the record fires exactly once.
+  FIND [[(nm (and (machine? machine) (machine-name machine)))]]
+  REPLACE [[(nm (and (machine? machine) 'wrong))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "single machine stamp -- expected solo, got wrong")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the diagnostic severity is a warning rather than an error"
+  # The `error` constant in stamp-diagnostic. Separable from the dropped map by got warning vs #f.
+  FIND [[(diagnostic-edge d) 'error machine-name]]
+  REPLACE [[(diagnostic-edge d) 'warning machine-name]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "non-machine severity -- expected error, got warning")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the EOF path is not reversed, so it runs from the node to the start"
+  # Decision 0032 item 5's 'starting at the walk's start', as a first/last comparison. SITES=1: all six verdict sites route through this one helper (Task 4 Step 1).
+  FIND [[(define (verdict v path) (list v (reverse path)))]]
+  REPLACE [[(define (verdict v path) (list v path))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "eof-reachable-stop: path starts at the walk start -- expected start, got stop")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the EOF verdict join keeps the right operand on a tie"
+  # Measured UNCAUGHT in all nine verify-driving programs before the widening (F10); the path is what makes decision 0032 item 5's tie-break observable. On the two-distinct-stop fixture the winner's path moves from s1 to s2.
+  FIND [[(if (>= (eof-verdict-rank (car a)) (eof-verdict-rank (car b))) a b)]]
+  REPLACE [[(if (> (eof-verdict-rank (car a)) (eof-verdict-rank (car b))) a b)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "path last is the LEFT branch's stop -- expected s1, got s2")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: the zero-progress cycle path is empty"
+  # Separated from 'zero-progress detection never fires' by the finding COUNT: this mutant keeps the finding with an empty path (got #f), the deleting one removes it and the case's 'is emitted' check fails instead.
+  FIND [[((eq? (caar frontier) start) (cons start (reverse (cdar frontier))))]]
+  REPLACE [[((eq? (caar frontier) start) '())]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "zero-progress-cycle: path starts at the walk start -- expected start, got #f")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a byte parent is not recorded, so the :908 path is truncated"
+  # reach-from's parent alist. Caught only by a two-hop fixture whose source is not the entry (Task 6 Step 7); a source==entry fixture is unchanged.
+  FIND [[(cons name parent)]]
+  REPLACE [[(cons name #f)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "non-eof-into-finish \\(edge\\): path starts at the walk start -- expected start, got mid")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a span parent is not recorded, so span paths are truncated"
+  # edge-parents' equivalent, kept separate from the byte map above because they are two maps and each reddens a family the other does not.
+  FIND [[(cons (cons (car succ) (car frontier)) parents)]]
+  REPLACE [[(cons (cons (car succ) #f) parents)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "invalid-span-state: path starts at the walk start -- expected start, got op2")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a two-name declarations list loses its second name"
+  # invalid-span-callback's two-element list (decision 0032 item 3). Witness: the two-name declarations case.
+  FIND [["span data callback is not of kind span-data" (list (span-declaration-name sd) dn)]]
+  REPLACE [["span data callback is not of kind span-data" (list (span-declaration-name sd))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "span then callback -- expected \\(body ondata\\), got \\(body\\)")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -11346,12 +11449,17 @@ byte_machine_mutation(
   # failure to the site table rather than to any one fixture.
   # Re-anchored at Slice ⓪b task 4: the site this pointed at was one of two
   # `eof-reachable-stop` emissions, and the §16.2:909 collapse left one.
-  FIND [[(list (make-diagnostic 'eof-reachable-stop (node-name n)
-                                                     "an EOF path reaches a stop terminal")))]]
-  REPLACE [[(list (make-diagnostic 'zero-progress-cycle (node-name n)
-                                                     "an EOF path reaches a stop terminal")))]]
+  FIND [[(make-diagnostic/path 'eof-reachable-stop (node-name n)]]
+  REPLACE [[(make-diagnostic/path 'zero-progress-cycle (node-name n)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the code set and the per-site counts match the pinned table")
+  # Tightened by Milestone 7 Slice ①: Slice ①'s new "a path-bearing site is
+  # relabelled to a non-path code" mutation ALSO reddens this case (it relabels a
+  # path site too), so the bare case name resolved to two mutants. Pinned instead
+  # on the count row unique to THIS mutant -- it relabels to `zero-progress-cycle`,
+  # so that code reads 2; the Slice ① mutant relabels to `duplicate-name` and
+  # leaves `zero-progress-cycle` at 1.
+  EXPECT_OUTPUT_MATCHES
+    "the code set and the per-site counts match the pinned table: zero-progress-cycle -- expected 1, got 2")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.unit.diagnostic-census.chez.source
@@ -11366,6 +11474,32 @@ byte_machine_mutation(
   REPLACE [[(make-diagnostic 'unreachable-nodes (node-name n) "node is unreachable")]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "no source code lacks a fixture")
+
+# --- Milestone 7 Slice ①: the census path row's two directions --------------
+# A mutation is witnessed only by its own SPEC lane's program, so these two run
+# on the diagnostic-census lane: one makes a path site pathless (the per-site
+# count moves), the other relabels a path site to a non-path code (the code set
+# moves). Together they close both halves of decision 0032 item 6.
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.unit.diagnostic-census.chez.source
+  LABEL "verify: a path-bearing site is made pathless"
+  # The two constructors have the same arity, so this compiles and the site's code stays path-bearing while its constructor stops carrying a path -- the half of decision 0032 item 6 that keeps a new site under a path-bearing code from shipping pathless.
+  FIND [[(make-diagnostic/path 'zero-progress-cycle (node-name n)]]
+  REPLACE [[(make-diagnostic/declarations 'zero-progress-cycle (node-name n)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "make-diagnostic/path sites -- expected 11, got 10")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.unit.diagnostic-census.chez.source
+  LABEL "verify: a path-bearing site is relabelled to a non-path code"
+  # The row's other half ('no other site passes a path'): a non-path code now rides a path constructor. Separable from the shipped 'an emission site is relabelled' -- which relabels WITHIN the path set -- by the got, which carries `duplicate-name`.
+  FIND [[(make-diagnostic/path 'eof-reachable-stop (node-name n)]]
+  REPLACE [[(make-diagnostic/path 'duplicate-name (node-name n)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "the codes emitted through a path constructor equal the declared policy -- expected \\(eof-reachable-stop eof-zero-progress-cycle inconsistent-span-state invalid-span-state non-eof-into-finish span-active-at-exit span-active-at-pause zero-progress-cycle\\), got \\(duplicate-name")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -11535,15 +11669,15 @@ byte_machine_mutation(
   # into itself verifies clean and then invokes its callback forever in both
   # lanes. Its own record is the pause-continuation cell, where the mutant keeps
   # the EOF cycle and loses the feed one -- a record no other mutant here emits.
-  FIND [[                                  (integer-accumulate-node? n)
-                                  (callback-node? n)
-                                  (span-start-node? n) (span-end-node? n)
-                                  (counted-consume-node? n))
-                              (reaches-self? (node-name n)))]]
-  REPLACE [[                                  (integer-accumulate-node? n)
-                                  (span-start-node? n) (span-end-node? n)
-                                  (counted-consume-node? n))
-                              (reaches-self? (node-name n)))]]
+  FIND [[                                         (integer-accumulate-node? n)
+                                         (callback-node? n)
+                                         (span-start-node? n) (span-end-node? n)
+                                         (counted-consume-node? n))
+                                     (self-cycle (node-name n)))]]
+  REPLACE [[                                         (integer-accumulate-node? n)
+                                         (span-start-node? n) (span-end-node? n)
+                                         (counted-consume-node? n))
+                                     (self-cycle (node-name n)))]]
   EXPECT_STATUS 1
   # RE-ANCHORED by Milestone 7 Slice ⓪: the pin was the bare cell prefix
   # "callback-pause-continuation advance want", which this slice's new "the
@@ -11592,11 +11726,11 @@ byte_machine_mutation(
   # The half-fix Milestone 3 Slice ② shipped, two kinds later: the WALK finds
   # the cycle and nothing reports it, so a span node whose successor is itself
   # verifies clean and then hangs in both lanes.
-  FIND [[                                  (span-start-node? n) (span-end-node? n)
-                                  (counted-consume-node? n))
-                              (reaches-self? (node-name n)))]]
-  REPLACE [[                                                                    (counted-consume-node? n))
-                              (reaches-self? (node-name n)))]]
+  FIND [[                                         (span-start-node? n) (span-end-node? n)
+                                         (counted-consume-node? n))
+                                     (self-cycle (node-name n)))]]
+  REPLACE [[                                         (counted-consume-node? n))
+                                     (self-cycle (node-name n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "span-start-next advance want")
 
@@ -12110,8 +12244,9 @@ byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.differential.span.chez.source
   LABEL "verify: a span re-entering itself is not rejected"
   FIND [[               ((and (pair? state) (eq? (cadr state) s))
-                (list (make-diagnostic 'invalid-span-state (node-name n)
-                                       "span re-entry: this span is already open")))]]
+                (list (make-diagnostic/path 'invalid-span-state (node-name n)
+                                            "span re-entry: this span is already open"
+                                            path)))]]
   REPLACE [[               ((and (pair? state) (eq? (cadr state) s)) '())]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "reentry want .invalid-span-state. got .."
@@ -12121,8 +12256,9 @@ byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.differential.span.chez.source
   LABEL "verify: ending the wrong span is not rejected"
   FIND [[               ((pair? state)
-                (list (make-diagnostic 'invalid-span-state (node-name n)
-                                       "wrong end: a different span is open")))]]
+                (list (make-diagnostic/path 'invalid-span-state (node-name n)
+                                            "wrong end: a different span is open"
+                                            path)))]]
   REPLACE [[               ((pair? state) '())]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "wrong-end want .invalid-span-state. got .."

@@ -3559,4 +3559,359 @@
                                'default-eof #f)))
           (check-equal "no diagnostics" (codes m) '()))))))
 
+;; ============================================================================
+;; Milestone 7 Slice ①: the diagnostic record's four new fields (decision 0032)
+;; ============================================================================
+;; §16.4:937-943's seven fields now live in nine slots. These groups witness the
+;; four fields the 129 shipped accessor reads never touch -- severity (:938),
+;; machine (:939), declarations (:942), path (:943). Paths are compared by SHAPE
+;; only -- first element, last element, membership (§16.4:945, 0032 item 5),
+;; never as a whole list -- through #f-tolerant guards, so an absent path fails
+;; by comparison (`got #f`) rather than raising in `car`; that is what makes
+;; Task 6's empty-path mutants comparison catches too.
+(define (s1-diags m) (verification-diagnostics (verify-machine m)))
+(define (s1-diag m code)
+  (let loop ((ds (s1-diags m)))
+    (cond ((null? ds) #f)
+          ((eq? (diagnostic-code (car ds)) code) (car ds))
+          (else (loop (cdr ds))))))
+(define (s1-diag-at m code node)
+  (let loop ((ds (s1-diags m)))
+    (cond ((null? ds) #f)
+          ((and (eq? (diagnostic-code (car ds)) code)
+                (eq? (diagnostic-node (car ds)) node)) (car ds))
+          (else (loop (cdr ds))))))
+(define (path-first d) (let ((p (diagnostic-path d))) (and (pair? p) (car p))))
+(define (path-last  d) (let ((p (diagnostic-path d))) (and (pair? p) (car (reverse p)))))
+(define (path-has?  d n) (let ((p (diagnostic-path d))) (and (pair? p) (memq n p) #t)))
+
+;; Fresh fixtures, so the widening stays invisible: not one shipped line moves.
+(define (s1-error n) (make-error-node n 'rejected #f))
+(define (s1-one-case name target mode eof-target)
+  (make-byte-dispatch-node name
+    (list (make-byte-case (make-exact-byte-matcher 0) (make-edge target mode) #f))
+    (make-edge 'rej 'reexecute) eof-target #f))
+(define (s1-mach name entry fields nodes)
+  (make-machine name entry fields '() '() errs nodes 'default-eof #f))
+
+(harness-group "the widened record stamps severity and the machine name (0032 item 2)"
+  (lambda ()
+    (harness-case "every diagnostic of a machine carries error and the machine's name"
+      (lambda ()
+        ;; Three findings from three passes -- overlap, duplicate name, and an
+        ;; unreachable orphan -- all stamped once in `verify-machine`.
+        (let* ((m (s1-mach 'multi 'start '()
+                           (list (make-byte-dispatch-node 'start
+                                   (list (make-byte-case (make-byte-range-matcher 0 10)
+                                                         (make-edge 'stop 'advance) #f)
+                                         (make-byte-case (make-byte-range-matcher 5 20)
+                                                         (make-edge 'stop 'advance) #f))
+                                   (make-edge 'reject 'reexecute) #f #f)
+                                 (make-stop-node 'stop #f) (make-stop-node 'stop #f)
+                                 (make-stop-node 'orphan #f) (s1-error 'reject))))
+               (ds (s1-diags m))
+               (observed 0))
+          ;; check-equal, not a boolean check, so the three stamping mutations
+          ;; separate by their got: the dropped map gives `#f`, a wrong constant
+          ;; gives that constant, a warning severity gives `warning`.
+          (for-each (lambda (d)
+                      (set! observed (+ observed 1))
+                      (check-equal "diagnostic severity" (diagnostic-severity d) 'error)
+                      (check-equal "diagnostic machine stamp" (diagnostic-machine d) 'multi))
+                    ds)
+          ;; The sentinel reads the count it actually drove, never the fixture's
+          ;; own expectation, and asserts at least the three passes' findings.
+          (check-equal "the loop drove every diagnostic" observed (length ds))
+          (check "at least three findings from three passes" (>= observed 3)))))
+    (harness-case "a not-a-machine diagnostic carries error and machine #f (F5)"
+      (lambda ()
+        ;; `#f` here is the RULE, not a placeholder: `verify-machine` runs every
+        ;; pass but `pass-schema` only under `(machine? machine)`, so a diagnostic
+        ;; with no machine name is exactly one about a non-machine. `pass-schema`'s
+        ;; version arm is unconstructible through the public API, so its own
+        ;; machine-name answer is right by construction, not by a fixture.
+        (let ((d (s1-diag 'not-a-machine 'invalid-shape)))
+          (check "one shape finding for a non-machine" (and d #t))
+          (check-equal "non-machine severity" (diagnostic-severity d) 'error)
+          (check-equal "non-machine has no machine stamp" (diagnostic-machine d) #f))))
+    (harness-case "a single-finding machine stamps that one diagnostic once"
+      (lambda ()
+        ;; One finding, so each stamp assertion fires EXACTLY ONCE -- the single
+        ;; record Task 6's machine-stamp (got a wrong constant) and severity (got
+        ;; a warning) mutations each need to pin without matching the multi-fault
+        ;; loop's several identical records.
+        (let ((d (s1-diag (s1-mach 'solo 'start '()
+                                   (list (s1-one-case 'start 'stop 'advance #f)
+                                         (make-stop-node 'stop #f) (make-stop-node 'stop #f)
+                                         (s1-error 'rej)))
+                          'duplicate-name)))
+          (check "one duplicate-name finding" (and d #t))
+          (check-equal "single severity" (diagnostic-severity d) 'error)
+          (check-equal "single machine stamp" (diagnostic-machine d) 'solo))))))
+
+;; --- declarations, one per family (decision 0032 item 3, F12) ----------------
+(define (s1-cb name kind req keys default) (make-callback-declaration name kind req keys default #f))
+(define (s1-sp name data complete) (make-span-declaration name data complete #f))
+(define (s1-ok-nodes) (list (s1-one-case 'start 'stop 'advance #f)
+                            (make-stop-node 'stop #f) (s1-error 'rej)))
+(define (s1-decls name cbs sps ds nodes) (make-machine name 'start '() cbs sps ds nodes 'default-eof #f))
+
+(harness-group "each site's declarations list names its declaration (0032 item 3, F12)"
+  (lambda ()
+    (harness-case "the callback / span / error / field families each carry (list subject)"
+      (lambda ()
+        (check-equal "callback: invalid-callback-declaration names the callback"
+                     (diagnostic-declarations
+                      (s1-diag (s1-decls 'a (list (s1-cb 'cbx 'decision #f '(keep skip) #f))
+                                         '() errs (s1-ok-nodes))
+                               'invalid-callback-declaration))
+                     '(cbx))
+        (check-equal "span: duplicate-span-declaration names the span"
+                     (diagnostic-declarations
+                      (s1-diag (s1-decls 'a (list (s1-cb 'ond 'span-data #f '() #f))
+                                         (list (s1-sp 'body 'ond #f) (s1-sp 'body 'ond #f))
+                                         errs (s1-ok-nodes))
+                               'duplicate-span-declaration))
+                     '(body))
+        ;; Label carries no diagnostic-code token, so no shipped pin's
+        ;; output-match resolves onto this case's FAIL line (Task 2 Step 9).
+        (check-equal "the error family names its duplicated declaration"
+                     (diagnostic-declarations
+                      (s1-diag (make-machine 'a 'start '() '() '() (list eof-decl rej-decl rej-decl)
+                                             (s1-ok-nodes) 'default-eof #f)
+                               'duplicate-error-declaration))
+                     '(rejected))
+        (check-equal "field: invalid-field-declaration names the field"
+                     (diagnostic-declarations
+                      (s1-diag (make-machine 'a 'start
+                                             (list (make-uint-field 'n 8 0 #f)
+                                                   (make-uint-field 'n 8 0 #f))
+                                             '() '() errs (s1-ok-nodes) 'default-eof #f)
+                               'invalid-field-declaration))
+                     '(n))))
+    (harness-case "invalid-span-callback carries the span AND the callback (two names)"
+      (lambda ()
+        (check-equal "span then callback"
+                     (diagnostic-declarations
+                      (s1-diag (s1-decls 'a (list (s1-cb 'ondata 'event #f '() #f))
+                                         (list (s1-sp 'body 'ondata #f)) errs (s1-ok-nodes))
+                               'invalid-span-callback))
+                     '(body ondata))))
+    (harness-case "F12: the two span missing-callback-declaration sites name their callback"
+      (lambda ()
+        ;; Written under F12 ACCEPTED (the two span sites become two-element,
+        ;; matching the callback-node's missing-callback-declaration which item 3
+        ;; already gives its callback). If the reviewer overturns F12 these become
+        ;; one-element and the site records the asymmetry's reason.
+        (check-equal "span data callback: span then the undeclared name"
+                     (diagnostic-declarations
+                      (s1-diag (s1-decls 'a '() (list (s1-sp 'body 'nosuch #f)) errs (s1-ok-nodes))
+                               'missing-callback-declaration))
+                     '(body nosuch))))
+    (harness-case "the duplicate-branch-key PAIR: a list at the declaration, '() at the node"
+      (lambda ()
+        ;; The case that makes the per-site policy visible rather than accidental
+        ;; (F12's mirror): the declaration's key list is the subject there, while
+        ;; at the callback NODE the fault is the node's own key list and the
+        ;; callback resolved, so it carries no declaration.
+        (check-equal "declaration site names the callback"
+                     (diagnostic-declarations
+                      (s1-diag (s1-decls 'a (list (s1-cb 'cbx 'decision #t '(dup dup) #f))
+                                         '() errs (s1-ok-nodes))
+                               'duplicate-branch-key))
+                     '(cbx))
+        (check-equal "node site carries the empty list"
+                     (diagnostic-declarations
+                      (s1-diag-at (s1-decls 'a (list (s1-cb 'cbx 'decision #t '(keep) #f)) '()
+                                            errs (list (s1-one-case 'start 'inv 'advance #f)
+                                                       (make-callback-node 'inv 'cbx 'stop
+                                                         '((dup a1) (dup a2)) 'rej #f)
+                                                       (make-stop-node 'stop #f) (s1-error 'rej)))
+                                  'duplicate-branch-key 'inv))
+                     '())))))
+
+;; --- the eight path-bearing codes, one loop with an observed-count sentinel --
+;; Each row: (label code fixture expected-first expected-last expected-member
+;;            expected-count). Compared by shape only (0032 item 5), and the
+;; finding COUNT rides beside the path so an empty-path mutant (same count, `#f`
+;; path) is told apart from an emission-deleting one (one fewer) -- the widening
+;; mutant nesting inside the deleting one (Task 6 Steps 6-8).
+(define s1-path-table
+  (list
+   (list "zero-progress-cycle" 'zero-progress-cycle
+         (s1-mach 'a 'start '() (list (s1-one-case 'start 'start 'reexecute #f) (s1-error 'rej)))
+         'start 'start 'start 1)
+   (list "eof-reachable-stop" 'eof-reachable-stop
+         (s1-mach 'a 'start '() (list (s1-one-case 'start 'stop 'advance 'stop)
+                                      (make-stop-node 'stop #f) (s1-error 'rej)))
+         'start 'stop 'stop 1)
+   (list "eof-zero-progress-cycle" 'eof-zero-progress-cycle
+         (s1-mach 'a 'start '() (list (s1-one-case 'start 'stop 'advance 'x)
+                                      (s1-one-case 'x 'stop 'advance 'y)
+                                      (s1-one-case 'y 'stop 'advance 'x)
+                                      (make-stop-node 'stop #f) (s1-error 'rej)))
+         'start 'x 'y 1)
+   ;; TWO hops (entry -> mid -> fin), so the byte-edge path is not the trivial
+   ;; one the entry already carries: this is what catches "a byte parent is not
+   ;; recorded" (Task 6 Step 7), which leaves a source==entry fixture unchanged.
+   (list "non-eof-into-finish (edge)" 'non-eof-into-finish
+         (s1-mach 'a 'start '() (list (s1-one-case 'start 'mid 'advance #f)
+                                      (s1-one-case 'mid 'fin 'advance #f)
+                                      (make-finish-node 'fin #f) (s1-error 'rej)))
+         'start 'fin 'mid 1)
+   (list "invalid-span-state" 'invalid-span-state
+         (span-machine (append (list (entry-to 'op) (make-span-start-node 'op 'body 'op2 #f)
+                                     (make-span-start-node 'op2 'body 'cl #f)
+                                     (make-span-end-node 'cl 'body 'exit #f)) (span-tail/exit)))
+         'start 'op2 'op2 1)
+   (list "inconsistent-span-state" 'inconsistent-span-state
+         (span-machine (append (list (entry-fork 'op 'mrg) (make-span-start-node 'op 'body 'mrg #f)
+                                     (make-byte-dispatch-node 'mrg (list (case-to 'done))
+                                       (make-edge 'reject 'reexecute) #f #f)) (span-tail2)))
+         'start 'mrg 'mrg 1)
+   (list "span-active-at-pause" 'span-active-at-pause
+         (span-machine (append (list (entry-to 'op) (make-span-start-node 'op 'body 'p #f)
+                                     (make-pause-node 'p 'cl #f)
+                                     (make-span-end-node 'cl 'body 'exit #f)) (span-tail/exit)))
+         'start 'p 'p 1)
+   (list "span-active-at-exit" 'span-active-at-exit
+         (span-machine (append (list (entry-to 'op) (make-span-start-node 'op 'body 'done #f))
+                               (span-tail)))
+         'start 'done 'op 1)))
+
+(harness-group "each path-bearing code carries a path of the right shape (0032 items 4-5)"
+  (lambda ()
+    (harness-case "first, last and membership per code, with the finding count beside it"
+      (lambda ()
+        (let ((driven 0))
+          (for-each
+           (lambda (row)
+             (let* ((label (list-ref row 0)) (code (list-ref row 1)) (m (list-ref row 2))
+                    (efirst (list-ref row 3)) (elast (list-ref row 4))
+                    (emember (list-ref row 5)) (ecount (list-ref row 6))
+                    (d (s1-diag m code)) (ds (s1-diags m)))
+               (set! driven (+ driven 1))
+               (check (string-append label ": is emitted") (and d #t))
+               (check-equal (string-append label ": path starts at the walk start")
+                            (path-first d) efirst)
+               (check-equal (string-append label ": path ends at the reporting target")
+                            (path-last d) elast)
+               (check (string-append label ": the expected node is on the path")
+                      (path-has? d emember))
+               (check-equal (string-append label ": finding count") (length ds) ecount)))
+           s1-path-table)
+          ;; The sentinel reads the rows it drove, and the table's length is
+          ;; checked against it, so dropping a row cannot shrink the group silently.
+          (check-equal "drove eight path codes" driven 8)
+          (check-equal "the table has eight rows" (length s1-path-table) driven))))
+    (harness-case "a parked callback's path starts at its pause continuation, not the node"
+      (lambda ()
+        ;; 0032's Consequences: for a parked callback the walk starts at
+        ;; `parked-eof-start`'s answer -- the pause continuation -- and NOT at the
+        ;; reporting node. A test asserting the reporting node would pass for a
+        ;; dispatch and fail here; the design's first draft made that error.
+        (let ((d (s1-diag
+                  (make-machine 'a 'start '()
+                    (list (make-callback-declaration 'ev 'event #f '() #f #f)) '() errs
+                    (list (s1-one-case 'start 'cbn 'advance #f)
+                          (make-callback-node 'cbn 'ev 'k '() 'pc #f)
+                          (make-stop-node 'k #f) (make-stop-node 'pc #f) (s1-error 'rej))
+                    'default-eof #f)
+                  'eof-reachable-stop)))
+          (check "reported at the callback node" (eq? (diagnostic-node d) 'cbn))
+          (check-equal "path starts at the pause continuation" (path-first d) 'pc))))
+    (harness-case "a parked counted consume's path starts at its eof-target, not the node"
+      (lambda ()
+        ;; The second kind whose walk start differs from its name.
+        (let ((d (s1-diag
+                  (make-machine 'a 'start (list (make-uint-field 'n 8 0 #f)) '() '() errs
+                    (list (s1-one-case 'start 'cc 'advance #f)
+                          (make-counted-consume-node 'cc 'n 'nx 'et #f)
+                          (make-stop-node 'nx #f) (make-stop-node 'et #f) (s1-error 'rej))
+                    'default-eof #f)
+                  'eof-reachable-stop)))
+          (check "reported at the counted consume node" (eq? (diagnostic-node d) 'cc))
+          (check-equal "path starts at the eof-target" (path-first d) 'et))))
+    (harness-case "the zero-hop non-eof-into-finish path is the entry alone"
+      (lambda ()
+        (let ((d (s1-diag (make-machine 'a 'fin '() '() '() errs
+                                        (list (make-finish-node 'fin #f)) 'default-eof #f)
+                          'non-eof-into-finish)))
+          (check "reported at the entry" (eq? (diagnostic-node d) 'fin))
+          (check-equal "path first is the entry" (path-first d) 'fin)
+          (check-equal "path last is the entry" (path-last d) 'fin))))))
+
+(harness-group "a code no fixture emits has no path assertion passing vacuously (0032, negatives)"
+  (lambda ()
+    (harness-case "each path code is ABSENT one edit away from the fault"
+      (lambda ()
+        (let ((driven 0))
+          (for-each
+           (lambda (row)
+             (let ((label (car row)) (code (cadr row)) (m (caddr row)))
+               (set! driven (+ driven 1))
+               (check (string-append label ": absent") (not (has-code? m code)))))
+           (list
+            (list "zero-progress-cycle" 'zero-progress-cycle
+                  (s1-mach 'a 'start '() (list (s1-one-case 'start 'start 'advance #f)
+                                               (s1-error 'rej))))
+            (list "eof-reachable-stop" 'eof-reachable-stop
+                  (s1-mach 'a 'start '() (list (s1-one-case 'start 'stop 'advance 'fin)
+                                               (make-stop-node 'stop #f)
+                                               (make-finish-node 'fin #f) (s1-error 'rej))))
+            (list "eof-zero-progress-cycle" 'eof-zero-progress-cycle
+                  (s1-mach 'a 'start '() (list (s1-one-case 'start 'stop 'advance 'x)
+                                               (s1-one-case 'x 'stop 'advance 'stop)
+                                               (make-stop-node 'stop #f) (s1-error 'rej))))
+            (list "non-eof-into-finish" 'non-eof-into-finish
+                  (s1-mach 'a 'start '() (list (s1-one-case 'start 'stop 'advance #f)
+                                               (make-stop-node 'stop #f) (s1-error 'rej))))
+            (list "invalid-span-state" 'invalid-span-state
+                  (span-machine (append (list (entry-to 'op)
+                                              (make-span-start-node 'op 'body 'cl #f)
+                                              (make-span-end-node 'cl 'body 'exit #f))
+                                        (span-tail/exit))))
+            (list "inconsistent-span-state" 'inconsistent-span-state
+                  (span-machine (append (list (entry-to 'op)
+                                              (make-span-start-node 'op 'body 'cl #f)
+                                              (make-span-end-node 'cl 'body 'exit #f))
+                                        (span-tail/exit))))
+            (list "span-active-at-pause" 'span-active-at-pause
+                  (span-machine (append (list (entry-to 'p) (make-pause-node 'p 'done #f))
+                                        (span-tail))))
+            (list "span-active-at-exit" 'span-active-at-exit
+                  (span-machine (append (list (entry-to 'op)
+                                              (make-span-start-node 'op 'body 'cl #f)
+                                              (make-span-end-node 'cl 'body 'done #f))
+                                        (span-tail))))))
+          (check-equal "drove eight negatives" driven 8))))))
+
+(harness-group "the EOF join tie-break returns the left operand's path (0032 item 5, F10)"
+  (lambda ()
+    (harness-case "a tie within tier 1 keeps the LEFT branch's path"
+      (lambda ()
+        ;; A `t6-join-machine` variant whose field branch reaches TWO DISTINCT
+        ;; stop nodes: the distinctness is the whole fixture -- one shared stop
+        ;; makes the second branch a memo hit that returns the first's path, and
+        ;; `>=` vs `>` become uncatchable. `s1`(true) is the LEFT operand of the
+        ;; join, so the shipped `>=` reports the path through it; `>` would report
+        ;; the path through `s2`. This is the witness 0032 item 5's determinism
+        ;; sentence never had (F10).
+        (let ((d (s1-diag
+                  (make-machine 'j 's0 (list (make-uint-field 'n 8 0 #f)) '() '()
+                    (list eof-decl rej-decl)
+                    (list (make-byte-dispatch-node 's0
+                            (list (make-byte-case (make-exact-byte-matcher 0)
+                                                  (make-edge 's1 'advance) #f))
+                            (make-edge 'rj 'reexecute) 'br #f)
+                          (make-field-branch-node 'br 'zero '(n) 's1 's2 #f)
+                          (make-stop-node 's1 #f) (make-stop-node 's2 #f)
+                          (make-error-node 'rj 'rejected #f))
+                    'default-eof #f)
+                  'eof-reachable-stop)))
+          (check "reported at the entry dispatch" (eq? (diagnostic-node d) 's0))
+          (check-equal "path first is the entry" (path-first d) 's0)
+          (check-equal "path last is the LEFT branch's stop" (path-last d) 's1)
+          (check "the left stop is on the path" (path-has? d 's1)))))))
+
 (harness-finish)

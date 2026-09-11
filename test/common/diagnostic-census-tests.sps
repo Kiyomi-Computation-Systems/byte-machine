@@ -79,11 +79,13 @@
           (else acc))))
 
 (define (walk-diagnostics x)
-  ;; Both constructors count. `make-diagnostic/edge` (Slice ⓪b task 5) carries
-  ;; §16.4:940's edge label; it is an emission site exactly as much as the
-  ;; three-argument form, and a census that missed it would under-count the
-  ;; moment the tree started using it -- which is the failure this file exists
-  ;; to prevent, one level up.
+  ;; Every constructor counts -- four since Milestone 7 Slice ①
+  ;; (`make-diagnostic`, `/edge`, `/declarations`, `/path`), all in the derived
+  ;; `diagnostic-constructors` set. `make-diagnostic/edge` (Slice ⓪b task 5)
+  ;; carries §16.4:940's edge label; it is an emission site exactly as much as the
+  ;; three-argument form, and a census that missed any constructor would
+  ;; under-count the moment the tree started using it -- which is the failure this
+  ;; file exists to prevent, one level up.
   (let loop ((x x) (codes '()) (total 0))
     (cond ((pair? x)
            (if (memq (car x) diagnostic-constructors)
@@ -522,5 +524,82 @@
           (check-equal "no source code lacks a fixture" missing '())
           (check-equal "and every source code was driven"
                        driven (length (distinct (census-codes the-census)))))))))
+
+;; --- the path row (decision 0032 item 6, Milestone 7 Slice ①) ---------------
+;; Derived on both halves it can derive, the way the code census is: the
+;; path-carrying CONSTRUCTOR set from each constructor's own parameter list, and
+;; the per-constructor SITE table from the same datum walk. Only the path-bearing
+;; CODE set is DECLARED, because it is the policy of decision 0032 item 4 and not
+;; a property of the source -- so this row goes red under BOTH of Task 6's census
+;; mutations: a path site made pathless (the site table moves) and a path site
+;; relabelled out of the set (the code set moves).
+(define (form-count-of ctor)
+  ;; Every form whose car is `ctor`: its N call sites plus the ONE `(define
+  ;; (ctor …) …)` header, which is subtracted by name below exactly as the shipped
+  ;; `quoted sites plus one header per constructor` identity subtracts it.
+  (let loop ((x (car verify-src)) (n 0))
+    (cond ((pair? x) (loop (cdr x) (loop (car x) (if (eq? (car x) ctor) (+ n 1) n))))
+          ((vector? x) (loop (vector->list x) n))
+          (else n))))
+(define (site-count-of ctor) (- (form-count-of ctor) 1))
+(define (constructor-formals name)
+  ;; The formals of `(define (name . formals) …)`, or #f. A constructor written
+  ;; `(define name (lambda …))` would return #f here and drop out of the
+  ;; path-carrying set silently -- which is why every constructor uses the
+  ;; `(define (name …) …)` form (F3).
+  (let loop ((x (car verify-src)))
+    (cond ((not (pair? x)) #f)
+          ((and (eq? (car x) 'define) (pair? (cdr x)) (pair? (cadr x))
+                (eq? (car (cadr x)) name))
+           (cdr (cadr x)))
+          (else (or (loop (car x)) (loop (cdr x)))))))
+(define path-carrying-constructors
+  (filter (lambda (c) (let ((fs (constructor-formals c))) (and fs (memq 'path fs) #t)))
+          diagnostic-constructors))
+(define (codes-under ctors)
+  ;; The quoted codes of every emission site whose constructor is in `ctors`.
+  (let loop ((x (car verify-src)) (acc '()))
+    (cond ((pair? x)
+           (if (memq (car x) ctors)
+               (let ((q (and (pair? (cdr x)) (pair? (cadr x))
+                             (eq? (car (cadr x)) 'quote) (cadr (cadr x)))))
+                 (loop (cdr x) (if q (cons q acc) acc)))
+               (loop (cdr x) (loop (car x) acc))))
+          ((vector? x) (loop (vector->list x) acc))
+          (else acc))))
+;; Decision 0032 item 4's policy, cited rather than derived: the eight codes a
+;; path is carried for, and #f everywhere else.
+(define path-bearing-codes-declared
+  '(eof-reachable-stop eof-zero-progress-cycle zero-progress-cycle non-eof-into-finish
+    invalid-span-state inconsistent-span-state span-active-at-pause span-active-at-exit))
+
+(harness-group "the path row is total over the census (decision 0032 items 4 and 6)"
+  (lambda ()
+    (harness-case "four constructors, and the path-carrying pair derived from their arglists"
+      (lambda ()
+        (check-equal "four diagnostic constructors" (length diagnostic-constructors) 4)
+        (check-equal "the path-carrying constructors are /edge and /path"
+                     (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b)))
+                                path-carrying-constructors)
+                     '(make-diagnostic/edge make-diagnostic/path))))
+    (harness-case "the per-constructor site table sums to the fifty-six sites"
+      (lambda ()
+        (check-equal "make-diagnostic sites" (site-count-of 'make-diagnostic) 14)
+        (check-equal "make-diagnostic/declarations sites"
+                     (site-count-of 'make-diagnostic/declarations) 30)
+        (check-equal "make-diagnostic/path sites" (site-count-of 'make-diagnostic/path) 11)
+        (check-equal "make-diagnostic/edge sites" (site-count-of 'make-diagnostic/edge) 1)
+        (check-equal "the site total is fifty-six"
+                     (apply + (map site-count-of diagnostic-constructors)) 56)
+        (check-equal "twelve path-carrying sites"
+                     (apply + (map site-count-of path-carrying-constructors)) 12)))
+    (harness-case "the path-bearing code set is exactly item 4's eight codes"
+      (lambda ()
+        (let ((sortsym (lambda (l) (list-sort (lambda (a b) (string<? (symbol->string a)
+                                                                      (symbol->string b)))
+                                              l))))
+          (check-equal "the codes emitted through a path constructor equal the declared policy"
+                       (sortsym (distinct (codes-under path-carrying-constructors)))
+                       (sortsym path-bearing-codes-declared)))))))
 
 (harness-finish)
