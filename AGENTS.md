@@ -192,6 +192,18 @@
   so. After re-anchoring, read the `FIND` and the `REPLACE` **together** and ask
   what single decision separates them. A swap pair — where each mutation's
   `REPLACE` is the other's `FIND` — must move in lockstep for the same reason.
+  Milestone 7 Slice ① measured a third shape a FIND-movement census cannot see: a
+  pin whose `FIND` did **not** move — so a re-anchoring pass keyed on which FINDs
+  went stale never re-examined it — but whose `REPLACE` named a construct the slice
+  **re-contracted**. When the slice renamed `reaches-self?`→`self-cycle`, made
+  `eof-terminal` answer a `(verdict path)` pair and `reach-from` return a
+  `(name . parent)` alist, two such pins broke: `pass 4`'s `REPLACE` called
+  `(reach-from …)` for its old list-of-names return, and arm 5's `REPLACE`
+  returned a bare `'default-error` where the walk now needs `(verdict 'default-error
+  path)`. Both were caught only by the lane's own "wrong reason" guard, and both
+  `got`s were unchanged once the `REPLACE` matched the new contract. So when a
+  slice renames or re-contracts a construct, grep every pin's `REPLACE` (and `FIND`)
+  for that construct across **all** pins, not only the pins whose `FIND` moved.
 
 * **Judge a pin against the other mutants in its lane, not by reading it.**
   Static inspection cannot see a collision; re-judging each pin through
