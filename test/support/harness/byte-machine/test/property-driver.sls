@@ -33,7 +33,7 @@
 (library (byte-machine test property-driver)
   (export schedules-for schedules-per-input
           run-machine run-machine-verdict run-one-trial
-          fixture-text
+          fixture-text minimize machine-node-count
           make-counter-set observe-counters counter-ref counter-keys counter-labels family-members
           counter-agreed-label counter-interp-label
           make-rejection* rejection? rejection-index rejection-machine
@@ -575,42 +575,39 @@
   ;; is present, and exits 0 once it is fixed (§4.7's "exits 1 on the disagreement
   ;; and 0 when fixed"; the polarity P3 measured as "FAIL … the lanes agree").
   ;;   m script schedule input : the trial to reproduce.
-  ;;   gen-file    : basename the fixture emits its generated lane to, BESIDE itself
-  ;;                 (F6: Chez does not register a `(library …)` form through eval,
-  ;;                 so the fixture writes a .sls into BYTE_MACHINE_TEST_TMPDIR when
-  ;;                 set else ".", and loads it -- the launcher runs it from that dir).
-  ;;   invocation  : the F5 header comment (already ";;"-prefixed, newline-terminated)
-  ;;                 the lane computed from (command-line-arguments): the exact
-  ;;                 provenance-unset `chez … chez-source.ss … --program <this file>`.
-  ;;   preamble    : extra top-level forms ('() for an honest saver; the probe's
-  ;;                 `perturb` definition otherwise).
-  ;;   gen-expr    : the datum bound to `gen`, with `gen-honest` in scope --
-  ;;                 `gen-honest` for an honest saver, the lying slot-2 wrapper (F7)
-  ;;                 for the probe.
-  (define (fixture-text machine-datum script schedule input gen-file invocation preamble gen-expr)
+  ;;   invocation : the F5 header comment (already ";;"-prefixed, newline-terminated)
+  ;;                the lane computed from (command-line-arguments): the exact
+  ;;                provenance-unset `chez … chez-source.ss … --program <this file>`.
+  ;;   preamble   : extra top-level forms ('() honest; the probe's `perturb` def).
+  ;;   gen-expr   : the datum bound to `gen`, with `ref` in scope -- `ref` itself for
+  ;;                an honest fixture (which then agrees and exits 0), or the lying
+  ;;                slot-2 wrapper of REF's op for the probe (F7).
+  ;;
+  ;; The fixture builds BOTH lanes from the interpreter and EMITS NOTHING. F7's lie
+  ;; can only wrap the message-dispatch op, which is the INTERPRETER variant's -- the
+  ;; generated variant's slot 2 is a step function of a different arity (measured:
+  ;; wrapping it raises "incorrect number of arguments"). So the deliberate-failure
+  ;; probe needs no generated lane and no writable directory: F6's "the fixture emits
+  ;; a generated lane" does not hold for it (Task 12 corrects F6), and "without
+  ;; external tooling" (§25:1627) is the stronger for it -- chez, the launcher, the
+  ;; tree, and not one byte written. A fixture reproducing a REAL interpreter/generated
+  ;; disagreement would instead build one lane by emission; that is not this probe.
+  (define (fixture-text machine-datum script schedule input invocation preamble gen-expr)
     (let ((forms
            (append
             (list
-             '(import (rnrs) (rnrs eval) (only (chezscheme) load)
+             '(import (rnrs)
                       (byte-machine test harness) (byte-machine test property-driver)
                       (byte-machine graph) (byte-machine verify) (byte-machine interpret)
-                      (byte-machine runtime) (byte-machine compile))
+                      (byte-machine runtime))
              (list 'define 'machine machine-datum)
              (list 'define 'script (list 'quote script))
              (list 'define 'schedule (list 'quote schedule))
              (list 'define 'input input)
-             '(define gen-dir
-                (let ((d (adapter-environment-variable "BYTE_MACHINE_TEST_TMPDIR")))
-                  (if (and d (not (string=? d ""))) d ".")))
-             (list 'define 'gen-file-path (list 'string-append 'gen-dir "/" gen-file))
-             '(call-with-port (open-file-output-port gen-file-path (file-options no-fail))
-                (lambda (p) (emit-machine (compile-machine machine '()) 'gen-parser p)))
-             '(load gen-file-path)
-             '(define gen-honest (eval 'gen-parser (environment '(generated gen)))))
+             '(define ref (make-interpreted-machine (verify-machine machine))))
             preamble
             (list
              (list 'define 'gen gen-expr)
-             '(define ref (make-interpreted-machine (verify-machine machine)))
              '(harness-begin "fixture")
              '(harness-group "reproduction"
                 (lambda ()
@@ -624,6 +621,228 @@
        (lambda (port)
          (put-string port invocation)
          (for-each (lambda (f) (write f port) (newline port) (newline port)) forms)))))
+
+  ;; ============ the minimizer (Slice ③, §4.7) =================================
+  ;; A PURE greedy reducer over (machine script input schedule): a fixed sequence of
+  ;; reductions, each candidate accepted iff the reduced machine VERIFIES (validity
+  ;; oracle: the shipped verify-machine) AND the reduced trial STILL DISAGREES
+  ;; (failure oracle: `fail-oracle`, injected by the lane because only the lane knows
+  ;; how the gen lane was built -- honest, or the probe's lie). Deterministic (fixed
+  ;; candidate order, first accepted wins, restart), bounded to `bound` failure-oracle
+  ;; calls (each rebuilds/emits a gen lane), and TERMINATING because every accepted
+  ;; reduction strictly decreases `tuple-size`, which is bounded below by zero. Its
+  ;; output is (values machine script input schedule) -- the minimized trial, which
+  ;; the lane saves through the SAME saver (fixture-text) as the raw one.
+  ;;
+  ;; It introduces no third notion of validity or failure (§4.7): validity is the
+  ;; verifier's verdict, failure is run-one-trial's (via fail-oracle).
+
+  ;; -- structural size: a node's weight reflects its content, so replacing a rich
+  ;; node with a fresh error sink (remove-node, below) strictly shrinks the machine
+  ;; even though the node COUNT is unchanged; a trivial node replaced by a sink does
+  ;; not shrink, and the `smaller?` guard then skips that no-progress removal.
+  (define (node-weight n)
+    (cond ((byte-dispatch-node? n) (+ 1 (length (byte-dispatch-node-cases n))))
+          ((sequence-dispatch-node? n) (+ 1 (length (sequence-dispatch-node-cases n))))
+          ((callback-node? n) (+ 1 (length (callback-node-branch-targets n))))
+          (else 1)))
+  (define (machine-node-count m) (length (machine-nodes m)))
+  (define (tuple-size m script input schedule)
+    (+ (apply + (map node-weight (machine-nodes m)))
+       (length (machine-fields m)) (length (machine-callbacks m))
+       (length (machine-spans m)) (length (machine-errors m))
+       (bytevector-length input) (length schedule)))
+
+  ;; -- target renaming, per node kind (mirrors the printer's arm structure): every
+  ;; NODE-target slot passes through `rename`; declaration/field/callback/span name
+  ;; references (error-node's declaration, a field/callback/span reference) are NOT
+  ;; node targets and are left alone. field-action's `error` and integer-accumulate's
+  ;; `overflow-error` ARE node targets (ir.sls says both name a target node).
+  (define (rename-edge e rename) (make-edge (rename (edge-target e)) (edge-mode e)))
+  (define (rt rename t) (if (symbol? t) (rename t) t))     ; target-or-#f
+  (define (rename-targets n rename)
+    (cond
+      ((byte-dispatch-node? n)
+       (make-byte-dispatch-node (byte-dispatch-node-name n)
+         (map (lambda (c) (make-byte-case (byte-case-matcher c)
+                            (rename-edge (byte-case-edge c) rename) (byte-case-source-label c)))
+              (byte-dispatch-node-cases n))
+         (rename-edge (byte-dispatch-node-fallback n) rename)
+         (rt rename (byte-dispatch-node-eof-target n)) (byte-dispatch-node-source-label n)))
+      ((sequence-dispatch-node? n)
+       (make-sequence-dispatch-node (sequence-dispatch-node-name n)
+         (map (lambda (c) (make-sequence-case (sequence-case-bytes c)
+                            (rename (sequence-case-target c)) (sequence-case-source-label c)))
+              (sequence-dispatch-node-cases n))
+         (rename-edge (sequence-dispatch-node-mismatch n) rename)
+         (rt rename (sequence-dispatch-node-eof-target n)) (sequence-dispatch-node-source-label n)))
+      ((pause-node? n)
+       (make-pause-node (pause-node-name n) (rename (pause-node-continuation n))
+                        (pause-node-source-label n)))
+      ((field-action-node? n)
+       (make-field-action-node (field-action-node-name n) (field-action-node-operation n)
+         (field-action-node-arguments n) (rename (field-action-node-next n))
+         (rt rename (field-action-node-error n)) (field-action-node-source-label n)))
+      ((field-branch-node? n)
+       (make-field-branch-node (field-branch-node-name n) (field-branch-node-predicate n)
+         (field-branch-node-arguments n) (rename (field-branch-node-true-target n))
+         (rename (field-branch-node-false-target n)) (field-branch-node-source-label n)))
+      ((integer-accumulate-node? n)
+       (make-integer-accumulate-node (integer-accumulate-node-name n)
+         (integer-accumulate-node-field n) (integer-accumulate-node-base n)
+         (rename (integer-accumulate-node-digit-target n))
+         (rename-edge (integer-accumulate-node-nondigit-edge n) rename)
+         (rename (integer-accumulate-node-overflow-error n))
+         (rt rename (integer-accumulate-node-eof-target n)) (integer-accumulate-node-source-label n)))
+      ((callback-node? n)
+       (make-callback-node (callback-node-name n) (callback-node-callback n)
+         (rename (callback-node-continue-target n))
+         (map (lambda (b) (list (car b) (rename (cadr b)))) (callback-node-branch-targets n))
+         (rename (callback-node-pause-continuation n)) (callback-node-source-label n)))
+      ((span-start-node? n)
+       (make-span-start-node (span-start-node-name n) (span-start-node-span n)
+         (rename (span-start-node-next n)) (span-start-node-source-label n)))
+      ((span-end-node? n)
+       (make-span-end-node (span-end-node-name n) (span-end-node-span n)
+         (rename (span-end-node-next n)) (span-end-node-source-label n)))
+      ((counted-consume-node? n)
+       (make-counted-consume-node (counted-consume-node-name n) (counted-consume-node-field n)
+         (rename (counted-consume-node-next n)) (rt rename (counted-consume-node-eof-target n))
+         (counted-consume-node-source-label n)))
+      (else n)))            ; stop / finish / error: no node targets
+
+  (define (rebuild-machine m nodes)
+    (make-machine (machine-name m) (machine-entry m) (machine-fields m) (machine-callbacks m)
+      (machine-spans m) (machine-errors m) nodes (machine-default-eof-error m)
+      (machine-source-label m)))
+  (define (replace-node m name n2)
+    (rebuild-machine m (map (lambda (n) (if (eq? (node-name n) name) n2 n)) (machine-nodes m))))
+
+  ;; remove NODE victim: every in-edge is retargeted to a FRESH error node OF ITS OWN
+  ;; (Task 5 Step 4). Never a shared sink -- a shared sink joins `none` with (active s)
+  ;; inside a span and stops every subsequent reduction at inconsistent-span-state
+  ;; (decision 0029 item 2). The sink references the machine's first declared error,
+  ;; and its name is portable (lowercase/hyphen), so the verifier accepts the name.
+  (define (remove-node m victim)
+    (let* ((errname (if (pair? (machine-errors m))
+                        (error-declaration-name (car (machine-errors m)))
+                        (machine-default-eof-error m)))
+           (fresh (string->symbol (string-append "min-sink-" (symbol->string victim))))
+           (rename (lambda (t) (if (eq? t victim) fresh t)))
+           (kept (filter (lambda (n) (not (eq? (node-name n) victim))) (machine-nodes m)))
+           (renamed (map (lambda (n) (rename-targets n rename)) kept)))
+      (rebuild-machine m (append renamed (list (make-error-node fresh errname #f))))))
+
+  (define (indices xs) (let loop ((i 0) (xs xs)) (if (null? xs) '() (cons i (loop (+ i 1) (cdr xs))))))
+  (define (list-head xs k) (if (= k 0) '() (cons (car xs) (list-head (cdr xs) (- k 1)))))  ; not in (rnrs)
+  (define (drop-index xs i)
+    (let loop ((j 0) (xs xs)) (cond ((null? xs) '()) ((= j i) (cdr xs)) (else (cons (car xs) (loop (+ j 1) (cdr xs)))))))
+  (define (bytevector-drop bv i)
+    (let ((n (bytevector-length bv)))
+      (let ((out (make-bytevector (- n 1))))
+        (do ((k 0 (+ k 1)) (o 0 (if (= k i) o (+ o 1))))
+            ((= k n) out)
+          (unless (= k i) (bytevector-u8-set! out o (bytevector-u8-ref bv k)))))))
+
+  ;; The reductions, in §4.7's order. Each maps the current trial to a list of
+  ;; candidate trials (m script input schedule); the driver's verify+fail-oracle
+  ;; guards decide which are kept. Reductions that need no graph surgery (input and
+  ;; schedule shrinks) are pure list edits.
+  (define (red-remove-node m s i sch)
+    (map (lambda (n) (list (remove-node m (node-name n)) s i sch))
+         (filter (lambda (n) (not (eq? (node-name n) (machine-entry m)))) (machine-nodes m))))
+  (define (red-remove-case m s i sch)
+    (apply append
+      (map (lambda (N)
+             (cond
+               ((byte-dispatch-node? N)
+                (map (lambda (k)
+                       (list (replace-node m (node-name N)
+                               (make-byte-dispatch-node (byte-dispatch-node-name N)
+                                 (drop-index (byte-dispatch-node-cases N) k)
+                                 (byte-dispatch-node-fallback N) (byte-dispatch-node-eof-target N)
+                                 (byte-dispatch-node-source-label N)))
+                             s i sch))
+                     (indices (byte-dispatch-node-cases N))))
+               ;; a sequence-dispatch needs >=1 case (make-sequence-dispatch-node), so
+               ;; only drop when more than one remains.
+               ((and (sequence-dispatch-node? N) (> (length (sequence-dispatch-node-cases N)) 1))
+                (map (lambda (k)
+                       (list (replace-node m (node-name N)
+                               (make-sequence-dispatch-node (sequence-dispatch-node-name N)
+                                 (drop-index (sequence-dispatch-node-cases N) k)
+                                 (sequence-dispatch-node-mismatch N) (sequence-dispatch-node-eof-target N)
+                                 (sequence-dispatch-node-source-label N)))
+                             s i sch))
+                     (indices (sequence-dispatch-node-cases N))))
+               (else '())))
+           (machine-nodes m))))
+  ;; remove a declaration (a field / callback / span / error). §4.7's "unnamed
+  ;; declaration": rather than re-derive referencedness, offer each and let the
+  ;; verifier reject a referenced one -- a removable declaration is exactly one whose
+  ;; removal still verifies.
+  (define (red-remove-declaration m s i sch)
+    (append
+     (map (lambda (k) (list (rebuild-with m 'fields (drop-index (machine-fields m) k)) s i sch)) (indices (machine-fields m)))
+     (map (lambda (k) (list (rebuild-with m 'callbacks (drop-index (machine-callbacks m) k)) s i sch)) (indices (machine-callbacks m)))
+     (map (lambda (k) (list (rebuild-with m 'spans (drop-index (machine-spans m) k)) s i sch)) (indices (machine-spans m)))
+     (map (lambda (k) (list (rebuild-with m 'errors (drop-index (machine-errors m) k)) s i sch)) (indices (machine-errors m)))))
+  (define (rebuild-with m which coll)
+    (make-machine (machine-name m) (machine-entry m)
+      (if (eq? which 'fields) coll (machine-fields m))
+      (if (eq? which 'callbacks) coll (machine-callbacks m))
+      (if (eq? which 'spans) coll (machine-spans m))
+      (if (eq? which 'errors) coll (machine-errors m))
+      (machine-nodes m) (machine-default-eof-error m) (machine-source-label m)))
+  (define (red-drop-input-byte m s i sch)
+    (map (lambda (k)
+           (let ((i2 (bytevector-drop i k)))
+             (list m s i2 (list (list i2 0 (bytevector-length i2))))))
+         (indices (bytevector->u8-list i))))
+  ;; merge two ADJACENT contiguous slices of the same bytevector into one feed.
+  (define (red-merge-feeds m s i sch)
+    (let loop ((k 0) (acc '()))
+      (if (>= k (- (length sch) 1)) (reverse acc)
+          (let ((a (list-ref sch k)) (b (list-ref sch (+ k 1))))
+            (loop (+ k 1)
+                  (if (and (eq? (car a) (car b)) (= (caddr a) (cadr b)))   ; same bv, a.end = b.start
+                      (cons (list m s i
+                                  (append (list-head sch k)
+                                          (list (list (car a) (cadr a) (caddr b)))
+                                          (list-tail sch (+ k 2))))
+                            acc)
+                      acc))))))
+  ;; drop the trailing feed (§4.7's "drop a resume or the finish": shortening the
+  ;; schedule ends the trial earlier; a dropped resume tends to make both lanes hit
+  ;; the same contract condition, i.e. AGREEMENT, so the oracle usually rejects it).
+  (define (red-drop-trailing-feed m s i sch)
+    (if (> (length sch) 1) (list (list m s i (list-head sch (- (length sch) 1)))) '()))
+
+  (define (minimize machine script input schedule fail-oracle bound)
+    (let ((emissions 0))
+      (define (verifies? m) (verification-ok? (verify-machine m)))
+      (define (still-fails? m s i sch)
+        (and (< emissions bound)
+             (begin (set! emissions (+ emissions 1))
+                    (not (eq? (fail-oracle m s i sch) 'none)))))
+      (define (candidates cur)
+        (let ((m (car cur)) (s (cadr cur)) (i (caddr cur)) (sch (cadddr cur)))
+          (append (red-remove-node m s i sch) (red-remove-case m s i sch)
+                  (red-remove-declaration m s i sch) (red-drop-input-byte m s i sch)
+                  (red-merge-feeds m s i sch) (red-drop-trailing-feed m s i sch))))
+      (let loop ((cur (list machine script input schedule)))
+        (let ((cur-size (apply tuple-size cur)))
+          (let try ((cs (candidates cur)))
+            (cond
+             ((or (null? cs) (>= emissions bound))
+              (values (car cur) (cadr cur) (caddr cur) (cadddr cur)))
+             (else
+              (let* ((c (car cs)) (cm (car c)) (cs2 (cadr c)) (ci (caddr c)) (csch (cadddr c)))
+                (if (and (< (apply tuple-size c) cur-size)
+                         (verifies? cm)
+                         (still-fails? cm cs2 ci csch))
+                    (loop c)
+                    (try (cdr cs)))))))))))
   ;; Bind every declared callback (required ones MUST be bound; optionals MAY be).
   ;; §4.4's "optional callbacks bound in half the draws" governs which PATHS run,
   ;; not the 96 counters, so binding all is valid here; the coverage segment's
