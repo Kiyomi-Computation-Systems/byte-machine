@@ -97,7 +97,7 @@ exactness, coalesced invariance and the error path — a body-shaped arm in the
 retention lane, and the close-out: the `§25:1593-1609` disposition against the
 tree, `§4.11`'s five obligations disposed, and the reachability narrowing handed
 to Milestone 7 under `§25:1611` with both ends written. No mechanism was added:
-the slice's source diff is one comment. Milestone 7 (verification and generative hardening) is **in progress**. Its Gate 0 discharged **2026-09-06** as decisions 0031-0033 (PR #85), and Slice ⓪ closed **2026-09-07**: `pass-reachability` walks the occupiable relation — `byte-reached` plus the EOF walk from the parked set — so "unreachable" quantifies over what an execution can occupy rather than over a walk that crossed an eof-target and then kept taking byte edges. The parked set is one procedure with three consumers, `all-out-targets` is retired, and the `E →(eof) T →(byte) Z` family it was hiding is rejected and pinned both ways for each of the three kinds it can hold. No diagnostic code and no emission site were added and the census did not move. No versioned release exists yet.
+the slice's source diff is one comment. Milestone 7 (verification and generative hardening) is **in progress**. Its Gate 0 discharged **2026-09-06** as decisions 0031-0033 (PR #85), and Slice ⓪ closed **2026-09-07**: `pass-reachability` walks the occupiable relation — `byte-reached` plus the EOF walk from the parked set — so "unreachable" quantifies over what an execution can occupy rather than over a walk that crossed an eof-target and then kept taking byte edges. The parked set is one procedure with three consumers, `all-out-targets` is retired, and the `E →(eof) T →(byte) Z` family it was hiding is rejected and pinned both ways for each of the three kinds it can hold. No diagnostic code and no emission site were added and the census did not move. Slice ① landed **2026-09-10**: the diagnostic record widened to `§16.4`'s seven fields in nine slots, adding `diagnostic-severity`, `diagnostic-machine`, `diagnostic-declarations` and `diagnostic-path`, and eight codes now carry a representative graph path — from the EOF walk's `(verdict path)` answer, `self-cycle`'s returned cycle, `reach-from`'s parent alist and `pass-spans`'s edge-list parent map. No verdict moved: the 129 shipped accessor reads pass with the record widened and no shipped case edited, and the census still reads thirty codes over fifty-six sites. No versioned release exists yet.
 
 ### Added
 
@@ -828,6 +828,15 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   passes / 236 mutations**, 227 caught; every other number above is unchanged
   and was re-measured, including the three fingerprints, both goldens and the
   nine `EXPECT_SURVIVES`.
+- **The diagnostic record carries `§16.4:937-943`'s seven fields**, and four new
+  accessors are exported from `(byte-machine verify)`: `diagnostic-severity`
+  (`error` for every finding; warnings remain a policy `§16.4:947` defers),
+  `diagnostic-machine` (the machine's name, `#f` for the not-a-machine arm),
+  `diagnostic-declarations` (the declaration names a finding names beside its
+  node) and `diagnostic-path` (a representative graph path — first element, last
+  element and membership are what a test compares, `§16.4:945`) for the eight
+  codes whose finding is about a path. The four shipped accessors and their 129
+  reads are unaffected (Milestone 7 Slice ①, decision 0032).
 
 ### Changed
 

@@ -4,6 +4,10 @@ Date: 2026-09-06
 Status: accepted
 Milestone: 7, Gate 0 (milestone-7-design.md §4.2)
 
+> **2026-09-10, Slice ① implemented** — corrects three **instructions** in items 3
+> and 4 in place (each marked at its site) and adds the **Note** at the foot; the
+> Context is untouched. See the foot note.
+
 ## Context
 
 Decided against `main` at `50516af` — the Milestone 7 design (PR #83) and its Gate 0
@@ -127,10 +131,15 @@ pass a non-empty list, by code:
   comment) and pass `'()`;
 - `missing-callback-declaration` and the three `invalid-callback-invocation` sites at
   a callback node — `cn`, the callback the node invokes;
+- the two **span** `missing-callback-declaration` sites — `(list (span-declaration-name
+  sd) dn)` and `… cn` — the span **and** the callback it names *(corrected 2026-09-10,
+  Slice ①: these were omitted here; see the foot note and Slice ① finding F12)*;
 - `missing-span-declaration` — the span the node names.
 
-Every other site is untouched: `make-diagnostic` and `make-diagnostic/edge` keep
-their arities and fill the new slots with `'()` and `#f`; the sites that carry a
+Every other site is untouched: `make-diagnostic` keeps its arity and fills the new
+slots with `'()` and `#f`; `make-diagnostic/edge` **gains a fifth `path` parameter**
+*(corrected 2026-09-10, Slice ①: its one call site is a path site, so a four-argument
+arity would leave it dead — see the foot note and finding F4)*; the sites that carry a
 declaration list or a path call new constructors whose names begin `make-diagnostic`,
 so the census counts them without an edit. About thirty sites gain a `declarations` argument and the twelve
 path-bearing sites (item 4) a path — forty-two of fifty-six; the fourteen that keep
@@ -145,7 +154,7 @@ and `#f` everywhere else:
 | Code | Path carried | Produced by |
 | --- | --- | --- |
 | `eof-reachable-stop`, `eof-zero-progress-cycle` | the EOF walk's stack from `parked-eof-start`'s answer for the reporting node — the node itself, a parked callback's pause continuation, a parked counted consume's eof-target — to the stop, or around the cycle | `eof-terminal`'s `walk`: `path` already is the DFS stack; the walk returns the verdict and its path as a two-element `list`, never a `(cons 'verdict …)` pair (Context: `edge-roles-in-source` would collect the symbol as an edge role and the matrix would go red on its baseline); `eof-verdict-join` keeps the surviving verdict's path, its left operand on a tie |
-| `zero-progress-cycle` | the cycle, from the reporting node back to itself | `reaches-self?` gains parent links |
+| `zero-progress-cycle` | the cycle, from the reporting node back to itself | `self-cycle` returns the cycle *(renamed from `reaches-self?` 2026-09-10, Slice ① F9: a `?` name that answers a list lies)* |
 | `non-eof-into-finish` | the byte path from the entry to the source node, then the offending edge's target | `reach-from` gains a parent map; the zero-hop entry clause ("the entry is a finish terminal") carries the one-element path |
 | `invalid-span-state`, `inconsistent-span-state`, `span-active-at-pause`, `span-active-at-exit` | a path from the entry to the node over `span-flow`'s edge relation | a parent map computed once from the edge list, before the fixpoint |
 | every other code | `#f` | — |
@@ -197,3 +206,39 @@ path-bearing code cannot ship pathless.
   warnings (`§16.4:947` defers it; the field is a constant until it is not); a
   diagnostic renderer; a diagnostic catalog (`§27:1696`); a path for
   `unreachable-node` (none, by item 4 — decision 0031 says the same).
+
+## Note — 2026-09-10, Milestone 7 Slice ① (implemented)
+
+Slice ① implemented this record. Three of the **instructions** above were corrected
+in place, each marked at its site; the **Context** is a record measured at `50516af`
+and is untouched, so where this slice measured differently the difference is named
+here rather than written back.
+
+- **Item 3, `make-diagnostic/edge`'s arity (F4).** The clause "`make-diagnostic` and
+  `make-diagnostic/edge` keep their arities" was wrong for `/edge`: item 4 puts both
+  `non-eof-into-finish` sites in the path set, and `/edge`'s one call site is one of
+  them, so keeping the four-argument arity would leave it dead code. It gains a fifth
+  `path` parameter and keeps its name, its call site and its five test reads.
+- **Item 3, the two span `missing-callback-declaration` sites (F12).** Item 3 gave the
+  callback **node**'s `missing-callback-declaration` its callback but not the two
+  **span** sites theirs, though the undeclared name is in scope at both. Following the
+  item's own principle — a site that names a declaration beside a node passes it — the
+  two span sites now carry `(list (span-declaration-name sd) dn)` and `… cn`. No count
+  moves; only the contents at two of the thirty declaration sites change. **This was a
+  scope call the plan flagged for the reviewer** and may be overturned; if it is, the
+  two sites revert to the one-element list and the asymmetry is recorded at the sites.
+- **Item 4, the walk's name (F9).** `reaches-self?` is renamed `self-cycle`: its
+  contract changed from a `#t`/`#f` answer to the cycle itself, and a `?` name that
+  answers a list is a comment that lies. Item 4's "two-element `list`, never a
+  `(cons 'verdict …)` pair" was already right and is what shipped.
+
+- **The Context's "122 accessor reads" is 129 at this slice's base** (`12c03d9`):
+  Slice ⓪ added cases. The Context's number described `50516af` and is correct for
+  that tree; it stays. Nothing in item 1's invisibility argument depends on the exact
+  number — only that no test reads a whole record or its length, which holds at 129 too.
+
+The one declared survivor `verify.sls` carries — "the EOF walk keeps no completed-set" —
+named this slice as its reopening condition. The condition fired (the walk now carries
+a path); it was re-measured and **still survives**, with a dated note at the mutation
+recording why (the join's left-biased tie-break hands the memo only a losing operand's
+stale path). Decision 0021 item 2, which the memo implements, is therefore unamended.

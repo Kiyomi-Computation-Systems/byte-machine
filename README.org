@@ -114,7 +114,12 @@ The verifier's reachability pass now walks the relation an execution can
 actually occupy — byte flow, then EOF routes from the states a parser can be
 parked on — in one procedure shared with the two passes that already read it,
 so a node standing behind an edge no execution can take is reported as
-unreachable rather than silently accepted.
+unreachable rather than silently accepted. Slice ① closed 2026-09-10: the
+diagnostic record now carries =§16.4='s seven fields — severity, machine name,
+declaration names and a representative graph path join the code, node, edge and
+message — and eight of the verifier's codes report the path their finding is
+about. No verdict changed: every machine accepted or rejected before is accepted
+or rejected still.
 
 =src/byte-machine/= holds the construction API, the verifier, the normalizer and
 emitter, the reference interpreter, and the runtime, each exercised in both the
