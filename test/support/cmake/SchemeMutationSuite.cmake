@@ -43,7 +43,10 @@
 # Milestone 7's slices ⓪, ① and ② add NO pass: ⓪ and ① re-anchor and widen
 # existing passes, and Slice ②'s new mutations join the existing Pass 39 (the
 # property differential), so the property generator and its three comparison
-# layers are witnessed there rather than by a fifty-ninth.
+# layers are witnessed there rather than by a fifty-ninth. Slice ③ DOES add the
+# FIFTY-NINTH: the fixture lane (property-fixture-tests.sps), whose printer,
+# saver and minimizer are a distinct witness -- three caught mutations and one
+# declared survivor (the 64-emission bound, F10) -- so EXPECTED_PASSES = 59.
 #
 # EXPECTED_PASSES and EXPECTED_MUTATIONS are declared below; checked against
 # byte_machine_mutation_totals' accumulated count once every pass below has
@@ -1376,8 +1379,8 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-set(EXPECTED_PASSES 58)
-set(EXPECTED_MUTATIONS 557)
+set(EXPECTED_PASSES 59)
+set(EXPECTED_MUTATIONS 561)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -12906,6 +12909,101 @@ byte_machine_mutation(
   REPLACE [[            "                  (if (and (= n v) (< (+ pos n) end))\n"]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "generated: byte-at-a-time per-feed events, count and span -- expected .... 3 #f. ... 3 sp. ...data 1.. 2 sp. ...data 1.. 1 sp. ...data 1. complete. 0 #f. ... 0 #f.., got .... 3 #f. ... 3 sp. ...data 1.. 2 sp. ...data 1.. 1 sp. ...data 1.. 0 sp. ..complete. 0 #f..")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Milestone 7 Slice ③ Pass 59: the printer, the fixture saver, the minimizer -
+# The FIFTY-NINTH pass, and the first Milestone 7 adds (⓪/①/② re-anchored or
+# widened existing passes). It runs property-fixture-tests.sps -- the deliberate-
+# failure probe (§4.7). Three mutations are CAUGHT, each by a distinct check whose
+# failure signature is asserted (not a bare nonzero exit, the family the plan warns
+# is least visible by exit status): the printer emitting another kind's constructor,
+# the saver writing a non-reproducing fixture, and the minimizer accepting a
+# reduction that no longer disagrees. The fourth, the 64-emission bound, is a
+# declared SURVIVOR (F10): the survivor is named only after the attempt, and the
+# attempt measured the probe minimizing in FOUR emissions, so no probe here reaches
+# the bound -- witnessing it would need a machine with >64 verifying, still-
+# disagreeing reductions, which this slice does not construct.
+#
+# --- Slice ③ sweep (Task 9, measured 2026-09-11 over the three caught mutants). The
+# per-pin match-count matrix is a clean diagonal: on the green tree all three regexes
+# match ZERO records; each mutant matches its OWN pin's regex exactly ONCE and the
+# other two ZERO times (pin1 R1=1/R2=0/R3=0, pin2 0/1/0, pin3 0/0/1). The printer pin
+# matches the printer group's lone "case raised" render-rejection; the saver pin the
+# RAW reruns-disagree check (distinct from the MINIMIZED one's label); the minimizer
+# pin the in-memory minimized-still-disagrees check. Label audit (Task 9 Step 3): none
+# of 230 shipped regexes contains or is contained by these three, and none matches any
+# fixture check label; Step 4: no regex uses `.*` or ends at `got`. The whole lane
+# passed 59/561 with all four behaving (three caught, the bound survivor surviving),
+# so no shipped pin's FIND was broken by this slice's driver edits (Task 9 Step 1).
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/property-fixture-tests.sps")
+
+# The printer's arm for one KIND emitting another kind's constructor. The round
+# trip catches it: a stop reprinted as a finish makes a byte edge target a finish
+# terminal, which the verifier REJECTS, so render-machine of the reprinted machine
+# raises inside the round-trip case. (§8 says "by fingerprint"; a KIND swap is
+# caught one step earlier, at verify -- the reprinted machine does not verify, a
+# stronger catch than a fingerprint mismatch. Task 12 corrects §8's mechanism.)
+# COUPLING (measured, seed 20260823): this render-rejection signature holds because
+# the first accepted machine carrying a stop node reaches that stop over a BYTE edge,
+# so reprinting it as a finish trips `non-eof-into-finish`. Were the first such stop
+# EOF-only-reachable, the reprint would VERIFY and the round trip would fail instead
+# by byte-identity ("... machine <i> ... expected a true value"). The signature is
+# thus tied to the committed seed and generator, as the differential pins' machine
+# indices are; a generator change that flips it makes this pin read UNCAUGHT and
+# reddens the lane, which is the re-anchor signal (Slice ③ Task 9, CMake review).
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-print.sls
+  SPEC byte-machine.property.fixture.chez.source
+  LABEL "print-stop emits another kind's constructor (make-finish-node)"
+  FIND [[    (list 'make-stop-node (lit (stop-node-name n)) (lit (stop-node-source-label n))))]]
+  REPLACE [[    (list 'make-finish-node (lit (stop-node-name n)) (lit (stop-node-source-label n))))]]
+  EXPECT_OUTPUT_MATCHES "round trip byte-identical over the seed set: case raised -- Exception in render-machine: cannot render an unverified machine")
+
+# The saver writing the base machine instead of the corrupted trial: the emitted
+# fixture binds `gen` to the honest interpreter (`ref`) rather than the lying
+# wrapper, so the reloaded fixture's lanes AGREE and it reproduces nothing. Caught
+# by the in-process re-run of the saved fixture's own gen (reruns-disagree?).
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/property-driver.sls
+  SPEC byte-machine.property.fixture.chez.source
+  LABEL "the saver writes an honest gen (base machine), so the fixture no longer reproduces"
+  FIND [[             (list 'define 'gen gen-expr)]]
+  REPLACE [[             (list 'define 'gen 'ref)]]
+  EXPECT_OUTPUT_MATCHES "the raw fixture's saved trial still disagrees when re-read and re-run -- expected a true value")
+
+# The minimizer accepting a reduction that no longer disagrees: the failure oracle
+# is short-circuited to "always failing", so the minimizer keeps shrinking past the
+# disagreement and the minimized trial agrees. Caught by the minimized-still-
+# disagrees check.
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/property-driver.sls
+  SPEC byte-machine.property.fixture.chez.source
+  LABEL "the minimizer accepts a reduction that no longer disagrees"
+  FIND [[                    (not (eq? (fail-oracle m s i sch) 'none)))))]]
+  REPLACE [[                    #t)))]]
+  EXPECT_OUTPUT_MATCHES "the minimized trial still disagrees -- expected a true value")
+
+# The 64-emission bound (F10). SURVIVOR, declared with the measured attempt: the
+# probe minimizes in FOUR emissions (Task 5 Step 8), so removing the loop's bound
+# guard changes nothing here -- the fixpoint stops it first. Pinned only after the
+# attempt, never before it; a probe that reached the bound would witness this, and
+# constructing one (>64 verifying, still-disagreeing reductions) is not this slice.
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/property-driver.sls
+  SPEC byte-machine.property.fixture.chez.source
+  LABEL "the minimizer's emission bound is removed"
+  FIND [[             ((or (null? cs) (>= emissions bound))]]
+  REPLACE [[             ((or (null? cs) #f)]]
+  EXPECT_SURVIVES "the probe minimizes in 4 emissions (< the 64 bound), so the fixpoint stops the loop before the bound is ever consulted; no probe in this slice reaches it (F10)")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
