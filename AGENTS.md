@@ -386,6 +386,24 @@
   subsumed residue **in the tree**, beside the pin, named by mutation LABEL: the
   session ledger is git-ignored, so an obligation left there has not been
   recorded.
+* **A closed-set totality row is a floor-independent pin substrate.** When a
+  per-member counter pin is subsumed by a tight acceptance floor — removing the
+  member drops acceptance below the floor, so the floor check reddens first and
+  catches the mutant "for the wrong reason" — do not lower the floor and do not
+  leave it unpinned. Pin the removal on the **totality row** that compares the IR's
+  closed set (read from `ir.sls` as a datum) to the generator's exported draw
+  table: its `set-equal` fails on the removed member *regardless of the floor* or
+  of whether any counter zeroed, and the member-specific got-list makes the pin
+  match only that removal. Measured in Milestone 7 Slice ②: exact-byte / byte-set /
+  integer-accumulate / mask-none removals each drop the 36-vs-32 acceptance below
+  the floor, so all four are pinned on their totality rows, not their counters; the
+  floor check still co-fires on them, recorded as a by-construction containment
+  (each has a unique totality witness). This works only for a **drawn** family (a
+  draw table exists to diverge from the source); a **declared** family with no draw
+  table (span events, schedule shapes) has a totality row against a cited literal
+  that no removal mutation can exercise. And when a family's totality row is
+  exercisable, give it **one** removal pin so the row itself is proven load-bearing
+  — an unexercised totality row is a check no mutation shows would fire.
 * **A completion sentinel must read the observed value, and the loop over the loops needs one too.**
   No suite here declares an expected case or check count — `harness-summary`
   reports only what ran — so an exhaustive loop that never executes passes
