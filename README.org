@@ -121,7 +121,7 @@ message — and eight of the verifier's codes report the path their finding is
 about. No verdict changed: every machine accepted or rejected before is accepted
 or rejected still.
 
-Slice ② is in progress: a generator now draws random machines over every one of
+Slice ② closed 2026-09-11 (PR #95): a generator now draws random machines over every one of
 the thirteen node kinds and runs each through the reference interpreter and the
 compiled executor, comparing them at three layers — the per-schedule result
 tuple, the fragment and callback traces normalized across every way of splitting
