@@ -261,27 +261,28 @@
     (write-file! path text)
     path))
 
-;; Re-read a saved fixture in-process (Task 6 Step 4): read its top-level forms and
-;; evaluate the (define machine …)/(define script …)/(define schedule …)/(define
-;; input …) exprs (machine in a (byte-machine graph) environment), so the trial can
-;; be re-run from exactly what was written -- proving the SAVED datum reproduces.
-(define (fixture-defines path)
-  (let ((port (open-string-input-port (utf8->string (adapter-file-bytes path))))
-        (want '(machine script schedule input)) (acc '()))
-    (let loop ()
+;; Re-read a saved fixture in-process and run its trial exactly as the fixture would
+;; (Task 6 Step 4, "load the raw fixture in-process through eval"): evaluate the
+;; fixture's own top-level (define …) forms -- machine, script, schedule, input, ref,
+;; the perturb definition, and gen (the EMBEDDED lie) -- in dependency order, then
+;; run-one-trial over them. Because it evaluates the fixture's OWN gen wiring, a
+;; mutation to the saver that writes a non-reproducing fixture (e.g. gen := ref) is
+;; caught here, not only by the by-hand standalone run (Step 8).
+(define fx-env (environment '(rnrs) '(byte-machine graph) '(byte-machine verify)
+                            '(byte-machine interpret) '(byte-machine runtime)
+                            '(byte-machine test property-driver)))
+(define (fixture-define-forms path)
+  (let ((port (open-string-input-port (utf8->string (adapter-file-bytes path)))))
+    (let loop ((acc '()))
       (let ((form (get-datum port)))
         (cond ((eof-object? form) (reverse acc))
-              ((and (pair? form) (eq? (car form) 'define) (pair? (cdr form))
-                    (memq (cadr form) want))
-               (set! acc (cons (cons (cadr form) (eval (caddr form) graph-env)) acc))
-               (loop))
-              (else (loop)))))))
-(define (assoc-ref al k) (cond ((assq k al) => cdr) (else #f)))
+              ((and (pair? form) (eq? (car form) 'define)) (loop (cons form acc)))
+              (else (loop acc)))))))
 (define (reruns-disagree? path)
-  (let* ((d (fixture-defines path)) (m (assoc-ref d 'machine)))
-    (not (eq? (run-one-trial m (interp m) (lie-of m)
-                             (assoc-ref d 'script) (assoc-ref d 'schedule) (assoc-ref d 'input))
-              'none))))
+  (not (eq? (eval `(let () ,@(fixture-define-forms path)
+                     (run-one-trial machine ref gen script schedule input))
+                  fx-env)
+            'none)))
 
 (harness-group "saver"
  (lambda ()
