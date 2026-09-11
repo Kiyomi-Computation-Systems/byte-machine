@@ -12952,6 +12952,14 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 # raises inside the round-trip case. (§8 says "by fingerprint"; a KIND swap is
 # caught one step earlier, at verify -- the reprinted machine does not verify, a
 # stronger catch than a fingerprint mismatch. Task 12 corrects §8's mechanism.)
+# COUPLING (measured, seed 20260823): this render-rejection signature holds because
+# the first accepted machine carrying a stop node reaches that stop over a BYTE edge,
+# so reprinting it as a finish trips `non-eof-into-finish`. Were the first such stop
+# EOF-only-reachable, the reprint would VERIFY and the round trip would fail instead
+# by byte-identity ("... machine <i> ... expected a true value"). The signature is
+# thus tied to the committed seed and generator, as the differential pins' machine
+# indices are; a generator change that flips it makes this pin read UNCAUGHT and
+# reddens the lane, which is the re-anchor signal (Slice ③ Task 9, CMake review).
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/machine-print.sls
   SPEC byte-machine.property.fixture.chez.source

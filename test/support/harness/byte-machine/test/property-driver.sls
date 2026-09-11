@@ -640,7 +640,8 @@
   ;; -- structural size: a node's weight reflects its content, so replacing a rich
   ;; node with a fresh error sink (remove-node, below) strictly shrinks the machine
   ;; even though the node COUNT is unchanged; a trivial node replaced by a sink does
-  ;; not shrink, and the `smaller?` guard then skips that no-progress removal.
+  ;; not shrink, and the loop's `(< (apply tuple-size c) cur-size)` guard then skips
+  ;; that no-progress removal.
   (define (node-weight n)
     (cond ((byte-dispatch-node? n) (+ 1 (length (byte-dispatch-node-cases n))))
           ((sequence-dispatch-node? n) (+ 1 (length (sequence-dispatch-node-cases n))))

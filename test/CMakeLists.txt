@@ -1644,8 +1644,10 @@ byte_machine_add_scheme_lane(
 # BYTE_MACHINE_SOURCE_ROOT for the same reason as the differential lane: the
 # printer's totality rows read ir.sls as a datum and the reader raises when it is
 # unset (NOT the seed clause of decision 0033 item 3). No seed is passed. TIMEOUT
-# is set from the measured wall-clock (~1 s registered; ~0.5 s in source by hand)
-# plus a wide margin, NOT copied from the differential's 180.
+# is set from THIS lane's measured wall-clock -- one machine through the saver and
+# the minimizer, 0.53 s source / 0.29 s aot registered -- plus a wide margin, NOT
+# copied from the differential's 180. (The fixture lane is far below the differential
+# lanes' ~4 s of §4.10, which drive 64 machines through the full sweep, not one.)
 byte_machine_add_scheme_lane(
   NAME byte-machine.property.fixture.chez.source
   BACKEND chez

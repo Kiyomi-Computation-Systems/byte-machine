@@ -191,6 +191,12 @@
 (define (u8 . bs) (u8-list->bytevector bs))
 (define (whole bv) (list (list bv 0 (bytevector-length bv))))
 (define (interp m) (make-interpreted-machine (verify-machine m)))
+;; Where save-fixture writes the probe fixtures. Unlike the differential lane, which
+;; is LOUD on an unset BYTE_MACHINE_TEST_TMPDIR (it must emit a generated lane per
+;; machine), this program degrades to "." deliberately: it must also run under the
+;; Scheme mutation runner, whose verify command sets no tmpdir, and its saver writes
+;; are throwaway probe fixtures. The registered CTest lanes set the var, so a normal
+;; run writes into the per-lane tmp directory, never the source tree.
 (define (tmpdir-or-dot)
   (let ((d (adapter-environment-variable "BYTE_MACHINE_TEST_TMPDIR")))
     (if (and d (not (string=? d ""))) d ".")))
