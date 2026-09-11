@@ -404,6 +404,19 @@
   that no removal mutation can exercise. And when a family's totality row is
   exercisable, give it **one** removal pin so the row itself is proven load-bearing
   — an unexercised totality row is a check no mutation shows would fire.
+* **A "the saved artifact reproduces" test must run the artifact's OWN code, not a
+  re-derivation from the inputs.** When a slice ships a saver, serializer or
+  code-generator and asserts its output round-trips or re-runs, load the emitted
+  artifact and run IT — its own emitted constructors, its own embedded oracle, its
+  own lane construction — rather than reconstructing the expected result from the
+  pre-save inputs. Otherwise a mutation that makes the saver emit a wrong-but-well-
+  formed artifact (right data, wrong embedded behaviour) survives, because the check
+  never read what the saver wrote. Measured in Milestone 7 Slice ③: the fixture
+  saver's first reproduction check re-applied the probe's lie to the saved
+  `(machine, input)` and would have missed a saver that embedded an honest `gen`
+  (`gen := ref`); re-reading and evaluating the fixture's own `(define gen …)` is
+  what caught it. Ask of every such check: which mutation to the saver's OUTPUT does
+  it miss? If a wrong output still passes, the check is testing the inputs.
 * **A completion sentinel must read the observed value, and the loop over the loops needs one too.**
   No suite here declares an expected case or check count — `harness-summary`
   reports only what ran — so an exhaustive loop that never executes passes
