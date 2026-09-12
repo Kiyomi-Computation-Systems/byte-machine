@@ -39,7 +39,15 @@
                 (list 'method-complete (ev 'method-complete))
                 (list 'target-data (dv 'target-data))
                 (list 'target-complete (ev 'target-complete))
-                (list 'version-complete (ev 'version-complete)))
+                (list 'version-complete (ev 'version-complete))
+                ;; Slice ②: the fixture now fires these too; bind them so a
+                ;; complete no-body message's full trace is recorded.
+                (list 'header-name-data (dv 'header-name-data))
+                (list 'header-name-complete (ev 'header-name-complete))
+                (list 'header-value-data (dv 'header-value-data))
+                (list 'header-value-complete (ev 'header-value-complete))
+                (list 'headers-complete (ev 'headers-complete))
+                (list 'message-complete (ev 'message-complete)))
           (lambda () (reverse tr)))))
 
 (define cm (make-interpreted-machine (verify-machine (make-http-machine))))
@@ -63,6 +71,13 @@
     (parser-feed! p bv 0 (bytevector-length bv))
     (let ((r (parser-finish! p)))
       (list (parser-result-status r) (parser-result-stream-offset r) (err-triple r)))))
+;; Feed then finish, keeping the trace; return (status offset error-triple trace).
+(define (feed-finish s)
+  (let* ((rc (recorder)) (p (make-parser cm (car rc) #f))
+         (bv (u8-list->bytevector (bytes s))))
+    (parser-feed! p bv 0 (bytevector-length bv))
+    (let ((r (parser-finish! p)))
+      (list (parser-result-status r) (parser-result-stream-offset r) (err-triple r) ((cdr rc))))))
 ;; Feed a string split at ASCENDING interior cuts; return (status . trace).
 (define (feed-cuts s cuts)
   (let* ((rc (recorder)) (p (make-parser cm (car rc) #f)) (bs (bytes s)))
@@ -90,32 +105,37 @@
 
 (harness-group "a well-formed request line fires §21.3's events in order"
   (lambda ()
-    (harness-case "GET /index HTTP/1.1 stops after the CRLF with the full event trace"
+    (harness-case "the request-line events fire in order, then the machine awaits the header section"
       (lambda ()
+        ;; Since Slice ②, the request-line CRLF leads into the header section
+        ;; rather than stopping, so a bare request line reaches need-input at the
+        ;; header line start with the request-line event PREFIX delivered.
         (let ((r (feed-whole "GET /index HTTP/1.1\r\n")))
-          (check-equal "status/offset/error"
-                       (list (car r) (cadr r) (caddr r)) '(stopped 21 #f))
-          (check-equal "trace"
+          (check-equal "status/offset/error -- awaiting headers"
+                       (list (car r) (cadr r) (caddr r)) '(need-input 21 #f))
+          (check-equal "the request-line event prefix, in order"
                        (cadddr r)
                        '(message-begin (method-data "GET") method-complete
                          (target-data "/index") target-complete version-complete)))))
+    (harness-case "a complete no-body message finishes and matches the event grammar"
+      (lambda ()
+        (let ((r (feed-finish "GET /index HTTP/1.1\r\n\r\n")))
+          (check-equal "finished, no error" (list (car r) (caddr r)) '(finished #f))
+          (check-equal "the full no-body event trace"
+                       (cadddr r)
+                       '(message-begin (method-data "GET") method-complete
+                         (target-data "/index") target-complete version-complete
+                         headers-complete message-complete))
+          (check "the skeleton matches http-request-grammar"
+                 (event-sequence-matches? http-request-grammar (trace-skeleton (cadddr r)))))))
     (harness-case "HTTP/1.0 is accepted identically (both version alternatives reach version-complete)"
       (lambda ()
-        (let ((r (feed-whole "POST /a HTTP/1.0\r\n")))
-          (check-equal "status" (car r) 'stopped)
-          (check-equal "trace"
-                       (cadddr r)
+        (let ((r (feed-finish "POST /a HTTP/1.0\r\n\r\n")))
+          (check-equal "HTTP/1.0 finishes too" (car r) 'finished)
+          (check-equal "trace prefix through version-complete"
+                       (harness-take (cadddr r) 6)
                        '(message-begin (method-data "POST") method-complete
                          (target-data "/a") target-complete version-complete)))))
-    (harness-case "the trace skeleton matches the shared event-order grammar (§4.9 item 1)"
-      (lambda ()
-        (let ((sk (trace-skeleton (cadddr (feed-whole "GET /index HTTP/1.1\r\n")))))
-          (check "matches http-request-grammar"
-                 (event-sequence-matches? http-request-grammar sk))
-          (check-equal "the coalesced skeleton is exactly the six-event prefix"
-                       sk
-                       '(message-begin method-data method-complete
-                         target-data target-complete version-complete)))))
     (harness-case "the oracle REJECTS a scrambled order (a negative self-test)"
       (lambda ()
         (check "target before method is rejected"
@@ -179,26 +199,29 @@
 
 ;; --- split points: the event skeleton is invariant, the raw trace is not ------
 
-(harness-group "every split point of a request line preserves the event order (§22.5)"
+(harness-group "every split point of a complete no-body message preserves the event order (§22.5)"
   (lambda ()
-    (harness-case "the coalesced skeleton is invariant across all 20 single-cut splits"
+    (harness-case "the coalesced skeleton is invariant across all 22 single-cut splits"
       (lambda ()
-        (let* ((s "GET /index HTTP/1.1\r\n")
+        ;; A complete no-body message (request line + empty header line). All
+        ;; events fire during the feed; message-complete loops to idle, so the
+        ;; final status is need-input (at idle), invariant across splits.
+        (let* ((s "GET /index HTTP/1.1\r\n\r\n")
                (canon (trace-skeleton (cadddr (feed-whole s))))
                (bad 'none) (n 0) (raws '()))
           (let loop ((k 1))
-            (when (<= k 20)
+            (when (<= k 22)
               (let* ((rt (feed-cuts s (list k)))
                      (sk (trace-skeleton (cdr rt))))
                 (set! n (+ n 1))
                 (set! raws (cons (cdr rt) raws))
-                (unless (eq? (car rt) 'stopped)
-                  (when (eq? bad 'none) (set! bad (list 'not-stopped k))))
+                (unless (eq? (car rt) 'need-input)
+                  (when (eq? bad 'none) (set! bad (list 'not-idle k (car rt)))))
                 (unless (equal? sk canon)
                   (when (eq? bad 'none) (set! bad (list 'skeleton-differs k sk)))))
               (loop (+ k 1))))
-          (check-equal "no split changed the skeleton or failed to stop" bad 'none)
-          (check-equal "all 20 single-cut splits ran" n 20)
+          (check-equal "no split changed the skeleton or the idle terminal" bad 'none)
+          (check-equal "all 22 single-cut splits ran" n 22)
           ;; The negative sentinel (§22.5:1287): the RAW fragment trace is NOT
           ;; invariant — a split inside `/index` splits the target-data delivery,
           ;; so at least two of the raw traces differ. Without this, "the

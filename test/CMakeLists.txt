@@ -1485,6 +1485,29 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/http-request-line-tests.sps"
   TIMEOUT 120)
 
+# Slice ②: headers, the empty line, and the no-body message loop.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.http-message.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/http-message-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-event-order.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/http-message-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.http-message.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/http-message-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-event-order.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/http-message-tests.sps"
+  TIMEOUT 120)
+
 byte_machine_add_scheme_lane(
   NAME byte-machine.differential.http.chez.source
   BACKEND chez

@@ -52,7 +52,15 @@
                 (list 'method-complete (ev 'method-complete))
                 (list 'target-data (dv 'target-data))
                 (list 'target-complete (ev 'target-complete))
-                (list 'version-complete (ev 'version-complete)))
+                (list 'version-complete (ev 'version-complete))
+                ;; Slice ②: bind the header events so the trace comparison
+                ;; between the executors covers them too.
+                (list 'header-name-data (dv 'header-name-data))
+                (list 'header-name-complete (ev 'header-name-complete))
+                (list 'header-value-data (dv 'header-value-data))
+                (list 'header-value-complete (ev 'header-value-complete))
+                (list 'headers-complete (ev 'headers-complete))
+                (list 'message-complete (ev 'message-complete)))
           (lambda () (reverse tr)))))
 
 (define (rfields r)
@@ -85,7 +93,7 @@
 
 (define ref (make-interpreted-machine (verify-machine (make-http-machine))))
 (define gen (generated-machine 'httpreq (make-http-machine)))
-(define canon (bytes "GET /index HTTP/1.1\r\n"))   ; 21 bytes
+(define canon (bytes "GET /index HTTP/1.1\r\n\r\n"))   ; 23 bytes, a complete no-body message
 
 (harness-group "the fixture verifies clean before it is driven (§22.6:1297)"
   (lambda ()
@@ -95,25 +103,27 @@
                      (map (lambda (d) #t) (verification-diagnostics (verify-machine (make-http-machine))))
                      '())))))
 
-(harness-group "interpreter and generated agree at every single-cut split of a request line"
+(harness-group "interpreter and generated agree at every single-cut split of a no-body message"
   (lambda ()
-    (harness-case "all 20 interior cuts plus the uncut line agree on tuple AND trace, and stop"
+    (harness-case "all interior cuts plus the uncut message agree on tuple AND trace, and reach idle"
       (lambda ()
-        (let ((bad 'none) (compared 0) (stops 0))
+        ;; Fed without finish!, a complete no-body message ends at idle
+        ;; (message-complete looped back), so both executors return need-input.
+        (let ((bad 'none) (compared 0) (idles 0))
           (let loop ((k 0))
-            (when (<= k 21)
-              (let* ((cuts (if (or (= k 0) (= k 21)) '() (list k)))
+            (when (<= k 23)
+              (let* ((cuts (if (or (= k 0) (= k 23)) '() (list k)))
                      (ss (slices-for canon cuts))
                      (ri (run ref ss #f)) (rg (run gen ss #f)))
                 (set! compared (+ compared 1))
                 (unless (equal? ri rg)
                   (when (eq? bad 'none) (set! bad (list 'disagree k ri rg))))
-                (when (and (equal? ri rg) (eq? (caar rg) 'stopped))
-                  (set! stops (+ stops 1))))
+                (when (and (equal? ri rg) (eq? (caar rg) 'need-input))
+                  (set! idles (+ idles 1))))
               (loop (+ k 1))))
           (check-equal "nothing disagreed" bad 'none)
-          (check-equal "22 iterations ran (k = 0..21)" compared 22)
-          (check-equal "every run stopped, observed from the executors" stops 22))))))
+          (check-equal "24 iterations ran (k = 0..23)" compared 24)
+          (check-equal "every run reached idle, observed from the executors" idles 24))))))
 
 (harness-group "interpreter and generated agree on malformed request lines and their positions"
   (lambda ()
@@ -125,7 +135,37 @@
                  (rg (run gen (slices-for (bytes s) '()) #f)))
              (check-equal (string-append "agree: " s) ri rg)))
          (list "@" "GE@ x HTTP/1.1\r\n" "GET \x01;;" "GET /a\x01; HTTP/1.1\r\n"
-               "GET /x XTTP/1.1\r\n" "GET /x HTTP/1.1X" "GET /x HTTP/1.1\rX"))))))
+               "GET /x XTTP/1.1\r\n" "GET /x HTTP/1.1X" "GET /x HTTP/1.1\rX"
+               ;; Slice ②: header-region errors agree too.
+               "GET / HTTP/1.1\r\n@bad\r\n" "GET / HTTP/1.1\r\nHost\r\n"
+               "GET / HTTP/1.1\r\nHost: a\x01;b\r\n" "GET / HTTP/1.1\r\nHost: v\rX"
+               "GET / HTTP/1.1\r\n\rX"))))))
+
+(harness-group "interpreter and generated agree on messages with headers and on the loop"
+  (lambda ()
+    (harness-case "single- and multi-header messages, an all-OWS value, and two pipelined requests agree on tuple AND trace"
+      (lambda ()
+        (for-each
+         (lambda (s)
+           (let ((ri (run ref (slices-for (bytes s) '()) #t))
+                 (rg (run gen (slices-for (bytes s) '()) #t)))
+             (check-equal (string-append "finish-agree: " s) ri rg)))
+         (list "GET / HTTP/1.0\r\n\r\n"
+               "GET /index HTTP/1.1\r\nHost: example.com\r\nAccept: */*\r\n\r\n"
+               "GET / HTTP/1.1\r\nX-Empty:  \r\n\r\n"
+               "GET /a HTTP/1.1\r\n\r\nPOST /b HTTP/1.0\r\nH: v\r\n\r\n"))))
+    (harness-case "every header split of a two-header message agrees on tuple AND trace"
+      (lambda ()
+        (let* ((m (bytes "GET / HTTP/1.1\r\nHost: x\r\nAccept: y\r\n\r\n"))
+               (bad 'none))
+          (let loop ((k 1))
+            (when (< k (length m))
+              (let ((ri (run ref (slices-for m (list k)) #t))
+                    (rg (run gen (slices-for m (list k)) #t)))
+                (unless (equal? ri rg)
+                  (when (eq? bad 'none) (set! bad (list 'disagree k)))))
+              (loop (+ k 1))))
+          (check-equal "no header split disagreed" bad 'none))))))
 
 (harness-group "interpreter and generated agree at end of stream (parser-finish!)"
   (lambda ()
@@ -151,8 +191,8 @@
                 (check "at least one draw was a genuine multi-split (>= 2 cuts)" (> multi 0)))
               (let*-values (((d1 s1) (prng-next s 2)) ((d2 s2) (prng-next s1 2))
                             ((d3 s3) (prng-next s2 2)) ((d4 s4) (prng-next s3 2)))
-                (let* ((cuts (append (if (= d1 1) '(3) '()) (if (= d2 1) '(7) '())
-                                     (if (= d3 1) '(11) '()) (if (= d4 1) '(19) '())))
+                (let* ((cuts (append (if (= d1 1) '(3) '()) (if (= d2 1) '(11) '())
+                                     (if (= d3 1) '(19) '()) (if (= d4 1) '(21) '())))
                        (ss (slices-for canon cuts))
                        (ri (run ref ss #f)) (rg (run gen ss #f)))
                   (loop (+ i 1) s4 (+ multi (if (>= (length cuts) 2) 1 0))
@@ -166,7 +206,7 @@
         (let* ((canon-sk (trace-skeleton (cadr (run gen (slices-for canon '()) #f))))
                (bad 'none) (raws '()))
           (let loop ((k 1))
-            (when (<= k 20)
+            (when (<= k 22)
               (let* ((rg (run gen (slices-for canon (list k)) #f))
                      (sk (trace-skeleton (cadr rg))))
                 (set! raws (cons (cadr rg) raws))
@@ -174,7 +214,7 @@
                   (when (eq? bad 'none) (set! bad (list 'skeleton-differs k sk)))))
               (loop (+ k 1))))
           (check-equal "the coalesced skeleton is invariant across all splits" bad 'none)
-          (check "the skeleton is the §21.3 six-event prefix"
+          (check "the skeleton is a complete §21.3 no-body message"
                  (event-sequence-matches? http-request-grammar canon-sk))
           (check "the raw fragment trace is NOT invariant"
                  (> (length (let dedup ((xs raws) (seen '()))

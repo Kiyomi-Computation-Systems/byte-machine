@@ -1379,11 +1379,14 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-set(EXPECTED_PASSES 62)
-set(EXPECTED_MUTATIONS 593)
+set(EXPECTED_PASSES 63)
+set(EXPECTED_MUTATIONS 596)
 # Sixty-two is sixty-one plus one: Milestone 8 Slice ① adds one pass over the
 # request-line fixture (http-machine.sls) with three mutations (590 -> 593),
 # each caught by byte-machine.unit.http-request-line with a measured signature.
+# Sixty-three is sixty-two plus one: Slice ② adds a second pass over the same
+# fixture's header section with three mutations (593 -> 596), each caught by
+# byte-machine.unit.http-message with a measured signature.
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -13469,6 +13472,50 @@ byte_machine_mutation(
   FIND [[(make-sequence-case (string-bytes "HTTP/1.1") 'ver-ok #f)]]
   REPLACE [[(make-sequence-case (string-bytes "HTTP/1.2") 'ver-ok #f)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid-version byte 18")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+byte_machine_mutation_reset()
+
+# --- Milestone 8 Slice ②: the header section's own decisions -----------------
+# Three decisions the header section encodes, caught by the http-message lane
+# with a MEASURED signature (the got value, not a bare nonzero exit). Measured
+# against a staged run 2026-09-12: the first header-name byte belongs to the name
+# span (header-line-start REEXECUTES a tchar into hn-open); a header name ends
+# BEFORE its colon (hn-loop reexecutes the colon into hn-close); and the header
+# value opens AFTER leading OWS is skipped (ows-skip reexecutes the first
+# non-OWS byte into hv-open), so advancing there drops the value's first byte.
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/http-message-tests.sps")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/http-machine.sls
+  SPEC byte-machine.unit.http-message.chez.source
+  LABEL "http-machine: the first header-name byte is advanced past instead of opening the name span"
+  FIND [[(make-edge 'hn-open 'reexecute)]]
+  REPLACE [[(make-edge 'hn-open 'advance)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "header-name-data .ost.")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/http-machine.sls
+  SPEC byte-machine.unit.http-message.chez.source
+  LABEL "http-machine: the header name consumes its colon instead of ending before it"
+  FIND [[(make-edge 'hn-close 'reexecute)]]
+  REPLACE [[(make-edge 'hn-close 'advance)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "header-name-data .Host:.")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/http-machine.sls
+  SPEC byte-machine.unit.http-message.chez.source
+  LABEL "http-machine: the header value advances past its first byte instead of opening the span there"
+  FIND [[(make-edge 'hv-open 'reexecute)]]
+  REPLACE [[(make-edge 'hv-open 'advance)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "header-value-data .xample.com.")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
