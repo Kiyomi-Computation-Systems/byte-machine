@@ -935,7 +935,9 @@ allocation as a plan, and the tree as the record.**
    matrix is the shape that answers this honestly: enumerate the topologies as data, derive each
    expected verdict from `§14:843` and `§16.2:899` *before* running, and let the count be the
    sentinel. **The bounded invalid-machine generator is Milestone 7's** (`§25` names it there),
-   and this slice must not quietly become it.
+   and this slice must not quietly become it. *(Closed 2026-09-11, Milestone 7 Slice ④: it now
+   exists — the corruption catalogue and the independent oracle over §4.6's graph rules; this
+   enumerated matrix kept its own job and did not become it. Parent plan's Slice ④ close note.)*
 4. **The error path delivers no completion event** (`§14:839`), while the success path delivers
    exactly one (`§14:834`) — the reading recorded in §4.11. `§22.5:1289` states the matching
    test rule and it is easy to violate: for malformed inputs, cross-schedule assertions compare

@@ -1,7 +1,7 @@
 # Milestone 7 Design — Verification and generative hardening
 
 **Status: Gate 0 discharged 2026-09-06 as decisions 0031-0033 (PR #85; §4's blockquote and
-§11's first bullet carry the discharge); Slice ⓪ delivered 2026-09-07 (PR #89); Slice ① delivered 2026-09-11 (PR #92); Slice ② (the generator over every construct and the property differential suite) delivered 2026-09-11 (PR #95); Slice ③ (the printer, the fixture saver, and the minimizer) delivered 2026-09-11 (PR #97); Slice ④ next.** Before it: the design merged 2026-09-06
+§11's first bullet carry the discharge); Slice ⓪ delivered 2026-09-07 (PR #89); Slice ① delivered 2026-09-11 (PR #92); Slice ② (the generator over every construct and the property differential suite) delivered 2026-09-11 (PR #95); Slice ③ (the printer, the fixture saver, and the minimizer) delivered 2026-09-11 (PR #97); Slice ④ (the corruption catalogue, the independent oracle, the `§16.2:910` and `:911` witnesses, and the milestone close) delivered 2026-09-11; Milestone 7 closed 2026-09-11.** Before it: the design merged 2026-09-06
 as PR #83 = `8edceb1`, and §4.12 was settled by the owner the same day (items 1-3 approved).
 Written against **`5ac363a`** (`main` = PR #82, which added only
 `AGENTS.md` bullets on top of Milestone 6's close at `0920b13`) on branch
@@ -11,6 +11,30 @@ suite **58 passes / 522 mutations** (`EXPECTED_PASSES` and `EXPECTED_MUTATIONS` 
 `test/support/cmake/SchemeMutationSuite.cmake`, asserted by the lane against what actually ran);
 the diagnostic census **30 codes over 56 sites** (`diagnostic-census-tests.sps`'s `pinned-sites`,
 summed); under Chez Scheme 10.4.1 on `tarm64osx`.
+
+> **Corrections at delivery (2026-09-11, Slice ④), each measured through the registered lane and
+> dispositioned in full in the parent plan's Slice ④ close note.** These annotate the sections named;
+> they do not rewrite them. **§4.6's drive** gains the catalogue's corrupted machines as a third
+> source: F1 measured that `§16.2:885`'s duplicate row and `:894`'s prefix row fire on no free draw
+> (0 of 512), and the corrupted machines make every rule fire by construction. **§4.5's totality
+> sentinel** is realized as two rows (F5): a code sentinel — the entry codes ∪ the unconstructible
+> list, set-equal to the census's thirty — and a hand-written refusal table keyed by `§16.2` bullet;
+> the sentence's literal union of codes with the constructor-refusal bullets (which name no code) is
+> unsatisfiable. The code sentinel's `∪ unconstructible` term proved **redundant** (invalid-shape is
+> also the not-a-machine entry's code, and every census code has an entry), so its mutation is a
+> declared survivor. **§9's close-out search** prints exactly `verify.sls:31` (F8; a bare `rg -i
+> 'owed'` also matches `allowed`/`followed`/`narrowed`/`flowed`, so the genuine `owed` count is five,
+> word-bounded). **§4.8/§9's `:910` witness machine** is a hand-built every-construct machine in
+> `compile-tests.sps`, its totality a derived row against `render-state-arm`'s thirteen arms (F10;
+> the compile lane has no generator or printer). **§3.1's negative accounting** re-measured 19 / 17 /
+> 155, twenty-four of thirty codes without a naming negative (F11). Three findings surfaced in
+> implementation: decision **0023 item 3's parked-set prose is incomplete** — the states a parser can
+> be parked on also include callback and span-end nodes (which `verify.sls`'s `parked?` already
+> carries and the independent oracle mirrors); the `§16.2:911` **lane name** is
+> `byte-machine.unit.compile-limits.chez.*` (the plan's `compile` layer does not exist in the
+> harness); and **reachability is ill-defined on a duplicate-node-name graph**, so the oracle's
+> reachability rules are compared only on unique-node-name machines. Measured at the close: release
+> **120/120** both Chez modes, mutation **61 passes / 590 mutations**, census unmoved at 30/56.
 
 **Every citation in this document was measured on 2026-09-06 against `5ac363a`.** Parent-plan
 citations are `§section:line`; source citations name the **construct** and give a line only where
