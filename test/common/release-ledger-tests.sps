@@ -94,23 +94,24 @@
 ;; ---- the disposition partition (the design Appendix, authoritative) --------
 (define (refs-with-state st)
   (sort-strings (map criterion-ref (filter (lambda (r) (eq? (criterion-state r) st)) release-criteria))))
-(harness-group "the initial disposition: 6 met, 3 partly, 6 open (design Appendix)"
+(harness-group "the disposition partition (after Slice ③: 8 met, 3 partly, 4 open)"
   (lambda ()
-    (harness-case "met rows are exactly the six"
+    (harness-case "met rows are exactly the eight (Slice ③ added §26:1679, §26:1680)"
       (lambda ()
         (check-equal "met"
                      (refs-with-state 'met)
-                     (sort-strings '("§26:1672" "§26:1673" "§26:1674" "§26:1675" "§26:1676" "§26:1685")))))
+                     (sort-strings '("§26:1672" "§26:1673" "§26:1674" "§26:1675" "§26:1676"
+                                     "§26:1679" "§26:1680" "§26:1685")))))
     (harness-case "partly rows are exactly the three"
       (lambda ()
         (check-equal "partly"
                      (refs-with-state 'partly)
                      (sort-strings '("§26:1671" "§26:1681" "§26:1683")))))
-    (harness-case "open rows are exactly the six (incl. §26:1680, true but unasserted)"
+    (harness-case "open rows are exactly the four (the two CI-blocked, examples, changelog)"
       (lambda ()
         (check-equal "open"
                      (refs-with-state 'open)
-                     (sort-strings '("§26:1677" "§26:1678" "§26:1679" "§26:1680" "§26:1682" "§26:1684")))))
+                     (sort-strings '("§26:1677" "§26:1678" "§26:1682" "§26:1684")))))
     (harness-case "every open/partly row names a receiver; every met row names none"
       (lambda ()
         (for-each
@@ -140,12 +141,26 @@
         (check "byte-machine.determinism lane present" (lane-registered? "byte-machine.determinism"))
         (check "the sixth (HTTP) golden is committed"
                (file-exists? (string-append repo "/test/fixtures/generated-http.golden.sls")))))
-    (harness-case "§26:1679 bench/ holds only placeholders (no baseline recorded yet)"
+    (harness-case "§26:1679 the committed benchmark baseline is recorded with the §23.1 fields"
       (lambda ()
         (check "kind mechanical" (mechanical? "§26:1679"))
-        (check-equal "bench/ subdirs" (dir-entries (string-append repo "/bench")) '("fixtures" "runner"))
-        (check-equal "bench/fixtures/" (dir-entries (string-append repo "/bench/fixtures")) '(".gitkeep"))
-        (check-equal "bench/runner/" (dir-entries (string-append repo "/bench/runner")) '(".gitkeep"))))
+        (check "the runner is present"
+               (file-exists? (string-append repo "/bench/runner/benchmark.sps")))
+        (let* ((art (call-with-input-file
+                     (string-append repo "/bench/fixtures/baseline-tarm64osx.sls") read))
+               (keys (map car art)))
+          (for-each
+           (lambda (k) (check (string-append "baseline field: " (symbol->string k))
+                              (and (memq k keys) #t)))
+           '(schema harness-version runtime mode compiler-options warmup rounds
+             iterations-per-round deterministic-seed exact-command one-time-metrics
+             required-metrics unavailable-metrics workloads))
+          (check-equal "twelve §23.2 workloads" (length (cadr (assq 'workloads art))) 12))))
+    (harness-case "§26:1680 the allocation-audit lane is registered (generated slope gated)"
+      (lambda ()
+        (check "kind mechanical" (mechanical? "§26:1680"))
+        (check "byte-machine.unit.allocation-audit lane present"
+               (lane-registered? "byte-machine.unit.allocation-audit"))))
     (harness-case "§26:1682 examples/ holds only .gitkeep (no example tree yet)"
       (lambda ()
         (check "kind mechanical" (mechanical? "§26:1682"))

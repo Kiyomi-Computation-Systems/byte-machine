@@ -102,14 +102,14 @@
        (five))
       ("§26:1679"
        "compiled benchmark baselines are recorded without speculative optimization"
-       open mechanical
-       "bench/ holds only .gitkeep; the baseline artefact and runner land in Slice ③"
-       (three))
+       met mechanical
+       "bench/runner/benchmark.sps produces the committed baseline bench/fixtures/baseline-tarm64osx.sls with the §23.1 fields (canonical bytes, seeds, harness version, exact command, raw samples, summary, required-vs-unavailable, twelve §23.2 workloads); recorded, no perf gate (§23.1); no optimisation attempted (§23.3 admission rule unmet)"
+       ())
       ("§26:1680"
        "generated per-byte paths contain no deliberate list/vector/string/result construction, and fixnum-sized allocation measurements are recorded with callbacks disabled"
-       open judgement
-       "TRUE but unasserted at 62671b2 — 0.0 B/byte measured (design §3.3 P2); no lane asserts it yet. The allocation slope + live control land in Slice ③ (decision 0040)"
-       (three))
+       met mechanical
+       "byte-machine.unit.allocation-audit asserts the generated per-byte slope is zero (alloc(short)=alloc(long)) against a live nonzero control, both executors measured, callbacks disabled with the callback-bound figure recorded beside it (decision 0040)"
+       ())
       ("§26:1681"
        "public libraries and generated-runtime dependency boundaries are documented"
        partly judgement
