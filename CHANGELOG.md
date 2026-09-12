@@ -6,6 +6,40 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.0] - 2026-09-12
+
+The first tagged release. byte-machine generates R6RS Chez Scheme byte parsers
+from a machine described through the public `(byte-machine graph)` API: verified,
+compiled offline, and emitted as a self-contained library that depends only on
+`(byte-machine runtime)`. Milestones 0 through 9 are closed — the executable
+machine (M1), incremental lifecycle (M2), byte classes and sequences (M3),
+fields/actions/branches (M4), callbacks/poisoning/spans (M5), counted consumption
+(M6), verification and generative hardening (M7), the private HTTP fixture (M8),
+and cross-platform hardening and this release (M9). The documentation set
+(`docs/reference/`, eleven references) and a runnable example
+(`examples/generate-simple-machine/`) ship with it.
+
+**Known open at v0.1 — recorded, not silently waived:**
+
+- **Tier 1 CI is one cell.** Only macOS arm64 is verified, and locally; Linux
+  amd64, Windows amd64, and Linux arm64 are deferred past v0.1 for lack of billed
+  CI minutes (decision 0041 — an explicit `§7.3:195` amendment, not a release-note
+  waiver). `#88`'s two-run Chez-cache verification is dispositioned, not
+  discharged. Cross-cell generation equality (`§26:1677`) is proved by the
+  mechanism — six committed determinism goldens compared on every run — over the
+  one cell that runs.
+- **`§12.7:770`'s zero-width machine-action half** — measured, still wrong, and
+  unreachable in practice (its broken shape needs a fallible zero-width action
+  reached over a reexecute edge, which `§21`'s grammar has no producer for);
+  receivers at `compile.sls` and `interpret.sls` unchanged.
+- **`§9.3:392-393`'s `parser-result` enforcement** — deferred, same receivers.
+- **`§25:1590`'s span-topology universal** — still partial after Milestone 7
+  Slice ④.
+
+The detailed record of what each milestone delivered follows.
+
 Milestones 0 through 6 (portability spike, minimal executable machine,
 incremental execution and lifecycle, byte classes and sequences, fields and
 actions and branches, callbacks and poisoning and spans, counted consumption)

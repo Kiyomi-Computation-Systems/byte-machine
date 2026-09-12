@@ -94,32 +94,32 @@
 ;; ---- the disposition partition (the design Appendix, authoritative) --------
 (define (refs-with-state st)
   (sort-strings (map criterion-ref (filter (lambda (r) (eq? (criterion-state r) st)) release-criteria))))
-(harness-group "the disposition partition (after Slice ④: 11 met, 0 partly, 4 open)"
+(harness-group "the disposition partition (v0.1 close: 13 met, 2 amended, 0 open)"
   (lambda ()
-    (harness-case "met rows are exactly the eleven (Slice ④ added §26:1671, §26:1681, §26:1683)"
+    (harness-case "met rows are exactly the thirteen (Slice ⑤ added §26:1682, §26:1684)"
       (lambda ()
         (check-equal "met"
                      (refs-with-state 'met)
                      (sort-strings '("§26:1671" "§26:1672" "§26:1673" "§26:1674" "§26:1675"
-                                     "§26:1676" "§26:1679" "§26:1680" "§26:1681" "§26:1683"
-                                     "§26:1685")))))
-    (harness-case "no rows remain partly (the three references landed in Slice ④)"
+                                     "§26:1676" "§26:1679" "§26:1680" "§26:1681" "§26:1682"
+                                     "§26:1683" "§26:1684" "§26:1685")))))
+    (harness-case "the two amended rows are exactly the CI-blocked pair (decision 0041)"
       (lambda ()
-        (check-equal "partly" (refs-with-state 'partly) '())))
-    (harness-case "open rows are exactly the four (the two CI-blocked, examples-clean-checkout, changelog)"
+        (check-equal "amended"
+                     (refs-with-state 'amended)
+                     (sort-strings '("§26:1677" "§26:1678")))))
+    (harness-case "nothing remains partly or open at the v0.1 close"
       (lambda ()
-        (check-equal "open"
-                     (refs-with-state 'open)
-                     (sort-strings '("§26:1677" "§26:1678" "§26:1682" "§26:1684")))))
-    (harness-case "every open/partly row names a receiver; every met row names none"
+        (check-equal "partly" (refs-with-state 'partly) '())
+        (check-equal "open" (refs-with-state 'open) '())))
+    (harness-case "every row is met or amended, and none names a receiver (nothing is owed)"
       (lambda ()
         (for-each
          (lambda (r)
-           (if (eq? (criterion-state r) 'met)
-               (check (string-append (criterion-ref r) " met -> no receiver")
-                      (null? (criterion-receiver r)))
-               (check (string-append (criterion-ref r) " not-met -> a receiver")
-                      (pair? (criterion-receiver r)))))
+           (check (string-append (criterion-ref r) " is met or amended")
+                  (and (memq (criterion-state r) '(met amended)) #t))
+           (check (string-append (criterion-ref r) " names no receiver")
+                  (null? (criterion-receiver r))))
          release-criteria)))))
 
 ;; ---- mechanical rows are executed -----------------------------------------
@@ -134,9 +134,9 @@
       (lambda ()
         (check "kind mechanical" (mechanical? "§26:1673"))
         (check "byte-machine.differential lane present" (lane-registered? "byte-machine.differential"))))
-    (harness-case "§26:1677 determinism lanes registered; all six goldens committed"
+    (harness-case "§26:1677 amended for v0.1; the mechanism (six goldens) is complete"
       (lambda ()
-        (check "kind mechanical" (mechanical? "§26:1677"))
+        (check "state amended (decision 0041)" (eq? (criterion-state (row "§26:1677")) 'amended))
         (check "byte-machine.determinism lane present" (lane-registered? "byte-machine.determinism"))
         (check "the sixth (HTTP) golden is committed"
                (file-exists? (string-append repo "/test/fixtures/generated-http.golden.sls")))))
@@ -170,19 +170,20 @@
         (check "kind mechanical" (mechanical? "§26:1681"))
         (check "reference present"
                (file-exists? (string-append repo "/docs/reference/generated-code-integration-chez.md")))))
-    (harness-case "§26:1682 the example ships (its clean-checkout run is Slice ⑤)"
+    (harness-case "§26:1682 met; the example ships (its clean-checkout run is recorded in the close)"
       (lambda ()
-        (check "kind mechanical" (mechanical? "§26:1682"))
+        (check "state met" (eq? (criterion-state (row "§26:1682")) 'met))
         (check "example program present"
                (file-exists? (string-append repo "/examples/generate-simple-machine/generate.sps")))
         (check "example README present"
                (file-exists? (string-append repo "/examples/generate-simple-machine/README.md")))))
-    (harness-case "§26:1684 CHANGELOG.md exists with no 0.1.0 entry yet"
+    (harness-case "§26:1684 CHANGELOG.md carries the 0.1.0 entry"
       (lambda ()
         (check "kind mechanical" (mechanical? "§26:1684"))
         (let ((cl (string-append repo "/CHANGELOG.md")))
           (check "CHANGELOG.md exists" (file-exists? cl))
-          (check "no 0.1.0 entry yet" (not (harness-string-contains? (file-string cl) "0.1.0"))))))
+          (check "has the [0.1.0] entry"
+                 (harness-string-contains? (file-string cl) "[0.1.0]")))))
     (harness-case "§26:1685 no native artifact is tracked; the leak lane guards HTTP re-export"
       (lambda ()
         (check "kind mechanical" (mechanical? "§26:1685"))
