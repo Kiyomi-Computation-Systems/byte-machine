@@ -519,6 +519,23 @@ their build, and adding a public name in the release milestone — after two
 milestones of an untouched `src/` — buys a small convenience with the one thing
 this milestone is best positioned to keep: a `src/` diff that is empty.
 
+> **Owner decisions on these three questions — 2026-09-12.** Recorded here so each
+> approval names a receiver (AGENTS.md, *"an approval with no receiver"*).
+>
+> - **Item 1 — CI budget: zero.** No CI this milestone; the billed minutes are not
+>   available. Dispositioned by [decision 0041](../decisions/0041-tier-1-cells-under-a-stated-budget.md):
+>   **Slice ② is struck**, the `§7.3:195` tier is amended for v0.1 (macOS arm64
+>   verified locally; Linux amd64, Windows amd64 and Linux arm64 deferred past
+>   v0.1), and `#88` is dispositioned, not waived. Because this is the final
+>   milestone, the deferral is v0.1's standing disposition, not a carry-forward.
+> - **Item 2 — licence & headers: both.** The `README.org` footer contradiction
+>   is resolved **and** a one-line SPDX header is added to each of the nine `src/`
+>   libraries. The §4.7 gate is therefore the comment-excluded one. Receiver: Slice ⓪.
+> - **Item 3 — `(byte-machine version)` export: declined for v0.1.** `0.1.0` lives
+>   in `CHANGELOG.md`, `README.org` and the git tag only; `§9`'s public surface
+>   stays frozen and the `src/` diff stays empty of new names. Receiver: Slice ⓪
+>   (§4.5) and Slice ⑤.
+
 ---
 
 ## 5. Slice ⓪ — The release ledger, the version surface, and the licence review
