@@ -1726,7 +1726,7 @@ byte_machine_add_scheme_lane(
 # for the code sentinel (reads verify.sls as a datum) and BYTE_MACHINE_HARNESS_ROOT
 # for the matcher-bytes prohibition (reads verify-oracle.sls as a datum), both loud
 # when unset. TIMEOUT from the measured wall-clock (2.90 s source; the oracle's
-# three-source drive over 834 machines x 8 rules and the AOT build are the cost, not
+# three-source drive over 834 machines x 9 rules and the AOT build are the cost, not
 # the catalogue arithmetic -- P3 priced that at 0.83 s) plus a wide margin, NOT
 # copied from the differential's 180.
 byte_machine_add_scheme_lane(

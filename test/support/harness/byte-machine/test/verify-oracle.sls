@@ -206,11 +206,6 @@
           ((null? b) #f)
           ((equal? (car a) (car b)) (prefix? (cdr a) (cdr b)))
           (else #f)))
-  (define (any-prefix? seqs)
-    (exists (lambda (i)
-              (exists (lambda (j) (and (not (eq? i j)) (prefix? (car i) (car j))))
-                      (map cons seqs seqs)))
-            (map cons seqs seqs)))
   (define (rule-prefix m)
     (filter-map-nodes m
       (lambda (n)

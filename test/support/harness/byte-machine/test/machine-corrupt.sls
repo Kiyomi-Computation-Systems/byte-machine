@@ -98,11 +98,6 @@
           (assertion-violation 'edit "expected exactly one match" family match-pos match-val n))
         out)))
 
-  ;; Read the current operand at `operand-pos` of the one matching form (for edits
-  ;; that extend a list rather than replace a leaf).
-  (define (read-operand datum family match-pos match-val operand-pos)
-    (list-ref (locate datum family match-pos match-val) operand-pos))
-
   ;; ---- machine <-> datum ----------------------------------------------------
   (define eval-env (environment '(rnrs) '(byte-machine graph)))
   (define (->d m) (print-machine m))

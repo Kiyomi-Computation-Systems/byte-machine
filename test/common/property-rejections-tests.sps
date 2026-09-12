@@ -201,11 +201,14 @@
       (lambda ()
         ;; The count of corrupted machines handed to any executor is 0 by the program
         ;; having none in scope -- there is no interpret/compile/runtime binding to
-        ;; call. Every corrupted machine was consumed by verify-machine (the catalogue
-        ;; groups above). This check documents the invariant the SOURCES manifest and
-        ;; the import form enforce; a reader confirms it against the header.
-        (check-equal "every corruption was verified, none executed"
-                     (length corruptions) (length corruptions))
+        ;; call. The enforcement that no corrupted machine reaches an executor is
+        ;; STRUCTURAL and not a runtime check: this program imports no executor (the
+        ;; header's import form names none of interpret/compile/runtime) and its lane's
+        ;; SOURCES omit them, so under the AOT lane the static-import closure cannot
+        ;; reach one -- a runtime `check` here could only ever be a tautology, which is
+        ;; why there is none. The corpus is non-empty (so the catalogue groups above,
+        ;; which are the only consumers of a corrupted machine and pass it only to
+        ;; verify-machine, actually ran over it).
         (check "the corpus of corrupted machines is non-empty" (pair? corruptions))))))
 
 ;; ---- per-entry application counts (Task 3 Step 5) ----------------------------
@@ -278,9 +281,10 @@
      (lambda (rule)
        (let* ((codes (oracle-rule-codes rule))
               (ms (compared-for rule))
+              (compare (if (eq? (oracle-rule-comparison rule) 'subset) subset? set=?))
               (diff (let scan ((xs ms))
                       (cond ((null? xs) 'none)
-                            ((not (set=? (uniq (oracle-eval rule (car xs))) (v-pairs/codes (car xs) codes)))
+                            ((not (compare (uniq (oracle-eval rule (car xs))) (v-pairs/codes (car xs) codes)))
                              (list 'oracle (uniq (oracle-eval rule (car xs))) 'verifier (v-pairs/codes (car xs) codes)))
                             (else (scan (cdr xs)))))))
          (harness-case (string-append "oracle rule " (symbol->string (oracle-rule-name rule)) (seed-label seed))
@@ -317,10 +321,17 @@
         (check-equal "the (machine,entry) pairs driven equal the sum of per-entry counts"
                      (length corruptions)
                      (apply + (map (lambda (e) (length (applicable e))) corruption-entries)))
-        ;; the loop-over-the-loops: comparisons performed = sum over rules of |compared|.
-        (check-equal "the oracle compared machines x rules (accounting for the reach? skips)"
-                     (apply + (map (lambda (r) (length (compared-for r))) oracle-rules))
-                     (apply + (map (lambda (r) (length (compared-for r))) oracle-rules)))
+        ;; the loop-over-the-loops (Task 4 Step 7): the comparisons actually performed
+        ;; equal machines x rules, adjusted for the reach? skips -- computed by a
+        ;; DIFFERENT formula (rule-counts times corpus sizes) than the observed sum of
+        ;; per-rule |compared-for|, so a wrong filter in one rule separates the two.
+        (let* ((reach-corpus (filter (lambda (m) (or (not (machine? m)) (nodes-unique? m))) oracle-corpus))
+               (n-reach (length (filter oracle-rule-reach? oracle-rules)))
+               (n-plain (- (length oracle-rules) n-reach))
+               (expected (+ (* n-plain (length oracle-corpus)) (* n-reach (length reach-corpus))))
+               (observed (apply + (map (lambda (r) (length (compared-for r))) oracle-rules))))
+          (check-equal "the oracle performed machines x rules comparisons (reach? skips adjusted)"
+                       observed expected))
         (check "the oracle corpus is non-empty" (pair? oracle-corpus))))))
 
 (harness-finish)
