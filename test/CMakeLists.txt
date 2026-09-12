@@ -938,6 +938,32 @@ byte_machine_add_scheme_lane(
   ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
   TIMEOUT 120)
 
+# --- Milestone 7 Slice ④: the §16.2:911 compile-file witness (§4.12 item 2) ----
+# The limits lane. It both compiles a machine and executes one (it imports the
+# emitter AND the interpreter and runtime -- ${BYTE_MACHINE_CORE_EMIT}), which is
+# exactly why it is its own lane pair and not a group in the rejections program
+# (F7). It compile-files the largest emittable machine (a 256-exact-case dispatch
+# plus a complement-matcher dispatch) at run time, loads the object, and asserts one
+# feed agrees with the interpreter. TIMEOUT from the measured wall-clock (0.29 s
+# source) plus a wide margin -- compile-file of a ~36 KB library is fast.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.compile-limits.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/compile-limits-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/compile-limits-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.compile-limits.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/compile-limits-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/compile-limits-tests.sps"
+  TIMEOUT 120)
+
 # --- Milestone 1 Phase 3 Slice A: differential and example ----------------
 set(BYTE_MACHINE_CORE_EMIT
     ${BYTE_MACHINE_CORE_ALL}
