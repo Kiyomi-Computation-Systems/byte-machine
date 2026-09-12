@@ -42,25 +42,25 @@
   (let loop ((i (- to 1)) (acc '()))
     (if (< i from) (list->string acc)
         (loop (- i 1) (cons (integer->char (bytevector-u8-ref bv i)) acc)))))
+;; Bind EVERY callback the fixture declares, so the interpreter-vs-generated
+;; trace comparison covers the body, chunk and trailer events too (grown each
+;; slice).
+(define all-callbacks
+  '(message-begin method-data method-complete target-data target-complete version-complete
+    header-name-data header-name-complete header-value-data header-value-complete
+    headers-complete message-complete body-data chunk-header chunk-complete
+    chunk-extension-name-data chunk-extension-name-complete
+    chunk-extension-value-data chunk-extension-value-complete
+    trailer-name-data trailer-name-complete trailer-value-data trailer-value-complete))
+(define data-callbacks
+  '(method-data target-data header-name-data header-value-data body-data
+    chunk-extension-name-data chunk-extension-value-data trailer-name-data trailer-value-data))
 (define (recorder)
   (let ((tr '()))
     (define (ev name) (lambda (ps ux) (set! tr (cons name tr)) callback-continue))
     (define (dv name) (lambda (ps ux bv from to)
                         (set! tr (cons (list name (frag bv from to)) tr)) callback-continue))
-    (cons (list (list 'message-begin (ev 'message-begin))
-                (list 'method-data (dv 'method-data))
-                (list 'method-complete (ev 'method-complete))
-                (list 'target-data (dv 'target-data))
-                (list 'target-complete (ev 'target-complete))
-                (list 'version-complete (ev 'version-complete))
-                ;; Slice ②: bind the header events so the trace comparison
-                ;; between the executors covers them too.
-                (list 'header-name-data (dv 'header-name-data))
-                (list 'header-name-complete (ev 'header-name-complete))
-                (list 'header-value-data (dv 'header-value-data))
-                (list 'header-value-complete (ev 'header-value-complete))
-                (list 'headers-complete (ev 'headers-complete))
-                (list 'message-complete (ev 'message-complete)))
+    (cons (map (lambda (n) (list n (if (memq n data-callbacks) (dv n) (ev n)))) all-callbacks)
           (lambda () (reverse tr)))))
 
 (define (rfields r)
@@ -197,6 +197,36 @@
                   (when (eq? bad 'none) (set! bad (list 'disagree k)))))
               (loop (+ k 1))))
           (check-equal "no split of a Content-Length message disagreed" bad 'none))))))
+
+(harness-group "interpreter and generated agree on the chunked body and trailers (Slice ④)"
+  (lambda ()
+    (define cpre "GET / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n")
+    (harness-case "chunks, extensions, the zero chunk, trailers, and every chunked error agree"
+      (lambda ()
+        (for-each
+         (lambda (s)
+           (let ((ri (run ref (slices-for (bytes s) '()) #t))
+                 (rg (run gen (slices-for (bytes s) '()) #t)))
+             (check-equal (string-append "finish-agree: " s) ri rg)))
+         (list (string-append cpre "5\r\nHELLO\r\n0\r\n\r\n")
+               (string-append cpre "3;a=b\r\nabc\r\n2\r\nde\r\n0\r\nX-T: v\r\n\r\n")
+               (string-append cpre "05\r\nHELLO\r\n0\r\n\r\n")
+               (string-append cpre "XYZ\r\n")                              ; invalid-chunk-size
+               (string-append cpre "fffffffffffffffff\r\n")               ; overflow
+               (string-append cpre "5\r\nHELLOX\r\n")                      ; invalid-chunk-ending
+               (string-append cpre "5;=x\r\nHELLO\r\n")                    ; invalid-chunk-extension
+               (string-append cpre "0\r\nContent-Length: 5\r\n\r\n")))))   ; forbidden-trailer
+    (harness-case "a chunked message with an extension and a trailer agrees at every split"
+      (lambda ()
+        (let ((m (bytes (string-append cpre "3;a=b\r\nabc\r\n0\r\nX-T: v\r\n\r\n"))) (bad 'none))
+          (let loop ((k 1))
+            (when (< k (length m))
+              (let ((ri (run ref (slices-for m (list k)) #t))
+                    (rg (run gen (slices-for m (list k)) #t)))
+                (unless (equal? ri rg)
+                  (when (eq? bad 'none) (set! bad (list 'disagree k)))))
+              (loop (+ k 1))))
+          (check-equal "no split of a chunked message disagreed" bad 'none))))))
 
 (harness-group "interpreter and generated agree at end of stream (parser-finish!)"
   (lambda ()

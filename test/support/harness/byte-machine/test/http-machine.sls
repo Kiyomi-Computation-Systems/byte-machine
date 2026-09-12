@@ -68,6 +68,10 @@
   (define http-field-value-bytes
     (append (list 9 32) (iota-range 33 126) (iota-range 128 255)))
 
+  ;; HEXDIG = 0-9 / A-F / a-f (§21.2:1108), for base-16 chunk sizes.
+  (define http-hexdig-bytes
+    (append (iota-range 48 57) (iota-range 65 70) (iota-range 97 102)))
+
   ;; A canonical, well-formed request line, for the lanes to split and drive.
   (define (http-request-line-bytes)
     (string-bytes "GET /index HTTP/1.1\r\n"))
@@ -114,7 +118,8 @@
      ;; width 64). Reset by the completion clear chain (§21.3:1150).
      (list (make-uint-field 'content-length 64 0 #f)
            (make-uint-field 'has-cl 8 0 #f)
-           (make-uint-field 'has-te 8 0 #f))
+           (make-uint-field 'has-te 8 0 #f)
+           (make-uint-field 'chunk-size 64 0 #f))   ; Slice ④: base-16 chunk size
      ;; callbacks: the events and the two request-line span pairs (§21.3).
      (list (make-callback-declaration 'message-begin 'event #f '() #f #f)
            (make-callback-declaration 'method-data 'span-data #f '() #f #f)
@@ -131,12 +136,27 @@
            (make-callback-declaration 'message-complete 'event #f '() #f #f)
            ;; Slice ③: the fixed body's data callback — NO completion callback
            ;; (§21.3:1145).
-           (make-callback-declaration 'body-data 'span-data #f '() #f #f))
+           (make-callback-declaration 'body-data 'span-data #f '() #f #f)
+           ;; Slice ④: the chunked body's events, chunk-extension and trailer spans.
+           (make-callback-declaration 'chunk-header 'event #f '() #f #f)
+           (make-callback-declaration 'chunk-complete 'event #f '() #f #f)
+           (make-callback-declaration 'chunk-extension-name-data 'span-data #f '() #f #f)
+           (make-callback-declaration 'chunk-extension-name-complete 'span-complete #f '() #f #f)
+           (make-callback-declaration 'chunk-extension-value-data 'span-data #f '() #f #f)
+           (make-callback-declaration 'chunk-extension-value-complete 'span-complete #f '() #f #f)
+           (make-callback-declaration 'trailer-name-data 'span-data #f '() #f #f)
+           (make-callback-declaration 'trailer-name-complete 'span-complete #f '() #f #f)
+           (make-callback-declaration 'trailer-value-data 'span-data #f '() #f #f)
+           (make-callback-declaration 'trailer-value-complete 'span-complete #f '() #f #f))
      (list (make-span-declaration 'method 'method-data 'method-complete #f)
            (make-span-declaration 'target 'target-data 'target-complete #f)
            (make-span-declaration 'header-name 'header-name-data 'header-name-complete #f)
            (make-span-declaration 'header-value 'header-value-data 'header-value-complete #f)
-           (make-span-declaration 'body 'body-data #f #f))
+           (make-span-declaration 'body 'body-data #f #f)
+           (make-span-declaration 'chunk-extension-name 'chunk-extension-name-data 'chunk-extension-name-complete #f)
+           (make-span-declaration 'chunk-extension-value 'chunk-extension-value-data 'chunk-extension-value-complete #f)
+           (make-span-declaration 'trailer-name 'trailer-name-data 'trailer-name-complete #f)
+           (make-span-declaration 'trailer-value 'trailer-value-data 'trailer-value-complete #f))
      ;; error declarations — one per §21.4 code this slice can raise; the EOF
      ;; declaration is the machine default (decision 0037).
      (list (make-error-declaration 'unexpected-eof 'unexpected-eof "unexpected end of input" #f)
@@ -152,7 +172,13 @@
            (make-error-declaration 'duplicate-content-length 'duplicate-content-length "a second Content-Length" #f)
            (make-error-declaration 'duplicate-transfer-encoding 'duplicate-transfer-encoding "a second Transfer-Encoding" #f)
            (make-error-declaration 'framing-conflict 'framing-conflict "both Content-Length and Transfer-Encoding" #f)
-           (make-error-declaration 'unsupported-transfer-encoding 'unsupported-transfer-encoding "Transfer-Encoding is not chunked" #f))
+           (make-error-declaration 'unsupported-transfer-encoding 'unsupported-transfer-encoding "Transfer-Encoding is not chunked" #f)
+           ;; Slice ④: the chunked-body and trailer codes (§21.4:1168-1172).
+           (make-error-declaration 'invalid-chunk-size 'invalid-chunk-size "chunk size is not 1*HEXDIG" #f)
+           (make-error-declaration 'chunk-size-overflow 'chunk-size-overflow "chunk size overflows u64" #f)
+           (make-error-declaration 'invalid-chunk-extension 'invalid-chunk-extension "chunk extension is malformed" #f)
+           (make-error-declaration 'invalid-chunk-ending 'invalid-chunk-ending "chunk data is not followed by CRLF" #f)
+           (make-error-declaration 'forbidden-trailer 'forbidden-trailer "Content-Length or Transfer-Encoding as a trailer" #f))
      (append
       (list
       ;; --- idle: the message-begin gate (decision 0037) -------------------
@@ -302,29 +328,164 @@
       ;; (Slice ④); neither present is an empty body.
       (make-field-branch-node 'body-decide 'nonzero '(has-cl) 'bd-cl 'bd-te #f)
       (make-field-branch-node 'bd-cl 'nonzero '(content-length) 'body-open 'msg-complete #f)
-      (make-field-branch-node 'bd-te 'nonzero '(has-te) 'chunked-todo 'msg-complete #f)
+      (make-field-branch-node 'bd-te 'nonzero '(has-te) 'chunk-size-gate 'msg-complete #f)
       (make-span-start-node 'body-open 'body 'body-consume #f)
       (make-counted-consume-node 'body-consume 'content-length 'body-close 'e-eof-body #f)
       (make-span-end-node 'body-close 'body 'msg-complete #f)
-      ;; Slice ④ replaces this with the chunked body, which begins by reading the
-      ;; first chunk-size byte. For ③ it is input-reading (not a stop) so it is
-      ;; not an EOF-reachable stop (§16.2:909): EOF here is a truncated chunked
-      ;; message (unexpected-eof, the machine default); a body byte reaches a stop
-      ;; ④ will replace.
+      ;; === Slice ④: the chunked body (§21.2:1108-1112) =====================
+      ;; chunk-size: 1*HEXDIG, base-16 checked accumulation (leading zeroes ok).
       (make-byte-dispatch-node
-       'chunked-todo
-       (list (make-byte-case (make-byte-range-matcher 0 255)
-                             (make-edge 'chunked-stop 'advance) #f))
-       (make-edge 'chunked-stop 'reexecute)   ; unreachable: the range covers all bytes
-       #f #f)
-      (make-stop-node 'chunked-stop #f)
+       'chunk-size-gate
+       (list (make-byte-case (make-byte-set-matcher http-hexdig-bytes)
+                             (make-edge 'chunk-size 'reexecute) #f))
+       (make-edge 'e-chunk-size 'reexecute) #f #f)
+      (make-integer-accumulate-node 'chunk-size 'chunk-size 16 'chunk-size
+        (make-edge 'chunk-ext-start 'reexecute) 'e-chunk-size-overflow #f #f)
+      ;; chunk-ext = *(";" token ["=" token]): after the size, ";" starts an
+      ;; extension and CR ends the chunk-size line. Quoted values are excluded
+      ;; (§21.2:1109) — a non-token byte is invalid-chunk-extension.
+      (make-byte-dispatch-node
+       'chunk-ext-start
+       (list (make-byte-case (make-exact-byte-matcher 59) (make-edge 'chunk-ext-name-gate 'advance) #f)   ; ";"
+             (make-byte-case (make-exact-byte-matcher CR) (make-edge 'chunk-size-lf 'advance) #f))
+       (make-edge 'e-chunk-ext 'reexecute) #f #f)
+      (make-byte-dispatch-node
+       'chunk-ext-name-gate
+       (list (make-byte-case (make-byte-set-matcher http-tchar-bytes)
+                             (make-edge 'chunk-ext-name-open 'reexecute) #f))
+       (make-edge 'e-chunk-ext 'reexecute) #f #f)
+      (make-span-start-node 'chunk-ext-name-open 'chunk-extension-name 'chunk-ext-name-loop #f)
+      (make-byte-dispatch-node
+       'chunk-ext-name-loop
+       (list (make-byte-case (make-byte-set-matcher http-tchar-bytes)
+                             (make-edge 'chunk-ext-name-loop 'advance) #f))
+       (make-edge 'chunk-ext-name-close 'reexecute)
+       'e-eof-cen #f)
+      (make-span-end-node 'chunk-ext-name-close 'chunk-extension-name 'chunk-ext-after-name #f)
+      (make-byte-dispatch-node
+       'chunk-ext-after-name
+       (list (make-byte-case (make-exact-byte-matcher 61) (make-edge 'chunk-ext-value-gate 'advance) #f)  ; "="
+             (make-byte-case (make-exact-byte-matcher 59) (make-edge 'chunk-ext-start 'reexecute) #f)      ; ";"
+             (make-byte-case (make-exact-byte-matcher CR) (make-edge 'chunk-size-lf 'advance) #f))
+       (make-edge 'e-chunk-ext 'reexecute) #f #f)
+      (make-byte-dispatch-node
+       'chunk-ext-value-gate
+       (list (make-byte-case (make-byte-set-matcher http-tchar-bytes)
+                             (make-edge 'chunk-ext-value-open 'reexecute) #f))
+       (make-edge 'e-chunk-ext 'reexecute) #f #f)
+      (make-span-start-node 'chunk-ext-value-open 'chunk-extension-value 'chunk-ext-value-loop #f)
+      (make-byte-dispatch-node
+       'chunk-ext-value-loop
+       (list (make-byte-case (make-byte-set-matcher http-tchar-bytes)
+                             (make-edge 'chunk-ext-value-loop 'advance) #f))
+       (make-edge 'chunk-ext-value-close 'reexecute)
+       'e-eof-cev #f)
+      (make-span-end-node 'chunk-ext-value-close 'chunk-extension-value 'chunk-ext-after-value #f)
+      (make-byte-dispatch-node
+       'chunk-ext-after-value
+       (list (make-byte-case (make-exact-byte-matcher 59) (make-edge 'chunk-ext-start 'reexecute) #f)      ; ";"
+             (make-byte-case (make-exact-byte-matcher CR) (make-edge 'chunk-size-lf 'advance) #f))
+       (make-edge 'e-chunk-ext 'reexecute) #f #f)
+      (make-byte-dispatch-node
+       'chunk-size-lf
+       (list (make-byte-case (make-exact-byte-matcher LF) (make-edge 'chunk-header 'advance) #f))
+       (make-edge 'e-line-ending 'reexecute) #f #f)
+      ;; chunk-header after the chunk-size line CRLF (§21.3:1146), exposing the
+      ;; checked size; a nonzero size takes the data path, the zero chunk trailers.
+      (make-callback-node 'chunk-header 'chunk-header 'chunk-body-decide '() 'chunk-body-decide #f)
+      (make-field-branch-node 'chunk-body-decide 'nonzero '(chunk-size) 'chunk-data-open 'trailer-start #f)
+      (make-span-start-node 'chunk-data-open 'body 'chunk-data-consume #f)   ; a fresh body span per chunk
+      (make-counted-consume-node 'chunk-data-consume 'chunk-size 'chunk-data-close 'e-eof-body #f)
+      (make-span-end-node 'chunk-data-close 'body 'chunk-data-cr #f)
+      (make-byte-dispatch-node
+       'chunk-data-cr
+       (list (make-byte-case (make-exact-byte-matcher CR) (make-edge 'chunk-data-lf 'advance) #f))
+       (make-edge 'e-chunk-ending 'reexecute) #f #f)
+      (make-byte-dispatch-node
+       'chunk-data-lf
+       (list (make-byte-case (make-exact-byte-matcher LF) (make-edge 'chunk-complete 'advance) #f))
+       (make-edge 'e-chunk-ending 'reexecute) #f #f)
+      ;; chunk-complete after the data-terminating CRLF (§21.3:1148); reset the
+      ;; per-chunk size and loop to the next chunk-size.
+      (make-callback-node 'chunk-complete 'chunk-complete 'chunk-size-reset '() 'chunk-size-reset #f)
+      (make-field-action-node 'chunk-size-reset 'clear '(chunk-size) 'chunk-size-gate #f #f)
+      ;; === Slice ④: the trailer section (the zero chunk proceeds here) ======
+      ;; trailer-field reuses the header grammar with DISTINCT trailer spans
+      ;; (§4.5: distinct events → distinct spans → distinct nodes, so duplicated);
+      ;; a recognized Content-Length/Transfer-Encoding trailer name is forbidden
+      ;; at the colon (§21.2:1110, forbidden-trailer = a byte at the colon).
+      (make-byte-dispatch-node
+       'trailer-start
+       (list (make-byte-case (make-exact-byte-matcher CR) (make-edge 'trailer-end-lf 'advance) #f)
+             (make-byte-case (make-byte-set-matcher http-tchar-bytes) (make-edge 'trailer-name-open 'reexecute) #f))
+       (make-edge 'e-hname 'reexecute) #f #f)
+      (make-byte-dispatch-node
+       'trailer-end-lf
+       (list (make-byte-case (make-exact-byte-matcher LF) (make-edge 'msg-complete 'advance) #f))
+       (make-edge 'e-line-ending 'reexecute) #f #f)
+      (make-span-start-node 'trailer-name-open 'trailer-name 'trailer-recognize #f)
+      (make-byte-dispatch-node
+       'trailer-recognize
+       (list (make-byte-case (make-byte-set-matcher (both-cases (char->integer #\C)))
+                             (make-edge 'tcl-0 'advance) #f)
+             (make-byte-case (make-byte-set-matcher (both-cases (char->integer #\T)))
+                             (make-edge 'tte-0 'advance) #f))
+       (make-edge 'trailer-name-loop 'reexecute)
+       'e-eof-tname #f)
+      (make-byte-dispatch-node
+       'trailer-name-loop
+       (list (make-byte-case (make-byte-set-matcher http-tchar-bytes)
+                             (make-edge 'trailer-name-loop 'advance) #f))
+       (make-edge 'trailer-name-close 'reexecute)
+       'e-eof-tname #f)
+      (make-span-end-node 'trailer-name-close 'trailer-name 'trailer-after-name #f)
+      (make-byte-dispatch-node
+       'trailer-after-name
+       (list (make-byte-case (make-exact-byte-matcher 58) (make-edge 'trailer-ows 'advance) #f))
+       (make-edge 'e-hname 'reexecute) #f #f)
+      ;; tcl-end / tte-end: a recognized forbidden name at the colon is
+      ;; forbidden-trailer; a tchar means only the prefix matched (opaque, allowed).
+      (make-byte-dispatch-node
+       'tcl-end
+       (list (make-byte-case (make-exact-byte-matcher 58) (make-edge 'e-forbidden-trailer 'reexecute) #f)
+             (make-byte-case (make-byte-set-matcher http-tchar-bytes) (make-edge 'trailer-name-loop 'reexecute) #f))
+       (make-edge 'trailer-name-close 'reexecute)
+       'e-eof-tname #f)
+      (make-byte-dispatch-node
+       'tte-end
+       (list (make-byte-case (make-exact-byte-matcher 58) (make-edge 'e-forbidden-trailer 'reexecute) #f)
+             (make-byte-case (make-byte-set-matcher http-tchar-bytes) (make-edge 'trailer-name-loop 'reexecute) #f))
+       (make-edge 'trailer-name-close 'reexecute)
+       'e-eof-tname #f)
+      (make-byte-dispatch-node
+       'trailer-ows
+       (list (make-byte-case (make-exact-byte-matcher SP) (make-edge 'trailer-ows 'advance) #f)
+             (make-byte-case (make-exact-byte-matcher 9)  (make-edge 'trailer-ows 'advance) #f))
+       (make-edge 'trailer-value-open 'reexecute) #f #f)
+      (make-span-start-node 'trailer-value-open 'trailer-value 'trailer-value-loop #f)
+      (make-byte-dispatch-node
+       'trailer-value-loop
+       (list (make-byte-case (make-byte-set-matcher http-field-value-bytes)
+                             (make-edge 'trailer-value-loop 'advance) #f))
+       (make-edge 'trailer-value-close 'reexecute)
+       'e-eof-tvalue #f)
+      (make-span-end-node 'trailer-value-close 'trailer-value 'trailer-value-cr #f)
+      (make-byte-dispatch-node
+       'trailer-value-cr
+       (list (make-byte-case (make-exact-byte-matcher CR) (make-edge 'trailer-value-lf 'advance) #f))
+       (make-edge 'e-hvalue 'reexecute) #f #f)
+      (make-byte-dispatch-node
+       'trailer-value-lf
+       (list (make-byte-case (make-exact-byte-matcher LF) (make-edge 'trailer-start 'advance) #f))
+       (make-edge 'e-line-ending 'reexecute) #f #f)
       ;; message-complete, then the completion clear chain resets the message
       ;; fields (§21.3:1150) and loops to idle; the absolute offset is untouched.
       ;; `clear` is infallible, so the chain takes no error edge (decision 0037).
       (make-callback-node 'msg-complete 'message-complete 'clear-cl '() 'clear-cl #f)
       (make-field-action-node 'clear-cl 'clear '(content-length) 'clear-hascl #f #f)
       (make-field-action-node 'clear-hascl 'clear '(has-cl) 'clear-haste #f #f)
-      (make-field-action-node 'clear-haste 'clear '(has-te) 'idle #f #f)
+      (make-field-action-node 'clear-haste 'clear '(has-te) 'clear-chunk #f #f)
+      (make-field-action-node 'clear-chunk 'clear '(chunk-size) 'idle #f #f)
       (make-finish-node 'fin #f)
       ;; === Slice ③: the Content-Length value path ==========================
       ;; cl-end sees the byte after the recognized name: a colon confirms
@@ -436,9 +597,22 @@
       (make-error-node 'e-dup-cl 'duplicate-content-length #f)        ; no span open (post-LF)
       (make-error-node 'e-dup-te 'duplicate-transfer-encoding #f)     ; no span open (post-LF)
       (make-error-node 'e-framing-conflict 'framing-conflict #f)      ; no span open (post-LF)
-      (make-error-node 'e-te-unsup 'unsupported-transfer-encoding #f)) ; header-value span open
+      (make-error-node 'e-te-unsup 'unsupported-transfer-encoding #f) ; header-value span open
+      ;; Slice ④ error nodes (decision 0036)
+      (make-error-node 'e-chunk-size 'invalid-chunk-size #f)          ; no span open
+      (make-error-node 'e-chunk-size-overflow 'chunk-size-overflow #f) ; no span open
+      (make-error-node 'e-chunk-ext 'invalid-chunk-extension #f)      ; no span open
+      (make-error-node 'e-chunk-ending 'invalid-chunk-ending #f)      ; no span open (body closed)
+      (make-error-node 'e-forbidden-trailer 'forbidden-trailer #f)   ; trailer-name span open
+      (make-error-node 'e-eof-cen 'unexpected-eof #f)                ; chunk-extension-name span open
+      (make-error-node 'e-eof-cev 'unexpected-eof #f)                ; chunk-extension-value span open
+      (make-error-node 'e-eof-tname 'unexpected-eof #f)              ; trailer-name span open
+      (make-error-node 'e-eof-tvalue 'unexpected-eof #f))            ; trailer-value span open
      ;; the case-insensitive recognizer chains (decision 0035), generated
      (recognizer-chain "cl-" (string-bytes "ontent-Length") 'cl-end 'hn-loop 'e-eof-hname)
      (recognizer-chain "te-" (string-bytes "ransfer-Encoding") 'te-end 'hn-loop 'e-eof-hname)
-     (recognizer-chain "tv-" (string-bytes "chunked") 'tv-end 'e-te-unsup 'e-eof-hvalue))
+     (recognizer-chain "tv-" (string-bytes "chunked") 'tv-end 'e-te-unsup 'e-eof-hvalue)
+     ;; Slice ④: the trailer forbidden-name recognizers (open the trailer-name span)
+     (recognizer-chain "tcl-" (string-bytes "ontent-Length") 'tcl-end 'trailer-name-loop 'e-eof-tname)
+     (recognizer-chain "tte-" (string-bytes "ransfer-Encoding") 'tte-end 'trailer-name-loop 'e-eof-tname))
      'unexpected-eof #f)))                 ; machine default EOF (no span)

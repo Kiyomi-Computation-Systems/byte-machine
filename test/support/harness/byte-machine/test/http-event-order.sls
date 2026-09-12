@@ -25,7 +25,9 @@
   ;; The span-data events: the ones a fragment splits, so the ones `star`
   ;; quantifies and `trace-skeleton` coalesces. Grows with the fixture.
   (define http-data-events
-    '(method-data target-data header-name-data header-value-data body-data))
+    '(method-data target-data header-name-data header-value-data body-data
+      chunk-extension-name-data chunk-extension-value-data
+      trailer-name-data trailer-value-data))
 
   ;; §21.3's no-body message event order (Slices ① and ②). `method`/`target`
   ;; are 1*, so their data is `star`. The header section is zero or more
@@ -43,9 +45,21 @@
       (rep (star header-name-data) (one header-name-complete)
            (star header-value-data) (one header-value-complete))
       (one headers-complete)
-      ;; the fixed body (Slice ③): body-data* with no completion callback
-      ;; (§21.3:1145). Slice ④ inserts the chunk sub-grammar here instead.
+      ;; the body is one of three shapes, distinguished by which events appear:
+      ;;  * fixed body (Slice ③): body-data* with no completion (§21.3:1145);
+      ;;  * chunked body (Slice ④): nonzero chunks*, the zero chunk, trailers*;
+      ;;  * empty: none of the above.
+      ;; A chunk carries optional extensions before its chunk-header; a nonzero
+      ;; chunk adds body-data* and chunk-complete, the zero chunk does not.
       (star body-data)
+      (rep (rep (star chunk-extension-name-data) (one chunk-extension-name-complete)
+                (opt (star chunk-extension-value-data) (one chunk-extension-value-complete)))
+           (one chunk-header) (star body-data) (one chunk-complete))
+      (opt (rep (star chunk-extension-name-data) (one chunk-extension-name-complete)
+                (opt (star chunk-extension-value-data) (one chunk-extension-value-complete)))
+           (one chunk-header))
+      (rep (star trailer-name-data) (one trailer-name-complete)
+           (star trailer-value-data) (one trailer-value-complete))
       (one message-complete)))
 
   (define (entry-name e) (if (pair? e) (car e) e))
@@ -63,8 +77,12 @@
 
   ;; Match a term list against a skeleton, returning the remaining skeleton or
   ;; #f. Terminals are distinct event names, so a greedy left-to-right match
-  ;; needs no backtracking. Terms: (one E), (star E), (rep T...) — zero or more
-  ;; repetitions of the sub-sequence T....
+  ;; needs no backtracking. Terms: (one E); (star E); (rep T...) — zero or more
+  ;; repetitions of the sub-sequence T...; (opt T...) — zero or one. `rep`/`opt`
+  ;; sub-sequences may themselves nest. `match-terms` is functional (it never
+  ;; mutates the position), so a group that partially matches then fails leaves
+  ;; the caller at its original position — which is what lets a greedy `rep`
+  ;; stop cleanly and a following `opt`/`one` take over (the zero chunk).
   (define (match-terms terms s)
     (if (null? terms)
         s
@@ -83,6 +101,9 @@
                  (if (and r (not (eq? r s)))     ; matched and consumed >= 1
                      (loop r)
                      (match-terms rest s)))))
+            ((opt)
+             (let ((r (match-terms (cdr term) s)))
+               (match-terms rest (or r s))))
             (else #f)))))
 
   (define (event-sequence-matches? grammar skeleton)
