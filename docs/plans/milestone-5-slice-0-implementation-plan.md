@@ -421,4 +421,9 @@ it does.
   acyclicity walk.** Both are Milestone 7's, which names *bounded invalid-machine generator*
   already. Building 2a now would build it twice: M5 and M6 each add codes. The **ratchet** (S3+S4)
   is what comes forward, so a new code's coverage is mandatory the moment it lands.
+  > **Closed 2026-09-11, Milestone 7 Slice ④** (design §4.11 item 4): both tiers now exist —
+  > tier 1/2a is the corruption catalogue (`machine-corrupt.sls`) and tier 2b is the independent
+  > oracle (`verify-oracle.sls`, widened from an acyclicity walk to §4.6's nine graph rules), driven
+  > by `property-rejections-tests.sps`. The ratchet came forward as the code sentinel (set-equal to
+  > the census's derived thirty). See the parent plan's Slice ④ close note.
 - **Any change to the executors or the emitter.** §9's H7.

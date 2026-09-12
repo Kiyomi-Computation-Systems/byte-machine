@@ -589,6 +589,14 @@ byte_machine_add_scheme_lane(
 # Slice ③'s accumulate golden adds the fourth, before its pass exists rather
 # than after: the failure mode is a red BASELINE that names neither the variable
 # nor the lane, and it is the same failure every time.
+# This is one ctest entry that runs the whole mutation suite (~5 min), and ctest
+# buffers a single test's output until it finishes -- so on a plain run this line
+# sits silent for minutes, which is easy to mistake for a hang. To watch it work,
+# run `make test-mutation` (or `ctest --preset release -V -R scheme-mutation`),
+# which streams SchemeMutationSuite's per-pass progress live. The TIMEOUT below is
+# the whole-lane ceiling; MutationRunner bounds each individual mutation with its
+# own per-command timeout, so one non-terminating mutation fails by name rather
+# than consuming this budget in silence.
 if(BYTE_MACHINE_CHEZ_EXECUTABLE)
   byte_machine_add_test(
     NAME byte-machine.harness.scheme-mutation.cmake.direct
@@ -923,6 +931,9 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_COMPILE}
           "${CMAKE_SOURCE_DIR}/test/common/compile-tests.sps"
+  # Milestone 7 Slice ④: the §16.2:910 witness reads compile.sls as a datum for its
+  # derived totality row (render-state-arm's thirteen kind arms), loud when unset.
+  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
   TIMEOUT 120)
 
 byte_machine_add_scheme_lane(
@@ -932,6 +943,33 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_COMPILE}
           "${CMAKE_SOURCE_DIR}/test/common/compile-tests.sps"
+  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
+  TIMEOUT 120)
+
+# --- Milestone 7 Slice ④: the §16.2:911 compile-file witness (§4.12 item 2) ----
+# The limits lane. It both compiles a machine and executes one (it imports the
+# emitter AND the interpreter and runtime -- ${BYTE_MACHINE_CORE_EMIT}), which is
+# exactly why it is its own lane pair and not a group in the rejections program
+# (F7). It compile-files the largest emittable machine (a 256-exact-case dispatch
+# plus a complement-matcher dispatch) at run time, loads the object, and asserts one
+# feed agrees with the interpreter. TIMEOUT from the measured wall-clock (0.29 s
+# source) plus a wide margin -- compile-file of a ~36 KB library is fast.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.compile-limits.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/compile-limits-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/compile-limits-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.compile-limits.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/compile-limits-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/compile-limits-tests.sps"
   TIMEOUT 120)
 
 # --- Milestone 1 Phase 3 Slice A: differential and example ----------------
@@ -1611,6 +1649,7 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-gen.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/rejection-ledger.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/property-driver.sls"
           ${BYTE_MACHINE_CORE_EMIT}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
@@ -1630,6 +1669,7 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-gen.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/rejection-ledger.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/property-driver.sls"
           ${BYTE_MACHINE_CORE_EMIT}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
@@ -1655,6 +1695,7 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-gen.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/rejection-ledger.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/property-driver.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-print.sls"
           ${BYTE_MACHINE_CORE_EMIT}
@@ -1670,6 +1711,7 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-gen.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/rejection-ledger.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/property-driver.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-print.sls"
           ${BYTE_MACHINE_CORE_EMIT}
@@ -1677,6 +1719,57 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/property-fixture-tests.sps"
   ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
   TIMEOUT 60)
+
+# --- Milestone 7 Slice ④: the corruption catalogue and the independent oracle --
+# The rejections lane. Its SOURCES are ${BYTE_MACHINE_CORE_VERIFY} -- CORE_GRAPH
+# plus verify.sls and NO executor -- and the test-support libraries the two
+# instruments read: prng/machine-gen (the draws), machine-print (the corruption
+# datum), rejection-ledger (the property lane's rejected draws, F6/F13),
+# machine-corrupt (the catalogue) and verify-oracle (the independent oracle). It
+# deliberately omits ${BYTE_MACHINE_CORE_EMIT}'s executor libraries and
+# property-driver.sls, so (byte-machine interpret/compile/runtime) are absent: under
+# the AOT lane the program's static-import closure CANNOT reach an executor, which
+# is what makes "the corrupted machine is never handed to an executor" (§22.6:1297,
+# F7) structurally enforceable rather than a runtime claim. BYTE_MACHINE_SOURCE_ROOT
+# for the code sentinel (reads verify.sls as a datum) and BYTE_MACHINE_HARNESS_ROOT
+# for the matcher-bytes prohibition (reads verify-oracle.sls as a datum), both loud
+# when unset. TIMEOUT from the measured wall-clock (2.90 s source; the oracle's
+# three-source drive over 834 machines x 9 rules and the AOT build are the cost, not
+# the catalogue arithmetic -- P3 priced that at 0.83 s) plus a wide margin, NOT
+# copied from the differential's 180.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.property.rejections.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/property-rejections-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-gen.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-print.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/rejection-ledger.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-corrupt.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/verify-oracle.sls"
+          ${BYTE_MACHINE_CORE_VERIFY}
+          "${CMAKE_SOURCE_DIR}/test/common/property-rejections-tests.sps"
+  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
+              "BYTE_MACHINE_HARNESS_ROOT=${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.property.rejections.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/property-rejections-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-gen.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-print.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/rejection-ledger.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/machine-corrupt.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/verify-oracle.sls"
+          ${BYTE_MACHINE_CORE_VERIFY}
+          "${CMAKE_SOURCE_DIR}/test/common/property-rejections-tests.sps"
+  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
+              "BYTE_MACHINE_HARNESS_ROOT=${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
+  TIMEOUT 120)
 
 # --- Milestone 1 Phase 3 Slice B: member-2 runtime-export drift guard ---------
 byte_machine_add_scheme_lane(

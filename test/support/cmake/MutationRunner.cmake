@@ -173,9 +173,24 @@ function(byte_machine_mutation_run_spec stage_dir spec out_rc out_output)
     set(verify_cwd "${BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY}")
   endif()
 
+  # No single mutation may hang the whole lane. Without a per-command bound, one
+  # mutated program that fails to terminate holds this execute_process open until
+  # CTest kills the entire lane at its own TIMEOUT -- minutes of silence that read
+  # as a hang, not a diagnosis. A per-command TIMEOUT turns that into a prompt,
+  # named failure instead (byte_machine_mutation_verdict maps the non-numeric
+  # result it produces to `did-not-terminate`). It is deliberately generous: no
+  # verify command runs anywhere near this long, so tripping it means a genuine
+  # non-termination rather than a slow machine. Override with the environment
+  # variable if a legitimately heavy command ever approaches it.
+  set(_timeout "$ENV{BYTE_MACHINE_MUTATION_INVOCATION_TIMEOUT}")
+  if(NOT _timeout)
+    set(_timeout 300)
+  endif()
+
   execute_process(
     COMMAND ${command}
     WORKING_DIRECTORY "${verify_cwd}"
+    TIMEOUT "${_timeout}"
     RESULT_VARIABLE rc
     OUTPUT_VARIABLE out
     ERROR_VARIABLE err)
@@ -213,6 +228,18 @@ endfunction()
 # not.
 function(byte_machine_mutation_verdict rc output expect_status expect_output_matches out_verdict out_reason)
   set(${out_reason} "" PARENT_SCOPE)
+
+  # A result that is not an integer is not an exit code. byte_machine_mutation_run_spec
+  # bounds each verify command with a TIMEOUT, and a command that had to be killed for
+  # running too long comes back as CMake's non-numeric diagnostic string rather than a
+  # status. That is a mutation that made the program hang: neither a clean pass nor a
+  # clean catch, so it gets its own verdict, which the run surfaces by name rather than
+  # letting a non-numeric "nonzero" fall through to `caught` and hide a non-terminating
+  # mutation. Checked first so no numeric comparison below ever sees a non-number.
+  if(NOT rc MATCHES "^-?[0-9]+$")
+    set(${out_verdict} "did-not-terminate" PARENT_SCOPE)
+    return()
+  endif()
 
   if(rc EQUAL 0)
     set(${out_verdict} "not-caught" PARENT_SCOPE)
@@ -302,6 +329,15 @@ function(byte_machine_mutation_run source_root stage_dir)
   endforeach()
   message(STATUS "byte-machine-mutation: baseline green for ${specs_used}")
 
+  # A single ctest entry buffers its whole output, so on a plain run nothing of
+  # this appears until the lane ends; run the lane with `ctest -V` (see the
+  # `test-mutation` make target) to watch these stream. Either way, this header
+  # plus the per-mutation counter below name exactly how far a run got -- so a
+  # failure or a timeout points at the pass and mutation it stopped on rather
+  # than at a wall of silence.
+  message(STATUS
+    "byte-machine-mutation: pass ${_bm_total_passes}: ${_bm_mutation_count} mutations against ${specs_used}")
+
   # --- Mutations ---------------------------------------------------------
   set(uncaught 0)
   foreach(i RANGE 1 ${_bm_mutation_count})
@@ -364,9 +400,19 @@ function(byte_machine_mutation_run source_root stage_dir)
       "${rc}" "${output}" "${expect_status}" "${expect_output_matches}"
       verdict reason)
 
-    if(survives)
+    if(verdict STREQUAL "did-not-terminate")
+      # Handled ahead of the survives branch: a declared survivor that hangs is
+      # still a hang to investigate, not the tolerated not-caught it was recorded as.
+      message(SEND_ERROR
+        "byte-machine-mutation: [${i}/${_bm_mutation_count}] '${label}': the verify "
+        "command for ${spec} did not terminate and was killed (${rc}). A mutation "
+        "that makes the program hang is a defect to investigate, not a silent catch. "
+        "If it is legitimately slow on this machine, raise "
+        "BYTE_MACHINE_MUTATION_INVOCATION_TIMEOUT.")
+      math(EXPR uncaught "${uncaught} + 1")
+    elseif(survives)
       if(verdict STREQUAL "not-caught")
-        message(STATUS "byte-machine-mutation: SURVIVES (expected) ${label} -- ${survives}")
+        message(STATUS "byte-machine-mutation: [${i}/${_bm_mutation_count}] SURVIVES (expected) ${label} -- ${survives}")
       else()
         message(SEND_ERROR
           "byte-machine-mutation: '${label}' is recorded as knowingly uncaught "
@@ -387,7 +433,7 @@ function(byte_machine_mutation_run source_root stage_dir)
         "the decision this mutation names, and proves nothing about it.")
       math(EXPR uncaught "${uncaught} + 1")
     else()
-      message(STATUS "byte-machine-mutation: caught ${label}")
+      message(STATUS "byte-machine-mutation: [${i}/${_bm_mutation_count}] caught ${label}")
     endif()
   endforeach()
 

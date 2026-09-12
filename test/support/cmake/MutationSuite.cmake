@@ -119,11 +119,20 @@
 # forwarding it to that same builder -- exactly the forwarding bug that would
 # let the permanently-registered staleness lane compile the real text and
 # exit 0.
+#
+# Seventy-three is seventy-two plus one: byte_machine_mutation_run_spec gained a
+# per-command TIMEOUT so one non-terminating mutation can no longer hang the whole
+# lane, and byte_machine_mutation_verdict gained the `did-not-terminate` branch that
+# names the non-numeric result a killed command produces. Folding that branch back
+# into `caught` would let a mutation that made the program hang read as a silent
+# success; the added "a killed, non-terminating command is judged caught instead of
+# did-not-terminate" mutation witnesses it, caught by MutationRunnerSpec.cmake's
+# "a non-numeric result ... is neither caught nor not-caught" case.
 
 cmake_minimum_required(VERSION 3.26)
 
 set(EXPECTED_PASSES 1)
-set(EXPECTED_MUTATIONS 72)
+set(EXPECTED_MUTATIONS 73)
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -377,6 +386,17 @@ byte_machine_mutation(
   LABEL "mutation-runner: a caught verdict is reported as not-caught"
   FIND [[  set(${out_verdict} "caught" PARENT_SCOPE)]]
   REPLACE [[  set(${out_verdict} "not-caught" PARENT_SCOPE)]])
+
+# The verdict for a verify command that had to be killed for running too long: a
+# non-numeric result must be its own `did-not-terminate`, not folded into `caught`
+# where a non-terminating mutation would read as a silent success. MutationRunnerSpec's
+# "a non-numeric result ... is neither caught nor not-caught" case is what tells this
+# REPLACE apart from the FIND.
+byte_machine_mutation(
+  FILE test/support/cmake/MutationRunner.cmake SPEC MutationRunnerSpec.cmake
+  LABEL "mutation-runner: a killed, non-terminating command is judged caught instead of did-not-terminate"
+  FIND [[    set(${out_verdict} "did-not-terminate" PARENT_SCOPE)]]
+  REPLACE [[    set(${out_verdict} "caught" PARENT_SCOPE)]])
 
 # EXPECT_SURVIVES is judged by whether the verify command merely exited zero;
 # EXPECT_STATUS and EXPECT_OUTPUT_MATCHES are never consulted for a declared

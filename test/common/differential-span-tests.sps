@@ -714,6 +714,18 @@
 ;; bounded invalid-machine generator is Milestone 7's, and this must not quietly
 ;; become it.
 ;;
+;; *** 2026-09-11, Milestone 7 Slice ④ (design §4.11 item 4, closing note): the
+;; bounded invalid-machine generator now EXISTS -- the corruption catalogue and the
+;; independent oracle in property-rejections-tests.sps, over the generator's drawn
+;; span-bearing bases. This table did NOT become it and keeps its own job: it is a
+;; HAND-DERIVED census of span topologies with per-row verdicts derived from the
+;; spec before running (the "write the set down" shape §25:1590's universal wants),
+;; whereas the catalogue corrupts DRAWN machines one decision at a time and the
+;; oracle re-derives the graph rules. §25:1590 stays only PARTLY a universal (§4.11
+;; item 6): the catalogue rejects drawn span faults by edit but §4.6 keeps pass 7's
+;; span-state lattice outside the oracle, so this enumerated table remains the
+;; nearest thing to the universal and is not superseded.
+;;
 ;; Every row shares one skeleton so the graph plumbing cannot differ between
 ;; them: a one-byte dispatch consuming `A` into the row's head, a reject
 ;; terminal, and an `exit` dispatch whose EOF route is the finish -- which is

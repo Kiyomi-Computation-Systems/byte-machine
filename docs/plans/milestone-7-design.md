@@ -1,7 +1,7 @@
 # Milestone 7 Design — Verification and generative hardening
 
 **Status: Gate 0 discharged 2026-09-06 as decisions 0031-0033 (PR #85; §4's blockquote and
-§11's first bullet carry the discharge); Slice ⓪ delivered 2026-09-07 (PR #89); Slice ① delivered 2026-09-11 (PR #92); Slice ② (the generator over every construct and the property differential suite) delivered 2026-09-11 (PR #95); Slice ③ (the printer, the fixture saver, and the minimizer) delivered 2026-09-11 (PR #97); Slice ④ next.** Before it: the design merged 2026-09-06
+§11's first bullet carry the discharge); Slice ⓪ delivered 2026-09-07 (PR #89); Slice ① delivered 2026-09-11 (PR #92); Slice ② (the generator over every construct and the property differential suite) delivered 2026-09-11 (PR #95); Slice ③ (the printer, the fixture saver, and the minimizer) delivered 2026-09-11 (PR #97); Slice ④ (the corruption catalogue, the independent oracle, the `§16.2:910` and `:911` witnesses, and the milestone close) delivered 2026-09-11; Milestone 7 closed 2026-09-11.** Before it: the design merged 2026-09-06
 as PR #83 = `8edceb1`, and §4.12 was settled by the owner the same day (items 1-3 approved).
 Written against **`5ac363a`** (`main` = PR #82, which added only
 `AGENTS.md` bullets on top of Milestone 6's close at `0920b13`) on branch
@@ -11,6 +11,33 @@ suite **58 passes / 522 mutations** (`EXPECTED_PASSES` and `EXPECTED_MUTATIONS` 
 `test/support/cmake/SchemeMutationSuite.cmake`, asserted by the lane against what actually ran);
 the diagnostic census **30 codes over 56 sites** (`diagnostic-census-tests.sps`'s `pinned-sites`,
 summed); under Chez Scheme 10.4.1 on `tarm64osx`.
+
+> **Corrections at delivery (2026-09-11, Slice ④), each measured through the registered lane and
+> dispositioned in full in the parent plan's Slice ④ close note.** These annotate the sections named;
+> they do not rewrite them. **§4.6's drive** gains the catalogue's corrupted machines as a third
+> source: F1 measured that `§16.2:885`'s duplicate row and `:894`'s prefix row fire on no free draw
+> (0 of 512), and the corrupted machines make every rule fire by construction. **§4.5's totality
+> sentinel** is realized as two rows (F5): a code sentinel — the entry codes ∪ the unconstructible
+> list, set-equal to the census's thirty — and a hand-written refusal table keyed by `§16.2` bullet;
+> the sentence's literal union of codes with the constructor-refusal bullets (which name no code) is
+> unsatisfiable. The code sentinel's `∪ unconstructible` term proved **redundant** (invalid-shape is
+> also the not-a-machine entry's code, and every census code has an entry), so its mutation is a
+> declared survivor. **§9's close-out search** prints two lines, `verify.sls:31` and this slice's own
+> §4.12 item 3 comment at `verify.sls:115`, neither a receiver (F8; a bare `rg -i 'owed'` also
+> matches `allowed`/`followed`/`narrowed`/`flowed`, so the genuine `owed` count is five, word-bounded,
+> none naming Milestone 7). **§4.8/§9's `:910` witness machine** is a hand-built every-construct machine in
+> `compile-tests.sps`, its totality a derived row against `render-state-arm`'s thirteen arms (F10;
+> the compile lane has no generator or printer). **§3.1's negative accounting** re-measured 19 / 17 /
+> 155, twenty-four of thirty codes without a naming negative (F11). Three findings surfaced in
+> implementation: decision **0023 item 3's parked-set prose is incomplete** — the states a parser can
+> be parked on also include callback and span-end nodes — derived from the executor's parking
+> semantics (a parser is parked at a callback that has returned, and at a span-end whose resume point
+> is its successor), which `verify.sls`'s `parked?` also carries, so the oracle reaches the same set
+> independently rather than by reading the verifier; the `§16.2:911` **lane name** is
+> `byte-machine.unit.compile-limits.chez.*` (the plan's `compile` layer does not exist in the
+> harness); and **reachability is ill-defined on a duplicate-node-name graph**, so the oracle's
+> reachability rules are compared only on unique-node-name machines. Measured at the close: release
+> **120/120** both Chez modes, mutation **61 passes / 590 mutations**, census unmoved at 30/56.
 
 **Every citation in this document was measured on 2026-09-06 against `5ac363a`.** Parent-plan
 citations are `§section:line`; source citations name the **construct** and give a line only where
@@ -1405,11 +1432,11 @@ not contain (§4.12).
 each entry gets a **dated disposition** naming the slice, the file and the case in the tree
 that meets it — never reworded to match what shipped.
 
-| Criterion | Allocated to | What will meet it |
-| --- | --- | --- |
-| **:1625** — "every required diagnostic has positive and negative tests" | **④** | The catalogue's drive: for every code in the census's derived set, an entry whose corrupted machine emits it and whose base does not, with a stated reason for the codes a constructor refuses or the public API cannot construct. "Required" is read as the code set `verify.sls` emits, which is the ratchet's set; the positive half is already the census's, the negative half is new. |
-| **:1626** — "property suite runs in both execution lanes" | **②** (already true; re-verified) | The `.chez.source` and `.chez.aot` registrations of every property lane, green with identical counters; stated at close that this criterion held before the milestone and what the milestone added under it. |
-| **:1627** — "minimized/reproducible failure fixtures can be saved without external tooling" | **③** | The probe: a saved fixture that reproduces through the shipped launcher and a minimized one that is smaller and still reproduces; the printer's totality and round trip. |
+| Criterion | Allocated to | What will meet it | Disposition at close (2026-09-11) |
+| --- | --- | --- | --- |
+| **:1625** — "every required diagnostic has positive and negative tests" | **④** | The catalogue's drive: for every code in the census's derived set, an entry whose corrupted machine emits it and whose base does not, with a stated reason for the codes a constructor refuses or the public API cannot construct. "Required" is read as the code set `verify.sls` emits, which is the ratchet's set; the positive half is already the census's, the negative half is new. | **Met** by Slice ④'s catalogue in `property-rejections-tests.sps` (lanes `byte-machine.property.rejections.chez.{source,aot}`): each of the thirty codes `diagnostic-census-tests.sps`'s `pinned-sites` derives has a `machine-corrupt.sls` entry whose corruption emits it (the positive-half group, by containment) and whose twin verifies and does not (the negative-half group); the code sentinel is a floor-independent ratchet failing by name on a thirty-first code. |
+| **:1626** — "property suite runs in both execution lanes" | **②** (already true; re-verified) | The `.chez.source` and `.chez.aot` registrations of every property lane, green with identical counters; stated at close that this criterion held before the milestone and what the milestone added under it. | **Met**, held before the milestone; Slice ④ added two lane pairs — the rejections lanes and the `byte-machine.unit.compile-limits.chez.{source,aot}` witness — green in both modes with identical counters, bringing the release to 120 lanes. |
+| **:1627** — "minimized/reproducible failure fixtures can be saved without external tooling" | **③** | The probe: a saved fixture that reproduces through the shipped launcher and a minimized one that is smaller and still reproduces; the printer's totality and round trip. | **Met** by Slice ③'s probe (`property-fixture-tests.sps`) — a saved fixture that reproduces through `chez-source.ss` and a smaller minimized one that still does. |
 
 ---
 

@@ -54,6 +54,7 @@
           (byte-machine private ir)
           (byte-machine private conditions)
           (byte-machine test error-projection)
+          (byte-machine test rejection-ledger)
           (byte-machine test prng)
           (byte-machine test machine-gen))
 
@@ -874,20 +875,14 @@
   (define (write-to-string v) (call-with-string-output-port (lambda (p) (write v p))))
 
   ;; ============ 8. rejection ledger ===========================================
-  ;; DEFERRED (0033 item 1 -> Slice ④): exported and shaped, but NOT exercised in
-  ;; this slice -- the property lane runs `property-steering` (orphan/dangling probs
-  ;; 0) so it draws no rejection material worth cataloguing and counts rejections as
-  ;; a bare total, never by code. Slice ④'s catalogue and independent oracle drive
-  ;; `free-steering` and consume this ledger; its receiver is 0033 item 1.
-  (define-record-type rejection (fields index machine diagnostics codes code-sites))
-  (define (make-rejection* index machine diagnostics)
-    (make-rejection index machine diagnostics
-                    (sort-unique (map diagnostic-code diagnostics))
-                    (sort-unique-pairs (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d))) diagnostics))))
-  (define (sort-unique xs)
-    (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b)))
-               (fold-left (lambda (a x) (if (memq x a) a (cons x a))) '() xs)))
-  (define (sort-unique-pairs xs) (fold-left (lambda (a x) (if (member x a) a (cons x a))) '() xs))
+  ;; MOVED (Slice ④, F13): the record, `make-rejection*` and the accessors now live
+  ;; in the executor-free `(byte-machine test rejection-ledger)`, imported above and
+  ;; RE-EXPORTED from this library (the export list is unchanged, so nothing that
+  ;; reads the driver moves). It moved because Slice ④'s rejections program must have
+  ;; no executor in scope (§4.5 / §22.6:1297) and THIS driver imports all three
+  ;; executors; a ledger left here would drag them into that program's manifest. Its
+  ;; receiver, decision 0033 item 1 -- "rejected draws are counted by code and kept"
+  ;; -- is `property-rejections-tests.sps`, which imports the small library directly.
 
   ;; ============ 9. Layer 2 -- the normalized-form comparators (§22.5:1287/:1289)
   (define (coalesce-fragments trace)

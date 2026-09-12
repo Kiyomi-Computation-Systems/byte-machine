@@ -108,7 +108,7 @@ both — a body-shaped arm in the retention lane, and the close-out: every scope
 bullet and exit criterion dispositioned against the tree, nothing the milestone
 approved left unshipped, and the one thing it declined to do (narrowing the
 verifier's reachability pass) handed to Milestone 7 with both ends written.
-Milestone 7 (verification and generative hardening) is in progress: its Gate 0
+Milestone 7 (verification and generative hardening) closed 2026-09-11: its Gate 0
 discharged 2026-09-06 as decisions 0031-0033, and Slice ⓪ closed 2026-09-07.
 The verifier's reachability pass now walks the relation an execution can
 actually occupy — byte flow, then EOF routes from the states a parser can be
@@ -143,6 +143,22 @@ it is fixed. A minimizer then shrinks that program — dropping nodes, cases, by
 and feeds — to the smallest trial that still disagrees, and writes it beside the
 first. The slice proves all three against a deliberate failure and pins them with a
 new mutation pass; it too changes no file under =src/=.
+
+Slice ④ closed 2026-09-11 and closed the milestone: the machine that /breaks/
+them. A corruption catalogue takes each verified machine and, for every one of the
+thirty diagnostics the verifier can emit, produces a machine differing in exactly
+one decision — the fault — beside a twin differing in the closest legal way, so
+each diagnostic has both a positive test (the fault emits it) and a negative one
+(the twin does not). An independent second implementation of nine of the verifier's
+graph rules — written from the specifications, not from the verifier — agrees with
+it on every drawn, rejected and corrupted machine of the seed set, so a rule the
+two ever disagree on has found a real defect. A structural witness proves no
+declared name can become a generated identifier (=§16.2:910=), and a =compile-file=
+witness compiles the largest emittable machine and runs it, measuring that no
+backend limit is reachable by a version-0.1 machine (=§16.2:911=). Milestone 7
+(verification and generative hardening) is **closed 2026-09-11**, delivered as a
+Gate 0 plus five slices; the whole suite runs 120 lanes in both execution modes and
+the mutation suite pins 61 passes over 590 mutations.
 
 =src/byte-machine/= holds the construction API, the verifier, the normalizer and
 emitter, the reference interpreter, and the runtime, each exercised in both the
