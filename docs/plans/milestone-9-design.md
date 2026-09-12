@@ -139,6 +139,17 @@ that does not put `scheme.exe` on `PATH`) and the AOT object convention. Slice
 Nine met, three partly, one true-but-unasserted, five open (:1677 and :1678
 share Slice ②'s work but are separate criteria and get separate rows).
 
+> **Annotated 2026-09-12 (Slice ⓪).** This summary sentence is loose: its four
+> buckets sum to eighteen, not fifteen ("nine met" reads the three `partly` and
+> the one true-but-unasserted rows as met), and the Slice ⓪ exit line below
+> ("open rows are the five plus three partly") counts differently again. The
+> **table above and the Appendix are the consistent, authoritative disposition**
+> and are what the shipped ledger encodes: **6 `met`, 3 `partly`, 6 `open`**
+> (§26:1680, true but unasserted, is `open`). This is exactly the "believing a
+> criterion" drift the ledger exists to catch; `(byte-machine test
+> release-ledger)` now carries the per-row states and a lane asserts the
+> partition. Nothing above is rewritten.
+
 `§27`'s eleven documentation deliverables, same treatment: **one** exists
 (`docs/reference/callback-span-lifetime.md`, :1694) and one is the changelog
 (:1701, exists but wants its `0.1.0` entry). The other nine do not exist. The

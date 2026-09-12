@@ -1,3 +1,4 @@
+;;; SPDX-License-Identifier: BSD-3-Clause
 ;;; (byte-machine private normal-ir): the normalizer (parent §17). Lowers a
 ;;; VERIFIED source machine to a canonical normalized IR in deterministic order
 ;;; — nodes numbered by declaration order, dispatch cases sorted ascending by

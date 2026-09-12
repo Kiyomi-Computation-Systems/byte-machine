@@ -1,3 +1,4 @@
+;;; SPDX-License-Identifier: BSD-3-Clause
 ;;; (byte-machine private names): the portable ASCII name grammar,
 ;;; [a-z][a-z0-9-]*, in ONE place (parent §9.3:423, §10.1:480, §16.2:886;
 ;;; Milestone 6 Slice ⓪, design §4.12 item 2).

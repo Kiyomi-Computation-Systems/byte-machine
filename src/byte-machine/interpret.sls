@@ -1,3 +1,4 @@
+;;; SPDX-License-Identifier: BSD-3-Clause
 ;;; (byte-machine interpret): the reference interpreter — the semantic oracle.
 ;;; It turns a *verification* (which carries its machine, §9.2) into a
 ;;; runtime-compatible compiled-machine by closing an `op` over the verified IR.
