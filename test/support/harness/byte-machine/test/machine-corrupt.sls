@@ -35,7 +35,7 @@
           corruption-entry-corrupt corruption-entry-twin corruption-entry-expected
           corruption-entries
           refusal? make-refusal refusal-bullet refusal-name refusal-thunk refusal-reason
-          constructor-refusals
+          constructor-refusals unconstructible-codes
           ;; the edit kit, exported so the program can pin it and a reader can test it
           operand-value q locate edit all-node-ctors)
   (import (rnrs)
@@ -460,5 +460,45 @@
       (lambda (m) m)
       (lambda (m) (list (cons 'inconsistent-span-state (pause-node-name (first-node-of m pause-node?))))))))
 
-  ;; ---- the refusal table (F5 row 2) -- filled in a later batch --------------
-  (define constructor-refusals '()))
+  ;; ---- the refusal table (F5 row 2) ----------------------------------------
+  ;; Faults the PUBLIC constructors refuse, so no machine can carry them and the
+  ;; catalogue reaches them only as a raise. Each thunk performs the refused
+  ;; construction by evaluating a `(byte-machine graph)` call in `eval-env` (graph
+  ;; re-exports ir.sls's validated constructors, which raise a contract violation
+  ;; whose `who` is the constructor). `:906` has NO thunk: terminal constructors
+  ;; take name and source-label only -- there is no out-edge slot to give -- so the
+  ;; row records the reason and the program asserts it structurally against ir.sls.
+  (define constructor-refusals
+    (list
+     (make-refusal ':895 'byte-dispatch-no-fallback
+       (lambda () (eval '(make-byte-dispatch-node 'zz (list) #f #f #f) eval-env))
+       "make-byte-dispatch-node requires an edge fallback (§16.2:895)")
+     (make-refusal ':895 'sequence-dispatch-no-fallback
+       (lambda () (eval '(make-sequence-dispatch-node 'zz (list (make-sequence-case '(65) 'x #f)) #f #f #f) eval-env))
+       "make-sequence-dispatch-node requires an edge mismatch fallback (§16.2:895)")
+     (make-refusal ':896 'edge-mode-outside-closed-set
+       (lambda () (eval '(make-edge 'x 'not-a-mode) eval-env))
+       "make-edge's mode must be advance or reexecute (§16.2:896)")
+     (make-refusal ':889 'uint-field-bad-width
+       (lambda () (eval '(make-uint-field 'f 7 0 #f) eval-env))
+       "make-uint-field's width must be 8/16/32/64 (§16.2:889 width half)")
+     (make-refusal ':889 'uint-field-bad-initial
+       (lambda () (eval '(make-uint-field 'f 8 999 #f) eval-env))
+       "make-uint-field's initial must fit the width (§16.2:889 initial half)")
+     (make-refusal ':889 'field-action-bad-operation
+       (lambda () (eval '(make-field-action-node 'fa 'not-an-op '() 'nx #f #f) eval-env))
+       "make-field-action-node rejects arbitrary operation names (§16.2:889 operation half)")
+     (make-refusal ':904 'integer-accumulate-bad-base
+       (lambda () (eval '(make-integer-accumulate-node 'a 'fld 7 'd (make-edge 'x 'advance) 'err 'e #f) eval-env))
+       "make-integer-accumulate-node's base must be 10 or 16 (§16.2:904 base half)")
+     (make-refusal ':906 'terminal-out-edge #f
+       "terminal node constructors (make-stop-node/make-finish-node/make-error-node) take name and source-label only -- there is no out-edge slot to give")))
+
+  ;; ---- the unconstructible list (Step 7) ------------------------------------
+  ;; Census codes reachable neither by an entry nor by a refusal, because no
+  ;; machine can carry the fault through the public API. One member: `invalid-shape`
+  ;; via its unsupported-version half (§9.1:320-322) -- `verify-tests.sps` forges
+  ;; such a descriptor with a test-only vector, and this catalogue does not. Its
+  ;; NOT-a-machine half IS an entry (`shape-not-a-machine`). The code sentinel
+  ;; (F5 row 1) adds these codes to the entry codes' union.
+  (define unconstructible-codes '(invalid-shape)))
