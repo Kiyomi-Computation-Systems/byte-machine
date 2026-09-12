@@ -113,6 +113,46 @@
   (define (nodes-of m pred) (filter pred (machine-nodes m)))
   (define (first-node-of m pred)
     (let ((ns (nodes-of m pred))) (and (pair? ns) (car ns))))
+  (define (first-branching-cb-node m)
+    (find (lambda (nd) (and (callback-node? nd) (pair? (callback-node-branch-targets nd))))
+          (machine-nodes m)))
+  (define (optional-decision-with-default m)
+    (find (lambda (c) (and (eq? (callback-declaration-kind c) 'decision)
+                           (not (callback-declaration-required? c))
+                           (callback-declaration-default-branch c)))
+          (machine-callbacks m)))
+  (define (first-decision-with-keys m)
+    (find (lambda (c) (and (eq? (callback-declaration-kind c) 'decision)
+                           (pair? (callback-declaration-branch-keys c))))
+          (machine-callbacks m)))
+  (define (span-with-data m)
+    (find (lambda (s) (span-declaration-data-callback s)) (machine-spans m)))
+  (define (bd-with-cases m k)
+    (find (lambda (nd) (and (byte-dispatch-node? nd)
+                            (>= (length (byte-dispatch-node-cases nd)) k)))
+          (machine-nodes m)))
+  (define (two-spans? m) (>= (length (machine-spans m)) 2))
+  (define (other-span-name m this)
+    (let ((n (find (lambda (s) (not (eq? (span-declaration-name s) this))) (machine-spans m))))
+      (and n (span-declaration-name n))))
+
+  ;; ---- list-operand edits (extend / duplicate an element) -------------------
+  (define (list-operand form pos)
+    (let ((o (list-ref form pos)))
+      (unless (and (pair? o) (eq? (car o) 'list))
+        (assertion-violation 'list-operand "operand is not a (list ...)" pos o))
+      o))
+  ;; Append `new-form` (a raw constructor datum) to the (list ...) operand at
+  ;; edit-pos of the one matching form.
+  (define (extend datum family match-pos match-val edit-pos new-form)
+    (let ((old (list-operand (locate datum family match-pos match-val) edit-pos)))
+      (edit datum family match-pos match-val edit-pos (append old (list new-form)))))
+  ;; Duplicate the first element of the (list ...) operand at edit-pos.
+  (define (dup-first datum family match-pos match-val edit-pos)
+    (let* ((old (list-operand (locate datum family match-pos match-val) edit-pos))
+           (elts (cdr old)))
+      (when (null? elts) (assertion-violation 'dup-first "empty list operand" edit-pos))
+      (edit datum family match-pos match-val edit-pos (append old (list (car elts))))))
 
   ;; ---- the entry record -----------------------------------------------------
   (define-record-type corruption-entry
@@ -237,7 +277,165 @@
       (lambda (m) (let ((n (first-node-of m span-start-node?)))
                     (build (edit (->d m) '(make-span-start-node) 1 (span-start-node-name n) 2 (q 'zz-ghost-span)))))
       (lambda (m) m)
-      (lambda (m) (list (cons 'missing-span-declaration (span-start-node-name (first-node-of m span-start-node?))))))))
+      (lambda (m) (list (cons 'missing-span-declaration (span-start-node-name (first-node-of m span-start-node?))))))
+     ;; :901 duplicate branch key -- a callback node lists one key twice.
+     (make-corruption-entry
+      'duplicate-branch-key ':901
+      (lambda (m) (first-branching-cb-node m))
+      (lambda (m) (let ((n (first-branching-cb-node m)))
+                    (build (edit (->d m) '(make-callback-node) 1 (callback-node-name n) 4
+                                 (q (let ((ts (callback-node-branch-targets n))) (list (car ts) (car ts))))))))
+      (lambda (m) m)
+      (lambda (m) (list (cons 'duplicate-branch-key (callback-node-name (first-branching-cb-node m))))))
+     ;; :902 reserved branch key -- a decision callback declaration lists `continue`.
+     (make-corruption-entry
+      'reserved-branch-key ':902
+      (lambda (m) (first-decision-with-keys m))
+      (lambda (m) (let ((c (first-decision-with-keys m)))
+                    (build (edit (->d m) '(make-callback-declaration) 1 (callback-declaration-name c) 4
+                                 (q (cons 'continue (callback-declaration-branch-keys c)))))))
+      (lambda (m) m)
+      (lambda (m) (list (cons 'reserved-branch-key (callback-declaration-name (first-decision-with-keys m))))))
+     ;; :901 invalid callback invocation -- a callback node names an undeclared key.
+     (make-corruption-entry
+      'invalid-callback-invocation ':901
+      (lambda (m) (first-branching-cb-node m))
+      (lambda (m) (let ((n (first-branching-cb-node m)))
+                    (build (edit (->d m) '(make-callback-node) 1 (callback-node-name n) 4
+                                 (q (let ((ts (callback-node-branch-targets n)))
+                                      (cons (cons 'zz-bad-key (cdr (car ts))) (cdr ts))))))))
+      (lambda (m) m)
+      (lambda (m) (list (cons 'invalid-callback-invocation (callback-node-name (first-branching-cb-node m))))))
+     ;; :891 invalid callback declaration -- clear an optional decision callback's default.
+     (make-corruption-entry
+      'invalid-callback-declaration ':891
+      (lambda (m) (optional-decision-with-default m))
+      (lambda (m) (let ((c (optional-decision-with-default m)))
+                    (build (edit (->d m) '(make-callback-declaration) 1 (callback-declaration-name c) 5 #f))))
+      (lambda (m) m)
+      (lambda (m) (list (cons 'invalid-callback-declaration (callback-declaration-name (optional-decision-with-default m))))))
+     ;; :892 invalid span callback -- a span's data callback is declared a non-span kind.
+     (make-corruption-entry
+      'invalid-span-callback ':892
+      (lambda (m) (span-with-data m))
+      (lambda (m) (let ((cb (span-declaration-data-callback (span-with-data m))))
+                    (build (edit (->d m) '(make-callback-declaration) 1 cb 2 (q 'event)))))
+      (lambda (m) m)
+      (lambda (m) (list (cons 'invalid-span-callback (span-declaration-name (span-with-data m))))))
+     ;; beside :890 unreferenced callback declaration -- INSERT a span-data callback
+     ;; no span names.
+     (make-corruption-entry
+      'unreferenced-callback-declaration ':890
+      (lambda (m) #t)
+      (lambda (m) (build (extend (->d m) '(make-machine) 1 (machine-name m) 4
+                                 '(make-callback-declaration (quote zz-unref) (quote span-data) #t (quote ()) #f #f))))
+      (lambda (m) m)
+      (lambda (m) (list (cons 'unreferenced-callback-declaration 'zz-unref))))
+     ;; :897 unreachable node -- INSERT an orphan node (no in-edge).
+     (make-corruption-entry
+      'unreachable-node ':897
+      (lambda (m) #t)
+      (lambda (m) (build (extend (->d m) '(make-machine) 1 (machine-name m) 7
+                                 '(make-stop-node (quote zz-orphan) #f))))
+      (lambda (m) m)
+      (lambda (m) (list (cons 'unreachable-node 'zz-orphan))))
+     ;; :893 overlapping cases -- duplicate a byte-dispatch node's first case.
+     (make-corruption-entry
+      'overlapping-cases ':893
+      (lambda (m) (bd-with-cases m 1))
+      (lambda (m) (let ((n (bd-with-cases m 1)))
+                    (build (dup-first (->d m) '(make-byte-dispatch-node) 1 (byte-dispatch-node-name n) 2))))
+      (lambda (m) m)
+      (lambda (m) (list (cons 'overlapping-cases (byte-dispatch-node-name (bd-with-cases m 1))))))
+     ;; :894 ambiguous sequence prefix -- duplicate a sequence-dispatch node's case.
+     (make-corruption-entry
+      'ambiguous-sequence-prefix ':894
+      (lambda (m) (first-node-of m sequence-dispatch-node?))
+      (lambda (m) (let ((n (first-node-of m sequence-dispatch-node?)))
+                    (build (dup-first (->d m) '(make-sequence-dispatch-node) 1 (sequence-dispatch-node-name n) 2))))
+      (lambda (m) m)
+      (lambda (m) (list (cons 'ambiguous-sequence-prefix (sequence-dispatch-node-name (first-node-of m sequence-dispatch-node?))))))
+     ;; :898 zero-progress cycle -- a byte-dispatch node reexecutes to itself on fallback.
+     (make-corruption-entry
+      'zero-progress-cycle ':898
+      (lambda (m) (first-node-of m byte-dispatch-node?))
+      (lambda (m) (let* ((n (first-node-of m byte-dispatch-node?)) (nm (byte-dispatch-node-name n)))
+                    (build (edit (->d m) '(make-byte-dispatch-node) 1 nm 3
+                                 (list 'make-edge (q nm) (q 'reexecute))))))
+      (lambda (m) m)
+      (lambda (m) (list (cons 'zero-progress-cycle (byte-dispatch-node-name (first-node-of m byte-dispatch-node?))))))
+     ;; :908 non-EOF control flow into a finish -- a byte edge (fallback) into a finish.
+     (make-corruption-entry
+      'non-eof-into-finish ':908
+      (lambda (m) (and (first-node-of m byte-dispatch-node?) (first-node-of m finish-node?)))
+      (lambda (m) (let ((n (first-node-of m byte-dispatch-node?)) (f (first-node-of m finish-node?)))
+                    (build (edit (->d m) '(make-byte-dispatch-node) 1 (byte-dispatch-node-name n) 3
+                                 (list 'make-edge (q (finish-node-name f)) (q 'advance))))))
+      (lambda (m) m)
+      (lambda (m) (list (cons 'non-eof-into-finish (byte-dispatch-node-name (first-node-of m byte-dispatch-node?))))))
+     ;; :908 EOF-only zero-progress cycle -- a byte-dispatch node's eof-target is itself.
+     (make-corruption-entry
+      'eof-zero-progress-cycle ':908
+      (lambda (m) (first-node-of m byte-dispatch-node?))
+      (lambda (m) (let* ((n (first-node-of m byte-dispatch-node?)) (nm (byte-dispatch-node-name n)))
+                    (build (edit (->d m) '(make-byte-dispatch-node) 1 nm 4 (q nm)))))
+      (lambda (m) m)
+      (lambda (m) (list (cons 'eof-zero-progress-cycle (byte-dispatch-node-name (first-node-of m byte-dispatch-node?))))))
+     ;; :909 EOF-reachable stop -- a byte-dispatch node's eof route reaches a stop.
+     (make-corruption-entry
+      'eof-reachable-stop ':909
+      (lambda (m) (and (first-node-of m byte-dispatch-node?) (first-node-of m stop-node?)))
+      (lambda (m) (let ((n (first-node-of m byte-dispatch-node?)) (s (first-node-of m stop-node?)))
+                    (build (edit (->d m) '(make-byte-dispatch-node) 1 (byte-dispatch-node-name n) 4
+                                 (q (stop-node-name s))))))
+      (lambda (m) m)
+      (lambda (m) (list (cons 'eof-reachable-stop (byte-dispatch-node-name (first-node-of m byte-dispatch-node?))))))
+     ;; :899 invalid span state -- a span-end node names a different span.
+     (make-corruption-entry
+      'invalid-span-state ':899
+      (lambda (m) (and (first-node-of m span-end-node?) (two-spans? m)))
+      (lambda (m) (let* ((n (first-node-of m span-end-node?))
+                         (other (other-span-name m (span-end-node-span n))))
+                    (build (edit (->d m) '(make-span-end-node) 1 (span-end-node-name n) 2 (q other)))))
+      (lambda (m) m)
+      (lambda (m) (list (cons 'invalid-span-state (span-end-node-name (first-node-of m span-end-node?))))))
+     ;; :900 span active at pause -- INTERPOSE a fresh pause on the span's own path
+     ;; (span-start -> new pause -> the start's old successor), so the pause is
+     ;; reached with the span open and has a single, span-active in-edge.
+     (make-corruption-entry
+      'span-active-at-pause ':900
+      (lambda (m) (first-node-of m span-start-node?))
+      (lambda (m) (let* ((s (first-node-of m span-start-node?))
+                         (nm (span-start-node-name s))
+                         (old-next (span-start-node-next s))
+                         (d1 (extend (->d m) '(make-machine) 1 (machine-name m) 7
+                                     (list 'make-pause-node (q 'zz-inspan-pause) (q old-next) #f))))
+                    (build (edit d1 '(make-span-start-node) 1 nm 3 (q 'zz-inspan-pause)))))
+      (lambda (m) m)
+      (lambda (m) (list (cons 'span-active-at-pause 'zz-inspan-pause))))
+     ;; :907 span active at exit -- INTERPOSE a fresh finish on the span's own path,
+     ;; so a successful EOF exit is reached with the span still open (one in-edge).
+     (make-corruption-entry
+      'span-active-at-exit ':907
+      (lambda (m) (first-node-of m span-start-node?))
+      (lambda (m) (let* ((s (first-node-of m span-start-node?))
+                         (nm (span-start-node-name s))
+                         (d1 (extend (->d m) '(make-machine) 1 (machine-name m) 7
+                                     (list 'make-finish-node (q 'zz-exit-finish) #f))))
+                    (build (edit d1 '(make-span-start-node) 1 nm 3 (q 'zz-exit-finish)))))
+      (lambda (m) m)
+      (lambda (m) (list (cons 'span-active-at-exit 'zz-exit-finish))))
+     ;; :899 inconsistent span state -- a span-start jumps to an EXISTING pause that
+     ;; keeps its own (span-closed) in-edge, so the pause is reached with two
+     ;; different active-span sets (the merge disagreement, decision 0029).
+     (make-corruption-entry
+      'inconsistent-span-state ':899
+      (lambda (m) (and (first-node-of m span-start-node?) (first-node-of m pause-node?)))
+      (lambda (m) (let ((s (first-node-of m span-start-node?)) (p (first-node-of m pause-node?)))
+                    (build (edit (->d m) '(make-span-start-node) 1 (span-start-node-name s) 3
+                                 (q (pause-node-name p))))))
+      (lambda (m) m)
+      (lambda (m) (list (cons 'inconsistent-span-state (pause-node-name (first-node-of m pause-node?))))))))
 
   ;; ---- the refusal table (F5 row 2) -- filled in a later batch --------------
   (define constructor-refusals '()))
