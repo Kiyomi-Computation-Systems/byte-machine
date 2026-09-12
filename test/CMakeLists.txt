@@ -589,6 +589,14 @@ byte_machine_add_scheme_lane(
 # Slice ③'s accumulate golden adds the fourth, before its pass exists rather
 # than after: the failure mode is a red BASELINE that names neither the variable
 # nor the lane, and it is the same failure every time.
+# This is one ctest entry that runs the whole mutation suite (~5 min), and ctest
+# buffers a single test's output until it finishes -- so on a plain run this line
+# sits silent for minutes, which is easy to mistake for a hang. To watch it work,
+# run `make test-mutation` (or `ctest --preset release -V -R scheme-mutation`),
+# which streams SchemeMutationSuite's per-pass progress live. The TIMEOUT below is
+# the whole-lane ceiling; MutationRunner bounds each individual mutation with its
+# own per-command timeout, so one non-terminating mutation fails by name rather
+# than consuming this budget in silence.
 if(BYTE_MACHINE_CHEZ_EXECUTABLE)
   byte_machine_add_test(
     NAME byte-machine.harness.scheme-mutation.cmake.direct

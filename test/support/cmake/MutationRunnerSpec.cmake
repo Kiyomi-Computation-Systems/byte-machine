@@ -163,6 +163,25 @@ set(reason "sentinel-reason")
 byte_machine_mutation_verdict("1" "" "" "" verdict reason)
 spec_check_equal("${reason}" "" "a plain caught verdict clears a seeded reason")
 
+# A verify command that had to be killed for running too long comes back from
+# byte_machine_mutation_run_spec as CMake's non-numeric timeout diagnostic, not an
+# exit code. That is a mutation that made the program hang: neither caught nor
+# not-caught, so it gets its own verdict the run surfaces by name. Seeded so a
+# branch that writes nothing cannot pass by leaving an earlier call's value in place.
+set(verdict "sentinel-verdict")
+set(reason "sentinel-reason")
+byte_machine_mutation_verdict("Process terminated due to timeout" "partial output" "" "" verdict reason)
+spec_check_equal("${verdict}" "did-not-terminate"
+  "a non-numeric result (a killed, non-terminating command) is neither caught nor not-caught")
+spec_check_equal("${reason}" "" "a did-not-terminate verdict carries no wrong-reason detail")
+
+# The non-numeric guard is checked first, so a killed command is did-not-terminate
+# even when EXPECT_STATUS and EXPECT_OUTPUT_MATCHES were declared -- never mistaken
+# for a satisfied or a mismatched expectation.
+byte_machine_mutation_verdict("Timeout" "" "1" "needle" verdict reason)
+spec_check_equal("${verdict}" "did-not-terminate"
+  "a killed command is did-not-terminate even when expectations were declared")
+
 # --- byte_machine_mutation: EXPECT_SURVIVES beside EXPECT_STATUS/EXPECT_OUTPUT_MATCHES ---
 #
 # byte_machine_mutation_run judges a declared survivor only by whether the
