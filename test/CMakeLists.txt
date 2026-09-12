@@ -923,6 +923,9 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_COMPILE}
           "${CMAKE_SOURCE_DIR}/test/common/compile-tests.sps"
+  # Milestone 7 Slice ④: the §16.2:910 witness reads compile.sls as a datum for its
+  # derived totality row (render-state-arm's thirteen kind arms), loud when unset.
+  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
   TIMEOUT 120)
 
 byte_machine_add_scheme_lane(
@@ -932,6 +935,7 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_COMPILE}
           "${CMAKE_SOURCE_DIR}/test/common/compile-tests.sps"
+  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
   TIMEOUT 120)
 
 # --- Milestone 1 Phase 3 Slice A: differential and example ----------------

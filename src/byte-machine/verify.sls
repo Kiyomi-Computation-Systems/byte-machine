@@ -112,6 +112,16 @@
   (define (valid-name? sym)
     (and (portable-name? sym)
          (not (memq sym reserved-member-1))))
+  ;; *** Milestone 7 §4.12 item 3 (approved 2026-09-11): reserved-member-1's
+  ;; exclusion of the R6RS syntactic keywords from a declared NAME has no warrant,
+  ;; and it is kept because relaxing it is a verdict change with no consumer.
+  ;; §16.2:886 is about PORTABILITY, and `if` is a portable symbol; §16.2:910 is
+  ;; about GENERATED identifiers, and no declared name becomes one -- a declared
+  ;; name reaches the emitted library only under `quote`, as data, which
+  ;; `compile-tests.sps`'s §16.2:910 structural witness (Slice ④) measures over an
+  ;; every-construct machine. So this row rejects a node named `if` for a reason
+  ;; neither bullet supplies; no machine anyone writes needs it relaxed, and a
+  ;; slice that did relax it would move a verdict for no receiver's benefit. ***
   ;; §10.1:480 restricts an error declaration's static reason to printable ASCII
   ;; plus LF. That is a DIFFERENT repertoire from valid-name?'s, over a string
   ;; rather than a symbol, so this cannot reuse that predicate -- it reuses the

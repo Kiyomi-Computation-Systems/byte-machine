@@ -4,8 +4,25 @@
 ;;; differential and example lanes). Rendered bytes are decoded with utf8->string
 ;;; only to search them — never to compare against implementation `write` output.
 (import (rnrs)
+        (rnrs eval)
+        ;; environment-symbols is a Chez extension (member3-drift-tests.sps's import);
+        ;; the §16.2:910 witness below subtracts the (rnrs) and (byte-machine runtime)
+        ;; environments from the emitted identifiers. (byte-machine runtime) is
+        ;; imported statically so the AOT lane compiles it (reserved-drift's surprise).
+        (only (chezscheme) environment-symbols)
         (byte-machine test harness)
         (byte-machine graph)
+        (byte-machine runtime)
+        ;; ir's reading accessors graph does not re-export -- the §16.2:910 witness
+        ;; walks the witness machine's nodes. The names graph DOES re-export (e.g.
+        ;; sequence-dispatch-node?) are the same bindings, so importing both is legal.
+        (only (byte-machine private ir)
+              machine-nodes machine-spans node-name
+              byte-dispatch-node? sequence-dispatch-node? stop-node? error-node?
+              finish-node? pause-node? field-action-node? field-branch-node?
+              integer-accumulate-node? callback-node? span-start-node? span-end-node?
+              counted-consume-node? span-end-node-span span-declaration-name
+              span-declaration-complete-callback)
         (byte-machine compile))
 
 (harness-begin "unit.compile")
@@ -337,5 +354,164 @@
             (check-equal "exactly one min" (count-forms arm (lambda (f) (eq? (car f) 'min))) 1)
             (check-equal "no per-byte advance"
                          (count-forms arm (lambda (f) (equal? f '(+ pos 1)))) 0)))))))
+
+;; --- Milestone 7 Slice ④: the §16.2:910 structural witness (design §4.8, F10) --
+;;
+;; §25:1617's discharge and §4.12 item 1's witness: NO declared name becomes a
+;; generated identifier. Over an every-construct machine (all thirteen node kinds,
+;; a span with a complete callback so the span-completion arm fires) hand-built in
+;; this file's style, because the compile lane has neither the generator nor the
+;; printer (F10). Its totality is a DERIVED row against the emitter's arms.
+(define w910-source-root
+  (let ((r (adapter-environment-variable "BYTE_MACHINE_SOURCE_ROOT")))
+    (if (and r (not (string=? r ""))) r
+        (assertion-violation 'compile-910 "BYTE_MACHINE_SOURCE_ROOT is unset" r))))
+(define w910
+  (make-machine 'ecw 'n-fa
+    (list (make-uint-field 'fld 8 0 #f))
+    (list (make-callback-declaration 'dc 'decision #t '(a b) #f #f)
+          (make-callback-declaration 'sd 'span-data #t '() #f #f)
+          (make-callback-declaration 'sc 'span-complete #t '() #f #f))
+    (list (make-span-declaration 'sp 'sd 'sc #f))
+    (list eof-decl rej-decl)
+    (list
+      (make-field-action-node 'n-fa 'store '(fld 1) 'n-fb #f #f)
+      (make-field-branch-node 'n-fb 'zero '(fld) 'n-ss 'n-ss #f)
+      (make-span-start-node 'n-ss 'sp 'n-bd #f)
+      (make-byte-dispatch-node 'n-bd
+        (list (make-byte-case (make-exact-byte-matcher 65) (make-edge 'n-se 'advance) #f))
+        (make-edge 'n-se 'advance) #f #f)
+      (make-span-end-node 'n-se 'sp 'n-sd #f)
+      (make-sequence-dispatch-node 'n-sd
+        (list (make-sequence-case '(66 67) 'n-cc #f))
+        (make-edge 'n-stop 'advance) 'n-fin #f)
+      (make-counted-consume-node 'n-cc 'fld 'n-acc 'n-fin #f)
+      (make-integer-accumulate-node 'n-acc 'fld 10 'n-acc (make-edge 'n-pause 'reexecute) 'n-err 'n-fin #f)
+      (make-pause-node 'n-pause 'n-cb #f)
+      (make-callback-node 'n-cb 'dc 'n-err '((a n-err) (b n-err)) 'n-err #f)
+      (make-stop-node 'n-stop #f)
+      (make-finish-node 'n-fin #f)
+      (make-error-node 'n-err 'rejected #f))
+    'default-eof #f))
+(define w910-binding 'ecw-parser)
+(define w910-name 'ecw)                 ; the machine's own name -> the library name element
+(define w910-lib
+  (read (open-string-input-port
+         (utf8->string (render-machine (compile-machine w910 '()) w910-binding)))))
+(define (w910-occurs? nm x)
+  (cond ((pair? x) (or (w910-occurs? nm (car x)) (w910-occurs? nm (cdr x))))
+        ((vector? x) (w910-occurs? nm (vector->list x)))
+        (else (eq? x nm))))
+(define (w910-any-node? pred) (exists pred (machine-nodes w910)))
+;; a span-end whose span declares a complete callback -> the span-completion arm.
+(define (w910-has-span-completion?)
+  (exists (lambda (n)
+            (and (span-end-node? n)
+                 (exists (lambda (s) (and (eq? (span-declaration-name s) (span-end-node-span n))
+                                          (span-declaration-complete-callback s)))
+                         (machine-spans w910))))
+          (machine-nodes w910)))
+;; the declared names of the witness (node/field/callback/span/error names).
+(define w910-declared
+  (append (map node-name (machine-nodes w910))
+          '(fld dc sd sc sp default-eof rejected)))
+
+;; --- reading compile.sls's render-state-arm keys (Step 2, derived) ---
+(define compile-src
+  (call-with-input-file (string-append w910-source-root "/byte-machine/compile.sls") read))
+(define (find-defn x name)
+  (cond ((and (pair? x) (eq? (car x) 'define) (pair? (cdr x)) (pair? (cadr x)) (eq? (car (cadr x)) name)) x)
+        ((pair? x) (or (find-defn (car x) name) (find-defn (cdr x) name)))
+        (else #f)))
+(define (find-kind-case x)
+  (cond ((and (pair? x) (eq? (car x) 'case) (pair? (cdr x)) (equal? (cadr x) '(normal-state-kind s))) x)
+        ((pair? x) (or (find-kind-case (car x)) (find-kind-case (cdr x))))
+        (else #f)))
+(define emitter-keys
+  (let* ((rsa (find-defn compile-src 'render-state-arm))
+         (kc (and rsa (find-kind-case rsa))))
+    (if kc (apply append (map car (filter (lambda (cl) (pair? (car cl))) (cddr kc)))) '())))
+;; the hand-written key -> "the witness exercises this arm" map (S2/F4: the operand
+;; a derived row compares against; a table read from the artifact would compare it
+;; to itself). Set-equal to emitter-keys, so a fourteenth emitter arm reddens.
+(define key->present
+  (list (cons 'stop            (lambda () (w910-any-node? stop-node?)))
+        (cons 'error           (lambda () (w910-any-node? error-node?)))
+        (cons 'finish          (lambda () (w910-any-node? finish-node?)))
+        (cons 'pause           (lambda () (w910-any-node? pause-node?)))
+        (cons 'accumulate      (lambda () (w910-any-node? integer-accumulate-node?)))
+        (cons 'field-action    (lambda () (w910-any-node? field-action-node?)))
+        (cons 'field-branch    (lambda () (w910-any-node? field-branch-node?)))
+        (cons 'callback        (lambda () (w910-any-node? callback-node?)))
+        (cons 'span-start      (lambda () (w910-any-node? span-start-node?)))
+        (cons 'span-end        (lambda () (w910-any-node? span-end-node?)))
+        (cons 'span-completion  w910-has-span-completion?)
+        (cons 'counted-consume (lambda () (w910-any-node? counted-consume-node?)))
+        (cons 'dispatch        (lambda () (or (w910-any-node? byte-dispatch-node?)
+                                              (w910-any-node? sequence-dispatch-node?))))))
+
+;; --- the identifier-position walk (Step 3, member3-drift's technique) ---
+(define (symbols-outside-quote x acc)
+  (cond ((symbol? x) (if (memq x acc) acc (cons x acc)))
+        ((pair? x)
+         (cond ((eq? (car x) 'quote) acc)
+               ((and (eq? (car x) 'case) (pair? (cdr x)))
+                (let cloop ((cs (cddr x)) (a (symbols-outside-quote (cadr x) acc)))
+                  (if (not (pair? cs)) a
+                      (cloop (cdr cs) (symbols-outside-quote (cdr (car cs)) a)))))
+               (else (symbols-outside-quote (cdr x) (symbols-outside-quote (car x) acc)))))
+        ((vector? x) (symbols-outside-quote (vector->list x) acc))
+        (else acc)))
+(define w910-identifiers (symbols-outside-quote w910-lib '()))
+(define w910-structural '(library import export generated rnrs byte-machine runtime))
+(define (subtract xs ys) (filter (lambda (x) (not (memq x ys))) xs))
+;; Subtract the TEMPLATE only -- the (rnrs) and (byte-machine runtime) environments,
+;; reserved-member-3 (the exec's own locals), and the library-form words -- leaving
+;; exactly the output binding and the machine name, and NO declared name.
+(define w910-leftover
+  (subtract (subtract (subtract (subtract w910-identifiers
+                                          (environment-symbols (environment '(rnrs))))
+                                (environment-symbols (environment '(byte-machine runtime))))
+                      reserved-member-3)
+            w910-structural))
+
+(harness-group "the every-construct witness exercises every emitter arm (§16.2:910 totality, F10)"
+  (lambda ()
+    (harness-case "the derived row: render-state-arm's keys equal the covered kinds"
+      (lambda ()
+        ;; found-it guards first: a reader returning #f would compare two empties.
+        (check "render-state-arm's kind case was found in compile.sls" (pair? emitter-keys))
+        (check-equal "the emitter has thirteen state-kind arms" (length emitter-keys) 13)
+        (check "the witness rendered to a generated library form"
+               (and (pair? w910-lib) (eq? (car w910-lib) 'library)))
+        ;; the hand-written map's keys set-equal the emitter's keys.
+        (check "every emitter key is in the hand-written coverage map"
+               (for-all (lambda (k) (assq k key->present)) emitter-keys))
+        (check "the coverage map names no key the emitter lacks"
+               (for-all (lambda (kv) (memq (car kv) emitter-keys)) key->present))
+        ;; and the witness exercises each.
+        (check "the witness exercises every emitter arm"
+               (for-all (lambda (kv) ((cdr kv))) key->present))))))
+
+(harness-group "no declared name reaches identifier position (§16.2:910, §25:1617)"
+  (lambda ()
+    (harness-case "the identifier-position set is exactly the output binding and the machine name"
+      (lambda ()
+        (check "the emitted library binds identifiers at all" (> (length w910-identifiers) 20))
+        (check-equal "after subtracting the template, only the binding and the machine name remain"
+                     (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b))) w910-leftover)
+                     (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b)))
+                                (list w910-binding w910-name)))))
+    (harness-case "every declared name that occurs, occurs only under quote"
+      (lambda ()
+        ;; the walk is over the names that OCCUR, not over all declared names: an
+        ;; error-declaration name never reaches the emitted text (only its code and
+        ;; reason do), so an occurrence check over all declared names would be
+        ;; vacuous for the error names (§4.8). A found-it guard: some declared name
+        ;; occurs somewhere in the datum (under quote), so this is not vacuous.
+        (let ((occurring (filter (lambda (nm) (w910-occurs? nm w910-lib)) w910-declared)))
+          (check "at least one declared name occurs in the emitted datum" (pair? occurring))
+          (check "no occurring declared name is in identifier position"
+                 (for-all (lambda (nm) (not (memq nm w910-identifiers))) occurring)))))))
 
 (harness-finish)
