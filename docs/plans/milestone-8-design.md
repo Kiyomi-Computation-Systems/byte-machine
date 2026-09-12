@@ -1,11 +1,28 @@
 # Milestone 8 Design — The private HTTP fixture
 
-**Status: draft, Gate 0 not yet discharged.** Written against **`741e0ca`** (`feat/m7-slice-4`,
+**Status: Gate 0 discharged (2026-09-12).** Written against **`741e0ca`** (`feat/m7-slice-4`,
 Milestone 7's close plus its mutation-runner follow-up) on branch `docs/milestone-8-design`, tree
 clean. Milestone 7 was closing in a parallel session as this was written, so **the base is
 re-taken when `main` carries the squash of Milestone 7** and every count below is re-measured then
 (§11); if that merge is a squash, this branch rebases with
 `git rebase --onto main 741e0ca`, never a plain `git rebase main`.
+
+> **Gate 0 discharge (2026-09-12), against `main` at `bf6e56d`.** Milestone 7 squash-merged
+> (`3391eca`, PR #99); this branch rebased `--onto main 741e0ca` as the paragraph above requires.
+> **`src/` and `test/` are byte-identical between `741e0ca` and `main`** (`git diff --stat 741e0ca..main
+> -- src/ test/` prints nothing; #98/#100 were docs-only), so every count below carries over
+> unchanged and the five prototypes reproduce by construction — the load-bearing negative (P3, the
+> §12.7:770 machine-action defect) is confirmed **in the tree** by `compile.sls`'s OWED note.
+> Re-confirmed at `bf6e56d`: `EXPECTED_PASSES 61` / `EXPECTED_MUTATIONS 590`, 102 scheme lanes, the
+> **18** `§21.4` codes, the 9 fixture machines. **The four records are written**:
+> [0034](../decisions/0034-http-error-table-is-first-and-fixture-owned.md) (§4.1),
+> [0035](../decisions/0035-case-insensitive-recognition-is-a-byte-set-chain.md) (§4.2),
+> [0036](../decisions/0036-error-node-is-per-span-state.md) (§4.3),
+> [0037](../decisions/0037-idle-node-message-begin-and-clean-eof.md) (§4.4). **§4.9 owner
+> dispositions**: items 1 (shared event-order oracle, receiver Slice ①) and 2 (fixture-region →
+> node-name map, receiver Slice ⓪, grows per slice) **approved**; item 3 (pipelining at every split
+> point) **deferred to Slice ⑤'s wall-clock measurement**, seeded-subset fallback — recorded in §4.9
+> below.
 
 Measured at `741e0ca` by reading the suite's own declared totals and by running five throwaway
 prototypes (§3.3): full `release` **120/120** in both Chez modes; Scheme mutation suite
@@ -426,6 +443,12 @@ slice-plan deferrals item 2 to item 7 name, plus the parent plan's `§21.4:1177`
 Each is priced, with a recommendation, and names its slice. Nothing here is started before the
 owner settles it (`AGENTS.md`: an approval with no receiver is invisible to every completeness
 sweep).
+
+> **Owner disposition (2026-09-12).** Item 1 **approved** — receiver **Slice ①** (built there,
+> extended by each later slice). Item 2 **approved** — receiver **Slice ⓪** (the exported
+> fixture-region → node-name map starts empty and grows a row per slice, with its totality row).
+> Item 3 **deferred to Slice ⑤'s wall-clock measurement**, seeded multi-split subset as the stated
+> fallback — no standing commitment either way until ⑤ measures.
 
 1. **An `§21.3` event-order oracle shared by every lane, rather than per-lane expected traces.**
    The event contract is a *grammar over events*; a shared checker that validates any trace against
