@@ -602,4 +602,46 @@
                        (sortsym (distinct (codes-under path-carrying-constructors)))
                        (sortsym path-bearing-codes-declared)))))))
 
+;; --- the committed catalog matches the census (§27:1696, Milestone 9 Slice ④) --
+;; docs/reference/verifier-diagnostic-catalog.md is DERIVED from THIS census. It
+;; lists the code set as `- `code` — …` bullets; assert that set equals the
+;; census code set, so the catalog is not a thirty-first place for the code set
+;; to drift. Keyed on BYTE_MACHINE_REPO_ROOT, which the ordinary ctest lane sets
+;; and the mutation suite does not — under mutation docs/ is not staged, and a
+;; doc-vs-code check does not belong in a verify.sls mutation run (it would fire
+;; alongside the census pins and muddy their per-pin accounting).
+(define catalog-repo (adapter-environment-variable "BYTE_MACHINE_REPO_ROOT"))
+(define (file->text path)
+  (let ((bv (adapter-file-bytes path)))
+    (let loop ((i (- (bytevector-length bv) 1)) (acc '()))
+      (if (< i 0) (list->string acc)
+          (loop (- i 1) (cons (integer->char (bytevector-u8-ref bv i)) acc))))))
+(define (catalog-codes path)
+  ;; every line "- `code` — …": the token between the first pair of backticks.
+  (let loop ((ls (harness-split (file->text path) #\newline)) (acc '()))
+    (cond ((null? ls) (reverse acc))
+          ((and (>= (string-length (car ls)) 3)
+                (string=? (substring (car ls) 0 3) "- `"))
+           (let* ((rest (substring (car ls) 3 (string-length (car ls))))
+                  (end (let find ((i 0))
+                         (cond ((= i (string-length rest)) #f)
+                               ((char=? (string-ref rest i) #\`) i)
+                               (else (find (+ i 1)))))))
+             (loop (cdr ls) (if end (cons (substring rest 0 end) acc) acc))))
+          (else (loop (cdr ls) acc)))))
+
+(when (and catalog-repo (not (string=? catalog-repo "")))
+  (harness-group "the committed diagnostic catalog matches the census (§27:1696)"
+    (lambda ()
+      (harness-case "verifier-diagnostic-catalog.md lists exactly the census codes"
+        (lambda ()
+          (let ((doc (list-sort string<?
+                       (catalog-codes
+                        (string-append catalog-repo
+                          "/docs/reference/verifier-diagnostic-catalog.md"))))
+                (census (list-sort string<?
+                          (map symbol->string (distinct (census-codes the-census))))))
+            (check "the catalog lists codes" (pair? doc))
+            (check-equal "catalog code set = census code set" doc census)))))))
+
 (harness-finish)

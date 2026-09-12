@@ -2115,7 +2115,12 @@ byte_machine_add_scheme_lane(
           ${BYTE_MACHINE_CORE_VERIFY}
           "${CMAKE_SOURCE_DIR}/test/common/diagnostic-census-tests.sps"
   TIMEOUT 120
-  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src")
+  # REPO_ROOT is set only for the ordinary ctest lane, never by the mutation
+  # suite (which sets only SOURCE_ROOT, to the staged tree). The §27:1696
+  # catalog-vs-census check keys on it, so it runs here and is skipped under the
+  # mutation suite — where docs/ is not staged and the check does not belong.
+  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
+              "BYTE_MACHINE_REPO_ROOT=${CMAKE_SOURCE_DIR}")
 
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.diagnostic-census.chez.aot
@@ -2125,7 +2130,8 @@ byte_machine_add_scheme_lane(
           ${BYTE_MACHINE_CORE_VERIFY}
           "${CMAKE_SOURCE_DIR}/test/common/diagnostic-census-tests.sps"
   TIMEOUT 120
-  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src")
+  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
+              "BYTE_MACHINE_REPO_ROOT=${CMAKE_SOURCE_DIR}")
 
 # --- Milestone 8 Slice ⓪: the fixture-state -> expected-error table -----------
 # §21.4:1177's precondition, shipped before any grammar node (decision 0034).
