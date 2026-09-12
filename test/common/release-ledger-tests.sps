@@ -94,20 +94,19 @@
 ;; ---- the disposition partition (the design Appendix, authoritative) --------
 (define (refs-with-state st)
   (sort-strings (map criterion-ref (filter (lambda (r) (eq? (criterion-state r) st)) release-criteria))))
-(harness-group "the disposition partition (after Slice ③: 8 met, 3 partly, 4 open)"
+(harness-group "the disposition partition (after Slice ④: 11 met, 0 partly, 4 open)"
   (lambda ()
-    (harness-case "met rows are exactly the eight (Slice ③ added §26:1679, §26:1680)"
+    (harness-case "met rows are exactly the eleven (Slice ④ added §26:1671, §26:1681, §26:1683)"
       (lambda ()
         (check-equal "met"
                      (refs-with-state 'met)
-                     (sort-strings '("§26:1672" "§26:1673" "§26:1674" "§26:1675" "§26:1676"
-                                     "§26:1679" "§26:1680" "§26:1685")))))
-    (harness-case "partly rows are exactly the three"
+                     (sort-strings '("§26:1671" "§26:1672" "§26:1673" "§26:1674" "§26:1675"
+                                     "§26:1676" "§26:1679" "§26:1680" "§26:1681" "§26:1683"
+                                     "§26:1685")))))
+    (harness-case "no rows remain partly (the three references landed in Slice ④)"
       (lambda ()
-        (check-equal "partly"
-                     (refs-with-state 'partly)
-                     (sort-strings '("§26:1671" "§26:1681" "§26:1683")))))
-    (harness-case "open rows are exactly the four (the two CI-blocked, examples, changelog)"
+        (check-equal "partly" (refs-with-state 'partly) '())))
+    (harness-case "open rows are exactly the four (the two CI-blocked, examples-clean-checkout, changelog)"
       (lambda ()
         (check-equal "open"
                      (refs-with-state 'open)
@@ -161,10 +160,23 @@
         (check "kind mechanical" (mechanical? "§26:1680"))
         (check "byte-machine.unit.allocation-audit lane present"
                (lane-registered? "byte-machine.unit.allocation-audit"))))
-    (harness-case "§26:1682 examples/ holds only .gitkeep (no example tree yet)"
+    (harness-case "§26:1671 the source IR and builder reference documents the node kinds"
+      (lambda ()
+        (check "kind mechanical" (mechanical? "§26:1671"))
+        (check "reference present"
+               (file-exists? (string-append repo "/docs/reference/source-ir-and-builder.md")))))
+    (harness-case "§26:1681 the integration guide documents the dependency boundary"
+      (lambda ()
+        (check "kind mechanical" (mechanical? "§26:1681"))
+        (check "reference present"
+               (file-exists? (string-append repo "/docs/reference/generated-code-integration-chez.md")))))
+    (harness-case "§26:1682 the example ships (its clean-checkout run is Slice ⑤)"
       (lambda ()
         (check "kind mechanical" (mechanical? "§26:1682"))
-        (check-equal "examples/ entries" (dir-entries (string-append repo "/examples")) '(".gitkeep"))))
+        (check "example program present"
+               (file-exists? (string-append repo "/examples/generate-simple-machine/generate.sps")))
+        (check "example README present"
+               (file-exists? (string-append repo "/examples/generate-simple-machine/README.md")))))
     (harness-case "§26:1684 CHANGELOG.md exists with no 0.1.0 entry yet"
       (lambda ()
         (check "kind mechanical" (mechanical? "§26:1684"))
@@ -190,19 +202,36 @@
                       (> (string-length (criterion-witness r)) 0))))
          release-criteria)))))
 
-;; ---- §27 deliverables that claim to exist actually exist -------------------
-(harness-group "§27: a deliverable marked existing is a committed file"
+;; ---- §27 deliverables: each marked-existing deliverable is really present ---
+(define reference-files
+  '(("§27:1692" . "docs/reference/source-ir-and-builder.md")
+    ("§27:1693" . "docs/reference/transition-and-cursor-semantics.md")
+    ("§27:1694" . "docs/reference/callback-span-lifetime.md")
+    ("§27:1695" . "docs/reference/field-and-overflow.md")
+    ("§27:1696" . "docs/reference/verifier-diagnostic-catalog.md")
+    ("§27:1697" . "docs/reference/generated-code-integration-chez.md")
+    ("§27:1698" . "docs/reference/grammar-author-testing-guide.md")
+    ("§27:1699" . "docs/reference/benchmark-methodology-and-baseline.md")
+    ("§27:1700" . "docs/reference/portability-matrix.md")))
+(harness-group "§27: every deliverable marked existing is really present (11 of 11)"
   (lambda ()
-    (harness-case "callback/span lifetime reference (§27:1694) exists"
+    (harness-case "each reference document exists as a committed file"
       (lambda ()
-        (check "file present"
-               (file-exists? (string-append repo "/docs/reference/callback-span-lifetime.md")))))
-    (harness-case "changelog (§27:1701) exists"
+        (for-each
+         (lambda (pair)
+           (check (string-append (car pair) " -> " (cdr pair))
+                  (file-exists? (string-append repo "/" (cdr pair)))))
+         reference-files)))
+    (harness-case "§27:1691 the README quick start exists"
       (lambda ()
-        (check "file present" (file-exists? (string-append repo "/CHANGELOG.md")))))
-    (harness-case "the two marked-existing are the only two"
+        (check "README has a Quick start"
+               (harness-string-contains? (file-string (string-append repo "/README.org")) "Quick start"))))
+    (harness-case "§27:1701 the changelog exists"
       (lambda ()
-        (check-equal "exists count" (length (filter deliverable-exists? release-deliverables)) 2)))))
+        (check "CHANGELOG.md exists" (file-exists? (string-append repo "/CHANGELOG.md")))))
+    (harness-case "all eleven §27 deliverables are marked existing"
+      (lambda ()
+        (check-equal "exists count" (length (filter deliverable-exists? release-deliverables)) 11)))))
 
 ;; ---- §4.5 the version surface ----------------------------------------------
 ;; Read the public libraries as data (the http-leak technique) and assert none

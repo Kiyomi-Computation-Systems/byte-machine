@@ -62,9 +62,9 @@
   (define release-criteria
     '(("§26:1671"
        "every approved IR node has documented semantics"
-       partly judgement
-       "thirteen node kinds, semantics in parent §10.6; no reference document yet — §27:1692 (Slice ④)"
-       (four))
+       met mechanical
+       "docs/reference/source-ir-and-builder.md documents every node kind and constructor; semantics in parent §10.6 (§27:1692)"
+       ())
       ("§26:1672"
        "mandatory verification is complete and emission cannot bypass it through the public API"
        met judgement
@@ -112,19 +112,19 @@
        ())
       ("§26:1681"
        "public libraries and generated-runtime dependency boundaries are documented"
-       partly judgement
-       "parent §7.2 carries the diagram; no reference document yet — §27:1697 (Slice ④)"
-       (four))
+       met mechanical
+       "docs/reference/generated-code-integration-chez.md documents the boundary — generated parsers import only (byte-machine runtime) — with parent §7.2's diagram (§27:1697)"
+       ())
       ("§26:1682"
        "examples generate, compile, and run from a clean checkout"
        open mechanical
-       "examples/ holds only .gitkeep; §9.6's example is a test lane (§3.2 item 1). The example tree lands in Slice ④, the clean-checkout run in Slice ⑤"
-       (four five))
+       "examples/generate-simple-machine/ ships and runs locally, using only the public API (§27:1703); the CLEAN-CHECKOUT run (a fresh clone) is performed in Slice ⑤ (§25:1663), which a test lane cannot witness (§3.2 item 1)"
+       (five))
       ("§26:1683"
        "`README.org` explains scope and quick start"
-       partly judgement
-       "scope yes; \"Building and testing\" builds the repository, not a machine — the quick start lands in Slice ④. The Documentation list is stale since Milestone 5 (§3.2 item 4); the status-surface sweep (Slice ⑤) refreshes it"
-       (four five))
+       met mechanical
+       "the intro explains scope; a Quick start section builds a machine (not the repository) and links the reference set. (README's status paragraph and Documentation list are refreshed by Slice ⑤'s status-surface sweep, §3.2 item 4.)"
+       ())
       ("§26:1684"
        "`CHANGELOG.md` contains the `0.1.0` entry"
        open mechanical
@@ -138,16 +138,16 @@
 
   ;; §27 — the eleven documentation deliverables (parent plan §27, 1691-1701).
   (define release-deliverables
-    '(("§27:1691" "concise README quick start"                       #f (four))
-      ("§27:1692" "source IR and builder reference"                  #f (four))
-      ("§27:1693" "transition/cursor semantics reference"            #f (four))
+    '(("§27:1691" "concise README quick start"                       #t ())
+      ("§27:1692" "source IR and builder reference"                  #t ())
+      ("§27:1693" "transition/cursor semantics reference"            #t ())
       ("§27:1694" "callback/span lifetime reference"                 #t ())
-      ("§27:1695" "field and overflow reference"                     #f (four))
-      ("§27:1696" "verifier diagnostic catalog"                      #f (four))
-      ("§27:1697" "generated-code integration guide for Chez"        #f (four))
-      ("§27:1698" "grammar-author testing guide"                     #f (four))
-      ("§27:1699" "benchmark methodology and baseline report"        #f (three four))
-      ("§27:1700" "portability matrix and pinned runtime versions"   #f (four))
+      ("§27:1695" "field and overflow reference"                     #t ())
+      ("§27:1696" "verifier diagnostic catalog"                      #t ())
+      ("§27:1697" "generated-code integration guide for Chez"        #t ())
+      ("§27:1698" "grammar-author testing guide"                     #t ())
+      ("§27:1699" "benchmark methodology and baseline report"        #t ())
+      ("§27:1700" "portability matrix and pinned runtime versions"   #t ())
       ("§27:1701" "changelog"                                        #t (five))))
 
   ;; §4.5 — the version surface. `0.1.0` has ONE owner (the value here) and a

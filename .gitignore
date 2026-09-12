@@ -37,6 +37,11 @@ CMakeUserPresets.json
 *.so
 *.wpo
 
+# Generated libraries the examples emit at run time (examples/*/README document
+# the command). The suffix keeps them clear of real source, which is never
+# `*.generated.sls`, and out of the tree §26:1685 asserts is free of artifacts.
+*.generated.sls
+
 # Editor and platform noise
 .DS_Store
 *~

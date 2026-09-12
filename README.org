@@ -181,6 +181,43 @@ emitter, the reference interpreter, and the runtime, each exercised in both the
 source and ahead-of-time execution lanes. See
 [[file:docs/plans/byte-machine-implementation-plan.md][the implementation plan]] for scope, architecture, and milestones.
 
+** Quick start
+
+Build a *parser* — not the repository. A machine is constructed through the
+public =(byte-machine graph)= API, verified, compiled, and emitted as a
+self-contained Scheme library that depends only on =(byte-machine runtime)=:
+
+#+begin_src scheme
+(import (byte-machine graph) (byte-machine verify) (byte-machine compile))
+
+;; a parser that accepts exactly the byte 'A' (0x41), then stops
+(define m
+  (make-machine 'simple 'start '() '() '()
+    (list (make-error-declaration 'eof 'unexpected-eof "unexpected end of input" #f)
+          (make-error-declaration 'rejected 'unexpected-byte "expected 0x41" #f))
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher #x41)
+                                  (make-edge 'accept 'advance) #f))
+            (make-edge 'reject 'reexecute) 'eof-stop #f)
+          (make-stop-node 'accept #f)
+          (make-error-node 'reject 'rejected #f)
+          (make-error-node 'eof-stop 'eof #f))
+    'eof #f))
+
+(compilation-ok? (compile-machine m '()))   ; => #t
+#+end_src
+
+The runnable, end-to-end version — construct, compile, emit, load, feed bytes —
+is [[file:examples/generate-simple-machine/][=examples/generate-simple-machine/=]]:
+
+#+begin_src bash
+chez --libdirs src --program examples/generate-simple-machine/generate.sps
+#+end_src
+
+From there, the [[file:docs/reference/source-ir-and-builder.md][source IR and builder reference]] documents every constructor, and
+the [[file:docs/reference/generated-code-integration-chez.md][generated-code integration guide]] shows how a consumer imports and runs a
+generated parser. See [[*Documentation][Documentation]] below for the full set.
+
 ** Requirements
 
 - CMake 3.26 or newer (local work uses 4.3.3; CI runs on whatever version its
