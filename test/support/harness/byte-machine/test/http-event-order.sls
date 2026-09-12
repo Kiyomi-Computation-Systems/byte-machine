@@ -24,18 +24,26 @@
 
   ;; The span-data events: the ones a fragment splits, so the ones `star`
   ;; quantifies and `trace-skeleton` coalesces. Grows with the fixture.
-  (define http-data-events '(method-data target-data))
+  (define http-data-events
+    '(method-data target-data header-name-data header-value-data))
 
-  ;; §21.3's request-line event order (Slice ①). `method`/`target` are 1*,
-  ;; so their data is `star` (a fragment can split a nonempty span any number of
-  ;; ways, including into one delivery).
+  ;; §21.3's no-body message event order (Slices ① and ②). `method`/`target`
+  ;; are 1*, so their data is `star`. The header section is zero or more
+  ;; header-fields — a `rep` of a header group — then headers-complete and, with
+  ;; no body yet, message-complete. `header-value` may be empty (§21.2:1097), so
+  ;; its data is `star` and can be absent entirely. Slice ③ inserts the body
+  ;; between headers-complete and message-complete.
   (define http-request-grammar
     '((one message-begin)
       (star method-data)
       (one method-complete)
       (star target-data)
       (one target-complete)
-      (one version-complete)))
+      (one version-complete)
+      (rep (star header-name-data) (one header-name-complete)
+           (star header-value-data) (one header-value-complete))
+      (one headers-complete)
+      (one message-complete)))
 
   (define (entry-name e) (if (pair? e) (car e) e))
 
@@ -50,27 +58,35 @@
               (loop (cdr es) prev out)                 ; coalesce the run
               (loop (cdr es) n (cons n out))))))))
 
-  ;; Greedy match of a skeleton (list of event symbols) against the grammar.
-  ;; Returns #t / #f.
-  (define (event-sequence-matches? grammar skeleton)
-    (let loop ((g grammar) (s skeleton))
-      (cond
-       ((null? g) (null? s))                            ; both exhausted
-       (else
-        (let ((term (car g)))
+  ;; Match a term list against a skeleton, returning the remaining skeleton or
+  ;; #f. Terminals are distinct event names, so a greedy left-to-right match
+  ;; needs no backtracking. Terms: (one E), (star E), (rep T...) — zero or more
+  ;; repetitions of the sub-sequence T....
+  (define (match-terms terms s)
+    (if (null? terms)
+        s
+        (let ((term (car terms)) (rest (cdr terms)))
           (case (car term)
             ((one)
-             (and (pair? s) (eq? (car s) (cadr term))
-                  (loop (cdr g) (cdr s))))
+             (and (pair? s) (eq? (car s) (cadr term)) (match-terms rest (cdr s))))
             ((star)
              (let skip ((s s))
                (if (and (pair? s) (eq? (car s) (cadr term)))
                    (skip (cdr s))
-                   (loop (cdr g) s))))
-            (else #f)))))))
+                   (match-terms rest s))))
+            ((rep)
+             (let loop ((s s))
+               (let ((r (match-terms (cdr term) s)))
+                 (if (and r (not (eq? r s)))     ; matched and consumed >= 1
+                     (loop r)
+                     (match-terms rest s)))))
+            (else #f)))))
 
-  ;; A human-readable reason on mismatch, for a check's detail; `#f` on match.
+  (define (event-sequence-matches? grammar skeleton)
+    (let ((r (match-terms grammar skeleton))) (and r (null? r) #t)))
+
+  ;; A reason on mismatch, for a check's detail; `#f` on match.
   (define (event-sequence-diagnosis grammar skeleton)
     (if (event-sequence-matches? grammar skeleton)
         #f
-        (list 'expected (map cadr grammar) 'got skeleton))))
+        (list 'did-not-match 'skeleton skeleton))))
