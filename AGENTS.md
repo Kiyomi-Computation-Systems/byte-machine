@@ -490,6 +490,28 @@
   branch produced a second instance of exactly that, in a mutation comment
   citing `design:834-836`, stale by its own merge.
 
+* **The mutation lane is one silent ctest entry — bound each command, stream per-pass progress, and never read a live process as a progressing one.**
+  The scheme mutation lane runs 590 mutations inside a single ctest entry (~5 min),
+  and ctest buffers a single test's output until it ends, so a plain `make test-all`
+  sits silent on `Start 29:` for minutes — indistinguishable from a hang. Milestone 7's
+  close hit exactly this: the lane was reported hung while it was in fact progressing,
+  and a first diagnosis called it "fine" from one `ps` snapshot showing a live `chez` —
+  but a live process is not a progressing one (it can be blocked), and a stall detector
+  keyed on the program name gives false positives, because a pass with many mutations
+  holds one program name across many fresh short-lived processes. Prove *advancement*
+  (churning PIDs, rising CPU, an advancing timestamped log — sampled twice) before
+  calling such a lane hung or fine. Two changes make the lane honest about itself:
+  `byte_machine_mutation_run_spec` bounds each verify command with a per-command
+  `TIMEOUT` (default 300s, env `BYTE_MACHINE_MUTATION_INVOCATION_TIMEOUT`), so one
+  non-terminating mutation fails *by name* — `byte_machine_mutation_verdict` maps the
+  non-numeric result a killed command returns to a `did-not-terminate` verdict rather
+  than folding it into `caught`, where a hang would read as a silent success — instead
+  of consuming the whole-lane ceiling in silence; and each pass prints a
+  `pass N: K mutations against <specs>` header and each mutation an `[i/K]` line, which
+  stream live under `ctest -V` (`make test-mutation`) and name the pass and mutation a
+  failing or timed-out run stopped on. A *successful* plain run is still silent on that
+  entry — that is ctest buffering one passing test, not a hang.
+
 ### Documentation & record discipline
 
 * **Re-measure against the shipped artifact before a number enters a doc or record.**
