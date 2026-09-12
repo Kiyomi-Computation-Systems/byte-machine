@@ -1,3 +1,4 @@
+;;; SPDX-License-Identifier: BSD-3-Clause
 ;;; Immutable source-IR descriptors (parent §9.1, §10), M1 subset: the machine,
 ;;; byte-dispatch/stop/error/finish/pause nodes, exact-byte matcher, edge,
 ;;; error declaration, and the verification-result value. Tagged vectors behind

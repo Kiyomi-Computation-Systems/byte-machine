@@ -1,3 +1,4 @@
+;;; SPDX-License-Identifier: BSD-3-Clause
 ;;; The byte-machine contract-violation condition (parent §9.4, M1 subset).
 ;;; A programmer error against the public API — bad argument shape, an
 ;;; unverified machine handed to the interpreter, and so on. Codes are symbols;

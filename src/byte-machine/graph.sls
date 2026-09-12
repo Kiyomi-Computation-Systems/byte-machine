@@ -1,3 +1,4 @@
+;;; SPDX-License-Identifier: BSD-3-Clause
 ;;; (byte-machine graph): the public construction API. It re-exports the source-IR
 ;;; constructors from the private ir library so grammar authors build machines
 ;;; without touching internals. Constructors validate local shape only;

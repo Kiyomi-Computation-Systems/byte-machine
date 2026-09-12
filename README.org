@@ -248,4 +248,4 @@ cmake --preset no-scheme && ctest --preset no-scheme
 
 -----
 
-© Kiyomi Computation Systems LLC, all rights reserved.
+© 2026 Kiyomi Computation Systems LLC. Released under the [[file:LICENSE][BSD 3-Clause License]].

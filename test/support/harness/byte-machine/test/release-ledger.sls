@@ -1,0 +1,181 @@
+;;; The v0.1 release ledger: §26's fifteen release criteria and §27's eleven
+;;; documentation deliverables, carried as DATA a lane reads, not prose a human
+;;; audits (decision 0038). Milestone 9 Slice ⓪ ships it FIRST, before any
+;;; criterion is worked, so the milestone establishes which are already true
+;;; before spending effort on the rest — the shape decision 0034 gave Milestone
+;;; 8's error table, applied to the release exit (`§25:1665`).
+;;;
+;;; A §26 row is (ref text state kind witness receiver):
+;;;   ref      -- "§26:NNNN", a label. The row is KEYED ON `text`, never the line
+;;;               number: line numbers move (Milestone 8 learned this at
+;;;               §21.7:1209), the criterion's words do not.
+;;;   text     -- the criterion, VERBATIM from `§26` (parent plan lines
+;;;               1671-1685), minus the "- " bullet prefix and the trailing ";".
+;;;               The totality lane re-reads `§26` from the plan and set-compares
+;;;               against these strings, so a drift in either side fails by name.
+;;;   state    -- `met`, `partly`, or `open`. `§26:1680` is `open` although the
+;;;               property is TRUE at `62671b2` (measured 0.0 B/byte, design
+;;;               §3.3 P2): the distinction between a property holding and a
+;;;               suite KNOWING it holds is the whole reason the ledger exists,
+;;;               and a row marked `met` on this document's say-so would be the
+;;;               "sentinel computed from the test's own expectation" defect.
+;;;   kind     -- `mechanical` (the lane executes the witness: a file exists, a
+;;;               lane is registered, a `git ls-files` result is empty, a
+;;;               directory holds only `.gitkeep`) or `judgement` (the witness is
+;;;               a close-note paragraph the lane records but does not pretend to
+;;;               check — a ledger that "checked" a judgement by recomputing the
+;;;               expectation it was handed asserts nothing).
+;;;   witness  -- what establishes the row: the check descriptor for a mechanical
+;;;               row, the standing paragraph for a judgement row.
+;;;   receiver -- the slices that move the row (symbols), or `()` for `met`.
+;;;
+;;; A §27 row is (ref text exists? receiver): a deliverable exists as a committed
+;;; document, or it does not and a slice owns it. Two of eleven exist at Slice ⓪
+;;; (`:1694` callback/span lifetime; `:1701` the changelog, pending its `0.1.0`
+;;; entry).
+;;;
+;;; TWO TOTALITY ROWS, checked by the lane, self-ratcheting (no mutation entry,
+;;; as Milestone 8 Slice ⓪'s table earned none): the criterion set against
+;;; `§26`'s fifteen and the deliverable set against `§27`'s eleven. Adding or
+;;; dropping a criterion in either the plan or this ledger fails BY NAME.
+;;;
+;;; The design's §3.1 PROSE summary ("Nine met, three partly, one
+;;; true-but-unasserted, five open") sums to eighteen and its Slice ⓪ exit line
+;;; ("open rows are the five plus three partly") disagrees again; its TABLE and
+;;; Appendix are the consistent, authoritative disposition and are what this
+;;; ledger encodes: 6 `met`, 3 `partly`, 6 `open`. (design Appendix, annotated
+;;; 2026-09-12.)
+;;;
+;;; This library lives with the fixture harness, no `src/` library imports it,
+;;; and it carries no name into the `(byte-machine ...)` prefix a public importer
+;;; would use — Slice ⑤'s leak sweep asserts both.
+(library (byte-machine test release-ledger)
+  (export release-criteria release-deliverables
+          criterion-ref criterion-text criterion-state criterion-kind
+          criterion-witness criterion-receiver
+          deliverable-ref deliverable-text deliverable-exists? deliverable-receiver
+          release-version release-version-surfaces release-version-export?)
+  (import (rnrs))
+
+  ;; §26 — the fifteen v0.1 release criteria (parent plan §26, lines 1671-1685).
+  ;; `text` is verbatim minus "- " and the trailing ";".
+  (define release-criteria
+    '(("§26:1671"
+       "every approved IR node has documented semantics"
+       partly judgement
+       "thirteen node kinds, semantics in parent §10.6; no reference document yet — §27:1692 (Slice ④)"
+       (four))
+      ("§26:1672"
+       "mandatory verification is complete and emission cannot bypass it through the public API"
+       met judgement
+       "render-machine on an unverified value raises invalid-shape / \"not a machine\"; Milestone 7 Slice ④'s catalogue"
+       ())
+      ("§26:1673"
+       "interpreter/generated differential tests pass"
+       met mechanical
+       "the differential lanes are registered (byte-machine.differential.*)"
+       ())
+      ("§26:1674"
+       "lifecycle, callbacks, spans, fields, offsets, errors, EOF, and counted consumption meet this plan"
+       met judgement
+       "Milestones 2-6 close notes"
+       ())
+      ("§26:1675"
+       "the private HTTP fixture meets its required behavior"
+       met judgement
+       "Milestone 8 close; §25:1646 dispositioned in the Slice ⑤ note"
+       ())
+      ("§26:1676"
+       "representative fixture inputs pass every split point"
+       met judgement
+       "Milestone 8 Slice ⑤; §4.9 item 3 (every split) declined by measurement, seeded subset stated as the fallback"
+       ())
+      ("§26:1677"
+       "deterministic generation passes across supported platform cells"
+       open mechanical
+       "the six determinism lanes are registered and compare committed goldens; the sixth (HTTP) golden lands in Slice ①. Cross-CELL width is one cell (macOS arm64, local) — no CI this milestone (decision 0041)"
+       (one))
+      ("§26:1678"
+       "every Tier 1 matrix cell passes its required source, generation, AOT-compilation, and execution checks"
+       open judgement
+       "amended for v0.1 (decision 0041, §7.3:195 dated disposition): macOS arm64 verified locally; Linux amd64, Windows amd64, Linux arm64 deferred past v0.1 for lack of billed CI minutes; #88 dispositioned not waived"
+       (five))
+      ("§26:1679"
+       "compiled benchmark baselines are recorded without speculative optimization"
+       open mechanical
+       "bench/ holds only .gitkeep; the baseline artefact and runner land in Slice ③"
+       (three))
+      ("§26:1680"
+       "generated per-byte paths contain no deliberate list/vector/string/result construction, and fixnum-sized allocation measurements are recorded with callbacks disabled"
+       open judgement
+       "TRUE but unasserted at 62671b2 — 0.0 B/byte measured (design §3.3 P2); no lane asserts it yet. The allocation slope + live control land in Slice ③ (decision 0040)"
+       (three))
+      ("§26:1681"
+       "public libraries and generated-runtime dependency boundaries are documented"
+       partly judgement
+       "parent §7.2 carries the diagram; no reference document yet — §27:1697 (Slice ④)"
+       (four))
+      ("§26:1682"
+       "examples generate, compile, and run from a clean checkout"
+       open mechanical
+       "examples/ holds only .gitkeep; §9.6's example is a test lane (§3.2 item 1). The example tree lands in Slice ④, the clean-checkout run in Slice ⑤"
+       (four five))
+      ("§26:1683"
+       "`README.org` explains scope and quick start"
+       partly judgement
+       "scope yes; \"Building and testing\" builds the repository, not a machine — the quick start lands in Slice ④. The Documentation list is stale since Milestone 5 (§3.2 item 4); the status-surface sweep (Slice ⑤) refreshes it"
+       (four five))
+      ("§26:1684"
+       "`CHANGELOG.md` contains the `0.1.0` entry"
+       open mechanical
+       "CHANGELOG.md exists with no 0.1.0 entry yet; the entry lands in Slice ⑤"
+       (five))
+      ("§26:1685"
+       "no native build artifacts or unrelated HTTP/server code are committed"
+       met mechanical
+       "git ls-files matching the native-artifact pattern is empty; every HTTP path is under test/ or docs/, and byte-machine.unit.http-leak asserts the fixture is not re-exported"
+       ())))
+
+  ;; §27 — the eleven documentation deliverables (parent plan §27, 1691-1701).
+  (define release-deliverables
+    '(("§27:1691" "concise README quick start"                       #f (four))
+      ("§27:1692" "source IR and builder reference"                  #f (four))
+      ("§27:1693" "transition/cursor semantics reference"            #f (four))
+      ("§27:1694" "callback/span lifetime reference"                 #t ())
+      ("§27:1695" "field and overflow reference"                     #f (four))
+      ("§27:1696" "verifier diagnostic catalog"                      #f (four))
+      ("§27:1697" "generated-code integration guide for Chez"        #f (four))
+      ("§27:1698" "grammar-author testing guide"                     #f (four))
+      ("§27:1699" "benchmark methodology and baseline report"        #f (three four))
+      ("§27:1700" "portability matrix and pinned runtime versions"   #f (four))
+      ("§27:1701" "changelog"                                        #t (five))))
+
+  ;; §4.5 — the version surface. `0.1.0` has ONE owner (the value here) and a
+  ;; mirror rule: every surface below must carry it at the close (Slice ⑤), and
+  ;; the ledger checks the changelog row (§26:1684) and the status-surface sweep.
+  ;; The `(byte-machine version)` export is DECLINED for v0.1 (§4.9 item 3): the
+  ;; public surface stays frozen and the src/ diff stays empty of new names, so
+  ;; `release-version-export?` is #f and the leak sweep asserts no public library
+  ;; exports a `version` name. `current-abi-version` (5, runtime.sls) is the
+  ;; generated-runtime ABI — a different thing with a different lifecycle — and
+  ;; is deliberately NOT this value.
+  (define release-version "0.1.0")
+  (define release-version-export? #f)
+  (define release-version-surfaces
+    '("CHANGELOG.md 0.1.0 entry (§26:1684)"
+      "README.org status paragraph"
+      "the parent plan's dated disposition"
+      "the milestone-9-design.md status header"
+      "the git tag"))
+
+  ;; --- accessors -----------------------------------------------------------
+  (define (criterion-ref r)      (list-ref r 0))
+  (define (criterion-text r)     (list-ref r 1))
+  (define (criterion-state r)    (list-ref r 2))
+  (define (criterion-kind r)     (list-ref r 3))
+  (define (criterion-witness r)  (list-ref r 4))
+  (define (criterion-receiver r) (list-ref r 5))
+  (define (deliverable-ref d)     (list-ref d 0))
+  (define (deliverable-text d)    (list-ref d 1))
+  (define (deliverable-exists? d) (list-ref d 2))
+  (define (deliverable-receiver d)(list-ref d 3)))

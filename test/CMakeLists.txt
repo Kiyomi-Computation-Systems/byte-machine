@@ -1646,6 +1646,46 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-http-tests.sps"
   TIMEOUT 180)
 
+# --- Milestone 9 Slice ⓪: the release ledger (decision 0038) -----------------
+# §26's fifteen release criteria and §27's eleven deliverables as data a lane
+# reads. The two totality rows re-read §26/§27 from the parent plan and
+# set-compare; mechanical rows are executed; judgement rows are recorded. No
+# mutation entry: the totality rows self-ratchet (as M8 Slice ⓪'s table did).
+#
+# §26:1685's mechanical witness is `git ls-files` matching the native-artifact
+# pattern being empty. The build layer runs git (the lane cannot) and writes the
+# result to a file; the lane asserts it is empty. Regenerated every configure.
+set(BYTE_MACHINE_NATIVE_ARTIFACTS_FILE
+    "${CMAKE_BINARY_DIR}/release-ledger-native-artifacts.txt")
+execute_process(
+  COMMAND git ls-files -- "*.so" "*.o" "*.a" "*.dylib" "*.dll" "*.exe" "*.obj" "*.lib"
+  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+  OUTPUT_FILE "${BYTE_MACHINE_NATIVE_ARTIFACTS_FILE}")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.release-ledger.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/release-ledger-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/release-ledger.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/release-ledger-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_REPO_ROOT=${CMAKE_SOURCE_DIR}"
+              "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
+              "BYTE_MACHINE_NATIVE_ARTIFACTS_FILE=${BYTE_MACHINE_NATIVE_ARTIFACTS_FILE}")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.release-ledger.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/release-ledger-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/release-ledger.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/release-ledger-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_REPO_ROOT=${CMAKE_SOURCE_DIR}"
+              "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
+              "BYTE_MACHINE_NATIVE_ARTIFACTS_FILE=${BYTE_MACHINE_NATIVE_ARTIFACTS_FILE}")
+
 # --- Milestone 4 Slice ①a task 7: all three §12.7 position kinds -------------
 byte_machine_add_scheme_lane(
   NAME byte-machine.differential.position-kind.chez.source
