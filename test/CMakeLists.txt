@@ -1554,6 +1554,72 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/http-chunked-tests.sps"
   TIMEOUT 120)
 
+# --- Milestone 8 Slice ⑤: the close ------------------------------------------
+# The malformed sweep, pipelining, and the EOF rules.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.http-close.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/http-close-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-error-table.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/http-close-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.http-close.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/http-close-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-error-table.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/http-close-tests.sps"
+  TIMEOUT 120)
+
+# The leak check reads src/ and the harness root as data (§25:1649).
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.http-leak.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/http-leak-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${CMAKE_SOURCE_DIR}/test/common/http-leak-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
+              "BYTE_MACHINE_HARNESS_ROOT=${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.http-leak.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/http-leak-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${CMAKE_SOURCE_DIR}/test/common/http-leak-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
+              "BYTE_MACHINE_HARNESS_ROOT=${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}")
+
+# The determinism golden (in-process byte-identical + load-and-run).
+byte_machine_add_scheme_lane(
+  NAME byte-machine.determinism.http.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/determinism-http-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/determinism-http-tests.sps"
+  TIMEOUT 180)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.determinism.http.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/determinism-http-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/determinism-http-tests.sps"
+  TIMEOUT 180)
+
 byte_machine_add_scheme_lane(
   NAME byte-machine.differential.http.chez.source
   BACKEND chez

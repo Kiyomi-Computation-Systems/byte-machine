@@ -160,6 +160,22 @@ backend limit is reachable by a version-0.1 machine (=§16.2:911=). Milestone 7
 Gate 0 plus five slices; the whole suite runs 120 lanes in both execution modes and
 the mutation suite pins 61 passes over 590 mutations.
 
+Milestone 8 (the private HTTP fixture) closed 2026-09-12: the thing every milestone
+so far had been building /for/. A test fixture now parses HTTP/1.x request messages
+— the request line, the header section, case-insensitive =Content-Length= and
+=Transfer-Encoding= recognition, a checked fixed body, the chunked body with its
+extensions and trailers, the framing conflicts, and the message loop — written
+/only/ in declared graph nodes, with callbacks that record and never decide, and
+the reference interpreter and the generated executor produce the same event trace
+for every message at every feed split point. It was delivered as a design plus a
+Gate 0 (four decision records) plus six slices — the error table first (a
+precondition, not a deliverable), then the request line, headers, framing and the
+fixed body, the chunked body and trailers, and the close. **No file under =src/=
+changed across the whole milestone**: it spent the shipped mechanism and shipped
+none, and a leak check read from the tree keeps the fixture private — no =src/=
+library imports it and no public library re-exports an HTTP name. The mutation
+suite now pins 65 passes over 602 mutations.
+
 =src/byte-machine/= holds the construction API, the verifier, the normalizer and
 emitter, the reference interpreter, and the runtime, each exercised in both the
 source and ahead-of-time execution lanes. See

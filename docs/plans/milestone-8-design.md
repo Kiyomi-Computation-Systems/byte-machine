@@ -1,6 +1,8 @@
 # Milestone 8 Design — The private HTTP fixture
 
-**Status: Gate 0 discharged (2026-09-12).** Written against **`741e0ca`** (`feat/m7-slice-4`,
+**Status: Milestone 8 CLOSED (2026-09-12).** Gate 0 discharged, all six slices (⓪–⑤) executed and
+merged; the four `§25:1646-1649` exit criteria are dispositioned in
+`milestone-8-slice-5-implementation-plan.md`. Written against **`741e0ca`** (`feat/m7-slice-4`,
 Milestone 7's close plus its mutation-runner follow-up) on branch `docs/milestone-8-design`, tree
 clean. Milestone 7 was closing in a parallel session as this was written, so **the base is
 re-taken when `main` carries the squash of Milestone 7** and every count below is re-measured then
