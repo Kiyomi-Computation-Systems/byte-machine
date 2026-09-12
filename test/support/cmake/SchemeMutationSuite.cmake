@@ -1379,14 +1379,17 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-set(EXPECTED_PASSES 63)
-set(EXPECTED_MUTATIONS 596)
+set(EXPECTED_PASSES 64)
+set(EXPECTED_MUTATIONS 599)
 # Sixty-two is sixty-one plus one: Milestone 8 Slice ① adds one pass over the
 # request-line fixture (http-machine.sls) with three mutations (590 -> 593),
 # each caught by byte-machine.unit.http-request-line with a measured signature.
 # Sixty-three is sixty-two plus one: Slice ② adds a second pass over the same
 # fixture's header section with three mutations (593 -> 596), each caught by
 # byte-machine.unit.http-message with a measured signature.
+# Sixty-four is sixty-three plus one: Slice ③ adds a third pass over the fixture's
+# framing recognition with three mutations (596 -> 599), each caught by
+# byte-machine.unit.http-framing with a measured signature.
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -13505,8 +13508,13 @@ byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/http-machine.sls
   SPEC byte-machine.unit.http-message.chez.source
   LABEL "http-machine: the header name consumes its colon instead of ending before it"
-  FIND [[(make-edge 'hn-close 'reexecute)]]
-  REPLACE [[(make-edge 'hn-close 'advance)]]
+  # Re-anchored in Slice ③: `(make-edge 'hn-close 'reexecute)` now occurs three
+  # times (hn-loop, cl-end, te-end all reexecute into hn-close), so the FIND
+  # includes hn-loop's own self-loop line to stay a single site.
+  FIND [[(make-edge 'hn-loop 'advance) #f))
+       (make-edge 'hn-close 'reexecute)]]
+  REPLACE [[(make-edge 'hn-loop 'advance) #f))
+       (make-edge 'hn-close 'advance)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "header-name-data .Host:.")
 
 byte_machine_mutation(
@@ -13516,6 +13524,51 @@ byte_machine_mutation(
   FIND [[(make-edge 'hv-open 'reexecute)]]
   REPLACE [[(make-edge 'hv-open 'advance)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "header-value-data .xample.com.")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+byte_machine_mutation_reset()
+
+# --- Milestone 8 Slice ③: framing recognition and the fixed body ------------
+# Three decisions the framing slice encodes, caught by the http-framing lane with
+# a MEASURED signature. Measured against a staged run 2026-09-12:
+#   1. recognition is CASE-INSENSITIVE (decision 0035): both-cases yields the
+#      character's two cases, so collapsing it to one drops lowercase/mixed names;
+#   2. a framing header's flag is checked at the boundary AFTER the line's LF
+#      (§21.4:1175): inverting the duplicate test flags the FIRST Content-Length;
+#   3. Content-Length is base-10 checked accumulation (§21.2:1073): base 16 makes
+#      "abc" a valid length and moves the overflow digit.
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/http-framing-tests.sps")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/http-machine.sls
+  SPEC byte-machine.unit.http-framing.chez.source
+  LABEL "http-machine: framing recognition is no longer case-insensitive"
+  FIND [[(if (>= b 97) (list b (- b 32)) (list b (+ b 32)))]]
+  REPLACE [[(list b)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "hit: content-length -- expected error")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/http-machine.sls
+  SPEC byte-machine.unit.http-framing.chez.source
+  LABEL "http-machine: the Content-Length duplicate test is inverted, flagging the first one"
+  FIND [[(make-field-branch-node 'cl-line-done 'nonzero '(has-cl)]]
+  REPLACE [[(make-field-branch-node 'cl-line-done 'zero '(has-cl)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "duplicate-content-length boundary 35")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/http-machine.sls
+  SPEC byte-machine.unit.http-framing.chez.source
+  LABEL "http-machine: Content-Length accumulates in base 16 instead of base 10"
+  FIND [['cl-value 'content-length 10 'cl-value]]
+  REPLACE [['cl-value 'content-length 16 'cl-value]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "content-length-overflow byte 48")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

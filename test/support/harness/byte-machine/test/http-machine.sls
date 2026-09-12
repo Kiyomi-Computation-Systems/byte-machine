@@ -76,10 +76,45 @@
   (define CR 13)
   (define LF 10)
 
+  ;; --- Slice ③: the case-insensitive recognizer (decision 0035) --------------
+  (define (letter? b) (or (and (>= b 65) (<= b 90)) (and (>= b 97) (<= b 122))))
+  ;; The byte-set of a character's two cases — one byte where it has no case
+  ;; (e.g. the hyphen), so §16.2:893's overlap rule is satisfied by construction.
+  (define (both-cases b)
+    (if (letter? b)
+        (if (>= b 97) (list b (- b 32)) (list b (+ b 32)))
+        (list b)))
+  (define (nsym prefix i) (string->symbol (string-append prefix (number->string i))))
+
+  ;; One dispatch node per grammar character (decision 0035): node i matches
+  ;; char i (both cases) and ADVANCES to node i+1 (the last to `end`); its
+  ;; fallback REEXECUTES into `opaque`, so the byte it did not match is re-read
+  ;; there — no case-set arithmetic, and the opaque path keeps every byte. `chars`
+  ;; is the canonical byte list AFTER the shared first byte.
+  (define (recognizer-chain prefix chars end opaque eof-target)
+    (let ((n (length chars)))
+      (let loop ((i 0) (cs chars) (out '()))
+        (if (null? cs)
+            (reverse out)
+            (let ((nextname (if (= i (- n 1)) end (nsym prefix (+ i 1)))))
+              (loop (+ i 1) (cdr cs)
+                    (cons (make-byte-dispatch-node
+                           (nsym prefix i)
+                           (list (make-byte-case (make-byte-set-matcher (both-cases (car cs)))
+                                                 (make-edge nextname 'advance) #f))
+                           (make-edge opaque 'reexecute)
+                           eof-target #f)
+                          out)))))))
+
   (define (make-http-machine)
     (make-machine
      'httpreq 'idle
-     '()                                 ; fields — none until Slice ③
+     ;; Slice ③ fields: the checked Content-Length value and the two framing
+     ;; flags. u8 flags carry 0/1; content-length is a checked u64 (§9.1 admits
+     ;; width 64). Reset by the completion clear chain (§21.3:1150).
+     (list (make-uint-field 'content-length 64 0 #f)
+           (make-uint-field 'has-cl 8 0 #f)
+           (make-uint-field 'has-te 8 0 #f))
      ;; callbacks: the events and the two request-line span pairs (§21.3).
      (list (make-callback-declaration 'message-begin 'event #f '() #f #f)
            (make-callback-declaration 'method-data 'span-data #f '() #f #f)
@@ -93,11 +128,15 @@
            (make-callback-declaration 'header-value-data 'span-data #f '() #f #f)
            (make-callback-declaration 'header-value-complete 'span-complete #f '() #f #f)
            (make-callback-declaration 'headers-complete 'event #f '() #f #f)
-           (make-callback-declaration 'message-complete 'event #f '() #f #f))
+           (make-callback-declaration 'message-complete 'event #f '() #f #f)
+           ;; Slice ③: the fixed body's data callback — NO completion callback
+           ;; (§21.3:1145).
+           (make-callback-declaration 'body-data 'span-data #f '() #f #f))
      (list (make-span-declaration 'method 'method-data 'method-complete #f)
            (make-span-declaration 'target 'target-data 'target-complete #f)
            (make-span-declaration 'header-name 'header-name-data 'header-name-complete #f)
-           (make-span-declaration 'header-value 'header-value-data 'header-value-complete #f))
+           (make-span-declaration 'header-value 'header-value-data 'header-value-complete #f)
+           (make-span-declaration 'body 'body-data #f #f))
      ;; error declarations — one per §21.4 code this slice can raise; the EOF
      ;; declaration is the machine default (decision 0037).
      (list (make-error-declaration 'unexpected-eof 'unexpected-eof "unexpected end of input" #f)
@@ -106,8 +145,16 @@
            (make-error-declaration 'invalid-version 'invalid-version "version is not HTTP/1.0 or HTTP/1.1" #f)
            (make-error-declaration 'invalid-line-ending 'invalid-line-ending "line ending is not CRLF" #f)
            (make-error-declaration 'invalid-header-name 'invalid-header-name "header name is not a token" #f)
-           (make-error-declaration 'invalid-header-value 'invalid-header-value "header value has an invalid byte" #f))
-     (list
+           (make-error-declaration 'invalid-header-value 'invalid-header-value "header value has an invalid byte" #f)
+           ;; Slice ③: the framing codes (§21.4:1162-1167).
+           (make-error-declaration 'invalid-content-length 'invalid-content-length "Content-Length is not 1*DIGIT *OWS" #f)
+           (make-error-declaration 'content-length-overflow 'content-length-overflow "Content-Length overflows u64" #f)
+           (make-error-declaration 'duplicate-content-length 'duplicate-content-length "a second Content-Length" #f)
+           (make-error-declaration 'duplicate-transfer-encoding 'duplicate-transfer-encoding "a second Transfer-Encoding" #f)
+           (make-error-declaration 'framing-conflict 'framing-conflict "both Content-Length and Transfer-Encoding" #f)
+           (make-error-declaration 'unsupported-transfer-encoding 'unsupported-transfer-encoding "Transfer-Encoding is not chunked" #f))
+     (append
+      (list
       ;; --- idle: the message-begin gate (decision 0037) -------------------
       (make-byte-dispatch-node
        'idle
@@ -186,8 +233,19 @@
                              (make-edge 'hn-open 'reexecute) #f))
        (make-edge 'e-hname 'reexecute)
        #f #f)
-      ;; header-name span: 1*tchar, ends before the colon.
-      (make-span-start-node 'hn-open 'header-name 'hn-loop #f)
+      ;; header-name span: 1*tchar, ends before the colon. Slice ③ opens the
+      ;; span, then dispatches the first byte into the framing recognizers
+      ;; (decision 0035); an unrecognized first byte reexecutes into the opaque
+      ;; loop, keeping the span accumulating on both paths.
+      (make-span-start-node 'hn-open 'header-name 'hn-recognize #f)
+      (make-byte-dispatch-node
+       'hn-recognize
+       (list (make-byte-case (make-byte-set-matcher (both-cases (char->integer #\C)))
+                             (make-edge 'cl-0 'advance) #f)     ; Content-Length
+             (make-byte-case (make-byte-set-matcher (both-cases (char->integer #\T)))
+                             (make-edge 'te-0 'advance) #f))    ; Transfer-Encoding
+       (make-edge 'hn-loop 'reexecute)      ; any other first byte → opaque
+       'e-eof-hname #f)
       (make-byte-dispatch-node
        'hn-loop
        (list (make-byte-case (make-byte-set-matcher http-tchar-bytes)
@@ -237,21 +295,150 @@
                              (make-edge 'hdrs-complete 'advance) #f))
        (make-edge 'e-line-ending 'reexecute)  ; the empty line's CR not followed by LF
        #f #f)
-      (make-callback-node 'hdrs-complete 'headers-complete 'msg-complete '() 'msg-complete #f)
-      ;; No body until Slice ③: message-complete fires for the empty body, then
-      ;; the loop returns to idle (§21.3:1150). No fields yet, so no clear chain
-      ;; (Slice ③ adds Content-Length and the clear that resets it).
-      (make-callback-node 'msg-complete 'message-complete 'idle '() 'idle #f)
+      (make-callback-node 'hdrs-complete 'headers-complete 'body-decide '() 'body-decide #f)
+      ;; === Slice ③: the body decision (§21.2:1076-1078) ====================
+      ;; Content-Length present routes to the fixed body (zero length goes
+      ;; straight to completion); Transfer-Encoding present to the chunked body
+      ;; (Slice ④); neither present is an empty body.
+      (make-field-branch-node 'body-decide 'nonzero '(has-cl) 'bd-cl 'bd-te #f)
+      (make-field-branch-node 'bd-cl 'nonzero '(content-length) 'body-open 'msg-complete #f)
+      (make-field-branch-node 'bd-te 'nonzero '(has-te) 'chunked-todo 'msg-complete #f)
+      (make-span-start-node 'body-open 'body 'body-consume #f)
+      (make-counted-consume-node 'body-consume 'content-length 'body-close 'e-eof-body #f)
+      (make-span-end-node 'body-close 'body 'msg-complete #f)
+      ;; Slice ④ replaces this with the chunked body, which begins by reading the
+      ;; first chunk-size byte. For ③ it is input-reading (not a stop) so it is
+      ;; not an EOF-reachable stop (§16.2:909): EOF here is a truncated chunked
+      ;; message (unexpected-eof, the machine default); a body byte reaches a stop
+      ;; ④ will replace.
+      (make-byte-dispatch-node
+       'chunked-todo
+       (list (make-byte-case (make-byte-range-matcher 0 255)
+                             (make-edge 'chunked-stop 'advance) #f))
+       (make-edge 'chunked-stop 'reexecute)   ; unreachable: the range covers all bytes
+       #f #f)
+      (make-stop-node 'chunked-stop #f)
+      ;; message-complete, then the completion clear chain resets the message
+      ;; fields (§21.3:1150) and loops to idle; the absolute offset is untouched.
+      ;; `clear` is infallible, so the chain takes no error edge (decision 0037).
+      (make-callback-node 'msg-complete 'message-complete 'clear-cl '() 'clear-cl #f)
+      (make-field-action-node 'clear-cl 'clear '(content-length) 'clear-hascl #f #f)
+      (make-field-action-node 'clear-hascl 'clear '(has-cl) 'clear-haste #f #f)
+      (make-field-action-node 'clear-haste 'clear '(has-te) 'idle #f #f)
       (make-finish-node 'fin #f)
+      ;; === Slice ③: the Content-Length value path ==========================
+      ;; cl-end sees the byte after the recognized name: a colon confirms
+      ;; Content-Length; a tchar means only the prefix matched (Content-Lengthy),
+      ;; so reexecute into the opaque loop keeping the span's bytes; anything else
+      ;; ends the name without a colon (invalid-header-name via hn-close).
+      (make-byte-dispatch-node
+       'cl-end
+       (list (make-byte-case (make-exact-byte-matcher 58) (make-edge 'cl-name-close 'reexecute) #f)
+             (make-byte-case (make-byte-set-matcher http-tchar-bytes) (make-edge 'hn-loop 'reexecute) #f))
+       (make-edge 'hn-close 'reexecute)
+       'e-eof-hname #f)
+      (make-span-end-node 'cl-name-close 'header-name 'cl-colon #f)
+      (make-byte-dispatch-node
+       'cl-colon
+       (list (make-byte-case (make-exact-byte-matcher 58) (make-edge 'cl-ows 'advance) #f))
+       (make-edge 'e-hname 'reexecute) #f #f)
+      (make-byte-dispatch-node        ; skip leading OWS before the value span
+       'cl-ows
+       (list (make-byte-case (make-exact-byte-matcher SP) (make-edge 'cl-ows 'advance) #f)
+             (make-byte-case (make-exact-byte-matcher 9)  (make-edge 'cl-ows 'advance) #f))
+       (make-edge 'cl-hv-open 'reexecute) #f #f)
+      ;; the value is a header-value span too (§21.3): the digits are delivered
+      ;; as header-value-data AND accumulated into content-length.
+      (make-span-start-node 'cl-hv-open 'header-value 'cl-gate #f)
+      (make-byte-dispatch-node        ; 1*DIGIT: at least one digit
+       'cl-gate
+       (list (make-byte-case (make-byte-range-matcher 48 57) (make-edge 'cl-value 'reexecute) #f))
+       (make-edge 'e-cl-invalid 'reexecute)
+       'e-eof-hvalue #f)
+      (make-integer-accumulate-node 'cl-value 'content-length 10 'cl-value
+        (make-edge 'cl-after 'reexecute) 'e-cl-overflow 'e-eof-hvalue #f)
+      (make-byte-dispatch-node        ; *OWS (in the span), then before CR
+       'cl-after
+       (list (make-byte-case (make-exact-byte-matcher SP) (make-edge 'cl-after 'advance) #f)
+             (make-byte-case (make-exact-byte-matcher 9)  (make-edge 'cl-after 'advance) #f)
+             (make-byte-case (make-exact-byte-matcher CR) (make-edge 'cl-hv-close 'reexecute) #f))
+       (make-edge 'e-cl-invalid 'reexecute)
+       'e-eof-hvalue #f)
+      (make-span-end-node 'cl-hv-close 'header-value 'cl-crlf-cr #f)
+      (make-byte-dispatch-node
+       'cl-crlf-cr
+       (list (make-byte-case (make-exact-byte-matcher CR) (make-edge 'cl-crlf-lf 'advance) #f))
+       (make-edge 'e-line-ending 'reexecute) #f #f)
+      (make-byte-dispatch-node
+       'cl-crlf-lf
+       (list (make-byte-case (make-exact-byte-matcher LF) (make-edge 'cl-line-done 'advance) #f))
+       (make-edge 'e-line-ending 'reexecute) #f #f)
+      ;; The framing refusals are decided at the boundary AFTER the LF (P2): a
+      ;; zero-width field-branch, so the position is a boundary (§21.4:1175). A
+      ;; second Content-Length is a duplicate; one after a Transfer-Encoding is a
+      ;; conflict; otherwise set the flag and go on.
+      (make-field-branch-node 'cl-line-done 'nonzero '(has-cl) 'e-dup-cl 'cl-conflict #f)
+      (make-field-branch-node 'cl-conflict 'nonzero '(has-te) 'e-framing-conflict 'cl-set #f)
+      (make-field-action-node 'cl-set 'store '(has-cl 1) 'header-line-start #f #f)
+      ;; === Slice ③: the Transfer-Encoding value path (case-insensitive chunked) =
+      (make-byte-dispatch-node
+       'te-end
+       (list (make-byte-case (make-exact-byte-matcher 58) (make-edge 'te-name-close 'reexecute) #f)
+             (make-byte-case (make-byte-set-matcher http-tchar-bytes) (make-edge 'hn-loop 'reexecute) #f))
+       (make-edge 'hn-close 'reexecute)
+       'e-eof-hname #f)
+      (make-span-end-node 'te-name-close 'header-name 'te-colon #f)
+      (make-byte-dispatch-node
+       'te-colon
+       (list (make-byte-case (make-exact-byte-matcher 58) (make-edge 'te-ows 'advance) #f))
+       (make-edge 'e-hname 'reexecute) #f #f)
+      (make-byte-dispatch-node
+       'te-ows
+       (list (make-byte-case (make-exact-byte-matcher SP) (make-edge 'te-ows 'advance) #f)
+             (make-byte-case (make-exact-byte-matcher 9)  (make-edge 'te-ows 'advance) #f))
+       (make-edge 'te-hv-open 'reexecute) #f #f)
+      (make-span-start-node 'te-hv-open 'header-value 'tv-0 #f)   ; tv-0 recognizes "chunked"
+      ;; after "chunked": optional trailing OWS (in the span), then before CR;
+      ;; anything else is unsupported-transfer-encoding.
+      (make-byte-dispatch-node
+       'tv-end
+       (list (make-byte-case (make-exact-byte-matcher SP) (make-edge 'tv-end 'advance) #f)
+             (make-byte-case (make-exact-byte-matcher 9)  (make-edge 'tv-end 'advance) #f)
+             (make-byte-case (make-exact-byte-matcher CR) (make-edge 'te-hv-close 'reexecute) #f))
+       (make-edge 'e-te-unsup 'reexecute)
+       'e-eof-hvalue #f)
+      (make-span-end-node 'te-hv-close 'header-value 'te-crlf-cr #f)
+      (make-byte-dispatch-node
+       'te-crlf-cr
+       (list (make-byte-case (make-exact-byte-matcher CR) (make-edge 'te-crlf-lf 'advance) #f))
+       (make-edge 'e-line-ending 'reexecute) #f #f)
+      (make-byte-dispatch-node
+       'te-crlf-lf
+       (list (make-byte-case (make-exact-byte-matcher LF) (make-edge 'te-line-done 'advance) #f))
+       (make-edge 'e-line-ending 'reexecute) #f #f)
+      (make-field-branch-node 'te-line-done 'nonzero '(has-te) 'e-dup-te 'te-conflict #f)
+      (make-field-branch-node 'te-conflict 'nonzero '(has-cl) 'e-framing-conflict 'te-set #f)
+      (make-field-action-node 'te-set 'store '(has-te 1) 'header-line-start #f #f)
       ;; --- error nodes, per span state (decision 0036) --------------------
       (make-error-node 'e-eof-method 'unexpected-eof #f)   ; method span open
       (make-error-node 'e-eof-target 'unexpected-eof #f)   ; target span open
       (make-error-node 'e-eof-hname 'unexpected-eof #f)    ; header-name span open
       (make-error-node 'e-eof-hvalue 'unexpected-eof #f)   ; header-value span open
+      (make-error-node 'e-eof-body 'unexpected-eof #f)     ; body span open
       (make-error-node 'e-method 'invalid-method #f)       ; no span open
       (make-error-node 'e-target 'invalid-target #f)       ; no span open
       (make-error-node 'e-version 'invalid-version #f)     ; no span open
       (make-error-node 'e-line-ending 'invalid-line-ending #f)
       (make-error-node 'e-hname 'invalid-header-name #f)   ; no span open
-      (make-error-node 'e-hvalue 'invalid-header-value #f))  ; no span open
+      (make-error-node 'e-hvalue 'invalid-header-value #f) ; no span open
+      (make-error-node 'e-cl-invalid 'invalid-content-length #f)      ; header-value span open
+      (make-error-node 'e-cl-overflow 'content-length-overflow #f)    ; header-value span open
+      (make-error-node 'e-dup-cl 'duplicate-content-length #f)        ; no span open (post-LF)
+      (make-error-node 'e-dup-te 'duplicate-transfer-encoding #f)     ; no span open (post-LF)
+      (make-error-node 'e-framing-conflict 'framing-conflict #f)      ; no span open (post-LF)
+      (make-error-node 'e-te-unsup 'unsupported-transfer-encoding #f)) ; header-value span open
+     ;; the case-insensitive recognizer chains (decision 0035), generated
+     (recognizer-chain "cl-" (string-bytes "ontent-Length") 'cl-end 'hn-loop 'e-eof-hname)
+     (recognizer-chain "te-" (string-bytes "ransfer-Encoding") 'te-end 'hn-loop 'e-eof-hname)
+     (recognizer-chain "tv-" (string-bytes "chunked") 'tv-end 'e-te-unsup 'e-eof-hvalue))
      'unexpected-eof #f)))                 ; machine default EOF (no span)

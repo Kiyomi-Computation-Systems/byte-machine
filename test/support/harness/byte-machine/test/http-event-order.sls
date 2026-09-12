@@ -25,7 +25,7 @@
   ;; The span-data events: the ones a fragment splits, so the ones `star`
   ;; quantifies and `trace-skeleton` coalesces. Grows with the fixture.
   (define http-data-events
-    '(method-data target-data header-name-data header-value-data))
+    '(method-data target-data header-name-data header-value-data body-data))
 
   ;; §21.3's no-body message event order (Slices ① and ②). `method`/`target`
   ;; are 1*, so their data is `star`. The header section is zero or more
@@ -43,6 +43,9 @@
       (rep (star header-name-data) (one header-name-complete)
            (star header-value-data) (one header-value-complete))
       (one headers-complete)
+      ;; the fixed body (Slice ③): body-data* with no completion callback
+      ;; (§21.3:1145). Slice ④ inserts the chunk sub-grammar here instead.
+      (star body-data)
       (one message-complete)))
 
   (define (entry-name e) (if (pair? e) (car e) e))
