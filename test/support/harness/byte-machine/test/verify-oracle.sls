@@ -145,6 +145,24 @@
      (map (lambda (nm) (cons 'duplicate-span-declaration nm))
           (dups (map span-declaration-name (machine-spans m))))))
 
+  ;; :885 non-duplicate arms -- the two :885 codes that are NOT a bare name clash:
+  ;; a duplicate uint-field name (invalid-field-declaration's dup arm) and a
+  ;; duplicate branch key in a callback node's targets (duplicate-branch-key).
+  ;; Compared by CONTAINMENT (oracle ⊆ verifier): the verifier reports these codes
+  ;; for other faults too (a field's width/operand, a declaration's keys), which the
+  ;; oracle does not model, so the oracle finds a subset and never a superset.
+  (define (rule-885-nondup m)
+    (append
+     (map (lambda (nm) (cons 'invalid-field-declaration nm))
+          (dups (map uint-field-name (machine-fields m))))
+     (apply append
+       (map (lambda (n)
+              (if (callback-node? n)
+                  (map (lambda (k) (cons 'duplicate-branch-key (node-name n)))
+                       (dups (map car (callback-node-branch-targets n))))
+                  '()))
+            (machine-nodes m)))))
+
   ;; :887/:905 missing targets -- a NON-EOF target that names no node (pass-names,
   ;; through node-out-targets, plus the entry). Attributed to the missing target.
   (define (rule-missing-target m)
@@ -377,6 +395,8 @@
      (make-oracle-rule ':885-duplicates
        '(duplicate-name duplicate-error-declaration duplicate-callback-declaration duplicate-span-declaration)
        'exact rule-duplicates #f)
+     (make-oracle-rule ':885-nondup '(invalid-field-declaration duplicate-branch-key)
+       'subset rule-885-nondup #f)
      (make-oracle-rule ':887-905-missing-target '(missing-target) 'exact rule-missing-target #f)
      (make-oracle-rule ':893-overlap '(overlapping-cases) 'exact rule-overlap #f)
      (make-oracle-rule ':894-prefix '(ambiguous-sequence-prefix) 'exact rule-prefix #f)

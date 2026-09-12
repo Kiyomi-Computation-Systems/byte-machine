@@ -74,24 +74,29 @@
 (call-with-port (open-file-output-port genfile (file-options no-fail))
   (lambda (p) (put-bytevector p emitted)))
 (generate-wpo-files #f)
+;; remove any object left by a previous run in the shared tmpdir, so the
+;; object-exists check below reflects THIS run's compile-file and a mutation that
+;; bypasses compile-file cannot pass on a stale object (Task 9 Step 2).
+(when (file-exists? objfile) (delete-file objfile))
 (define compile-line
   (with-output-to-string (lambda () (compile-file genfile objfile))))
-(load objfile)
-(define cm (eval 'lim-parser (environment '(generated lim))))
-(define im (make-interpreted-machine v))
-
-;; the object file exists and is non-empty -- written BEFORE the feed check, so a
-;; mutation replacing compile-file with a plain load of the source is caught here
-;; (the object never gets written) rather than passing because the feed still agrees.
+;; the object exists and is non-empty is computed BEFORE the object is loaded, and
+;; the load is guarded, so a mutation replacing compile-file with a plain load of
+;; the source is caught by this check (the object never gets written) rather than
+;; crashing the program at a top-level (load of a missing object).
 (define (file-nonempty? path)
   (and (file-exists? path)
        (call-with-port (open-file-input-port path)
          (lambda (p) (not (eof-object? (get-u8 p)))))))
+(define obj-ok (file-nonempty? objfile))
+(define cm
+  (and obj-ok (guard (e (#t #f)) (load objfile) (eval 'lim-parser (environment '(generated lim))))))
+(define im (make-interpreted-machine v))
 
 (define input (u8-list->bytevector '(65 66)))
 (define (feed-once m) (parser-feed! (make-parser m '() #f) input 0 2))
 (define ri (feed-once im))
-(define rc (feed-once cm))
+(define rc (and cm (feed-once cm)))
 (define (triple r) (list (parser-result-status r) (parser-result-next r)
                          (parser-result-consumed r) (parser-result-stream-offset r)))
 
@@ -106,13 +111,14 @@
         (check "the emitted source is large" (> emitted-size 10000))))
     (harness-case "compile-file wrote an object, and it is what was loaded"
       (lambda ()
-        (check "the object file exists and is non-empty" (file-nonempty? objfile))
+        (check "the object file exists and is non-empty" obj-ok)
         (check "compile-file announced the compilation" (> (string-length compile-line) 0))
         (check "the loaded binding is a compiled machine parser" (and cm #t))))
     (harness-case "one feed agrees with the interpreter on the full parser-result"
       (lambda ()
-        (check-equal "compiled result status is stopped" (parser-result-status rc) 'stopped)
-        (check-equal "the two lanes agree on the full triple" (triple rc) (triple ri))))))
+        (check "the compiled machine produced a result" (and rc #t))
+        (check-equal "compiled result status is stopped" (and rc (parser-result-status rc)) 'stopped)
+        (check-equal "the two lanes agree on the full triple" (and rc (triple rc)) (triple ri))))))
 
 ;; --- the disposition data (Task 8 Step 5) ------------------------------------
 ;; Which §30:1778 limits were looked for, and what this witness measured for each.

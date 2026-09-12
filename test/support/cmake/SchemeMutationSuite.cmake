@@ -1379,8 +1379,8 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-set(EXPECTED_PASSES 59)
-set(EXPECTED_MUTATIONS 561)
+set(EXPECTED_PASSES 61)
+set(EXPECTED_MUTATIONS 590)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -1526,6 +1526,12 @@ set(STAGE_DIR "${WORK_DIR}/stage")
 # every source-side mutation report as caught while the census compared the
 # pristine file against itself.
 set(ENV{BYTE_MACHINE_SOURCE_ROOT} "${STAGE_DIR}/src")
+
+# Milestone 7 Slice ④: the rejections program reads verify-oracle.sls as a datum
+# (the matcher-bytes prohibition) under BYTE_MACHINE_HARNESS_ROOT, for the same
+# reason -- under this suite it must read the STAGED harness tree, so the
+# matcher-bytes-in-the-oracle mutation (Pass 60) is seen. Set once here.
+set(ENV{BYTE_MACHINE_HARNESS_ROOT} "${STAGE_DIR}/test/support/harness")
 
 # The object guard the Chez launcher requires. It lives outside the stage
 # because the stage is removed and rebuilt on every run, and the launcher
@@ -8414,6 +8420,24 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the emitted arm applies min exactly once and never advances by one: exactly one min -- expected 1, got 0")
 
+# Milestone 7 Slice ④ Task 9 Step 4: the §16.2:910 witness's two pins. Each drops a
+# quote wrapper in one render-state-arm arm, so a DECLARED name is emitted in
+# identifier position; the identifier-position walk over the every-construct witness
+# catches it (the leftover is no longer exactly the binding and the machine name).
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "the span-open arm emits the span name unquoted (identifier position)"
+  FIND [[            "       (begin (byte-machine-span-open/v1 psr (quote "]]
+  REPLACE [[            "       (begin (byte-machine-span-open/v1 psr ("]]
+  EXPECT_OUTPUT_MATCHES "only the binding and the machine name remain -- expected .ecw ecw-parser., got .ecw")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "the error arm emits the source-node name unquoted (identifier position)"
+  FIND [[                                                  (normal-error-reason s))) ") (quote "]]
+  REPLACE [[                                                  (normal-error-reason s))) ") ("]]
+  EXPECT_OUTPUT_MATCHES "only the binding and the machine name remain -- expected .ecw ecw-parser., got .ecw")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 37: D7 identifier repertoire + LF (Slice B) -------------------------
@@ -13004,6 +13028,394 @@ byte_machine_mutation(
   FIND [[             ((or (null? cs) (>= emissions bound))]]
   REPLACE [[             ((or (null? cs) #f)]]
   EXPECT_SURVIVES "the probe minimizes in 4 emissions (< the 64 bound), so the fixpoint stops the loop before the bound is ever consulted; no probe in this slice reaches it (F10)")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Milestone 7 Slice ④ Pass 60: the corruption catalogue and the oracle -------
+# The SIXTIETH pass. It runs property-rejections-tests.sps -- the catalogue and the
+# independent oracle (§4.5/§4.6). Twenty-five mutations: the catalogue's positive
+# (a no-op corrupt), negative (a twin that is its corrupt), refusal (a thunk made
+# legal) and per-entry-count (an applies? made false) checks; the code sentinel's
+# unconstructible term (a declared survivor, see mut4); the matcher-bytes
+# prohibition; and each of the nine oracle rows made to never fire (its fire
+# counter) and to always fire (its silent counter). Each EXPECT asserts the failure
+# signature, never a bare nonzero exit.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/property-rejections-tests.sps")
+
+# mut1: a non-span entry's corrupt is a no-op -> the positive containment fails.
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-corrupt.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "a non-span entry's corrupt (dup-node-name) is a no-op"
+  FIND [[      (lambda (m) (let ((ns (node-names m))) (rename-to m all-node-ctors ns (car ns))))]]
+  REPLACE [[      (lambda (m) m)]]
+  EXPECT_OUTPUT_MATCHES "dup-node-name corruptions all contain the expected pairs -- expected a true value")
+
+# mut2: a span-bearing entry's corrupt is a no-op -> the positive containment fails.
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-corrupt.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "a span-bearing entry's corrupt (span-active-at-pause) is a no-op"
+  FIND [[      (lambda (m) (let* ((s (first-node-of m span-start-node?))
+                         (nm (span-start-node-name s))
+                         (old-next (span-start-node-next s))
+                         (d1 (extend (->d m) '(make-machine) 1 (machine-name m) 7
+                                     (list 'make-pause-node (q 'zz-inspan-pause) (q old-next) #f))))
+                    (build (edit d1 '(make-span-start-node) 1 nm 3 (q 'zz-inspan-pause)))))]]
+  REPLACE [[      (lambda (m) m)]]
+  EXPECT_OUTPUT_MATCHES "span-active-at-pause corruptions all contain the expected pairs -- expected a true value")
+
+# mut3: one entry's twin is replaced by its corrupt -> the twin no longer verifies.
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-corrupt.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "an entry's twin is its corrupt (dup-node-name)"
+  FIND [[      (lambda (m) (let ((ns (node-names m))) (rename-to m all-node-ctors ns (car ns))))
+      identity-twin]]
+  REPLACE [[      (lambda (m) (let ((ns (node-names m))) (rename-to m all-node-ctors ns (car ns))))
+      (lambda (m) (let ((ns (node-names m))) (rename-to m all-node-ctors ns (car ns))))]]
+  EXPECT_OUTPUT_MATCHES "dup-node-name twins verify and lack the entry's code -- expected a true value")
+
+# mut4: the code sentinel drops the unconstructible list. DECLARED SURVIVOR
+# (Task 9 Step 8 reconciliation): invalid-shape is redundantly the not-a-machine
+# entry's expected code, so dropping the unconstructible {invalid-shape} leaves the
+# union unchanged. Every census code has an entry, so no code is unconstructible-
+# only; the unconstructible list is a documented belt-and-braces, not a load-bearing
+# sentinel term. The plan's Step 1 predicted this caught "naming invalid-shape"; the
+# measurement is that it is not catchable, recorded here.
+byte_machine_mutation(
+  FILE test/common/property-rejections-tests.sps
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "the code sentinel drops the unconstructible list"
+  FIND [[               (sentinel (uniq (append entry-codes unconstructible-codes)))]]
+  REPLACE [[               (sentinel (uniq entry-codes))]]
+  EXPECT_SURVIVES "invalid-shape is redundantly the not-a-machine entry's expected code, so the union is unchanged when the unconstructible list is dropped; every census code has an entry, so no code is unconstructible-only and the list is documentary rather than load-bearing")
+
+# mut5: one refusal thunk is made legal -> F5 row 2 sees no raise.
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-corrupt.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "a refusal thunk is made legal (make-edge with a valid mode)"
+  FIND [[       (lambda () (eval '(make-edge 'x 'not-a-mode) eval-env))]]
+  REPLACE [[       (lambda () (eval '(make-edge 'x 'advance) eval-env))]]
+  EXPECT_OUTPUT_MATCHES "edge-mode-outside-closed-set raises a contract violation -- expected a true value")
+
+# mut6: an entry's applies? is constantly false -> its per-entry count reads 0.
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/machine-corrupt.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "an entry's applies? is constantly false (missing-callback-declaration)"
+  FIND [[      (lambda (m) (first-node-of m callback-node?))]]
+  REPLACE [[      (lambda (m) #f)]]
+  EXPECT_OUTPUT_MATCHES "missing-callback-declaration applied >= 1 -- expected a true value")
+
+# mut7: the oracle's :893 row reads matcher-bytes -> the structural census catches it.
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/verify-oracle.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "the oracle's :893 byte-set arm reads matcher-bytes"
+  FIND [[          ((byte-set-matcher? mt) (byte-set-matcher-bytes mt))]]
+  REPLACE [[          ((byte-set-matcher? mt) (matcher-bytes mt))]]
+  EXPECT_OUTPUT_MATCHES "the symbol matcher-bytes does not occur in the oracle -- expected 0, got 1")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/verify-oracle.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "oracle rule :885-duplicates never fires (returns empty)"
+  FIND [[(define (rule-duplicates m)
+    (append
+     (map (lambda (nm) (cons 'duplicate-name nm)) (dups (node-set m)))
+     (map (lambda (nm) (cons 'duplicate-error-declaration nm))
+          (dups (map error-declaration-name (machine-errors m))))
+     (map (lambda (nm) (cons 'duplicate-callback-declaration nm))
+          (dups (map callback-declaration-name (machine-callbacks m))))
+     (map (lambda (nm) (cons 'duplicate-span-declaration nm))
+          (dups (map span-declaration-name (machine-spans m))))))]]
+  REPLACE [[(define (rule-duplicates m) '())]]
+  EXPECT_OUTPUT_MATCHES ":885-duplicates fired at least once -- expected a true value")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/verify-oracle.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "oracle rule :885-duplicates always fires (every node)"
+  FIND [[(define (rule-duplicates m)
+    (append
+     (map (lambda (nm) (cons 'duplicate-name nm)) (dups (node-set m)))
+     (map (lambda (nm) (cons 'duplicate-error-declaration nm))
+          (dups (map error-declaration-name (machine-errors m))))
+     (map (lambda (nm) (cons 'duplicate-callback-declaration nm))
+          (dups (map callback-declaration-name (machine-callbacks m))))
+     (map (lambda (nm) (cons 'duplicate-span-declaration nm))
+          (dups (map span-declaration-name (machine-spans m))))))]]
+  REPLACE [[(define (rule-duplicates m) (map (lambda (zzn) (cons 'duplicate-name (node-name zzn))) (machine-nodes m)))]]
+  EXPECT_OUTPUT_MATCHES ":885-duplicates agrees with the verifier -- expected none, got .oracle")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/verify-oracle.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "oracle rule :885-nondup never fires (returns empty)"
+  FIND [[(define (rule-885-nondup m)
+    (append
+     (map (lambda (nm) (cons 'invalid-field-declaration nm))
+          (dups (map uint-field-name (machine-fields m))))
+     (apply append
+       (map (lambda (n)
+              (if (callback-node? n)
+                  (map (lambda (k) (cons 'duplicate-branch-key (node-name n)))
+                       (dups (map car (callback-node-branch-targets n))))
+                  '()))
+            (machine-nodes m)))))]]
+  REPLACE [[(define (rule-885-nondup m) '())]]
+  EXPECT_OUTPUT_MATCHES ":885-nondup fired at least once -- expected a true value")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/verify-oracle.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "oracle rule :885-nondup always fires (every node)"
+  FIND [[(define (rule-885-nondup m)
+    (append
+     (map (lambda (nm) (cons 'invalid-field-declaration nm))
+          (dups (map uint-field-name (machine-fields m))))
+     (apply append
+       (map (lambda (n)
+              (if (callback-node? n)
+                  (map (lambda (k) (cons 'duplicate-branch-key (node-name n)))
+                       (dups (map car (callback-node-branch-targets n))))
+                  '()))
+            (machine-nodes m)))))]]
+  REPLACE [[(define (rule-885-nondup m) (map (lambda (zzn) (cons 'invalid-field-declaration (node-name zzn))) (machine-nodes m)))]]
+  EXPECT_OUTPUT_MATCHES ":885-nondup agrees with the verifier -- expected none, got .oracle")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/verify-oracle.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "oracle rule :887-905-missing-target never fires (returns empty)"
+  FIND [[(define (rule-missing-target m)
+    (let* ((nodes (node-set m))
+           (refs (uniq (append (if (symbol? (machine-entry m)) (list (machine-entry m)) '())
+                               (apply append (map non-eof-targets (machine-nodes m)))))))
+      (map (lambda (t) (cons 'missing-target t))
+           (filter (lambda (t) (and (symbol? t) (not (memq t nodes)))) refs))))]]
+  REPLACE [[(define (rule-missing-target m) '())]]
+  EXPECT_OUTPUT_MATCHES ":887-905-missing-target fired at least once -- expected a true value")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/verify-oracle.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "oracle rule :887-905-missing-target always fires (every node)"
+  FIND [[(define (rule-missing-target m)
+    (let* ((nodes (node-set m))
+           (refs (uniq (append (if (symbol? (machine-entry m)) (list (machine-entry m)) '())
+                               (apply append (map non-eof-targets (machine-nodes m)))))))
+      (map (lambda (t) (cons 'missing-target t))
+           (filter (lambda (t) (and (symbol? t) (not (memq t nodes)))) refs))))]]
+  REPLACE [[(define (rule-missing-target m) (map (lambda (zzn) (cons 'missing-target (node-name zzn))) (machine-nodes m)))]]
+  EXPECT_OUTPUT_MATCHES ":887-905-missing-target agrees with the verifier -- expected none, got .oracle")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/verify-oracle.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "oracle rule :893-overlap never fires (returns empty)"
+  FIND [[(define (rule-overlap m)
+    (filter-map-nodes m
+      (lambda (n)
+        (and (byte-dispatch-node? n)
+             (any-meet? (map (lambda (c) (matcher-set (byte-case-matcher c)))
+                             (byte-dispatch-node-cases n)))
+             (cons 'overlapping-cases (byte-dispatch-node-name n))))))]]
+  REPLACE [[(define (rule-overlap m) '())]]
+  EXPECT_OUTPUT_MATCHES ":893-overlap fired at least once -- expected a true value")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/verify-oracle.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "oracle rule :893-overlap always fires (every node)"
+  FIND [[(define (rule-overlap m)
+    (filter-map-nodes m
+      (lambda (n)
+        (and (byte-dispatch-node? n)
+             (any-meet? (map (lambda (c) (matcher-set (byte-case-matcher c)))
+                             (byte-dispatch-node-cases n)))
+             (cons 'overlapping-cases (byte-dispatch-node-name n))))))]]
+  REPLACE [[(define (rule-overlap m) (map (lambda (zzn) (cons 'overlapping-cases (node-name zzn))) (machine-nodes m)))]]
+  EXPECT_OUTPUT_MATCHES ":893-overlap agrees with the verifier -- expected none, got .oracle")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/verify-oracle.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "oracle rule :894-prefix never fires (returns empty)"
+  FIND [[(define (rule-prefix m)
+    (filter-map-nodes m
+      (lambda (n)
+        (and (sequence-dispatch-node? n)
+             (let ((alts (map sequence-case-bytes (sequence-dispatch-node-cases n))))
+               (and (pairwise-prefix? alts)
+                    (cons 'ambiguous-sequence-prefix (sequence-dispatch-node-name n))))))))]]
+  REPLACE [[(define (rule-prefix m) '())]]
+  EXPECT_OUTPUT_MATCHES ":894-prefix fired at least once -- expected a true value")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/verify-oracle.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "oracle rule :894-prefix always fires (every node)"
+  FIND [[(define (rule-prefix m)
+    (filter-map-nodes m
+      (lambda (n)
+        (and (sequence-dispatch-node? n)
+             (let ((alts (map sequence-case-bytes (sequence-dispatch-node-cases n))))
+               (and (pairwise-prefix? alts)
+                    (cons 'ambiguous-sequence-prefix (sequence-dispatch-node-name n))))))))]]
+  REPLACE [[(define (rule-prefix m) (map (lambda (zzn) (cons 'ambiguous-sequence-prefix (node-name zzn))) (machine-nodes m)))]]
+  EXPECT_OUTPUT_MATCHES ":894-prefix agrees with the verifier -- expected none, got .oracle")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/verify-oracle.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "oracle rule :897-unreachable never fires (returns empty)"
+  FIND [[(define (rule-unreachable m)
+    (let ((r (reachable m)))
+      (map (lambda (nm) (cons 'unreachable-node nm))
+           (filter (lambda (nm) (not (member nm r))) (node-set m)))))]]
+  REPLACE [[(define (rule-unreachable m) '())]]
+  EXPECT_OUTPUT_MATCHES ":897-unreachable fired at least once -- expected a true value")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/verify-oracle.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "oracle rule :897-unreachable always fires (every node)"
+  FIND [[(define (rule-unreachable m)
+    (let ((r (reachable m)))
+      (map (lambda (nm) (cons 'unreachable-node nm))
+           (filter (lambda (nm) (not (member nm r))) (node-set m)))))]]
+  REPLACE [[(define (rule-unreachable m) (map (lambda (zzn) (cons 'unreachable-node (node-name zzn))) (machine-nodes m)))]]
+  EXPECT_OUTPUT_MATCHES ":897-unreachable agrees with the verifier -- expected none, got .oracle")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/verify-oracle.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "oracle rule :908-non-eof-into-finish never fires (returns empty)"
+  FIND [[(define (rule-non-eof-into-finish m)
+    (let ((r (byte-reached m)))
+      (uniq
+       (filter-map-nodes m
+         (lambda (n)
+           (and (member (node-name n) r)
+                (exists (lambda (t) (finish-name? m t)) (non-eof-targets n))
+                (cons 'non-eof-into-finish (node-name n))))))))]]
+  REPLACE [[(define (rule-non-eof-into-finish m) '())]]
+  EXPECT_OUTPUT_MATCHES ":908-non-eof-into-finish fired at least once -- expected a true value")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/verify-oracle.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "oracle rule :908-non-eof-into-finish always fires (every node)"
+  FIND [[(define (rule-non-eof-into-finish m)
+    (let ((r (byte-reached m)))
+      (uniq
+       (filter-map-nodes m
+         (lambda (n)
+           (and (member (node-name n) r)
+                (exists (lambda (t) (finish-name? m t)) (non-eof-targets n))
+                (cons 'non-eof-into-finish (node-name n))))))))]]
+  REPLACE [[(define (rule-non-eof-into-finish m) (map (lambda (zzn) (cons 'non-eof-into-finish (node-name zzn))) (machine-nodes m)))]]
+  EXPECT_OUTPUT_MATCHES ":908-non-eof-into-finish agrees with the verifier -- expected none, got .oracle")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/verify-oracle.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "oracle rule :898-zero-progress never fires (returns empty)"
+  FIND [[(define (rule-zero-progress m)
+    (let* ((br (byte-reached m))                     ; 0030 item 7: byte-reached only
+           (nodes (filter (lambda (nm) (member nm br)) (node-set m)))
+           (on-cycle (nodes-on-nonconsuming-cycle m nodes)))
+      (map (lambda (nm) (cons 'zero-progress-cycle nm)) on-cycle)))]]
+  REPLACE [[(define (rule-zero-progress m) '())]]
+  EXPECT_OUTPUT_MATCHES ":898-zero-progress fired at least once -- expected a true value")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/verify-oracle.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "oracle rule :898-zero-progress always fires (every node)"
+  FIND [[(define (rule-zero-progress m)
+    (let* ((br (byte-reached m))                     ; 0030 item 7: byte-reached only
+           (nodes (filter (lambda (nm) (member nm br)) (node-set m)))
+           (on-cycle (nodes-on-nonconsuming-cycle m nodes)))
+      (map (lambda (nm) (cons 'zero-progress-cycle nm)) on-cycle)))]]
+  REPLACE [[(define (rule-zero-progress m) (map (lambda (zzn) (cons 'zero-progress-cycle (node-name zzn))) (machine-nodes m)))]]
+  EXPECT_OUTPUT_MATCHES ":898-zero-progress agrees with the verifier -- expected none, got .oracle")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/verify-oracle.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "oracle rule :909-eof never fires (returns empty)"
+  FIND [[(define (rule-eof m)
+    (uniq
+     (apply append
+       (map (lambda (start)
+              (let ((v (eof-verdict m (parked-eof-start m start) '())))
+                (cond ((eq? v 'stop) (list (cons 'eof-reachable-stop (node-name start))))
+                      ((eq? v 'cycle) (list (cons 'eof-zero-progress-cycle (node-name start))))
+                      (else '()))))
+            (parked-set m)))))]]
+  REPLACE [[(define (rule-eof m) '())]]
+  EXPECT_OUTPUT_MATCHES ":909-eof fired at least once -- expected a true value")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/verify-oracle.sls
+  SPEC byte-machine.property.rejections.chez.source
+  LABEL "oracle rule :909-eof always fires (every node)"
+  FIND [[(define (rule-eof m)
+    (uniq
+     (apply append
+       (map (lambda (start)
+              (let ((v (eof-verdict m (parked-eof-start m start) '())))
+                (cond ((eq? v 'stop) (list (cons 'eof-reachable-stop (node-name start))))
+                      ((eq? v 'cycle) (list (cons 'eof-zero-progress-cycle (node-name start))))
+                      (else '()))))
+            (parked-set m)))))]]
+  REPLACE [[(define (rule-eof m) (map (lambda (zzn) (cons 'eof-reachable-stop (node-name zzn))) (machine-nodes m)))]]
+  EXPECT_OUTPUT_MATCHES ":909-eof agrees with the verifier -- expected none, got .oracle")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Milestone 7 Slice ④ Pass 61: the compile-file limits witness --------------
+# The SIXTY-FIRST pass. It runs compile-limits-tests.sps (§4.12 item 2). Two
+# mutations: compile-file replaced by a plain load of the source (caught by the
+# object-exists check, written before the object is loaded); and the interpreter-
+# agreement comparison inverted (caught by the agreement check).
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/compile-limits-tests.sps")
+
+byte_machine_mutation(
+  FILE test/common/compile-limits-tests.sps
+  SPEC byte-machine.unit.compile-limits.chez.source
+  LABEL "compile-file is replaced by a plain load of the source"
+  FIND [[(compile-file genfile objfile)]]
+  REPLACE [[(load genfile)]]
+  EXPECT_OUTPUT_MATCHES "the object file exists and is non-empty -- expected a true value")
+
+byte_machine_mutation(
+  FILE test/common/compile-limits-tests.sps
+  SPEC byte-machine.unit.compile-limits.chez.source
+  LABEL "the interpreter-agreement comparison is inverted"
+  FIND [[(check-equal "the two lanes agree on the full triple" (and rc (triple rc)) (triple ri))]]
+  REPLACE [[(check-not-equal "the two lanes agree on the full triple" (and rc (triple rc)) (triple ri))]]
+  EXPECT_OUTPUT_MATCHES "the two lanes agree on the full triple -- expected any value other than")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
