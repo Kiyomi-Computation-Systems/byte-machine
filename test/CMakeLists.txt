@@ -1608,7 +1608,8 @@ byte_machine_add_scheme_lane(
           ${BYTE_MACHINE_CORE_EMIT}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/determinism-http-tests.sps"
-  TIMEOUT 180)
+  TIMEOUT 180
+  ENVIRONMENT "BYTE_MACHINE_HTTP_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-http.golden.sls")
 
 byte_machine_add_scheme_lane(
   NAME byte-machine.determinism.http.chez.aot
@@ -1618,7 +1619,8 @@ byte_machine_add_scheme_lane(
           ${BYTE_MACHINE_CORE_EMIT}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/determinism-http-tests.sps"
-  TIMEOUT 180)
+  TIMEOUT 180
+  ENVIRONMENT "BYTE_MACHINE_HTTP_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-http.golden.sls")
 
 byte_machine_add_scheme_lane(
   NAME byte-machine.differential.http.chez.source
@@ -1685,6 +1687,28 @@ byte_machine_add_scheme_lane(
   ENVIRONMENT "BYTE_MACHINE_REPO_ROOT=${CMAKE_SOURCE_DIR}"
               "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
               "BYTE_MACHINE_NATIVE_ARTIFACTS_FILE=${BYTE_MACHINE_NATIVE_ARTIFACTS_FILE}")
+
+# --- Milestone 9 Slice ①: the dry Windows-cell audit -------------------------
+# The tree-answerable rows of docs/plans/milestone-9-windows-cell-audit.md, as
+# assertions (the machine-type identity, the discovery names, the executable
+# fallback). The two runner-only rows are deferred past v0.1 (decision 0041).
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.windows-audit.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/windows-audit-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${CMAKE_SOURCE_DIR}/test/common/windows-audit-tests.sps"
+  TIMEOUT 60
+  ENVIRONMENT "BYTE_MACHINE_REPO_ROOT=${CMAKE_SOURCE_DIR}")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.windows-audit.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/windows-audit-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${CMAKE_SOURCE_DIR}/test/common/windows-audit-tests.sps"
+  TIMEOUT 60
+  ENVIRONMENT "BYTE_MACHINE_REPO_ROOT=${CMAKE_SOURCE_DIR}")
 
 # --- Milestone 4 Slice ①a task 7: all three §12.7 position kinds -------------
 byte_machine_add_scheme_lane(

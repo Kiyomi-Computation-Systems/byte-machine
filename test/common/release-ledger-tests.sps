@@ -134,10 +134,12 @@
       (lambda ()
         (check "kind mechanical" (mechanical? "§26:1673"))
         (check "byte-machine.differential lane present" (lane-registered? "byte-machine.differential"))))
-    (harness-case "§26:1677 determinism lanes are registered (goldens compared)"
+    (harness-case "§26:1677 determinism lanes registered; all six goldens committed"
       (lambda ()
         (check "kind mechanical" (mechanical? "§26:1677"))
-        (check "byte-machine.determinism lane present" (lane-registered? "byte-machine.determinism"))))
+        (check "byte-machine.determinism lane present" (lane-registered? "byte-machine.determinism"))
+        (check "the sixth (HTTP) golden is committed"
+               (file-exists? (string-append repo "/test/fixtures/generated-http.golden.sls")))))
     (harness-case "§26:1679 bench/ holds only placeholders (no baseline recorded yet)"
       (lambda ()
         (check "kind mechanical" (mechanical? "§26:1679"))

@@ -29,19 +29,19 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
   if(c STREQUAL "registration-rejects-undeclared-status")
     byte_machine_add_exit_code_test(
       NAME byte-machine.harness.example.chez.source
-      COMMAND "/bin/true"
+      COMMAND "placeholder-command"
       EXPECT_EXIT 7
       TIMEOUT 10)
   elseif(c STREQUAL "registration-rejects-non-numeric-status")
     byte_machine_add_exit_code_test(
       NAME byte-machine.harness.example.chez.source
-      COMMAND "/bin/true"
+      COMMAND "placeholder-command"
       EXPECT_EXIT "one"
       TIMEOUT 10)
   elseif(c STREQUAL "registration-requires-expectation")
     byte_machine_add_exit_code_test(
       NAME byte-machine.harness.example.chez.source
-      COMMAND "/bin/true"
+      COMMAND "placeholder-command"
       TIMEOUT 10)
   else()
     message(FATAL_ERROR "byte-machine-spec: unknown case '${c}'")
@@ -134,7 +134,7 @@ set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY "sentinel")
 set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "sentinel")
 byte_machine_add_exit_code_test(
   NAME byte-machine.harness.example.chez.source
-  COMMAND "/bin/true"
+  COMMAND "placeholder-command"
   EXPECT_EXIT 1
   TIMEOUT 10
   WORKING_DIRECTORY "/h/run")
@@ -149,7 +149,7 @@ set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY "sentinel")
 set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD "sentinel")
 byte_machine_add_exit_code_test(
   NAME byte-machine.harness.example.chez.source
-  COMMAND "/bin/true"
+  COMMAND "placeholder-command"
   EXPECT_EXIT 1
   TIMEOUT 10)
 get_property(wd_keyword GLOBAL PROPERTY BYTE_MACHINE_SPEC_WORKING_DIRECTORY_KEYWORD)

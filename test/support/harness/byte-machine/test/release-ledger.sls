@@ -93,8 +93,8 @@
       ("§26:1677"
        "deterministic generation passes across supported platform cells"
        open mechanical
-       "the six determinism lanes are registered and compare committed goldens; the sixth (HTTP) golden lands in Slice ①. Cross-CELL width is one cell (macOS arm64, local) — no CI this milestone (decision 0041)"
-       (one))
+       "MECHANISM COMPLETE (Slice ①): all six determinism lane pairs compare committed goldens — the sixth (HTTP, 196 682 bytes) landed in Slice ①. Cross-CELL width is one cell (macOS arm64, local); the other cells are deferred past v0.1 for lack of CI (decision 0041). Slice ⑤ records the v0.1 disposition"
+       (five))
       ("§26:1678"
        "every Tier 1 matrix cell passes its required source, generation, AOT-compilation, and execution checks"
        open judgement

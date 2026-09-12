@@ -56,7 +56,7 @@ if(DEFINED BYTE_MACHINE_SPEC_CASE)
   elseif(c STREQUAL "registration-rejects-absent-working-directory")
     byte_machine_add_test(
       NAME byte-machine.harness.example.cmake.direct
-      COMMAND "/bin/true"
+      COMMAND "placeholder-command"
       TIMEOUT 10
       WORKING_DIRECTORY "/there/is/no/such/directory")
   else()
