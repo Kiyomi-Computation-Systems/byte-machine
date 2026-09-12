@@ -1379,8 +1379,11 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-set(EXPECTED_PASSES 61)
-set(EXPECTED_MUTATIONS 590)
+set(EXPECTED_PASSES 62)
+set(EXPECTED_MUTATIONS 593)
+# Sixty-two is sixty-one plus one: Milestone 8 Slice ① adds one pass over the
+# request-line fixture (http-machine.sls) with three mutations (590 -> 593),
+# each caught by byte-machine.unit.http-request-line with a measured signature.
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -13416,6 +13419,56 @@ byte_machine_mutation(
   FIND [[(check-equal "the two lanes agree on the full triple" (and rc (triple rc)) (triple ri))]]
   REPLACE [[(check-not-equal "the two lanes agree on the full triple" (and rc (triple rc)) (triple ri))]]
   EXPECT_OUTPUT_MATCHES "the two lanes agree on the full triple -- expected any value other than")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+byte_machine_mutation_reset()
+
+# --- Milestone 8 Slice ①: the request line's own decisions -------------------
+# Three decisions the request-line fixture (http-machine.sls) encodes, each
+# caught by the unit lane with a MEASURED failure signature -- the got value the
+# mutation produces, not a bare nonzero exit (Slice ③'s pin-audit rule). Measured
+# against a staged run 2026-09-12:
+#   1. the first method byte belongs to the span -- idle REEXECUTES a tchar into
+#      message-begin (decision 0037), so advancing it instead drops the byte and
+#      the method span reads "ET" not "GET";
+#   2. a span ends BEFORE its delimiter SP (§21.3:1140) -- advancing at the token
+#      end pulls the SP into the span, which then reads "GET ";
+#   3. the version production is HTTP/1.0 / HTTP/1.1 -- altering the 1.1
+#      alternative rejects a canonical HTTP/1.1 request at its final digit.
+# No collision sweep against other passes is owed: this FILE and this SPEC lane
+# are new to this slice, so no existing pin's FIND or output is touched.
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/http-request-line-tests.sps")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/http-machine.sls
+  SPEC byte-machine.unit.http-request-line.chez.source
+  LABEL "http-machine: idle advances the first method byte instead of reexecuting it into the span"
+  FIND [[(make-edge 'msg-begin 'reexecute)]]
+  REPLACE [[(make-edge 'msg-begin 'advance)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "method-data .ET.")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/http-machine.sls
+  SPEC byte-machine.unit.http-request-line.chez.source
+  LABEL "http-machine: the method span consumes its delimiter SP instead of ending before it"
+  FIND [[(make-edge 'method-close 'reexecute)]]
+  REPLACE [[(make-edge 'method-close 'advance)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "method-data .GET .")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/http-machine.sls
+  SPEC byte-machine.unit.http-request-line.chez.source
+  LABEL "http-machine: the HTTP/1.1 version alternative is not recognized"
+  FIND [[(make-sequence-case (string-bytes "HTTP/1.1") 'ver-ok #f)]]
+  REPLACE [[(make-sequence-case (string-bytes "HTTP/1.2") 'ver-ok #f)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid-version byte 18")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

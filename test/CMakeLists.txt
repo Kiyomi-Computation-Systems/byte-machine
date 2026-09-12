@@ -1456,6 +1456,61 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-http-version-tests.sps"
   TIMEOUT 180)
 
+# --- Milestone 8 Slice ①: the request line -----------------------------------
+# The fixture machine (http-machine.sls) and the shared event-order oracle
+# (http-event-order.sls, §4.9 item 1) are grown across the milestone. The unit
+# lane pins the §21.3 events and Slice ⓪'s request-line error positions
+# absolutely (CORE_ALL); the differential lane emits/loads a generated library
+# and compares it to the interpreter across §22.5 split points (CORE_EMIT + prng
+# + error-projection), the §25:1648 criterion this lane will extend each slice.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.http-request-line.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/http-request-line-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-event-order.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/http-request-line-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.http-request-line.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/http-request-line-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-event-order.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/http-request-line-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.http.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-http-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-event-order.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-http-tests.sps"
+  TIMEOUT 180)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.http.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-http-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/prng.sls"
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-event-order.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-http-tests.sps"
+  TIMEOUT 180)
+
 # --- Milestone 4 Slice ①a task 7: all three §12.7 position kinds -------------
 byte_machine_add_scheme_lane(
   NAME byte-machine.differential.position-kind.chez.source

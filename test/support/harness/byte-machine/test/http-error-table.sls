@@ -22,9 +22,16 @@
 ;;;   trigger      -- `byte`, `boundary` or `eof`, matching §21.4:1175's three
 ;;;                   sentences: what causes the error.
 ;;;   code         -- one of §21.4:1156-1173's eighteen stable codes.
-;;;   position-kind-- `byte` or `boundary`, the parser-error-position-kind the
-;;;                   fixture will report (§12.7:770-773, and what the runtime's
-;;;                   `(kind ...)` carries).
+;;;   position-kind-- `byte`, `boundary` or `eof`, the parser-error-position-kind
+;;;                   the fixture reports (§12.7:405 `byte | boundary | eof`, and
+;;;                   §12.7:768-771). CORRECTED in Slice ① (2026-09-12): the eof
+;;;                   rows read `boundary` when Slice ⓪ shipped them; the built
+;;;                   fixture reports position-kind `eof` for an `unexpected-eof`
+;;;                   raised by `parser-finish!` (§12.7:771 "`eof` at the final
+;;;                   stream offset"), so every eof row is `eof`. This is the
+;;;                   table-measured-against-the-fixture process (decision 0034)
+;;;                   doing its job: the row is corrected in place with the reason
+;;;                   (design Appendix).
 ;;;   offset-rule  -- §21.4:1175 restated for this row, as data.
 ;;;   production   -- the §21.2 production the region guards.
 ;;;
@@ -98,38 +105,38 @@
       (method byte invalid-method byte
               "the first offending unconsumed byte -- not a tchar inside the method"
               "method = 1*tchar")
-      (method eof unexpected-eof boundary
+      (method eof unexpected-eof eof
               "the final stream boundary -- EOF in a non-idle state"
               "method = 1*tchar")
       (target byte invalid-target byte
               "the first offending unconsumed byte -- not a target-byte"
               "request-target = 1*target-byte")
-      (target eof unexpected-eof boundary
+      (target eof unexpected-eof eof
               "the final stream boundary -- EOF in a non-idle state"
               "request-target = 1*target-byte")
       (version byte invalid-version byte
                "the first offending unconsumed byte -- diverges from HTTP/1.0 or HTTP/1.1"
                "version = \"HTTP/1.0\" / \"HTTP/1.1\"")
-      (version eof unexpected-eof boundary
+      (version eof unexpected-eof eof
                "the final stream boundary -- EOF in a non-idle state"
                "version = \"HTTP/1.0\" / \"HTTP/1.1\"")
       (request-line-crlf byte invalid-line-ending byte
                          "the first offending unconsumed byte -- a bare CR or bare LF where CRLF is required"
                          "CRLF = %x0D %x0A")
-      (request-line-crlf eof unexpected-eof boundary
+      (request-line-crlf eof unexpected-eof eof
                          "the final stream boundary -- EOF in a non-idle state"
                          "CRLF = %x0D %x0A")
       ;; --- header section ---------------------------------------------------
       (header-name byte invalid-header-name byte
                    "the first offending unconsumed byte -- not a tchar inside a field-name"
                    "field-name = 1*tchar")
-      (header-name eof unexpected-eof boundary
+      (header-name eof unexpected-eof eof
                    "the final stream boundary -- EOF in a non-idle state"
                    "field-name = 1*tchar")
       (header-value byte invalid-header-value byte
                     "the first offending unconsumed byte -- not a field-value-byte"
                     "field-value = *field-value-byte")
-      (header-value eof unexpected-eof boundary
+      (header-value eof unexpected-eof eof
                     "the final stream boundary -- EOF in a non-idle state"
                     "field-value = *field-value-byte")
       (header-crlf byte invalid-line-ending byte
@@ -144,7 +151,7 @@
       (header-crlf boundary framing-conflict boundary
                    "the between-byte boundary after the later header line's LF -- both framing headers present"
                    "body = fixed-body / chunked-body / empty")
-      (header-crlf eof unexpected-eof boundary
+      (header-crlf eof unexpected-eof eof
                    "the final stream boundary -- EOF in a non-idle state"
                    "header-section = *header-field CRLF")
       ;; --- framing header values -------------------------------------------
@@ -154,17 +161,17 @@
       (content-length-value byte content-length-overflow byte
                             "the digit that would overflow u64, left unconsumed"
                             "content-length = 1*DIGIT *OWS")
-      (content-length-value eof unexpected-eof boundary
+      (content-length-value eof unexpected-eof eof
                             "the final stream boundary -- EOF in a non-idle state"
                             "content-length = 1*DIGIT *OWS")
       (transfer-encoding-value byte unsupported-transfer-encoding byte
                                "the first offending unconsumed byte -- a value other than case-insensitive chunked plus trailing OWS"
                                "transfer-value = case-insensitive(\"chunked\") *OWS")
-      (transfer-encoding-value eof unexpected-eof boundary
+      (transfer-encoding-value eof unexpected-eof eof
                                "the final stream boundary -- EOF in a non-idle state"
                                "transfer-value = case-insensitive(\"chunked\") *OWS")
       ;; --- fixed body -------------------------------------------------------
-      (fixed-body eof unexpected-eof boundary
+      (fixed-body eof unexpected-eof eof
                   "the final stream boundary -- EOF before content-length octets have been consumed"
                   "fixed-body = exactly content-length octets")
       ;; --- chunked body -----------------------------------------------------
@@ -174,28 +181,28 @@
       (chunk-size byte chunk-size-overflow byte
                   "the digit that would overflow u64, left unconsumed"
                   "nonzero-chunk = 1*HEXDIG chunk-ext CRLF chunk-data CRLF")
-      (chunk-size eof unexpected-eof boundary
+      (chunk-size eof unexpected-eof eof
                   "the final stream boundary -- EOF in a non-idle state"
                   "nonzero-chunk = 1*HEXDIG chunk-ext CRLF chunk-data CRLF")
       (chunk-ext-name byte invalid-chunk-extension byte
                       "the first offending unconsumed byte -- not a token character where an extension name is expected"
                       "chunk-ext = *(\";\" token [\"=\" token])")
-      (chunk-ext-name eof unexpected-eof boundary
+      (chunk-ext-name eof unexpected-eof eof
                       "the final stream boundary -- EOF in a non-idle state"
                       "chunk-ext = *(\";\" token [\"=\" token])")
       (chunk-ext-value byte invalid-chunk-extension byte
                        "the first offending unconsumed byte -- not a token character where an extension value is expected (quoted values are excluded)"
                        "chunk-ext = *(\";\" token [\"=\" token])")
-      (chunk-ext-value eof unexpected-eof boundary
+      (chunk-ext-value eof unexpected-eof eof
                        "the final stream boundary -- EOF in a non-idle state"
                        "chunk-ext = *(\";\" token [\"=\" token])")
-      (chunk-data eof unexpected-eof boundary
+      (chunk-data eof unexpected-eof eof
                   "the final stream boundary -- EOF before decoded chunk-size octets have been consumed"
                   "chunk-data = exactly decoded chunk-size octets")
       (chunk-ending byte invalid-chunk-ending byte
                     "the first offending unconsumed byte -- the CRLF terminating chunk data is malformed"
                     "nonzero-chunk = 1*HEXDIG chunk-ext CRLF chunk-data CRLF")
-      (chunk-ending eof unexpected-eof boundary
+      (chunk-ending eof unexpected-eof eof
                     "the final stream boundary -- EOF in a non-idle state"
                     "nonzero-chunk = 1*HEXDIG chunk-ext CRLF chunk-data CRLF")
       ;; --- trailers ---------------------------------------------------------
@@ -205,13 +212,13 @@
       (trailer-name byte forbidden-trailer byte
                     "the colon following the completed forbidden name -- the first unconsumed byte after a Content-Length or Transfer-Encoding trailer name"
                     "trailer-field = header-field")
-      (trailer-name eof unexpected-eof boundary
+      (trailer-name eof unexpected-eof eof
                     "the final stream boundary -- EOF in a non-idle state"
                     "trailer-field = header-field")
       (trailer-value byte invalid-header-value byte
                      "the first offending unconsumed byte -- not a field-value-byte inside a trailer value"
                      "trailer-field = header-field")
-      (trailer-value eof unexpected-eof boundary
+      (trailer-value eof unexpected-eof eof
                      "the final stream boundary -- EOF in a non-idle state"
                      "trailer-field = header-field")))
 
