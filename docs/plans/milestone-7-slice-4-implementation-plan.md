@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
-> checkbox (`- [ ]`) syntax for tracking.
+> checkbox (`- [x]`) syntax for tracking.
 
 Authority: [decision 0033](../decisions/0033-property-suite-contract.md) items 1-2 (Gate 0, PR
 #85), then `milestone-7-design.md` §4.5, §4.6, §4.8, §4.11, §4.12 and §9, then the parent plan's
@@ -496,7 +496,7 @@ record, the edit kit, `corruption-entries` and `constructor-refusals`. **Tests f
 writes the program's catalogue group against an empty table and watches it fail for the stated
 reason; entries land after.
 
-- [ ] **Step 0 — extract the rejection ledger** (F13), before anything else, because it moves a
+- [x] **Step 0 — extract the rejection ledger** (F13), before anything else, because it moves a
       **pinned** file and the two property lanes' `SOURCES` with it. New
       `test/support/harness/byte-machine/test/rejection-ledger.sls` holding the record,
       `make-rejection*` and the accessors; `property-driver.sls` imports and **re-exports** them,
@@ -509,43 +509,43 @@ reason; entries land after.
       "**8. rejection ledger**" comment (`:876-881`) — which says the block is deferred to Slice ④
       and names 0033 item 1 as its receiver — is corrected at the site to say where the ledger now
       lives and who reads it.
-- [ ] **Step 1 — the failing shape.** In `property-rejections-tests.sps` (created here, completed
+- [x] **Step 1 — the failing shape.** In `property-rejections-tests.sps` (created here, completed
       in Task 5), assert F5 row 1 — the union of the entry table's expected codes plus the
       unconstructible list set-equals the census's derived code set — with `corruption-entries`
       empty. Expected failure, verbatim in the task's record: the row names the thirty codes it did
       not find. This is the red that proves the row can fail.
-- [ ] **Step 2 — the entry record.** `(define-record-type corruption-entry (fields name bullet
+- [x] **Step 2 — the entry record.** `(define-record-type corruption-entry (fields name bullet
       applies? corrupt twin expected))`, where `applies?` is `machine -> boolean`, `corrupt` and
       `twin` are `machine -> machine`, and `expected` is a list of `(code . node)` pairs **derived
       from the `§16.2` bullet the entry names and written before the run** (§4.5). The record's
       accessors are exported; the table is one `(list (make-corruption-entry …) …)`.
-- [ ] **Step 3 — the edit kit** (F3). Pure functions over `print-machine`'s datum: locate the one
+- [x] **Step 3 — the edit kit** (F3). Pure functions over `print-machine`'s datum: locate the one
       form whose constructor name matches a family and whose operand at a named position equals a
       given literal, and substitute. The kit's contract is *exactly one* substitution per edit; it
       raises when it finds zero or more than one, so an entry that stops locating its site is loud
       rather than silently a no-op. `(eval datum (environment '(rnrs) '(byte-machine graph)))`
       rebuilds the machine — the same environment `property-fixture-tests.sps:72` already uses.
-- [ ] **Step 4 — the entry table**, worked from the appendix ledger row by row, in ledger order.
+- [x] **Step 4 — the entry table**, worked from the appendix ledger row by row, in ledger order.
       One or more entries per bullet; each entry names its bullet, its `applies?` and its twin. The
       ledger's "Catalogue entry (④)" column is the specification for each row's *edit*; the
       "Code(s)" column is the specification for its `expected`. A row Task 2 cannot follow is
       corrected in the ledger in this commit (§11: the table is an instruction).
-- [ ] **Step 5 — the twins** (§4.5, "an entry has two edits, not one"). Each entry's twin is the
+- [x] **Step 5 — the twins** (§4.5, "an entry has two edits, not one"). Each entry's twin is the
       closest **legal** shape: it verifies, and its diagnostics do not contain the entry's code.
       The design fixes three by name and they are built as written — `:897`: `Z` also reachable by a
       byte edge from the entry; `:908`: the EOF-only byte edge into a finish that has another route;
       `:909`: the one-shot "length, body, stop" grammar. A twin that will not verify is a finding
       about the entry, not a licence to drop the twin: record it and re-shape the edit.
-- [ ] **Step 6 — the refusal table** (F5 row 2). Hand-written, keyed by `§16.2` bullet, each row a
+- [x] **Step 6 — the refusal table** (F5 row 2). Hand-written, keyed by `§16.2` bullet, each row a
       thunk performing the refused construction. Rows: `:895` (byte dispatch and sequence dispatch
       built without a fallback), `:896` (`make-edge` with a mode outside the closed set), `:906` (a
       terminal given an out-edge — recorded with the reason "no slot", since there is no constructor
       call to make), `:889`'s width / initial / operation halves and `:904`'s base half. Each row
       asserted by catching the raise in Task 3.
-- [ ] **Step 7 — the unconstructible list.** One row: `invalid-shape`'s unsupported-version half
+- [x] **Step 7 — the unconstructible list.** One row: `invalid-shape`'s unsupported-version half
       (`§9.1:320-322`), with the note that `verify-tests.sps` forges one with a test-only vector and
       this table does not. Its not-a-machine half is an **entry**, driven as the census drives it.
-- [ ] **Step 8 — green.** Step 1's row now passes by set-equality, and the entry-count literal and
+- [x] **Step 8 — green.** Step 1's row now passes by set-equality, and the entry-count literal and
       the derived total both hold. Run the gate.
 
 ---
@@ -555,37 +555,37 @@ reason; entries land after.
 In `property-rejections-tests.sps`. The drive is the program's (the imperative shell); the entries
 and the kit are the library's (the functional core).
 
-- [ ] **Step 1 — the base set.** Draw 64 machines at the committed seed under `property-steering`,
+- [x] **Step 1 — the base set.** Draw 64 machines at the committed seed under `property-steering`,
       keep the accepted ones; assert the count is **36** and that it equals the differential lane's
       own literal, so the two programs cannot drift apart silently. A machine-loop sentinel reads
       the observed draw count, not the expectation.
-- [ ] **Step 2 — the positive half.** For every accepted machine and every applicable entry: the
+- [x] **Step 2 — the positive half.** For every accepted machine and every applicable entry: the
       corrupted machine's `(code . node)` pairs **contain** the entry's `expected` pairs. Collateral
       diagnostics are expected and are not compared (F4). One check per entry, its label naming the
       entry and its bullet — never one check per machine, or thirty-odd entries would produce
       thousands of records and no pin could resolve once.
-- [ ] **Step 3 — the negative half** (`§25:1625`'s missing half, and `AGENTS.md`'s attribution
+- [x] **Step 3 — the negative half** (`§25:1625`'s missing half, and `AGENTS.md`'s attribution
       check). For every accepted machine and every applicable entry: the **twin verifies**, and its
       diagnostics **do not contain** the entry's code. One check per entry.
-- [ ] **Step 4 — never executed** (F7, `§22.6:1297`). The program imports no executor; state it in
+- [x] **Step 4 — never executed** (F7, `§22.6:1297`). The program imports no executor; state it in
       the header beside the `SOURCES` list it mirrors, and assert structurally that the drive's only
       consumer of a corrupted machine is `verify-machine` — the corrupted machines are counted, and
       the count of machines handed to any executor is **0** by the program having none in scope.
-- [ ] **Step 5 — the per-entry application counts.** A counter per entry, incremented from the
+- [x] **Step 5 — the per-entry application counts.** A counter per entry, incremented from the
       observed `applies?` answer. Every entry's count is **≥ 1** (F2 measured the floors: 36 for
       most families, 19 stop, 12 finish, 6 sequence dispatch, 6 counted consume); the whole table is
       printed in the check detail so a count that collapses is legible without a re-run. An entry
       that never applied is a red row, not a skipped one.
-- [ ] **Step 6 — F5 row 1, the code sentinel.** `(union of every entry's expected codes) ∪
+- [x] **Step 6 — F5 row 1, the code sentinel.** `(union of every entry's expected codes) ∪
       {invalid-shape}` set-equals the census's derived code set, read from `verify.sls` as a datum by
       this program's own reader (the census's `defined-list`/walk shape, replicated as
       `property-differential-tests.sps` replicates it — these are programs, not libraries). Both the
       set-equality and the count literal **30**, neither catching the other.
-- [ ] **Step 7 — F5 row 2, the refusal table.** Each refusal row's thunk raises, and the raise is
+- [x] **Step 7 — F5 row 2, the refusal table.** Each refusal row's thunk raises, and the raise is
       caught and identified — the condition's `who` or its message, asserted, never a bare "it
       raised". The `:906` row has no thunk and is asserted by its recorded reason plus the absence
       of a slot in `ir.sls`'s terminal constructors, read as a datum.
-- [ ] **Step 8 — the drive's own sentinels.** The entry loop carries a literal count and a derived
+- [x] **Step 8 — the drive's own sentinels.** The entry loop carries a literal count and a derived
       total; the machine loop likewise; and one check asserts that the number of `(machine, entry)`
       pairs actually driven equals the sum of the per-entry counts. The three do not catch each
       other, which is why all three are here.
@@ -598,7 +598,7 @@ New library `test/support/harness/byte-machine/test/verify-oracle.sls`. **Each r
 from the plan's sentence and the decision record it cites, with `verify.sls` closed.** A decision
 record is a commitment the oracle may read; the implementation is not (§4.6).
 
-- [ ] **Step 1 — the rule table**, hand-written and exported, one row per §4.6 rule:
+- [x] **Step 1 — the rule table**, hand-written and exported, one row per §4.6 rule:
 
       | Row | Written from | Compared code(s) | Comparison |
       |---|---|---|---|
@@ -612,52 +612,52 @@ record is a commitment the oracle may read; the implementation is not (§4.6).
       | `:909` EOF path to a stop | the EOF walk from 0023 item 3's parked set, each start at `parked-eof-start`'s answer (0023's 2026-09-06 note; 0030 item 6), under 0023 item 5's tiers | `eof-reachable-stop`, `eof-zero-progress-cycle` | exact, **jointly per start** |
       | `:898` zero-progress | the edge rule the tree records as a deliberate over-rejection of `§11.4:654` — reexecute edges, pause continuations, zero-width successors, accumulate overflow edges, counted `next` (0030 item 7); digit edges excluded (`§10.6:566`); byte-reached nodes only (0027 item 3) | `zero-progress-cycle` | exact |
 
-- [ ] **Step 2 — `:898`'s expected answer is equality, and the reason is recorded at the site.**
+- [x] **Step 2 — `:898`'s expected answer is equality, and the reason is recorded at the site.**
       The oracle implements the **same** conservative rule the verifier does — a cycle of
       non-consuming edges is rejected whether or not a byte can close it — not because `§11.4:654`
       says so (it quantifies over cycles that *can run* without consuming, and names no edges) but
       because the tree records the edge rule as a deliberate over-rejection at two sites. A
       difference is therefore a finding (§4.6).
-- [ ] **Step 3 — what is out of scope, and why, in the file.** Pass 7's lattice (0029 is a
+- [x] **Step 3 — what is out of scope, and why, in the file.** Pass 7's lattice (0029 is a
       definition, and a second implementation of a lattice is the lattice); the EOF verdict tiers
       (0023 item 5 — a ranking, not a graph fact); `:890-:892`/`:901-:902`'s declaration
       cross-references (table lookups the catalogue covers exactly); the field operand rules
       (`:889`, `:903`, `:904` — arithmetic on declared widths, covered by the catalogue and
       Milestone 4's matrix). Codes outside the table are **not compared**.
-- [ ] **Step 4 — the drive, three sources (F1).** Free draws under `free-steering` at the committed
+- [x] **Step 4 — the drive, three sources (F1).** Free draws under `free-steering` at the committed
       seed; every draw the property lane rejected (built through `make-rejection*`, the
       shipped ledger's first consumer — F6 — reached through F13's extracted library); and the catalogue's corrupted machines
       from Task 3. Per machine, per rule, the oracle's `(code . node)` set is compared to the
       verifier's set for that rule's codes under that row's comparison.
-- [ ] **Step 5 — the fire and silent counters.** Per rule, two observed counters: the number of
+- [x] **Step 5 — the fire and silent counters.** Per rule, two observed counters: the number of
       machines on which the oracle's set was non-empty, and the number on which it was empty. Each
       is asserted **≥ 1**. F1 measured six rows firing on free draws alone; the third source is what
       makes `:885` and `:894` fire at all, and the task records the per-source contribution so a
       later generator change that starts drawing duplicates is visible rather than invisible.
-- [ ] **Step 6 — zero differences on the committed seed.** One check per rule: the count of
+- [x] **Step 6 — zero differences on the committed seed.** One check per rule: the count of
       machines on which the two sets differed is **0**, its detail naming the first differing
       machine, rule and pair. A difference here is a *finding about the verifier or the oracle* and
       stops the task (`AGENTS.md`: it is the one instrument that can find a defect nobody wrote a
       fixture for).
-- [ ] **Step 7 — the loop over the loops.** A sentinel asserting the number of `(machine, rule)`
+- [x] **Step 7 — the loop over the loops.** A sentinel asserting the number of `(machine, rule)`
       comparisons actually performed equals `machines × rules`, read from observed values.
 
 ---
 
 ## Task 5 — `property-rejections-tests.sps`: the program
 
-- [ ] **Step 1 — the header**, stating: what the program is (§4.5 and §4.6's two instruments in one
+- [x] **Step 1 — the header**, stating: what the program is (§4.5 and §4.6's two instruments in one
       program, on §4.10's lane-name allocation); that it imports **no executor** and why (F7); the
       seed rule (`BYTE_MACHINE_PROPERTY_SEED`, unset legal, malformed loud — `§4.10`'s parsing rule,
       replicated from `property-differential-tests.sps`, with the same `(rnrs)`-has-no-`string-trim`
       note); and `BYTE_MACHINE_SOURCE_ROOT`'s loud-when-unset rule, for the census's reason.
-- [ ] **Step 2 — the group layout.** Separate `harness-group`s with distinct labels for the
+- [x] **Step 2 — the group layout.** Separate `harness-group`s with distinct labels for the
       catalogue's positives, the catalogue's negatives, the refusal table, the totality rows, and
       the oracle — so a pin can assert a failure *signature* rather than a bare nonzero exit, and no
       label is a substring of another (the label audit is Task 9 Step 3).
-- [ ] **Step 3 — the seed is printed once** at the suite's start, as the differential lane prints
+- [x] **Step 3 — the seed is printed once** at the suite's start, as the differential lane prints
       it, and every machine-level check label carries `(seed N)` (decision 0033 item 3).
-- [ ] **Step 4 — run it under `ctest` in both lanes** and record the counts: checks, cases, and the
+- [x] **Step 4 — run it under `ctest` in both lanes** and record the counts: checks, cases, and the
       wall clock per lane. These are the numbers Task 6's `TIMEOUT` is set from — **not** copied
       from the differential lane's 180 (Slice ③'s registration comment makes exactly this point).
 
@@ -665,7 +665,7 @@ record is a commitment the oracle may read; the implementation is not (§4.6).
 
 ## Task 6 — CMake: two registrations and a measured timeout
 
-- [ ] **Step 1 — the two registrations**, `byte-machine.property.rejections.chez.source` and
+- [x] **Step 1 — the two registrations**, `byte-machine.property.rejections.chez.source` and
       `.aot`, on the fixture lane's shape (`test/CMakeLists.txt:1652-1680`): `SOURCES` =
       `${BYTE_MACHINE_HARNESS_MANIFEST}`, `prng.sls`, `machine-gen.sls`, `machine-print.sls`,
       `rejection-ledger.sls`, `machine-corrupt.sls`, `verify-oracle.sls`,
@@ -673,19 +673,19 @@ record is a commitment the oracle may read; the implementation is not (§4.6).
       `verify.sls` and **no executor** — and the program; **not** `${BYTE_MACHINE_CORE_EMIT}` and
       **not** `property-driver.sls` (F7, F13); `ENVIRONMENT BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src`
       and `BYTE_MACHINE_HARNESS_ROOT` (Task 9 Step 3).
-- [ ] **Step 2 — the executor-free manifest is the assertion.** Write the `SOURCES` list so that
+- [x] **Step 2 — the executor-free manifest is the assertion.** Write the `SOURCES` list so that
       `(byte-machine interpret)`, `(byte-machine compile)` and `(byte-machine runtime)` are absent,
       and state in a comment that the AOT lane's static-import closure is what makes it enforceable.
       Verify by running the AOT lane.
-- [ ] **Step 3 — the timeout, measured.** Set `TIMEOUT` from Task 5 Step 4's measured wall clock
+- [x] **Step 3 — the timeout, measured.** Set `TIMEOUT` from Task 5 Step 4's measured wall clock
       plus a wide margin, and write the measurement into the comment beside it. **P3** prices the
       catalogue's own arithmetic at 0.83 s for 2160 `eval` + `verify` on this machine, so the drive
       is not expected to be the cost; the oracle's three sources and the AOT lane's build are.
-- [ ] **Step 4 — the fingerprint.** All three new libraries are in a lane's `SOURCES`, and F13's
+- [x] **Step 4 — the fingerprint.** All three new libraries are in a lane's `SOURCES`, and F13's
       move puts `rejection-ledger.sls` into the **differential** lane's `SOURCES` too, so
       `touch test/CMakeLists.txt && cmake --preset dev && cmake --build --preset dev` after every
       edit to either, or the lane fails `PROVENANCE-ERROR`.
-- [ ] **Step 5 — the `pr` preset already selects label `property`**; confirm both new lanes appear
+- [x] **Step 5 — the `pr` preset already selects label `property`**; confirm both new lanes appear
       in `ctest --preset pr -N` and in `--preset release -N`, and record the new release total
       (**116 → 118** with these two; **120** after Task 8's pair).
 
@@ -695,27 +695,27 @@ record is a commitment the oracle may read; the implementation is not (§4.6).
 
 §4.8, F10. This is `§25:1617`'s discharge and §4.12 item 1's witness.
 
-- [ ] **Step 1 — the every-construct machine**, hand-built in `compile-tests.sps`'s own style
+- [x] **Step 1 — the every-construct machine**, hand-built in `compile-tests.sps`'s own style
       beside `cc-witness` (`:302`): every declaration family (uint field, callback, span, error) and
       every node kind, so every one of `render-state-arm`'s thirteen arms contributes its emitted
       text. Named for what it is: the `:910` witness machine.
-- [ ] **Step 2 — the derived totality row** (F10). Read `compile.sls` as a datum, find
+- [x] **Step 2 — the derived totality row** (F10). Read `compile.sls` as a datum, find
       `(define (render-state-arm …) …)`, take the `case` keys of its `(case (normal-state-kind s) …)`
       — expected **13**: `stop`, `error`, `finish`, `pause`, `accumulate`, `field-action`,
       `field-branch`, `callback`, `span-start`, `span-end`, `span-completion`, `counted-consume`,
       `dispatch` — and assert that the witness machine's rendered text exercises each. A found-it
       guard first: a reader returning `#f` would compare two empties and pass.
-- [ ] **Step 3 — the identifier-position walk.** Read the emitted library as a datum
+- [x] **Step 3 — the identifier-position walk.** Read the emitted library as a datum
       (`member3-drift-tests.sps`'s technique) and collect the symbols in **identifier position**.
       Assert that this set, minus the template's own identifiers (`reserved-member-3`, the runtime
       calls, the library form), is **exactly** the output binding and the library name's machine-name
       element — so it contains no declared name.
-- [ ] **Step 4 — the quote-position walk.** Separately: every declared name occurring **anywhere**
+- [x] **Step 4 — the quote-position walk.** Separately: every declared name occurring **anywhere**
       in the datum occurs under `quote`. Note in the file why the first draft's shape is wrong
       (§4.8): an occurrence check over *all* declared names fails on any machine declaring an error,
       because error-declaration **names** never reach the emitted text — only their codes and
       reasons do. The walk is therefore over the names that occur, not over the names declared.
-- [ ] **Step 5 — §4.12 item 3's comment** (F9), at `verify.sls`'s `valid-name?` (`:112`) and
+- [x] **Step 5 — §4.12 item 3's comment** (F9), at `verify.sls`'s `valid-name?` (`:112`) and
       nowhere else: `reserved-member-1`'s exclusion on declared **names** is kept, and it has no
       warrant — `§16.2:886` is about portability and `if` is portable; `§16.2:910` is about
       generated identifiers and no declared name becomes one (this witness is the measurement).
@@ -729,26 +729,26 @@ record is a commitment the oracle may read; the implementation is not (§4.6).
 New program `test/common/compile-limits-tests.sps` and one lane pair. **P4** proved the mechanism
 on this tree; this task builds the real witness.
 
-- [ ] **Step 1 — the machine.** Every construct at the generator's bounds, plus a hand-built
+- [x] **Step 1 — the machine.** Every construct at the generator's bounds, plus a hand-built
       **256-exact-case** dispatch and the same dispatch over a **complement matcher** (§4.12 item 2's
       words). Verify it, compile it, render it, and record the emitted source size — P4 measured
       **18 757 bytes** for the 256-case dispatch alone.
-- [ ] **Step 2 — `compile-file`**, under the AOT launcher's conventions (`generate-wpo-files #f`, an
+- [x] **Step 2 — `compile-file`**, under the AOT launcher's conventions (`generate-wpo-files #f`, an
       object beside the source in `BYTE_MACHINE_TEST_TMPDIR`), then `load` the object and
       `(eval 'NAME (environment '(generated NAME)))`. P4: the object loads and
       `compiled-machine?` answers `#t`.
-- [ ] **Step 3 — one feed agrees with the interpreter.** P4: `(stopped)` in both lanes. Assert the
+- [x] **Step 3 — one feed agrees with the interpreter.** P4: `(stopped)` in both lanes. Assert the
       full `parser-result` triple the differential lanes compare, not just the status.
-- [ ] **Step 4 — `compile-file` writes a `compiling …` line to stdout.** Measured in P4. Suppress
+- [x] **Step 4 — `compile-file` writes a `compiling …` line to stdout.** Measured in P4. Suppress
       it or capture it, and check it against every pin regex in the suite before committing — an
       uncontrolled line in a lane's output is exactly what makes a pin resolve twice.
-- [ ] **Step 5 — the disposition's content.** Record **which limits were looked for** —
+- [x] **Step 5 — the disposition's content.** Record **which limits were looked for** —
       `§30:1778`'s identifier length and source size, `case` arity, literal size — and what was
       measured for each. The disposition (Task 10) states that none is reachable by a v0.1 machine,
       **or**, if the witness finds one, `:911` gains a check and a code and this item becomes a slice
       of its own (§4.12 item 2's own escape clause). Do not write the disposition before the
       measurement.
-- [ ] **Step 6 — the lane pair**, `byte-machine.compile.limits.chez.{source,aot}`, with a measured
+- [x] **Step 6 — the lane pair**, `byte-machine.compile.limits.chez.{source,aot}`, with a measured
       `TIMEOUT` (this lane compiles a large library twice; it is the slowest thing the slice adds).
 
 ---
@@ -759,7 +759,7 @@ on this tree; this task builds the real witness.
 `EXPECTED_MUTATIONS` 561 → 590.** The prediction is fixed by the measurement in Step 6, never the
 other way round.
 
-- [ ] **Step 1 — Pass 60, the rejections lane** (`SPEC byte-machine.property.rejections.chez.source`),
+- [x] **Step 1 — Pass 60, the rejections lane** (`SPEC byte-machine.property.rejections.chez.source`),
       **25 mutations**:
 
       | # | Mutation | Caught by |
@@ -777,19 +777,19 @@ other way round.
       mutations inside a 262.80 s release run, ≈ 0.36 s each), which is why all eighteen are taken
       rather than a sample. Each `EXPECT_OUTPUT_MATCHES` asserts the **failure signature** — the
       check label and its `expected/got` — never a bare nonzero exit.
-- [ ] **Step 2 — Pass 61, the limits lane** (`SPEC byte-machine.compile.limits.chez.source`),
+- [x] **Step 2 — Pass 61, the limits lane** (`SPEC byte-machine.compile.limits.chez.source`),
       **2 mutations**: `compile-file` replaced by a plain `load` of the source (caught by the check
       that the object file exists, is non-empty and is what was loaded — **write that check first**,
       or this mutation survives because the feed still agrees); and the interpreter-agreement
       comparison inverted.
-- [ ] **Step 3 — the `matcher-bytes` prohibition, made checkable.** §4.6 forbids the `:893` row from
+- [x] **Step 3 — the `matcher-bytes` prohibition, made checkable.** §4.6 forbids the `:893` row from
       reading `matcher-bytes`, and **no behavioural pin can witness a violation**: an oracle that
       read `matcher-bytes` would agree with the verifier by construction and every comparison would
       stay green. So the program reads `verify-oracle.sls` **as a datum** (a new
       `BYTE_MACHINE_HARNESS_ROOT` on the two registrations, loud when unset for the census's reason)
       and asserts the symbol `matcher-bytes` occurs **zero** times in it. Mutation 7 is what proves
       that census can fail.
-- [ ] **Step 4 — two mutations on the existing compile SPEC** for the `:910` witness. The first is
+- [x] **Step 4 — two mutations on the existing compile SPEC** for the `:910` witness. The first is
       §9's named pin: the witness's quote-position walk skips the payload (`(quote #(…))`), so a
       declared name emitted as an identifier inside it would pass — caught by the
       identifier-position check. The second is the stronger one and the defect the witness exists
@@ -801,21 +801,21 @@ other way round.
       (`SchemeMutationSuite.cmake:8194` onward), and the precedent for a pass running a program it
       did not open is recorded at `SchemeMutationSuite.cmake:506-515`. A mutation on a `.sps`
       program also has a precedent — `property-differential-tests.sps` at `:8737`.
-- [ ] **Step 5 — the two-direction sweep.** Re-anchoring is half the sweep: every shipped pin whose
+- [x] **Step 5 — the two-direction sweep.** Re-anchoring is half the sweep: every shipped pin whose
       `FIND` **or** `REPLACE` names a construct this slice re-contracts is checked against both the
       old and the new mutant. This slice edits no shipped library, so the expected answer is "no
       shipped pin moves" — **measured, not assumed**, because a pin's *observation* can move without
       its `FIND` moving (`AGENTS.md`: a verdict change moves what mutants produce).
-- [ ] **Step 6 — the per-pin match-count matrix.** For every new pin, count matches of its regex in
+- [x] **Step 6 — the per-pin match-count matrix.** For every new pin, count matches of its regex in
       its **own** mutant's output (`re.findall`, DOTALL) and require exactly **1**; and count matches
       in the green tree's output and require **0**. Print the matrix; a clean diagonal is the
       acceptance criterion (Slice ③ Task 9's shape).
-- [ ] **Step 7 — the label audit.** No new check label contains, or is contained by, any shipped
+- [x] **Step 7 — the label audit.** No new check label contains, or is contained by, any shipped
       pin's regex; no new regex uses `.*` between `expected` and `got`, and none ends at `got`
       (`AGENTS.md`: `.` spans newlines in CMake, so `.*` bridges to a later record, and a regex
       ending at `got` is satisfied by every mutant that moves the value). Spell the list; pin the
       measured digest.
-- [ ] **Step 8 — reconcile the totals.** `EXPECTED_PASSES` and `EXPECTED_MUTATIONS` moved in the
+- [x] **Step 8 — reconcile the totals.** `EXPECTED_PASSES` and `EXPECTED_MUTATIONS` moved in the
       **same commit** as the pins, and the suite's own totals assertion is what proves the arithmetic.
       If the measured count differs from 590, the plan's prediction is corrected in the commit that
       measures it.
@@ -828,7 +828,7 @@ Milestone 6's §9 asks three questions at a close: which exit criteria are met; 
 named this milestone; and **what did this milestone approve that the tree does not contain**. The
 third is asked against §4.12 by item number.
 
-- [ ] **Step 1 — `§25:1615-1621`, the seven scope bullets**, each dispositioned against the tree by
+- [x] **Step 1 — `§25:1615-1621`, the seven scope bullets**, each dispositioned against the tree by
       file and case, appended to the parent plan's `## Dated dispositions` section (never inserted
       above it — every `§section:line` citation in the repository navigates by line):
 
@@ -842,13 +842,13 @@ third is asked against §4.12 by item number.
       | `:1620` differential property suite | Slice ② (three layers, both lanes), Slice ③ (the fixture and the minimizer) |
       | `:1621` deterministic failure seed reporting | Slice ② (decision 0033 item 3: the environment seed, printed once, carried in every label) |
 
-- [ ] **Step 2 — the three exit criteria**, dispositioned in the design's Exit table **in place**
+- [x] **Step 2 — the three exit criteria**, dispositioned in the design's Exit table **in place**
       and in the parent plan: `:1625` by this slice's catalogue (every code in the census's derived
       set has an entry or a stated reason, positive and negative); `:1626` stated as having held
       **before** the milestone, with what the milestone added under it (two lane pairs in Slice ②/③
       and one or two more here); `:1627` by Slice ③'s probe. Each entry is **dated** and names the
       slice, the file and the case — never reworded to match what shipped.
-- [ ] **Step 3 — §4.11's seven obligations, each at both ends.** An "addressed here" with no
+- [x] **Step 3 — §4.11's seven obligations, each at both ends.** An "addressed here" with no
       receiver is invisible to every completeness sweep (`AGENTS.md`), so each gets the adjudicating
       sentence **and** a note at the site that named it:
 
@@ -876,28 +876,28 @@ third is asked against §4.12 by item number.
          `parser-result` enforcement, receivers unchanged. §4.9's gate is what proves this milestone
          touched neither; quote the gate's output.
 
-- [ ] **Step 4 — §4.12's three items, by number** (the third close-out question). Item 1: approved
+- [x] **Step 4 — §4.12's three items, by number** (the third close-out question). Item 1: approved
       and **shipped** — the disposition appended with Task 7's witness named. Item 2: approved and
       **shipped** — the disposition appended with Task 8's measurement, naming which limits were
       looked for. Item 3: approved and **shipped** — the comment at `verify.sls`'s `valid-name?`
       (F9) plus the sentence in the `:910` disposition. Nothing approved is left without a receiver.
-- [ ] **Step 5 — the design's corrections, in place, each with its measurement** (Global
+- [x] **Step 5 — the design's corrections, in place, each with its measurement** (Global
       Constraints' four findings): §4.6's drive sentence gains F1's third source and the measured
       reason; §4.5's totality sentence is re-stated as F5's two rows; §9's close-out search is
       re-stated per F8 with the one line quoted; §4.8/§9's "the printer's round-trip fixture" is
       re-stated per F10 as the hand-built every-construct machine with its derived arm row; and §3.1
       is annotated with F11's re-measurement. Corrections **annotate**, never rewrite, anything that
       is a record.
-- [ ] **Step 6 — the four status surfaces**, all four, in this order so none is forgotten (the
+- [x] **Step 6 — the four status surfaces**, all four, in this order so none is forgotten (the
       closing ritual names three and `README.org` is the one that drifted through three closed
       milestones): the parent plan's `Status:` line; this design's `**Status:**` header;
       `CHANGELOG.md`'s `[Unreleased]` paragraph; and `README.org`'s milestone narrative. Each states
       Milestone 7 **closed**, its date, and the slice that closed it.
-- [ ] **Step 7 — the close note**, as a dated disposition (Milestones 4, 5 and 6's shape, not a §25
+- [x] **Step 7 — the close note**, as a dated disposition (Milestones 4, 5 and 6's shape, not a §25
       subsection), carrying: what each slice delivered; the measured totals at the close (release,
       mutation passes/mutations, census codes/sites); the three questions and their answers; and the
       two obligations this milestone hands **on** (§4.11 item 7's pair), with their receivers.
-- [ ] **Step 8 — the citation sweep, last.** Re-measure every cross-document `file:line` this
+- [x] **Step 8 — the citation sweep, last.** Re-measure every cross-document `file:line` this
       commit writes, after the last edit to the files they point into. A citation into a file this
       branch edits is stale on arrival and no link check sees it.
 
@@ -905,23 +905,23 @@ third is asked against §4.12 by item number.
 
 ## Task 11 — The whole-branch review, and the close
 
-- [ ] **Step 1 — the whole-branch review**, read-only, in an **isolated worktree** (never the live
+- [x] **Step 1 — the whole-branch review**, read-only, in an **isolated worktree** (never the live
       checkout: a concurrent edit invalidates any measurement in flight, and the mutation suite is
       worst affected because it stages the tree). The reviewers run every command the plan states.
       Put `AGENTS.md`'s sentence in each prompt **verbatim**: *check what this claims the code or the
       spec DOES against the code and the spec, not against the prose.* The seams between artifacts
       are what a task-scoped review cannot see — every task passing tells you nothing about them.
-- [ ] **Step 2 — three review dimensions**, as Slices ①-③ ran them: (a) fidelity to the design and
+- [x] **Step 2 — three review dimensions**, as Slices ①-③ ran them: (a) fidelity to the design and
       to decision 0033, every count re-derived; (b) the mutation surface — every new pin's match
       count, the label audit, the two-direction sweep; (c) the close-out's completeness — every
       obligation's both ends, every §4.12 item's receiver, every status surface.
-- [ ] **Step 3 — fold the findings** on the branch, then re-run the full release selection and
+- [x] **Step 3 — fold the findings** on the branch, then re-run the full release selection and
       record the totals.
-- [ ] **Step 4 — the closing ritual** (`AGENTS.md`): **ask the owner for the go-ahead**, then
+- [x] **Step 4 — the closing ritual** (`AGENTS.md`): **ask the owner for the go-ahead**, then
       squash-merge the PR yourself, fast-forward local `main`, delete the branch locally and
       remotely, and reflect — durable facts into memory, project standards into `AGENTS.md`, and
       anything the code should say about itself into a comment at the site.
-- [ ] **Step 5 — CI.** This PR touches `test/` and CMake, so it gets the `ci` label once the branch
+- [x] **Step 5 — CI.** This PR touches `test/` and CMake, so it gets the `ci` label once the branch
       is final and merges after that run is green — **and it is the PR that can finally discharge
       #88's unverified Chez-build cache** (two runs after a reset prove it; the plan in #88's body).
       If Actions credits are still exhausted, say so explicitly in the PR and carry the obligation
@@ -976,3 +976,58 @@ Milestone 7 is closed when:
   **both** ends, §4.12's three items are recorded as shipped, and all four status surfaces say so;
 - the release selection is green in both Chez modes, the mutation suite's declared totals hold, and
   §4.9's gate prints nothing but §4.12 item 3's comment.
+
+---
+
+## Verification results (recorded 2026-09-11, base `dc3e2b1`, branch `feat/m7-slice-4`)
+
+1. **The gate.** `git diff --stat main..HEAD -- src/ ':!src/byte-machine/verify.sls'` prints
+   nothing; `git diff main..HEAD -- src/byte-machine/verify.sls` shows comment lines only (§4.12
+   item 3); `git diff --stat main..HEAD -- test/fixtures` prints nothing. ✓
+2. **The release selection.** `make test-all` → `100% tests passed, 0 tests failed out of 120`
+   (116 base + the two rejections lanes + the two `unit.compile-limits` lanes). ✓
+3. **Both Chez modes.** Both new lane pairs green in `.chez.source` and `.chez.aot` with identical
+   counters. ✓
+4. **The mutation suite.** `61 passes / 590 mutations`, asserted by the suite against its own
+   accumulated totals (Pass 60 the catalogue+oracle 25, Pass 61 the limits witness 2, two more on
+   the compile SPEC for the `:910` witness; `59→61`, `561→590`). ✓
+5. **The catalogue.** All thirty census codes have an entry; every entry applied to ≥ 1 accepted
+   machine (min 6, for ambiguous-sequence-prefix / counted-consume families; most 36); every
+   entry's positive (containment) and negative (twin verifies, lacks the code) both ran. ✓
+6. **The oracle.** Zero differences per rule on the committed seed over the 834-machine corpus
+   (free draws ∪ the property lane's rejected draws ∪ the corrupted machines); each of the nine
+   rows fired ≥ 1 and stayed silent ≥ 1; the reachability rows compared only on unique-node-name
+   machines. ✓
+7. **The `:910` witness.** The derived thirteen-arm row holds; after subtracting the template the
+   identifier-position set is exactly `(ecw ecw-parser)`; every declared name that occurs, occurs
+   under `quote`. ✓
+8. **The `:911` witness.** The object exists and was loaded; one feed agrees with the interpreter
+   on the full parser-result triple; the limits looked for (identifier length, source size = 36 520
+   bytes, `case` arity 256, literal size) are recorded, none reachable by a v0.1 machine. ✓
+9. **The close-out.** `rg -n -i 'milestone 7' src/` prints two lines (`verify.sls:31` and the §4.12
+   item 3 comment at `:115`), neither a receiver and neither containing `owed`/`failing that`; all
+   four status surfaces say closed; every §4.11 obligation and §4.12 item has both ends in the tree.
+   ✓
+10. **The citation sweep.** The close-out cites by construct name (`valid-name?`, `render-state-arm`,
+    the lane names) and by lines above the `verify.sls` insertion, so no citation this branch
+    authored is stale. ✓
+
+## Task 11 — the whole-branch review
+
+Three read-only review agents ran over the branch diff, each carrying `AGENTS.md`'s sentence
+verbatim (*check what this claims the code or the spec DOES against the code and the spec, not
+against the prose*): (a) fidelity to the design and the decision records, every count re-derived;
+(b) the mutation surface — the label audit, per-pin signatures, the two-direction sweep, the
+arithmetic; (c) the close-out's completeness — obligations at both ends, §4.12 receivers, status
+surfaces. **No shipped-code correctness defect.** Folded on the branch: the oracle's zero-diff
+check now honours each rule's `oracle-rule-comparison` (`:885-nondup` by containment); the
+loop-over-loops sentinel is non-tautological (expected computed by a different formula); the
+"never executed" tautology removed (the structural enforcement is real); the design's Exit table
+dispositioned in place; F8's close-out claim corrected to two `verify.sls` lines; the parked-set
+finding reworded (the callback/span-end inclusion is derived from the executor's parking
+semantics, not read from the verifier); two dead helpers removed and a stale "8 rules" comment
+fixed. Full release re-run after the folds: **120/120** both Chez modes, mutation **61/590**.
+Benign observations recorded and not folded: the two `:910` pins share a (correct, resolve-once)
+regex; the plan's `byte-machine.compile.limits.*` lane name uses a layer the harness lacks (shipped
+as `byte-machine.unit.compile-limits.*`); the two `:910` emitter pins target `compile.sls` arms
+rather than the plan's walk+emitter split (arguably stronger).
