@@ -402,43 +402,90 @@ does **not** become a universal (§4.11 item 6 — the remainder is named in the
 Nothing is edited in this task. Its output is the baseline every later claim is measured against,
 and three of its steps are instructions §11 addresses to this plan by name.
 
-- [ ] **Step 1 — the gate, before anything.** `git diff --stat dc3e2b1..HEAD -- src/` prints
+- [x] **Step 1 — the gate, before anything.** `git diff --stat dc3e2b1..HEAD -- src/` prints
       nothing (at Task 1 `HEAD` is the base, so this is the empty-diff baseline the later gate
       compares to).
-- [ ] **Step 2 — the release suite.** `make test-all` ends with
+- [x] **Step 2 — the release suite.** `make test-all` ends with
       `100% tests passed, 0 tests failed out of 116`. Measured at `dc3e2b1`: **116/116**, total
       262.80 s.
-- [ ] **Step 3 — the mutation totals.** `rg -n 'EXPECTED_PASSES|EXPECTED_MUTATIONS' test/support/cmake/SchemeMutationSuite.cmake`
+- [x] **Step 3 — the mutation totals.** `rg -n 'EXPECTED_PASSES|EXPECTED_MUTATIONS' test/support/cmake/SchemeMutationSuite.cmake`
       prints `set(EXPECTED_PASSES 59)` and `set(EXPECTED_MUTATIONS 561)`. The suite asserts these
       against its own accumulated totals, so Step 2 passing *is* the measurement that 59/561 hold.
-- [ ] **Step 4 — the census.** Extract `pinned-sites` from `diagnostic-census-tests.sps` and count:
+- [x] **Step 4 — the census.** Extract `pinned-sites` from `diagnostic-census-tests.sps` and count:
       **30 rows**, site total **56**. The rows and the total are asserted separately in the census
       itself, which is why both are re-taken here.
-- [ ] **Step 5 — the appendix ledger re-run (§11's instruction).** For each of the thirty census
+- [x] **Step 5 — the appendix ledger re-run (§11's instruction).** For each of the thirty census
       codes, assert it occurs in the design's appendix table; then list the code-shaped tokens in
       that table which are *not* census codes. Expected: **the first loop prints nothing**, and the
       second prints only pass names, constructors, accessors and `invalid-output-binding` (F12). A
       code the census derives and the ledger lacks is the finding, and the ledger is corrected in
       place — in the commit that finds it.
-- [ ] **Step 6 — §3.1's negative-side accounting.** Over `test/common/`:
+- [x] **Step 6 — §3.1's negative-side accounting.** Over `test/common/`:
       `rg -c "\(not \(memq '" test/common/verify-tests.sps` → **19**; the code histogram →
       `unreachable-node 4`, `eof-reachable-stop 4`, `zero-progress-cycle 3`, `non-eof-into-finish 3`,
       `eof-zero-progress-cycle 3`, `invalid-field-operand 1` (the nineteenth form names the node
       `start`); `rg -c 'no diagnostics' test/common/verify-tests.sps` → **17**;
       `rg -o '\(verify-machine\b' test/common | wc -l` → **155**. Twenty-four of thirty codes have
       no negative that names them — the number `§25:1625` is measured against (F11).
-- [ ] **Step 7 — the two draws (P1's measurement, re-taken).** Through a scratch program in the
+- [x] **Step 7 — the two draws (P1's measurement, re-taken).** Through a scratch program in the
       scratchpad, never in the tree: 64 draws at the committed seed under `property-steering` →
       **36 accepted**; under `free-steering` → **3 accepted of 64** and a rejection histogram naming
       exactly the nine codes of F1. Print the accepted-machine construct availability table of F2
       and keep it: Task 3's per-entry floors are read from it.
-- [ ] **Step 8 — the Milestone 7 receivers in `src/`.** `rg -n -i 'milestone 7' src/` prints
+- [x] **Step 8 — the Milestone 7 receivers in `src/`.** `rg -n -i 'milestone 7' src/` prints
       **exactly one line**, `src/byte-machine/verify.sls:31`, and it names decision 0032, not a
       receiver. `rg -n -i 'owed|failing that' src/` prints five lines, none of which names
       Milestone 7 (F8). Quote both outputs into the task's record; Task 10's close-out compares
       against them.
-- [ ] **Step 9 — record the base commit** in the plan's own header if it is not `dc3e2b1`, and
+- [x] **Step 9 — record the base commit** in the plan's own header if it is not `dc3e2b1`, and
       re-run Steps 1-8 if it is not. Every literal in Tasks 2-11 is stated against this base.
+
+### Task 1 measurements — recorded 2026-09-11, base `dc3e2b1` (`main`, tree clean)
+
+Every literal below reproduced at the slice's own base. Base commit **is** `dc3e2b1` (Step 9: no
+header change, no re-run).
+
+- **Step 1** — `git diff --stat dc3e2b1..HEAD -- src/` prints nothing.
+- **Step 2** — `make test-all` → `100% tests passed, 0 tests failed out of 116` (real 256.96 s).
+- **Step 3** — `set(EXPECTED_PASSES 59)` / `set(EXPECTED_MUTATIONS 561)`; asserted by the suite in
+  Step 2's green run.
+- **Step 4** — `pinned-sites`: **30 rows, site total 56**.
+- **Step 5** — every one of the thirty census codes occurs in the appendix table (first loop:
+  nothing); the code-shaped tokens the table carries that are **not** census codes are pass names,
+  constructors (`make-edge`, `make-byte-dispatch-node`, `make-sequence-dispatch-node`), accessors
+  (`node-out-targets`, `valid-binding`, `verify-machine`), test-program names, prose compounds, and
+  `invalid-output-binding` (the `:910` row's labelled non-code). **The ledger needs no correction**
+  (F12).
+- **Step 6** — over `test/common/`: `(not (memq '` in `verify-tests.sps` = **19**; the code
+  histogram = `unreachable-node 4`, `eof-reachable-stop 4`, `zero-progress-cycle 3`,
+  `non-eof-into-finish 3`, `eof-zero-progress-cycle 3`, `invalid-field-operand 1` (eighteen naming
+  codes; the nineteenth names node `start`); `no diagnostics` = **17**; `(verify-machine` = **155**.
+  Twenty-four of thirty codes have no negative naming them.
+- **Step 7** — through the scratchpad drive (`draw-census.sps`, committed seed 20260823, 64 draws,
+  fresh steering per draw, the differential lane's exact loop): `property-steering` → **36
+  accepted** (equal to the differential lane's asserted literal); `free-steering` → **3 accepted**
+  and a rejection histogram naming **exactly F1's nine codes** (`eof-reachable-stop`,
+  `eof-zero-progress-cycle`, `inconsistent-span-state`, `invalid-callback-declaration`,
+  `missing-target`, `non-eof-into-finish`, `overlapping-cases`, `unreachable-node`,
+  `zero-progress-cycle`). The **F2 construct-availability table reproduced exactly** (`f2-table.sps`,
+  over each accepted machine's `print-machine` datum): byte-dispatch / error node / pause /
+  field-action / field-branch / integer-accumulate / callback node / span-start / span-end / uint
+  field / callback declaration / span declaration / ≥ 2 error declarations = **36 of 36**; stop
+  **19**; finish **12**; sequence dispatch **6**; counted consume **6**. These are Task 3's
+  per-entry floors.
+  - *Two recorded discrepancies vs the prose (Task 10 folds both):* (i) F1's **per-code
+    multiplicities** differ from P1 (P1: 8/32/10/11/7/34/11/5/28; here 10/61/10/11/9/50/28/5/56) —
+    the drive histograms every diagnostic occurrence across the 61 rejected draws where P1 counted
+    otherwise; **the code set (the invariant F1's resolution rests on) is identical**. (ii) F8's
+    bare `rg -n -i 'owed|failing that' src/` prints **ten** lines, not five, because `owed` is a
+    substring of `allowed`/`followed`/`narrowed`/`flowed`; the **word-boundary** count
+    (`rg -i '\bowed\b|failing that'`) is exactly F8's five genuine lines (`compile.sls:351`, `:376`,
+    `interpret.sls:431`, `runtime.sls:541`, `private/names.sls:12`), none naming Milestone 7. Task
+    10's close-out uses the word-boundary form and the milestone-7 intersection, which holds either
+    way.
+- **Step 8** — `rg -n -i 'milestone 7' src/` prints exactly `src/byte-machine/verify.sls:31`, which
+  names decision 0032, not a receiver; the genuine `owed` lines (word-boundary, above) are five,
+  none naming Milestone 7.
 
 ---
 
