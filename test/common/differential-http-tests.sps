@@ -167,6 +167,37 @@
               (loop (+ k 1))))
           (check-equal "no header split disagreed" bad 'none))))))
 
+(harness-group "interpreter and generated agree on framing recognition and the fixed body (Slice ③)"
+  (lambda ()
+    (harness-case "recognized/opaque names, the fixed body, and every framing refusal agree"
+      (lambda ()
+        (for-each
+         (lambda (s)
+           (let ((ri (run ref (slices-for (bytes s) '()) #t))
+                 (rg (run gen (slices-for (bytes s) '()) #t)))
+             (check-equal (string-append "finish-agree: " s) ri rg)))
+         (list "POST /x HTTP/1.1\r\nContent-Length: 5\r\n\r\nHELLO"
+               "GET / HTTP/1.1\r\ncoNtEnT-lEnGtH: 3\r\n\r\nabc"
+               "GET / HTTP/1.1\r\nContent-Length: 0\r\n\r\n"
+               "GET / HTTP/1.1\r\nContent-Lengthy: x\r\n\r\n"      ; opaque
+               "GET / HTTP/1.1\r\nContent-Length: abc\r\n\r\n"     ; invalid
+               "GET / HTTP/1.1\r\nContent-Length: 99999999999999999999999999\r\n\r\n" ; overflow
+               "GET / HTTP/1.1\r\nContent-Length: 1\r\nContent-Length: 2\r\n\r\n"      ; dup CL
+               "GET / HTTP/1.1\r\nTransfer-Encoding: chunked\r\nTransfer-Encoding: chunked\r\n\r\n" ; dup TE
+               "GET / HTTP/1.1\r\nContent-Length: 1\r\nTransfer-Encoding: chunked\r\n\r\n"          ; conflict
+               "GET / HTTP/1.1\r\nTransfer-Encoding: gzip\r\n\r\n"))))               ; unsupported
+    (harness-case "a Content-Length message agrees at every split, body included"
+      (lambda ()
+        (let ((m (bytes "POST /x HTTP/1.1\r\nContent-Length: 5\r\n\r\nHELLO")) (bad 'none))
+          (let loop ((k 1))
+            (when (< k (length m))
+              (let ((ri (run ref (slices-for m (list k)) #t))
+                    (rg (run gen (slices-for m (list k)) #t)))
+                (unless (equal? ri rg)
+                  (when (eq? bad 'none) (set! bad (list 'disagree k)))))
+              (loop (+ k 1))))
+          (check-equal "no split of a Content-Length message disagreed" bad 'none))))))
+
 (harness-group "interpreter and generated agree at end of stream (parser-finish!)"
   (lambda ()
     (harness-case "clean idle EOF and unexpected-eof from every non-idle region agree"

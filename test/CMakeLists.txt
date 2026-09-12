@@ -1508,6 +1508,29 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/http-message-tests.sps"
   TIMEOUT 120)
 
+# Slice ③: framing recognition, checked Content-Length, and the fixed body.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.http-framing.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/http-framing-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-event-order.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/http-framing-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.http-framing.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/http-framing-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-event-order.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/http-framing-tests.sps"
+  TIMEOUT 120)
+
 byte_machine_add_scheme_lane(
   NAME byte-machine.differential.http.chez.source
   BACKEND chez
