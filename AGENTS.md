@@ -783,6 +783,40 @@
   automatically. When you write a census, ask what set the *recogniser* is: if
   it is a literal, it is the census you actually shipped.
 
+* **A committed document that enumerates a set the code also defines is another place that set drifts — check it against the code, and scope the check away from the mutation suite.**
+  The derived-census rule above keeps a TEST honest against the source; a reference
+  DOCUMENT that lists the same set needs the same discipline, or it becomes a
+  thirty-first place for the set to go stale. Milestone 9's
+  `docs/reference/verifier-diagnostic-catalog.md` lists the thirty diagnostic
+  codes; `diagnostic-census-tests.sps` now asserts the catalog's code set equals
+  the census it walks from `verify.sls`, so a code added to the verifier reddens
+  the catalog until it is updated — the doc cannot silently lag the code. Two
+  scoping traps make this more than a one-line check: (a) `diagnostic-census-tests.sps`
+  is ITSELF a mutation verify command, so an unscoped doc-vs-code check would fire
+  alongside the census pins on every `verify.sls` mutation and muddy their per-pin
+  accounting; (b) the mutation suite runs against a STAGED tree that does not
+  include `docs/`. Both are avoided by keying the check on `BYTE_MACHINE_REPO_ROOT`,
+  which the ordinary ctest lane sets and the mutation runner does not — so the
+  check runs under `ctest` and is skipped under the mutation suite, where a
+  documentation-consistency check does not belong.
+
+* **A release ledger is a derived census of the exit criteria, and a criterion it ships not-met is `amended`, never `met` and never quietly dropped.**
+  Milestone 9's `(byte-machine test release-ledger)` carries `§26`'s fifteen
+  criteria and `§27`'s eleven deliverables as data and RE-READS `§26`/`§27` from
+  the parent plan to set-compare (two totality rows — adding or dropping a
+  criterion in either the plan or the ledger fails by name, the derived-census
+  rule applied to the exit gate). Its worth is the honesty it forces at the close.
+  When a criterion cannot be met — M9 had no CI budget, so two Tier 1
+  cross-cell/matrix criteria could not pass — the ledger carries it as a FOURTH
+  state, `amended`, distinct from `met` and from a silent omission: an explicit
+  dated `§7.3:195` amendment in the parent plan plus a release-note entry, which is
+  exactly what `§7.3:203` demands ("cannot be silently waived in release notes").
+  The lane asserts the whole partition (13 `met`, 2 `amended`, 0 `open`) and that
+  no row names a receiver — nothing is owed and nothing is claimed met that is not.
+  A release that shipped an unmet criterion as `met`, or dropped it from the
+  ledger, would be the waiver the plan forbids, arriving through the ledger instead
+  of the release notes.
+
 * **Re-sweep every count after a fix wave, not just the tests.**
   A review's fix commits move counts, and the prose that quotes them is not part of
   the suite. Milestone 4 Slice ③ closed with a status block reading "358 mutations"
