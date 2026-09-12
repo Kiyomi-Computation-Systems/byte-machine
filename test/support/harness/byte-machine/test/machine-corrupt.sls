@@ -131,6 +131,9 @@
     (find (lambda (nd) (and (byte-dispatch-node? nd)
                             (>= (length (byte-dispatch-node-cases nd)) k)))
           (machine-nodes m)))
+  (define (bd-with-no-eof m)
+    (find (lambda (nd) (and (byte-dispatch-node? nd) (not (byte-dispatch-node-eof-target nd))))
+          (machine-nodes m)))
   (define (two-spans? m) (>= (length (machine-spans m)) 2))
   (define (other-span-name m this)
     (let ((n (find (lambda (s) (not (eq? (span-declaration-name s) this))) (machine-spans m))))
@@ -331,13 +334,20 @@
                                  '(make-callback-declaration (quote zz-unref) (quote span-data) #t (quote ()) #f #f))))
       (lambda (m) m)
       (lambda (m) (list (cons 'unreferenced-callback-declaration 'zz-unref))))
-     ;; :897 unreachable node -- INSERT an orphan node (no in-edge).
+     ;; :897 unreachable node -- INSERT an orphan finish node (no in-edge). The twin
+     ;; (design §4.5, :897) inserts the SAME node but makes it reachable, by pointing
+     ;; a byte-dispatch node's free (#f) eof-target at it -- an EOF accept into a
+     ;; finish, legal -- so the isolated fault is reachability, not the node's
+     ;; presence. Gated on a node with a free eof-target so the twin can wire it.
      (make-corruption-entry
       'unreachable-node ':897
-      (lambda (m) #t)
+      (lambda (m) (bd-with-no-eof m))
       (lambda (m) (build (extend (->d m) '(make-machine) 1 (machine-name m) 7
-                                 '(make-stop-node (quote zz-orphan) #f))))
-      (lambda (m) m)
+                                 '(make-finish-node (quote zz-orphan) #f))))
+      (lambda (m) (let* ((bd (bd-with-no-eof m))
+                         (d1 (extend (->d m) '(make-machine) 1 (machine-name m) 7
+                                     '(make-finish-node (quote zz-orphan) #f))))
+                    (build (edit d1 '(make-byte-dispatch-node) 1 (byte-dispatch-node-name bd) 4 (q 'zz-orphan)))))
       (lambda (m) (list (cons 'unreachable-node 'zz-orphan))))
      ;; :893 overlapping cases -- duplicate a byte-dispatch node's first case.
      (make-corruption-entry
@@ -371,7 +381,11 @@
       (lambda (m) (let ((n (first-node-of m byte-dispatch-node?)) (f (first-node-of m finish-node?)))
                     (build (edit (->d m) '(make-byte-dispatch-node) 1 (byte-dispatch-node-name n) 3
                                  (list 'make-edge (q (finish-node-name f)) (q 'advance))))))
-      (lambda (m) m)
+      ;; twin (design §4.5, :908): the same finish reached by an EOF-only edge (the
+      ;; node's eof-target) rather than a byte edge -- a legal accept.
+      (lambda (m) (let ((n (first-node-of m byte-dispatch-node?)) (f (first-node-of m finish-node?)))
+                    (build (edit (->d m) '(make-byte-dispatch-node) 1 (byte-dispatch-node-name n) 4
+                                 (q (finish-node-name f))))))
       (lambda (m) (list (cons 'non-eof-into-finish (byte-dispatch-node-name (first-node-of m byte-dispatch-node?))))))
      ;; :908 EOF-only zero-progress cycle -- a byte-dispatch node's eof-target is itself.
      (make-corruption-entry
@@ -381,15 +395,24 @@
                     (build (edit (->d m) '(make-byte-dispatch-node) 1 nm 4 (q nm)))))
       (lambda (m) m)
       (lambda (m) (list (cons 'eof-zero-progress-cycle (byte-dispatch-node-name (first-node-of m byte-dispatch-node?))))))
-     ;; :909 EOF-reachable stop -- a byte-dispatch node's eof route reaches a stop.
+     ;; :909 EOF-reachable stop -- point a byte-dispatch node's FREE (#f) eof-target
+     ;; at a stop, so an EOF route reaches a stop terminal. The twin (design §4.5,
+     ;; :909) points the same free eof route at an ERROR node instead -- a legal EOF
+     ;; rejection -- so neither half orphans an existing eof-target.
      (make-corruption-entry
       'eof-reachable-stop ':909
-      (lambda (m) (and (first-node-of m byte-dispatch-node?) (first-node-of m stop-node?)))
-      (lambda (m) (let ((n (first-node-of m byte-dispatch-node?)) (s (first-node-of m stop-node?)))
+      (lambda (m) (and (bd-with-no-eof m) (first-node-of m stop-node?)))
+      (lambda (m) (let ((n (bd-with-no-eof m)) (s (first-node-of m stop-node?)))
                     (build (edit (->d m) '(make-byte-dispatch-node) 1 (byte-dispatch-node-name n) 4
                                  (q (stop-node-name s))))))
-      (lambda (m) m)
-      (lambda (m) (list (cons 'eof-reachable-stop (byte-dispatch-node-name (first-node-of m byte-dispatch-node?))))))
+      ;; twin: the same free EOF route reaching a FRESH finish -- a legal EOF accept
+      ;; with a single in-edge, so it carries no span-state entanglement (an existing
+      ;; error node would, and route to it reads as inconsistent-span-state instead).
+      (lambda (m) (let* ((n (bd-with-no-eof m))
+                         (d1 (extend (->d m) '(make-machine) 1 (machine-name m) 7
+                                     '(make-finish-node (quote zz-eof-ok) #f))))
+                    (build (edit d1 '(make-byte-dispatch-node) 1 (byte-dispatch-node-name n) 4 (q 'zz-eof-ok)))))
+      (lambda (m) (list (cons 'eof-reachable-stop (byte-dispatch-node-name (bd-with-no-eof m))))))
      ;; :899 invalid span state -- a span-end node names a different span.
      (make-corruption-entry
       'invalid-span-state ':899
