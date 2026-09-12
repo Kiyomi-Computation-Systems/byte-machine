@@ -1,6 +1,10 @@
 # Milestone 9 Design — Cross-platform hardening and the v0.1 release
 
-**Status: draft, Gate 0 not yet discharged.**
+**Status: Milestone 9 CLOSED (2026-09-12) — v0.1.0 released.** Gate 0 (decisions
+0038-0041) and Slices ⓪, ①, ③, ④, ⑤ landed; Slice ② (Tier 1 CI) was struck for
+lack of CI minutes (decision 0041, §4.9 item 1). The release ships with §26:1677
+and §26:1678 amended for v0.1 (one Tier 1 cell verified, locally); every other
+§26 criterion is met and all eleven §27 deliverables exist.
 
 Written against **`62671b2`** (`main`, Milestone 8 Slice ⑤ merged as PR #108,
 2026-09-12). Every number below was measured against that commit, in this

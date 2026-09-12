@@ -13,7 +13,11 @@
 ;;;               1671-1685), minus the "- " bullet prefix and the trailing ";".
 ;;;               The totality lane re-reads `§26` from the plan and set-compares
 ;;;               against these strings, so a drift in either side fails by name.
-;;;   state    -- `met`, `partly`, or `open`. `§26:1680` is `open` although the
+;;;   state    -- `met`, `partly`, `open`, or `amended`. `amended` is a v0.1
+;;;               disposition (decision 0041): a criterion the release ships NOT
+;;;               fully met, with an explicit dated `§7.3:195` amendment and a
+;;;               release-note entry — never a silent waiver. `§26:1680` is `open`
+;;;               (at Slice ⓪) although the
 ;;;               property is TRUE at `62671b2` (measured 0.0 B/byte, design
 ;;;               §3.3 P2): the distinction between a property holding and a
 ;;;               suite KNOWING it holds is the whole reason the ledger exists,
@@ -43,8 +47,9 @@
 ;;; true-but-unasserted, five open") sums to eighteen and its Slice ⓪ exit line
 ;;; ("open rows are the five plus three partly") disagrees again; its TABLE and
 ;;; Appendix are the consistent, authoritative disposition and are what this
-;;; ledger encodes: 6 `met`, 3 `partly`, 6 `open`. (design Appendix, annotated
-;;; 2026-09-12.)
+;;; ledger encodes at Slice ⓪: 6 `met`, 3 `partly`, 6 `open`. (design Appendix,
+;;; annotated 2026-09-12.) Slices ①–⑤ move rows as they land; the v0.1 CLOSE
+;;; state is 13 `met`, 2 `amended` (§26:1677 and :1678, decision 0041), 0 `open`.
 ;;;
 ;;; This library lives with the fixture harness, no `src/` library imports it,
 ;;; and it carries no name into the `(byte-machine ...)` prefix a public importer
@@ -92,14 +97,14 @@
        ())
       ("§26:1677"
        "deterministic generation passes across supported platform cells"
-       open mechanical
-       "MECHANISM COMPLETE (Slice ①): all six determinism lane pairs compare committed goldens — the sixth (HTTP, 196 682 bytes) landed in Slice ①. Cross-CELL width is one cell (macOS arm64, local); the other cells are deferred past v0.1 for lack of CI (decision 0041). Slice ⑤ records the v0.1 disposition"
-       (five))
+       amended judgement
+       "AMENDED for v0.1 (decision 0041, §7.3:195 dated disposition, release notes): the MECHANISM is complete — six committed determinism goldens compared on every run — but cross-CELL coverage is one cell (macOS arm64, local); the other cells are deferred past v0.1 for lack of CI. Recorded, not waived"
+       ())
       ("§26:1678"
        "every Tier 1 matrix cell passes its required source, generation, AOT-compilation, and execution checks"
-       open judgement
-       "amended for v0.1 (decision 0041, §7.3:195 dated disposition): macOS arm64 verified locally; Linux amd64, Windows amd64, Linux arm64 deferred past v0.1 for lack of billed CI minutes; #88 dispositioned not waived"
-       (five))
+       amended judgement
+       "AMENDED for v0.1 (decision 0041, §7.3:195 dated disposition, release notes): macOS arm64 verified locally; Linux amd64, Windows amd64, Linux arm64 deferred past v0.1 for lack of billed CI minutes; #88 dispositioned not waived. Recorded, not waived"
+       ())
       ("§26:1679"
        "compiled benchmark baselines are recorded without speculative optimization"
        met mechanical
@@ -117,9 +122,9 @@
        ())
       ("§26:1682"
        "examples generate, compile, and run from a clean checkout"
-       open mechanical
-       "examples/generate-simple-machine/ ships and runs locally, using only the public API (§27:1703); the CLEAN-CHECKOUT run (a fresh clone) is performed in Slice ⑤ (§25:1663), which a test lane cannot witness (§3.2 item 1)"
-       (five))
+       met judgement
+       "examples/generate-simple-machine/ ships and uses only the public API (§27:1703); the CLEAN-CHECKOUT run — a fresh clone, the documented command, generating/compiling/running — was PERFORMED 2026-09-12 (§25:1663), its output recorded in the Slice ⑤ close. A test lane cannot witness a fresh clone (§3.2 item 1), so this is a recorded judgement"
+       ())
       ("§26:1683"
        "`README.org` explains scope and quick start"
        met mechanical
@@ -127,9 +132,9 @@
        ())
       ("§26:1684"
        "`CHANGELOG.md` contains the `0.1.0` entry"
-       open mechanical
-       "CHANGELOG.md exists with no 0.1.0 entry yet; the entry lands in Slice ⑤"
-       (five))
+       met mechanical
+       "CHANGELOG.md carries the [0.1.0] - 2026-09-12 section with the release summary and the known-open list"
+       ())
       ("§26:1685"
        "no native build artifacts or unrelated HTTP/server code are committed"
        met mechanical

@@ -12,8 +12,8 @@ reference interpreter.
 It is a library and source generator, not itself an HTTP parser. A separate
 project will use it to define and generate one.
 
-*Status: pre-release.* No versioned release exists yet — the target is =0.1.0=,
-and the API is not yet stable. Milestones 0 (portability and harness spike), 1
+*Status: =0.1.0= released 2026-09-12.* The first tagged release; the public API
+is frozen for v0.1 (parent plan §9). Milestones 0 (portability and harness spike), 1
 (minimal executable machine), 2 (incremental execution and lifecycle), 3
 (byte classes and sequences), 4 (fields, actions, and branches) and 5
 (callbacks, poisoning, and spans) have closed.
@@ -181,6 +181,15 @@ emitter, the reference interpreter, and the runtime, each exercised in both the
 source and ahead-of-time execution lanes. See
 [[file:docs/plans/byte-machine-implementation-plan.md][the implementation plan]] for scope, architecture, and milestones.
 
+Milestone 9 (cross-platform hardening and the v0.1 release, the final milestone)
+closed 2026-09-12 and tagged =0.1.0=: the release ledger, the documentation set
+(=docs/reference/=, eleven references) and a runnable example, the sixth
+determinism golden, and the compiled-benchmark baseline with the allocation
+audit. It ships two criteria *amended* rather than met, recorded not waived: only
+macOS arm64 is verified in Tier 1 (locally), with Linux amd64, Windows amd64 and
+Linux arm64 deferred past v0.1 for lack of billed CI minutes (decision 0041). The
+release notes in [[file:CHANGELOG.md][=CHANGELOG.md=]] list what ships known-open.
+
 ** Quick start
 
 Build a *parser* — not the repository. A machine is constructed through the
@@ -279,7 +288,25 @@ cmake --preset no-scheme && ctest --preset no-scheme
 - [[file:docs/plans/milestone-3-design.md][Milestone 3 design]] — byte classes and sequences
 - [[file:docs/plans/milestone-4-design.md][Milestone 4 design]] — fields, actions, and branches
 - [[file:docs/plans/milestone-5-design.md][Milestone 5 design]] — callbacks, poisoning, and spans
-- [[file:docs/reference/callback-span-lifetime.md][Callback and span lifetime]] — what a callback receives, how long it may hold it, and what the parser guarantees about the bytes you feed it
+- [[file:docs/plans/milestone-6-design.md][Milestone 6 design]] — counted consumption
+- [[file:docs/plans/milestone-7-design.md][Milestone 7 design]] — verification and generative hardening
+- [[file:docs/plans/milestone-8-design.md][Milestone 8 design]] — the private HTTP fixture
+- [[file:docs/plans/milestone-9-design.md][Milestone 9 design]] — cross-platform hardening and the v0.1 release
+
+*References* ([[file:docs/reference/][=docs/reference/=]], the v0.1 documentation set):
+
+- [[file:docs/reference/source-ir-and-builder.md][Source IR and builder]] — every =(byte-machine graph)= constructor and node kind
+- [[file:docs/reference/transition-and-cursor-semantics.md][Transition and cursor semantics]] — edge modes, cursor, offsets, statuses, position kinds
+- [[file:docs/reference/field-and-overflow.md][Fields and overflow]] — uint fields, actions, predicates, accumulation, counted consumption
+- [[file:docs/reference/callback-span-lifetime.md][Callback and span lifetime]] — what a callback receives, how long it may hold it, and the byte guarantees
+- [[file:docs/reference/verifier-diagnostic-catalog.md][Verifier diagnostic catalog]] — the thirty diagnostic codes, derived from =verify.sls=
+- [[file:docs/reference/generated-code-integration-chez.md][Generated-code integration for Chez]] — generating, importing, and running a parser; the dependency boundary
+- [[file:docs/reference/grammar-author-testing-guide.md][Grammar-author testing guide]] — the harness, lanes, and differential testing
+- [[file:docs/reference/benchmark-methodology-and-baseline.md][Benchmark methodology and baseline]] — the metrics, workloads, and the recorded v0.1 baseline
+- [[file:docs/reference/portability-matrix.md][Portability matrix]] — the Tier 1 matrix as amended for v0.1, and the pinned runtime
+
+*Example*: [[file:examples/generate-simple-machine/][=examples/generate-simple-machine/=]] — construct, compile, emit, and run a parser end to end.
+
 - [[file:docs/decisions/][Architecture decisions]]
 - [[file:CHANGELOG.md][Changelog]]
 
