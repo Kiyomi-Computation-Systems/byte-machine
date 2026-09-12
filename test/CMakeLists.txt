@@ -1845,6 +1845,28 @@ byte_machine_add_scheme_lane(
   TIMEOUT 120
   ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src")
 
+# --- Milestone 8 Slice ⓪: the fixture-state -> expected-error table -----------
+# §21.4:1177's precondition, shipped before any grammar node (decision 0034).
+# The table library imports only (rnrs) -- pure data -- so the lane needs the
+# harness manifest, the table library, and the program; no core.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.http-error-table.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/http-error-table-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-error-table.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/http-error-table-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.http-error-table.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/http-error-table-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-error-table.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/http-error-table-tests.sps"
+  TIMEOUT 120)
+
 # --- Milestone 4 Slice ①a task 4.7-2: the member-3 drift guard ---------------
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.member3-drift.chez.source
