@@ -1379,8 +1379,8 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-set(EXPECTED_PASSES 64)
-set(EXPECTED_MUTATIONS 599)
+set(EXPECTED_PASSES 65)
+set(EXPECTED_MUTATIONS 602)
 # Sixty-two is sixty-one plus one: Milestone 8 Slice ① adds one pass over the
 # request-line fixture (http-machine.sls) with three mutations (590 -> 593),
 # each caught by byte-machine.unit.http-request-line with a measured signature.
@@ -1390,6 +1390,9 @@ set(EXPECTED_MUTATIONS 599)
 # Sixty-four is sixty-three plus one: Slice ③ adds a third pass over the fixture's
 # framing recognition with three mutations (596 -> 599), each caught by
 # byte-machine.unit.http-framing with a measured signature.
+# Sixty-five is sixty-four plus one: Slice ④ adds a fourth pass over the fixture's
+# chunked body and trailers with three mutations (599 -> 602), each caught by
+# byte-machine.unit.http-chunked with a measured signature.
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -13569,6 +13572,53 @@ byte_machine_mutation(
   FIND [['cl-value 'content-length 10 'cl-value]]
   REPLACE [['cl-value 'content-length 16 'cl-value]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "content-length-overflow byte 48")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+byte_machine_mutation_reset()
+
+# --- Milestone 8 Slice ④: the chunked body and trailers ----------------------
+# Three decisions the chunked slice encodes, caught by the http-chunked lane with
+# a MEASURED signature. Measured against a staged run 2026-09-12:
+#   1. chunk sizes are BASE 16 (§21.2:1108): base 10 rejects an all-`f` size as a
+#      malformed extension instead of overflowing;
+#   2. the chunk-header size decides body vs trailers: inverting it routes a
+#      nonzero chunk's data into the trailer section (its bytes read as a name);
+#   3. a Content-Length trailer is FORBIDDEN at the colon (§21.2:1110): dropping
+#      the recognizer's forbidden verdict accepts it.
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/http-chunked-tests.sps")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/http-machine.sls
+  SPEC byte-machine.unit.http-chunked.chez.source
+  LABEL "http-machine: chunk sizes accumulate in base 10 instead of base 16"
+  FIND [['chunk-size 'chunk-size 16 'chunk-size]]
+  REPLACE [['chunk-size 'chunk-size 10 'chunk-size]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "invalid-chunk-extension byte 46")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/http-machine.sls
+  SPEC byte-machine.unit.http-chunked.chez.source
+  LABEL "http-machine: the chunk-header size test is inverted, routing chunk data to the trailers"
+  FIND [[(make-field-branch-node 'chunk-body-decide 'nonzero '(chunk-size)]]
+  REPLACE [[(make-field-branch-node 'chunk-body-decide 'zero '(chunk-size)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "trailer-name-data .HELLO.")
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/http-machine.sls
+  SPEC byte-machine.unit.http-chunked.chez.source
+  LABEL "http-machine: a Content-Length trailer is accepted instead of forbidden"
+  FIND [['tcl-end
+       (list (make-byte-case (make-exact-byte-matcher 58) (make-edge 'e-forbidden-trailer 'reexecute) #f)]]
+  REPLACE [['tcl-end
+       (list (make-byte-case (make-exact-byte-matcher 58) (make-edge 'trailer-name-close 'reexecute) #f)]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "Content-Length trailer -- expected .forbidden-trailer byte 63., got #f")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
