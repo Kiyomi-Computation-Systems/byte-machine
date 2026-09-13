@@ -267,7 +267,7 @@ recommended set gives **922 / 2000 = 46.1%** (`sh scratch/run3.sh S3 20260823 20
 "(span-pair placed back-prog entry-bd few-cases)"`), i.e. **~29.5 accepted of 64 — below the
 floor of 32.** Declining the steering and changing nothing else puts the slice under 0033
 item 2's own trigger — "a measured rate below half sends the draw back for steering before the
-lane lands" (`0033:96`, verbatim; the draw lives in §4.4, which is where "back" goes).
+lane lands" (`0033` item 2, verbatim; the draw lives in §4.4, which is where "back" goes).
 
 **The remedy, in two parts, both grounded in the same code.**
 
@@ -1815,7 +1815,7 @@ at the end.
 
 **This is the slice's first decision, not its last.** Decision 0033 item 2 makes a measured
 rate below half the machine count a **blocking** finding that "sends the draw back for steering
-before the lane lands" (`0033:96`, verbatim; §4.4 is where the draw lives, which is where
+before the lane lands" (`0033` item 2, verbatim; §4.4 is where the draw lives, which is where
 "back" goes). F1 measures §4.4's draw at 3 of 64. The steering set, its
 classification and the floor literal are settled here, before a line of the generator is
 written, and the measurement is taken **through a prototype of the draw this slice will
