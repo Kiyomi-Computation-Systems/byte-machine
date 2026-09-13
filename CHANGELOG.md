@@ -62,8 +62,8 @@ delimiter — `span[method]="MKCOL"` from the six bytes of `MKCOLA`, the whole
 `GET-PARAMETER` when the input reaches it — proved on both executors by
 `byte-machine.differential.keyword-span`. And the change's justification, measured
 through `byte-machine.unit.keyword-size`: the **47 llhttp method names** as **one
-`keyword-table` node emit 2,723 bytes**, versus **96,092 bytes for the equivalent
-242-node byte-dispatch trie** the workaround ships today — a **35× reduction, 242
+`keyword-table` node emit 2,795 bytes**, versus **96,169 bytes for the equivalent
+242-node byte-dispatch trie** the workaround ships today — a **34× reduction, 242
 generated states to one**. This closes Milestone 11; all seven of the upstream
 brief's acceptance criteria are met.
 

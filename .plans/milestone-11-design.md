@@ -511,7 +511,7 @@ Brief §7's seven acceptance criteria, each against the tree:
 | 4 | a CI table matches `Content-Length`/`content-length`/`cOnTeNt-LeNgTh`; a CS one does not | Slice ② — `byte-machine.differential.keyword-header` |
 | 5 | a span closes at the matched keyword's length | Slice ③ — `byte-machine.differential.keyword-span` (`MKCOL` from `MKCOLA`, span data absolute, both lanes) |
 | 6 | interpreter ≡ generated on all of the above, under the property suite too | ①-③ — the differential lanes + the property draw table (keyword-table drawn, `case-insensitive? #f`) |
-| 7 | 47-keyword emitted size ≪ today's 242-node equivalent | Slice ③ — `byte-machine.unit.keyword-size`: **2,723 bytes as one keyword-table state vs 96,092 bytes as the 242-node byte-dispatch trie, 35× smaller**, both rendered through the emitter (measured, not the prototype's number copied) |
+| 7 | 47-keyword emitted size ≪ today's 242-node equivalent | Slice ③ — `byte-machine.unit.keyword-size`: **2,795 bytes as one keyword-table state vs 96,169 bytes as the 242-node byte-dispatch trie, 34× smaller**, both rendered through the emitter (measured through the lane, not the prototype's number copied) |
 
 **The §29 deferred-extension admission is discharged.** §29:1749 admits the
 sequence/trie specialization "with evidence from the separate HTTP project or
