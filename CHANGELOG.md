@@ -39,9 +39,23 @@ version-5 generated library and a version-6 runtime refuse each other. All six
 existing determinism goldens are re-baselined to the version-6 literal, and a
 seventh golden (a keyword table) is added.
 
-_Deferred to later slices: per-table case-insensitivity's folded-collision
-diagnostic and the HTTP-header demonstration (Slice ②); span composition and the
-47-keyword before/after size measurement (Slice ③)._
+**Added (Slice ②): the per-table folded-collision rejection, and the HTTP-header
+case-insensitivity demonstration.** The verifier now rejects a *case-insensitive*
+keyword table whose two entries are equal after ASCII case-folding (for example
+`Content-Length` and `content-length`) with a new diagnostic
+`case-insensitive-keyword-collision` — the fold-up analogue of `duplicate-keyword`
+(which still catches byte-identical entries in either table). Byte-distinct case
+variants remain legal in a *case-sensitive* table. A new lane
+`byte-machine.differential.keyword-header` proves brief §2b criterion 4 on the
+HTTP header shape: a case-insensitive table folds `Content-Length`,
+`content-length` and `cOnTeNt-LeNgTh` to one target while a case-sensitive one
+over the same names recognizes only the canonical bytes, interpreter and
+generated agreeing with the generated side asserted absolutely. The diagnostic
+census moves to 32 codes over 58 sites. No node kind, ABI, or determinism golden
+changes in this slice.
+
+_Deferred to Slice ③: span composition and the 47-keyword before/after size
+measurement._
 
 ## [0.2.0] - 2026-09-13
 
