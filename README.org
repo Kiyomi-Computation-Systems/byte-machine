@@ -17,8 +17,11 @@ fields with checked accumulation, zero-width actions and branches, callbacks,
 spans, and counted consumption. The [[file:.reference/source-ir-and-builder.md][source IR and builder reference]] documents
 every constructor and node kind.
 
-*Status:* =0.1.0=. The public API is frozen for v0.1. =src/byte-machine/= holds
-the construction API, the verifier, the normalizer and emitter, the reference
+*Status:* =0.2.0=. The public API surface is unchanged since v0.1; v0.2 changes one
+observable behaviour — an empty span (one that opens and closes having delivered
+no bytes) now invokes its data callback once with an empty range, so a consumer can
+tell "present and empty" from "never happened" (decision 0042). =src/byte-machine/=
+holds the construction API, the verifier, the normalizer and emitter, the reference
 interpreter, and the runtime.
 
 ** Quick start

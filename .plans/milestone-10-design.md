@@ -1,9 +1,9 @@
 # Milestone 10 Design — An empty span, observable
 
-**Status: Milestone 10 OPEN (2026-09-13) — design and Gate 0.** Gate 0 is
+**Status: Milestone 10 CLOSED (2026-09-13) — v0.2.0 released.** Gate 0 is
 decision [0042](../.decisions/0042-empty-span-delivers-one-fragment-on-the-feed-side.md);
-Slices ① (the mechanism) and ② (the release and close) are unstarted. Ships as
-**v0.2.0**.
+Slice ① (the mechanism, PR #122) and Slice ② (the release and close) are
+delivered. Ships as **v0.2.0**.
 
 Written against **`e9f8d9c`** (`main`; v0.1.0 released as `c38e76f`, tag
 `v0.1.0`). Every anchor below was measured against that commit, in this checkout,
