@@ -4709,10 +4709,8 @@ byte_machine_mutation(
   # the two named here: still a clean subset both before and after this
   # comment's count correction. Left pinned to the check that states this
   # decision.
-  FIND [[;; advance is a zero-progress cycle.
-              ((pause-node? n) (list (pause-node-continuation n)))]]
-  REPLACE [[;; advance is a zero-progress cycle.
-              ((pause-node? n) '())]]
+  FIND [[((pause-node? n) (list (pause-node-continuation n)))]]
+  REPLACE [[((pause-node? n) '())]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "cycle with no advance makes no progress: zero-progress-cycle diagnostic")
 
 # Task 1's whole-branch review found two of the five decisions above were
@@ -5408,7 +5406,7 @@ byte_machine_mutation(
   # tiers, so the decision this pins -- `cycle` outranking `eof-reachable-stop` --
   # is now a tier assignment. Swapping the two tiers is the same decision
   # inverted, in one token rather than two list positions.
-  FIND [[      (eof-reachable-stop)                      ; §16.2:909
+  FIND [[      (eof-reachable-stop)
       (cycle)))]]
   REPLACE [[      (cycle)
       (eof-reachable-stop)))]]
@@ -6074,10 +6072,10 @@ byte_machine_mutation(
   LABEL "verify: eof-reachable-stop is promoted into the benign tier"
   # §16.2:909's whole verdict, demoted to tie with the verdicts that mean "the
   # chain terminates". Every join then masks it -- three fixtures redden.
-  FIND [[    '((finish unresolved error default-error)   ; the chain terminates
-      (eof-reachable-stop)                      ; §16.2:909]]
-  REPLACE [[    '((finish unresolved error default-error eof-reachable-stop)   ; terminates
-      ()                                        ; §16.2:909]]
+  FIND [[    '((finish unresolved error default-error)
+      (eof-reachable-stop)]]
+  REPLACE [[    '((finish unresolved error default-error eof-reachable-stop)
+      ()]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "an `error` sibling does not mask the stop")
 
@@ -6089,10 +6087,10 @@ byte_machine_mutation(
   # a field-branch machine verify with zero diagnostics while `parser-finish!`
   # never returns. One token, and the only fixture that moves is the one whose
   # sibling verdict is `default-error` -- which is what makes it this pin's own.
-  FIND [[    '((finish unresolved error default-error)   ; the chain terminates
-      (eof-reachable-stop)                      ; §16.2:909]]
-  REPLACE [[    '((finish unresolved error)                 ; the chain terminates
-      (eof-reachable-stop default-error)        ; §16.2:909]]
+  FIND [[    '((finish unresolved error default-error)
+      (eof-reachable-stop)]]
+  REPLACE [[    '((finish unresolved error)
+      (eof-reachable-stop default-error)]]
   EXPECT_STATUS 1
   # RE-ANCHORED by Milestone 7 Slice ⓪. The pin was a bare CASE-NAME prefix,
   # which twelve mutants satisfied on the merge base and which the re-baselined
@@ -6117,12 +6115,12 @@ byte_machine_mutation(
   # answers `'unresolved` for an EOF successor naming no node, and a machine
   # whose chain reaches a dangling name AND a stop reports the stop only because
   # `unresolved` loses the join.
-  FIND [[    '((finish unresolved error default-error)   ; the chain terminates
-      (eof-reachable-stop)                      ; §16.2:909
-      (cycle)))                                 ; 0021 item 1]]
-  REPLACE [[    '((finish error default-error)              ; the chain terminates
-      (eof-reachable-stop)                      ; §16.2:909
-      (cycle unresolved)))                      ; 0021 item 1]]
+  FIND [[    '((finish unresolved error default-error)
+      (eof-reachable-stop)
+      (cycle)))]]
+  REPLACE [[    '((finish error default-error)
+      (eof-reachable-stop)
+      (cycle unresolved)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "an UNRESOLVED sibling does not mask the stop")
 
@@ -10984,10 +10982,14 @@ byte_machine_mutation(
   # PROJECTION, whose "expected" is the generated lane's value -- the harness
   # prints the second `check-equal` argument as expected -- so the three read as
   # mirror images of each other and no two collide.
-  FIND [[            (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off)))))\n")))
-        ;; --- Slice ③'s three span arms]]
-  REPLACE [[            (nm (normal-state-id s)) ") " id " off pk) " id " off)))))\n")))
-        ;; --- Slice ③'s three span arms]]
+  FIND [[            (num (cadr tg)) " off))\n"
+            "           (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
+            "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
+            (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off)))))\n")))]]
+  REPLACE [[            (num (cadr tg)) " off))\n"
+            "           (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
+            "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
+            (nm (normal-state-id s)) ") " id " off pk) " id " off)))))\n")))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "a callback failure reports boundary at the committed offset: the lanes agree on the projection -- expected .callback said-no .callback failure. inv 1 byte."
@@ -11953,10 +11955,10 @@ byte_machine_mutation(
   # the wrong diagnostic -- `cycle` stops outranking `eof-reachable-stop`, which
   # is the ONE relation decision 0021 item 1 pins by name, and the one a
   # non-terminating machine depends on.
-  FIND [[      (eof-reachable-stop)                      ; §16.2:909
-      (cycle)))                                 ; 0021 item 1]]
-  REPLACE [[      (eof-reachable-stop cycle)                ; §16.2:909
-      ()))                                      ; 0021 item 1]]
+  FIND [[      (eof-reachable-stop)
+      (cycle)))]]
+  REPLACE [[      (eof-reachable-stop cycle)
+      ()))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the join is the higher tier every time")
 
@@ -12281,9 +12283,9 @@ byte_machine_mutation(
   # write and the wind. The FIND had to carry the following lines only because
   # the runner refuses an empty REPLACE, so it carries the new ones instead --
   # the mutant, and its verdict, are unchanged.
-  FIND [[       (parser-set-lifecycle! parser 'busy)
-       ;; §14:833: an open span "begins its next possible fragment at the next]]
-  REPLACE [[       ;; §14:833: an open span "begins its next possible fragment at the next]]
+  FIND [[(parser-set-lifecycle! parser 'busy)
+       (when (parser-active-span parser)]]
+  REPLACE [[(when (parser-active-span parser)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "all six answered -- expected .busy inv 1 7")
 
@@ -12740,11 +12742,11 @@ byte_machine_mutation(
   # a successful stop, `parser-stored-error` is not exported, and no other lane
   # in the tree looks at what a parser still reaches. Every other suite stays
   # green under this mutant.
-  FIND [[       (parser-set-lifecycle! parser 'busy)
-       ;; §14:833: an open span "begins its next possible fragment at the next]]
-  REPLACE [[       (parser-set-lifecycle! parser 'busy)
+  FIND [[(parser-set-lifecycle! parser 'busy)
+       (when (parser-active-span parser)]]
+  REPLACE [[(parser-set-lifecycle! parser 'busy)
        (parser-set-stored-error! parser bv)
-       ;; §14:833: an open span "begins its next possible fragment at the next]]
+       (when (parser-active-span parser)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "gone in both lanes -- expected ..interpreted . #f. .generated . #f.., got ..interpreted . #t."
 )

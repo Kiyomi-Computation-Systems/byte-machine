@@ -12,183 +12,14 @@ reference interpreter.
 It is a library and source generator, not itself an HTTP parser. A separate
 project will use it to define and generate one.
 
-*Status: =0.1.0= released 2026-09-12.* The first tagged release; the public API
-is frozen for v0.1 (parent plan §9). Milestones 0 (portability and harness spike), 1
-(minimal executable machine), 2 (incremental execution and lifecycle), 3
-(byte classes and sequences), 4 (fields, actions, and branches) and 5
-(callbacks, poisoning, and spans) have closed.
-Milestone 3 closed 2026-08-30 with Slice ③ (multiple alternatives, ambiguity,
-and cycle analysis), after Slices ① (byte classes) and ② (sequence dispatch and
-prefix lowering). Milestone 4 closed 2026-09-03 with Slice ③ (integer
-accumulation), after Gate 0 (2026-08-31), Slice ①a (the ABI, encoding and
-parser-error seam), Slice ①b (field declaration, slot assignment and
-=parser-field-ref=), and Slice ② (field action and field branch). A machine can
-now declare unsigned integer fields, write them with zero-width actions and
-branches, and read them from the input stream with a checked
-integer-accumulate node. Milestone 5 (callbacks, poisoning, and spans) closed
-2026-09-06 with Slice ④. Two hardening slices ran first and closed 2026-09-04 — Slice ⓪ (the
-verifier's kind × position matrix and a diagnostic-code census derived from the
-source) and Slice ⓪b (the EOF walk cluster), which closed two holes in the
-verifier: a machine whose /entry/ is a =finish= terminal, and a machine whose
-entry's own EOF path reaches a =stop=, both verified clean before and are now
-rejected. Gate 0 then discharged 2026-09-04 as decisions 0024-0029, and Slice
-①a — the seam, carrying the generated ABI to version 4 — and Slice ①b — callback
-and span declarations, indexed binding resolution, and five public accessors —
-landed the same day. Slice ② landed 2026-09-05: the machine now /calls out/. A
-callback-invocation node is the tenth node kind, its four outcomes (continue, a
-declared decision branch, a pause, and an explicit failure) route identically in
-the interpreted and generated lanes through one shared classifier, an
-out-of-contract return is a =callback=-domain parser error rather than a raise, a
-callback that escapes marks the parser =poisoned= through =dynamic-wind=, and
-=parser-state-name= — the accessor Slice ①b deferred whole — answers in both
-lanes now that the generated ABI (version 5) carries a state-id to source-name
-table. Slice ③ landed 2026-09-05: the machine now /spans/. Span-start and
-span-end are the eleventh and twelfth node kinds, a dataflow pass proves no
-reachable path opens a second span, ends the wrong one, ends with none open,
-pauses with one open, or reaches a successful stop or finish with one active, and
-a span's data callback receives the exact byte range — identical in the
-interpreted and generated lanes for the same feed schedule, and identical once
-coalesced across every schedule, which is what the parent plan asks for and the
-opposite of what it asks for raw fragment boundaries.
+Machines combine byte dispatch, byte classes and sequences, unsigned-integer
+fields with checked accumulation, zero-width actions and branches, callbacks,
+spans, and counted consumption. The [[file:.reference/source-ir-and-builder.md][source IR and builder reference]] documents
+every constructor and node kind.
 
-That slice also found five defects, four of them in its own new code and one
-older; three changed behaviour and two were holes in its own new tests. A span end is a state a parser can be parked on; before the fix a
-machine whose span end continued into a =stop= verified clean and then answered
-=stopped= from =parser-finish!=. A span node naming a span the machine never
-declared verified clean and then crashed the normalizer. And every
-callback-domain error built by the feed and finish loops — nine sites, six in the
-runtime and three rendered by the emitter — reported the wrong position kind when
-its node was reached by a reexecuting edge; only the boundary flush's own arm,
-which passed the literal, was already right. /Both lanes reported the same wrong
-value/, so the cross-lane comparison that was the only thing reading it had been
-satisfied throughout.
-
-Slice ④ closed the milestone 2026-09-06. A parser now demonstrates that it keeps
-nothing: a test holds a parser alive across a full garbage collection and checks
-that a weak reference to the bytevector it was fed reads /broken-weak-pointer/,
-in both lanes. That test is only worth its green if it can go red, so the same
-lane ships the fixture that retains on purpose and must read /retained/ — and
-arms for all three carriers the plan puts /outside/ the guarantee,
-because an application that keeps your input in its own callback closure, its
-user context, or a callback failure's detail has kept it by its own choice — and
-one more that holds the same failing path with an empty detail and must read
-/gone/, so the third arm is about the carrier and not about the error record. The
-slice also closed the three fragment shapes nothing had covered — a span left
-open when =parser-finish!= is called and closed on the EOF chain, a reset while
-parked between the span-end substeps, and a reset of a poisoned parser with a
-span still open — and shipped the first document in the plan's
-reference directory, [[file:.reference/callback-span-lifetime.md][the callback and
-span lifetime reference]]. Closing the milestone also turned up a check the
-project had approved at the milestone's design gate and then simply lost: the
-verifier now rejects a callback or span declaration whose optional diagnostic
-label falls outside the portable repertoire, which is a rule the plan has always
-required and nothing had ever enforced for any declaration.
-
-Milestone 6 (counted consumption) closed 2026-09-06. Slice ⓪, a hardening slice,
-closed 2026-09-06, and its Gate 0 discharged the same day as decision 0030 — a
-counted consume is an input-reading node with a zero-count route. The verifier's
-diagnostic-label check is now total: every construct that carries a label —
-nineteen, where Milestone 5 had checked two — is held to the portable repertoire,
-through the same four checks that already read each construct's name, so no new
-diagnostic was added. And the portable name grammar lives in one library shared
-by the verifier, the emitter and the runtime, which means an application's
-callback failure code is finally checked against it, as the plan has always
-required. Slice ① landed the same day: the thirteenth node kind, counted
-consume, in every library, both executors, the emitter and every census. A body
-of a thousand bytes is one step in either lane — witnessed structurally, since no
-behavioural comparison can tell bulk from byte-at-a-time — a zero count
-transitions before exhaustion is even asked, count completion wins when input
-runs out at the same byte, and the verifier treats the successor as both an EOF
-route and a non-consuming edge because it cannot see the count. Slice ② closed
-the milestone the same day: the same body inside a span, with the fragment trace
-asserted feed by feed under forty-five schedules in both lanes — the completion
-event lands in the feed that delivered the last body byte, a value no comparison
-between the two executors could have seen, since a wrong reading is wrong in
-both — a body-shaped arm in the retention lane, and the close-out: every scope
-bullet and exit criterion dispositioned against the tree, nothing the milestone
-approved left unshipped, and the one thing it declined to do (narrowing the
-verifier's reachability pass) handed to Milestone 7 with both ends written.
-Milestone 7 (verification and generative hardening) closed 2026-09-11: its Gate 0
-discharged 2026-09-06 as decisions 0031-0033, and Slice ⓪ closed 2026-09-07.
-The verifier's reachability pass now walks the relation an execution can
-actually occupy — byte flow, then EOF routes from the states a parser can be
-parked on — in one procedure shared with the two passes that already read it,
-so a node standing behind an edge no execution can take is reported as
-unreachable rather than silently accepted. Slice ① closed 2026-09-11 (PR #92): the
-diagnostic record now carries =§16.4='s seven fields — severity, machine name,
-declaration names and a representative graph path join the code, node, edge and
-message — and eight of the verifier's codes report the path their finding is
-about. No verdict changed: every machine accepted or rejected before is accepted
-or rejected still.
-
-Slice ② closed 2026-09-11 (PR #95): a generator now draws random machines over every one of
-the thirteen node kinds and runs each through the reference interpreter and the
-compiled executor, comparing them at three layers — the per-schedule result
-tuple, the fragment and callback traces normalized across every way of splitting
-the input, and a set of oracle invariants no single lane supplies (the lifecycle
-table, cursor arithmetic, field bounds, and the span-content anchor). A property
-test drives sixty-four machines per seed under a committed default seed, asserts
-that only verifier-accepted machines reach an executor, that every construct is
-observed in both lanes, and that the generator draws from exactly the closed
-sets =ir.sls= defines. No file under =src/= changes: this slice is entirely
-test-side.
-
-Slice ③ closed 2026-09-11 (PR #97): a machine can now be saved as a failing test.
-A printer renders any built machine as the ordinary constructor calls that rebuild
-it — total over every node and matcher kind, and proved so by a round trip that is
-byte-identical through the compiler. When a drawn machine's two lanes disagree, a
-saver writes a self-contained program that a person runs with the shipped launcher
-and nothing else: it exits non-zero while the disagreement is present and zero once
-it is fixed. A minimizer then shrinks that program — dropping nodes, cases, bytes
-and feeds — to the smallest trial that still disagrees, and writes it beside the
-first. The slice proves all three against a deliberate failure and pins them with a
-new mutation pass; it too changes no file under =src/=.
-
-Slice ④ closed 2026-09-11 and closed the milestone: the machine that /breaks/
-them. A corruption catalogue takes each verified machine and, for every one of the
-thirty diagnostics the verifier can emit, produces a machine differing in exactly
-one decision — the fault — beside a twin differing in the closest legal way, so
-each diagnostic has both a positive test (the fault emits it) and a negative one
-(the twin does not). An independent second implementation of nine of the verifier's
-graph rules — written from the specifications, not from the verifier — agrees with
-it on every drawn, rejected and corrupted machine of the seed set, so a rule the
-two ever disagree on has found a real defect. A structural witness proves no
-declared name can become a generated identifier (=§16.2:910=), and a =compile-file=
-witness compiles the largest emittable machine and runs it, measuring that no
-backend limit is reachable by a version-0.1 machine (=§16.2:911=). Milestone 7
-(verification and generative hardening) is **closed 2026-09-11**, delivered as a
-Gate 0 plus five slices; the whole suite runs 120 lanes in both execution modes and
-the mutation suite pins 61 passes over 590 mutations.
-
-Milestone 8 (the private HTTP fixture) closed 2026-09-12: the thing every milestone
-so far had been building /for/. A test fixture now parses HTTP/1.x request messages
-— the request line, the header section, case-insensitive =Content-Length= and
-=Transfer-Encoding= recognition, a checked fixed body, the chunked body with its
-extensions and trailers, the framing conflicts, and the message loop — written
-/only/ in declared graph nodes, with callbacks that record and never decide, and
-the reference interpreter and the generated executor produce the same event trace
-for every message at every feed split point. It was delivered as a design plus a
-Gate 0 (four decision records) plus six slices — the error table first (a
-precondition, not a deliverable), then the request line, headers, framing and the
-fixed body, the chunked body and trailers, and the close. **No file under =src/=
-changed across the whole milestone**: it spent the shipped mechanism and shipped
-none, and a leak check read from the tree keeps the fixture private — no =src/=
-library imports it and no public library re-exports an HTTP name. The mutation
-suite now pins 65 passes over 602 mutations.
-
-=src/byte-machine/= holds the construction API, the verifier, the normalizer and
-emitter, the reference interpreter, and the runtime, each exercised in both the
-source and ahead-of-time execution lanes. See
-[[file:.plans/byte-machine-implementation-plan.md][the implementation plan]] for scope, architecture, and milestones.
-
-Milestone 9 (cross-platform hardening and the v0.1 release, the final milestone)
-closed 2026-09-12 and tagged =0.1.0=: the release ledger, the documentation set
-(=.reference/=, eleven references) and a runnable example, the sixth
-determinism golden, and the compiled-benchmark baseline with the allocation
-audit. It ships two criteria *amended* rather than met, recorded not waived: only
-macOS arm64 is verified in Tier 1 (locally), with Linux amd64, Windows amd64 and
-Linux arm64 deferred past v0.1 for lack of billed CI minutes (decision 0041). The
-release notes in [[file:CHANGELOG.md][=CHANGELOG.md=]] list what ships known-open.
+*Status:* =0.1.0=. The public API is frozen for v0.1. =src/byte-machine/= holds
+the construction API, the verifier, the normalizer and emitter, the reference
+interpreter, and the runtime.
 
 ** Quick start
 
@@ -229,17 +60,12 @@ generated parser. See [[*Documentation][Documentation]] below for the full set.
 
 ** Requirements
 
-- CMake 3.26 or newer (local work uses 4.3.3; CI runs on whatever version its
-  runners ship, which the workflow does not pin)
+- CMake 3.26 or newer
 - Chez Scheme 10.4.1 or newer, full system rather than Petite
 
-The Chez pin is a floor recording what has actually been verified, not a guess
-at what would work; lowering it needs CI evidence from the older release.
-
-CI (GitHub Actions, =.github/workflows/ci.yml=) is one Linux job, run on
-demand: a pull request runs it only once it carries the =ci= label; a push to
-=main= runs it; =gh workflow run ci.yml --ref <branch>= runs it on any branch.
-Docs-only changes never run it. macOS is exercised locally, not in CI.
+The Chez version is a floor recording what has actually been verified. v0.1 is
+verified on macOS arm64; Linux/Windows amd64 and Linux arm64 are supported but
+not yet CI-verified — see the [[file:.reference/portability-matrix.md][portability matrix]].
 
 ** Building and testing
 
@@ -281,31 +107,21 @@ cmake --preset no-scheme && ctest --preset no-scheme
 
 ** Documentation
 
-- [[file:.plans/byte-machine-implementation-plan.md][Implementation plan]] — authoritative scope, IR semantics, milestones, and release criteria
-- [[file:.plans/milestone-0-portability-spike.md][Milestone 0 plan]] — the portability and harness spike
-- [[file:.plans/milestone-1-design.md][Milestone 1 design]] — the minimal executable machine
-- [[file:.plans/milestone-2-design.md][Milestone 2 design]] — incremental execution and lifecycle
-- [[file:.plans/milestone-3-design.md][Milestone 3 design]] — byte classes and sequences
-- [[file:.plans/milestone-4-design.md][Milestone 4 design]] — fields, actions, and branches
-- [[file:.plans/milestone-5-design.md][Milestone 5 design]] — callbacks, poisoning, and spans
-- [[file:.plans/milestone-6-design.md][Milestone 6 design]] — counted consumption
-- [[file:.plans/milestone-7-design.md][Milestone 7 design]] — verification and generative hardening
-- [[file:.plans/milestone-8-design.md][Milestone 8 design]] — the private HTTP fixture
-- [[file:.plans/milestone-9-design.md][Milestone 9 design]] — cross-platform hardening and the v0.1 release
-
 *References* ([[file:.reference/][=.reference/=]], the v0.1 documentation set):
 
 - [[file:.reference/source-ir-and-builder.md][Source IR and builder]] — every =(byte-machine graph)= constructor and node kind
 - [[file:.reference/transition-and-cursor-semantics.md][Transition and cursor semantics]] — edge modes, cursor, offsets, statuses, position kinds
 - [[file:.reference/field-and-overflow.md][Fields and overflow]] — uint fields, actions, predicates, accumulation, counted consumption
 - [[file:.reference/callback-span-lifetime.md][Callback and span lifetime]] — what a callback receives, how long it may hold it, and the byte guarantees
-- [[file:.reference/verifier-diagnostic-catalog.md][Verifier diagnostic catalog]] — the thirty diagnostic codes, derived from =verify.sls=
+- [[file:.reference/verifier-diagnostic-catalog.md][Verifier diagnostic catalog]] — the diagnostic codes the verifier can emit
 - [[file:.reference/generated-code-integration-chez.md][Generated-code integration for Chez]] — generating, importing, and running a parser; the dependency boundary
 - [[file:.reference/grammar-author-testing-guide.md][Grammar-author testing guide]] — the harness, lanes, and differential testing
 - [[file:.reference/benchmark-methodology-and-baseline.md][Benchmark methodology and baseline]] — the metrics, workloads, and the recorded v0.1 baseline
-- [[file:.reference/portability-matrix.md][Portability matrix]] — the Tier 1 matrix as amended for v0.1, and the pinned runtime
+- [[file:.reference/portability-matrix.md][Portability matrix]] — the Tier 1 matrix and the pinned runtime
 
 *Example*: [[file:examples/generate-simple-machine/][=examples/generate-simple-machine/=]] — construct, compile, emit, and run a parser end to end.
+
+For architecture and IR semantics in depth, see the [[file:.plans/byte-machine-implementation-plan.md][implementation plan]].
 
 - [[file:.decisions/][Architecture decisions]]
 - [[file:CHANGELOG.md][Changelog]]

@@ -1,23 +1,18 @@
 ;;; SPDX-License-Identifier: BSD-3-Clause
 ;;; (byte-machine private names): the portable ASCII name grammar,
-;;; [a-z][a-z0-9-]*, in ONE place (parent §9.3:423, §10.1:480, §16.2:886;
-;;; Milestone 6 Slice ⓪, design §4.12 item 2).
+;;; [a-z][a-z0-9-]*, in ONE place.
 ;;;
 ;;; Three libraries check names against it, and the runtime may import neither of
-;;; the other two: verify.sls checks every declared name (§16.2:886), compile.sls checks
-;;; the caller's output binding (§20), and runtime.sls checks an application's
-;;; callback failure code (§9.3:423) -- and the runtime is downstream of
-;;; verification, so it must not import (byte-machine verify). Through
-;;; Milestone 5 the grammar was two textually identical bodies in verify.sls and
-;;; compile.sls and NO body in runtime.sls, which checked `symbol?` alone and
-;;; recorded the grammar half as owed. identifier-repertoire-tests.sps proves
-;;; the verify and compile sites agree by driving both; the mutation suite's
-;;; twinned FIND, which the duplication left, is retired with the copy.
+;;; the other two: verify.sls checks every declared name, compile.sls checks
+;;; the caller's output binding, and runtime.sls checks an application's
+;;; callback failure code -- and the runtime is downstream of verification, so it
+;;; must not import (byte-machine verify). Keeping the grammar in its own library
+;;; lets all three share one definition.
 ;;;
 ;;; The grammar is the whole of this library. The reserved sets stay with their
-;;; owners -- member 1 (R6RS syntactic keywords) with verify.sls and compile.sls,
-;;; members 2 and 3 (the emitted library's own bindings) with compile.sls alone --
-;;; because which set applies is a property of the SITE and not of the name.
+;;; owners -- R6RS syntactic keywords with verify.sls and compile.sls, the emitted
+;;; library's own bindings with compile.sls alone -- because which set applies is a
+;;; property of the SITE and not of the name.
 (library (byte-machine private names)
   (export portable-name?)
   (import (rnrs))
@@ -29,6 +24,7 @@
   ;; length guard comes first: `string-ref` on the empty name would raise, and a
   ;; refusal is the contract, not a crash. The argument is a symbol by every
   ;; caller's own contract; this predicate does not re-check that.
+  ;; portable-name? : Symbol -> Boolean
   (define (portable-name? sym)
     (let ((s (symbol->string sym)))
       (and (> (string-length s) 0)

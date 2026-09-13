@@ -1,10 +1,10 @@
 ;;; SPDX-License-Identifier: BSD-3-Clause
-;;; (byte-machine private normal-ir): the normalizer (parent §17). Lowers a
+;;; (byte-machine private normal-ir): the normalizer. Lowers a
 ;;; VERIFIED source machine to a canonical normalized IR in deterministic order
 ;;; — nodes numbered by declaration order, dispatch cases sorted ascending by
 ;;; byte, error references resolved to their codes — and computes the IR
-;;; fingerprint (decision 0009): 64-bit FNV-1a over a canonical byte encoding of
-;;; the normalized IR. Pure; runs only after verification (parent §16.3).
+;;; fingerprint: 64-bit FNV-1a over a canonical byte encoding of
+;;; the normalized IR. Pure; runs only after verification.
 (library (byte-machine private normal-ir)
   (export normalize-machine
           normal-machine? normal-machine-entry normal-machine-states
@@ -61,107 +61,110 @@
                                callback-decls span-decls)
     (vector nm-tag entry states fp debug-map fields callbacks spans callback-decls
             span-decls))
+  ;; normal-machine? : Any -> Boolean
   (define (normal-machine? x) (and (vector? x) (> (vector-length x) 0) (eq? (vector-ref x 0) nm-tag)))
+  ;; normal-machine-entry : NormalMachine -> StateId
   (define (normal-machine-entry m) (vector-ref m 1))
+  ;; normal-machine-states : NormalMachine -> (Vectorof NormalState)
   (define (normal-machine-states m) (vector-ref m 2))
+  ;; normal-machine-fingerprint : NormalMachine -> ExactInteger
   (define (normal-machine-fingerprint m) (vector-ref m 3))
-  ;; §17:963's state-ID-to-source-name map, total over internal prefix states.
+  ;; The state-ID-to-source-name map, total over internal prefix states.
   ;; It is what makes parser-error-node-name answerable in the generated lane,
   ;; where the emitter needs each state's public name as an emission-time
   ;; literal. It cannot perturb the fingerprint: the debug map is not among
   ;; encode-normal's arguments, so nothing it holds can reach the encoding.
-  ;;
-  ;; It used to say "encode-normal is called as (encode-normal entry states) and
-  ;; never sees names", which stopped being true in Slice ①b: the call takes a
-  ;; third argument now, and the field table it carries DOES contain names, which
-  ;; are encoded on purpose -- a field name is observable to a generated parser
+  ;; Node names stay absent from the encoding; field names, by contrast, ARE
+  ;; encoded on purpose -- a field name is observable to a generated parser
   ;; through parser-field-ref, so two machines differing only in one must differ
-  ;; in fingerprint. Node names remain absent; that is the narrower claim, and it
-  ;; is the one that was load-bearing here all along.
+  ;; in fingerprint. That node names are absent is the narrower, load-bearing
+  ;; claim here.
+  ;; normal-machine-debug-map : NormalMachine -> (Listof (Pair StateId Symbol))
   (define (normal-machine-debug-map m) (vector-ref m 4))
-  ;; §17:962's field slot assignment, appended for the same reason the debug map
-  ;; is: normal-machine-fingerprint is slot 3 and the emitter reads it by index.
-  ;; A list of (name width initial slot), slot ascending from 0 and equal to the
-  ;; list position -- redundant by construction. NO consumer in this slice reads
-  ;; the slot element: the encoder writes the records in order and omits it, the
-  ;; emitter renders (name . initial) pairs, and parser-field-ref resolves a name
-  ;; against the pair vector by position. It is carried because Slice ②'s field
-  ;; operands reference a field BY SLOT and will read it, and because a table
-  ;; that states its own slot can be asserted whole in a test -- which is what
-  ;; witnesses the numbering, since no fingerprint can (the slot is not encoded).
-  ;; An earlier version of this comment claimed "every consumer downstream indexes
-  ;; BY SLOT"; none does yet.
-  (define (normal-machine-fields m) (vector-ref m 5))
-  ;; §17:962's callback and span slot assignment, Milestone 5 Slice ①b, appended
-  ;; after fields for the same reason fields were appended after the debug map:
+  ;; The field slot assignment, appended for the same reason the debug map is:
   ;; normal-machine-fingerprint is slot 3 and the emitter reads it by index, so
-  ;; nothing may be inserted ahead of it. Each is a list of (name slot) with slot
-  ;; ascending from 0 and equal to the list position -- redundant by
-  ;; construction, and carried for the same reason the field table carries it.
+  ;; nothing may be inserted ahead of it. A list of (name width initial slot),
+  ;; slot ascending from 0 and equal to the list position -- redundant by
+  ;; construction. The slot is carried, not encoded, so that field operands can
+  ;; reference a field BY SLOT and so a table stating its own slot can be
+  ;; asserted whole in a test -- which is what witnesses the numbering, since no
+  ;; fingerprint can.
+  ;; normal-machine-fields : NormalMachine -> FieldSlotTable
+  (define (normal-machine-fields m) (vector-ref m 5))
+  ;; The callback and span slot assignment, appended after fields for the same
+  ;; reason fields were appended after the debug map: normal-machine-fingerprint
+  ;; is slot 3 and the emitter reads it by index, so nothing may be inserted
+  ;; ahead of it. Each is a list of (name slot) with slot ascending from 0 and
+  ;; equal to the list position -- redundant by construction, and carried for the
+  ;; same reason the field table carries it.
+  ;; normal-machine-callbacks : NormalMachine -> NameSlotTable
   (define (normal-machine-callbacks m) (vector-ref m 6))
   ;; The four parts the generated lane's binding resolution needs, in slot order.
   ;; Separate from the slot table above: that one is what the ENCODING walks and
   ;; carries names only, this one is what the EMITTER renders into ABI member 1.
+  ;; normal-machine-callback-decls : NormalMachine -> (Listof (List Symbol CallbackKind Boolean (Option Symbol)))
   (define (normal-machine-callback-decls m) (vector-ref m 8))
-  ;; Slot 9, Milestone 5 Slice ③, and the span half of exactly the split above:
-  ;; the table at slot 7 carries NAMES, which is what the fingerprint's span
-  ;; section walks, and this one carries what the EMITTER needs -- the span's
-  ;; name plus its two callbacks RESOLVED TO CALLBACK SLOTS, in span-slot order.
+  ;; The span half of exactly the split above: the table at slot 7 carries NAMES,
+  ;; which is what the fingerprint's span section walks, and this one carries
+  ;; what the EMITTER needs -- the span's name plus its two callbacks RESOLVED TO
+  ;; CALLBACK SLOTS, in span-slot order.
   ;;
   ;; The resolution belongs here and not in the emitter. A lowered span state
-  ;; carries the SPAN slot (§17:962), but the arm it renders indexes `cbv`, so
-  ;; something has to cross from one numbering to the other; doing it in
-  ;; compile.sls would put a second, independently-written copy of the
-  ;; declaration walk in the lane that is supposed to be checked against this
-  ;; one. Entries are (name data-slot complete-slot), complete-slot #f when
-  ;; §10.4:516's optional completion callback is absent.
+  ;; carries the SPAN slot, but the arm it renders indexes `cbv`, so something
+  ;; has to cross from one numbering to the other; doing it in compile.sls would
+  ;; put a second, independently-written copy of the declaration walk in the lane
+  ;; that is supposed to be checked against this one. Entries are (name data-slot
+  ;; complete-slot), complete-slot #f when the optional completion callback is
+  ;; absent.
+  ;; normal-machine-span-decls : NormalMachine -> (Listof (List Symbol (Option ExactInteger) (Option ExactInteger)))
   (define (normal-machine-span-decls m) (vector-ref m 9))
+  ;; normal-machine-spans : NormalMachine -> NameSlotTable
   (define (normal-machine-spans m) (vector-ref m 7))
 
   (define ns-tag (vector 'byte-machine-normal-state))
   ;; (vector ns-tag kind id transitions fallback code eof reason
   ;;         selector arguments targets)                        ; unused slots #f.
   ;;
-  ;; *** WIDENED in Milestone 4 Slice ② (design §0 D3), against §7's ruling to
-  ;; "carry it in the existing seven-slot state vector rather than widening it".
-  ;; That ruling was made against a SEVEN-slot premise which is wrong: Slice ①a
-  ;; appended `reason`, so the vector was already eight and had five free payload
-  ;; slots. ②'s two kinds need exactly five each, with zero spare, and Slice ③'s
-  ;; accumulate needs eight. Whoever widens pays the same six-state-literal edit
-  ;; once, and ② is already editing those six literals -- so ② widens and ③
-  ;; inherits the room rather than inventing a packing. ***
-  ;;
   ;; `selector` (slot 8) is the operation or predicate symbol; `arguments`
   ;; (slot 9) the operand list as written; `targets` (slot 10) the kind's own
   ;; successor list -- (next . error-or-#f) for a field action, (true . false)
-  ;; for a field branch. Slice ③ reuses slot 6's shipped (node . id) /
+  ;; for a field branch. Accumulate reuses slot 6's (node . id) /
   ;; (default . code) convention for its EOF routing rather than adding another.
-  ;; `reason` (slot 7, Milestone 4 Slice ①a) is the error declaration's static
-  ;; reason STRING, added as its own slot rather than by widening slot 5 or the
-  ;; eof pair: both of those are read by compile.sls through symbol->string, and
-  ;; the eof pair is additionally asserted by whole value in normal-ir-tests.sps,
-  ;; so widening either is three breakages for one slot. An error state carries
-  ;; its own declaration's reason; a dispatch state carries the machine
-  ;; default-eof declaration's when its eof routing is (default . code), and #f
-  ;; when it routes to a node.
+  ;; `reason` (slot 7) is the error declaration's static reason STRING, added as
+  ;; its own slot rather than by widening slot 5 or the eof pair: both of those
+  ;; are read by compile.sls through symbol->string, so a reason STRING could not
+  ;; ride either. An error state carries its own declaration's reason; a dispatch
+  ;; state carries the machine default-eof declaration's when its eof routing is
+  ;; (default . code), and #f when it routes to a node.
   ;; eof (slot 6) is a dispatch state's resolved eof routing:
   ;;   (node . <id>)             -- an exhausted dispatch continues to node <id>
   ;;   (default . <code-symbol>) -- it routes to the machine default-eof error.
-  ;;   pause states carry (node . <continuation-id>) there (Slice ③).
+  ;;   pause states carry (node . <continuation-id>) there.
   ;; Other non-dispatch states carry #f there.
+  ;; normal-state-kind : NormalState -> NormalStateKind
   (define (normal-state-kind s) (vector-ref s 1))
+  ;; normal-state-id : NormalState -> StateId
   (define (normal-state-id s) (vector-ref s 2))
+  ;; normal-dispatch-transitions : NormalState -> (Listof (List Byte StateId EdgeMode))
   (define (normal-dispatch-transitions s) (vector-ref s 3))
+  ;; normal-dispatch-fallback : NormalState -> (Pair StateId EdgeMode)
   (define (normal-dispatch-fallback s) (vector-ref s 4))
+  ;; normal-error-code : NormalState -> Symbol
   (define (normal-error-code s) (vector-ref s 5))
+  ;; normal-error-reason : NormalState -> (Option String)
   (define (normal-error-reason s) (vector-ref s 7))
+  ;; normal-dispatch-eof : NormalState -> (U (Pair 'node StateId) (Pair 'default Symbol))
   (define (normal-dispatch-eof s) (vector-ref s 6))
+  ;; normal-pause-target : NormalState -> StateId
   (define (normal-pause-target s) (cdr (vector-ref s 6)))
+  ;; normal-field-selector : NormalState -> Any
   (define (normal-field-selector s) (vector-ref s 8))
+  ;; normal-field-arguments : NormalState -> Any
   (define (normal-field-arguments s) (vector-ref s 9))
+  ;; normal-field-targets : NormalState -> Any
   (define (normal-field-targets s) (vector-ref s 10))
 
-  ;; --- FNV-1a 64-bit over a canonical byte encoding (decision 0009) ---
+  ;; --- FNV-1a 64-bit over a canonical byte encoding ---
   (define mask64 (- (expt 2 64) 1))
   (define fnv-offset 14695981039346656037)
   (define fnv-prime  1099511628211)
@@ -215,24 +218,19 @@
               args))
 
   ;; The `else` guards below are unreachable-today safety for the kind AFTER the
-  ;; ones this file handles. *** THIS SENTENCE NAMED SIX and was already false
-  ;; when accumulate, the two field kinds and the callback landed; Slice ③ is
-  ;; the pass that re-measured it rather than adding two more kinds under it.
-  ;; *** Thirteen node kinds lower here (§10.6's closed set, complete since
-  ;; Milestone 6 Slice ①'s counted consume) and THIRTEEN normalized state kinds
-  ;; come out -- the same thirteen less `sequence`, which lowers to ordinary
-  ;; dispatch states (decision 0015 point 1, so it adds no case of its own),
-  ;; plus `span-completion`, which has no source node at all. So the guards
-  ;; protect against a FOURTEENTH node kind, not a seventh. Verified by
-  ;; inspection, not mutation.
+  ;; ones this file handles. Thirteen node kinds lower here -- the closed set,
+  ;; complete with counted consume -- and THIRTEEN normalized state kinds come
+  ;; out: the same thirteen less `sequence`, which lowers to ordinary dispatch
+  ;; states (so it adds no case of its own), plus `span-completion`, which has no
+  ;; source node at all. So the guards protect against a FOURTEENTH node kind,
+  ;; not a seventh.
 
-  ;; --- sequence prefix trie (decisions 0015, 0016) ---
+  ;; --- sequence prefix trie ---
   ;; A trie node is (children . terminal); children is an alist (byte . node)
-  ;; kept ASCENDING by byte, which is what makes decision 0016 point 1's
-  ;; pre-order total. Alternatives that agree on a byte descend into ONE shared
-  ;; child, so no prefix state can offer the same byte twice -- the property
-  ;; decision 0014 rests the ascending sort on, and which pass-overlap cannot
-  ;; supply here because it walks source byte-cases and never sees these states.
+  ;; kept ASCENDING by byte, which is what makes the pre-order walk total.
+  ;; Alternatives that agree on a byte descend into ONE shared child, so no
+  ;; prefix state can offer the same byte twice -- the property the ascending
+  ;; sort rests on.
   (define (empty-trie) (cons '() #f))
   (define (trie-children t) (car t))
   (define (trie-terminal t) (cdr t))
@@ -242,15 +240,15 @@
           ((= b (caar cs)) (cons (cons b child) (cdr cs)))
           ((< b (caar cs)) (cons (cons b child) cs))
           (else (cons (car cs) (trie-put (cdr cs) b child)))))
-  ;; The two guards below are internal invariants, not user diagnostics. Decision
-  ;; 0015 point 2: a prefix state has no "accept here" slot, so a trie node that
-  ;; is both terminal and interior is UNREPRESENTABLE rather than merely
-  ;; unwanted. Milestone 3 Slice ③'s pass-sequence-ambiguity (§16.2:894) now
-  ;; rejects both shapes at verify-machine, so a verified machine cannot reach
-  ;; them. They are KEPT as defense-in-depth because normalize-machine is a
-  ;; public entry point that does not itself verify: a caller who skips
-  ;; verification must fail loudly here rather than silently lose an
-  ;; alternative. (byte-machine interpret)'s seq-step carries the same two.
+  ;; The two guards below are internal invariants, not user diagnostics. A prefix
+  ;; state has no "accept here" slot, so a trie node that is both terminal and
+  ;; interior is UNREPRESENTABLE rather than merely unwanted. pass-sequence-
+  ;; ambiguity now rejects both shapes at verify-machine, so a verified machine
+  ;; cannot reach them. They are KEPT as defense-in-depth because
+  ;; normalize-machine is a public entry point that does not itself verify: a
+  ;; caller who skips verification must fail loudly here rather than silently
+  ;; lose an alternative. (byte-machine interpret)'s seq-step carries the same
+  ;; two.
   (define (trie-insert t bs target)
     (if (null? bs)
         (begin
@@ -272,10 +270,9 @@
           (loop (cdr cs) (trie-insert t (sequence-case-bytes (car cs))
                                       (sequence-case-target (car cs)))))))
   ;; Ids for every INTERIOR non-root node, depth-first pre-order with children
-  ;; ascending by byte (decision 0016 point 1). The root is the declared node's
-  ;; own state, and a TERMINAL child consumes no id -- its byte routes straight
-  ;; to that alternative's declared target. Returns (alist next-id), keyed by
-  ;; trie-node identity.
+  ;; ascending by byte. The root is the declared node's own state, and a TERMINAL
+  ;; child consumes no id -- its byte routes straight to that alternative's
+  ;; declared target. Returns (alist next-id), keyed by trie-node identity.
   (define (allocate-prefix-ids t next)
     (let walk ((cs (trie-children t)) (acc '()) (next next))
       (if (null? cs) (values (reverse acc) next)
@@ -297,9 +294,6 @@
                       (let loop ((es (machine-errors machine)))
                         (if (eq? (error-declaration-name (car es)) nm)
                             (error-declaration-code (car es)) (loop (cdr es))))))
-           ;; A sibling rather than a widening of errcode: a mutation FINDs
-           ;; errcode's tail verbatim, and returning a pair from it would take
-           ;; that FIND to zero sites and fail the suite at declaration.
            (errreason (lambda (nm)
                         (let walk ((es (machine-errors machine)))
                           (if (eq? (error-declaration-name (car es)) nm)
@@ -317,14 +311,13 @@
                        (if (symbol? t)
                            (cons 'node (id-of t))
                            (cons 'default default-eof-code)))))
-           ;; Slice ②: a callback node names its callback by NAME, and the
-           ;; generated lane holds an indexed slot vector (§9.3:419). The slot IS
-           ;; the declaration position -- `name-table` below builds the same
-           ;; numbering for `normal-machine-callbacks`, and §10.1:482 makes
-           ;; declaration order carry no semantic priority precisely so it can
-           ;; give stable ids. Resolved HERE rather than at emission: the
-           ;; fingerprint must cover what the ABI carries (0019 item 2), and what
-           ;; the ABI carries is the slot.
+           ;; A callback node names its callback by NAME, and the generated lane
+           ;; holds an indexed slot vector. The slot IS the declaration position
+           ;; -- `name-table` below builds the same numbering for
+           ;; `normal-machine-callbacks`, and declaration order carries no
+           ;; semantic priority precisely so it can give stable ids. Resolved
+           ;; HERE rather than at emission: the fingerprint must cover what the
+           ;; ABI carries, and what the ABI carries is the slot.
            (callback-slot-of
             (lambda (nm)
               (let loop ((cs (machine-callbacks machine)) (i 0))
@@ -341,11 +334,11 @@
                                             "callback node names no declaration" nm))
                       ((eq? (callback-declaration-name (car cs)) nm) (car cs))
                       (else (loop (cdr cs)))))))
-           ;; §9.3:419: "An optional decision callback must declare
-           ;; `default-branch`; other optional callbacks default to `continue`."
-           ;; Resolved to a TARGET ID here, so the invocation site -- decision
-           ;; 0028 item 3's short circuit over the unbound-callback sentinel --
-           ;; is one jump and carries no rule of its own.
+           ;; An optional decision callback must declare `default-branch`; other
+           ;; optional callbacks default to `continue`. Resolved to a TARGET ID
+           ;; here, so the invocation site -- the short circuit over the
+           ;; unbound-callback sentinel -- is one jump and carries no rule of its
+           ;; own.
            ;;
            ;; #f for a REQUIRED callback: its slot can never hold the sentinel,
            ;; so there is no default to take, and #f says exactly that where a
@@ -357,7 +350,7 @@
                       ((eq? (callback-declaration-kind d) 'decision)
                        (let ((hit (assq (callback-declaration-default-branch d)
                                         (callback-node-branch-targets n))))
-                         ;; Unreachable once §16.2:901's node half runs: it
+                         ;; Unreachable once verify's node-half check runs: it
                          ;; requires an optional decision callback's node to
                          ;; declare a target for the default branch. Loud rather
                          ;; than #f, which here means "required".
@@ -369,16 +362,14 @@
                       (else (id-of (callback-node-continue-target n)))))))
            (entry (id-of (machine-entry machine)))
            (declared-count (length nodes))
-           ;; Decision 0016: declared nodes keep their declaration index; every
-           ;; internal prefix state appends after the whole declared block, in
-           ;; declaring-node order. Interleaving would renumber every later node
-           ;; and move the fingerprint of every machine containing a sequence.
-           ;; Slice ③: an accumulate node's own EOF edge. A separate lambda
-           ;; rather than a widened `eof-of`, for the reason eof-terminal's two
-           ;; parallel arms already record -- `eof-of` reads
-           ;; `byte-dispatch-node-eof-target`, a bare slot read with no tag
-           ;; guard, so handing it another kind returns a plausible-looking value
-           ;; from the wrong slot. §4.7 item 4 names that exact hazard.
+           ;; Declared nodes keep their declaration index; every internal prefix
+           ;; state appends after the whole declared block, in declaring-node
+           ;; order. Interleaving would renumber every later node and move the
+           ;; fingerprint of every machine containing a sequence.
+           ;; An accumulate node's own EOF edge, a separate lambda rather than a
+           ;; widened `eof-of`: `eof-of` reads `byte-dispatch-node-eof-target`, a
+           ;; bare slot read with no tag guard, so handing it another kind would
+           ;; return a plausible-looking value from the wrong slot.
            (acc-eof-of (lambda (n)
                          (let ((t (integer-accumulate-node-eof-target n)))
                            (if (symbol? t)
@@ -388,35 +379,31 @@
                          (let ((t (sequence-dispatch-node-eof-target n)))
                            (if (symbol? t) (cons 'node (id-of t))
                                (cons 'default default-eof-code)))))
-           ;; Milestone 6 Slice ①: the FOURTH resolver, for acc-eof-of's reason
-           ;; -- each reads its own kind's accessor, and a shared one would be a
-           ;; bare slot read from the wrong kind's vector.
+           ;; The FOURTH such resolver, for the same reason acc-eof-of is
+           ;; separate: each reads its own kind's accessor, and a shared one
+           ;; would be a bare slot read from the wrong kind's vector.
            (count-eof-of (lambda (n)
                            (let ((t (counted-consume-node-eof-target n)))
                              (if (symbol? t) (cons 'node (id-of t))
                                  (cons 'default default-eof-code)))))
-           ;; *** THE WALK THAT MAKES DECISION 0026 ITEM 1 NON-INERT. *** Until
-           ;; Slice ③ there was exactly ONE family of internal states -- a
-           ;; sequence node's prefix states -- so the rule "a declaring node
-           ;; contributes ALL of its internal states at its own position in
-           ;; declaring-node order" had nothing to order against. A span END is
-           ;; the second family, and this loop is where the two interleave: it
-           ;; walks the declared nodes ONCE and allocates whatever the node in
-           ;; hand needs, so a span-end's continuation sits ahead of a LATER
-           ;; sequence node's prefix states rather than in a family block of its
-           ;; own.
+           ;; The walk that orders internal states. A declaring node contributes
+           ;; ALL of its internal states at its own position in declaring-node
+           ;; order. There are two families of internal state -- a sequence
+           ;; node's prefix states and a span END's continuation -- and this loop
+           ;; is where they interleave: it walks the declared nodes ONCE and
+           ;; allocates whatever the node in hand needs, so a span-end's
+           ;; continuation sits ahead of a LATER sequence node's prefix states
+           ;; rather than in a family block of its own.
            ;;
            ;; Phase one is untouched -- every declared node keeps its
            ;; declaration index -- and this is phase two, which begins at
            ;; `declared-count`. Internal states never interleave with declared
-           ;; ones; 0016's Consequences rejected that and 0026 restates the
-           ;; rejection because a shorter statement of this rule reads the other
-           ;; way.
+           ;; ones.
            ;;
            ;; A block is `(node kind payload ids)`: for a sequence node the
            ;; payload is its trie and `ids` the prefix-state alist; for a span
-           ;; end the payload is #f and `ids` is the one continuation id §14:841
-           ;; calls `completion-pending`.
+           ;; end the payload is #f and `ids` is the one continuation id called
+           ;; `completion-pending`.
            (internal-blocks
             (let loop ((ns nodes) (next declared-count) (acc '()))
               (if (null? ns) (reverse acc)
@@ -427,12 +414,11 @@
                          (let-values (((ids next2) (allocate-prefix-ids t next)))
                            (loop (cdr ns) next2 (cons (list n 'prefix t ids) acc)))))
                       ;; ONE internal state per resumable substep, not a fused
-                      ;; state (0026 item 2): §14:838 resumes "at the next
-                      ;; undelivered substep", which a fused state cannot
-                      ;; express. A span end delivers two -- the remaining
-                      ;; fragment, then the completion callback -- so the
-                      ;; DECLARED node is the first substep and this is the
-                      ;; second, which §14:841 names.
+                      ;; state: resumption is "at the next undelivered substep",
+                      ;; which a fused state cannot express. A span end delivers
+                      ;; two -- the remaining fragment, then the completion
+                      ;; callback -- so the DECLARED node is the first substep
+                      ;; and this is the second.
                       ((span-end-node? n)
                        (loop (cdr ns) (+ next 1) (cons (list n 'span-end #f next) acc)))
                       (else (loop (cdr ns) next acc)))))))
@@ -454,9 +440,9 @@
                                ((eq? (car (car bs)) n) (car bs))
                                (else (loop (cdr bs)))))))
            ;; The declared span table's position, exactly as `callback-slot-of`
-           ;; resolves a callback's: the slot IS the declaration index (§17:962),
-           ;; and §10.1:482 makes declaration order carry no semantic priority
-           ;; precisely so it can give stable ids.
+           ;; resolves a callback's: the slot IS the declaration index, and
+           ;; declaration order carries no semantic priority precisely so it can
+           ;; give stable ids.
            (span-slot-of
             (lambda (nm)
               (let loop ((sp (machine-spans machine)) (i 0))
@@ -476,18 +462,13 @@
                              'advance)))
                    (trie-children t))))
            ;; Every prefix state carries the source node's mismatch edge as its
-           ;; fallback and inherits its EOF edge (§12.4:727).
+           ;; fallback and inherits its EOF edge.
            (seq-state
             (lambda (n t ids id)
               (let ((mm (sequence-dispatch-node-mismatch n)))
-                ;; The three Slice ② slots, #f like every other kind that does
-                ;; not use them. MISSED when the vector was widened, and the
-                ;; miss was invisible: sequence states carry kind `dispatch`, so
-                ;; the only readers of slots 8-10 -- all kind-guarded -- never
-                ;; reach one, and every lane stayed green. What it left behind is
-                ;; a state SHORTER than the layout this file declares, so any
-                ;; totalising read over states raises on exactly these, and
-                ;; Slice ③'s accumulate is the next thing likely to add one.
+                ;; The three payload slots (8-10) are #f here, like every other
+                ;; kind that does not use them: sequence states carry kind
+                ;; `dispatch`, whose readers never touch those slots.
                 (vector ns-tag 'dispatch id (trie-transitions t ids)
                         (cons (id-of (edge-target mm)) (edge-mode mm)) #f
                         (seq-eof-of n) (eof-reason-of (seq-eof-of n))
@@ -502,15 +483,7 @@
                              ((byte-dispatch-node? n)
                               (let ((trs (list-sort (lambda (a b) (< (car a) (car b)))
                                            ;; One transition per byte of each case's
-                                           ;; canonical set (decision 0014): the encoding
-                                           ;; and its tag bytes are unchanged, and every
-                                           ;; machine expressible before Milestone 3
-                                           ;; encodes identically to it. The format
-                                           ;; VERSION byte is no longer part of that
-                                           ;; claim -- it is 2 from Milestone 4 Slice ①a
-                                           ;; and every fingerprint moved with it
-                                           ;; (decision 0019). What 0014 fixes is the
-                                           ;; per-byte expansion, not the file format.
+                                           ;; canonical set.
                                            (apply append
                                              (map (lambda (c)
                                                     (let ((e (byte-case-edge c))
@@ -538,11 +511,10 @@
                               (vector ns-tag 'pause i #f #f #f
                                       (cons 'node (id-of (pause-node-continuation n))) #f
                                       #f #f #f))
-                             ;; Slice ②'s two ZERO-WIDTH kinds. §4.6 settles that
-                             ;; the lowering is 1:1 -- neither allocates an
-                             ;; internal state -- so each is one source node
-                             ;; becoming one normalized state, and `prefix-blocks`
-                             ;; correctly skips them.
+                             ;; The two ZERO-WIDTH kinds. The lowering is 1:1 --
+                             ;; neither allocates an internal state -- so each is
+                             ;; one source node becoming one normalized state, and
+                             ;; `prefix-blocks` correctly skips them.
                              ((field-action-node? n)
                               (vector ns-tag 'field-action i #f #f #f #f #f
                                       (field-action-node-operation n)
@@ -556,14 +528,14 @@
                                       (field-branch-node-arguments n)
                                       (cons (id-of (field-branch-node-true-target n))
                                             (id-of (field-branch-node-false-target n)))))
-                             ;; Integer accumulate (Slice ③), the milestone's
-                             ;; only INPUT-READING kind. 1:1 like ②'s two, so it
+                             ;; Integer accumulate, an INPUT-READING kind. 1:1
+                             ;; like the two zero-width kinds above, so it
                              ;; allocates no internal state and prefix-blocks
                              ;; correctly skips it.
                              ;;
                              ;; It needs FIVE payload values -- field, base, and
                              ;; three byte targets -- plus its EOF routing, which
-                             ;; rides slot 6 in the shipped (node . id) /
+                             ;; rides slot 6 in the (node . id) /
                              ;; (default . code) convention, and the `reason`
                              ;; slot 7 that convention requires when the routing
                              ;; is (default . code). `selector` carries the base,
@@ -578,15 +550,14 @@
                                         (list (id-of (integer-accumulate-node-digit-target n))
                                               (cons (id-of (edge-target nd)) (edge-mode nd))
                                               (id-of (integer-accumulate-node-overflow-error n))))))
-                             ;; Counted consume (Milestone 6 Slice ①), the fourth
-                             ;; INPUT-READING kind with an EOF route of its own
-                             ;; (after both dispatch kinds and accumulate), and
-                             ;; 1:1 like accumulate: `arguments` the field
-                             ;; NAME (the emitter resolves name to slot),
-                             ;; `targets` the one successor id, slot 6 the EOF
-                             ;; routing in the shipped convention through its own
-                             ;; resolver, slot 7 the reason when that routing is
-                             ;; the default. No selector.
+                             ;; Counted consume, the fourth INPUT-READING kind
+                             ;; with an EOF route of its own (after both dispatch
+                             ;; kinds and accumulate), and 1:1 like accumulate:
+                             ;; `arguments` the field NAME (the emitter resolves
+                             ;; name to slot), `targets` the one successor id,
+                             ;; slot 6 the EOF routing in the usual convention
+                             ;; through its own resolver, slot 7 the reason when
+                             ;; that routing is the default. No selector.
                              ((counted-consume-node? n)
                               (let ((eof (count-eof-of n)))
                                 (vector ns-tag 'counted-consume i #f #f #f
@@ -594,11 +565,10 @@
                                         #f
                                         (list (counted-consume-node-field n))
                                         (list (id-of (counted-consume-node-next n))))))
-                             ;; Callback invocation (Slice ②), the tenth kind and
-                             ;; the first that reaches OUT of the machine. 1:1
-                             ;; like the three zero-width kinds above, so it
-                             ;; allocates no internal state and prefix-blocks
-                             ;; correctly skips it.
+                             ;; Callback invocation, the first kind that reaches
+                             ;; OUT of the machine. 1:1 like the three zero-width
+                             ;; kinds above, so it allocates no internal state and
+                             ;; prefix-blocks correctly skips it.
                              ;;
                              ;; Its five payload values ride the three payload
                              ;; slots rather than widening the vector: `selector`
@@ -606,16 +576,12 @@
                              ;; the branch map as (key . target-id) pairs, and
                              ;; `targets` the list (continue-id pause-id
                              ;; default-id).
-                             ;; Widening would mean editing every state literal
-                             ;; in this cond for one kind's convenience, and the
-                             ;; three slots were widened in Slice ② of the LAST
-                             ;; milestone for exactly this purpose.
                              ;;
                              ;; The branch map's own order is the source list's,
-                             ;; which §9.1:318 fixes as "proper lists in
-                             ;; deterministic caller order" -- so two machines
-                             ;; whose branches differ only in order are two
-                             ;; machines, and the encoder below writes the order.
+                             ;; fixed as proper lists in deterministic caller
+                             ;; order -- so two machines whose branches differ
+                             ;; only in order are two machines, and the encoder
+                             ;; below writes the order.
                              ((callback-node? n)
                               (vector ns-tag 'callback i #f #f #f #f #f
                                       (callback-slot-of (callback-node-callback n))
@@ -625,16 +591,16 @@
                                       (list (id-of (callback-node-continue-target n))
                                             (id-of (callback-node-pause-continuation n))
                                             (callback-default-of n))))
-                             ;; The two span kinds (Slice ③). `selector` carries
-                             ;; the resolved span SLOT and `targets` the single
+                             ;; The two span kinds. `selector` carries the
+                             ;; resolved span SLOT and `targets` the single
                              ;; successor -- the same three payload slots the
                              ;; other zero-width kinds ride, so the vector is not
                              ;; widened again.
                              ;;
                              ;; A span END also carries its continuation id,
-                             ;; because the declared node is only the FIRST of
-                             ;; §14:841's two substeps. It rides `arguments`,
-                             ;; which no span kind otherwise uses.
+                             ;; because the declared node is only the FIRST of its
+                             ;; two substeps. It rides `arguments`, which no span
+                             ;; kind otherwise uses.
                              ((span-start-node? n)
                               (vector ns-tag 'span-start i #f #f #f #f #f
                                       (span-slot-of (span-start-node-span n))
@@ -651,14 +617,14 @@
                              (else (assertion-violation 'normalize-machine "unknown node kind" n)))
                            acc))))))
            ;; Phase two's states, in `internal-blocks` order -- which IS
-           ;; declaring-node order across both families (0026 item 1).
+           ;; declaring-node order across both families.
            (internal
             (apply append
                    (map (lambda (blk)
                           (let ((n (car blk)) (ids (cadddr blk)))
                             (if (eq? (cadr blk) 'prefix)
                                 (map (lambda (kv) (seq-state n (car kv) ids (cdr kv))) ids)
-                                ;; §14:841's `completion-pending`: the span is
+                                ;; The `completion-pending` state: the span is
                                 ;; already inactive when this runs, so it carries
                                 ;; only the completion callback's slot and the
                                 ;; node's successor.
@@ -668,12 +634,11 @@
                                               (id-of (span-end-node-next n)))))))
                         internal-blocks)))
            (states (list->vector (append declared internal)))
-           ;; §17:963's debug map, built in its OWN walk rather than inside the
-           ;; `internal` map above: that line is pinned verbatim by a mutation,
-           ;; and folding the map into it would take the FIND to zero sites.
-           ;; Total over internal prefix states -- name->id covers declared nodes
-           ;; only, and every prefix state answers with its DECLARING node's
-           ;; public name, which is what a default-EOF error reports.
+           ;; The debug map, built in its OWN walk rather than inside the
+           ;; `internal` map above. Total over internal prefix states -- name->id
+           ;; covers declared nodes only, and every prefix state answers with its
+           ;; DECLARING node's public name, which is what a default-EOF error
+           ;; reports.
            (debug-map
             (append (map (lambda (kv) (cons (cdr kv) (car kv))) name->id)
                     (apply append
@@ -681,27 +646,23 @@
                                   (let ((n (car blk)) (ids (cadddr blk)))
                                     (if (eq? (cadr blk) 'prefix)
                                         (map (lambda (kv) (cons (cdr kv) (node-name n))) ids)
-                                        ;; §13:820 requires the public parser
-                                        ;; state to name "the source callback/
-                                        ;; span node, not a generated internal
-                                        ;; continuation", so a span end's
-                                        ;; continuation answers with the span-end
-                                        ;; node's own name. Slice ② made an
-                                        ;; incomplete map an INDEX ERROR in the
+                                        ;; The public parser state must name the
+                                        ;; source callback/span node, not a
+                                        ;; generated internal continuation, so a
+                                        ;; span end's continuation answers with
+                                        ;; the span-end node's own name. An
+                                        ;; incomplete map is an INDEX ERROR in the
                                         ;; generated lane rather than a missing
                                         ;; debug string -- the map crosses the
-                                        ;; seam now, as ABI payload member 2.
+                                        ;; seam, as ABI payload member 2.
                                         (list (cons ids (node-name n))))))
                                 internal-blocks)))))
       (values entry states debug-map)))
 
-  ;; Encoding: (entry, states) -> canonical bytes (decision 0009 layout).
-  ;; EOF routing, written identically by the dispatch arm and the accumulate arm
-  ;; (Slice ③). Factored rather than duplicated: written out twice the text is
-  ;; identical, so a mutation pinning either resolves to TWO sites and the suite
-  ;; hard-fails at declaration -- the SITES-fails-both-directions trap, hit for
-  ;; the sixth time in this slice family. Each caller's CALL stays its own line,
-  ;; so the two arms remain separately mutable.
+  ;; Encoding: (entry, states) -> canonical bytes.
+  ;; Shared EOF routing, written identically by the dispatch, accumulate, and
+  ;; counted-consume arms. Factored into one helper so the arms cannot drift;
+  ;; each caller's CALL stays its own line.
   (define (put-eof-routing p eof reason)
     (if (eq? (car eof) 'node)
         (begin (put-u8 p 0) (put-u32be p (cdr eof)))
@@ -711,7 +672,7 @@
   (define (encode-normal entry states fields callbacks spans)
     (call-with-bytevector-output-port
      (lambda (p)
-       ;; Format version 2 (decision 0019). Header layout:
+       ;; Format version 2. Header layout:
        ;;   [version u8][entry u32be][state-count u32be][field-count u16be]
        ;;   [field records...][state records...]
        ;; Each field record is
@@ -720,41 +681,16 @@
        ;; position, and writing it too would let the stream express a table whose
        ;; slots disagree with their order.
        ;;
-       ;; ①a wrote this count as a literal zero with no records, and Slice ①b
-       ;; fills it. Its POSITION was fixed there rather than here: the byte
-       ;; stream has no self-description and nothing in the tree decodes it, so a
-       ;; disagreement about where the table sits would have been a second
-       ;; unbudgeted re-baseline. Decision 0019 item 5 is the other half of that
-       ;; bargain and holds -- a zero-field machine encodes byte-identically to
-       ;; ①a's, which normal-ir-tests.sps asserts at ①a's own measured value
-       ;; rather than leaving it to the goldens to notice.
-       ;;
-       ;; *** THE CALLBACK AND SPAN SECTIONS ARE AT THE FOOT OF THIS PROCEDURE,
-       ;; ADDED BY MILESTONE 5 SLICE ①b. *** The paragraph below is Slice ①a's,
-       ;; written when they were not here yet and kept because it records WHY the
-       ;; work moved; read it as history, and the sections themselves as the
-       ;; discharge of what it promised.
-       ;;
-       ;; ①a's note, as written: Decision 0025 point 1 fixes
-       ;; their shape -- an OPTIONAL TRAILING SECTION, present only when
-       ;; nonempty, with the header unchanged -- and its point 4 handed the shape
-       ;; to ①a on the reasoning that the seam slice pays every artifact move
-       ;; once. Measured while executing ①a: there is no move to pay. A trailing
-       ;; section that writes ZERO bytes for a machine declaring neither leaves
-       ;; the stream, and therefore the fingerprint, byte-identical whether the
-       ;; code exists or not -- so adding it later costs exactly nothing, which
-       ;; is the whole difference between a trailing section and the header slot
-       ;; 0019 had to reserve a slice ahead.
-       ;;
-       ;; Landing it here would have meant a guard over two always-empty lists:
-       ;; live code no input can reach, in the file whose milestone opened with
-       ;; two slices about exactly that. Slice ①b adds the section together with
-       ;; the data that makes it reachable. What ①a owes and this comment
-       ;; discharges is the SHAPE, recorded before anything depends on it:
+       ;; The callback and span tables are OPTIONAL TRAILING SECTIONS at the foot
+       ;; of this procedure, present only when nonempty, with the header
+       ;; unchanged. A trailing section that writes ZERO bytes for a machine
+       ;; declaring neither leaves the stream, and therefore the fingerprint,
+       ;; byte-identical to a machine that has no such declarations -- so it costs
+       ;; nothing on machines that do not use it. The full shape is:
        ;;   [... state records...][callback table?][span table?]
-       ;; each table wholly inside its own emptiness guard -- the count included,
-       ;; because an unconditional count is two bytes on every machine in the
-       ;; tree and moves all four goldens.
+       ;; each table wholly inside its own emptiness guard, the count included,
+       ;; because an unconditional count would be two bytes on every machine in
+       ;; the tree.
        (put-u8 p 2)
        (put-u32be p entry)
        (put-u32be p (vector-length states))
@@ -783,7 +719,7 @@
                ((error) (put-u8 p 2) (put-symbol p (normal-error-code s))
                         (put-reason p (normal-error-reason s)))
                ((finish) (put-u8 p 3))
-               ;; pause: tag 4 + u32be continuation state id (D5).
+               ;; pause: tag 4 + u32be continuation state id.
                ((pause) (put-u8 p 4) (put-u32be p (normal-pause-target s)))
                ;; field action: tag 5 + selector + operands + next + error tag.
                ;; field branch: tag 6 + selector + operands + both targets.
@@ -814,10 +750,8 @@
                   (put-u32be p (caddr tg)))
                 (put-eof-routing p (normal-dispatch-eof s) (normal-error-reason s)))
                ;; counted consume: tag, field name, successor id, eof routing --
-               ;; every part, because each is observable to a generated parser
-               ;; (decision 0019 item 2). The tag is the next free literal above
-               ;; the Milestone 5 kinds; it is named in words here and never as
-               ;; a digit in a comment (the pause tag's history, below).
+               ;; every part, because each is observable to a generated parser.
+               ;; The tag is the next free literal above the earlier kinds.
                ((counted-consume)
                 (put-u8 p 14)
                 (put-symbol p (car (normal-field-arguments s)))
@@ -829,24 +763,21 @@
                 (put-operands p (normal-field-arguments s))
                 (put-u32be p (car (normal-field-targets s)))
                 (put-u32be p (cdr (normal-field-targets s))))
-               ;; callback invocation (Slice ②): the tag, then the resolved
-               ;; callback slot, the continue target, the pause continuation,
-               ;; and the branch map as a count followed by (key, target)
-               ;; records.
+               ;; callback invocation: the tag, then the resolved callback slot,
+               ;; the continue target, the pause continuation, and the branch
+               ;; map as a count followed by (key, target) records.
                ;;
                ;; THE TAG IS TEN, not the eight the state-kind run would reach
-               ;; next: Slice ①b spent eight and nine on the two trailing
-               ;; slot-table sections below, and a reader walking this stream
-               ;; linearly could not tell a state record from a section by
-               ;; position alone once a machine carried both.
+               ;; next: tags eight and nine are the two trailing slot-table
+               ;; sections below, and a reader walking this stream linearly
+               ;; could not tell a state record from a section by position alone
+               ;; once a machine carried both.
                ;;
-               ;; EVERY PART IS ENCODED, on decision 0019 item 2 and the
-               ;; measured failure the section comment below records: a
-               ;; different slot is a different callback, a different key
-               ;; selects a different target, and a different branch ORDER is a
-               ;; different machine (§9.1:318 fixes the list as deterministic
-               ;; caller order). Machines differing in any of them emit
-               ;; different libraries, so they must differ in fingerprint.
+               ;; EVERY PART IS ENCODED: a different slot is a different
+               ;; callback, a different key selects a different target, and a
+               ;; different branch ORDER is a different machine (the list is
+               ;; deterministic caller order). Machines differing in any of them
+               ;; emit different libraries, so they must differ in fingerprint.
                ((callback)
                 (put-u8 p 10)
                 (put-u16be p (normal-field-selector s))
@@ -865,17 +796,17 @@
                               (put-symbol p (car b))
                               (put-u32be p (cdr b)))
                             bs)))
-               ;; The two span kinds and the internal substep (Slice ③). Tags
-               ;; ELEVEN, TWELVE and THIRTEEN: the state-kind run holds 0-7 and
-               ;; 10, and 8 and 9 are the trailing slot-table SECTION
-               ;; discriminators Slice ①b spent, so a reader walking this stream
-               ;; linearly could not tell a state record from a section by
-               ;; position alone once a machine carried both.
+               ;; The two span kinds and the internal substep. Tags ELEVEN,
+               ;; TWELVE and THIRTEEN: the state-kind run holds 0-7 and 10, and
+               ;; 8 and 9 are the trailing slot-table SECTION discriminators, so
+               ;; a reader walking this stream linearly could not tell a state
+               ;; record from a section by position alone once a machine carried
+               ;; both.
                ;;
-               ;; EVERY PART IS ENCODED (decision 0019 item 2): a different span
-               ;; slot is a different span, a different successor is a different
-               ;; machine, and a span end's continuation id is what the emitted
-               ;; lane resumes at, so all three enter the fingerprint.
+               ;; EVERY PART IS ENCODED: a different span slot is a different
+               ;; span, a different successor is a different machine, and a span
+               ;; end's continuation id is what the emitted lane resumes at, so
+               ;; all three enter the fingerprint.
                ((span-start)
                 (put-u8 p 11)
                 (put-u16be p (normal-field-selector s))
@@ -892,52 +823,29 @@
                (else (assertion-violation 'normalize-machine "unknown state kind"
                                           (normal-state-kind s)))))
            (loop (+ i 1))))
-       ;; --- the optional trailing slot-table sections (Slice ①b) --------------
-       ;; Decision 0025 point 1, whose SHAPE Slice ①a recorded at the head of
-       ;; this procedure and whose ambiguity its ①b-planning note corrected.
+       ;; --- the optional trailing slot-table sections -------------------------
        ;;
-       ;; *** EVERY BYTE BELOW IS INSIDE A GUARD, THE COUNT AND THE TAG
-       ;; INCLUDED. *** A machine declaring neither a callback nor a span writes
-       ;; ZERO bytes here and therefore encodes byte-identically to Milestone 5
-       ;; Slice ①a's, which is what keeps all four committed goldens and every
-       ;; pinned fingerprint still. An unconditional count would be two bytes on
-       ;; every machine in the tree and would move all of them -- that is NOT the
-       ;; field table's precedent, which reached byte-identity the opposite way,
-       ;; by writing a count that already existed with value 0 and paying for it
-       ;; with a format-version bump a slice earlier.
+       ;; EVERY BYTE BELOW IS INSIDE A GUARD, THE COUNT AND THE TAG INCLUDED. A
+       ;; machine declaring neither a callback nor a span writes ZERO bytes here
+       ;; and therefore encodes byte-identically to one with no such
+       ;; declarations, which is what keeps every pinned fingerprint still. An
+       ;; unconditional count would be two bytes on every machine in the tree and
+       ;; would move all of them.
        ;;
        ;; THE TAG IS WHY THERE IS A TAG. Two guarded tables with no discriminator
        ;; are ambiguous: one callback and no spans, versus no callbacks and one
        ;; span, both emit [count][one record]. Both record kinds are
        ;; symbol-shaped, so they can collide, and a collision would falsify the
-       ;; claim decision 0025 point 1 rests its rejected alternative on -- that
-       ;; declaration identity is fingerprint-visible.
+       ;; claim that declaration identity is fingerprint-visible. Tags 8 and 9:
+       ;; the state-kind tags run 0-7.
        ;;
-       ;; Tags 8 and 9: the state-kind tags run 0-7 and 8 was unused.
-       ;;
-       ;; *** DO NOT WRITE A STATE-KIND TAG LITERAL IN A COMMENT IN THIS FILE. ***
-       ;; The mutation pinning the pause tag FINDs that one-line form as TEXT, at
-       ;; exactly one site, and `FIND` does not know a comment from code. This
-       ;; very paragraph originally spelled the pause tag out while warning
-       ;; against duplicating it, which took the pin to two occurrences and
-       ;; failed the suite at declaration -- the same shape as a textual
-       ;; `(cons '` count that answers 15 because two of them are in the comment
-       ;; forbidding them. Name the tag in words, as here.
-       ;; *** EVERY PART THAT REACHES THE ABI IS ENCODED, and the first version
-       ;; of this section encoded only the name. *** Decision 0019 item 2 is the
-       ;; rule: a datum "must enter the *encoding*, not merely be read from the
-       ;; source machine... Two machines differing only in a reason must
-       ;; therefore differ in fingerprint, or the fingerprint stops identifying
-       ;; what was emitted."
-       ;;
-       ;; MEASURED, before this was fixed: two machines differing only in a
-       ;; callback's `required?` shared fingerprint 4858454120852933155 while
-       ;; emitting different libraries -- one of which raises
-       ;; `missing-required-callback` from `make-parser` and the other builds.
-       ;; `kind` and `default-branch` gave two more such pairs, and a span's two
-       ;; callback NAMES were not encoded at all. That is the converse of the
-       ;; property 0019 item 2 states, and the same defect compile.sls records
-       ;; paying for twice in its own comments.
+       ;; EVERY PART THAT REACHES THE ABI IS ENCODED. A datum must enter the
+       ;; ENCODING, not merely be read from the source machine: two machines
+       ;; differing only in a reason must differ in fingerprint, or the
+       ;; fingerprint stops identifying what was emitted. So a callback's
+       ;; `required?`, `kind`, and `default-branch`, and a span's two callback
+       ;; NAMES, are all encoded -- machines differing only in one of them emit
+       ;; different libraries.
        ;;
        ;; The slot is still not written: it is the record's position, and writing
        ;; it too would let the stream express a table whose slots disagree with
@@ -966,9 +874,9 @@
                            (put-u8 p 0))))
                    spans)))))
 
-  ;; Slot = declaration index (design §6 task 5). `machine-fields` is the
-  ;; declaration list in declaration order, so the slot is the position and this
-  ;; is a numbering, not a choice.
+  ;; Slot = declaration index. `machine-fields` is the declaration list in
+  ;; declaration order, so the slot is the position and this is a numbering, not
+  ;; a choice.
   (define (field-table machine)
     (let loop ((fs (machine-fields machine)) (slot 0) (out '()))
       (if (null? fs) (reverse out)
@@ -979,15 +887,16 @@
                             slot)
                       out)))))
 
-  ;; §17:962, the callback and span halves. Slot IS the position, so these are
-  ;; the declaration names in declaration order; §10.1:482 makes declaration
-  ;; order carry no semantic priority and exist precisely to give stable ids.
+  ;; The callback and span halves. Slot IS the position, so these are the
+  ;; declaration names in declaration order; declaration order carries no
+  ;; semantic priority and exists precisely to give stable ids.
   (define (name-table decls name-of)
     (let tloop ((ds decls) (slot 0) (out '()))
       (if (null? ds) (reverse out)
           (tloop (cdr ds) (+ slot 1)
                  (cons (list (name-of (car ds)) slot) out)))))
 
+  ;; normalize-machine : Machine -> NormalMachine
   (define (normalize-machine machine)
     (let-values (((entry states debug-map) (lower-machine machine)))
       (let* ((fields (field-table machine))
@@ -995,20 +904,19 @@
                                     callback-declaration-name))
              (spans (name-table (machine-spans machine) span-declaration-name))
              ;; Name -> CALLBACK slot, read off the table just built rather than
-             ;; re-walking the declarations: the slot IS the list position
-             ;; (§17:962), and reading it back is what keeps the span table's
-             ;; numbering the same object the callback table published.
+             ;; re-walking the declarations: the slot IS the list position, and
+             ;; reading it back is what keeps the span table's numbering the same
+             ;; object the callback table published.
              ;;
              ;; A MISS ANSWERS #f AND DOES NOT RAISE, which is the one place this
              ;; table differs from `span-slot-of` above. `normalize-machine` is
-             ;; reachable for an unverified machine -- normal-ir-tests.sps drives
-             ;; it directly, and a span naming no callback declaration is exactly
-             ;; what §16.2:890 rejects as `missing-callback-declaration`. Raising
-             ;; here would move that rejection out of the verifier and into the
-             ;; normalizer for every caller. The #f cannot reach an emitted arm:
-             ;; `render-machine` refuses an unverified compilation before it
-             ;; reads this table, so a guard on the emitter side would be one
-             ;; that cannot fire.
+             ;; reachable for an unverified machine, and a span naming no callback
+             ;; declaration is exactly what verify rejects as
+             ;; `missing-callback-declaration`. Raising here would move that
+             ;; rejection out of the verifier and into the normalizer for every
+             ;; caller. The #f cannot reach an emitted arm: `render-machine`
+             ;; refuses an unverified compilation before it reads this table, so a
+             ;; guard on the emitter side would be one that cannot fire.
              (cb-slot (lambda (nm)
                         (let loop ((cs callbacks))
                           (cond ((null? cs) #f)
@@ -1017,8 +925,7 @@
         (make-normal-machine entry states
                              ;; The DECLARATIONS reach the encoder, not the slot
                              ;; tables: every part the ABI carries must be in the
-                             ;; fingerprint (0019 item 2), and a slot table holds
-                             ;; only names.
+                             ;; fingerprint, and a slot table holds only names.
                              (fnv1a-64 (encode-normal entry states fields
                                                       (machine-callbacks machine)
                                                       (machine-spans machine)))

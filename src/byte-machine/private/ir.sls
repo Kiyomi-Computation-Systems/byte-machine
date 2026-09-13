@@ -1,12 +1,11 @@
 ;;; SPDX-License-Identifier: BSD-3-Clause
-;;; Immutable source-IR descriptors (parent §9.1, §10), M1 subset: the machine,
-;;; byte-dispatch/stop/error/finish/pause nodes, exact-byte matcher, edge,
-;;; error declaration, and the verification-result value. Tagged vectors behind
-;;; accessors; the tag is a freshly allocated vector so a second copy gets a
-;;; second identity. Constructors validate only local shape; graph/cross-
-;;; reference checks live in verify.
+;;; Immutable source-IR descriptors: the machine, its node kinds, matchers,
+;;; edges, field/callback/span/error declarations, and the verification-result
+;;; value. Tagged vectors behind accessors; the tag is a freshly allocated
+;;; vector so a second copy gets a second identity. Constructors validate only
+;;; local shape; graph/cross-reference checks live in verify.
 ;;; Error references (error nodes, the machine default eof error) are symbolic
-;;; NAMES resolved by verify against the error declarations (parent §10.1).
+;;; NAMES resolved by verify against the error declarations.
 (library (byte-machine private ir)
   (export make-machine machine? machine-name machine-entry machine-fields
           machine-callbacks machine-spans machine-errors machine-nodes
@@ -104,32 +103,35 @@
 
   ;; --- exact-byte matcher ---
   (define exact-byte-matcher-tag (tag 'byte-machine-exact-byte-matcher))
+  ;; make-exact-byte-matcher : byte:Byte -> ExactByteMatcher
   (define (make-exact-byte-matcher byte)
     (require-byte 'make-exact-byte-matcher 'byte byte)
     (vector exact-byte-matcher-tag byte))
+  ;; exact-byte-matcher? : Any -> Boolean
   (define (exact-byte-matcher? x) (tagged? exact-byte-matcher-tag x))
   ;; Tag-guarded: an unguarded (vector-ref m 1) on a matcher of another kind
   ;; pulls a byte LIST out of the wrong slot and fails far away, inside
   ;; arithmetic or a sort predicate, rather than at the contract boundary.
+  ;; exact-byte-matcher-byte : ExactByteMatcher -> Byte
   (define (exact-byte-matcher-byte m)
     (unless (exact-byte-matcher? m)
       (byte-machine-contract-violation 'exact-byte-matcher-byte 'invalid-argument 'matcher))
     (vector-ref m 1))
 
-  ;; --- byte-set matcher (§9.1:292; decision 0017 points 1 and 3) ---
+  ;; --- byte-set matcher ---
   ;; The caller's element order and duplicates are stored verbatim -- sorting
   ;; or de-duplicating here would be a construction-time semantic transform,
-  ;; which §9.1:322 forbids; matcher-bytes does both, once, at
+  ;; which the descriptor contract forbids; matcher-bytes does both, once, at
   ;; canonicalization. The list is copied on BOTH sides of the descriptor,
   ;; with `(append bytes '())` rather than `list-copy` (unbound under a bare
   ;; `(rnrs)` import): once at construction, and again below in
-  ;; byte-set-matcher-bytes -- so §9.1's "immutable-by-API descriptor" holds
+  ;; byte-set-matcher-bytes -- so the "immutable-by-API descriptor" holds
   ;; in both directions. A caller who mutates the list they passed in
   ;; (set-car!, etc.) cannot reach back into an already-built matcher, and a
   ;; caller who mutates the list this accessor just handed them cannot reach
   ;; the matcher's own storage either -- both routes go through `(rnrs
-  ;; mutable-pairs)` and this closes both. Copying is not the transform
-  ;; decision 0017 point 3 forbids -- it changes the list's identity, not its
+  ;; mutable-pairs)` and this closes both. Copying is not the forbidden
+  ;; transform -- it changes the list's identity, not its
   ;; order or membership; the copy byte-set-matcher-bytes returns is unsorted
   ;; and undeduplicated, same as the stored list. The degenerate `(append '()
   ;; z)` case (which would return `z` itself, aliasing it) cannot occur on
@@ -145,61 +147,73 @@
   ;; closing it would mean deep-copying an arbitrarily nested matcher tree on
   ;; every read -- out of scope here.
   (define byte-set-matcher-tag (tag 'byte-machine-byte-set-matcher))
+  ;; make-byte-set-matcher : bytes:(Listof Byte) -> ByteSetMatcher
   (define (make-byte-set-matcher bytes)
     (unless (and (list? bytes) (pair? bytes) (for-all byte-value? bytes))
       (byte-machine-contract-violation 'make-byte-set-matcher 'invalid-argument 'bytes))
     (vector byte-set-matcher-tag (append bytes '())))
+  ;; byte-set-matcher? : Any -> Boolean
   (define (byte-set-matcher? x) (tagged? byte-set-matcher-tag x))
+  ;; byte-set-matcher-bytes : ByteSetMatcher -> (Listof Byte) -- fresh copy
   (define (byte-set-matcher-bytes m)
     (unless (byte-set-matcher? m)
       (byte-machine-contract-violation 'byte-set-matcher-bytes 'invalid-argument 'matcher))
     (append (vector-ref m 1) '()))
 
-  ;; --- byte-range matcher (§9.1:293; decision 0017 points 1 and 2) ---
+  ;; --- byte-range matcher ---
   ;; low = high is legal: a redundant but well-formed exact byte.
   (define byte-range-matcher-tag (tag 'byte-machine-byte-range-matcher))
+  ;; make-byte-range-matcher : low:Byte high:Byte -> ByteRangeMatcher
   (define (make-byte-range-matcher low high)
     (require-byte 'make-byte-range-matcher 'low low)
     (require-byte 'make-byte-range-matcher 'high high)
     (unless (<= low high)
       (byte-machine-contract-violation 'make-byte-range-matcher 'invalid-argument 'range))
     (vector byte-range-matcher-tag low high))
+  ;; byte-range-matcher? : Any -> Boolean
   (define (byte-range-matcher? x) (tagged? byte-range-matcher-tag x))
+  ;; byte-range-matcher-low : ByteRangeMatcher -> Byte
   (define (byte-range-matcher-low m)
     (unless (byte-range-matcher? m)
       (byte-machine-contract-violation 'byte-range-matcher-low 'invalid-argument 'matcher))
     (vector-ref m 1))
+  ;; byte-range-matcher-high : ByteRangeMatcher -> Byte
   (define (byte-range-matcher-high m)
     (unless (byte-range-matcher? m)
       (byte-machine-contract-violation 'byte-range-matcher-high 'invalid-argument 'matcher))
     (vector-ref m 2))
 
-  ;; --- byte-complement matcher (§9.1:294) ---
+  ;; --- byte-complement matcher ---
   ;; It complements a MATCHER, not a byte list, so complements nest and
   ;; canonicalization is recursive. The complement of a full-universe matcher is
   ;; the empty set of transitions on a node whose fallback then takes every byte
-  ;; -- vacuous, not malformed (decision 0017 point 2).
+  ;; -- vacuous, not malformed.
   (define byte-complement-matcher-tag (tag 'byte-machine-byte-complement-matcher))
+  ;; make-byte-complement-matcher : matcher:Matcher -> ByteComplementMatcher
   (define (make-byte-complement-matcher matcher)
     (unless (matcher? matcher)
       (byte-machine-contract-violation 'make-byte-complement-matcher 'invalid-argument 'matcher))
     (vector byte-complement-matcher-tag matcher))
+  ;; byte-complement-matcher? : Any -> Boolean
   (define (byte-complement-matcher? x) (tagged? byte-complement-matcher-tag x))
+  ;; byte-complement-matcher-matcher : ByteComplementMatcher -> Matcher
   (define (byte-complement-matcher-matcher m)
     (unless (byte-complement-matcher? m)
       (byte-machine-contract-violation 'byte-complement-matcher-matcher
                                        'invalid-argument 'matcher))
     (vector-ref m 1))
 
+  ;; matcher? : Any -> Boolean
   (define (matcher? x)
     (or (exact-byte-matcher? x) (byte-set-matcher? x)
         (byte-range-matcher? x) (byte-complement-matcher? x)))
 
-  ;; ascii-bytes (§9.1:299): a string's code points as a proper list of exact
-  ;; integers, in string order, with no de-duplication -- §9.1:318 names `bytes`
-  ;; a proper list, so this composes directly with make-byte-set-matcher. It is a
-  ;; helper, not a matcher constructor, so the empty string is legal and yields
-  ;; '(); make-byte-set-matcher is where that becomes a contract violation.
+  ;; ascii-bytes: a string's code points as a proper list of exact integers, in
+  ;; string order, with no de-duplication -- `bytes` is a proper list, so this
+  ;; composes directly with make-byte-set-matcher. It is a helper, not a matcher
+  ;; constructor, so the empty string is legal and yields '();
+  ;; make-byte-set-matcher is where that becomes a contract violation.
+  ;; ascii-bytes : String -> (Listof Byte)
   (define (ascii-bytes s)
     (unless (string? s)
       (byte-machine-contract-violation 'ascii-bytes 'invalid-argument 'string))
@@ -211,19 +225,20 @@
               (byte-machine-contract-violation 'ascii-bytes 'invalid-argument 'non-ascii))
             (loop (- i 1) (cons c acc))))))
 
-  ;; --- matcher canonicalization (parent §10.6:538, §16.3:921; decision 0014) ---
+  ;; --- matcher canonicalization ---
   ;; Every matcher denotes a subset of the closed byte universe 0..255. This is
   ;; the one place that subset is computed: the verifier's overlap analysis, the
   ;; normalizer's per-byte lowering and the interpreter's membership test all
   ;; call it, so a matcher kind taught here is understood by all three at once.
   ;; The result is a proper list of exact integers, ascending and duplicate-free
   ;; -- ordering and de-duplication are what keep the normalizer's
-  ;; ascending-by-byte transition sort a TOTAL order (decision 0014).
+  ;; ascending-by-byte transition sort a TOTAL order.
   (define (byte-set-canonical bs)
     (let loop ((s (list-sort < bs)) (acc '()))
       (cond ((null? s) (reverse acc))
             ((and (pair? acc) (= (car s) (car acc))) (loop (cdr s) acc))
             (else (loop (cdr s) (cons (car s) acc))))))
+  ;; matcher-bytes : Matcher -> (Listof Byte) -- ascending, duplicate-free
   (define (matcher-bytes m)
     (cond ((exact-byte-matcher? m) (list (exact-byte-matcher-byte m)))
           ((byte-set-matcher? m) (byte-set-canonical (byte-set-matcher-bytes m)))
@@ -243,33 +258,42 @@
 
   ;; --- edge ---
   (define edge-tag (tag 'byte-machine-edge))
+  ;; make-edge : target:NodeName mode:EdgeMode -> Edge
   (define (make-edge target mode)
     (require-symbol 'make-edge 'target target)
     (unless (memq mode '(advance reexecute))
       (byte-machine-contract-violation 'make-edge 'invalid-argument 'mode))
     (vector edge-tag target mode))
+  ;; edge? : Any -> Boolean
   (define (edge? x) (tagged? edge-tag x))
+  ;; edge-target : Edge -> NodeName
   (define (edge-target e) (vector-ref e 1))
+  ;; edge-mode : Edge -> EdgeMode
   (define (edge-mode e) (vector-ref e 2))
 
   ;; --- byte case ---
   (define byte-case-tag (tag 'byte-machine-byte-case))
+  ;; make-byte-case : matcher:Matcher edge:Edge source-label:Label -> ByteCase
   (define (make-byte-case matcher edge source-label)
     (unless (matcher? matcher)
       (byte-machine-contract-violation 'make-byte-case 'invalid-argument 'matcher))
     (unless (edge? edge)
       (byte-machine-contract-violation 'make-byte-case 'invalid-argument 'edge))
     (vector byte-case-tag matcher edge source-label))
+  ;; byte-case? : Any -> Boolean
   (define (byte-case? x) (tagged? byte-case-tag x))
+  ;; byte-case-matcher : ByteCase -> Matcher
   (define (byte-case-matcher c) (vector-ref c 1))
+  ;; byte-case-edge : ByteCase -> Edge
   (define (byte-case-edge c) (vector-ref c 2))
-  ;; Milestone 6 Slice ⓪: the label had been stored since Milestone 1 with no
-  ;; accessor, so §16.2:886's label clause could not reach it. A case has no name
-  ;; of its own; the verifier reports its label under the owning node.
+  ;; A case has no name of its own; the verifier reports its label under the
+  ;; owning node.
+  ;; byte-case-source-label : ByteCase -> Label
   (define (byte-case-source-label c) (vector-ref c 3))
 
   ;; --- byte-dispatch node ---
   (define byte-dispatch-node-tag (tag 'byte-machine-byte-dispatch-node))
+  ;; make-byte-dispatch-node : name:Symbol cases:(Listof ByteCase) fallback:Edge eof-target:(Option NodeName) source-label:Label -> ByteDispatchNode
   (define (make-byte-dispatch-node name cases fallback eof-target source-label)
     (require-symbol 'make-byte-dispatch-node 'name name)
     (unless (and (list? cases) (for-all byte-case? cases))
@@ -280,69 +304,86 @@
     (unless (or (symbol? eof-target) (eq? eof-target #f))
       (byte-machine-contract-violation 'make-byte-dispatch-node 'invalid-argument 'eof-target))
     (vector byte-dispatch-node-tag name cases fallback eof-target source-label))
+  ;; byte-dispatch-node? : Any -> Boolean
   (define (byte-dispatch-node? x) (tagged? byte-dispatch-node-tag x))
+  ;; byte-dispatch-node-name : ByteDispatchNode -> Symbol
   (define (byte-dispatch-node-name n) (vector-ref n 1))
+  ;; byte-dispatch-node-cases : ByteDispatchNode -> (Listof ByteCase)
   (define (byte-dispatch-node-cases n) (vector-ref n 2))
+  ;; byte-dispatch-node-fallback : ByteDispatchNode -> Edge
   (define (byte-dispatch-node-fallback n) (vector-ref n 3))
+  ;; byte-dispatch-node-eof-target : ByteDispatchNode -> (Option NodeName)
   (define (byte-dispatch-node-eof-target n) (vector-ref n 4))
+  ;; byte-dispatch-node-source-label : ByteDispatchNode -> Label
   (define (byte-dispatch-node-source-label n) (vector-ref n 5))
 
   ;; --- stop node ---
   (define stop-node-tag (tag 'byte-machine-stop-node))
+  ;; make-stop-node : name:Symbol source-label:Label -> StopNode
   (define (make-stop-node name source-label)
     (require-symbol 'make-stop-node 'name name)
     (vector stop-node-tag name source-label))
+  ;; stop-node? : Any -> Boolean
   (define (stop-node? x) (tagged? stop-node-tag x))
+  ;; stop-node-name : StopNode -> Symbol
   (define (stop-node-name n) (vector-ref n 1))
+  ;; stop-node-source-label : StopNode -> Label
   (define (stop-node-source-label n) (vector-ref n 2))
 
   ;; --- finish node (EOF-only successful terminal, returns finished) ---
   (define finish-node-tag (tag 'byte-machine-finish-node))
+  ;; make-finish-node : name:Symbol source-label:Label -> FinishNode
   (define (make-finish-node name source-label)
     (require-symbol 'make-finish-node 'name name)
     (vector finish-node-tag name source-label))
+  ;; finish-node? : Any -> Boolean
   (define (finish-node? x) (tagged? finish-node-tag x))
+  ;; finish-node-name : FinishNode -> Symbol
   (define (finish-node-name n) (vector-ref n 1))
+  ;; finish-node-source-label : FinishNode -> Label
   (define (finish-node-source-label n) (vector-ref n 2))
 
-  ;; --- pause node (explicit continuation; returns paused -- parent §10.6) ---
+  ;; --- pause node (explicit continuation; returns paused) ---
   ;; One zero-width out-edge to `continuation`: pause reads no byte, so it has
-  ;; no advance/reexecute mode (§11.2 defines modes only for byte reads).
+  ;; no advance/reexecute mode (modes are defined only for byte reads).
   (define pause-node-tag (tag 'byte-machine-pause-node))
+  ;; make-pause-node : name:Symbol continuation:NodeName source-label:Label -> PauseNode
   (define (make-pause-node name continuation source-label)
     (require-symbol 'make-pause-node 'name name)
     (require-symbol 'make-pause-node 'continuation continuation)
     (vector pause-node-tag name continuation source-label))
+  ;; pause-node? : Any -> Boolean
   (define (pause-node? x) (tagged? pause-node-tag x))
+  ;; pause-node-name : PauseNode -> Symbol
   (define (pause-node-name n) (vector-ref n 1))
+  ;; pause-node-continuation : PauseNode -> NodeName
   (define (pause-node-continuation n) (vector-ref n 2))
+  ;; pause-node-source-label : PauseNode -> Label
   (define (pause-node-source-label n) (vector-ref n 3))
 
-  ;; --- zero-width field nodes (Milestone 4 Slice ②; §9.1:301-306, §10.6:550,
-  ;; :575). Both are ZERO-WIDTH: they consume no byte, which is what every
-  ;; verifier extension in ② turns on.
+  ;; --- zero-width field nodes ---
+  ;; Both are ZERO-WIDTH: they consume no byte.
   ;;
-  ;; *** The constructor/verifier boundary is decision 0020's, and item 2 fixes
-  ;; the whole of it in one line: `arguments` is checked as a proper list AND NO
-  ;; FURTHER. *** Everything needing the §9.1:326-346 schema -- which position
-  ;; holds the field, how many positions there are, what each means -- is the
-  ;; verifier's, because §9.1:348 assigns exact arity there and nothing can be
-  ;; read out of `arguments` before arity is known. So `low <= high` for `range`
-  ;; is the VERIFIER's, even though 0017 rejects `low > high` inside
-  ;; `make-byte-range-matcher`: there they are named parameters, here they are
-  ;; the second and third elements of a list whose length this constructor is not
-  ;; entitled to assume. 0020 item 2 flags that as the consequence a reader of
-  ;; 0017 will think is wrong.
+  ;; This constructor checks `arguments` as a proper list AND NO FURTHER.
+  ;; Everything needing the argument schema -- which position holds the field,
+  ;; how many positions there are, what each means -- is the verifier's,
+  ;; because exact arity is assigned there and nothing can be read out of
+  ;; `arguments` before arity is known. So `low <= high` for a `range` predicate
+  ;; is the VERIFIER's, even though `make-byte-range-matcher` rejects
+  ;; `low > high`: there they are named parameters, here they are the second and
+  ;; third elements of a list whose length this constructor is not entitled to
+  ;; assume.
   ;;
   ;; What IS closed here is evaluable from the one node being built: the
-  ;; operation and predicate sets (§9.1:348's "it rejects arbitrary operation
-  ;; names" -- the one clause of that sentence pass 6a does not carry), the
+  ;; operation and predicate sets (it rejects arbitrary operation names), the
   ;; symbols, and the error slot's rule below.
+  ;; field-operations : (Listof FieldOperation)
   (define field-operations '(store clear increment decrement add set-mask clear-mask))
+  ;; field-predicates : (Listof FieldPredicate)
   (define field-predicates '(equal zero nonzero range mask-any mask-all mask-none))
   ;; The four operations that provably cannot fail once their constant or mask is
-  ;; range-checked against the field width -- which is pass 6a's check, not this
-  ;; one. `increment`, `decrement` and `add` can fail.
+  ;; range-checked against the field width -- which is the verifier's check, not
+  ;; this one. `increment`, `decrement` and `add` can fail.
   (define infallible-field-operations '(store clear set-mask clear-mask))
 
   (define (require-proper-list who what v)
@@ -356,7 +397,8 @@
   ;; fail loudly anywhere downstream: node-out-targets feeds `error` into the
   ;; reachability walk unconditionally, so the target is reached and no pass
   ;; checks whether the operation can actually fail. This constructor is the only
-  ;; place that can. Precedent for a target-or-#f slot: `eof-target` (§9.1:318).
+  ;; place that can. Precedent for a target-or-#f slot: `eof-target`.
+  ;; make-field-action-node : name:Symbol operation:FieldOperation arguments:(Listof (U Symbol ExactInteger)) next:NodeName error:(Option NodeName) source-label:Label -> FieldActionNode
   (define (make-field-action-node name operation arguments next error source-label)
     (require-symbol 'make-field-action-node 'name name)
     (unless (memq operation field-operations)
@@ -369,18 +411,26 @@
       (unless (or (eq? error #f) (symbol? error))
         (byte-machine-contract-violation 'make-field-action-node 'invalid-argument 'error)))
     (vector field-action-node-tag name operation arguments next error source-label))
+  ;; field-action-node? : Any -> Boolean
   (define (field-action-node? x) (tagged? field-action-node-tag x))
+  ;; field-action-node-name : FieldActionNode -> Symbol
   (define (field-action-node-name n) (vector-ref n 1))
+  ;; field-action-node-operation : FieldActionNode -> FieldOperation
   (define (field-action-node-operation n) (vector-ref n 2))
+  ;; field-action-node-arguments : FieldActionNode -> (Listof (U Symbol ExactInteger))
   (define (field-action-node-arguments n) (vector-ref n 3))
+  ;; field-action-node-next : FieldActionNode -> NodeName
   (define (field-action-node-next n) (vector-ref n 4))
+  ;; field-action-node-error : FieldActionNode -> (Option NodeName)
   (define (field-action-node-error n) (vector-ref n 5))
+  ;; field-action-node-source-label : FieldActionNode -> Label
   (define (field-action-node-source-label n) (vector-ref n 6))
 
   (define field-branch-node-tag (tag 'byte-machine-field-branch-node))
-  ;; §9.1:305 requires "an explicit target for every possible result", so both
-  ;; targets are mandatory symbols -- there is no #f arm and no fallthrough.
-  ;; This is the kind that makes the EOF walk multi-successor.
+  ;; An explicit target is required for every possible result, so both targets
+  ;; are mandatory symbols -- there is no #f arm and no fallthrough. This is the
+  ;; kind that makes the EOF walk multi-successor.
+  ;; make-field-branch-node : name:Symbol predicate:FieldPredicate arguments:(Listof (U Symbol ExactInteger)) true-target:NodeName false-target:NodeName source-label:Label -> FieldBranchNode
   (define (make-field-branch-node name predicate arguments true-target false-target source-label)
     (require-symbol 'make-field-branch-node 'name name)
     (unless (memq predicate field-predicates)
@@ -389,29 +439,34 @@
     (require-symbol 'make-field-branch-node 'true-target true-target)
     (require-symbol 'make-field-branch-node 'false-target false-target)
     (vector field-branch-node-tag name predicate arguments true-target false-target source-label))
+  ;; field-branch-node? : Any -> Boolean
   (define (field-branch-node? x) (tagged? field-branch-node-tag x))
+  ;; field-branch-node-name : FieldBranchNode -> Symbol
   (define (field-branch-node-name n) (vector-ref n 1))
+  ;; field-branch-node-predicate : FieldBranchNode -> FieldPredicate
   (define (field-branch-node-predicate n) (vector-ref n 2))
+  ;; field-branch-node-arguments : FieldBranchNode -> (Listof (U Symbol ExactInteger))
   (define (field-branch-node-arguments n) (vector-ref n 3))
+  ;; field-branch-node-true-target : FieldBranchNode -> NodeName
   (define (field-branch-node-true-target n) (vector-ref n 4))
+  ;; field-branch-node-false-target : FieldBranchNode -> NodeName
   (define (field-branch-node-false-target n) (vector-ref n 5))
+  ;; field-branch-node-source-label : FieldBranchNode -> Label
   (define (field-branch-node-source-label n) (vector-ref n 6))
 
-  ;; --- integer accumulate (Milestone 4 Slice ③; §9.1:301-306, §10.6:566-571,
-  ;; §11.4:652). The milestone's last node kind, and the only INPUT-READING one:
-  ;; it consumes a byte and makes progress, which is what separates it from
-  ;; Slice ②'s two zero-width kinds at every verifier site. It must NOT join
-  ;; `zero-width-successors`.
+  ;; --- integer accumulate ---
+  ;; The only INPUT-READING field-related kind: it consumes a byte and makes
+  ;; progress, which separates it from the two zero-width field kinds at every
+  ;; verifier site. It must NOT join `zero-width-successors`.
   ;;
-  ;; *** The constructor/verifier boundary here is 0017's, not 0020's. *** 0020
-  ;; item 2 keeps the constructor out of `arguments` because that is a LIST whose
-  ;; length it may not assume. This kind has no `arguments`: its operands are
-  ;; NAMED PARAMETERS, which is precisely the situation 0017 point 1 addresses
-  ;; when it rejects `low > high` inside `make-byte-range-matcher`. So `base` is
-  ;; closed here -- the base half of §16.2:904 -- and only the FIELD REFERENCE,
-  ;; which needs the declaration list to evaluate, is the verifier's.
+  ;; Unlike the field-action/branch kinds, this one has no `arguments` list: its
+  ;; operands are NAMED PARAMETERS. So `base` is closed here (validated at
+  ;; construction), and only the FIELD REFERENCE, which needs the declaration
+  ;; list to evaluate, is the verifier's.
+  ;; accumulate-bases : (Listof AccumulateBase)
   (define accumulate-bases '(10 16))
   (define integer-accumulate-node-tag (tag 'byte-machine-integer-accumulate-node))
+  ;; make-integer-accumulate-node : name:Symbol field:Symbol base:AccumulateBase digit-target:NodeName nondigit-edge:Edge overflow-error:NodeName eof-target:(Option NodeName) source-label:Label -> IntegerAccumulateNode
   (define (make-integer-accumulate-node name field base digit-target nondigit-edge
                                         overflow-error eof-target source-label)
     (require-symbol 'make-integer-accumulate-node 'name name)
@@ -419,95 +474,120 @@
     (unless (memv base accumulate-bases)
       (byte-machine-contract-violation 'make-integer-accumulate-node 'invalid-argument 'base))
     (require-symbol 'make-integer-accumulate-node 'digit-target digit-target)
-    ;; An EDGE, not a bare target: §10.6:567's non-digit "takes an explicit
-    ;; fallback edge, normally reexecuting the delimiter", so the MODE is the
-    ;; whole point and a bare symbol could not carry one.
+    ;; An EDGE, not a bare target: the non-digit takes an explicit fallback
+    ;; edge, normally reexecuting the delimiter, so the MODE is the whole point
+    ;; and a bare symbol could not carry one.
     (unless (edge? nondigit-edge)
       (byte-machine-contract-violation 'make-integer-accumulate-node
                                        'invalid-argument 'nondigit-edge))
-    ;; Never #f, unlike a field action's `error`: §10.6:568 says overflow "takes
-    ;; an explicit error edge", and accumulation can ALWAYS overflow -- there is
-    ;; no base or width at which it cannot, so there is nothing for the
-    ;; can-it-fail rule to decide.
+    ;; Never #f, unlike a field action's `error`: overflow takes an explicit
+    ;; error edge, and accumulation can ALWAYS overflow -- there is no base or
+    ;; width at which it cannot, so there is nothing for the can-it-fail rule to
+    ;; decide.
     (require-symbol 'make-integer-accumulate-node 'overflow-error overflow-error)
-    ;; #f means the machine default-eof error, the byte-dispatch convention
-    ;; (§9.1:318).
+    ;; #f means the machine default-eof error, the byte-dispatch convention.
     (unless (or (eq? eof-target #f) (symbol? eof-target))
       (byte-machine-contract-violation 'make-integer-accumulate-node
                                        'invalid-argument 'eof-target))
     (vector integer-accumulate-node-tag name field base digit-target nondigit-edge
             overflow-error eof-target source-label))
+  ;; integer-accumulate-node? : Any -> Boolean
   (define (integer-accumulate-node? x) (tagged? integer-accumulate-node-tag x))
+  ;; integer-accumulate-node-name : IntegerAccumulateNode -> Symbol
   (define (integer-accumulate-node-name n) (vector-ref n 1))
+  ;; integer-accumulate-node-field : IntegerAccumulateNode -> Symbol
   (define (integer-accumulate-node-field n) (vector-ref n 2))
+  ;; integer-accumulate-node-base : IntegerAccumulateNode -> AccumulateBase
   (define (integer-accumulate-node-base n) (vector-ref n 3))
+  ;; integer-accumulate-node-digit-target : IntegerAccumulateNode -> NodeName
   (define (integer-accumulate-node-digit-target n) (vector-ref n 4))
+  ;; integer-accumulate-node-nondigit-edge : IntegerAccumulateNode -> Edge
   (define (integer-accumulate-node-nondigit-edge n) (vector-ref n 5))
+  ;; integer-accumulate-node-overflow-error : IntegerAccumulateNode -> NodeName
   (define (integer-accumulate-node-overflow-error n) (vector-ref n 6))
+  ;; integer-accumulate-node-eof-target : IntegerAccumulateNode -> (Option NodeName)
   (define (integer-accumulate-node-eof-target n) (vector-ref n 7))
+  ;; integer-accumulate-node-source-label : IntegerAccumulateNode -> Label
   (define (integer-accumulate-node-source-label n) (vector-ref n 8))
 
   ;; --- error node (references a declaration by NAME) ---
   (define error-node-tag (tag 'byte-machine-error-node))
+  ;; make-error-node : name:Symbol error-declaration:ErrorName source-label:Label -> ErrorNode
   (define (make-error-node name error-declaration source-label)
     (require-symbol 'make-error-node 'name name)
     (require-symbol 'make-error-node 'error-declaration error-declaration)
     (vector error-node-tag name error-declaration source-label))
+  ;; error-node? : Any -> Boolean
   (define (error-node? x) (tagged? error-node-tag x))
+  ;; error-node-name : ErrorNode -> Symbol
   (define (error-node-name n) (vector-ref n 1))
+  ;; error-node-error-name : ErrorNode -> ErrorName
   (define (error-node-error-name n) (vector-ref n 2))
+  ;; error-node-source-label : ErrorNode -> Label
   (define (error-node-source-label n) (vector-ref n 3))
 
   ;; --- error declaration ---
   (define error-declaration-tag (tag 'byte-machine-error-declaration))
+  ;; make-error-declaration : name:Symbol code:Symbol reason:String source-label:Label -> ErrorDeclaration
   (define (make-error-declaration name code reason source-label)
     (require-symbol 'make-error-declaration 'name name)
     (require-symbol 'make-error-declaration 'code code)
     (unless (string? reason)
       (byte-machine-contract-violation 'make-error-declaration 'invalid-argument 'reason))
     (vector error-declaration-tag name code reason source-label))
+  ;; error-declaration? : Any -> Boolean
   (define (error-declaration? x) (tagged? error-declaration-tag x))
+  ;; error-declaration-name : ErrorDeclaration -> Symbol
   (define (error-declaration-name d) (vector-ref d 1))
+  ;; error-declaration-code : ErrorDeclaration -> Symbol
   (define (error-declaration-code d) (vector-ref d 2))
+  ;; error-declaration-reason : ErrorDeclaration -> String
   (define (error-declaration-reason d) (vector-ref d 3))
+  ;; error-declaration-source-label : ErrorDeclaration -> Label
   (define (error-declaration-source-label d) (vector-ref d 4))
 
-  ;; --- sequence case (§9.1:298) ---
+  ;; --- sequence case ---
   ;; A byte list and a bare TARGET, with no mode. A successful sequence consumes
-  ;; every byte in it (§10.6:546), so giving a case an advance/reexecute mode
-  ;; would reintroduce the lookahead :546 forbids. The mismatch EDGE on the node
-  ;; below carries the only mode a sequence has. The accessor copies for the same
-  ;; reason byte-set-matcher-bytes does: §9.1 says constructors return
+  ;; every byte in it, so giving a case an advance/reexecute mode would
+  ;; reintroduce the lookahead that consuming forbids. The mismatch EDGE on the
+  ;; node below carries the only mode a sequence has. The accessor copies for
+  ;; the same reason byte-set-matcher-bytes does: constructors return
   ;; immutable-by-API descriptors, and a copy preserves order and duplicates, so
-  ;; it is not the semantic transform §9.1:322 forbids.
+  ;; it is not a forbidden semantic transform.
   (define sequence-case-tag (tag 'byte-machine-sequence-case))
+  ;; make-sequence-case : bytes:(Listof Byte) target:NodeName source-label:Label -> SequenceCase
   (define (make-sequence-case bytes target source-label)
     (unless (and (list? bytes) (pair? bytes) (for-all byte-value? bytes))
       (byte-machine-contract-violation 'make-sequence-case 'invalid-argument 'bytes))
     (require-symbol 'make-sequence-case 'target target)
     (vector sequence-case-tag (append bytes '()) target source-label))
+  ;; sequence-case? : Any -> Boolean
   (define (sequence-case? x) (tagged? sequence-case-tag x))
+  ;; sequence-case-bytes : SequenceCase -> (Listof Byte) -- fresh copy
   (define (sequence-case-bytes c)
     (unless (sequence-case? c)
       (byte-machine-contract-violation 'sequence-case-bytes 'invalid-argument 'case))
     (append (vector-ref c 1) '()))
+  ;; sequence-case-target : SequenceCase -> NodeName
   (define (sequence-case-target c)
     (unless (sequence-case? c)
       (byte-machine-contract-violation 'sequence-case-target 'invalid-argument 'case))
     (vector-ref c 2))
   ;; Tag-guarded like its two siblings above, and reported under the owning node
   ;; by the verifier, as a byte case's label is.
+  ;; sequence-case-source-label : SequenceCase -> Label
   (define (sequence-case-source-label c)
     (unless (sequence-case? c)
       (byte-machine-contract-violation 'sequence-case-source-label 'invalid-argument 'case))
     (vector-ref c 3))
 
-  ;; --- sequence-dispatch node (§9.1:297, §10.6:542-546) ---
-  ;; The sixth node kind. Matches one of a finite set of exact byte sequences
-  ;; without backtracking; alternatives may share nonterminal prefixes. Whether
-  ;; two alternatives collide is a cross-case property, so it is verification's
-  ;; job, not this constructor's (decision 0017 point 4).
+  ;; --- sequence-dispatch node ---
+  ;; Matches one of a finite set of exact byte sequences without backtracking;
+  ;; alternatives may share nonterminal prefixes. Whether two alternatives
+  ;; collide is a cross-case property, so it is verification's job, not this
+  ;; constructor's.
   (define sequence-dispatch-node-tag (tag 'byte-machine-sequence-dispatch-node))
+  ;; make-sequence-dispatch-node : name:Symbol cases:(Listof SequenceCase) mismatch:Edge eof-target:(Option NodeName) source-label:Label -> SequenceDispatchNode
   (define (make-sequence-dispatch-node name cases mismatch eof-target source-label)
     (require-symbol 'make-sequence-dispatch-node 'name name)
     (unless (and (list? cases) (pair? cases) (for-all sequence-case? cases))
@@ -518,45 +598,49 @@
     (unless (or (symbol? eof-target) (eq? eof-target #f))
       (byte-machine-contract-violation 'make-sequence-dispatch-node 'invalid-argument 'eof-target))
     (vector sequence-dispatch-node-tag name cases mismatch eof-target source-label))
+  ;; sequence-dispatch-node? : Any -> Boolean
   (define (sequence-dispatch-node? x) (tagged? sequence-dispatch-node-tag x))
+  ;; sequence-dispatch-node-name : SequenceDispatchNode -> Symbol
   (define (sequence-dispatch-node-name n) (vector-ref n 1))
+  ;; sequence-dispatch-node-cases : SequenceDispatchNode -> (Listof SequenceCase)
   (define (sequence-dispatch-node-cases n) (vector-ref n 2))
+  ;; sequence-dispatch-node-mismatch : SequenceDispatchNode -> Edge
   (define (sequence-dispatch-node-mismatch n) (vector-ref n 3))
+  ;; sequence-dispatch-node-eof-target : SequenceDispatchNode -> (Option NodeName)
   (define (sequence-dispatch-node-eof-target n) (vector-ref n 4))
+  ;; sequence-dispatch-node-source-label : SequenceDispatchNode -> Label
   (define (sequence-dispatch-node-source-label n) (vector-ref n 5))
 
-  ;; --- callback-invocation node (§9.1:307-308, §10.6:584-586) ---
-  ;; The TENTH node kind, and Milestone 5's first. Zero-width: §11.4:652 lists
-  ;; "callback invocations" with the field kinds on the side that does not
-  ;; consume input, so it joins the verifier's `zero-width-edges` census and
-  ;; never the input-reading arms beside it.
+  ;; --- callback-invocation node ---
+  ;; Zero-width: a callback invocation does not consume input, so it joins the
+  ;; verifier's `zero-width-edges` census and never the input-reading arms
+  ;; beside it.
   ;;
-  ;; Decision 0020's CONSTRUCTOR half, and only that half. `branch-targets` is
-  ;; checked for the shape §9.1:318 fixes for every branch map -- "two-element
-  ;; lists (key target), not implementation hash tables", the same convention
-  ;; §9.3:419 fixes for callback bindings and the one Slice ①b's review caught
-  ;; being implemented as pairs -- and for nothing else. Whether `callback`
-  ;; names a declared callback, whether that declaration is an `event` or a
-  ;; `decision`, and whether these keys are the keys it declared are three
-  ;; CROSS-REFERENCES against the machine's callback table, which this
-  ;; constructor cannot see at all; §16.2:901's node half owns all three, and
-  ;; the comment on make-uint-field above states what moving one of them here
-  ;; would cost.
+  ;; This constructor checks only local shape. `branch-targets` is checked for
+  ;; the shape every branch map uses -- two-element lists (key target), not
+  ;; implementation hash tables, the same convention used for callback bindings
+  ;; -- and for nothing else. Whether `callback` names a declared callback,
+  ;; whether that declaration is an `event` or a `decision`, and whether these
+  ;; keys are the keys it declared are three CROSS-REFERENCES against the
+  ;; machine's callback table, which this constructor cannot see at all; the
+  ;; verifier owns all three, and the comment on make-uint-field above states
+  ;; what moving one of them here would cost.
   (define callback-node-tag (tag 'byte-machine-callback-node))
+  ;; make-callback-node : name:Symbol callback:Symbol continue-target:NodeName branch-targets:(Listof (List Symbol NodeName)) pause-continuation:NodeName source-label:Label -> CallbackNode
   (define (make-callback-node name callback continue-target branch-targets
                               pause-continuation source-label)
     (require-symbol 'make-callback-node 'name name)
     (require-symbol 'make-callback-node 'callback callback)
-    ;; §10.6:586: "Every invocation declares a continue target and a pause
-    ;; continuation." Both are mandatory symbols with no #f arm -- the
-    ;; field-branch precedent (§9.1:305, "an explicit target for every possible
-    ;; result"), not the byte-dispatch eof-target one where #f means a default.
+    ;; Every invocation declares a continue target and a pause continuation.
+    ;; Both are mandatory symbols with no #f arm -- the field-branch precedent
+    ;; (an explicit target for every possible result), not the byte-dispatch
+    ;; eof-target one where #f means a default.
     (require-symbol 'make-callback-node 'continue-target continue-target)
     (require-symbol 'make-callback-node 'pause-continuation pause-continuation)
     ;; An EMPTY branch list is legal here and is the ordinary event-callback
-    ;; shape: §10.6:584 invokes "one named event or decision callback", and only
-    ;; a decision has branch keys at all (§10.2:504). Rejecting `'()` would make
-    ;; every event invocation unbuildable.
+    ;; shape: a callback node invokes one named event or decision callback, and
+    ;; only a decision has branch keys at all. Rejecting `'()` would make every
+    ;; event invocation unbuildable.
     (unless (and (list? branch-targets)
                  (for-all (lambda (b)
                             (and (list? b) (= (length b) 2)
@@ -567,83 +651,96 @@
     (vector callback-node-tag name callback continue-target
             (map (lambda (b) (list (car b) (cadr b))) branch-targets)
             pause-continuation source-label))
+  ;; callback-node? : Any -> Boolean
   (define (callback-node? x) (tagged? callback-node-tag x))
+  ;; callback-node-name : CallbackNode -> Symbol
   (define (callback-node-name n) (vector-ref n 1))
+  ;; callback-node-callback : CallbackNode -> Symbol
   (define (callback-node-callback n) (vector-ref n 2))
+  ;; callback-node-continue-target : CallbackNode -> NodeName
   (define (callback-node-continue-target n) (vector-ref n 3))
+  ;; callback-node-branch-targets : CallbackNode -> (Listof (List Symbol NodeName))
   (define (callback-node-branch-targets n) (vector-ref n 4))
+  ;; callback-node-pause-continuation : CallbackNode -> NodeName
   (define (callback-node-pause-continuation n) (vector-ref n 5))
+  ;; callback-node-source-label : CallbackNode -> Label
   (define (callback-node-source-label n) (vector-ref n 6))
 
-  ;; --- span nodes (§9.1:309-310, §10.6:588-594) ---
-  ;; The ELEVENTH and TWELFTH node kinds, and the pair that makes the machine
-  ;; hand out ranges of input it has already seen. Both are ZERO-WIDTH:
-  ;; §10.6:590 and §10.6:594 each say "without consuming input", so both join
-  ;; the verifier's `zero-width-edges` census and never the input-reading arms.
+  ;; --- span nodes ---
+  ;; The pair that makes the machine hand out ranges of input it has already
+  ;; seen. Both are ZERO-WIDTH: neither consumes input, so both join the
+  ;; verifier's `zero-width-edges` census and never the input-reading arms.
   ;;
-  ;; Decision 0020's CONSTRUCTOR half only. `span` is a symbol and nothing more:
-  ;; whether it names a DECLARED span, whether that span is the one currently
-  ;; open, and whether any reachable path opens two at once are all judgements
-  ;; that need the machine's span table and its whole graph, which this
-  ;; constructor cannot see.
+  ;; This constructor checks only local shape. `span` is a symbol and nothing
+  ;; more: whether it names a DECLARED span, whether that span is the one
+  ;; currently open, and whether any reachable path opens two at once are all
+  ;; judgements that need the machine's span table and its whole graph, which
+  ;; this constructor cannot see.
   ;;
-  ;; *** THEY DO NOT ALL HAVE THE SAME OWNER, and this comment said they did.
-  ;; *** It read "§16.2:899 and pass 7's lattice own every one of them (decision
-  ;; 0029)", and pass 7 provably cannot own the first: a lattice over span STATE
-  ;; is well defined for any symbol, so it treats an undeclared name exactly as
-  ;; it treats a declared one. The obligation therefore had a named owner and no
-  ;; implementation, and a machine naming no span verified CLEAN and then raised
-  ;; out of the normalizer. Split as it actually is: DECLAREDNESS is
-  ;; `pass-declarations`' (`missing-span-declaration`); which span is open, and
-  ;; whether two are, are pass 7's lattice (decision 0029).
+  ;; Those three span judgements do not share one owner. DECLAREDNESS -- whether
+  ;; `span` names a declared span -- is `pass-declarations`' (it raises
+  ;; `missing-span-declaration`); a lattice over span STATE is well defined for
+  ;; any symbol and so cannot tell a declared name from an undeclared one. Which
+  ;; span is open, and whether two are open at once, are the verifier's
+  ;; span-state lattice.
   ;;
   ;; One mandatory successor each, on the field-action precedent rather than the
-  ;; byte-dispatch eof-target one: neither §10.6:590 nor §10.6:594 gives these
-  ;; kinds a route of their own for anything, so there is no case for a #f arm.
+  ;; byte-dispatch eof-target one: neither span kind is given a route of its own
+  ;; for anything, so there is no case for a #f arm.
   (define span-start-node-tag (tag 'byte-machine-span-start-node))
+  ;; make-span-start-node : name:Symbol span:Symbol next:NodeName source-label:Label -> SpanStartNode
   (define (make-span-start-node name span next source-label)
     (require-symbol 'make-span-start-node 'name name)
     (require-symbol 'make-span-start-node 'span span)
     (require-symbol 'make-span-start-node 'next next)
     (vector span-start-node-tag name span next source-label))
+  ;; span-start-node? : Any -> Boolean
   (define (span-start-node? x) (tagged? span-start-node-tag x))
+  ;; span-start-node-name : SpanStartNode -> Symbol
   (define (span-start-node-name n) (vector-ref n 1))
+  ;; span-start-node-span : SpanStartNode -> Symbol
   (define (span-start-node-span n) (vector-ref n 2))
+  ;; span-start-node-next : SpanStartNode -> NodeName
   (define (span-start-node-next n) (vector-ref n 3))
+  ;; span-start-node-source-label : SpanStartNode -> Label
   (define (span-start-node-source-label n) (vector-ref n 4))
 
-  ;; A span END is one node HERE and several states after lowering: §14:838
-  ;; resumes "at the next undelivered substep", so decision 0026 item 2 gives it
-  ;; one internal state per substep. None of that is visible at construction --
-  ;; decision 0029's Consequences say the lattice runs over the declared graph,
-  ;; "a span end is one node to this analysis, whatever it lowers to afterwards".
+  ;; A span END is one node HERE and several states after lowering: resumption
+  ;; happens at the next undelivered substep, so lowering gives it one internal
+  ;; state per substep. None of that is visible at construction -- the lattice
+  ;; runs over the declared graph, where a span end is one node to this
+  ;; analysis, whatever it lowers to afterwards.
   (define span-end-node-tag (tag 'byte-machine-span-end-node))
+  ;; make-span-end-node : name:Symbol span:Symbol next:NodeName source-label:Label -> SpanEndNode
   (define (make-span-end-node name span next source-label)
     (require-symbol 'make-span-end-node 'name name)
     (require-symbol 'make-span-end-node 'span span)
     (require-symbol 'make-span-end-node 'next next)
     (vector span-end-node-tag name span next source-label))
+  ;; span-end-node? : Any -> Boolean
   (define (span-end-node? x) (tagged? span-end-node-tag x))
+  ;; span-end-node-name : SpanEndNode -> Symbol
   (define (span-end-node-name n) (vector-ref n 1))
+  ;; span-end-node-span : SpanEndNode -> Symbol
   (define (span-end-node-span n) (vector-ref n 2))
+  ;; span-end-node-next : SpanEndNode -> NodeName
   (define (span-end-node-next n) (vector-ref n 3))
+  ;; span-end-node-source-label : SpanEndNode -> Label
   (define (span-end-node-source-label n) (vector-ref n 4))
 
-  ;; --- counted consume (Milestone 6 Slice ①; §9.1:311, §10.6:596-604,
-  ;; §11.4:652). The thirteenth node kind, and the first that is INPUT-READING
-  ;; and ALSO has a route taken with no input present at all: a zero count
-  ;; transitions to `next` immediately (§10.6:600), at EOF and on an empty feed
+  ;; --- counted consume ---
+  ;; INPUT-READING, but also has a route taken with no input present at all: a
+  ;; zero count transitions to `next` immediately, at EOF and on an empty feed
   ;; -- where accumulate's non-consuming overflow edge still needs a byte to
-  ;; examine. Decision 0030 is where that one fact meets
-  ;; the verifier and both executors; here it is five parts and a shape. `next`
-  ;; is mandatory -- a count that reaches zero always has somewhere to go -- and
-  ;; `eof-target` follows the byte-dispatch convention, #f meaning the machine
-  ;; default EOF error (§9.1:318). No `error` slot, unlike a field action's:
-  ;; §15:872's subtraction cannot underflow, because the committed count never
-  ;; exceeds the field's value, so there is nothing for an error edge to carry.
-  ;; The FIELD REFERENCE is the verifier's (decision 0020 item 1; §16.2:903
-  ;; through pass-field-operands), as accumulate's is.
+  ;; examine. `next` is mandatory -- a count that reaches zero always has
+  ;; somewhere to go -- and `eof-target` follows the byte-dispatch convention,
+  ;; #f meaning the machine default EOF error. No `error` slot, unlike a field
+  ;; action's: the subtraction cannot underflow, because the committed count
+  ;; never exceeds the field's value, so there is nothing for an error edge to
+  ;; carry. The FIELD REFERENCE is the verifier's (checked by
+  ;; pass-field-operands), as accumulate's is.
   (define counted-consume-node-tag (tag 'byte-machine-counted-consume-node))
+  ;; make-counted-consume-node : name:Symbol field:Symbol next:NodeName eof-target:(Option NodeName) source-label:Label -> CountedConsumeNode
   (define (make-counted-consume-node name field next eof-target source-label)
     (require-symbol 'make-counted-consume-node 'name name)
     (require-symbol 'make-counted-consume-node 'field field)
@@ -652,20 +749,28 @@
       (byte-machine-contract-violation 'make-counted-consume-node
                                        'invalid-argument 'eof-target))
     (vector counted-consume-node-tag name field next eof-target source-label))
+  ;; counted-consume-node? : Any -> Boolean
   (define (counted-consume-node? x) (tagged? counted-consume-node-tag x))
+  ;; counted-consume-node-name : CountedConsumeNode -> Symbol
   (define (counted-consume-node-name n) (vector-ref n 1))
+  ;; counted-consume-node-field : CountedConsumeNode -> Symbol
   (define (counted-consume-node-field n) (vector-ref n 2))
+  ;; counted-consume-node-next : CountedConsumeNode -> NodeName
   (define (counted-consume-node-next n) (vector-ref n 3))
+  ;; counted-consume-node-eof-target : CountedConsumeNode -> (Option NodeName)
   (define (counted-consume-node-eof-target n) (vector-ref n 4))
+  ;; counted-consume-node-source-label : CountedConsumeNode -> Label
   (define (counted-consume-node-source-label n) (vector-ref n 5))
 
   ;; --- node dispatch ---
+  ;; node? : Any -> Boolean
   (define (node? x)
     (or (byte-dispatch-node? x) (sequence-dispatch-node? x) (stop-node? x)
         (error-node? x) (finish-node? x) (pause-node? x)
         (field-action-node? x) (field-branch-node? x)
         (integer-accumulate-node? x) (callback-node? x)
         (span-start-node? x) (span-end-node? x) (counted-consume-node? x)))
+  ;; node-name : Node -> Symbol
   (define (node-name x)
     (cond ((byte-dispatch-node? x) (byte-dispatch-node-name x))
           ((sequence-dispatch-node? x) (sequence-dispatch-node-name x))
@@ -681,16 +786,11 @@
           ((span-end-node? x) (span-end-node-name x))
           ((counted-consume-node? x) (counted-consume-node-name x))
           (else (byte-machine-contract-violation 'node-name 'invalid-argument 'node))))
-  ;; Milestone 6 Slice ⓪. `node-name`'s shape -- one arm per kind above a raising
-  ;; `else` -- for the one other field every node kind carries. It exists so that
-  ;; §16.2:886's label clause can be TOTAL over the node kinds from one arm in the
-  ;; verifier rather than twelve; before it, nine CARRIERS -- six node kinds, both
-  ;; case kinds and the error declaration -- stored a label nothing could read.
-  ;;
-  ;; *** THIS IS A PER-KIND CENSUS, and a new kind owes it an arm. *** The kind x
-  ;; position census derives this cond's predicate set from the file and compares
-  ;; it to `node?`'s disjuncts, so a thirteenth disjunct with no arm here fails by
-  ;; comparison before the `else` can raise on it.
+  ;; `node-source-label` mirrors `node-name`'s shape -- one arm per kind above a
+  ;; raising `else` -- for the one other field every node kind carries, so the
+  ;; verifier's label clause is total over the node kinds from one accessor
+  ;; rather than one per kind. A new node kind owes this cond an arm.
+  ;; node-source-label : Node -> Label
   (define (node-source-label x)
     (cond ((byte-dispatch-node? x) (byte-dispatch-node-source-label x))
           ((sequence-dispatch-node? x) (sequence-dispatch-node-source-label x))
@@ -707,61 +807,65 @@
           ((counted-consume-node? x) (counted-consume-node-source-label x))
           (else (byte-machine-contract-violation 'node-source-label 'invalid-argument 'node))))
 
-  ;; --- uint field descriptor (§9.1:283, §10.2:488-491) ---
-  ;; The four parts §10.2 names: a symbolic name, an unsigned width of 8, 16, 32
+  ;; --- uint field descriptor ---
+  ;; The four parts of a field: a symbolic name, an unsigned width of 8, 16, 32
   ;; or 64 bits, an initial exact-integer value within that width, and an
   ;; optional diagnostic label.
   ;;
-  ;; Every check here is decision 0020's CONSTRUCTOR half -- closed-set
-  ;; membership and the local shape of the one value being built -- on the
-  ;; make-edge precedent above, which memq-checks `mode` at construction even
-  ;; though §16.2:896 assigns advancement modes to the verifier. A contract
-  ;; violation is not a diagnostic (§4.6), so none of these carries a code, and
-  ;; NO verifier pass re-checks them: a machine whose field failed construction
-  ;; never exists, so the arm would be unreachable through any public API and
-  ;; its permissive mutation would survive while the suite reported it caught.
+  ;; Every check here is the constructor's local half -- closed-set membership
+  ;; and the local shape of the one value being built -- on the make-edge
+  ;; precedent above, which memq-checks `mode` at construction even though
+  ;; advancement modes are otherwise the verifier's. A contract violation is not
+  ;; a diagnostic, so none of these carries a code, and no verifier pass
+  ;; re-checks them: a machine whose field failed construction never exists, so
+  ;; such an arm would be unreachable through any public API.
   ;;
-  ;; There is exactly one field TYPE in v0.1; §29:1754 defers additional ones.
+  ;; There is exactly one field TYPE in v0.1; additional ones are deferred.
   (define uint-field-tag (tag 'byte-machine-uint-field))
+  ;; make-uint-field : name:Symbol width:UintWidth initial:ExactInteger source-label:Label -> UintField
   (define (make-uint-field name width initial source-label)
     (require-symbol 'make-uint-field 'name name)
     (unless (memq width '(8 16 32 64))
       (byte-machine-contract-violation 'make-uint-field 'invalid-argument 'width))
     ;; `exact-integer?` is not R6RS; the pair below is what (rnrs) gives, and
-    ;; the range is inclusive at both ends per §10.2:490. The u64 upper bound is
-    ;; a bignum on every supported runtime -- (greatest-fixnum) is 2^60-1 -- so
-    ;; this comparison must not be narrowed to fixnum arithmetic.
+    ;; the range is inclusive at both ends. The u64 upper bound is a bignum on
+    ;; every supported runtime -- (greatest-fixnum) is 2^60-1 -- so this
+    ;; comparison must not be narrowed to fixnum arithmetic.
     (unless (and (integer? initial) (exact? initial)
                  (<= 0 initial (- (expt 2 width) 1)))
       (byte-machine-contract-violation 'make-uint-field 'invalid-argument 'initial))
     (vector uint-field-tag name width initial source-label))
+  ;; uint-field? : Any -> Boolean
   (define (uint-field? x) (tagged? uint-field-tag x))
+  ;; uint-field-name : UintField -> Symbol
   (define (uint-field-name f) (vector-ref f 1))
+  ;; uint-field-width : UintField -> UintWidth
   (define (uint-field-width f) (vector-ref f 2))
+  ;; uint-field-initial : UintField -> ExactInteger
   (define (uint-field-initial f) (vector-ref f 3))
+  ;; uint-field-source-label : UintField -> Label
   (define (uint-field-source-label f) (vector-ref f 4))
 
-  ;; --- callback declaration (§9.1:284-285, §10.3:499-506) ---
-  ;; The six parts §10.3 names: a symbolic name, a kind from a closed set, a
-  ;; required?/optional flag, the branch keys an optional decision callback may
-  ;; return, the default branch for one, and an optional diagnostic label.
+  ;; --- callback declaration ---
+  ;; The six parts of a callback declaration: a symbolic name, a kind from a
+  ;; closed set, a required?/optional flag, the branch keys an optional decision
+  ;; callback may return, the default branch for one, and an optional diagnostic
+  ;; label.
   ;;
-  ;; *** WHAT IS DELIBERATELY *NOT* CHECKED HERE, and why. *** Three checks are
-  ;; locally evaluable from these six arguments and all three belong to the
-  ;; verifier (design §6, decision 0020's split):
-  ;;   - §16.2:891, an optional DECISION callback without a valid declared
-  ;;     default branch -- `kind`, `required?`, `branch-keys` and
-  ;;     `default-branch` are all right here, and it is still pass 6a's;
-  ;;   - §16.2:902, a branch key colliding with `continue` or `pause`
-  ;;     (§9.3:421 fixes the reserved pair);
-  ;;   - §16.2:886's grammar over `name` and the branch keys.
+  ;; What is deliberately NOT checked here, and why. Three checks are locally
+  ;; evaluable from these six arguments yet all three belong to the verifier:
+  ;;   - an optional DECISION callback without a valid declared default branch
+  ;;     -- `kind`, `required?`, `branch-keys` and `default-branch` are all
+  ;;     right here, and it is still the verifier's;
+  ;;   - a branch key colliding with the reserved `continue` or `pause`;
+  ;;   - the grammar over `name` and the branch keys.
   ;; The comment on make-uint-field above states the consequence of moving one
   ;; of them here, and it is not a style point: a machine whose construction
   ;; failed never exists, so the verifier arm becomes unreachable through the
-  ;; public API and its permissive mutation survives while the suite reports it
-  ;; caught. Local SHAPE is this constructor's; every judgement about the
-  ;; declaration's CONTENT is pass 6a's.
+  ;; public API. Local SHAPE is this constructor's; every judgement about the
+  ;; declaration's CONTENT is the verifier's.
   (define callback-declaration-tag (tag 'byte-machine-callback-declaration))
+  ;; make-callback-declaration : name:Symbol kind:CallbackKind required?:Boolean branch-keys:(Listof Symbol) default-branch:(Option Symbol) source-label:Label -> CallbackDeclaration
   (define (make-callback-declaration name kind required? branch-keys
                                      default-branch source-label)
     (require-symbol 'make-callback-declaration 'name name)
@@ -772,7 +876,7 @@
       (byte-machine-contract-violation 'make-callback-declaration
                                        'invalid-argument 'required?))
     ;; Shape only: that the keys are a proper list of symbols. WHICH keys are
-    ;; admissible, and whether `default-branch` is among them, is pass 6a's.
+    ;; admissible, and whether `default-branch` is among them, is the verifier's.
     (unless (and (list? branch-keys) (for-all symbol? branch-keys))
       (byte-machine-contract-violation 'make-callback-declaration
                                        'invalid-argument 'branch-keys))
@@ -781,46 +885,59 @@
                                        'invalid-argument 'default-branch))
     (vector callback-declaration-tag name kind required? branch-keys
             default-branch source-label))
+  ;; callback-declaration? : Any -> Boolean
   (define (callback-declaration? x) (tagged? callback-declaration-tag x))
+  ;; callback-declaration-name : CallbackDeclaration -> Symbol
   (define (callback-declaration-name d) (vector-ref d 1))
+  ;; callback-declaration-kind : CallbackDeclaration -> CallbackKind
   (define (callback-declaration-kind d) (vector-ref d 2))
+  ;; callback-declaration-required? : CallbackDeclaration -> Boolean
   (define (callback-declaration-required? d) (vector-ref d 3))
+  ;; callback-declaration-branch-keys : CallbackDeclaration -> (Listof Symbol)
   (define (callback-declaration-branch-keys d) (vector-ref d 4))
+  ;; callback-declaration-default-branch : CallbackDeclaration -> (Option Symbol)
   (define (callback-declaration-default-branch d) (vector-ref d 5))
+  ;; callback-declaration-source-label : CallbackDeclaration -> Label
   (define (callback-declaration-source-label d) (vector-ref d 6))
 
-  ;; --- span declaration (§9.1:286, §10.4:512-517) ---
-  ;; The four parts §10.4 names. Both callback slots are declaration NAMES, not
-  ;; declarations: §16.2:892 ("invalid span callback declarations") is the
-  ;; cross-reference that resolves them and checks their kinds, and a
-  ;; cross-reference is the verifier's by decision 0020 item 1 -- this
-  ;; constructor cannot see the callback table at all.
+  ;; --- span declaration ---
+  ;; The four parts of a span declaration. Both callback slots are declaration
+  ;; NAMES, not declarations: the verifier is what resolves them and checks
+  ;; their kinds (a cross-reference), and this constructor cannot see the
+  ;; callback table at all.
   (define span-declaration-tag (tag 'byte-machine-span-declaration))
+  ;; make-span-declaration : name:Symbol data-callback:Symbol complete-callback:(Option Symbol) source-label:Label -> SpanDeclaration
   (define (make-span-declaration name data-callback complete-callback
                                  source-label)
     (require-symbol 'make-span-declaration 'name name)
     (require-symbol 'make-span-declaration 'data-callback data-callback)
-    ;; §10.4:516 makes the completion callback optional; #f is its absence, on
-    ;; the byte-dispatch eof-target convention.
+    ;; The completion callback is optional; #f is its absence, on the
+    ;; byte-dispatch eof-target convention.
     (unless (or (eq? complete-callback #f) (symbol? complete-callback))
       (byte-machine-contract-violation 'make-span-declaration
                                        'invalid-argument 'complete-callback))
     (vector span-declaration-tag name data-callback complete-callback
             source-label))
+  ;; span-declaration? : Any -> Boolean
   (define (span-declaration? x) (tagged? span-declaration-tag x))
+  ;; span-declaration-name : SpanDeclaration -> Symbol
   (define (span-declaration-name d) (vector-ref d 1))
+  ;; span-declaration-data-callback : SpanDeclaration -> Symbol
   (define (span-declaration-data-callback d) (vector-ref d 2))
+  ;; span-declaration-complete-callback : SpanDeclaration -> (Option Symbol)
   (define (span-declaration-complete-callback d) (vector-ref d 3))
+  ;; span-declaration-source-label : SpanDeclaration -> Label
   (define (span-declaration-source-label d) (vector-ref d 4))
 
   ;; --- machine (default-eof-error is a declared error NAME) ---
   (define machine-tag (tag 'byte-machine-machine))
-  (define machine-ir-version 1)     ; stamped; v0.1 callers do not override (§9.1)
+  (define machine-ir-version 1)     ; stamped; v0.1 callers do not override
   ;; The version pass-schema accepts. Named separately from the stamp so the two
-  ;; can be told apart by a mutation: forcing the stamp changes what is built,
-  ;; forcing this changes what is accepted, and only the second is a verifier
-  ;; decision.
+  ;; are distinct: the stamp is what is built, this is what is accepted, and only
+  ;; the second is a verifier decision.
+  ;; supported-ir-version : ExactInteger
   (define supported-ir-version 1)
+  ;; make-machine : name:Symbol entry:NodeName fields:(Listof UintField) callbacks:(Listof CallbackDeclaration) spans:(Listof SpanDeclaration) errors:(Listof ErrorDeclaration) nodes:(Listof Node) default-eof-error:ErrorName source-label:Label -> Machine
   (define (make-machine name entry fields callbacks spans errors nodes
                         default-eof-error source-label)
     (require-symbol 'make-machine 'name name)
@@ -835,44 +952,54 @@
     (unless (for-all error-declaration? errors)
       (byte-machine-contract-violation 'make-machine 'invalid-argument 'errors))
     ;; What makes the descriptor load-bearing. Before this guard the collection
-    ;; loop above checked only `list?`, so any proper list passed as `fields` --
-    ;; measured, a machine could carry (junk 42 "string") and nothing read it.
+    ;; loop above checked only `list?`, so any proper list passed as `fields`
+    ;; would be accepted -- a machine could carry (junk 42 "string") unchecked.
     (unless (for-all uint-field? fields)
       (byte-machine-contract-violation 'make-machine 'invalid-argument 'fields))
-    ;; Milestone 5 Slice ①b, the same sentence as fields above and for the same
-    ;; reason. Measured before this guard existed: `machine-callbacks` and
-    ;; `machine-spans` had been constructor parameters, vector slots and
-    ;; exported accessors since the descriptor was written, and NOTHING read
-    ;; either -- three hits in the whole tree, all inside this file. A proper
-    ;; list of junk was a valid callbacks table. These two guards are what make
-    ;; the slots load-bearing, and this slice is their first reader.
+    ;; The same as the fields guard above and for the same reason: a proper list
+    ;; of junk would otherwise be a valid callbacks or spans table. These two
+    ;; guards are what make the slots load-bearing.
     (unless (for-all callback-declaration? callbacks)
       (byte-machine-contract-violation 'make-machine 'invalid-argument 'callbacks))
     (unless (for-all span-declaration? spans)
       (byte-machine-contract-violation 'make-machine 'invalid-argument 'spans))
     (vector machine-tag machine-ir-version name entry fields callbacks spans
             errors nodes default-eof-error source-label))
+  ;; machine? : Any -> Boolean
   (define (machine? x) (tagged? machine-tag x))
   ;; Slot 1, stamped as the constant above and never taken from an argument.
-  ;; It had no accessor until Milestone 4 Slice ①b, which is why §16.2:884's
-  ;; unsupported-IR-version half was listed and unimplemented: pass-schema could
-  ;; not read what it was meant to check.
+  ;; pass-schema reads it for the unsupported-IR-version check.
+  ;; machine-ir-version-of : Machine -> ExactInteger
   (define (machine-ir-version-of m) (vector-ref m 1))
+  ;; machine-name : Machine -> Symbol
   (define (machine-name m) (vector-ref m 2))
+  ;; machine-entry : Machine -> NodeName
   (define (machine-entry m) (vector-ref m 3))
+  ;; machine-fields : Machine -> (Listof UintField)
   (define (machine-fields m) (vector-ref m 4))
+  ;; machine-callbacks : Machine -> (Listof CallbackDeclaration)
   (define (machine-callbacks m) (vector-ref m 5))
+  ;; machine-spans : Machine -> (Listof SpanDeclaration)
   (define (machine-spans m) (vector-ref m 6))
+  ;; machine-errors : Machine -> (Listof ErrorDeclaration)
   (define (machine-errors m) (vector-ref m 7))
+  ;; machine-nodes : Machine -> (Listof Node)
   (define (machine-nodes m) (vector-ref m 8))
+  ;; machine-default-eof-error : Machine -> ErrorName
   (define (machine-default-eof-error m) (vector-ref m 9))
+  ;; machine-source-label : Machine -> Label
   (define (machine-source-label m) (vector-ref m 10))
 
-  ;; --- verification result (carries the machine, per §9.2) ---
+  ;; --- verification result (carries the machine) ---
   (define verification-result-tag (tag 'byte-machine-verification-result))
+  ;; make-verification-result : ok?:Boolean diagnostics:(Listof Diagnostic) machine:Machine -> VerificationResult
   (define (make-verification-result ok? diagnostics machine)
     (vector verification-result-tag ok? diagnostics machine))
+  ;; verification-result? : Any -> Boolean
   (define (verification-result? x) (tagged? verification-result-tag x))
+  ;; verification-result-ok? : VerificationResult -> Boolean
   (define (verification-result-ok? v) (vector-ref v 1))
+  ;; verification-result-diagnostics : VerificationResult -> (Listof Diagnostic)
   (define (verification-result-diagnostics v) (vector-ref v 2))
+  ;; verification-result-machine : VerificationResult -> Machine
   (define (verification-result-machine v) (vector-ref v 3)))
