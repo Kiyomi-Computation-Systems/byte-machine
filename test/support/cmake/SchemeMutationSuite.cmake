@@ -4106,7 +4106,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # right.
 #
 # ONE thing in that note survives and is not about this file. Slice ①a's PLAN
-# (docs/plans/milestone-4-slice-1a-implementation-plan.md) records "Merge base:
+# (.plans/milestone-4-slice-1a-implementation-plan.md) records "Merge base:
 # 4 collisions" and "HEAD now carries exactly the merge base's four collisions".
 # Measured at c3ceec2 with this suite's own judgment semantics -- the pin regex
 # compiled the way CMake compiles it, matched against whole captured output --
@@ -10572,7 +10572,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # machine BYTE-IDENTICALLY to the committed golden, and leaves this pass's own
 # program green (cases=3 failed-cases=0 checks=8 failures=0 status=0). The
 # Slice ③ implementation plan's draft of this lane named `list-sort` as the
-# mechanism (docs/plans/milestone-3-slice-3-implementation-plan.md, Task 5);
+# mechanism (.plans/milestone-3-slice-3-implementation-plan.md, Task 5);
 # that is true of a byte-dispatch node -- decision 0014's ascending-by-byte
 # transition sort -- and false of a sequence prefix state, which is what this
 # fixture is made of.

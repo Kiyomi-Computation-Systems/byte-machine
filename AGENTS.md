@@ -6,17 +6,20 @@
 
 * Use the functional core / imperative shell pattern
 * Follow the 12 Factor Apps philosophy
-* Project targets Chez Scheme (R6RS) only — see docs/decisions/0005-chez-only.md
+* Project targets Chez Scheme (R6RS) only — see .decisions/0005-chez-only.md
 * Project should be portable across macos (darwin), linux, and windows
 * Project should be portable across amd64 and arm64
 
 ### Layout, process & libraries
 
-* Plans live in `/docs/plans`, decision records in `/docs/decisions`
+* Internal working documents live in hidden top-level directories — plans in
+  `/.plans`, decision records in `/.decisions`, the v0.1 reference set in
+  `/.reference`. `/docs` is reserved for **public** documentation only (it holds
+  none yet), keeping the published surface separate from the development record.
 * Add entries to `CHANGELOG.md` for each release
 * Makefile should have a `help` command which lists all of the make commands.
 * Libraries are R6RS `.sls`; libraries and programs contain their own code —
-  no shared include bodies (docs/decisions/0006-inline-libraries.md). R6RS
+  no shared include bodies (.decisions/0006-inline-libraries.md). R6RS
   forbids assigning an exported variable — reach mutable state through
   procedures.
 * **A test needing a narrow public surface widened imports from the private
@@ -558,7 +561,7 @@
   job: a reader who arrives at a numbered item by citation never scrolls to the
   foot of the file, so the **top** of the record must also say a later note
   reached back into it, and the amended item must say so at the site.
-  `docs/decisions/README.md` states that convention and the boundary it must
+  `.decisions/README.md` states that convention and the boundary it must
   not cross — a pointer routes, it never restates, because one that summarises
   the correction hands a reader the later decision's conclusion without the
   evidence the note carries, which is this bullet's rewrite arriving by the
@@ -575,7 +578,7 @@
   §7 deliverable entries still had to be corrected — so the pledge was scoped
   to name which sections it covers); a sentence that was **never true** is
   a third case, annotated rather than fixed when it is load-bearing
-  (docs/decisions/0001-toolchain-discovery.md's claim of a CI that has never
+  (.decisions/0001-toolchain-discovery.md's claim of a CI that has never
   existed); and an instruction changes category when its work closes — a
   completed work-order item, or the exit criterion of a milestone that has just
   closed, has become the record of what was asked, so it gets a dated
@@ -787,7 +790,7 @@
   The derived-census rule above keeps a TEST honest against the source; a reference
   DOCUMENT that lists the same set needs the same discipline, or it becomes a
   thirty-first place for the set to go stale. Milestone 9's
-  `docs/reference/verifier-diagnostic-catalog.md` lists the thirty diagnostic
+  `.reference/verifier-diagnostic-catalog.md` lists the thirty diagnostic
   codes; `diagnostic-census-tests.sps` now asserts the catalog's code set equals
   the census it walks from `verify.sls`, so a code added to the verifier reddens
   the catalog until it is updated — the doc cannot silently lag the code. Two
@@ -1053,6 +1056,30 @@
   and prefer a searchable construct name to a line number whenever the target has
   one. See also the standard on status surfaces: this is the same failure with a
   shorter fuse.
+
+
+* **Moving a documentation directory shifts every relative link into and out of
+  it — a repo-wide link-check is the only guard, and some references are
+  functional.** (2026-09-13) The internal doc sets left `/docs` for hidden root
+  directories — `docs/plans` → `.plans`, `docs/decisions` → `.decisions`,
+  `docs/reference` → `.reference` — so `/docs` carries only public documentation.
+  A directory that drops from depth 2 (`docs/plans`) to depth 1 (`.plans`) changes
+  the `../` depth of every link it holds: cross-set links became `../decisions/` →
+  `../.decisions/`, and every root-reaching `../../X` lost one hop to `../X`; links
+  from the other sets in gained one (`docs/decisions` → `docs/plans` was
+  `../plans/`, now `.decisions` → `.plans` is `../.plans/`). Root-anchored
+  references (repo-root paths in `README.org`/`CHANGELOG.md`, `../../docs/…` from
+  `examples/`, and `repo "/docs/…"` reads in tests) only need the `docs/X` segment
+  swapped for `.X`; docs-internal relative links need per-source-directory
+  recomputation. Crucially, several references are **functional, not cosmetic**:
+  `release-ledger-tests.sps` reads the implementation plan and the `§27` reference
+  docs by path and set-equal-checks them against `release-ledger.sls`, and
+  `diagnostic-census-tests.sps` reads `.reference/verifier-diagnostic-catalog.md`
+  under `BYTE_MACHINE_REPO_ROOT` — so the move must update those paths and re-run
+  the lanes, and a `git mv` comment edit inside a SOURCES `.sls` forces a provenance
+  reconfigure. The guard that made this safe was a resolve-every-`](…)`-link
+  checker run before and after: it went 17 pre-existing broken → 0, proving no new
+  breakage (and incidentally fixing the pre-existing `./NNNN-*.md` decision links).
 
 
 ## Closing ritual

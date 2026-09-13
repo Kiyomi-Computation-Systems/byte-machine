@@ -62,7 +62,7 @@
        (loop (cdr ls) in (cons (bullet-text (car ls)) acc)))
       (else (loop (cdr ls) in acc)))))
 
-(define plan (file-string (string-append repo "/docs/plans/byte-machine-implementation-plan.md")))
+(define plan (file-string (string-append repo "/.plans/byte-machine-implementation-plan.md")))
 (define cmakelists (file-string (string-append repo "/test/CMakeLists.txt")))
 
 ;; ---- totality row 1: §26's fifteen ----------------------------------------
@@ -164,12 +164,12 @@
       (lambda ()
         (check "kind mechanical" (mechanical? "§26:1671"))
         (check "reference present"
-               (file-exists? (string-append repo "/docs/reference/source-ir-and-builder.md")))))
+               (file-exists? (string-append repo "/.reference/source-ir-and-builder.md")))))
     (harness-case "§26:1681 the integration guide documents the dependency boundary"
       (lambda ()
         (check "kind mechanical" (mechanical? "§26:1681"))
         (check "reference present"
-               (file-exists? (string-append repo "/docs/reference/generated-code-integration-chez.md")))))
+               (file-exists? (string-append repo "/.reference/generated-code-integration-chez.md")))))
     (harness-case "§26:1682 met; the example ships (its clean-checkout run is recorded in the close)"
       (lambda ()
         (check "state met" (eq? (criterion-state (row "§26:1682")) 'met))
@@ -205,15 +205,15 @@
 
 ;; ---- §27 deliverables: each marked-existing deliverable is really present ---
 (define reference-files
-  '(("§27:1692" . "docs/reference/source-ir-and-builder.md")
-    ("§27:1693" . "docs/reference/transition-and-cursor-semantics.md")
-    ("§27:1694" . "docs/reference/callback-span-lifetime.md")
-    ("§27:1695" . "docs/reference/field-and-overflow.md")
-    ("§27:1696" . "docs/reference/verifier-diagnostic-catalog.md")
-    ("§27:1697" . "docs/reference/generated-code-integration-chez.md")
-    ("§27:1698" . "docs/reference/grammar-author-testing-guide.md")
-    ("§27:1699" . "docs/reference/benchmark-methodology-and-baseline.md")
-    ("§27:1700" . "docs/reference/portability-matrix.md")))
+  '(("§27:1692" . ".reference/source-ir-and-builder.md")
+    ("§27:1693" . ".reference/transition-and-cursor-semantics.md")
+    ("§27:1694" . ".reference/callback-span-lifetime.md")
+    ("§27:1695" . ".reference/field-and-overflow.md")
+    ("§27:1696" . ".reference/verifier-diagnostic-catalog.md")
+    ("§27:1697" . ".reference/generated-code-integration-chez.md")
+    ("§27:1698" . ".reference/grammar-author-testing-guide.md")
+    ("§27:1699" . ".reference/benchmark-methodology-and-baseline.md")
+    ("§27:1700" . ".reference/portability-matrix.md")))
 (harness-group "§27: every deliverable marked existing is really present (11 of 11)"
   (lambda ()
     (harness-case "each reference document exists as a committed file"

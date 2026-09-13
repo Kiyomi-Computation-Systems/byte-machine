@@ -18,7 +18,7 @@ machine (M1), incremental lifecycle (M2), byte classes and sequences (M3),
 fields/actions/branches (M4), callbacks/poisoning/spans (M5), counted consumption
 (M6), verification and generative hardening (M7), the private HTTP fixture (M8),
 and cross-platform hardening and this release (M9). The documentation set
-(`docs/reference/`, eleven references) and a runnable example
+(`.reference/`, eleven references) and a runnable example
 (`examples/generate-simple-machine/`) ship with it.
 
 **Known open at v0.1 — recorded, not silently waived:**
@@ -51,7 +51,7 @@ classes) and ② (sequence dispatch and prefix lowering). Milestone 4 closed
 encoding and `parser-error` seam), Slice ①b **2026-09-02** (fields:
 declaration, slots, and `parser-field-ref`), and Slice ② **2026-09-03** (field
 action and field branch). See
-[the implementation plan](docs/plans/byte-machine-implementation-plan.md) §25
+[the implementation plan](.plans/byte-machine-implementation-plan.md) §25
 for overall scope; the entries below record what each milestone actually
 delivered. Milestone 5 (callbacks, poisoning, and spans) closed 2026-09-06. Two
 hardening slices ran first and closed **2026-09-04** — Slice ⓪ (the verifier's
@@ -93,7 +93,7 @@ The slice also closed the three fragment shapes `§25:1589` still lacked — a s
 open at `parser-finish!` and closed on the EOF chain, a reset while parked
 between the span-end substeps, and a reset of a poisoned parser with a span open
 — shipped `§27:1694`'s callback/span lifetime reference — the first thing in
-`docs/reference/`, though not the first item on `§27`'s list to exist: this
+`.reference/`, though not the first item on `§27`'s list to exist: this
 changelog is `:1701` — and disposed the two obligations that named Milestone
 5's close-out as their receiver, writing each at the source construct its
 receiver will open. It also built `§16.2:886`'s **label-grammar check** for the
@@ -145,7 +145,7 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
 - CMake build frontend with checked-in presets and a thin `Makefile` over it.
 - Probe-based Chez and Gambit discovery that interrogates candidates rather
   than trusting binary names, rejecting Petite and Ghostscript's `gsc`. See
-  [decision 0001](docs/decisions/0001-toolchain-discovery.md).
+  [decision 0001](.decisions/0001-toolchain-discovery.md).
 - CTest registration helper enforcing the test-name grammar, label vocabulary,
   duplicate-name rejection, and mandatory timeouts at configure time.
 - Specifications for the functional core of every build-layer module, runnable
@@ -271,7 +271,7 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   identity claims wrongly and raises nothing, but the identity lane still
   fails it — an ordinary `check`/`check-equal` mismatch, exit 1 on both
   runtimes — while every lane that imports only the owner stays green.
-- [Decision 0003](docs/decisions/0003-cross-library-identity.md), including
+- [Decision 0003](.decisions/0003-cross-library-identity.md), including
   the deferred one-owner guard with the condition that reopens it, and an
   open question about Chez and Gambit disagreeing over a library body that
   redefines an imported name.
@@ -334,7 +334,7 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   guard fires from the summary, so it cannot catch a body that reaches
   neither the summary nor the check — the bootstrap's own shape, a single
   deliberate exception that carries its own call.
-- [Decision 0004](docs/decisions/0004-content-fingerprint-and-provenance.md),
+- [Decision 0004](.decisions/0004-content-fingerprint-and-provenance.md),
   including the bound the manifest does not close — a matching fingerprint
   proves the declared text is unchanged, not that the run included exactly
   those files — and the open question that reopens it.
@@ -401,14 +401,14 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   each asserting its own totals; the pull-request and release selections
   stand at 37 lanes and `no-scheme` at 8.
 - The Milestone 0 close-out design
-  (`docs/plans/milestone-0-close-out.md`), stating what the milestone
+  (`.plans/milestone-0-close-out.md`), stating what the milestone
   delivered against its own deliverable list, why three of its deliverables
   could not be executed as originally specified, and where each lands in
   Milestone 1 instead.
-- A Tier 1 CI feasibility note (`docs/plans/milestone-0-ci-feasibility.md`),
+- A Tier 1 CI feasibility note (`.plans/milestone-0-ci-feasibility.md`),
   discharging Milestone 0's second exit criterion with a design covering the
   two Tier 1 platform cells this host cannot run — not a running pipeline.
-- [Decision 0007](docs/decisions/0007-milestone-0-closes-at-the-harness.md),
+- [Decision 0007](.decisions/0007-milestone-0-closes-at-the-harness.md),
   recording that Milestone 0 closes at the harness, and answering the parent
   plan's four remaining hard questions with each answer's evidence level
   stated rather than assumed.
@@ -470,14 +470,14 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   load-bearing by a mutation that drops one entry, caught on the
   set-inequality FAIL line rather than by a bare nonzero exit. This ships
   with no `/v2` runtime export — `/v2` remains gated on benchmark evidence
-  per [decision 0010](docs/decisions/0010-direct-executor-abi.md) §5, which
+  per [decision 0010](.decisions/0010-direct-executor-abi.md) §5, which
   is amended to record that the guard's value does not depend on `/v2`
   shipping. Measured on the shipped tree: `release` 60/60, `no-scheme` 8/8,
   the Scheme mutation suite 37 passes/104 mutations, the CMake mutation
   suite 1 pass/72 mutations.
 - Milestone 2 Gate 0: three decision records answering the EOF, ABI, and
   condition questions Milestone 1 handed forward, with no code change.
-  [Decision 0011](docs/decisions/0011-eof-execution-model.md) fixes the EOF
+  [Decision 0011](.decisions/0011-eof-execution-model.md) fixes the EOF
   execution model. `parser-finish!` runs the same executor loop as feed with input
   permanently exhausted, and the only branch that differs is a dispatch node with
   no byte available: feed returns `need-input`, finish instead takes that node's
@@ -486,14 +486,14 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   finish path, because that "polysemous stop" model describes a machine parent
   §16.2 requires the verifier to *reject*; and eof-targets chain, terminating at
   `finish`, `error`, or (Slice ③) `pause`, never at `stop`.
-  [Decision 0012](docs/decisions/0012-generated-abi-v2-finish.md) takes the
+  [Decision 0012](.decisions/0012-generated-abi-v2-finish.md) takes the
   `/v2`-constructor-over-arity-break seam
-  [decision 0010](docs/decisions/0010-direct-executor-abi.md) item 4 had already
+  [decision 0010](.decisions/0010-direct-executor-abi.md) item 4 had already
   fixed for exactly this kind of change: `byte-machine-make-compiled-machine/v2`,
   `current-abi-version` 2, one unified `exec` closure carrying a `finish?` flag
   rather than two closures, terminal arms one per kind, and the `feed-outcome`
   record shape reused — `finished` and `paused` are new status *symbols*, not a new
-  record. [Decision 0013](docs/decisions/0013-runtime-coded-conditions.md) lets
+  record. [Decision 0013](.decisions/0013-runtime-coded-conditions.md) lets
   `runtime.sls` import `(byte-machine private conditions)`, so lifecycle misuse and
   the §11.1 invalid-slice contract raise `&byte-machine-contract` with a stable
   `code`/`who` the tests assert directly rather than `assertion-violation` text.
@@ -541,7 +541,7 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   parent §12.5: the parser vector grows an `entry` slot, and reset restores `current`
   to the entry state, zeroes the stream offset, and returns lifecycle to `ready`.
 
-  Per [decision 0013](docs/decisions/0013-runtime-coded-conditions.md),
+  Per [decision 0013](.decisions/0013-runtime-coded-conditions.md),
   `runtime.sls` now imports `(byte-machine private conditions)`, and
   `parser-feed!`'s invalid-slice guard raises `&byte-machine-contract` (code
   `invalid-slice`, who `parser-feed!`) instead of `assertion-violation`. Because
@@ -560,7 +560,7 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   only. `finish` joins `byte-dispatch`, `stop` and `error` as a source-IR node kind
   — `make-finish-node`, exported from `(byte-machine graph)` — giving EOF success
   the distinct terminal
-  [decision 0011](docs/decisions/0011-eof-execution-model.md) called for. The
+  [decision 0011](.decisions/0011-eof-execution-model.md) called for. The
   verifier grows the parent §16.2 checks that only become load-bearing once EOF is
   executed rather than merely declared: a byte edge into a finish terminal is
   `non-eof-into-finish` (§16.2:908), an eof-target chain that reaches a `stop` is
@@ -612,7 +612,7 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   `finish?`. The interpreter≡generated differential is extended to
   feed-then-finish across all 256 first bytes, distinguishing idle completion
   (`finished`) from truncation (`error`).
-  [Decision 0010](docs/decisions/0010-direct-executor-abi.md) item 4 governs the
+  [Decision 0010](.decisions/0010-direct-executor-abi.md) item 4 governs the
   `/v2`-constructor-over-arity-break seam.
 - Milestone 2 Slice ③: the explicit pause node, `parser-resume!`, and the
   full reachable operation matrix, closing Milestone 2. A new source-IR node
@@ -638,7 +638,7 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   cell raises `&byte-machine-contract` with the single code
   `'lifecycle-violation`: `who` is the refused operation (`parser-feed!` /
   `parser-finish!` / `parser-resume!`), `detail` is `(list <state> <op>)`.
-  See [decision 0013](docs/decisions/0013-runtime-coded-conditions.md)'s
+  See [decision 0013](.decisions/0013-runtime-coded-conditions.md)'s
   2026-08-29 note.
 
   The verifier's reachability and zero-progress passes learn a pause arm: a
@@ -676,7 +676,7 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   mutations past this slice's own close-out close a gap Task 7's review found
   in exit criterion 4: `error`/`finished` ×
   `resume!` and `finished` × `finish!` had no direct test (see
-  [milestone-2-design.md](docs/plans/milestone-2-design.md) §6's dated
+  [milestone-2-design.md](.plans/milestone-2-design.md) §6's dated
   disposition). Three further mutations past that close the final
   whole-branch review's (pre-merge) own findings: two Critical gaps where the
   feed-path and finish-path pause arms collapsed
@@ -688,10 +688,10 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   `make-byte-range-matcher`, `make-byte-complement-matcher` and `ascii-bytes` on
   the public construction façade, canonicalized to subsets of `0..255` by one
   shared spine and lowered to one normalized transition per byte
-  ([decision 0014](docs/decisions/0014-byte-classes-expand-per-byte.md)).
+  ([decision 0014](.decisions/0014-byte-classes-expand-per-byte.md)).
   Degenerate shapes — an empty byte set, a range with `low > high` — are
   constructor contract violations
-  ([decision 0017](docs/decisions/0017-degenerate-shapes-are-contract-violations.md));
+  ([decision 0017](.decisions/0017-degenerate-shapes-are-contract-violations.md));
   duplicate bytes and a vacuous complement are not. `pass-overlap` now reports
   one diagnostic per colliding pair of cases across mixed matcher kinds. The
   normalized encoding, its format version byte, the emitter and the runtime are
@@ -720,14 +720,14 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   prefix, so two alternatives sharing a first byte (`AB`/`AC`) no longer
   silently collide on the ascending-byte sort key; internal prefix states get
   ids appended after the declared block, depth-first pre-order, ascending by
-  child byte ([decision 0016](docs/decisions/0016-normalized-state-id-allocation.md)).
+  child byte ([decision 0016](.decisions/0016-normalized-state-id-allocation.md)).
   The reference interpreter tracks prefix progress independently, as a
   compound `current` carrying the consumed byte path rather than a bare
   position index — measured necessary: a position index cannot distinguish
   which alternatives are still live from how far along it is, so it accepts
   byte sequences never on the input when two alternatives diverge at position
   0 (`AB`/`XY`; see the dated amendment at design §4.2)
-  ([decision 0015](docs/decisions/0015-sequence-prefix-states.md)). The
+  ([decision 0015](.decisions/0015-sequence-prefix-states.md)). The
   emitter and `runtime.sls` are unchanged, confirmed and recorded at the
   change site (`compile.sls`'s `render-state-arm`). Both mismatch modes
   (`reexecute` and `advance`) are covered; the interpreter≡generated
@@ -759,7 +759,7 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   size ≤ 3 drawn from the 14 binary strings of length 1–3, with zero
   disagreements. `pass-overlap` is **not** extended to sequence nodes, now or
   later: §16.2:893 and :894 are two entries, two checks and two codes
-  ([decision 0017](docs/decisions/0017-degenerate-shapes-are-contract-violations.md)
+  ([decision 0017](.decisions/0017-degenerate-shapes-are-contract-violations.md)
   point 4), and the guards for the same two invariants are kept as
   defense-in-depth in both files — **three** assertion sites in
   `normal-ir.sls`'s `trie-insert`, because the ambiguity invariant is checked in
@@ -891,7 +891,7 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   property one hop away was correctly rejected. Both holes were pre-existing,
   not regressions, and both were found by Milestone 5 Slice ⓪'s kind × position
   matrix before any code was written. See
-  [decision 0023](docs/decisions/0023-eof-walk-starts-and-finish-reachability.md).
+  [decision 0023](.decisions/0023-eof-walk-starts-and-finish-reachability.md).
 - The §16.2:908 check is derived from byte-reachability over every node's
   out-edges rather than written out per node kind. The three hand-written sites
   it replaces each had to be extended by hand when a node kind was added, which
@@ -907,14 +907,14 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   them (0001, 0004, 0010, 0012, 0013); 0010 had accumulated four such notes, and
   its item 4 read "extends by a `/v2` constructor" forty-seven lines above the
   note recording that
-  [decision 0018](docs/decisions/0018-unversioned-generated-abi-constructor.md)
+  [decision 0018](.decisions/0018-unversioned-generated-abi-constructor.md)
   had replaced that mechanism. Nothing above a note was rewritten — the pointers
   are additions, and the convention and its boundary (a pointer routes; it never
   restates) are stated in
-  [docs/decisions/README.md](docs/decisions/README.md), whose previous wording
+  [.decisions/README.md](.decisions/README.md), whose previous wording
   covered supersession only. The one-bullet-per-note invariant ships with the
   command that checks it.
-- [Decision 0010](docs/decisions/0010-direct-executor-abi.md)'s 2026-08-23
+- [Decision 0010](.decisions/0010-direct-executor-abi.md)'s 2026-08-23
   Slice-B note gains a dated annotation: its "item 5's `/v2` remains gated on
   benchmark evidence" names the wrong item. Item 5 is the deferral of a coded
   ABI-mismatch condition and mentions no `/v2` and no benchmark gate; the
@@ -985,13 +985,13 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   and by the build-time expectation alike. A lane's manifest (`SOURCES`,
   formerly `SHARED_BODIES`) is its program plus every library it loads, so
   every byte of Scheme a lane runs is fingerprinted — wrapper text never was,
-  before. See [decision 0006](docs/decisions/0006-inline-libraries.md).
+  before. See [decision 0006](.decisions/0006-inline-libraries.md).
 - Milestone 0 (portability and harness spike) closes. Its three undelivered
   deliverables — a determinism proof, an identifier/LF proof, and a CI
   pipeline — are properties of an emitter this milestone was never scoped
   to build; they move to Milestone 1, landing on Scope lines that already
   named them rather than becoming new obligations there. See
-  [decision 0007](docs/decisions/0007-milestone-0-closes-at-the-harness.md).
+  [decision 0007](.decisions/0007-milestone-0-closes-at-the-harness.md).
 - Both governing plans are swept by grep over their whole text and then read:
   the milestone-0-portability-spike plan end to end, all thirteen sections; the
   parent implementation plan at §25 in full, plus §§7.1, 7.3, 9.2, 9.6, 10.1,
@@ -1016,9 +1016,9 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
 - The comment above the `cmake-mutation` lane, which claimed the lane "runs
   in CI", now says it runs under `ctest`. No CI has existed in any commit of
   this repository, and the old wording sat a few lines from the exact lane
-  [decision 0001](docs/decisions/0001-toolchain-discovery.md) cites as
+  [decision 0001](.decisions/0001-toolchain-discovery.md) cites as
   evidence of one.
-- [Decision 0001](docs/decisions/0001-toolchain-discovery.md) gains a dated
+- [Decision 0001](.decisions/0001-toolchain-discovery.md) gains a dated
   annotation on its claim that a lane "runs in CI": that sentence was never
   true, and it is annotated rather than silently corrected because the
   record cites it as evidence for its own Consequences.
@@ -1061,7 +1061,7 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   sticky error tuple. That is an observable behavior change, now covered by
   `runtime-tests.sps`'s "the error row returns the stored error after a
   default-EOF truncation" case. See
-  [milestone-2-design.md](docs/plans/milestone-2-design.md) §5's 2026-08-29
+  [milestone-2-design.md](.plans/milestone-2-design.md) §5's 2026-08-29
   note (D1).
 
 
@@ -1075,7 +1075,7 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   and after the bump `/v2`'s old literal-2 guard would have accepted exactly the
   stale files it was added to refuse. Generation is deterministic and the three
   committed goldens are regenerated from the emitter. See
-  [decision 0018](docs/decisions/0018-unversioned-generated-abi-constructor.md);
+  [decision 0018](.decisions/0018-unversioned-generated-abi-constructor.md);
   this satisfies §9.5:444's three requirements for a pre-1.0 ABI change.
 - **The canonical normalized encoding is format 2**, carrying the static reason
   of every error declaration the graph **reaches** — an error node's, and the
@@ -1083,7 +1083,7 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   machines differing only in a reached declaration's reason therefore differ in
   IR fingerprint, without which the fingerprint would stop identifying what was
   emitted. All four pinned fingerprints moved once, here. See
-  [decision 0019](docs/decisions/0019-encoding-format-2-pre-provisioned.md).
+  [decision 0019](.decisions/0019-encoding-format-2-pre-provisioned.md).
 - **A parser error is a structured record, not a bare code symbol.**
   `parser-result-error` now yields a `parser-error` carrying domain, code,
   reason, detail, public source-node name, state ID, absolute offset and
@@ -1093,7 +1093,7 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   member the two lanes may differ on: §12.7:777 licenses it, since an
   independently interpreted machine need not number states as the generated one
   does. Both still report one. See
-  [decision 0022](docs/decisions/0022-structured-parser-error-record.md).
+  [decision 0022](.decisions/0022-structured-parser-error-record.md).
 - **Machines declare unsigned integer fields, and parsers read them.**
   `make-uint-field` (§9.1:283) takes a name, a width of 8/16/32/64, an initial
   value and a source label, and refuses everything else **at construction**:
@@ -1120,14 +1120,14 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   asserted by `git diff --stat 51fd5f3..HEAD -- test/fixtures/` and by a case
   pinning a zero-field fingerprint at ①a's own measured value. The baseline is
   `51fd5f3` and **not** ①a's merge: that commit, the first on this branch,
-  resolved [decision 0022](docs/decisions/0022-structured-parser-error-record.md)'s
+  resolved [decision 0022](.decisions/0022-structured-parser-error-record.md)'s
   item 7 and moved `generated-pause.golden.sls`, whose `errs` vector had carried
   a declaration the graph never reaches. Decision 0019 point 5 makes an ①a-merge
   golden move a STOP condition; that point is amended at its own foot rather than
   here, because that is where a later slice arrives. Field-declaring machines
   get one new fingerprint of their own. See
-  [decision 0019](docs/decisions/0019-encoding-format-2-pre-provisioned.md) and
-  [decision 0020](docs/decisions/0020-field-shape-is-a-constructor-contract.md).
+  [decision 0019](.decisions/0019-encoding-format-2-pre-provisioned.md) and
+  [decision 0020](.decisions/0020-field-shape-is-a-constructor-contract.md).
 
   Measured at the slice's close: `release` 92/92, `pr` 92/92, `no-scheme` 8/8,
   the Scheme mutation suite **49 passes / 275 mutations**, the CMake mutation
@@ -1237,8 +1237,8 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   Scheme and R6RS only. The one consumer that required a second runtime,
   protium, is being replaced by a Chez-only libuv library, so nothing
   remaining needs Gambit. See
-  [decision 0005](docs/decisions/0005-chez-only.md) and
-  [the removal plan](docs/plans/chez-only-simplification.md). Milestone 0
+  [decision 0005](.decisions/0005-chez-only.md) and
+  [the removal plan](.plans/chez-only-simplification.md). Milestone 0
   slice 5c, which existed only to add Gambit's two compiled modes, is
   cancelled; deliverable D5 closes at two lanes, `chez.source` and
   `chez.aot`.
@@ -1264,11 +1264,11 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
   mutations to 29 passes/65 mutations; the `no-scheme` selection drops from
   10 to 9.
 
-  What stays: [decision 0002](docs/decisions/0002-shared-body-include-mechanism.md)
-  and [decision 0003](docs/decisions/0003-cross-library-identity.md) — the
+  What stays: [decision 0002](.decisions/0002-shared-body-include-mechanism.md)
+  and [decision 0003](.decisions/0003-cross-library-identity.md) — the
   shared-body `include` mechanism and its one-owner rule — remain in force,
   unchanged by this cut. The follow-up slice named in
-  [the removal plan](docs/plans/chez-only-simplification.md)'s §6 (since
+  [the removal plan](.plans/chez-only-simplification.md)'s §6 (since
   designed and landed — see the include-collapse entries above and below)
   collapses that indirection into inline R6RS libraries; until it lands, both
   decisions govern exactly as before.
@@ -1285,13 +1285,13 @@ the slice's source diff is one comment. Milestone 7 (verification and generative
 - Three bullets leave Milestone 0's Deliver list. "Shared hello-library body
   loaded through its owner wrapper" is retired along with the shared-body
   include mechanism itself — see
-  [decision 0006](docs/decisions/0006-inline-libraries.md). "Deterministic
+  [decision 0006](.decisions/0006-inline-libraries.md). "Deterministic
   text emission proof across the Chez source and AOT lanes" and "identifier
   repertoire and binary LF emission proof across available operating
   systems" are not dropped: both move to Milestone 1, landing on Scope
   lines that already named them ("deterministic output"; "symbolic name
   resolution" and "generated-name safety for every construct present"). See
-  [decision 0007](docs/decisions/0007-milestone-0-closes-at-the-harness.md).
+  [decision 0007](.decisions/0007-milestone-0-closes-at-the-harness.md).
 - The M0 placeholder libraries `src/byte-machine/placeholder.sls` and
   `src/byte-machine/placeholder-consumer.sls` (spike §11;
   milestone-1-design.md §6), along with their test programs

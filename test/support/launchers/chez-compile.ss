@@ -140,7 +140,7 @@
 ;; add a second compiled-artifact shape (a .wpo file) for the fingerprint
 ;; binding mechanism to track, and a portability proof does not need the
 ;; extra optimisation it buys. See "Explicitly deferred" in the slice
-;; design, docs/plans/milestone-0-slice-5b-5c-compiled-lanes.md section 10.
+;; design, .plans/milestone-0-slice-5b-5c-compiled-lanes.md section 10.
 (generate-wpo-files #f)
 
 ;; Nothing includes, so nothing resolves through source-directories at all

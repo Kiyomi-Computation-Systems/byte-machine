@@ -4,7 +4,7 @@
 ;;; against a written baseline, not a blank slate. Two of the rows are answerable
 ;;; only from a runner (the discovered scheme.exe path; the AOT object extension
 ;;; on ta6nt) and are DEFERRED past v0.1 with no CI (decision 0041) — they live in
-;;; docs/plans/milestone-9-windows-cell-audit.md, not here. The rows below are
+;;; .plans/milestone-9-windows-cell-audit.md, not here. The rows below are
 ;;; answerable from the tree at this slice's base and are asserted, not narrated.
 (import (rnrs)
         (byte-machine test harness))

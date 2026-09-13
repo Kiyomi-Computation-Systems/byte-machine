@@ -68,7 +68,7 @@
     '(("§26:1671"
        "every approved IR node has documented semantics"
        met mechanical
-       "docs/reference/source-ir-and-builder.md documents every node kind and constructor; semantics in parent §10.6 (§27:1692)"
+       ".reference/source-ir-and-builder.md documents every node kind and constructor; semantics in parent §10.6 (§27:1692)"
        ())
       ("§26:1672"
        "mandatory verification is complete and emission cannot bypass it through the public API"
@@ -118,7 +118,7 @@
       ("§26:1681"
        "public libraries and generated-runtime dependency boundaries are documented"
        met mechanical
-       "docs/reference/generated-code-integration-chez.md documents the boundary — generated parsers import only (byte-machine runtime) — with parent §7.2's diagram (§27:1697)"
+       ".reference/generated-code-integration-chez.md documents the boundary — generated parsers import only (byte-machine runtime) — with parent §7.2's diagram (§27:1697)"
        ())
       ("§26:1682"
        "examples generate, compile, and run from a clean checkout"

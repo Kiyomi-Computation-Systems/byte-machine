@@ -45,9 +45,9 @@ Set `BYTE_MACHINE_EXAMPLE_OUT` to write the generated library somewhere else.
 3. **Emit** the generated Scheme library with `emit-machine`.
 4. **Load** it — the generated library imports only `(rnrs)` and
    `(byte-machine runtime)` (the dependency boundary of §26:1681; see
-   [the integration guide](../../docs/reference/generated-code-integration-chez.md)).
+   [the integration guide](../../.reference/generated-code-integration-chez.md)).
 5. **Run** it: `make-parser`, `parser-feed!`, and read `parser-result-status`,
    `parser-result-consumed`, and the `parser-error` fields.
 
-See [`docs/reference/`](../../docs/reference/) for the full builder, runtime, and
+See [`.reference/`](../../.reference/) for the full builder, runtime, and
 field references.
