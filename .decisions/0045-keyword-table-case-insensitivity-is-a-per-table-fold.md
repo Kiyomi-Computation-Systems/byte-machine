@@ -4,6 +4,20 @@ Date: 2026-09-13
 Status: accepted
 Milestone: 11, Gate 0 (milestone-11-design.md §4.3)
 
+## Amendment 2026-09-13 (Slice ①): the fold ships in Slice ①, not Slice ②
+
+At the top of Slice ① the owner folded the executor half of this decision
+forward: the `case-insensitive?` field and the ASCII fold in **both** executors
+(item 2, item 4) ship in Slice ① alongside the node kind itself, and the
+temporary `keyword-table-case-insensitive` "not-yet-supported" verifier rejection
+the original plan carried through Slice ① is dropped — a table may declare
+`case-insensitive? #t` from the first slice. Slice ② is thereby narrowed to what
+remains: the **folded-collision rejection** (item 3, its diagnostic code, catalog
+entry, and census pin) and the brief §2b **HTTP-header case-insensitivity
+demonstration** lane. "Slice ② owns this" in Consequences should be read as "Slice
+② owns the collision rejection and the header demonstration"; the fold and the
+`case-insensitive?` field are Slice ①. Everything else in this decision stands.
+
 ## Context
 
 Decided against `main` at `e9f8d9c`; re-measured at the rebased base if Milestone
