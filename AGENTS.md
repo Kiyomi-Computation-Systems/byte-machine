@@ -348,6 +348,32 @@
   same on that operand. Assert EXPECTED values, not only that the lanes agree:
   two lanes wrong the same way agree.
 
+* **The generated lane's EOF span/callback behaviour IS the emitted feed arm, so
+  it cannot differ from the feed side without moving the golden — and an upstream
+  "suggested shape" is checked against the named invariants, not adopted.**
+  `parser-finish-v2!` runs the *emitted* `exec` with `finish?` and cursor 0, so the
+  generated lane's EOF span-end is the same emitted arm it runs mid-feed, calling
+  the same runtime step. Milestone 10 (empty-span observability, decision 0042)
+  arrived with a consumer brief proposing "the flush and the EOF arm get a separate
+  suppress-only entry point; emitted code only reaches the span-end path, so it
+  needs no edit" — true of the flush (a runtime-only path in `parser-feed!`) and
+  FALSE of the EOF arm: routing EOF to a suppress-only path made the two lanes
+  disagree, and forcing them to agree by suppressing would have required a
+  `finish?` branch inside the emitted text, moving the HTTP determinism golden and
+  re-anchoring a `compile.sls` mutation — the very cost the milestone was avoiding.
+  Keeping the emitted text byte-identical therefore FORCED the EOF span-end to
+  share the feed side's behaviour. The follow-on trap the whole-branch review
+  caught: with EOF on the shared step, an empty span carried from a feed into
+  finish fired only when its last feed happened to start at 0 (the per-feed
+  re-anchor had zeroed its mark) — a slicing-dependent *presence* of a callback,
+  not just a fragment boundary §14:837 permits to vary; the fix was to re-anchor
+  the mark to 0 at the finish boundary too, so every empty span is announced
+  uniformly. Two reversals, each because a plausible shape met an invariant it had
+  not been checked against. When a change proposal comes from outside the codebase
+  (a consumer brief, a review suggestion), name the invariants it rests on — here
+  the finish executor path and the mark's coordinate system — and verify the shape
+  against them before adopting it; the brief itself said to.
+
 * **`SITES` fails in BOTH directions — new code that DUPLICATES a pinned line breaks it too.**
   The familiar failure is "found 0, expected 1": an edit changed a `FIND`'s text.
   The one that gets missed is **"pattern occurs 2 times ... expected 1"**, when a
