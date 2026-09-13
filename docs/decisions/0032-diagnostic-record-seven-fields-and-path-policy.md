@@ -4,9 +4,13 @@ Date: 2026-09-06
 Status: accepted
 Milestone: 7, Gate 0 (milestone-7-design.md §4.2)
 
-> **2026-09-10, Slice ① implemented** — corrects three **instructions** in items 3
-> and 4 in place (each marked at its site) and adds the **Note** at the foot; the
-> Context is untouched. See the foot note.
+> **Amendments** — later notes at the foot of this file reach back into the text
+> above them. Nothing above a note is rewritten.
+>
+> - **2026-09-10, Milestone 7 Slice ① (implemented)** — **annotates items 3–4 and
+>   the Context**: Slice ① corrected three instructions in place (each marked at
+>   its site) and recorded where its measurement differs from the Context's.
+>   Nothing above became false. See the foot note.
 
 ## Context
 

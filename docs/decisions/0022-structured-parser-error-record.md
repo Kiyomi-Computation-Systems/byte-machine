@@ -18,6 +18,10 @@ Milestone: 4, Gate 0 (milestone-4-design.md §4.5)
 >   implemented by Milestone 7's Slice ①; `§16.4:945`'s comparison rule, which the
 >   bullet invokes, is unchanged. Nothing above became false; this bullet is the
 >   whole note.
+> - **2026-09-11 (Milestone 7 Slice ②)** — **annotates item 7's amendment**:
+>   records where the reached-but-unencoded declaration shape it names is now
+>   produced (the Slice ② generator's `orphan-prob`/`dangling-prob` draws) and
+>   consumed (Slice ④). Nothing above became false.
 
 ## Context
 

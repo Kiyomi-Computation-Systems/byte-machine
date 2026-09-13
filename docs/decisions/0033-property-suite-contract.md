@@ -4,13 +4,18 @@ Date: 2026-09-06
 Status: accepted
 Milestone: 7, Gate 0 (milestone-7-design.md §4.3)
 
-> **2026-09-11 (Slice ② implementation):** four items are corrected by the dated
-> Notes at the foot — item 2 (the counters become ten, and the field counter's
-> witness changed off the draw), item 5 row 1 (the lifecycle table permits a sticky
-> `stopped` from `parser-finish!`; the hole is the `(ready|finish-ready, finish!)`
-> pair), item 5 row 6 (a third inapplicability condition, no bound completion
-> callback), and item 4 (the fixture and saver are Slice ③'s, not ②'s). The items
-> and the Context stand as the record.
+> **Amendments** — later notes at the foot of this file reach back into the text
+> above them. Nothing above a note is rewritten.
+>
+> - **2026-09-11 (Milestone 7 Slice ② implementation)** — **amends item 2 and
+>   item 5's rows 1 and 6; annotates item 4**: the counters are **ten**, not the
+>   shipped eight, and the field counter reads a value back rather than the draw
+>   (item 2); `§12.2:695` permits the sticky `stopped` from `parser-finish!` that
+>   row 1 calls impermissible, and the `§16.2:909` hole is the `(ready |
+>   finish-ready, finish!)` pair (row 1); row 6 needs a third inapplicability
+>   condition — no bound completion callback; and the reproduction fixture and
+>   saver are Slice ③'s, not ②'s (item 4). See the dated notes at the foot; the
+>   items stand as decided.
 
 ## Context
 
@@ -105,6 +110,10 @@ measured rate below half sends the draw back for steering before the lane lands.
 verifier change that starts rejecting most draws is then a red lane, not a quietly
 shrunk one — clause 1's one real cost, made visible.
 
+> **Amended 2026-09-11 (Milestone 7 Slice ②)** — the counter set is ten, not the
+> shipped eight, and the field counter reads a value back rather than the draw.
+> See the dated note at the foot; the text above is left as decided.
+
 **3. The seed comes from `BYTE_MACHINE_PROPERTY_SEED`, with the committed default.**
 The value is a decimal exact non-negative integer; unset or empty means the literal
 the program declares; anything else is a loud `assertion-violation`, never a
@@ -145,6 +154,11 @@ qualifiers the design's review measured:
 | every field value is an exact integer in `[0, 2^width)` | — | `§15` |
 | `finished` is returned only by `parser-finish!` or a sticky feed after it | a verifier-completeness property: both executors carry an unconditional finish arm, and `§16.2:908`'s block over `node-out-edges` is the mechanism that keeps a feed from reaching it | `§12.4`, decision 0011 item 2 |
 | for a span that reaches its end with its data callback bound, the concatenation of its fragments in one schedule equals the input bytes the span covered | not applicable at an error — "Errors do not flush a final partial fragment" (`§14:839`); not applicable when the optional span-data callback is unbound, since no fragment is delivered | `§14:831-834`, `:839` |
+
+> **Amended 2026-09-11 (Milestone 7 Slice ②)** — row 1's sticky `stopped` from
+> `parser-finish!` is a `§16.2:909` hole (the `(ready | finish-ready, finish!)`
+> pair), and row 6 needs a third inapplicability condition (no bound completion
+> callback). See the dated note at the foot; the rows stand as decided.
 
 A trial that violates an invariant in one lane fails whether or not the other lane
 agrees. **The layer's blind spot, by name**: an agreed-wrong value that satisfies
