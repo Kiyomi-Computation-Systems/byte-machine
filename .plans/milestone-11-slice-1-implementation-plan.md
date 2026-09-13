@@ -27,7 +27,7 @@ version 5, six determinism goldens.
 Milestone 10 (empty-span fragments, decision 0042) merged to `main` while this
 slice was in flight — 65/602 → **65/606** mutations, ABI held at 5, no new lanes
 — so this slice merges onto that base. At the end of the slice: `pr` **147/147**
-(six new lanes), mutation **68 passes / 616 mutations** (65/606 + 3 passes + 10
+(six new lanes), mutation **68 passes / 619 mutations** (65/606 + 3 passes + 13
 mutations), diagnostic census **31 over 57**, fourteen node kinds, ABI 6, seven
 goldens.
 
@@ -129,7 +129,7 @@ fell to its raising `else` (`internal`), surfaced by the property differential
 and reproduced before the fix. Pass 66's third mutation pins it: neutering the
 arm reddens the unit lane's EOF case with `case raised … code: internal`.
 
-## 6. Mutation accounting (65/606 → 68/616)
+## 6. Mutation accounting (65/606 → 68/619)
 
 **Seventeen shipped pins re-anchored** to the keyword-table arms this slice
 inserted — twelve FINDs shifted in `ir.sls`, `verify.sls`, `interpret.sls`,
@@ -141,14 +141,16 @@ generator's PRNG stream so that no *generated* accepted machine reaches a
 completing span at this seed — the fixed fixture always does, and it was taught
 to name the violated row).
 
-**Three new passes, ten new mutations** (design §5, one per decision the nodes
-encode):
+**Three new passes, thirteen new mutations** (design §5, one per decision the
+nodes encode; the last three from the Slice ① adversarial review):
 
 - Pass 66 (`unit.keyword-table`, 4): the fold direction, the delimiter reexecute,
   the `eof-target-of` arm, the terminal-vs-proper-prefix test.
-- Pass 67 (`differential.keyword-table`, 5): the runtime op's own fold, delimiter
+- Pass 67 (`differential.keyword-table`, 8): the runtime op's own fold, delimiter
   and terminal test; a matched keyword routed to no-match; the normalizer
-  dropping the fold flag (pinned on the fingerprint group it alone reddens).
+  dropping the fold flag (pinned on the fingerprint group it alone reddens); and
+  the review's three — the no-match reject's position-kind, the advance no-match
+  consume, and the keyword-table entry in the reached-declaration credit list.
 - Pass 68 (`determinism.keyword-table`, 1): the emitted ABI literal — emitting 5
   makes the v6 runtime refuse the v5-stamped library at construction
   (`generated-runtime ABI mismatch with irritant 5`), which the determinism
@@ -157,6 +159,17 @@ encode):
 
 Every new pin asserts its failure signature, never a bare nonzero exit
 ([[mutation-caught-for-wrong-reason]]).
+
+**The adversarial review** (six dimensions, each finding verified by an
+independent refuter) confirmed nine findings, all addressed: the three new Pass
+67 pins above close coverage gaps in new code (the walk's error position-kind was
+never compared across executors though the interpreter declares it must match;
+the no-match `advance` arm was unexercised; the default-EOF credit had no
+witness); the kind×position census's axis B gained the three keyword positions
+(they were in `position-table` but not `self-expectations`, and a tautological
+count had hidden it — the count is now derived from `position-table`); and four
+stale prose counts were corrected. One finding (a claimed pr-lane miscount) was a
+false positive — `ctest -N` confirms 147.
 
 ## 7. Exit and boundaries
 

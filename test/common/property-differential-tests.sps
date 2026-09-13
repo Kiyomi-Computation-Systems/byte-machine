@@ -253,7 +253,7 @@
      ;; very condition it exists to witness).
      (check-equal "the counter pass ran over the measured accepted machines" accepted-count 41)))
 
-  ;; ---- SECOND harness-case: the 96 counter checks, entered only when the floor
+  ;; ---- SECOND harness-case: the 98 counter checks, entered only when the floor
   ;; held (F12). A rejects-everything mutant fails the floor and this case emits
   ;; NONE of the member labels, so every per-member pin resolves to one record. ----
   (harness-case "counters"

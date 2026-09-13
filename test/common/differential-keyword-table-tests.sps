@@ -228,4 +228,94 @@
               (ci-bytes (render-machine (compile-machine (build-flagged #t) '()) 'flagtable)))
           (check "the two renders differ on the flag alone" (not (equal? cs-bytes ci-bytes))))))))
 
+;; --- the error position-kind is compared across executors --------------------
+;; interpret.sls:177-182 lists position-kind among the fields "required to match
+;; across executors", but the 7-tuple above excludes it, so a keyword-step
+;; position-kind lowering defect (the no-match else branch's `byte`) would agree
+;; on every other field and slip. This group compares it directly, both lanes,
+;; and asserts the generated value absolutely.
+(define (err-pk cm s)
+  (let* ((bv (str->bv s)) (p (make-parser cm '() #f))
+         (r (parser-feed! p bv 0 (bytevector-length bv))) (e (parser-result-error r)))
+    (and (parser-error? e) (parser-error-position-kind e))))
+(define (err-pk-finish cm s)
+  (let ((p (make-parser cm '() #f)))
+    (unless (= 0 (string-length s)) (parser-feed! p (str->bv s) 0 (string-length s)))
+    (let* ((r (parser-finish! p)) (e (parser-result-error r)))
+      (and (parser-error? e) (parser-error-position-kind e)))))
+(harness-group "the error position-kind agrees across executors and is absolute"
+  (lambda ()
+    (harness-case "a no-match reject reports position-kind byte on the generated table and both agree"
+      (lambda ()
+        (check-equal "generated" (err-pk cs-gen "xyz") 'byte)
+        (check-equal "agree" (err-pk cs-ref "xyz") (err-pk cs-gen "xyz"))))
+    (harness-case "an EOF mid-table reports position-kind eof on the generated table and both agree"
+      (lambda ()
+        (check-equal "generated" (err-pk-finish cs-gen "GET") 'eof)
+        (check-equal "agree" (err-pk-finish cs-ref "GET") (err-pk-finish cs-gen "GET"))))))
+
+;; --- the no-match edge's advance mode ----------------------------------------
+;; The fixtures above use a reexecute no-match; the walk's advance arm (it
+;; consumes the offending byte and reports `boundary` after it) had no coverage.
+;; A table identical but for the no-match mode isolates that arm on both lanes.
+(define (build-mode name mode)
+  (make-machine name 'table '() '() '()
+    (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
+          (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f)
+          (make-error-declaration 'incomplete 'truncated-keyword "incomplete keyword at end of input" #f))
+    (list (make-keyword-table-node 'table
+            (map (lambda (p) (make-keyword-entry (map char->integer (string->list (car p))) (cdr p) #f))
+                 keyword-table-keywords)
+            (make-edge 'reject mode) 'eof-incomplete #f #f)
+          (make-stop-node 'got-get #f) (make-stop-node 'got-gp #f)
+          (make-stop-node 'got-close #f) (make-stop-node 'got-closed #f)
+          (make-error-node 'eof-incomplete 'incomplete #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+(harness-group "the no-match edge's advance mode consumes the byte and reports boundary"
+  (lambda ()
+    (define adv-ref (make-interpreted-machine (verify-machine (build-mode 'advkw 'advance))))
+    (define adv-gen (generated-machine 'advkw (build-mode 'advkw 'advance)))
+    (harness-case "a non-keyword byte advances (consumed 1) and the reject is at the boundary after it, both lanes"
+      (lambda ()
+        (check-equal "generated" (feed1 adv-gen "xyz") '(error 1 1 1 reject unexpected-byte 1))
+        (check-equal "generated position-kind" (err-pk adv-gen "xyz") 'boundary)
+        (check-equal "agree tuple" (feed1 adv-ref "xyz") (feed1 adv-gen "xyz"))
+        (check-equal "agree position-kind" (err-pk adv-ref "xyz") (err-pk adv-gen "xyz"))))
+    (harness-case "a matched keyword still accepts under an advance no-match (the mode is the no-match edge's, not the keyword's)"
+      (lambda ()
+        (check-equal "generated" (feed1 adv-gen "GET ") '(stopped 3 3 3 got-get #f #f))
+        (check-equal "agree" (feed1 adv-ref "GET ") (feed1 adv-gen "GET "))))))
+
+;; --- the default EOF route (the reached-declaration credit list) -------------
+;; A keyword table whose eof-target is #f takes the machine's default EOF error;
+;; that makes the table the sole consumer of the default-eof declaration, so the
+;; emitter must credit the keyword-table kind in its reached-declaration walk or
+;; the declaration is filtered out of the errs table and render-machine raises on
+;; a machine the verifier accepted (the Milestone 4 Slice ③ defect, one kind
+;; later). Rendering, loading and running such a machine exercises that credit.
+(define (build-default-eof)
+  (make-machine 'defeofkw 'table '() '() '()
+    (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
+          (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))
+    (list (make-keyword-table-node 'table
+            (map (lambda (p) (make-keyword-entry (map char->integer (string->list (car p))) (cdr p) #f))
+                 keyword-table-keywords)
+            (make-edge 'reject 'reexecute) #f #f #f)   ; eof-target #f -> machine default-eof
+          (make-stop-node 'got-get #f) (make-stop-node 'got-gp #f)
+          (make-stop-node 'got-close #f) (make-stop-node 'got-closed #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+(harness-group "a keyword table on the default EOF route renders, loads and runs"
+  (lambda ()
+    (harness-case "the default-eof machine renders and its EOF route takes the machine default error"
+      (lambda ()
+        (let* ((g (generated-machine 'defeofkw (build-default-eof)))
+               (p (make-parser g '() #f)))
+          (parser-feed! p (str->bv "GET") 0 3)
+          (let ((r (parser-finish! p)))
+            (check-equal "eof error" (parser-result-status r) 'error)
+            (check-equal "the machine default eof code" (parser-error-code (parser-result-error r)) 'eof)
+            (check-equal "position kind eof" (parser-error-position-kind (parser-result-error r)) 'eof)))))))
+
 (harness-finish)

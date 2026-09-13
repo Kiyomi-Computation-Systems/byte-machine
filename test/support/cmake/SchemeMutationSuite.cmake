@@ -1385,18 +1385,20 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-# Milestone 11 Slice ① (the fourteenth node kind, keyword-table): 65/606 -> 68/616.
+# Milestone 11 Slice ① (the fourteenth node kind, keyword-table): 65/606 -> 68/619.
 # Milestone 10 (65/602 -> 65/606, the empty-span fragment work) landed on main
 # first, so this slice's base is 606, not the 602 it was measured against; the
-# arithmetic is +3 passes and +10 mutations over whichever base, and the merge
-# reconciles to 616.
+# arithmetic is +3 passes and +13 mutations over whichever base, and the merge
+# reconciles to 619.
 # THREE new passes, one per new lane -- 66 the interpreter walk
 # (unit.keyword-table, 4 mutations: the fold, the delimiter reexecute, the
 # eof-target-of arm, the terminal-vs-proper-prefix test), 67 the generated
-# compact-table walk (differential.keyword-table, 5 mutations: the op's own fold
-# and delimiter and terminal test, a matched keyword routed to no-match, and the
+# compact-table walk (differential.keyword-table, 8 mutations: the op's own fold
+# and delimiter and terminal test, a matched keyword routed to no-match, the
 # normalizer dropping the case-insensitive flag -- pinned on the fingerprint
-# group it alone reddens), and 68 the emitted ABI literal
+# group it alone reddens -- and three from the Slice ① adversarial review: the
+# no-match position-kind, the advance no-match consume, and the keyword-table
+# entry in the reached-declaration credit list), and 68 the emitted ABI literal
 # (determinism.keyword-table, 1 mutation, caught by the v6 runtime refusing the
 # v5-stamped library). The closed-set FORMS are carried by ir.sls's "fourteen
 # kinds" census ratchets, re-anchored in place; seventeen shipped pins were
@@ -1405,7 +1407,7 @@ cmake_minimum_required(VERSION 3.26)
 # re-homed onto the deterministic fixture the draw-table growth left as its only
 # witness).
 set(EXPECTED_PASSES 68)
-set(EXPECTED_MUTATIONS 616)
+set(EXPECTED_MUTATIONS 619)
 # Sixty-two is sixty-one plus one: Milestone 8 Slice ① adds one pass over the
 # request-line fixture (http-machine.sls) with three mutations (590 -> 593),
 # each caught by byte-machine.unit.http-request-line with a measured signature.
@@ -13919,6 +13921,50 @@ byte_machine_mutation(
   REPLACE [[#f #f #f)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES [[the two renders differ on the flag alone -- expected a true value]])
+
+# The three below close gaps the Slice ① adversarial review confirmed: the walk
+# op's error position-kind was never compared across executors (interpret.sls
+# lists it as required-to-match), the no-match edge's advance arm had no
+# coverage, and the keyword-table's entry in the reached-declaration credit list
+# had no witness. Each is caught by a group added to differential-keyword-table.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.keyword-table.chez.source
+  LABEL "runtime: the no-match reject reports the wrong position-kind (boundary, not byte)"
+  # The reexecute no-match does not consume the offending byte, so the error is
+  # AT that byte (position-kind byte), not after it (boundary). The differential
+  # now compares position-kind across executors and absolutely.
+  FIND [[(else (list 'jump (car no-match) i (quote byte)))]]
+  REPLACE [[(else (list 'jump (car no-match) i (quote boundary)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[a no-match reject reports position-kind byte on the generated table and both agree: generated -- expected byte, got boundary]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.keyword-table.chez.source
+  LABEL "runtime: the advance no-match does not consume the offending byte"
+  # The advance arm consumes the mismatching byte (offset i+1); dropping the
+  # increment leaves it unconsumed, which is the reexecute behaviour under an
+  # advance edge. Caught by the advance-mode group.
+  FIND [[(list 'jump (car no-match) (+ i 1) (quote boundary))]]
+  REPLACE [[(list 'jump (car no-match) i (quote boundary))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[advances .consumed 1. and the reject is at the boundary after it, both lanes: generated -- expected .error 1 1 1 reject unexpected-byte 1., got .error 0 0 0 reject unexpected-byte 0.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.differential.keyword-table.chez.source
+  LABEL "compile: the reached declaration walk ignores keyword-table (default-eof credit)"
+  # A keyword table with eof-target #f is the sole consumer of the default-eof
+  # declaration; not crediting the keyword-table kind filters that declaration
+  # out of the errs table and render-machine raises on a machine the verifier
+  # accepted -- the Milestone 4 Slice ③ defect, one kind later. Distinct from the
+  # counted-consume-drop pin above (different REPLACE, keyword-table's own row).
+  FIND [[                                                      '(dispatch accumulate counted-consume
+                                                        keyword-table))]]
+  REPLACE [[                                                      '(dispatch accumulate counted-consume))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the default-eof machine renders and its EOF route takes the machine default error: case raised.*no error declaration for code]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

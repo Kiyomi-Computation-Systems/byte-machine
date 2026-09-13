@@ -74,7 +74,7 @@
 ;; the skeleton happened to create.
 (define (sinks) (list (make-error-node 'ee 'rejected #f)))
 
-;; --- the thirteen kinds, as data --------------------------------------------
+;; --- the fourteen kinds, as data --------------------------------------------
 ;; Each builder returns the node named `t`. Its own out-edges go to the sinks.
 (define kind-table
   (list
@@ -121,7 +121,7 @@
                         (list (make-keyword-entry '(1) 'ee #f))
                         (make-edge 'ee 'reexecute) #f #f #f)))))
 
-;; --- the twenty-three positions, as data ------------------------------------
+;; --- the twenty-six positions, as data ------------------------------------
 ;; Each builder returns (entry . host-nodes) with the placed node `t` wired into
 ;; that one position. Every host is byte-reachable from the entry, so no cell
 ;; carries an incidental unreachable-node and the byte-reachability gate that
@@ -741,7 +741,17 @@
     ;; its symbolic route, the walk starts at that route -- itself -- and the
     ;; join of `cycle` with the zero-width half's `error` is `cycle`.
     ((count-next            advance)   . (zero-progress-cycle))
-    ((count-eof-target      advance)   . (eof-zero-progress-cycle))))
+    ((count-eof-target      advance)   . (eof-zero-progress-cycle))
+    ;; Milestone 11 Slice ①: the keyword table's out-positions self-targeted.
+    ;; A matched keyword consumed bytes before the target, so a self-loop there
+    ;; makes progress -- no cycle. The no-match edge divides on its mode exactly
+    ;; like dispatch-fallback (advance consumes; reexecute is a feed-time
+    ;; zero-progress cycle). The EOF route self-loop is an EOF cycle, like the
+    ;; other eof-target positions.
+    ((keyword-target        reexecute) . ())
+    ((keyword-no-match      advance)   . ())
+    ((keyword-no-match      reexecute) . (zero-progress-cycle))
+    ((keyword-eof-target    advance)   . (eof-zero-progress-cycle))))
 
 ;; The self machine: the host points the position under test at ITSELF.
 (define (self-machine pos mode)
@@ -799,6 +809,19 @@
                           (make-counted-consume-node 'cc 'n 'cc #f #f)))
       ((count-eof-target) (list (dsp (one-case 'cc 'advance) (make-edge 'ee 'reexecute) #f)
                                 (make-counted-consume-node 'cc 'n 'ee 'cc #f)))
+      ;; Milestone 11 Slice ①: the keyword table's out-positions pointed at the
+      ;; table itself. keyword-target's match reexecutes the closing byte after
+      ;; consuming the keyword, so its mode is intrinsic; keyword-no-match's edge
+      ;; carries the tested mode; keyword-eof-target is the symbolic EOF route.
+      ((keyword-target) (list (make-keyword-table-node 'h
+                                (list (make-keyword-entry '(1) 'h #f))
+                                (make-edge 'ee 'reexecute) #f #f #f)))
+      ((keyword-no-match) (list (make-keyword-table-node 'h
+                                  (list (make-keyword-entry '(1) 'ee #f))
+                                  (make-edge 'h mode) #f #f #f)))
+      ((keyword-eof-target) (list (make-keyword-table-node 'h
+                                    (list (make-keyword-entry '(1) 'ee #f))
+                                    (make-edge 'ee 'reexecute) 'h #f #f)))
       (else (assertion-violation 'self-machine "no such position" pos))))
   (make-machine 'self 'h (list (make-uint-field 'n 8 0 #f)) (list cb-decl sd-decl) (list sp-decl)
                 (list eof-decl rej-decl)
@@ -824,8 +847,25 @@
                  (set! bad (cons (list pos mode 'want want 'got got) bad)))))
            self-expectations)
           (check-equal "every self row was driven" driven (length self-expectations))
-          (check-equal "and twenty-two positions have one, four of them twice"
-                       driven (+ 22 4))
+          ;; NOT a magic literal. `driven (+ 22 4)` here read 26 and stayed green
+          ;; when Milestone 11's three keyword positions were added to
+          ;; position-table but NOT to self-expectations -- the Slice ① review
+          ;; found that hole. The invariant that actually catches it: the SET of
+          ;; positions carrying a self row is EXACTLY the self-loopable positions,
+          ;; every position-table row but machine-entry (the machine is not a
+          ;; node, §16.2:909). A position added without an axis-B row now reddens
+          ;; this by name rather than passing on a stale count.
+          (let* ((sortsym (lambda (l) (list-sort (lambda (a b)
+                                                   (string<? (symbol->string a) (symbol->string b))) l)))
+                 (dedup (lambda (l) (let loop ((l l) (seen '()))
+                                      (cond ((null? l) (reverse seen))
+                                            ((memq (car l) seen) (loop (cdr l) seen))
+                                            (else (loop (cdr l) (cons (car l) seen)))))))
+                 (covered (sortsym (dedup (map caar self-expectations))))
+                 (self-loopable (sortsym (filter (lambda (p) (not (eq? p 'machine-entry)))
+                                                 (map car position-table)))))
+            (check-equal "self rows cover exactly the self-loopable positions (all but machine-entry)"
+                         covered self-loopable))
           (check-equal "each matches its derivation" bad '()))))))
 
 

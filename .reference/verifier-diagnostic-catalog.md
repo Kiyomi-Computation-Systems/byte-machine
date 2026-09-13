@@ -85,5 +85,5 @@ The codes are grouped by the verifier pass that raises them.
 
 ---
 
-*Thirty codes. If this list and `verify.sls` disagree, `diagnostic-census-tests`
+*Thirty-one codes. If this list and `verify.sls` disagree, `diagnostic-census-tests`
 fails by name — see the [grammar-author testing guide](grammar-author-testing-guide.md).*

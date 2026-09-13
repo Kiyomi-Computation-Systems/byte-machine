@@ -358,7 +358,7 @@
 ;; --- Milestone 7 Slice ④: the §16.2:910 structural witness (design §4.8, F10) --
 ;;
 ;; §25:1617's discharge and §4.12 item 1's witness: NO declared name becomes a
-;; generated identifier. Over an every-construct machine (all thirteen node kinds,
+;; generated identifier. Over an every-construct machine (all fourteen node kinds,
 ;; a span with a complete callback so the span-completion arm fires) hand-built in
 ;; this file's style, because the compile lane has neither the generator nor the
 ;; printer (F10). Its totality is a DERIVED row against the emitter's arms.
