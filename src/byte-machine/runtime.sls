@@ -364,7 +364,7 @@
          (vector parser-tag 'op op entry entry 0 'ready #f
                  (initial-values decls) decls
                  (resolve-callbacks (op 'callback-decls) callback-bindings)
-                 user-context #f #f 0 #f)))
+                 user-context #f #f 0 #f #f)))
       ((eq? (compiled-machine-variant compiled-machine) 'v2)
        (let ((exec (compiled-machine-v2-exec compiled-machine))
              (entry-state (compiled-machine-v2-entry-state compiled-machine))
@@ -374,7 +374,7 @@
                  (resolve-callbacks (compiled-machine-v2-callbacks compiled-machine)
                                     callback-bindings)
                  user-context #f
-                 (compiled-machine-v2-state-names compiled-machine) 0 #f)))
+                 (compiled-machine-v2-state-names compiled-machine) 0 #f #f)))
       ;; Unreachable through the public API: the only two constructors build 'op
       ;; and 'v2. Kept LOUD rather than deleted, the same convention as
       ;; compile.sls's and normal-ir.sls's own unreachable else arms.
@@ -425,6 +425,13 @@
   (define (parser-span-data-slot p) (vector-ref p 15))
   (define (parser-set-span-data-slot! p v) (vector-set! p 15 v))
   (define (parser-set-active-span! p v) (vector-set! p 12 v))
+  ;; Slot 16, the fourth piece of span state: whether the active span has
+  ;; delivered ANY fragment yet. Inited #f by make-parser, reset #f by
+  ;; span-close beside slots 12/14/15, set on every delivery. A span END reads it to decide whether an
+  ;; empty final fragment is the span's ONLY fragment (deliver once) or the empty
+  ;; tail of a span whose bytes already went (suppress) -- decision 0042.
+  (define (parser-span-delivered? p) (vector-ref p 16))
+  (define (parser-set-span-delivered?! p v) (vector-set! p 16 v))
   ;; The absolute offset, which the parser already tracks; this is the public
   ;; name for it, and it is one of the values committed before a callback sees
   ;; the parser.
@@ -559,38 +566,103 @@
   (define (byte-machine-span-close/v1 parser)
     (parser-set-active-span! parser #f)
     (parser-set-span-mark! parser 0)
-    (parser-set-span-data-slot! parser #f))
+    (parser-set-span-data-slot! parser #f)
+    ;; The delivered? flag resets to #f beside the other three span slots, so a
+    ;; prior span's "has delivered" state cannot leak into the next span opened on
+    ;; the same parser (decision 0042). This is the flag's ONLY reset -- span-open
+    ;; does not touch it, so a mutation deleting this line leaves the flag stale
+    ;; across spans, caught where two spans run on one parser (the property
+    ;; coverage machine's covx→covy). make-parser inits the slot to #f, so the
+    ;; first span needs no reset; and it transitively covers parser-reset! and both
+    ;; completion arms exactly as slots 12/14/15 are covered.
+    (parser-set-span-delivered?! parser #f))
 
-  ;; ONE PROCEDURE DELIVERS EVERY SPAN FRAGMENT, and the empty-fragment
-  ;; suppression is inside it. A fragment is delivered in exactly three places --
-  ;; a span end, the feed-boundary flush, and the emitted arms for both -- and
-  ;; every one of them owes the same empty check.
+  ;; TWO ENTRY POINTS DELIVER EVERY SPAN FRAGMENT, over ONE delivery helper, and
+  ;; the difference between them is the whole of Milestone 10 (decision 0042).
+  ;; Every span END goes through `byte-machine-span-fragment-step/v1` -- the
+  ;; feed-loop span-end, the emitted arm, AND the EOF-side span end. The generated
+  ;; lane reaches all three through that one emitted arm, because
+  ;; `parser-finish-v2!` runs `exec` with `finish?` at cursor 0, so the
+  ;; interpreter matches by routing its EOF span-end here too rather than to a
+  ;; suppress-only path -- keeping the emitted text unchanged. The feed-boundary
+  ;; FLUSH, and only it, goes through `span-fragment-suppress-empty`. Both deliver
+  ;; a NONEMPTY `[from,to)` identically; they differ only on an EMPTY one.
   ;;
-  ;; IT DOES NOT ADVANCE THE MARK, and that is measured rather than assumed. The
-  ;; data callback is specified to see "its mark advanced to the current cursor",
-  ;; and an advance was written here first; deleting it fails nothing, in either
-  ;; lane. The reason is a construction: every path out of a delivery either
-  ;; CLOSES the span (the completion substep sets the mark to 0) or crosses a
-  ;; feed boundary, where the re-anchor overwrites the mark with the next slice's
-  ;; `start`. There is no third path, and no public accessor reads the mark, so
-  ;; nothing can observe the value between the two -- the "mark advanced" sentence
-  ;; is discharged by the feed-boundary re-anchor, which is where the re-anchoring
-  ;; lives entirely.
+  ;; A span END delivers an empty fragment ONCE, when the span has delivered
+  ;; nothing at all (`from == to`, flag clear) -- so a span that opens and closes
+  ;; having produced no bytes is observable, its data callback firing once with an
+  ;; empty range (§14:831 as amended by decision 0042). It SUPPRESSES an empty
+  ;; fragment in two shapes. `from == to` with the flag SET: the empty FINAL
+  ;; fragment of a span that already delivered -- a span split across feeds, whose
+  ;; bytes were flushed and whose mark was re-anchored to the next slice's `start`,
+  ;; then ends on that slice's first byte -- where announcing "empty" would be a
+  ;; lie. (`from > to` is not reachable: a feed span end has mark <= cursor, and an
+  ;; EOF span end has mark 0 because `parser-finish!` re-anchors it there -- so
+  ;; EVERY empty span, whether it opens on the EOF chain or is carried from a feed,
+  ;; ends with `from == to` and is announced once, uniformly (decision 0042
+  ;; item 4). The `else` still guards `from > to` as defence.) Emptiness is a
+  ;; property of the SPAN, not the fragment; `parser-span-delivered?` (slot 16,
+  ;; inited #f and reset by
+  ;; span-close, set on every delivery) is the per-span state that tells the deliver-once case
+  ;; from the split-span suppression, and it survives pause/resume because it is
+  ;; set BEFORE the callback runs and resume parks on the substep PAST the delivery.
   ;;
-  ;; The five-argument application is the ONLY thing here the two-argument entry
-  ;; point above does differently. `branches` is '() because a span callback gets
-  ;; only continue, pause and failure -- the branch arm is dead for spans rather
-  ;; than absent, which is what keeps ONE classifier.
+  ;; The FLUSH suppresses every empty fragment unconditionally: it is not a span
+  ;; end -- an empty flush means "no new bytes this slice" and the span stays open,
+  ;; so a delivery there would announce empty for a span still being built.
+  ;;
+  ;; NEITHER ENTRY POINT ADVANCES THE MARK, and that is measured rather than
+  ;; assumed. The data callback is specified to see "its mark advanced to the
+  ;; current cursor", and an advance was written here first; deleting it fails
+  ;; nothing, in either lane. The reason is a construction: every path out of a
+  ;; delivery either CLOSES the span (the completion substep sets the mark to 0)
+  ;; or crosses a feed boundary, where the re-anchor overwrites the mark with the
+  ;; next slice's `start`. There is no third path, and no public accessor reads the
+  ;; mark, so nothing can observe the value between the two -- the "mark advanced"
+  ;; sentence is discharged by the feed-boundary re-anchor, which is where the
+  ;; re-anchoring lives entirely.
+  ;;
+  ;; The five-argument application is the ONLY thing `span-fragment-deliver!` does
+  ;; differently from the two-argument entry point above. `branches` is '() because
+  ;; a span callback gets only continue, pause and failure -- the branch arm is dead
+  ;; for spans rather than absent, which is what keeps ONE classifier.
+  (define (span-fragment-deliver! parser state offset f bv from to continue)
+    (parser-set-span-delivered?! parser #t)
+    (callback-commit! parser state offset)
+    (classify-callback-result
+     (f parser (parser-user-context parser) bv from to)
+     '() continue))
+
   ;; byte-machine-span-fragment-step/v1 : Parser (U NodeName StateId) ExactInteger (U Procedure Unbound) Bytevector ExactInteger (U NodeName StateId) -> (U (List 'goto (U NodeName StateId)) (List 'pause) (List 'failure Symbol (Option Any)))
   (define (byte-machine-span-fragment-step/v1 parser state offset f bv to continue)
     (let ((from (parser-span-mark parser)))
+      (cond ((unbound-callback? f) (list 'goto continue))
+            ;; Real bytes.
+            ((< from to)
+             (span-fragment-deliver! parser state offset f bv from to continue))
+            ;; The span's ONLY fragment, empty (`from == to`, nothing delivered
+            ;; yet): deliver it once so the empty span is observable.
+            ((and (= from to) (not (parser-span-delivered? parser)))
+             (span-fragment-deliver! parser state offset f bv from to continue))
+            ;; Suppress. Two shapes reach here: `from == to` with the flag SET --
+            ;; the empty FINAL fragment of a span that already delivered (a span
+            ;; split across feeds, its bytes flushed and the mark re-anchored). The
+            ;; `from > to` case is not reachable -- feed marks are <= the cursor and
+            ;; `parser-finish!` re-anchors EOF marks to 0 (decision 0042 item 4) --
+            ;; so this arm suppresses only the flag-set final fragment; guarding the
+            ;; backwards range is defence, not a live path.
+            (else (list 'goto continue)))))
+
+  ;; The feed-boundary flush -- and only it. A nonempty fragment is delivered
+  ;; exactly as above; an empty one is ALWAYS suppressed, because the flush is not
+  ;; a span end and the span stays open. Not emitted -- generated code only ever
+  ;; reaches the span-end entry point above (its own boundary flush lives in
+  ;; `parser-feed!`, this runtime, not in `exec`).
+  (define (span-fragment-suppress-empty parser state offset f bv to continue)
+    (let ((from (parser-span-mark parser)))
       (if (or (>= from to) (unbound-callback? f))
           (list 'goto continue)
-          (begin
-            (callback-commit! parser state offset)
-            (classify-callback-result
-             (f parser (parser-user-context parser) bv from to)
-             '() continue)))))
+          (span-fragment-deliver! parser state offset f bv from to continue))))
 
   ;; The boundary flush. It runs at the ONE seam both lanes cross -- after the
   ;; executor has answered and before `parser-feed!` records the lifecycle --
@@ -614,7 +686,7 @@
   (define (span-boundary-flush! parser bv r)
     (if (and (eq? (parser-result-status r) 'need-input)
              (parser-active-span parser))
-        (let ((o (byte-machine-span-fragment-step/v1
+        (let ((o (span-fragment-suppress-empty
                   parser (parser-current parser) (parser-offset parser)
                   (vector-ref (parser-callbacks parser)
                               (parser-span-data-slot parser))
@@ -1013,15 +1085,23 @@
       ;; every lifecycle value added after it.
       ((ready finish-ready)
        (parser-set-lifecycle! parser 'busy)
-       ;; NO MARK RE-ANCHOR HERE, and its absence is a derivation rather than an
-       ;; omission. The feed path re-anchors because the next slice has its own
-       ;; coordinates; the finish path runs over `empty-bv 0 0` in both lanes, so
-       ;; an EOF-side span end delivers `[mark,0)` -- and `from >= to` holds for
-       ;; EVERY mark, a mark never being negative. The empty-fragment suppression
-       ;; fires whatever the mark says, which is also why the EOF side needs no
-       ;; bytevector and why there is no boundary flush after EOF. A
-       ;; `(parser-set-span-mark! parser 0)` here could not change an outcome, and
-       ;; a guard that cannot fire reads as one that does.
+       ;; RE-ANCHOR THE MARK TO 0, mirroring the feed path's re-anchor to the next
+       ;; slice's `start`: the finish path runs over `empty-bv 0 0`, so 0 IS the
+       ;; slice `start` here. This makes an EOF-side span end see `[0,0)` -- a
+       ;; coherent empty range -- for EVERY active span, whether it opened ON the
+       ;; EOF chain (its mark is already 0) or was CARRIED from a feed (its mark
+       ;; still held that feed's `start`). So every empty span closing at EOF
+       ;; delivers its one empty fragment exactly once, uniformly; a NON-empty span
+       ;; carried here suppresses because its `delivered?` flag is set (decision
+       ;; 0042 item 4). Without this line the carried empty case would deliver only
+       ;; when the last feed happened to start at 0 -- a slicing-dependent
+       ;; inconsistency the whole-branch review found. `from > to` is therefore no
+       ;; longer reachable at any span end (feed marks are <= the cursor, EOF marks
+       ;; are 0), so the step's guard suppresses only the flag-set final fragment;
+       ;; the `from > to` arm is kept as defence. The EOF side still needs no
+       ;; bytevector and there is no boundary flush after EOF.
+       (when (parser-active-span parser)
+         (parser-set-span-mark! parser 0))
        (let ((completed #f))
          (dynamic-wind
            (lambda () #t)
@@ -1153,15 +1233,22 @@
                   (parser-set-stored-error! parser e)
                   (make-parser-result 'error off 0 off e))))))
           ;; The span kinds on the EOF side. The SAME three arms as the feed
-          ;; loop's, written out for the reason this file's own comment above
-          ;; `parser-feed!` gives -- each records its own lifecycle -- and over
-          ;; `empty-bv` at cursor 0.
+          ;; loop's -- including the SAME public span-end step -- written out for
+          ;; the reason this file's own comment above `parser-feed!` gives (each
+          ;; records its own lifecycle) and over `empty-bv` at cursor 0. Routing
+          ;; the span end through the public step, not a suppress-only path, is
+          ;; what keeps the generated lane in step: `parser-finish-v2!` reaches
+          ;; this same behaviour through the emitted arm. The `ready` arm above
+          ;; re-anchored the mark to 0, so EVERY active span here has `from == to`:
+          ;; an empty span (flag clear) delivers its one empty fragment, a carried
+          ;; non-empty span (flag set) suppresses -- both lanes identically
+          ;; (decision 0042 item 4).
           ;;
           ;; THE CURSOR IS WHY NO BYTEVECTOR IS NEEDED HERE: the cursor passed
-          ;; below is the literal 0, a mark is never negative, so `from >= to`
-          ;; holds for EVERY mark and the empty-fragment suppression fires
-          ;; whatever the mark says. `empty-bv` is passed because the step's
-          ;; signature takes one, never because a byte of it is read.
+          ;; below is the literal 0, and the mark is 0 (re-anchored), so `from ==
+          ;; to` and `parser-span-delivered?` decides -- deliver an empty fragment
+          ;; once, or suppress a flag-set span. `empty-bv` is passed because the
+          ;; step's signature takes one, never because a byte of it is read.
           ((span-start)
            (let ((parts (op 'span-start-parts node)))
              (byte-machine-span-open/v1 parser (car parts) 0 (cadr parts))

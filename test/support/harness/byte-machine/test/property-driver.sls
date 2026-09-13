@@ -340,7 +340,7 @@
           '(continue pause declared-branch-key explicit-failure))
      (map (lambda (e) (fam-spec (string->symbol (string-append "span-" (symbol->string e)))
                                 'span-event "span event" e "observes"))
-          '(span-open boundary-fragment end-fragment completion suppressed-empty))
+          '(span-open boundary-fragment end-fragment completion empty-fragment))
      (map (lambda (s) (fam-spec (string->symbol (string-append "sched-" (symbol->string s)))
                                 'schedule-shape "schedule shape" s "drives"))
           '(every-split-point split-point-pair random-multi-split empty-feeds nonzero-slice padded-bytevector))))
@@ -407,15 +407,20 @@
       ;; span events from the data trace. A fragment or completion also witnesses
       ;; the span-start/span-end NODE KINDS, which are zero-width and so are never
       ;; named at a park (parser-state-name never names them) -- their observed
-      ;; witness IS the span event.
+      ;; witness IS the span event. A delivered fragment of length 0 witnesses
+      ;; `empty-fragment` (decision 0042: an empty span delivers one empty fragment,
+      ;; so the observable is a zero-length delivery, not the old suppression).
       (let loop ((tr ((lane-dreader lane))) (since 0) (prev-frag #f))
         (cond ((null? tr)
                (when prev-frag (note! 'span-end-fragment) (note! 'span-end)))
               ((eq? (car tr) 'complete)
                (note! 'span-completion) (note! 'span-end)
-               (if (= since 0) (note! 'span-suppressed-empty) (begin (note! 'span-end-fragment)))
+               (when (> since 0) (note! 'span-end-fragment))
                (loop (cdr tr) 0 #f))
-              (else (note! 'span-boundary-fragment) (note! 'span-start) (loop (cdr tr) (+ since 1) #t))))))
+              (else (note! 'span-boundary-fragment) (note! 'span-start)
+                    (when (and (bytevector? (car tr)) (= 0 (bytevector-length (car tr))))
+                      (note! 'span-empty-fragment))
+                    (loop (cdr tr) (+ since 1) #t))))))
 
   (define (accumulate-nodes m) (filter integer-accumulate-node? (machine-nodes m)))
   (define (accumulate-overflow-nodes m) (map integer-accumulate-node-overflow-error (accumulate-nodes m)))
@@ -1014,9 +1019,11 @@
     ;; and order within one logical span; (iii) the end anchor = parser-stream-offset
     ;; inside the span-complete callback. THREE inapplicability conditions: not at an
     ;; error (§14:839); not when the fragment step short-circuits (no frag recorded --
-    ;; unbound data callback or §14:834 empty suppression); and -- this plan's own
-    ;; addition -- not when no span-complete callback is bound, in which case (iii)
-    ;; is dropped and (i)+(ii) stand.
+    ;; an unbound data callback; since decision 0042 an empty span DELIVERS a
+    ;; zero-length fragment, so it is now IN scope for row 6 -- af==at at the span's
+    ;; offset, and the end anchor still holds); and -- this plan's own addition --
+    ;; not when no span-complete callback is bound, in which case (iii) is dropped
+    ;; and (i)+(ii) stand.
     (define (row6)
       (let* ((last-tup (and (pair? steps) (step-tuple (last-elt steps))))
              (final (and last-tup (tup-status last-tup)))

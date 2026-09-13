@@ -42,10 +42,11 @@
 ;;;   span-pair? + span-body?  COVERAGE, and §4.4 declares the span steering so.
 ;;;                A span is drawn as start -> one advancing one-case byte dispatch
 ;;;                carrying its OWN private EOF error node -> end. Without the body
-;;;                the span covers [mark,mark), §14:834 suppresses the empty
-;;;                fragment, and the span-data callback NEVER runs (measured 0 of
-;;;                40) -- so decision 0033 item 2's span-event counters would read
-;;;                zero forever (F5). span-body is +1.6 pts, i.e. free.
+;;;                the span covers [mark,mark); since decision 0042 amends §14:834
+;;;                that empty span now DELIVERS one empty fragment (witnessing
+;;;                `empty-fragment`), but its bytes-carrying boundary/end fragments
+;;;                would still never run -- so decision 0033 item 2's nonempty
+;;;                span-event counters need the body. span-body is +1.6 pts, i.e. free.
 ;;;   cbdefault    VALIDITY -- DECLINED (F4). Forcing an optional decision
 ;;;                callback's default-branch to a declared key takes
 ;;;                §16.2:891's invalid-callback-declaration to zero, reproducing
@@ -651,8 +652,9 @@
       ;; one byte -> span-open observed) -> covx4 closes covx (boundary + end
       ;; fragments) -> covx5 pauses (node kind pause) -> covx6 a decision callback
       ;; whose script the driver cycles (cb-continue / -pause / -declared-branch-key
-      ;; / -explicit-failure) -> covx7/covx8 an EMPTY span covy (suppressed-empty
-      ;; completion) -> covx9 consumes and routes to the error terminal. The free
+      ;; / -explicit-failure) -> covx7/covx8 an EMPTY span covy (delivers one empty
+      ;; fragment, witnessing empty-fragment -- decision 0042) -> covx9 consumes and
+      ;; routes to the error terminal. The free
       ;; draw reaches spans/pauses/branches too rarely to satisfy 0033 item 2 at the
       ;; committed seed, so this segment exercises them deterministically. It is
       ;; coverage steering of the class §4.4 licenses. covxt is the span body's OWN
@@ -669,7 +671,7 @@
               (record-kind! 'covx9 'byte-dispatch)
               (set! built (cons (make-byte-dispatch-node 'covx9 (list (make-byte-case (make-byte-range-matcher 0 255) (make-edge 'terr 'advance) #f)) (make-edge 'terr 'advance) 'terr #f) built))
               (let* ((nxt 'covx9)
-                     (nxt (if cov-span?      ; empty span covy -> suppressed-empty
+                     (nxt (if cov-span?      ; empty span covy -> empty-fragment
                               (begin (record-kind! 'covx7 'span-start) (record-kind! 'covx8 'span-end)
                                      (set! built (cons (make-span-end-node 'covx8 'covy nxt #f) built))
                                      (set! built (cons (make-span-start-node 'covx7 'covy 'covx8 #f) built))
