@@ -4,8 +4,9 @@
 ;;; Slice ② compared what a callback ANSWERS. A span callback answers the same
 ;;; three things (§13:812), so what is new here is what it is HANDED: a range of
 ;;; the caller's bytevector, chosen by rules that live in three different places
-;;; -- the span end (§14:831), the feed boundary (§14:833) and the empty-fragment
-;;; suppression that governs both (§14:834). Every one of those rules can be
+;;; -- the span end (§14:831, which since decision 0042 delivers even an empty
+;;; fragment once), the feed boundary (§14:833) and the empty-fragment suppression
+;;; that still governs the flush (§14:834). Every one of those rules can be
 ;;; wrong in one lane and right in the other, and none of them is visible in a
 ;;; parser result: two lanes can agree on `(stopped 5 5 5 #f stopped)` while
 ;;; delivering different bytes to the application.
@@ -18,7 +19,7 @@
 ;;;
 ;;; Task 5's six rules, one group each:
 ;;;   a nonempty fragment at the span end          §14:831
-;;;   an empty one suppressed                      §14:834
+;;;   an empty one delivered once                  §14:831 amended, decision 0042
 ;;;   a flush at a feed boundary, span still open  §14:833-834
 ;;;   a pause DURING the flush                     §14:837
 ;;;   a pause between the span-end substeps        §14:838, §14:841
@@ -78,9 +79,10 @@
     ;; that the interpreter's three finish-path arms are executed by something.
     ;; They are written out separately from the feed loop's -- each records its
     ;; own lifecycle -- so a fixture reaching spans only through `parser-feed!`
-    ;; leaves half the interpreted span implementation unrun. It also witnesses
-    ;; the EOF side's own theorem: the fragment there is `[mark,0)`, which is
-    ;; empty for every mark.
+    ;; leaves half the interpreted span implementation unrun. This span opens ON
+    ;; the EOF chain, so its mark is 0 and its span end delivers one empty `[0,0)`
+    ;; fragment (decision 0042); `parser-finish!`'s re-anchor to 0 makes a carried
+    ;; span reach the same `from == to == 0`.
     (list (make-byte-dispatch-node 'start
             (list (make-byte-case (make-exact-byte-matcher 65)
                                   (make-edge 'sopen 'advance) #f))
@@ -245,13 +247,72 @@
           (check "the fragment excludes the opener and the delimiter"
                  (not (equal? (car (cadr (car r))) (bytes 65 98 99 100 90)))))))))
 
-(harness-group "an empty fragment is suppressed (§14:834)"
+;; §14:834 amended by decision 0042: a span that opens and closes having
+;; delivered nothing is now OBSERVABLE -- its data callback fires once with an
+;; empty range -- so a consumer can tell "an optional field was present and
+;; empty" from "this field never happened". The suppression is kept only at the
+;; flush and the EOF-side span end (the groups below and "a span on the EOF
+;; chain").
+(harness-group "an empty span delivers one empty fragment then the completion (§14:831 amended, decision 0042)"
   (lambda ()
-    (harness-case "AZ delivers no data callback at all, only the completion"
+    (harness-case "AZ opens and closes having delivered nothing"
       (lambda ()
         (let ((r (both (list (list 'feed (bytes 65 90))) '() callback-continue)))
           (check-equal "the lanes agree" (caddr r) #t)
-          (check-equal "completion only" (cadr (car r)) '(complete)))))))
+          (check-equal "one empty fragment, then the completion"
+                       (cadr (car r)) (list (bytes) 'complete))
+          ;; The generated lane's OWN trace, as a value: agreement alone cannot
+          ;; tell an empty delivery from a suppression when both lanes do the same.
+          (check-equal "the generated lane's own trace"
+                       (cadr (cadr r)) (list (bytes) 'complete))
+          (check-equal "and the span is inactive afterwards" (caddr (car r)) #f))))))
+
+;; The two hazards decision 0042 §5 names, both by value: an empty FINAL fragment
+;; of a NONEMPTY span is suppressed (the naive `> from to` fix would announce it),
+;; and a flush that finds nothing accumulated delivers nothing (and does not set
+;; the delivered flag, so a genuinely empty span split across the boundary still
+;; delivers once).
+(harness-group "an empty final fragment vs an empty span across a feed boundary (decision 0042)"
+  (lambda ()
+    (harness-case "a nonempty span whose final fragment is empty delivers only its real bytes"
+      (lambda ()
+        ;; feed 1 flushes `bc`; feed 2 closes the span on its first byte with
+        ;; from==to, but the span has delivered, so the empty final fragment is
+        ;; suppressed. Criterion 2.
+        (let ((r (both (list (list 'feed (bytes 65 98 99)) (list 'feed (bytes 90)))
+                       '() callback-continue)))
+          (check-equal "the lanes agree" (caddr r) #t)
+          (check-equal "the flushed bytes, then the completion -- no empty tail"
+                       (cadr (car r)) (list (bytes 98 99) 'complete)))))
+    (harness-case "a flush that finds nothing delivers nothing, and the empty span still delivers once"
+      (lambda ()
+        ;; feed 1 opens the span and ends with nothing accumulated: the flush
+        ;; finds from==to and delivers nothing (criterion 3) and must NOT set the
+        ;; delivered flag. feed 2 closes the still-empty span, so the span END
+        ;; delivers the one empty fragment -- a genuinely empty span split across
+        ;; the boundary.
+        (let* ((lane (make-lane cm-full-ref '() callback-continue #t))
+               (mid (run lane (list (list 'feed (bytes 65))))))
+          (check-equal "the flush delivered nothing" (cadr mid) '()))
+        (let ((r (both (list (list 'feed (bytes 65)) (list 'feed (bytes 90)))
+                       '() callback-continue)))
+          (check-equal "the lanes agree" (caddr r) #t)
+          (check-equal "one empty fragment at the close, nothing before"
+                       (cadr (car r)) (list (bytes) 'complete)))))))
+
+(harness-group "a pause on the EMPTY span-end delivery (§14:834 amended, decision 0042)"
+  (lambda ()
+    (harness-case "the empty fragment pauses; resume delivers only the completion, each once"
+      (lambda ()
+        (let ((r (both (list (list 'feed (bytes 65 90))
+                             (list 'resume)
+                             (list 'feed (bytes 90)))
+                       (list callback-pause) callback-continue)))
+          (check-equal "the lanes agree" (caddr r) #t)
+          (check-equal "the empty fragment, then the completion -- each once"
+                       (cadr (car r)) (list (bytes) 'complete))
+          (check-equal "the pause is reported at the delimiter"
+                       (car (car (car r))) '(paused 1 1 1 #f paused-feed)))))))
 
 (harness-group "a feed boundary flushes and the span stays open (§14:833-834)"
   (lambda ()
@@ -483,17 +544,24 @@
           (check-equal "and the walk still reached the stop"
                        (car (car a)) '(stopped 5 5 5 #f stopped)))))))
 
-(harness-group "a span on the EOF chain (§12.4:729, §14:834)"
+(harness-group "a span on the EOF chain (§12.4:729, §14:831 amended, decision 0042)"
   (lambda ()
-    (harness-case "finish opens and closes a span, delivering no fragment"
+    (harness-case "finish opens and closes a span: one empty fragment, then completion"
       (lambda ()
-        ;; Nothing is consumed at finish, so `[mark,0)` is empty for every mark
-        ;; and §14:834 suppresses it -- which is exactly why `parser-finish-op!`
-        ;; takes no bytevector. A lane that delivered a fragment here would have
-        ;; had to slice something, and there is nothing to slice.
+        ;; The span opens ON the EOF chain, so its mark is 0, and finish runs over
+        ;; cursor 0 -- `[0,0)` is a COHERENT empty range, so the span END delivers
+        ;; it once, exactly as a feed-side empty span does. The generated lane
+        ;; reaches this through the SAME emitted span-end arm it uses in a feed
+        ;; (parser-finish-v2! runs `exec` with finish? and cursor 0), so both
+        ;; lanes deliver here without any emitted-text change (decision 0042
+        ;; item 4). A span CARRIED from a feed into finish is the different shape:
+        ;; its mark is uncoordinated, so `from > to` and the step's `from == to`
+        ;; guard suppresses -- not reachable in this machine, whose only EOF-chain
+        ;; span opens at finish.
         (let ((r (both (list (list 'finish)) '() callback-continue)))
           (check-equal "the lanes agree" (caddr r) #t)
-          (check-equal "completion only, no data" (cadr (car r)) '(complete))
+          (check-equal "one empty fragment, then the completion"
+                       (cadr (car r)) (list (bytes) 'complete))
           (check-equal "and the walk finished"
                        (car (car (car r))) '(finished 0 0 0 #f finished))
           (check-equal "with the span inactive" (caddr (car r)) #f))))
@@ -505,9 +573,10 @@
           (check-equal "paused-finish, then finished"
                        (map car (car (car r))) '(paused finished))
           ;; §13:814: the completion event was committed before the pause, so
-          ;; resuming must not deliver it again.
-          (check-equal "the completion is delivered exactly once"
-                       (cadr (car r)) '(complete)))))))
+          ;; resuming must not deliver it again; the empty data fragment was
+          ;; delivered on the first finish and is not re-delivered either.
+          (check-equal "the empty fragment then the completion, each once"
+                       (cadr (car r)) (list (bytes) 'complete)))))))
 
 (harness-group "reset clears span state (§12.5:739)"
   (lambda ()
@@ -1034,13 +1103,16 @@
 ;;   pause       "a pause DURING the flush commits the fragment (§14:837)"
 ;;               "a pause between the span-end substeps (§14:838, §14:841)"
 ;;   completion  "a span end delivers [mark,cursor) and exactly one completion"
-;;               "an empty fragment is suppressed (§14:834)"
+;;               "an empty span delivers one empty fragment then the completion"  [10]
+;;               "an empty final fragment vs an empty span across a feed boundary" [10]
+;;               "a pause on the EMPTY span-end delivery"                 [10]
 ;;               "a span declaring no completion callback (§10.4:516)"
 ;;   error       "an error with a span open (§14:839)"
 ;;               "a FAILURE during the flush is a callback-domain error"
 ;;               "the error path, per lane and across schedules"
-;;   EOF         "a span on the EOF chain (§12.4:729, §14:834)"           [3]
+;;   EOF         "a span on the EOF chain (§12.4:729, §14:831 amended)"    [3][10]
 ;;               "a span open at finish, closed on the EOF chain"         [4]
+;;               "an empty span carried into finish delivers once"        [10]
 ;;   reset       "reset clears span state (§12.5:739)"                    [3]
 ;;               "reset while parked BETWEEN the span-end substeps"       [4]
 ;;               "reset of a POISONED parser with a span open"            [4]
@@ -1124,8 +1196,10 @@
       (lambda ()
         ;; The shape nothing above reaches. `A b c` opens the span and leaves it
         ;; open at the end of the feed, so `§14:833`'s boundary flush delivers
-        ;; `bc`; `parser-finish!` then runs `bclose`, whose own fragment is
-        ;; `[mark,0)` and is suppressed by `§14:834`, and the completion is the
+        ;; `bc` and sets the span's delivered flag; `parser-finish!` then runs
+        ;; `bclose`, whose own fragment is `[0,0)` (the mark re-anchored to 0) but
+        ;; is suppressed because the flag is set (decision 0042 -- a non-empty span
+        ;; carried to EOF has no empty tail to announce), and the completion is the
         ;; only thing EOF adds.
         ;; *** THE FRAGMENT IS OBSERVED BETWEEN THE TWO STEPS, not only at the
         ;; end. *** `run` returns the trace after the whole script, so a lane
@@ -1149,11 +1223,12 @@
           (check-equal "and the span is inactive at the end" (caddr (car r)) #f))))
     (harness-case "the EOF span end delivers NO second fragment"
       (lambda ()
-        ;; The derivation `parser-finish-op!`'s own comment carries: the cursor
-        ;; passed to the fragment step at EOF is the literal 0 and a mark is
-        ;; never negative, so `from >= to` holds for every mark. A lane that
-        ;; re-delivered `[mark,end)` here would hand the application `bc` twice,
-        ;; and every result tuple would still agree.
+        ;; A non-empty span carried into finish: the flush already delivered `bc`
+        ;; and set the span's delivered flag, so the EOF span end -- over the
+        ;; re-anchored `[0,0)` -- suppresses (decision 0042: the empty tail of a
+        ;; span that already delivered). A lane that re-delivered `[mark,end)`
+        ;; here would hand the application `bc` twice, and every result tuple would
+        ;; still agree.
         (let* ((r (both-eof (list (list 'feed (bytes 65 98 99)) (list 'finish))
                             '() callback-continue))
                (frags (filter bytevector? (cadr (car r)))))
@@ -1168,6 +1243,32 @@
           (check-equal "the lanes agree" (caddr r) #t)
           (check-equal "nothing delivered" (cadr (car r)) '())
           (check-equal "and it finished" (map car (car (car r))) '(finished)))))))
+
+(harness-group "an empty span carried into finish delivers once, regardless of slicing (decision 0042 item 4)"
+  (lambda ()
+    ;; A span opens in a feed, stays EMPTY, and closes on the EOF chain (bclose).
+    ;; parser-finish! re-anchors the mark to 0, so the EOF span end sees from==to
+    ;; and delivers the one empty fragment -- and the result does NOT depend on
+    ;; the opening feed's slice `start`. Before that finish re-anchor the carried
+    ;; empty span was announced only when an intervening feed had re-anchored the
+    ;; mark to 0 (a slicing-dependent inconsistency the whole-branch review found);
+    ;; the two cases below, opened at start 0 and at a nonzero start, must agree.
+    (harness-case "opened by a whole-bytevector feed (start 0)"
+      (lambda ()
+        (let ((r (both-eof (list (list 'feed (bytes 65)) (list 'finish))
+                           '() callback-continue)))
+          (check-equal "the lanes agree" (caddr r) #t)
+          (check-equal "one empty fragment, then the completion"
+                       (cadr (car r)) (list (bytes) 'complete))
+          (check-equal "the generated lane's own trace"
+                       (cadr (cadr r)) (list (bytes) 'complete)))))
+    (harness-case "opened by a sub-slice feed (nonzero start) -- same result"
+      (lambda ()
+        (let ((r (both-eof (list (list 'feed-slice (bytes 7 65) 1 2) (list 'finish))
+                           '() callback-continue)))
+          (check-equal "the lanes agree" (caddr r) #t)
+          (check-equal "slicing-independent: one empty fragment, then the completion"
+                       (cadr (car r)) (list (bytes) 'complete)))))))
 
 (harness-group "reset while parked BETWEEN the span-end substeps (§25:1589 reset)"
   (lambda ()

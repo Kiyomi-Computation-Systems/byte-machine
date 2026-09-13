@@ -43,6 +43,34 @@ _Deferred to later slices: per-table case-insensitivity's folded-collision
 diagnostic and the HTTP-header demonstration (Slice ②); span composition and the
 47-keyword before/after size measurement (Slice ③)._
 
+## [0.2.0] - 2026-09-13
+
+Empty spans are now observable, the first change after v0.1.0 and the first
+opened from the downstream `chez-httparse` consumer's brief rather than the
+parent plan (Milestone 10, decision 0042).
+
+### Changed
+
+- A byte-machine span that opens and closes **having delivered no bytes** now
+  invokes its span-data callback **exactly once, with an empty range**
+  (`(f parser ctx bv from to)` where `from == to`), so a consumer can tell "an
+  optional field was present and empty" from "this field never happened". This
+  amends the span contract: a span end (feed-side or at EOF) delivers `[mark,cursor)`
+  even when empty, once, when the span has delivered nothing — parent plan `§14`
+  items 2 and 5, amended by a dated disposition. The feed-boundary flush still
+  suppresses empty fragments (an open span is still being built), and
+  `parser-finish!` re-anchors the span mark to 0 so every empty span closing at
+  EOF is announced uniformly, independent of how the input was sliced.
+- The change is confined to `(byte-machine runtime)` internals (a per-span
+  "delivered?" flag and a signature-preserving split of the span-fragment step).
+  The **emitted text is byte-identical**, so the six determinism goldens do not
+  move and the **generated ABI stays 5** (no bump — the contract's shape is
+  unchanged, only its behaviour). No public library gains a name.
+
+Consumers pinning byte-machine by gitlink pick this up by moving their pin off
+`v0.1.0`, targeting the same generated ABI 5, and re-measuring their traces:
+empty spans that previously produced no callback now produce one empty fragment.
+
 ## [0.1.0] - 2026-09-12
 
 The first tagged release. byte-machine generates R6RS Chez Scheme byte parsers

@@ -139,20 +139,22 @@
               (list (obs 'need-input 4 4 #f 'ready 'body 'sp 1 '((data 2)))
                     (obs 'need-input 2 6 #f 'ready 'idle #f 0 '((data 1) complete))))))))
 
-(harness-group "rule 5: an empty fragment is suppressed (§14:834)"
+(harness-group "rule 5: an empty span delivers one empty fragment (§14:834 amended, decision 0042)"
   (lambda ()
-    (harness-case "0:, in one feed delivers no data callback and one completion"
+    (harness-case "0:, in one feed delivers one empty fragment (data 0) then the completion"
       (lambda ()
         (both "zero body, one feed" 'full '((feed "0:,")) '() callback-continue
-              (list (obs 'need-input 3 3 #f 'ready 'idle #f 0 '(complete))))))
-    (harness-case "0:, byte at a time: the completion lands in the : feed and the , feed records nothing"
+              (list (obs 'need-input 3 3 #f 'ready 'idle #f 0 '((data 0) complete))))))
+    (harness-case "0:, byte at a time: the empty fragment and completion land in the : feed, the , feed records nothing"
       (lambda ()
         ;; The zero count takes its route at once (decision 0030 item 1): the `:`
-        ;; feed opens the span, transitions, suppresses the empty fragment and
-        ;; fires the completion before parking on the delimiter dispatch.
+        ;; feed opens the span, transitions, and the span END delivers the one
+        ;; empty fragment (decision 0042 -- the body delivered nothing, so the
+        ;; empty fragment is the span's only fragment) before firing the
+        ;; completion and parking on the delimiter dispatch.
         (both "zero body, byte at a time" 'full '((feed "0") (feed ":") (feed ",")) '() callback-continue
               (list (obs 'need-input 1 1 #f 'ready 'len #f 0 '())
-                    (obs 'need-input 1 2 #f 'ready 'comma #f 0 '(complete))
+                    (obs 'need-input 1 2 #f 'ready 'comma #f 0 '((data 0) complete))
                     (obs 'need-input 1 3 #f 'ready 'idle #f 0 '())))))))
 
 (harness-group "rule 8: a pause DURING the flush commits the fragment and the count survives (§14:837, §25:1600)"
@@ -191,7 +193,9 @@
     (harness-case "3:abc,0:, in one feed"
       (lambda ()
         (both "two messages, two completions" 'full '((feed "3:abc,0:,")) '() callback-continue
-              (list (obs 'need-input 9 9 #f 'ready 'idle #f 0 '((data 3) complete complete))))))))
+              ;; The second message's body is empty, so its span delivers one
+              ;; empty fragment (data 0) before its completion (decision 0042).
+              (list (obs 'need-input 9 9 #f 'ready 'idle #f 0 '((data 3) complete (data 0) complete))))))))
 
 ;; --- the placement oracle, per schedule (§10.6:603; decision 0030 item 2) ---------
 ;;

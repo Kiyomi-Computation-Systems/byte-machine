@@ -155,22 +155,26 @@
       ("§27:1700" "portability matrix and pinned runtime versions"   #t ())
       ("§27:1701" "changelog"                                        #t (five))))
 
-  ;; §4.5 — the version surface. `0.1.0` has ONE owner (the value here) and a
-  ;; mirror rule: every surface below must carry it at the close (Slice ⑤), and
-  ;; the ledger checks the changelog row (§26:1684) and the status-surface sweep.
-  ;; The `(byte-machine version)` export is DECLINED for v0.1 (§4.9 item 3): the
-  ;; public surface stays frozen and the src/ diff stays empty of new names, so
-  ;; `release-version-export?` is #f and the leak sweep asserts no public library
-  ;; exports a `version` name. `current-abi-version` (5, runtime.sls) is the
-  ;; generated-runtime ABI — a different thing with a different lifecycle — and
-  ;; is deliberately NOT this value.
-  (define release-version "0.1.0")
+  ;; §4.5 — the version surface. The CURRENT release string has ONE owner (the
+  ;; value here) and a mirror rule: every surface below carries it. Milestone 10
+  ;; (empty-span observability, decision 0042) bumps it to `0.2.0`; the `§26`/`§27`
+  ;; census above is UNCHANGED — those are the release exit criteria (the append
+  ;; rule freezes them, the empty-span behaviour adds no criterion row, and every
+  ;; one still holds, the two amended still the CI-blocked pair), so the ledger
+  ;; keeps checking them while this value tracks the release they were met for.
+  ;; The `(byte-machine version)` export stays DECLINED (§4.9 item 3): the public
+  ;; surface adds no name — Milestone 10's only src/ change was runtime.sls
+  ;; internals — so `release-version-export?` is #f and the leak sweep asserts no
+  ;; public library exports a `version` name. `current-abi-version` (5,
+  ;; runtime.sls) is the generated-runtime ABI — a different thing with a different
+  ;; lifecycle — and is deliberately NOT this value (it did not move at v0.2.0).
+  (define release-version "0.2.0")
   (define release-version-export? #f)
   (define release-version-surfaces
-    '("CHANGELOG.md 0.1.0 entry (§26:1684)"
+    '("CHANGELOG.md 0.2.0 entry (§26:1684)"
       "README.org status paragraph"
       "the parent plan's dated disposition"
-      "the milestone-9-design.md status header"
+      "the milestone-10-design.md status header"
       "the git tag"))
 
   ;; --- accessors -----------------------------------------------------------

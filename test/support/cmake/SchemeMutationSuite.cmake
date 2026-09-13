@@ -1005,6 +1005,12 @@ cmake_minimum_required(VERSION 3.26)
 # re-anchor to 0 was inert for a different reason: an EOF-side fragment is
 # `[mark,0)` and `from >= to` holds for every mark, so §14:834 suppresses it
 # whatever the mark says. Both rules now live in one place each.
+#   [2026-09-13, Milestone 10, decision 0042: the finish re-anchor to 0 was
+#   RE-ADDED and is no longer inert -- once an empty span END delivers, that
+#   re-anchor is what makes a carried empty span reach `from == to` and be
+#   announced uniformly rather than by the last feed's slice start. It now has its
+#   own pin ("parser-finish! does not re-anchor the span mark to 0"). The M5
+#   record above is left as it was measured then.]
 #
 # FOUR shipped pins moved. Two because the F1 split re-indented the classifier
 # and relocated the `busy` write, and TWO because a span arm became a second site
@@ -1379,7 +1385,11 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-# Milestone 11 Slice ① (the fourteenth node kind, keyword-table): 65/602 -> 68/612.
+# Milestone 11 Slice ① (the fourteenth node kind, keyword-table): 65/606 -> 68/616.
+# Milestone 10 (65/602 -> 65/606, the empty-span fragment work) landed on main
+# first, so this slice's base is 606, not the 602 it was measured against; the
+# arithmetic is +3 passes and +10 mutations over whichever base, and the merge
+# reconciles to 616.
 # THREE new passes, one per new lane -- 66 the interpreter walk
 # (unit.keyword-table, 4 mutations: the fold, the delimiter reexecute, the
 # eof-target-of arm, the terminal-vs-proper-prefix test), 67 the generated
@@ -1387,14 +1397,15 @@ cmake_minimum_required(VERSION 3.26)
 # and delimiter and terminal test, a matched keyword routed to no-match, and the
 # normalizer dropping the case-insensitive flag -- pinned on the fingerprint
 # group it alone reddens), and 68 the emitted ABI literal
-# (determinism.keyword-table, 1 mutation, caught by the seventh golden). The
-# closed-set FORMS are carried by ir.sls's "fourteen kinds" census ratchets,
-# re-anchored in place; seventeen shipped pins were re-anchored to the
-# keyword-table arms this slice inserted (twelve FINDs, two draw-table got-lists,
-# two census-count literals, and the Layer-3 row-6 pin re-homed onto the
-# deterministic fixture the draw-table growth left as its only witness).
+# (determinism.keyword-table, 1 mutation, caught by the v6 runtime refusing the
+# v5-stamped library). The closed-set FORMS are carried by ir.sls's "fourteen
+# kinds" census ratchets, re-anchored in place; seventeen shipped pins were
+# re-anchored to the keyword-table arms this slice inserted (twelve FINDs, two
+# draw-table got-lists, two census-count literals, and the Layer-3 row-6 pin
+# re-homed onto the deterministic fixture the draw-table growth left as its only
+# witness).
 set(EXPECTED_PASSES 68)
-set(EXPECTED_MUTATIONS 612)
+set(EXPECTED_MUTATIONS 616)
 # Sixty-two is sixty-one plus one: Milestone 8 Slice ① adds one pass over the
 # request-line fixture (http-machine.sls) with three mutations (590 -> 593),
 # each caught by byte-machine.unit.http-request-line with a measured signature.
@@ -1407,6 +1418,14 @@ set(EXPECTED_MUTATIONS 612)
 # Sixty-five is sixty-four plus one: Slice ④ adds a fourth pass over the fixture's
 # chunked body and trailers with three mutations (599 -> 602), each caught by
 # byte-machine.unit.http-chunked with a measured signature.
+# Milestone 10 Slice ① (empty-span observability, decision 0042) adds no pass but
+# four mutations (602 -> 606): three in the span differential lane -- the
+# `from == to` empty-delivery guard, the deliver! flag-set, and the parser-finish!
+# mark re-anchor to 0 (item 4's uniform EOF delivery) -- and one in the property
+# lane -- the span-close flag reset, witnessed by the coverage machine's
+# covx->covy two-span run. The pre-existing suppression pin was RE-AUTHORED in
+# place (net 0): its `from >= to` FIND now sits in span-fragment-suppress-empty
+# (the flush), and its witness moved to the flush's own empty case.
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
@@ -9051,6 +9070,21 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES [[check-invariants holds on every fixture schedule -- expected none, got .row6 span-end-anchor]])
 
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.property.differential.chez.source
+  LABEL "runtime: span-close does not reset the delivered flag"
+  # decision 0042 item 1: the delivered flag is reset only in
+  # byte-machine-span-close/v1, so a prior span's "has delivered" state cannot leak
+  # into the next span opened on the same parser. This is the only lane whose one
+  # machine runs TWO spans in sequence: the coverage machine's covx (a nonempty
+  # span -- flag set) then covy (an EMPTY span). Dropping the reset leaves covy's
+  # flag stale #t, so covy is suppressed and the empty-fragment counter reads zero.
+  FIND [[    (parser-set-span-delivered?! parser #f)]]
+  REPLACE [[    #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "at least one agreed trial observes span event empty-fragment -- expected a true value")
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 40: member-2 drift guard (Slice B) ---------------------------------
@@ -12471,14 +12505,69 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
-  LABEL "runtime: an empty span fragment is delivered instead of suppressed"
-  # §14:834. SHARED, so both lanes deliver the empty fragment and agree about
-  # it; only a test that says what the trace IS can notice. `AZ` opens and
-  # closes with nothing between, and the EOF-chain span is the same shape.
+  LABEL "runtime: the flush delivers an empty fragment instead of suppressing"
+  # §14:834 (amended, decision 0042). `>= from to` now lives in
+  # span-fragment-suppress-empty, which the FLUSH alone reaches (the span ends
+  # deliver-if-never through the public step). Inverting it to `> from to` makes
+  # an empty flush -- one that accumulated nothing this slice -- deliver a
+  # zero-length fragment. Witnessed by the criterion-3 case's MID trace, `()` in
+  # the baseline (the flush found nothing and delivered nothing); the FINAL trace
+  # is unchanged, because the span end then suppresses the now-set flag, so only
+  # the mid trace separates them.
   FIND [[      (if (or (>= from to) (unbound-callback? f))]]
   REPLACE [[      (if (or (> from to) (unbound-callback? f))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "completion only -- expected .complete., got .#vu8.. complete."
+  EXPECT_OUTPUT_MATCHES "the flush delivered nothing -- expected .., got .#vu8..."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "runtime: an empty span is suppressed instead of delivered once"
+  # decision 0042 item 1: the public span-end step delivers an empty fragment
+  # exactly when `from == to` and the span has delivered nothing. Weakening that
+  # guard to `< from to` makes the arm unreachable (arm 1 already took `< from
+  # to`), so an empty span delivers nothing -- the pre-0042 behaviour. Witnessed
+  # by the AZ empty span, which must now deliver one empty fragment then complete.
+  FIND [[            ((and (= from to) (not (parser-span-delivered? parser)))]]
+  REPLACE [[            ((and (< from to) (not (parser-span-delivered? parser)))]]
+  EXPECT_STATUS 1
+  # Anchored on the AZ case NAME, not the bare check label: the same "one empty
+  # fragment, then the completion" check fires for the EOF-chain span and the
+  # carried-EOF cases too (this mutant suppresses every empty delivery), so the
+  # case name is what resolves the pin to AZ alone.
+  EXPECT_OUTPUT_MATCHES "AZ opens and closes having delivered nothing: one empty fragment, then the completion -- expected .#vu8.. complete., got .complete."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "runtime: parser-finish! does not re-anchor the span mark to 0"
+  # decision 0042 item 4: parser-finish! re-anchors an active span's mark to 0
+  # before the EOF chain runs, so a span carried from a feed and closed empty at
+  # EOF sees from==to and delivers its one empty fragment uniformly. Dropping the
+  # re-anchor leaves the carried mark (the opening feed's start), so from>to and
+  # the span end suppresses -- announcing the empty span only when the last feed
+  # happened to start at 0. Witnessed by the nonzero-start carried-empty case,
+  # whose whole point is slicing-independence.
+  FIND [[       (when (parser-active-span parser)
+         (parser-set-span-mark! parser 0))
+       (let ((completed #f))]]
+  REPLACE [[       (let ((completed #f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "slicing-independent: one empty fragment, then the completion -- expected .#vu8.. complete., got .complete."
+)
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.span.chez.source
+  LABEL "runtime: a span-end fragment does not mark the span delivered"
+  # decision 0042 item 1: span-fragment-deliver! sets the delivered flag, so a
+  # span split across feeds whose FINAL fragment is empty suppresses it (the flush
+  # delivered the bytes and set the flag). Dropping the set leaves the flag clear,
+  # so the empty final fragment delivers spuriously. Witnessed by the criterion-2
+  # split: `bc` flushed, then an empty tail that must NOT appear.
+  FIND [[    (parser-set-span-delivered?! parser #t)]]
+  REPLACE [[    #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "no empty tail -- expected .#vu8.98 99. complete., got .#vu8.98 99. #vu8.. complete."
 )
 
 byte_machine_mutation(
@@ -12837,8 +12926,8 @@ byte_machine_mutation(
   # the two lanes reach `user-context` by different routes (`make-parser` builds
   # both vectors here, but only this arm's literal moves), and a pin that
   # mutated both would not show it.
-  FIND [[                 user-context #f #f 0 #f)))]]
-  REPLACE [[                 'not-the-input #f #f 0 #f)))]]
+  FIND [[                 user-context #f #f 0 #f #f)))]]
+  REPLACE [[                 'not-the-input #f #f 0 #f #f)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "user context may retain it, and does: retained, and permitted -- expected ..interpreted . #t. .generated . #t.., got ..interpreted . #f. .generated . #t."
 )
