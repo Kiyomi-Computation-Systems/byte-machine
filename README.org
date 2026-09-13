@@ -77,7 +77,7 @@ slice also closed the three fragment shapes nothing had covered — a span left
 open when =parser-finish!= is called and closed on the EOF chain, a reset while
 parked between the span-end substeps, and a reset of a poisoned parser with a
 span still open — and shipped the first document in the plan's
-reference directory, [[file:docs/reference/callback-span-lifetime.md][the callback and
+reference directory, [[file:.reference/callback-span-lifetime.md][the callback and
 span lifetime reference]]. Closing the milestone also turned up a check the
 project had approved at the milestone's design gate and then simply lost: the
 verifier now rejects a callback or span declaration whose optional diagnostic
@@ -179,11 +179,11 @@ suite now pins 65 passes over 602 mutations.
 =src/byte-machine/= holds the construction API, the verifier, the normalizer and
 emitter, the reference interpreter, and the runtime, each exercised in both the
 source and ahead-of-time execution lanes. See
-[[file:docs/plans/byte-machine-implementation-plan.md][the implementation plan]] for scope, architecture, and milestones.
+[[file:.plans/byte-machine-implementation-plan.md][the implementation plan]] for scope, architecture, and milestones.
 
 Milestone 9 (cross-platform hardening and the v0.1 release, the final milestone)
 closed 2026-09-12 and tagged =0.1.0=: the release ledger, the documentation set
-(=docs/reference/=, eleven references) and a runnable example, the sixth
+(=.reference/=, eleven references) and a runnable example, the sixth
 determinism golden, and the compiled-benchmark baseline with the allocation
 audit. It ships two criteria *amended* rather than met, recorded not waived: only
 macOS arm64 is verified in Tier 1 (locally), with Linux amd64, Windows amd64 and
@@ -223,8 +223,8 @@ is [[file:examples/generate-simple-machine/][=examples/generate-simple-machine/=
 chez --libdirs src --program examples/generate-simple-machine/generate.sps
 #+end_src
 
-From there, the [[file:docs/reference/source-ir-and-builder.md][source IR and builder reference]] documents every constructor, and
-the [[file:docs/reference/generated-code-integration-chez.md][generated-code integration guide]] shows how a consumer imports and runs a
+From there, the [[file:.reference/source-ir-and-builder.md][source IR and builder reference]] documents every constructor, and
+the [[file:.reference/generated-code-integration-chez.md][generated-code integration guide]] shows how a consumer imports and runs a
 generated parser. See [[*Documentation][Documentation]] below for the full set.
 
 ** Requirements
@@ -281,33 +281,33 @@ cmake --preset no-scheme && ctest --preset no-scheme
 
 ** Documentation
 
-- [[file:docs/plans/byte-machine-implementation-plan.md][Implementation plan]] — authoritative scope, IR semantics, milestones, and release criteria
-- [[file:docs/plans/milestone-0-portability-spike.md][Milestone 0 plan]] — the portability and harness spike
-- [[file:docs/plans/milestone-1-design.md][Milestone 1 design]] — the minimal executable machine
-- [[file:docs/plans/milestone-2-design.md][Milestone 2 design]] — incremental execution and lifecycle
-- [[file:docs/plans/milestone-3-design.md][Milestone 3 design]] — byte classes and sequences
-- [[file:docs/plans/milestone-4-design.md][Milestone 4 design]] — fields, actions, and branches
-- [[file:docs/plans/milestone-5-design.md][Milestone 5 design]] — callbacks, poisoning, and spans
-- [[file:docs/plans/milestone-6-design.md][Milestone 6 design]] — counted consumption
-- [[file:docs/plans/milestone-7-design.md][Milestone 7 design]] — verification and generative hardening
-- [[file:docs/plans/milestone-8-design.md][Milestone 8 design]] — the private HTTP fixture
-- [[file:docs/plans/milestone-9-design.md][Milestone 9 design]] — cross-platform hardening and the v0.1 release
+- [[file:.plans/byte-machine-implementation-plan.md][Implementation plan]] — authoritative scope, IR semantics, milestones, and release criteria
+- [[file:.plans/milestone-0-portability-spike.md][Milestone 0 plan]] — the portability and harness spike
+- [[file:.plans/milestone-1-design.md][Milestone 1 design]] — the minimal executable machine
+- [[file:.plans/milestone-2-design.md][Milestone 2 design]] — incremental execution and lifecycle
+- [[file:.plans/milestone-3-design.md][Milestone 3 design]] — byte classes and sequences
+- [[file:.plans/milestone-4-design.md][Milestone 4 design]] — fields, actions, and branches
+- [[file:.plans/milestone-5-design.md][Milestone 5 design]] — callbacks, poisoning, and spans
+- [[file:.plans/milestone-6-design.md][Milestone 6 design]] — counted consumption
+- [[file:.plans/milestone-7-design.md][Milestone 7 design]] — verification and generative hardening
+- [[file:.plans/milestone-8-design.md][Milestone 8 design]] — the private HTTP fixture
+- [[file:.plans/milestone-9-design.md][Milestone 9 design]] — cross-platform hardening and the v0.1 release
 
-*References* ([[file:docs/reference/][=docs/reference/=]], the v0.1 documentation set):
+*References* ([[file:.reference/][=.reference/=]], the v0.1 documentation set):
 
-- [[file:docs/reference/source-ir-and-builder.md][Source IR and builder]] — every =(byte-machine graph)= constructor and node kind
-- [[file:docs/reference/transition-and-cursor-semantics.md][Transition and cursor semantics]] — edge modes, cursor, offsets, statuses, position kinds
-- [[file:docs/reference/field-and-overflow.md][Fields and overflow]] — uint fields, actions, predicates, accumulation, counted consumption
-- [[file:docs/reference/callback-span-lifetime.md][Callback and span lifetime]] — what a callback receives, how long it may hold it, and the byte guarantees
-- [[file:docs/reference/verifier-diagnostic-catalog.md][Verifier diagnostic catalog]] — the thirty diagnostic codes, derived from =verify.sls=
-- [[file:docs/reference/generated-code-integration-chez.md][Generated-code integration for Chez]] — generating, importing, and running a parser; the dependency boundary
-- [[file:docs/reference/grammar-author-testing-guide.md][Grammar-author testing guide]] — the harness, lanes, and differential testing
-- [[file:docs/reference/benchmark-methodology-and-baseline.md][Benchmark methodology and baseline]] — the metrics, workloads, and the recorded v0.1 baseline
-- [[file:docs/reference/portability-matrix.md][Portability matrix]] — the Tier 1 matrix as amended for v0.1, and the pinned runtime
+- [[file:.reference/source-ir-and-builder.md][Source IR and builder]] — every =(byte-machine graph)= constructor and node kind
+- [[file:.reference/transition-and-cursor-semantics.md][Transition and cursor semantics]] — edge modes, cursor, offsets, statuses, position kinds
+- [[file:.reference/field-and-overflow.md][Fields and overflow]] — uint fields, actions, predicates, accumulation, counted consumption
+- [[file:.reference/callback-span-lifetime.md][Callback and span lifetime]] — what a callback receives, how long it may hold it, and the byte guarantees
+- [[file:.reference/verifier-diagnostic-catalog.md][Verifier diagnostic catalog]] — the thirty diagnostic codes, derived from =verify.sls=
+- [[file:.reference/generated-code-integration-chez.md][Generated-code integration for Chez]] — generating, importing, and running a parser; the dependency boundary
+- [[file:.reference/grammar-author-testing-guide.md][Grammar-author testing guide]] — the harness, lanes, and differential testing
+- [[file:.reference/benchmark-methodology-and-baseline.md][Benchmark methodology and baseline]] — the metrics, workloads, and the recorded v0.1 baseline
+- [[file:.reference/portability-matrix.md][Portability matrix]] — the Tier 1 matrix as amended for v0.1, and the pinned runtime
 
 *Example*: [[file:examples/generate-simple-machine/][=examples/generate-simple-machine/=]] — construct, compile, emit, and run a parser end to end.
 
-- [[file:docs/decisions/][Architecture decisions]]
+- [[file:.decisions/][Architecture decisions]]
 - [[file:CHANGELOG.md][Changelog]]
 
 -----

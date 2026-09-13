@@ -1689,7 +1689,7 @@ byte_machine_add_scheme_lane(
               "BYTE_MACHINE_NATIVE_ARTIFACTS_FILE=${BYTE_MACHINE_NATIVE_ARTIFACTS_FILE}")
 
 # --- Milestone 9 Slice ①: the dry Windows-cell audit -------------------------
-# The tree-answerable rows of docs/plans/milestone-9-windows-cell-audit.md, as
+# The tree-answerable rows of .plans/milestone-9-windows-cell-audit.md, as
 # assertions (the machine-type identity, the discovery names, the executable
 # fallback). The two runner-only rows are deferred past v0.1 (decision 0041).
 byte_machine_add_scheme_lane(
