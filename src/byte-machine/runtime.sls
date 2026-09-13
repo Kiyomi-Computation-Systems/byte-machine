@@ -237,7 +237,7 @@
   ;;
   ;; Milestone 5's close-out (Slice ④, 2026-09-06) disposed it as DEFERRED with
   ;; the receiver named as "the next slice that changes this record's shape".
-  ;; The adjudication is in `docs/plans/byte-machine-implementation-plan.md`
+  ;; The adjudication is in `.plans/byte-machine-implementation-plan.md`
   ;; under the `### §12.3:711` disposition -- NOT under §12.7, which is the
   ;; other close-out obligation. The note is here rather than only there because
   ;; that receiver opens this constructor.

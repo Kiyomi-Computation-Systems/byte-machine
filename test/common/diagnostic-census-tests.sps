@@ -603,7 +603,7 @@
                        (sortsym path-bearing-codes-declared)))))))
 
 ;; --- the committed catalog matches the census (§27:1696, Milestone 9 Slice ④) --
-;; docs/reference/verifier-diagnostic-catalog.md is DERIVED from THIS census. It
+;; .reference/verifier-diagnostic-catalog.md is DERIVED from THIS census. It
 ;; lists the code set as `- `code` — …` bullets; assert that set equals the
 ;; census code set, so the catalog is not a thirty-first place for the code set
 ;; to drift. Keyed on BYTE_MACHINE_REPO_ROOT, which the ordinary ctest lane sets
@@ -638,7 +638,7 @@
           (let ((doc (list-sort string<?
                        (catalog-codes
                         (string-append catalog-repo
-                          "/docs/reference/verifier-diagnostic-catalog.md"))))
+                          "/.reference/verifier-diagnostic-catalog.md"))))
                 (census (list-sort string<?
                           (map symbol->string (distinct (census-codes the-census))))))
             (check "the catalog lists codes" (pair? doc))

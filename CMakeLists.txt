@@ -8,7 +8,7 @@
 # which requires 3.25 -- plus a margin. It is not what enables JUnit output or
 # refusing an empty test selection; both of those arrive earlier, in 3.21. Only
 # 4.3.3 has actually been exercised, so 3.26 is a declared floor rather than a
-# tested one (docs/decisions/0001-toolchain-discovery.md).
+# tested one (.decisions/0001-toolchain-discovery.md).
 #
 # LANGUAGES NONE is deliberate: byte-machine has no C of its own, so asking
 # CMake for a C compiler would impose a requirement the project does not have.

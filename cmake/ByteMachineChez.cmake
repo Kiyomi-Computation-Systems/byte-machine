@@ -42,7 +42,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/ByteMachineProbe.cmake")
 # The floor is what this project has actually verified, not what it guesses it
 # could tolerate. Milestone 0 question 1 (parent plan section 30) is answered by
 # CI, and lowering this pin is that answer's job; raising it needs a reason
-# recorded in docs/decisions.
+# recorded in .decisions.
 set(BYTE_MACHINE_CHEZ_MINIMUM_VERSION "10.4.1")
 
 # Searched in this order. `scheme` is first because it is what upstream installs,
