@@ -6,7 +6,9 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ## [Unreleased]
 
-### Milestone 11 — the keyword-table node kind (targets 0.3.0)
+## [0.3.0] - 2026-09-13
+
+### Milestone 11 — the keyword-table node kind
 
 **Added (Slice ①): a `keyword-table` node kind.** A fourteenth IR node kind that
 matches one of a set of keywords, *tolerating* proper prefixes — `GET` and
@@ -54,8 +56,16 @@ generated agreeing with the generated side asserted absolutely. The diagnostic
 census moves to 32 codes over 58 sites. No node kind, ABI, or determinism golden
 changes in this slice.
 
-_Deferred to Slice ③: span composition and the 47-keyword before/after size
-measurement._
+**Added (Slice ③): span composition and the measured size win.** A span opened
+before a keyword table closes at the **matched keyword's length**, not at a
+delimiter — `span[method]="MKCOL"` from the six bytes of `MKCOLA`, the whole
+`GET-PARAMETER` when the input reaches it — proved on both executors by
+`byte-machine.differential.keyword-span`. And the change's justification, measured
+through `byte-machine.unit.keyword-size`: the **47 llhttp method names** as **one
+`keyword-table` node emit 2,723 bytes**, versus **96,092 bytes for the equivalent
+242-node byte-dispatch trie** the workaround ships today — a **35× reduction, 242
+generated states to one**. This closes Milestone 11; all seven of the upstream
+brief's acceptance criteria are met.
 
 ## [0.2.0] - 2026-09-13
 

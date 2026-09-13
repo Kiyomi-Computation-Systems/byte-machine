@@ -1,10 +1,13 @@
 # Milestone 11 Design — The keyword table
 
-**Status: Gate 0 in progress (2026-09-13).** Written against **`main` at `e9f8d9c`**
-(PR #120, the comment/README sweep) on branch `feat/m11-keyword-table` in the
-worktree `../byte-machine-m11-keyword-table`, tree clean. This milestone **ships
-new `src/` mechanism** — the first to do so since Milestone 8 spent none — and
-**bumps the generated ABI**, the first bump since Milestone 5.
+**Status: CLOSED 2026-09-13, v0.3.0 released.** Delivered as Gate 0 (decisions
+0043-0045, PR #121) plus three slices — Slice ① (PR #125 = `59c40c9`), Slice ②
+(PR #126 = `4e1519868`), Slice ③ (this v0.3.0 close). All seven brief acceptance
+criteria are met (see "Close" at the foot); the diagnostic census closes at 32/58,
+the mutation lane at 69/622, and the generated ABI at 6. This milestone **shipped
+new `src/` mechanism** — the first since Milestone 6 — and **bumped the generated
+ABI** 5→6, the first bump since Milestone 5. (Written originally against `main` at
+`e9f8d9c`; the base moved as Milestone 10 and the slices landed.)
 
 > **Concurrent branch (coordination, not dependency).** A parallel session owns
 > **Milestone 10 / v0.2.0** — the empty-span-delivery brief
@@ -493,3 +496,36 @@ naming the file and case that meets it.
   brief and its two measured consumers.
 - `AGENTS.md` — testing and mutation discipline; the census, per-kind-filter, and
   re-measurement rules this milestone leans on.
+
+---
+
+## Close (2026-09-13) — the seven criteria dispositioned, the admission discharged
+
+Brief §7's seven acceptance criteria, each against the tree:
+
+| # | Criterion | Met by |
+|---|---|---|
+| 1 | `GET` + `GET-PARAMETER` verify and compile | Slice ① — `keyword-table-machine.sls` + `byte-machine.unit.keyword-table` |
+| 2 | `GET-PARAMETER `→long, `GET `→short, `GETX`→`GET`+`X` unread | Slice ① — `byte-machine.differential.keyword-table` (both executors) |
+| 3 | `close`/`closed` distinguished | Slice ① — same lane (the pair `sequence-dispatch` refuses) |
+| 4 | a CI table matches `Content-Length`/`content-length`/`cOnTeNt-LeNgTh`; a CS one does not | Slice ② — `byte-machine.differential.keyword-header` |
+| 5 | a span closes at the matched keyword's length | Slice ③ — `byte-machine.differential.keyword-span` (`MKCOL` from `MKCOLA`, span data absolute, both lanes) |
+| 6 | interpreter ≡ generated on all of the above, under the property suite too | ①-③ — the differential lanes + the property draw table (keyword-table drawn, `case-insensitive? #f`) |
+| 7 | 47-keyword emitted size ≪ today's 242-node equivalent | Slice ③ — `byte-machine.unit.keyword-size`: **2,723 bytes as one keyword-table state vs 96,092 bytes as the 242-node byte-dispatch trie, 35× smaller**, both rendered through the emitter (measured, not the prototype's number copied) |
+
+**The §29 deferred-extension admission is discharged.** §29:1749 admits the
+sequence/trie specialization "with evidence from the separate HTTP project or
+benchmarks" once it carries "interpreter semantics, verification rules, generated
+parity, documentation, and tests" (§29:1767). The `chez-httparse` brief is the
+evidence; this milestone supplied every item. Recorded discharged in the parent
+plan's dated foot disposition.
+
+**Coordination (§4.6) closed.** Decision numbers 0043-0045 landed as taken; the
+ABI bump 5→6 was clean (M10 held ABI 5); the `CHANGELOG` head and the release
+ledger were reconciled at each slice; the M10/M11 merge seam was reviewed at
+Slice ①. No item remains open.
+
+**Version surfaces at 0.3.0:** README.org status, `CHANGELOG.md [0.3.0]`, the
+parent plan's status line and its Milestone 11 foot disposition, the release
+ledger's `release-version` (single owner) and its five mirror surfaces, this
+design's status header, and the annotated `v0.3.0` tag.
