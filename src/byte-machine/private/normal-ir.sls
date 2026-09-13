@@ -15,7 +15,8 @@
           normal-machine-debug-map normal-machine-fields
           normal-machine-callbacks normal-machine-spans
           normal-machine-callback-decls normal-machine-span-decls
-          normal-field-selector normal-field-arguments normal-field-targets)
+          normal-field-selector normal-field-arguments normal-field-targets
+          normal-keyword-entries normal-keyword-no-match normal-keyword-ci?)
   (import (rnrs)
           (only (byte-machine private ir)
                 machine-nodes machine-entry machine-errors machine-default-eof-error
@@ -29,6 +30,10 @@
                 sequence-dispatch-node? sequence-dispatch-node-cases
                 sequence-dispatch-node-mismatch sequence-dispatch-node-eof-target
                 sequence-case-bytes sequence-case-target
+                keyword-table-node? keyword-table-node-entries
+                keyword-table-node-no-match keyword-table-node-eof-target
+                keyword-table-node-case-insensitive?
+                keyword-entry-bytes keyword-entry-target
                 machine-fields uint-field-name uint-field-width uint-field-initial
                 machine-callbacks machine-spans
                 callback-declaration-name span-declaration-name
@@ -163,6 +168,18 @@
   (define (normal-field-arguments s) (vector-ref s 9))
   ;; normal-field-targets : NormalState -> Any
   (define (normal-field-targets s) (vector-ref s 10))
+  ;; A keyword-table state reuses the dispatch slots: `entries` (slot 3) is the
+  ;; list of (byte-list . target-id) pairs -- proper prefixes permitted -- and
+  ;; `no-match` (slot 4) the (target-id . mode) pair, exactly a dispatch state's
+  ;; transitions and fallback shapes. Its eof routing rides slot 6 and its reason
+  ;; slot 7, the dispatch convention; `ci?` (slot 8, the selector slot) is the
+  ;; per-table case-insensitivity flag.
+  ;; normal-keyword-entries : NormalState -> (Listof (Pair (Listof Byte) StateId))
+  (define (normal-keyword-entries s) (vector-ref s 3))
+  ;; normal-keyword-no-match : NormalState -> (Pair StateId EdgeMode)
+  (define (normal-keyword-no-match s) (vector-ref s 4))
+  ;; normal-keyword-ci? : NormalState -> Boolean
+  (define (normal-keyword-ci? s) (vector-ref s 8))
 
   ;; --- FNV-1a 64-bit over a canonical byte encoding ---
   (define mask64 (- (expt 2 64) 1))
@@ -386,6 +403,13 @@
                            (let ((t (counted-consume-node-eof-target n)))
                              (if (symbol? t) (cons 'node (id-of t))
                                  (cons 'default default-eof-code)))))
+           ;; The FIFTH such resolver -- a keyword table is input-reading and
+           ;; carries its own EOF edge, and this reads its OWN kind's accessor for
+           ;; the reason the four above are separate.
+           (kw-eof-of (lambda (n)
+                        (let ((t (keyword-table-node-eof-target n)))
+                          (if (symbol? t) (cons 'node (id-of t))
+                              (cons 'default default-eof-code)))))
            ;; The walk that orders internal states. A declaring node contributes
            ;; ALL of its internal states at its own position in declaring-node
            ;; order. There are two families of internal state -- a sequence
@@ -501,6 +525,24 @@
                              ((sequence-dispatch-node? n)
                               (let ((blk (block-of n)))
                                 (seq-state n (caddr blk) (cadddr blk) i)))
+                             ;; Keyword table: ONE normalized state carrying the
+                             ;; keyword list as data (decision 0044) -- NOT a trie
+                             ;; of per-prefix dispatch states, which is what makes
+                             ;; 47 keywords a table rather than 242 states. It
+                             ;; allocates no internal state, so prefix-blocks skips
+                             ;; it. Entries are (byte-list . target-id), no-match is
+                             ;; the (target-id . mode) pair, and slot 8 the ci flag.
+                             ((keyword-table-node? n)
+                              (let ((entries (map (lambda (e)
+                                                    (cons (keyword-entry-bytes e)
+                                                          (id-of (keyword-entry-target e))))
+                                                  (keyword-table-node-entries n)))
+                                    (nm (keyword-table-node-no-match n))
+                                    (eof (kw-eof-of n)))
+                                (vector ns-tag 'keyword-table i entries
+                                        (cons (id-of (edge-target nm)) (edge-mode nm))
+                                        #f eof (eof-reason-of eof)
+                                        (keyword-table-node-case-insensitive? n) #f #f)))
                              ((stop-node? n) (vector ns-tag 'stop i #f #f #f #f #f #f #f #f))
                              ((error-node? n)
                               (vector ns-tag 'error i #f #f
@@ -820,6 +862,26 @@
                 (put-u8 p 13)
                 (put-u16be p (normal-field-selector s))
                 (put-u32be p (normal-field-targets s)))
+               ;; keyword table: tag 15, the next free literal after the state
+               ;; tags 0-7,10-14 and the section discriminators 8,9. EVERY PART IS
+               ;; ENCODED -- a different keyword, target, no-match route, case
+               ;; sensitivity or eof route is a different machine, so all enter the
+               ;; fingerprint. A machine with no keyword table writes none of this,
+               ;; so its fingerprint is byte-identical to before (decision 0044).
+               ((keyword-table)
+                (put-u8 p 15)
+                (let ((es (normal-keyword-entries s)))
+                  (put-u16be p (length es))
+                  (for-each (lambda (e)
+                              (let ((kb (car e)))
+                                (put-u16be p (length kb))
+                                (for-each (lambda (b) (put-u8 p b)) kb)
+                                (put-u32be p (cdr e))))
+                            es))
+                (let ((nm (normal-keyword-no-match s)))
+                  (put-u32be p (car nm)) (put-u8 p (mode->byte (cdr nm))))
+                (put-u8 p (if (normal-keyword-ci? s) 1 0))
+                (put-eof-routing p (normal-dispatch-eof s) (normal-error-reason s)))
                (else (assertion-violation 'normalize-machine "unknown state kind"
                                           (normal-state-kind s)))))
            (loop (+ i 1))))

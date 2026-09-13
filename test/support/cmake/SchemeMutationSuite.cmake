@@ -1379,8 +1379,22 @@ cmake_minimum_required(VERSION 3.26)
 # counts differ because a one-line block is lexed but not counted the same way,
 # and it is the DELTA that has to agree).
 
-set(EXPECTED_PASSES 65)
-set(EXPECTED_MUTATIONS 602)
+# Milestone 11 Slice ① (the fourteenth node kind, keyword-table): 65/602 -> 68/612.
+# THREE new passes, one per new lane -- 66 the interpreter walk
+# (unit.keyword-table, 4 mutations: the fold, the delimiter reexecute, the
+# eof-target-of arm, the terminal-vs-proper-prefix test), 67 the generated
+# compact-table walk (differential.keyword-table, 5 mutations: the op's own fold
+# and delimiter and terminal test, a matched keyword routed to no-match, and the
+# normalizer dropping the case-insensitive flag -- pinned on the fingerprint
+# group it alone reddens), and 68 the emitted ABI literal
+# (determinism.keyword-table, 1 mutation, caught by the seventh golden). The
+# closed-set FORMS are carried by ir.sls's "fourteen kinds" census ratchets,
+# re-anchored in place; seventeen shipped pins were re-anchored to the
+# keyword-table arms this slice inserted (twelve FINDs, two draw-table got-lists,
+# two census-count literals, and the Layer-3 row-6 pin re-homed onto the
+# deterministic fixture the draw-table growth left as its only witness).
+set(EXPECTED_PASSES 68)
+set(EXPECTED_MUTATIONS 612)
 # Sixty-two is sixty-one plus one: Milestone 8 Slice ① adds one pass over the
 # request-line fixture (http-machine.sls) with three mutations (590 -> 593),
 # each caught by byte-machine.unit.http-request-line with a measured signature.
@@ -4332,6 +4346,7 @@ byte_machine_mutation(
   FIND [[(and (memq (node-name n) br898)
                                      (or (byte-dispatch-node? n) (pause-node? n)
                                          (sequence-dispatch-node? n)
+                                         (keyword-table-node? n)
                                          (field-action-node? n) (field-branch-node? n)
                                          (integer-accumulate-node? n)
                                          (callback-node? n)
@@ -4811,6 +4826,7 @@ byte_machine_mutation(
   FIND [[(and (memq (node-name n) br898)
                                      (or (byte-dispatch-node? n) (pause-node? n)
                                          (sequence-dispatch-node? n)
+                                         (keyword-table-node? n)
                                          (field-action-node? n) (field-branch-node? n)
                                          (integer-accumulate-node? n)
                                          (callback-node? n)
@@ -4819,6 +4835,7 @@ byte_machine_mutation(
                                      (self-cycle (node-name n)))]]
   REPLACE [[(and (or (byte-dispatch-node? n)
                                          (sequence-dispatch-node? n)
+                                         (keyword-table-node? n)
                                          (field-action-node? n) (field-branch-node? n)
                                          (integer-accumulate-node? n)
                                          (callback-node? n)
@@ -5094,6 +5111,7 @@ byte_machine_mutation(
   FIND [[(and (memq (node-name n) br898)
                                      (or (byte-dispatch-node? n) (pause-node? n)
                                          (sequence-dispatch-node? n)
+                                         (keyword-table-node? n)
                                          (field-action-node? n) (field-branch-node? n)
                                          (integer-accumulate-node? n)
                                          (callback-node? n)
@@ -5101,6 +5119,7 @@ byte_machine_mutation(
                                          (counted-consume-node? n))]]
   REPLACE [[(and (memq (node-name n) br898)
                                      (or (byte-dispatch-node? n) (pause-node? n)
+                                         (keyword-table-node? n)
                                          (field-action-node? n) (field-branch-node? n)
                                          (integer-accumulate-node? n)
                                          (callback-node? n)
@@ -7173,10 +7192,13 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
   LABEL "interpret: dispatch does not recognize a bare (not yet entered) sequence node"
-  FIND [[              (if (sequence-dispatch-node? n)
-                  (seq-step n '() byte)]]
-  REPLACE [[              (if (and (sequence-dispatch-node? n) #f)
-                  (seq-step n '() byte)]]
+  # RE-ANCHORED by Milestone 11 Slice ①: the bare-node `if` became a `cond` to
+  # admit the keyword-table arm above the sequence arm. The edit this LABEL names
+  # is unchanged -- neuter the sequence arm so a bare sequence node falls to the
+  # else (the byte-dispatch loop, itself untouched), where matcher-bytes rejects
+  # it -- and so is the witness.
+  FIND [[               ((sequence-dispatch-node? n) (seq-step n '() byte))]]
+  REPLACE [[               ((and (sequence-dispatch-node? n) #f) (seq-step n '() byte))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
     "the full sequence stops after four bytes: case raised.*code: invalid-argument.*who\\*: matcher-bytes.*detail: matcher")
 
@@ -8806,7 +8828,7 @@ byte_machine_mutation(
   FIND [[span-end counted-consume]]
   REPLACE [[span-end]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES [[the node-kind draw table covers exactly ir.sls.s node. kinds -- expected .byte-dispatch callback error field-action field-branch finish integer-accumulate pause sequence-dispatch span-end span-start stop., got .byte-dispatch callback counted-consume error field-action field-branch finish integer-accumulate pause sequence-dispatch span-end span-start stop.]])
+  EXPECT_OUTPUT_MATCHES [[the node-kind draw table covers exactly ir.sls.s node. kinds -- expected .byte-dispatch callback error field-action field-branch finish integer-accumulate keyword-table pause sequence-dispatch span-end span-start stop., got .byte-dispatch callback counted-consume error field-action field-branch finish integer-accumulate keyword-table pause sequence-dispatch span-end span-start stop.]])
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/property-driver.sls
@@ -8923,7 +8945,7 @@ byte_machine_mutation(
   FIND [[field-branch integer-accumulate callback]]
   REPLACE [[field-branch callback]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES [[the node-kind draw table covers exactly ir.sls.s node. kinds -- expected .byte-dispatch callback counted-consume error field-action field-branch finish pause sequence-dispatch span-end span-start stop., got .byte-dispatch callback counted-consume error field-action field-branch finish integer-accumulate pause sequence-dispatch span-end span-start stop.]])
+  EXPECT_OUTPUT_MATCHES [[the node-kind draw table covers exactly ir.sls.s node. kinds -- expected .byte-dispatch callback counted-consume error field-action field-branch finish keyword-table pause sequence-dispatch span-end span-start stop., got .byte-dispatch callback counted-consume error field-action field-branch finish integer-accumulate keyword-table pause sequence-dispatch span-end span-start stop.]])
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/machine-gen.sls
@@ -9016,10 +9038,18 @@ byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/property-driver.sls
   SPEC byte-machine.property.differential.chez.source
   LABEL "property-driver: Layer-3 row 6 (the span end anchor) inverted"
+  # RE-PINNED by Milestone 11 Slice ①: the keyword-table entry in the node-kind
+  # draw table (required by the totality row) shifts the generator's PRNG stream,
+  # so at this seed no ACCEPTED machine reaches a completing span and the
+  # accepted-machine invariant check the other rows use no longer witnesses row 6.
+  # The FIXED fixture always does, so this row now pins the deterministic
+  # fixture-schedule check -- which this slice also taught to name the violated
+  # row (expected none, got (row6 ...)) rather than report a bare boolean, so the
+  # witness still names row 6. The edit and decision are unchanged.
   FIND [[(not (= (cadr (last-elt frags)) coff))]]
   REPLACE [[(= (cadr (last-elt frags)) coff)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES [[no accepted machine's trial violated a Layer-3 invariant -- expected none, got .invariant [0-9]+ .row6]])
+  EXPECT_OUTPUT_MATCHES [[check-invariants holds on every fixture schedule -- expected none, got .row6 span-end-anchor]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -9331,8 +9361,10 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
   LABEL "ir: node? does not admit a sequence node"
-  FIND [[(or (byte-dispatch-node? x) (sequence-dispatch-node? x) (stop-node? x)]]
-  REPLACE [[(or (byte-dispatch-node? x) (stop-node? x)]]
+  FIND [[(or (byte-dispatch-node? x) (sequence-dispatch-node? x)
+        (keyword-table-node? x) (stop-node? x)]]
+  REPLACE [[(or (byte-dispatch-node? x)
+        (keyword-table-node? x) (stop-node? x)]]
   # Comparison-caught: with the disjunct removed, node? is false for a
   # sequence node (which would also make make-machine reject it outright),
   # and the case's own `check "node?"` reports "expected a true value".
@@ -10077,8 +10109,15 @@ byte_machine_mutation(
   # 'reexecute mutation below's own pin (0 0 0 / 1 1 1 vs 1 1 1 / 0 0 0) and
   # absent from that mutation's captured output and from the completed-
   # alternative-target mutation's output (both re-measured and grepped).
-  FIND [[(cons (edge-target mm) (edge-mode mm))))]]
-  REPLACE [[(cons (edge-target mm) 'advance)))]]
+  # RE-ANCHORED by Milestone 11 Slice ①: the keyword-table walk added a second
+  # `(cons (edge-target mm) (edge-mode mm))` (its no-match edge, bound through
+  # keyword-table-node-no-match), so the bare cons now occurs twice. Anchored on
+  # seq-step's own `sequence-dispatch-node-mismatch` binder to stay unique; the
+  # edit and witness are unchanged.
+  FIND [[(let ((mm (sequence-dispatch-node-mismatch n)))
+                   (cons (edge-target mm) (edge-mode mm))))]]
+  REPLACE [[(let ((mm (sequence-dispatch-node-mismatch n)))
+                   (cons (edge-target mm) 'advance)))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
     "k=0 -- expected \\(error 0 0 0 unexpected-byte\\), got \\(error 1 1 1 unexpected-byte\\)")
 
@@ -10092,8 +10131,13 @@ byte_machine_mutation(
   # stage: cases=10 checks=25 failures=5, failing advseq's all-256 case and all
   # four k= checks in "advance consumes the offending byte and shifts every
   # position by one". Comparison-caught.
-  FIND [[(cons (edge-target mm) (edge-mode mm))))]]
-  REPLACE [[(cons (edge-target mm) 'reexecute)))]]
+  # RE-ANCHORED by Milestone 11 Slice ① for the same reason as the sibling above:
+  # anchored on seq-step's `sequence-dispatch-node-mismatch` binder so the FIND
+  # is unique against the keyword-table walk's own no-match cons.
+  FIND [[(let ((mm (sequence-dispatch-node-mismatch n)))
+                   (cons (edge-target mm) (edge-mode mm))))]]
+  REPLACE [[(let ((mm (sequence-dispatch-node-mismatch n)))
+                   (cons (edge-target mm) 'reexecute)))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
     "k=0 -- expected \\(error 1 1 1 unexpected-byte\\), got \\(error 0 0 0 unexpected-byte\\)")
 
@@ -10303,8 +10347,11 @@ byte_machine_mutation(
   # The accessor is about WHERE THE PARSER IS. Reading the entry answers
   # correctly for a fresh parser -- which is why the bookend case checks a
   # stopped one too -- and wrongly everywhere else.
-  FIND [[      ((v2) (vector-ref (parser-state-names parser) (parser-current parser)))]]
-  REPLACE [[      ((v2) (vector-ref (parser-state-names parser) (parser-entry parser)))]]
+  # RE-ANCHORED by Milestone 11 Slice ①: the v2 arm now binds `current` to `c`
+  # and unwraps the keyword-table compound (decision 0044); the mutation still
+  # reads the entry instead, so the witness is unchanged.
+  FIND [[      ((v2) (let ((c (parser-current parser)))]]
+  REPLACE [[      ((v2) (let ((c (parser-entry parser)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "a fresh parser names the entry, and a finished one its terminal: stopped, both lanes")
@@ -10738,10 +10785,12 @@ byte_machine_mutation(
   # guard entry is what breaks it.
   # Re-anchored by Milestone 5 Slice ②: the list gained `o`, the callback arm's
   # outcome binding. Dropping `pk` is still the edit.
+  # Re-anchored by Milestone 11 Slice ①: the list gained `kpath`, the emitted
+  # keyword-table arm's resume-path local. Dropping `pk` is still the edit.
   FIND [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs pk
-      v r d o psr cbv n))]]
+      v r d o psr cbv n kpath))]]
   REPLACE [[    '(exec loop pos st off b bv start end state offset finish? fieldv errs
-      v r d o psr cbv n))]]
+      v r d o psr cbv n kpath))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(pk\\)")
 
@@ -10760,8 +10809,10 @@ byte_machine_mutation(
   # declared anywhere in this file, so every FIND is pinned at one occurrence).
   # Re-anchored by Milestone 5 Slice ②: the tail gained `o`. Dropping `d` is
   # still the edit, and the two FINDs in this pair stay textually distinct.
-  FIND [[      v r d o psr cbv n))]]
-  REPLACE [[      v r o psr cbv n))]]
+  # Re-anchored by Milestone 11 Slice ①: the tail gained `kpath`. Dropping `d` is
+  # still the edit, and the two FINDs in this pair stay textually distinct.
+  FIND [[      v r d o psr cbv n kpath))]]
+  REPLACE [[      v r o psr cbv n kpath))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(d\\)")
 
@@ -10769,8 +10820,10 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.member3-drift.chez.source
   LABEL "compile: reserved-member-3 loses the counted arm's n"
-  FIND [[      v r d o psr cbv n))]]
-  REPLACE [[      v r d o psr cbv))]]
+  # Re-anchored by Milestone 11 Slice ①: the tail gained `kpath`. Dropping `n` is
+  # still the edit.
+  FIND [[      v r d o psr cbv n kpath))]]
+  REPLACE [[      v r d o psr cbv kpath))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(n\\)")
 
@@ -11609,8 +11662,12 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
   LABEL "compile: only dispatch states are credited with consuming the default EOF declaration"
+  # Re-anchored by Milestone 11 Slice ①: the credit list gained `keyword-table`.
+  # Narrowing it to `dispatch` alone is still the edit and the witness (the field
+  # differential's accumulate-only default-eof consumer) is unchanged.
   FIND [[((and (memq (normal-state-kind st)
-                                                      '(dispatch accumulate counted-consume))]]
+                                                      '(dispatch accumulate counted-consume
+                                                        keyword-table))]]
   REPLACE [[((and (memq (normal-state-kind st)
                                                       '(dispatch))]]
   EXPECT_STATUS 1
@@ -11902,7 +11959,7 @@ byte_machine_mutation(
   REPLACE [[        (integer-accumulate-node? x) (callback-node? x)
         (span-start-node? x) (span-end-node? x) (counted-consume-node? x) (stop-node? x)))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the same thirteen kinds -- expected")
+  EXPECT_OUTPUT_MATCHES "the same fourteen kinds -- expected")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls
@@ -11922,7 +11979,7 @@ byte_machine_mutation(
           ((error-node? x) (error-node-source-label x))]]
   REPLACE [[          ((error-node? x) (error-node-source-label x))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "and there are thirteen of them -- expected 13, got 12")
+  EXPECT_OUTPUT_MATCHES "and there are fourteen of them -- expected 14, got 13")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls
@@ -12815,8 +12872,13 @@ byte_machine_mutation(
   # The machine whose ONLY default-EOF consumer is the counted consume: the
   # declaration leaves the errs table and render-machine raises on a machine the
   # verifier accepted -- the Milestone 4 Slice ③ defect, one kind later.
-  FIND [[                                                      '(dispatch accumulate counted-consume))]]
-  REPLACE [[                                                      '(dispatch accumulate))]]
+  # Re-anchored by Milestone 11 Slice ①: the credit list gained `keyword-table`
+  # on a continuation line. Dropping counted-consume (keeping keyword-table) is
+  # still the edit and the witness is unchanged.
+  FIND [[                                                      '(dispatch accumulate counted-consume
+                                                        keyword-table))]]
+  REPLACE [[                                                      '(dispatch accumulate
+                                                        keyword-table))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the only-consumer machine renders, loads and runs: case raised")
 
@@ -13621,6 +13683,185 @@ byte_machine_mutation(
   REPLACE [['tcl-end
        (list (make-byte-case (make-exact-byte-matcher 58) (make-edge 'trailer-name-close 'reexecute) #f)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "Content-Length trailer -- expected .forbidden-trailer byte 63., got #f")
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Milestone 11 Slice ① passes 66-68: the keyword-table node kind ------------
+# The fourteenth node kind (decision 0043), its compact-table lowering (0044) and
+# the per-table fold (0045). The census ratchets in ir.sls (the "fourteen kinds"
+# rows, re-anchored above) already carry the closed-set FORMS; these ten pins
+# carry the SEMANTICS the design's §5 mutation bullet names -- the fold, the
+# terminal-vs-continue split, the delimiter reexecute, the target/no-match
+# routing, the eof route, and the emitted ABI literal -- each caught absolutely
+# by one of the slice's three new lanes, never by a bare nonzero exit. The fold
+# and the reexecute are pinned on BOTH executors (interpreter and generated),
+# because decision 0015 derives them independently and a defect in one is a
+# differential result, not a shared wrong answer.
+
+# --- Pass 66: the interpreter's keyword walk (unit.keyword-table) --------------
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/keyword-interpret-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls
+  SPEC byte-machine.unit.keyword-table.chez.source
+  LABEL "interpret: the keyword fold goes the wrong direction (decision 0045)"
+  # A..Z fold to a..z (+32). Subtracting folds an uppercase keyword AWAY from its
+  # lowercased input, so the case-insensitive table stops matching a lowercased
+  # method. Comparison-caught by the CI cases.
+  FIND [[(if (and ci (>= b 65) (<= b 90)) (+ b 32) b)]]
+  REPLACE [[(if (and ci (>= b 65) (<= b 90)) (- b 32) b)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[accepts every casing to the same target: get -- expected .stopped 3 3 3 got-get #f #f., got .error 0 0 0 reject unexpected-byte 0.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls
+  SPEC byte-machine.unit.keyword-table.chez.source
+  LABEL "interpret: a matched keyword consumes its delimiter instead of reexecuting it (decision 0043)"
+  # The byte that closes a keyword is left unread, so the span ends at the
+  # keyword length. Advancing consumes it and every span runs one byte long.
+  FIND [[(cons (keyword-entry-target term) 'reexecute)]]
+  REPLACE [[(cons (keyword-entry-target term) 'advance)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[takes the short keyword, span closes at 3 .delimiter not consumed.: get -- expected .stopped 3 3 3 got-get #f #f., got .stopped 4 4 4 got-get #f #f.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls
+  SPEC byte-machine.unit.keyword-table.chez.source
+  LABEL "interpret: eof-target-of has no keyword-table arm (the AGENTS.md kind-filter trap)"
+  # eof-target-of is the per-kind filter a lookup does not teach. Neutering its
+  # keyword-table arm sends a parked table to the raising `else`; a finish! then
+  # raises `internal`, reported by the EOF case as "case raised".
+  FIND [[((keyword-table-node? n) (keyword-table-node-eof-target n))]]
+  REPLACE [[((and (keyword-table-node? n) #f) (keyword-table-node-eof-target n))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[each of six EOF inputs takes the eof-target at its own offset: case raised]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls
+  SPEC byte-machine.unit.keyword-table.chez.source
+  LABEL "interpret: a walk position is a terminal even when the path is a proper prefix (decision 0043)"
+  # A keyword terminates only when the path EQUALS an entry's bytes; dropping the
+  # length test makes every proper prefix a false terminal (GET-X would take the
+  # GET-PARAMETER path's target instead of no-matching, and a non-keyword first
+  # byte would falsely match).
+  FIND [[(and (= (length bs) (length path)) (kw-prefix? ci path bs))]]
+  REPLACE [[(and #t (kw-prefix? ci path bs))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[never rewinding to GET: get-x -- expected .error 4 4 4 reject unexpected-byte 4., got .stopped 4 4 4 got-gp #f #f.]])
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 67: the generated compact-table walk (differential.keyword-table) ----
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/differential-keyword-table-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.keyword-table.chez.source
+  LABEL "runtime: the keyword-step op folds the wrong direction (decision 0045, generated lane)"
+  # The runtime op's own fold, derived independently of the interpreter's. The
+  # differential asserts the generated table absolutely, so a wrong fold reddens
+  # even though the interpreter (unmutated) still folds correctly.
+  FIND [[(if (and ci? (>= b 65) (<= b 90)) (+ b 32) b)]]
+  REPLACE [[(if (and ci? (>= b 65) (<= b 90)) (- b 32) b)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[accepts every casing to the same target: no casing misbehaved -- expected none, got .gen "get " .error 0 0 0 reject unexpected-byte 0..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.keyword-table.chez.source
+  LABEL "runtime: a matched keyword routes to the no-match edge instead of its target (decision 0043)"
+  # `(cdr term)` is the matched entry's target id; routing to the no-match target
+  # sends every matched keyword to the reject node.
+  FIND [[(term (list 'jump (cdr term) i (quote byte)))]]
+  REPLACE [[(term (list 'jump (car no-match) i (quote byte)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[agrees with the interpreter: no case misbehaved -- expected none, got .gen "GET-PARAMETER " .error 13 13 13 reject unexpected-byte 13..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.keyword-table.chez.source
+  LABEL "runtime: a matched keyword consumes its delimiter instead of reexecuting it (decision 0043, generated lane)"
+  # The op reports position `i` (the closing byte is left unread); reporting
+  # `(+ i 1)` consumes it and the span runs one byte long. Same FIND as the pin
+  # above, a different edit -- each is staged independently.
+  FIND [[(term (list 'jump (cdr term) i (quote byte)))]]
+  REPLACE [[(term (list 'jump (cdr term) (+ i 1) (quote byte)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[agrees with the interpreter: no case misbehaved -- expected none, got .gen "GET-PARAMETER " .stopped 14 14 14 got-gp #f #f..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.keyword-table.chez.source
+  LABEL "runtime: a walk position is a terminal even when the path is a proper prefix (decision 0043, generated lane)"
+  # The generated twin of the interpreter's terminal-length pin: without the
+  # length test the op accepts a proper prefix as a terminal, so GET-X takes the
+  # GET-PARAMETER path's target rather than no-matching.
+  FIND [[(= (length (car (car es))) (length p))]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[agrees with the interpreter: no case misbehaved -- expected none, got .gen "GET-X" .stopped 4 4 4 got-gp #f #f..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls
+  SPEC byte-machine.differential.keyword-table.chez.source
+  LABEL "normal-ir: the case-insensitive flag is not encoded into the table (decision 0045 item 5)"
+  # Slot 8 is the fold flag. Forcing it #f makes a case-insensitive table encode
+  # as case-sensitive, so the fold vanishes AND -- the unique witness -- two
+  # tables differing only in the flag now render identically, which the
+  # fingerprint group forbids (decision 0045 item 5). Pinned to that group, not
+  # the shared CI-fold failure the runtime-fold pin above also produces.
+  FIND [[(keyword-table-node-case-insensitive? n) #f #f)))]]
+  REPLACE [[#f #f #f)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the two renders differ on the flag alone -- expected a true value]])
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 68: the emitted ABI literal (determinism.keyword-table) --------------
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/determinism-keyword-table-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.determinism.keyword-table.chez.source
+  LABEL "compile: the emitted ABI version literal is not the current one (decision 0044)"
+  # The keyword table lands together with the ABI bump 5->6 (decision 0044); the
+  # emitted literal must be the current version. Emitting 5 both diverges the
+  # rendered bytes from the committed golden AND makes the v6 runtime refuse the
+  # library outright at construction -- `byte-machine-make-compiled-machine`
+  # validates the version, so the determinism lane's top-level load of the
+  # generated file raises "generated-runtime ABI mismatch with irritant 5"
+  # (status 255) before it can report the golden mismatch cleanly. That refusal
+  # is the sharper witness -- it names the version the emitter stamped -- so the
+  # pin asserts it by message, not by the raw-byte golden diff. This is the ONE
+  # pin on the emitted literal; there was none before this slice.
+  FIND [[(byte-machine-make-compiled-machine 6 ]]
+  REPLACE [[(byte-machine-make-compiled-machine 5 ]]
+  EXPECT_STATUS 255
+  EXPECT_OUTPUT_MATCHES [[generated-runtime ABI mismatch with irritant 5]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

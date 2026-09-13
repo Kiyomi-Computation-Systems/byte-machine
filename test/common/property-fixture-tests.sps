@@ -82,11 +82,11 @@
    ;; ir.sls with no printer arm fails HERE (and print-node's own no-arm raise).
    (harness-case "totality"
     (lambda ()
-      (check-equal "the node arm table has thirteen kinds"
-                   (length node-print-arm-table) 13)
+      (check-equal "the node arm table has fourteen kinds"
+                   (length node-print-arm-table) 14)
       (check-equal "the matcher arm table has four kinds"
                    (length matcher-print-arm-table) 4)
-      (check-equal "the node arm table's kinds are node?'s thirteen disjuncts"
+      (check-equal "the node arm table's kinds are node?'s fourteen disjuncts"
                    (sortsym (map car node-print-arm-table))
                    (disjuncts-of ir-datum 'node? "-node?"))
       (check-equal "the matcher arm table's kinds are matcher?'s four disjuncts"

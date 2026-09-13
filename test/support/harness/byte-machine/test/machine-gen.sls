@@ -123,9 +123,9 @@
   ;; runtime-read list the row would compare ir.sls against ir.sls and close
   ;; nothing. A fourteenth kind in ir.sls reddens the row here.
   (define node-kind-draw-table
-    '(byte-dispatch sequence-dispatch stop error finish pause
+    '(byte-dispatch sequence-dispatch keyword-table stop error finish pause
       field-action field-branch integer-accumulate callback
-      span-start span-end counted-consume))          ; 13, matches node?
+      span-start span-end counted-consume))          ; 14, matches node?
   (define matcher-kind-draw-table
     '(exact-byte byte-set byte-range byte-complement)) ; 4, matches matcher?
   (define field-operation-draw-table
@@ -463,6 +463,25 @@
              (make-sequence-dispatch-node nm cases
                                           (make-edge (target* 'byte (eq? mm 'advance)) mm)
                                           (eof-route!) #f))))
+        ;; Keyword table: like a sequence, random byte-list entries -- proper
+        ;; prefixes and exact duplicates both arise and the verifier decides
+        ;; (prefixes accepted, duplicates rejected), so the differential covers
+        ;; both. `case-insensitive?` is #f here so the machine-drawing PRNG stream
+        ;; is unperturbed; the CI fold is exercised by the dedicated keyword-table
+        ;; lane (decision 0045).
+        ((keyword-table)
+         (let* ((n (+ 1 (d! 3)))
+                (entries (let loop ((i 0) (acc '()))
+                           (if (= i n) (reverse acc)
+                               (let* ((len (+ 1 (d! 3)))
+                                      (bs (let bl ((j 0) (b '()))
+                                            (if (= j len) (reverse b) (bl (+ j 1) (cons (d! 256) b))))))
+                                 (loop (+ i 1)
+                                       (cons (make-keyword-entry bs (target* 'byte #t) #f) acc)))))))
+           (let ((nmm (pickv! '#(advance reexecute))))
+             (make-keyword-table-node nm entries
+                                      (make-edge (target* 'byte (eq? nmm 'advance)) nmm)
+                                      (eof-route!) #f #f))))
         ((stop) (make-stop-node nm #f))
         ((error) (make-error-node nm (pickl! err-names) #f))
         ((finish) (make-finish-node nm #f))

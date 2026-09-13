@@ -71,7 +71,8 @@
       byte-machine-callback-step/v1 byte-machine-make-callback-error/v1
       parser-state-name
       byte-machine-span-open/v1 byte-machine-span-fragment-step/v1
-      byte-machine-span-close/v1))
+      byte-machine-span-close/v1
+      byte-machine-keyword-step/v1))
   ;; Every identifier the emitted body binds, so a caller-chosen output binding
   ;; cannot collide with one. `fieldv` is emitted `exec`'s field-value vector
   ;; parameter; it is deliberately not spelled `fields`, which `(rnrs)` binds as
@@ -84,7 +85,7 @@
   ;; reserved-member-3 : (Listof Symbol)
   (define reserved-member-3
     '(exec loop pos st off b bv start end state offset finish? fieldv errs pk
-      v r d o psr cbv n))
+      v r d o psr cbv n kpath))
   ;; The grammar half is (byte-machine private names)' `portable-name?`: one
   ;; body shared with verify.sls's name check and runtime.sls's callback-code
   ;; check. The three reserved sets stay here -- an output BINDING is barred from
@@ -233,6 +234,25 @@
   ;; `normal-machine-span-decls` -- (name data-slot complete-slot) in span-slot
   ;; order -- rather than leaving the emitter to re-walk the declarations, which
   ;; would put a second copy of that resolution in the lane being checked.
+  ;; The keyword-table entries as a quoted datum: ((byte-list . target-id) ...),
+  ;; the same list the encoder folds into the fingerprint. Rendering it inline (a
+  ;; handful of short byte lists) rather than as hundreds of dispatch state arms is
+  ;; the compact lowering decision 0044 exists for.
+  (define (render-kw-entries es)
+    (string-append
+     "("
+     (apply string-append
+            (map (lambda (e)
+                   (string-append
+                    "(("
+                    (let bl ((bs (car e)) (acc ""))
+                      (if (null? bs) acc
+                          (bl (cdr bs) (string-append acc (if (string=? acc "") "" " ")
+                                                      (num (car bs))))))
+                    ") . " (num (cdr e)) ")"))
+                 es))
+     ")"))
+
   (define (render-state-arm s names index-of fields spans)
     (let ((id (number->string (normal-state-id s)))
           ;; Total by construction: the debug map and the internal state list
@@ -491,11 +511,38 @@
             "             (case b\n"
             (apply string-append (map render-transition-arm (normal-dispatch-transitions s)))
             "               (else " (loop-tail (car fb) (cdr fb)) ")))))\n")))
+        ;; Keyword table (decision 0044). ONE arm: it reads the parked prefix from
+        ;; a compound `st` (empty on fresh entry), calls the runtime walk over its
+        ;; embedded entries, and either loops to the decision's target, parks the
+        ;; grown prefix as the compound (id . path) and yields need-input, or --
+        ;; under finish? -- takes the eof route. `off` advances by the bytes THIS
+        ;; feed consumed, `(- (caddr r) pos)`; the delimiter is left unread (a jump
+        ;; carries `pk` `byte` for a taken keyword). The exec loop's `case` key
+        ;; extracts the id from the compound (render-machine emits that only when a
+        ;; machine has a keyword table, so every other machine's text is unchanged).
+        ((keyword-table)
+         (let ((kwid (number->string (normal-state-id s)))
+               (nomatch (normal-keyword-no-match s)))
+           (string-append
+            "      ((" id ")\n"
+            "       (let* ((kpath (if (pair? st) (cdr st) (quote ())))\n"
+            "              (r (byte-machine-keyword-step/v1 (quote "
+            (render-kw-entries (normal-keyword-entries s)) ") (quote ("
+            (num (car nomatch)) " . " (symbol->string (cdr nomatch)) ")) "
+            (if (normal-keyword-ci? s) "#t" "#f") " kpath bv pos end)))\n"
+            "         (if (eq? (car r) (quote jump))\n"
+            "             (loop (caddr r) (cadr r) (+ off (- (caddr r) pos)) (cadddr r))\n"
+            "             (if finish?\n"
+            "                 " (render-eof-branch (normal-dispatch-eof s) id
+                                                  (string->symbol (nm (normal-state-id s)))
+                                                  (normal-error-reason s) index-of) "\n"
+            "                 (byte-machine-make-feed-outcome/v1 (quote need-input) (caddr r) #f (cons "
+            kwid " (cadr r)) (+ off (- (caddr r) pos)))))))\n")))
         ;; Unreachable today -- this case already covers every kind
-        ;; normal-state-kind can produce: dispatch, stop, error, finish, pause,
-        ;; field-action, field-branch, accumulate, callback, span-start,
-        ;; span-end, span-completion, and counted-consume -- THIRTEEN. Verified by
-        ;; inspection (same convention as normal-ir.sls's own else guards).
+        ;; normal-state-kind can produce: dispatch, keyword-table, stop, error,
+        ;; finish, pause, field-action, field-branch, accumulate, callback,
+        ;; span-start, span-end, span-completion, and counted-consume -- FOURTEEN.
+        ;; Verified by inspection (same convention as normal-ir.sls's own else).
         (else (assertion-violation 'render-machine "unknown state kind"
                                    (normal-state-kind s))))))
 
@@ -549,7 +596,8 @@
                                           ;; code" while rendering a machine the
                                           ;; verifier had just accepted.
                                           ((and (memq (normal-state-kind st)
-                                                      '(dispatch accumulate counted-consume))
+                                                      '(dispatch accumulate counted-consume
+                                                        keyword-table))
                                                 (eq? (car (normal-dispatch-eof st)) 'default))
                                            (cdr (normal-dispatch-eof st)))
                                           (else #f))))
@@ -679,6 +727,14 @@
                                        'render-machine
                                        "no source name for normalized state" i))
                                     (cdr hit))))))))
+           ;; True when any state is a keyword table. Only then does the exec loop
+           ;; need to extract the state id from a compound `st` (decision 0044's
+           ;; cross-feed resume) -- so a machine without one emits the identical
+           ;; `(case st ...)` it always has, and no golden but the ABI literal moves.
+           (has-kw (let hk ((i 0))
+                     (cond ((>= i (vector-length states)) #f)
+                           ((eq? (normal-state-kind (vector-ref states i)) 'keyword-table) #t)
+                           (else (hk (+ i 1))))))
            (bstr (symbol->string binding)))
       (string->utf8
        (string-append
@@ -695,7 +751,7 @@
         ;; that arm's own literal observationally identical to the inherited
         ;; variable -- agreement bought by making the difference unobservable.
         "    (let loop ((pos start) (st state) (off offset) (pk (quote boundary)))\n"
-        "      (case st\n"
+        "      (case " (if has-kw "(if (pair? st) (car st) st)" "st") "\n"
         (let loop ((i 0) (acc ""))
           (if (>= i (vector-length states)) acc
               (loop (+ i 1) (string-append acc (render-state-arm (vector-ref states i)
@@ -704,7 +760,7 @@
                                                                  (normal-machine-span-decls normal))))))
         "      (else (assertion-violation (quote exec) \"unknown state\" st)))))\n"
         "  (define " bstr "\n"
-        "    (byte-machine-make-compiled-machine 5 " (number->string fp) " "
+        "    (byte-machine-make-compiled-machine 6 " (number->string fp) " "
         (number->string entry) " exec (quote #(#(" fields ") #(" cbs ") #("
         snames "))))))\n"))))
 

@@ -42,6 +42,9 @@
 ;;;                               -> CountedConsumeNode
 ;;;   make-byte-case     : Matcher Edge Label -> ByteCase
 ;;;   make-sequence-case : (Listof Byte) NodeName Label -> SequenceCase
+;;;   make-keyword-table-node : Symbol (Listof KeywordEntry) Edge (Option NodeName)
+;;;                             Boolean Label -> KeywordTableNode
+;;;   make-keyword-entry : (Listof Byte) NodeName Label -> KeywordEntry
 ;;;   make-edge          : NodeName EdgeMode -> Edge
 ;;;   make-uint-field    : Symbol UintWidth ExactInteger Label -> UintField
 ;;;   make-callback-declaration : Symbol CallbackKind Boolean (Listof Symbol)
@@ -126,7 +129,8 @@
           sequence-dispatch-node? sequence-dispatch-node-name
           sequence-dispatch-node-cases sequence-dispatch-node-mismatch
           sequence-dispatch-node-eof-target
-          sequence-case? sequence-case-bytes sequence-case-target)
+          sequence-case? sequence-case-bytes sequence-case-target
+          make-keyword-table-node make-keyword-entry)
   (import (only (byte-machine private ir)
                 make-uint-field uint-field? uint-field-name uint-field-width
                 uint-field-initial uint-field-source-label
@@ -155,4 +159,5 @@
                 sequence-dispatch-node? sequence-dispatch-node-name
                 sequence-dispatch-node-cases sequence-dispatch-node-mismatch
                 sequence-dispatch-node-eof-target
-                sequence-case? sequence-case-bytes sequence-case-target)))
+                sequence-case? sequence-case-bytes sequence-case-target
+                make-keyword-table-node make-keyword-entry)))

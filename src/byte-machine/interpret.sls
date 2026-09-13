@@ -78,6 +78,52 @@
                 ;; step always advances into the declared target.
                 ((pair? ends) (cons (sequence-case-target (car ends)) 'advance))
                 (else (cons (cons (sequence-dispatch-node-name n) new) 'advance)))))
+      ;; --- the keyword-table walk, interpreter side ---
+      ;; Derived independently of the normalizer for decision 0015's reason (the
+      ;; keyword table lowers to a compact runtime-walked table, decision 0044;
+      ;; this walker is the oracle that catches a lowering defect and shares no
+      ;; helper with it). `current` inside a table is the compound (name . path),
+      ;; path the bytes consumed so far -- the same shape seq-step uses, so
+      ;; `kind`/`state-name`/`default-eof-parts` need no keyword-table arm.
+      ;;
+      ;; Unlike a sequence, a position may be BOTH a complete keyword AND the
+      ;; interior of a longer one (GET vs GET-PARAMETER). The rule (decision 0043):
+      ;; if the next byte extends toward any keyword, consume it and go deeper;
+      ;; otherwise take PATH's keyword if PATH is one (delimiter reexecuted, so a
+      ;; span closes at the keyword's length), else the no-match edge. Greedy
+      ;; forward, no backtracking: a byte consumed toward a longer keyword is
+      ;; never returned. Matching folds ASCII case when the table is
+      ;; case-insensitive (decision 0045).
+      ;; Case folding is per table (decision 0045): an ASCII letter matches
+      ;; either case, a byte with no case only itself. Written twice (here and in
+      ;; the runtime op) on purpose -- shared nothing with the emitter, so a fold
+      ;; defect in one lane is a differential result, not a hidden agreement.
+      (define (kw-fold b ci) (if (and ci (>= b 65) (<= b 90)) (+ b 32) b))
+      (define (kw-prefix? ci p bs)      ; p a (folded) prefix of bs
+        (cond ((null? p) #t)
+              ((null? bs) #f)
+              ((= (kw-fold (car p) ci) (kw-fold (car bs) ci)) (kw-prefix? ci (cdr p) (cdr bs)))
+              (else #f)))
+      (define (kw-terminal n ci path)   ; the entry whose bytes fold-equal `path`
+        (let loop ((es (keyword-table-node-entries n)))
+          (cond ((null? es) #f)
+                ((let ((bs (keyword-entry-bytes (car es))))
+                   (and (= (length bs) (length path)) (kw-prefix? ci path bs)))
+                 (car es))
+                (else (loop (cdr es))))))
+      (define (kw-step n path byte)
+        (let* ((ci (keyword-table-node-case-insensitive? n))
+               (new (append path (list byte)))
+               (continues (exists (lambda (e) (kw-prefix? ci new (keyword-entry-bytes e)))
+                                  (keyword-table-node-entries n))))
+          (if continues
+              (cons (cons (keyword-table-node-name n) new) 'advance)
+              (let ((term (kw-terminal n ci path)))
+                (if term
+                    ;; take the keyword; the delimiter is left unread.
+                    (cons (keyword-entry-target term) 'reexecute)
+                    (let ((mm (keyword-table-node-no-match n)))
+                      (cons (edge-target mm) (edge-mode mm))))))))
       ;; The interpreter's own substep representation, derived independently from
       ;; the production normalizer. The normalizer answers with a NUMBERED
       ;; internal state (`completion-pending`, lowered to its own id); this
@@ -96,6 +142,7 @@
             (let ((n (lookup nodes name)))
               (cond ((byte-dispatch-node? n) 'dispatch)
                     ((sequence-dispatch-node? n) 'dispatch)
+                    ((keyword-table-node? n) 'dispatch)
                     ((stop-node? n) 'stop)
                     ((error-node? n) 'error)
                     ((finish-node? n) 'finish)
@@ -110,10 +157,15 @@
                     (else (byte-machine-contract-violation 'interpret 'internal name))))))
       (define (dispatch name byte)
         (if (pair? name)
-            (seq-step (lookup nodes (car name)) (cdr name) byte)
+            (let ((n (lookup nodes (car name))))
+              (if (keyword-table-node? n)
+                  (kw-step n (cdr name) byte)
+                  (seq-step n (cdr name) byte)))
             (let ((n (lookup nodes name)))
-              (if (sequence-dispatch-node? n)
-                  (seq-step n '() byte)
+              (cond
+               ((keyword-table-node? n) (kw-step n '() byte))
+               ((sequence-dispatch-node? n) (seq-step n '() byte))
+               (else
                   (let loop ((cs (byte-dispatch-node-cases n)))
                     (cond ((null? cs)
                            (let ((e (byte-dispatch-node-fallback n)))
@@ -121,7 +173,7 @@
                           ((memv byte (matcher-bytes (byte-case-matcher (car cs))))
                            (let ((e (byte-case-edge (car cs))))
                              (cons (edge-target e) (edge-mode e))))
-                          (else (loop (cdr cs)))))))))
+                          (else (loop (cdr cs))))))))))
       ;; Source-node name, domain, code, offset and position kind are semantic
       ;; and required to match across executors; the internal state id is
       ;; excluded. This lane answers with the node's DECLARATION INDEX -- its
@@ -168,6 +220,9 @@
         (let ((n (lookup nodes (if (pair? cur) (car cur) cur))))
           (cond ((sequence-dispatch-node? n) (sequence-dispatch-node-eof-target n))
                 ((byte-dispatch-node? n) (byte-dispatch-node-eof-target n))
+                ;; A keyword table is input-reading: a parser parked mid-table (a
+                ;; compound `cur`) or on the bare node takes its own eof-target.
+                ((keyword-table-node? n) (keyword-table-node-eof-target n))
                 ((integer-accumulate-node? n) (integer-accumulate-node-eof-target n))
                 ;; Without this arm a parked counted consume raises out of
                 ;; parser-finish!, which is the loud else doing its job.

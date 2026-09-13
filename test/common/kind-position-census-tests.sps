@@ -46,7 +46,8 @@
               byte-dispatch-node? sequence-dispatch-node? stop-node? error-node?
               finish-node? pause-node? field-action-node? field-branch-node?
               integer-accumulate-node? callback-node?
-              span-start-node? span-end-node? counted-consume-node?)
+              span-start-node? span-end-node? counted-consume-node?
+              keyword-table-node?)
         (byte-machine verify))
 
 (harness-begin "unit.kind-position-census")
@@ -111,7 +112,14 @@
    ;; The thirteenth (Milestone 6 Slice ①). One byte successor on the shared
    ;; sink, the field `n` every cell machine already declares, and the machine
    ;; default for EOF, so the cell records the placed node's POSITION.
-   (cons 'counted-consume (lambda (nm) (make-counted-consume-node nm 'n 'ee #f #f)))))
+   (cons 'counted-consume (lambda (nm) (make-counted-consume-node nm 'n 'ee #f #f)))
+   ;; The fourteenth (Milestone 11). Input-reading like byte-dispatch/sequence, so
+   ;; it carries no kind-specific verdict; a single keyword (1) and the no-match
+   ;; land on the shared sink, so the cell records the placed node's POSITION.
+   (cons 'keyword-table
+         (lambda (nm) (make-keyword-table-node nm
+                        (list (make-keyword-entry '(1) 'ee #f))
+                        (make-edge 'ee 'reexecute) #f #f #f)))))
 
 ;; --- the twenty-three positions, as data ------------------------------------
 ;; Each builder returns (entry . host-nodes) with the placed node `t` wired into
@@ -152,6 +160,21 @@
          (lambda () (cons 'h (list (make-sequence-dispatch-node 'h
                                      (list (make-sequence-case '(1) 'ee #f))
                                      (make-edge 'ee 'reexecute) 't #f)))))
+   ;; --- the keyword table's two out-edges and its EOF route (Milestone 11) ---
+   ;; Byte-reachable like a sequence: the host reads byte 1, so a keyword-take or
+   ;; the no-match reaches the placed node; §16.2:908's gate is byte-reachability.
+   (list 'keyword-target            #t   #f
+         (lambda () (cons 'h (list (make-keyword-table-node 'h
+                                     (list (make-keyword-entry '(1) 't #f))
+                                     (make-edge 'ee 'reexecute) #f #f #f)))))
+   (list 'keyword-no-match          #t   #f
+         (lambda () (cons 'h (list (make-keyword-table-node 'h
+                                     (list (make-keyword-entry '(1) 'ee #f))
+                                     (make-edge 't 'reexecute) #f #f #f)))))
+   (list 'keyword-eof-target        #f   #t
+         (lambda () (cons 'h (list (make-keyword-table-node 'h
+                                     (list (make-keyword-entry '(1) 'ee #f))
+                                     (make-edge 'ee 'reexecute) 't #f #f)))))
    (list 'pause-continuation        #t   #t
          (lambda () (cons 'h (list (dispatch-to 'p) (make-pause-node 'p 't #f)))))
    (list 'field-action-next         #t   #f
@@ -251,7 +274,8 @@
         (cons 'callback callback-node?)
         (cons 'span-start span-start-node?)
         (cons 'span-end span-end-node?)
-        (cons 'counted-consume counted-consume-node?)))
+        (cons 'counted-consume counted-consume-node?)
+        (cons 'keyword-table keyword-table-node?)))
 
 (define (position-name p) (car p))
 (define (position-byte? p) (cadr p))
@@ -456,7 +480,7 @@
                   (from-table
                    (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b)))
                               (map car kind-table))))
-              (check-equal "the same thirteen kinds" from-source from-table))))))))
+              (check-equal "the same fourteen kinds" from-source from-table))))))))
 
 ;; --- S2b: `node-source-label` is total over `node?`'s closed set (Milestone 6
 ;; Slice ⓪) ---------------------------------------------------------------------
@@ -510,7 +534,7 @@
                            (sorted arms) (sorted preds))
               ;; The size too: two lists that both lost the same predicate would
               ;; still agree with each other.
-              (check-equal "and there are thirteen of them" (length arms) 13))))))))
+              (check-equal "and there are fourteen of them" (length arms) 14))))))))
 
 
 ;; --- axis A': the POSITION drift row (Milestone 5 Slice ①a task 5) -----------
@@ -578,6 +602,11 @@
     (fallback      dispatch-fallback)
     (alternative   sequence-case)
     (mismatch      sequence-mismatch)
+    ;; Milestone 11: verify.sls labels a keyword entry's edge `keyword` and the
+    ;; table's fallback `no-match`; the matrix names the positions that place a
+    ;; node into each.
+    (keyword       keyword-target)
+    (no-match      keyword-no-match)
     (continuation  pause-continuation)
     ;; Slice ③ adds two positions under the SAME role: both span kinds have one
     ;; successor and reuse `next` rather than minting roles that would say the
@@ -623,20 +652,20 @@
                            (set! missing (cons pos missing))))
                        (cdr entry)))
            role->positions)
-          (check-equal "every mapped position was looked up" checked 18)
+          (check-equal "every mapped position was looked up" checked 20)
           (check-equal "and each one exists" missing '()))))
-    (harness-case "the four EOF and entry positions are accounted for outside the role map"
+    (harness-case "the EOF and entry positions are accounted for outside the role map"
       (lambda ()
         ;; `node-eof-target` and the machine entry carry no `(cons 'role ...)`
         ;; label, so they cannot appear in the derived set. They are named here so
-        ;; that position-table's 23 rows are 18 mapped + these 5, and a row added
+        ;; that position-table's 26 rows are 20 mapped + these 6, and a row added
         ;; with neither a role nor a place here reddens the count below.
         (let ((names (map car position-table)))
           (for-each (lambda (p) (check (symbol->string p) (memq p names)))
                     '(machine-entry dispatch-eof-target sequence-eof-target
-                      accumulate-eof-target count-eof-target))
-          (check-equal "position-table is exactly 18 role-carrying + 5 unlabelled"
-                       (length position-table) 23))))))
+                      keyword-eof-target accumulate-eof-target count-eof-target))
+          (check-equal "position-table is exactly 20 role-carrying + 6 unlabelled"
+                       (length position-table) 26))))))
 
 
 ;; --- axis B: self-reference --------------------------------------------------
@@ -811,7 +840,8 @@
 ;; means "the machine default", so a SYMBOL that resolves to nothing is a
 ;; different fault from a missing edge.
 (define eof-positions
-  '(dispatch-eof-target sequence-eof-target accumulate-eof-target count-eof-target))
+  '(dispatch-eof-target sequence-eof-target keyword-eof-target
+    accumulate-eof-target count-eof-target))
 
 ;; Rebuilt directly rather than reusing axis A's builder: a dangling cell has no
 ;; `t` node at all, and threading "omit t" through the shared builder would make
@@ -851,7 +881,7 @@
                    (unless (equal? want got)
                      (set! bad (cons (list pos 'want want 'got got) bad)))))))
            position-table)
-          (check-equal "twenty-two dangling cells driven" driven 22)
+          (check-equal "twenty-five dangling cells driven" driven 25)
           (check-equal "each reports its derived fault" bad '()))))))
 
 ;; --- the absence census ------------------------------------------------------

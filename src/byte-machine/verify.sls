@@ -233,6 +233,14 @@
                         (sequence-dispatch-node-cases n))
                    (list (cons 'mismatch
                                (edge-target (sequence-dispatch-node-mismatch n))))))
+          ;; Keyword table: one byte out-target per keyword entry (role
+          ;; `keyword`) plus the no-match edge's target; its eof-target belongs to
+          ;; node-eof-target below, as a sequence node's does.
+          ((keyword-table-node? n)
+           (append (map (lambda (e) (cons 'keyword (keyword-entry-target e)))
+                        (keyword-table-node-entries n))
+                   (list (cons 'no-match
+                               (edge-target (keyword-table-node-no-match n))))))
           ((or (field-action-node? n) (field-branch-node? n)
                (callback-node? n)
                (span-start-node? n) (span-end-node? n))
@@ -264,6 +272,9 @@
   (define (node-eof-target n)
     (cond ((byte-dispatch-node? n) (byte-dispatch-node-eof-target n))
           ((sequence-dispatch-node? n) (sequence-dispatch-node-eof-target n))
+          ;; A keyword table is input-reading and declares its own EOF edge, the
+          ;; byte-dispatch convention -- #f means the machine default.
+          ((keyword-table-node? n) (keyword-table-node-eof-target n))
           ;; An accumulate node declares its own EOF edge, with #f meaning the
           ;; machine default -- the byte-dispatch convention.
           ((integer-accumulate-node? n) (integer-accumulate-node-eof-target n))
@@ -602,6 +613,37 @@
            (map (lambda (n) (if (sequence-dispatch-node? n) (node-ambiguities n) '()))
                 (machine-nodes m))))
 
+  ;; Keyword-table validity, an unnumbered pass beside pass-sequence-ambiguity and
+  ;; the INVERSE of it. Proper prefixes are the whole point of a keyword table
+  ;; (GET vs GET-PARAMETER), so they are permitted; the only cross-entry defect
+  ;; this slice rejects is an EXACT duplicate -- two entries with identical bytes,
+  ;; which would make the trie's terminal choice at that keyword ambiguous. A
+  ;; case-insensitive table's FOLD collision (two entries equal after folding) is
+  ;; the same defect one fold up and is Slice ②'s (decision 0045).
+  ;;
+  ;; The bindings are this pass's own (`kws`/`rest`/`others`/`dups`), never
+  ;; node-overlaps' or node-ambiguities', so no shipped mutation's single-line
+  ;; FIND doubles (AGENTS.md, "SITES fails in BOTH directions").
+  (define (node-keyword-defects n)
+    (let ((kws (map keyword-entry-bytes (keyword-table-node-entries n))))
+      (let scan ((rest kws) (dups '()))
+        (if (null? rest)
+            dups
+            (scan (cdr rest)
+                  (let probe ((others (cdr rest)) (dups dups))
+                    (if (null? others)
+                        dups
+                        (probe (cdr others)
+                               (if (equal? (car rest) (car others))
+                                   (cons (make-diagnostic 'duplicate-keyword (node-name n)
+                                                          "two keyword entries have the same bytes")
+                                         dups)
+                                   dups)))))))))
+  (define (pass-keyword-table m)
+    (apply append
+           (map (lambda (n) (if (keyword-table-node? n) (node-keyword-defects n) '()))
+                (machine-nodes m))))
+
   ;; PASS 4: reachability from entry.
   ;; "UNREACHABLE" QUANTIFIES OVER WHAT AN EXECUTION CAN OCCUPY. The pass walks
   ;; `occupiable` -- byte-reached plus the EOF walk from the parked set, the
@@ -681,6 +723,14 @@
               ((sequence-dispatch-node? n)
                (if (eq? (edge-mode (sequence-dispatch-node-mismatch n)) 'reexecute)
                    (list (edge-target (sequence-dispatch-node-mismatch n))) '()))
+              ;; Keyword table: like a sequence, only the NO-MATCH edge can be
+              ;; reexecute and thus zero-progress. Every keyword target is reached
+              ;; only after consuming that keyword's bytes (a non-empty entry, so
+              ;; >= 1 byte), so those targets make progress and stay out -- the
+              ;; sequence-alternative reasoning above.
+              ((keyword-table-node? n)
+               (if (eq? (edge-mode (keyword-table-node-no-match n)) 'reexecute)
+                   (list (edge-target (keyword-table-node-no-match n))) '()))
               ;; The field-action and field-branch kinds are ZERO-WIDTH, exactly
               ;; like a pause: every edge out of them makes no progress, so each
               ;; is a reexecute-equivalent and joins this walk. A
@@ -759,6 +809,7 @@
                      (let ((cyc (and (memq (node-name n) br898)
                                      (or (byte-dispatch-node? n) (pause-node? n)
                                          (sequence-dispatch-node? n)
+                                         (keyword-table-node? n)
                                          (field-action-node? n) (field-branch-node? n)
                                          (integer-accumulate-node? n)
                                          (callback-node? n)
@@ -925,6 +976,10 @@
                  (dispatch-arm (byte-dispatch-node-eof-target n) path))
                 ((sequence-dispatch-node? n)
                  (dispatch-arm (sequence-dispatch-node-eof-target n) path))
+                ;; A keyword table is input-reading with its own eof-target, so it
+                ;; hops exactly as the two arms above do.
+                ((keyword-table-node? n)
+                 (dispatch-arm (keyword-table-node-eof-target n) path))
                 ;; A callback node classified HERE is being flowed through: the
                 ;; EOF walk arrived at it, so `parser-finish!` will invoke the
                 ;; callback and every one of its outcomes is live. That is why
@@ -1165,6 +1220,8 @@
            (map byte-case-source-label (byte-dispatch-node-cases n)))
           ((sequence-dispatch-node? n)
            (map sequence-case-source-label (sequence-dispatch-node-cases n)))
+          ((keyword-table-node? n)
+           (map keyword-entry-source-label (keyword-table-node-entries n)))
           (else '())))
 
   ;; PASS 7: generated-name safety (member 1) — machine, node, error names/codes.
@@ -1799,6 +1856,7 @@
                                   (pass-spans machine)
                                   (pass-overlap machine)
                                   (pass-sequence-ambiguity machine)
+                                  (pass-keyword-table machine)
                                   (pass-reachability machine)
                                   (pass-zero-progress machine)
                                   (pass-eof machine)

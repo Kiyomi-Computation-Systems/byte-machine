@@ -48,6 +48,12 @@
           sequence-dispatch-node-source-label
           make-sequence-case sequence-case? sequence-case-bytes sequence-case-target
           sequence-case-source-label
+          make-keyword-table-node keyword-table-node?
+          keyword-table-node-name keyword-table-node-entries
+          keyword-table-node-no-match keyword-table-node-eof-target
+          keyword-table-node-case-insensitive? keyword-table-node-source-label
+          make-keyword-entry keyword-entry? keyword-entry-bytes
+          keyword-entry-target keyword-entry-source-label
           make-field-action-node field-action-node?
           field-action-node-name field-action-node-operation
           field-action-node-arguments field-action-node-next
@@ -611,6 +617,73 @@
   ;; sequence-dispatch-node-source-label : SequenceDispatchNode -> Label
   (define (sequence-dispatch-node-source-label n) (vector-ref n 5))
 
+  ;; --- keyword entry ---
+  ;; A byte list and a bare TARGET, with no mode -- the keyword-table node's
+  ;; no-match EDGE carries the only mode a table has, exactly as a sequence
+  ;; case's target carries none. Kept distinct from sequence-case so the two node
+  ;; kinds' opposite cross-entry rules -- a sequence rejects shared terminal
+  ;; prefixes, a keyword table permits them -- never share a record. The accessor
+  ;; copies for the same reason sequence-case-bytes does.
+  (define keyword-entry-tag (tag 'byte-machine-keyword-entry))
+  ;; make-keyword-entry : bytes:(Listof Byte) target:NodeName source-label:Label -> KeywordEntry
+  (define (make-keyword-entry bytes target source-label)
+    (unless (and (list? bytes) (pair? bytes) (for-all byte-value? bytes))
+      (byte-machine-contract-violation 'make-keyword-entry 'invalid-argument 'bytes))
+    (require-symbol 'make-keyword-entry 'target target)
+    (vector keyword-entry-tag (append bytes '()) target source-label))
+  ;; keyword-entry? : Any -> Boolean
+  (define (keyword-entry? x) (tagged? keyword-entry-tag x))
+  ;; keyword-entry-bytes : KeywordEntry -> (Listof Byte) -- fresh copy
+  (define (keyword-entry-bytes e)
+    (unless (keyword-entry? e)
+      (byte-machine-contract-violation 'keyword-entry-bytes 'invalid-argument 'entry))
+    (append (vector-ref e 1) '()))
+  ;; keyword-entry-target : KeywordEntry -> NodeName
+  (define (keyword-entry-target e)
+    (unless (keyword-entry? e)
+      (byte-machine-contract-violation 'keyword-entry-target 'invalid-argument 'entry))
+    (vector-ref e 2))
+  ;; keyword-entry-source-label : KeywordEntry -> Label
+  (define (keyword-entry-source-label e)
+    (unless (keyword-entry? e)
+      (byte-machine-contract-violation 'keyword-entry-source-label 'invalid-argument 'entry))
+    (vector-ref e 3))
+
+  ;; --- keyword-table node ---
+  ;; Matches one of a set of keywords, tolerating proper prefixes (GET vs
+  ;; GET-PARAMETER) that make-sequence-dispatch-node rejects, and -- optionally,
+  ;; per table -- case-insensitively. Whether two keywords collide (an exact
+  ;; duplicate, or a fold collision in a case-insensitive table) is a cross-entry
+  ;; property, so it is verification's job, not this constructor's.
+  (define keyword-table-node-tag (tag 'byte-machine-keyword-table-node))
+  ;; make-keyword-table-node : name:Symbol entries:(Listof KeywordEntry) no-match:Edge eof-target:(Option NodeName) case-insensitive?:Boolean source-label:Label -> KeywordTableNode
+  (define (make-keyword-table-node name entries no-match eof-target case-insensitive? source-label)
+    (require-symbol 'make-keyword-table-node 'name name)
+    (unless (and (list? entries) (pair? entries) (for-all keyword-entry? entries))
+      (byte-machine-contract-violation 'make-keyword-table-node 'invalid-argument 'entries))
+    (unless (edge? no-match)
+      (byte-machine-contract-violation 'make-keyword-table-node 'invalid-argument 'no-match))
+    ;; eof-target is a node name, or #f for the machine default eof error.
+    (unless (or (symbol? eof-target) (eq? eof-target #f))
+      (byte-machine-contract-violation 'make-keyword-table-node 'invalid-argument 'eof-target))
+    (unless (boolean? case-insensitive?)
+      (byte-machine-contract-violation 'make-keyword-table-node 'invalid-argument 'case-insensitive?))
+    (vector keyword-table-node-tag name entries no-match eof-target case-insensitive? source-label))
+  ;; keyword-table-node? : Any -> Boolean
+  (define (keyword-table-node? x) (tagged? keyword-table-node-tag x))
+  ;; keyword-table-node-name : KeywordTableNode -> Symbol
+  (define (keyword-table-node-name n) (vector-ref n 1))
+  ;; keyword-table-node-entries : KeywordTableNode -> (Listof KeywordEntry)
+  (define (keyword-table-node-entries n) (vector-ref n 2))
+  ;; keyword-table-node-no-match : KeywordTableNode -> Edge
+  (define (keyword-table-node-no-match n) (vector-ref n 3))
+  ;; keyword-table-node-eof-target : KeywordTableNode -> (Option NodeName)
+  (define (keyword-table-node-eof-target n) (vector-ref n 4))
+  ;; keyword-table-node-case-insensitive? : KeywordTableNode -> Boolean
+  (define (keyword-table-node-case-insensitive? n) (vector-ref n 5))
+  ;; keyword-table-node-source-label : KeywordTableNode -> Label
+  (define (keyword-table-node-source-label n) (vector-ref n 6))
+
   ;; --- callback-invocation node ---
   ;; Zero-width: a callback invocation does not consume input, so it joins the
   ;; verifier's `zero-width-edges` census and never the input-reading arms
@@ -765,7 +838,8 @@
   ;; --- node dispatch ---
   ;; node? : Any -> Boolean
   (define (node? x)
-    (or (byte-dispatch-node? x) (sequence-dispatch-node? x) (stop-node? x)
+    (or (byte-dispatch-node? x) (sequence-dispatch-node? x)
+        (keyword-table-node? x) (stop-node? x)
         (error-node? x) (finish-node? x) (pause-node? x)
         (field-action-node? x) (field-branch-node? x)
         (integer-accumulate-node? x) (callback-node? x)
@@ -774,6 +848,7 @@
   (define (node-name x)
     (cond ((byte-dispatch-node? x) (byte-dispatch-node-name x))
           ((sequence-dispatch-node? x) (sequence-dispatch-node-name x))
+          ((keyword-table-node? x) (keyword-table-node-name x))
           ((stop-node? x) (stop-node-name x))
           ((error-node? x) (error-node-name x))
           ((finish-node? x) (finish-node-name x))
@@ -794,6 +869,7 @@
   (define (node-source-label x)
     (cond ((byte-dispatch-node? x) (byte-dispatch-node-source-label x))
           ((sequence-dispatch-node? x) (sequence-dispatch-node-source-label x))
+          ((keyword-table-node? x) (keyword-table-node-source-label x))
           ((stop-node? x) (stop-node-source-label x))
           ((error-node? x) (error-node-source-label x))
           ((finish-node? x) (finish-node-source-label x))
