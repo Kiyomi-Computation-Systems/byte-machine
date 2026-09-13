@@ -98,7 +98,9 @@ matches; `eof-target` is a node name (or `#f` for the machine default) taken whe
 end of input arrives mid-table — a keyword is never accepted at EOF, since no
 byte has closed it. When `case-insensitive?` is true the match folds ASCII
 letters (`A`–`Z` ↔ `a`–`z`) and nothing else, per table; the verifier rejects two
-entries that are identical bytes (`duplicate-keyword`). See
+entries that are identical bytes (`duplicate-keyword`) and, in a case-insensitive
+table, two entries that are equal after folding (`case-insensitive-keyword-collision`
+— byte-distinct case variants are legal only in a case-sensitive table). See
 [decisions 0043–0045](../.decisions/) for the node kind, its compact-table
 lowering, and the fold.
 

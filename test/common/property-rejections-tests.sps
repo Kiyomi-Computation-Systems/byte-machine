@@ -237,8 +237,8 @@
                (sentinel (uniq (append entry-codes unconstructible-codes)))
                (census (census-codes)))
           (check "the sentinel set-equals the census's derived code set" (set=? sentinel census))
-          (check-equal "and the census derives exactly thirty-one codes" (length census) 31)
-          (check-equal "and the sentinel is exactly thirty-one codes" (length sentinel) 31))))))
+          (check-equal "and the census derives exactly thirty-two codes" (length census) 32)
+          (check-equal "and the sentinel is exactly thirty-two codes" (length sentinel) 32))))))
 
 ;; ---- F5 row 2: the refusal table (Task 3 Step 7) -----------------------------
 (harness-group "the constructor refusals still refuse"
@@ -316,7 +316,7 @@
                      (length accepted) 41)
         (check-equal "every property draw was accepted or rejected"
                      (+ (length accepted) (length rejections)) machine-count)
-        (check-equal "the entry table has thirty-one entries" (length corruption-entries) 31)
+        (check-equal "the entry table has thirty-two entries" (length corruption-entries) 32)
         ;; the (machine, entry) pairs actually driven equals the sum of per-entry counts.
         (check-equal "the (machine,entry) pairs driven equal the sum of per-entry counts"
                      (length corruptions)

@@ -624,7 +624,28 @@
   ;; The bindings are this pass's own (`kws`/`rest`/`others`/`dups`), never
   ;; node-overlaps' or node-ambiguities', so no shipped mutation's single-line
   ;; FIND doubles (AGENTS.md, "SITES fails in BOTH directions").
+  ;;
+  ;; Slice ② adds the fold-up analogue for a case-insensitive table: two entries
+  ;; equal AFTER ASCII case-folding but not byte-identical (`Content-Length` and
+  ;; `content-length`) collide -- the same terminal ambiguity, one fold up -- and
+  ;; are refused with `case-insensitive-keyword-collision` (decision 0045 item 3).
+  ;; The two codes are disjoint by construction: an exact `equal?` pair is always
+  ;; `duplicate-keyword` (either table mode); the collision fires only for a
+  ;; case-insensitive table on a fold-equal-but-not-byte-equal pair. `ci` is the
+  ;; SOLE per-table control (the outer guard below); `kw-fold` is an unconditional
+  ;; ASCII letter fold -- not itself guarded on `ci`, so the guard lives in exactly
+  ;; one place and dropping it makes a case-sensitive table wrongly collide (the
+  ;; per-table mutation pin). `kw-fold` is this pass's own, shared with no executor
+  ;; -- the verifier is not in the interpreter=generated differential, so decision
+  ;; 0015's independence rule does not compel a shared helper.
   (define (node-keyword-defects n)
+    (define ci (keyword-table-node-case-insensitive? n))
+    (define (kw-fold b) (if (and (>= b 65) (<= b 90)) (+ b 32) b))
+    (define (fold=? a b)
+      (cond ((null? a) (null? b))
+            ((null? b) #f)
+            ((= (kw-fold (car a)) (kw-fold (car b))) (fold=? (cdr a) (cdr b)))
+            (else #f)))
     (let ((kws (map keyword-entry-bytes (keyword-table-node-entries n))))
       (let scan ((rest kws) (dups '()))
         (if (null? rest)
@@ -634,11 +655,15 @@
                     (if (null? others)
                         dups
                         (probe (cdr others)
-                               (if (equal? (car rest) (car others))
-                                   (cons (make-diagnostic 'duplicate-keyword (node-name n)
-                                                          "two keyword entries have the same bytes")
-                                         dups)
-                                   dups)))))))))
+                               (cond ((equal? (car rest) (car others))
+                                      (cons (make-diagnostic 'duplicate-keyword (node-name n)
+                                                             "two keyword entries have the same bytes")
+                                            dups))
+                                     ((and ci (fold=? (car rest) (car others)))
+                                      (cons (make-diagnostic 'case-insensitive-keyword-collision (node-name n)
+                                                             "two keyword entries are equal after case-folding")
+                                            dups))
+                                     (else dups))))))))))
   (define (pass-keyword-table m)
     (apply append
            (map (lambda (n) (if (keyword-table-node? n) (node-keyword-defects n) '()))

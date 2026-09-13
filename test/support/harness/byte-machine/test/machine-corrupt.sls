@@ -247,6 +247,27 @@
       identity-twin
       (lambda (m) (list (cons 'duplicate-keyword
                               (keyword-table-node-name (first-node-of m keyword-table-node?))))))
+     ;; Milestone 11 Slice ②: a case-insensitive fold collision (decision 0045
+     ;; item 3). Flip the keyword-table's case-insensitive? flag (operand 5) to #t
+     ;; and append two byte-DISTINCT case variants -- A (65) and a (97) -- both
+     ;; routed to the first entry's EXISTING target, so no missing-target or
+     ;; unreachable collateral is introduced. Under folding the two are equal, so
+     ;; the table is refused with case-insensitive-keyword-collision. The twin is
+     ;; the accepted machine (case-sensitive, distinct entries), which verifies.
+     (make-corruption-entry
+      'ci-keyword-collision ':894
+      (lambda (m) (and (first-node-of m keyword-table-node?) #t))
+      (lambda (m) (let* ((n (first-node-of m keyword-table-node?))
+                         (nm (keyword-table-node-name n))
+                         (tgt (keyword-entry-target (car (keyword-table-node-entries n))))
+                         (var (lambda (b) (list 'make-keyword-entry (list 'quote (list b))
+                                                (list 'quote tgt) #f))))
+                    (build (extend (extend (edit (->d m) '(make-keyword-table-node) 1 nm 5 #t)
+                                           '(make-keyword-table-node) 1 nm 2 (var 65))
+                                   '(make-keyword-table-node) 1 nm 2 (var 97)))))
+      identity-twin
+      (lambda (m) (list (cons 'case-insensitive-keyword-collision
+                              (keyword-table-node-name (first-node-of m keyword-table-node?))))))
      ;; :888 missing error declaration -- an error node names an undeclared error.
      (make-corruption-entry
       'missing-error-declaration ':888
