@@ -1406,8 +1406,16 @@ cmake_minimum_required(VERSION 3.26)
 # draw-table got-lists, two census-count literals, and the Layer-3 row-6 pin
 # re-homed onto the deterministic fixture the draw-table growth left as its only
 # witness).
-set(EXPECTED_PASSES 68)
-set(EXPECTED_MUTATIONS 619)
+#
+# Milestone 11 Slice ② (per-table case-insensitivity): 68/619 -> 69/622. ONE new
+# pass -- 69 the folded-collision rejection (differential.keyword-header, 3
+# mutations: the collision arm never firing, the per-table guard dropped so a
+# case-sensitive table is wrongly refused, and the verifier's own fold going the
+# wrong direction), each caught absolutely by the header lane's collision verify
+# group. No node kind, ABI, or golden moves; no shipped pin re-anchored (nothing
+# was pinned on node-keyword-defects).
+set(EXPECTED_PASSES 69)
+set(EXPECTED_MUTATIONS 622)
 # Sixty-two is sixty-one plus one: Milestone 8 Slice ① adds one pass over the
 # request-line fixture (http-machine.sls) with three mutations (590 -> 593),
 # each caught by byte-machine.unit.http-request-line with a measured signature.
@@ -13997,6 +14005,62 @@ byte_machine_mutation(
   REPLACE [[(byte-machine-make-compiled-machine 5 ]]
   EXPECT_STATUS 255
   EXPECT_OUTPUT_MATCHES [[generated-runtime ABI mismatch with irritant 5]])
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Milestone 11 Slice ② Pass 69: the folded-collision rejection --------------
+# decision 0045 item 3: a case-insensitive table whose entries collide under
+# ASCII folding is refused with case-insensitive-keyword-collision. The three
+# pins carry the new verifier code -- the collision arm, its per-table guard, and
+# the verifier's own fold -- each caught absolutely by the header lane's collision
+# verify group (verify-machine directly), never by a bare nonzero exit. The
+# executor folds are Slice ①'s; this is the verifier's, which is new here.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/differential-keyword-header-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls
+  SPEC byte-machine.differential.keyword-header.chez.source
+  LABEL "verify: the folded-collision check never fires (decision 0045 item 3)"
+  # Forcing the guard #f drops the collision detection: a case-insensitive table
+  # whose entries fold-collide now verifies clean, so the header lane's
+  # collision-refused assertion reddens.
+  FIND [[((and ci (fold=? (car rest) (car others)))]]
+  REPLACE [[((and #f (fold=? (car rest) (car others)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the collision table does not verify -- expected a true value]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls
+  SPEC byte-machine.differential.keyword-header.chez.source
+  LABEL "verify: the collision check ignores the case-insensitive? flag (decision 0045 item 1, per table)"
+  # Forcing the guard #t runs the fold check on EVERY table, so a case-SENSITIVE
+  # table of byte-distinct case variants (legal: byte-different, no fold) is
+  # wrongly refused. The CS collision machine's verifies-clean assertion reddens.
+  # Same FIND as the pin above, a different edit -- each staged independently.
+  FIND [[((and ci (fold=? (car rest) (car others)))]]
+  REPLACE [[((and #t (fold=? (car rest) (car others)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the case-sensitive collision-shaped table verifies -- expected a true value]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls
+  SPEC byte-machine.differential.keyword-header.chez.source
+  LABEL "verify: the collision fold goes the wrong direction (decision 0045)"
+  # The verifier's own fold, independent of the executors' (Slice ①). Subtracting
+  # folds A (65) to 33 while a (97) is unchanged, so A and a no longer fold-equal
+  # and the collision is missed -- the case-insensitive table verifies clean.
+  FIND [[(if (and (>= b 65) (<= b 90)) (+ b 32) b)]]
+  REPLACE [[(if (and (>= b 65) (<= b 90)) (- b 32) b)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the collision table does not verify -- expected a true value]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

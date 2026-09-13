@@ -2267,3 +2267,30 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/determinism-keyword-table-tests.sps"
   TIMEOUT 120
   ENVIRONMENT "BYTE_MACHINE_KEYWORD_TABLE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-keyword-table.golden.sls")
+
+# --- Milestone 11 Slice ②: the HTTP-header case-insensitivity demonstration ---
+# Brief §7 criterion 4: a case-insensitive header table folds every casing of a
+# name to one target and a case-sensitive one over the same names does not; and
+# decision 0045 item 3's per-table folded-collision rejection, verified directly
+# (the case-insensitive collision machine is invalid by design, so it is never
+# handed to make-interpreted-machine). interpreter ≡ generated with the generated
+# side asserted absolutely.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.keyword-header.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-keyword-header-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/keyword-header-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-keyword-header-tests.sps"
+  TIMEOUT 180)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.keyword-header.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-keyword-header-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/keyword-header-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-keyword-header-tests.sps"
+  TIMEOUT 180)

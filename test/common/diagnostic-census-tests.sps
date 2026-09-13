@@ -158,9 +158,10 @@
     ;; it. Measured before the fix: such a machine verified clean and then raised
     ;; out of `normalize-machine`, which §9.2:368 forbids.
     (missing-span-declaration 1)
-    ;; Milestone 11: `pass-keyword-table`. One code, one site -- an exact
-    ;; duplicate keyword (a fold collision is Slice ②'s).
-    (duplicate-keyword 1)))
+    ;; Milestone 11: `pass-keyword-table`. Two codes, two sites -- an exact
+    ;; duplicate keyword (Slice ①) and, Slice ②, a fold collision in a
+    ;; case-insensitive table (decision 0045 item 3).
+    (duplicate-keyword 1) (case-insensitive-keyword-collision 1)))
 
 ;; *** RE-MEASURED 2026-09-03, Slice ⓪b task 2: `non-eof-into-finish` went 3 -> 1
 ;; and the total 31 -> 29. *** This is the ratchet FIRING, not a regression: ⓪b
@@ -379,6 +380,16 @@
                                         (make-keyword-entry '(1) 'stop #f))
                                   (make-edge 'rej 'reexecute) #f #f #f)
                                 (make-stop-node 'stop #f) (an-error 'rej)) 'default-eof)))
+   ;; Milestone 11 Slice ②: a case-insensitive table whose entries collide after
+   ;; folding -- A (65) and a (97), byte-distinct so not a duplicate-keyword; the
+   ;; fold makes their terminal choice ambiguous (decision 0045 item 3).
+   (cons 'case-insensitive-keyword-collision
+         (verify-of (mach 'a 'start '() (list ed rd)
+                          (list (make-keyword-table-node 'start
+                                  (list (make-keyword-entry '(65) 'stop #f)
+                                        (make-keyword-entry '(97) 'stop #f))
+                                  (make-edge 'rej 'reexecute) #f #t #f)
+                                (make-stop-node 'stop #f) (an-error 'rej)) 'default-eof)))
    (cons 'unreachable-node
          (verify-of (mach 'a 'start '() (list ed rd)
                           (list (one-case-dispatch 'start 'stop 'advance #f)
@@ -594,17 +605,18 @@
                      (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b)))
                                 path-carrying-constructors)
                      '(make-diagnostic/edge make-diagnostic/path))))
-    (harness-case "the per-constructor site table sums to the fifty-seven sites"
+    (harness-case "the per-constructor site table sums to the fifty-eight sites"
       (lambda ()
-        ;; Milestone 11 added one plain make-diagnostic site (pass-keyword-table's
-        ;; duplicate-keyword): make-diagnostic 14 -> 15 and the total 56 -> 57.
-        (check-equal "make-diagnostic sites" (site-count-of 'make-diagnostic) 15)
+        ;; Milestone 11 added plain make-diagnostic sites in pass-keyword-table:
+        ;; Slice ① duplicate-keyword (14 -> 15, total 56 -> 57) and Slice ② the
+        ;; case-insensitive fold collision (15 -> 16, total 57 -> 58).
+        (check-equal "make-diagnostic sites" (site-count-of 'make-diagnostic) 16)
         (check-equal "make-diagnostic/declarations sites"
                      (site-count-of 'make-diagnostic/declarations) 30)
         (check-equal "make-diagnostic/path sites" (site-count-of 'make-diagnostic/path) 11)
         (check-equal "make-diagnostic/edge sites" (site-count-of 'make-diagnostic/edge) 1)
-        (check-equal "the site total is fifty-seven"
-                     (apply + (map site-count-of diagnostic-constructors)) 57)
+        (check-equal "the site total is fifty-eight"
+                     (apply + (map site-count-of diagnostic-constructors)) 58)
         (check-equal "twelve path-carrying sites"
                      (apply + (map site-count-of path-carrying-constructors)) 12)))
     (harness-case "the path-bearing code set is exactly item 4's eight codes"
