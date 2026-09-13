@@ -95,13 +95,18 @@
         (let ((tr (cadddr (feed-finish "GET / HTTP/1.1\r\nX:  a b \r\n\r\n"))))
           (check "the value span is 'a b ' (leading OWS skipped, trailing kept)"
                  (and (member '(header-value-data "a b ") tr) #t)))))
-    (harness-case "an all-OWS value produces an empty value span followed by completion"
+    (harness-case "an all-OWS value produces one empty value fragment followed by completion"
       (lambda ()
         ;; "X-Empty:  \r\n": leading OWS consumes both spaces, the value span
-        ;; opens and closes empty -- header-value-complete with no data.
+        ;; opens and closes empty. Per decision 0042 the empty span now delivers
+        ;; ONE empty fragment (header-value-data "") before header-value-complete
+        ;; -- the exact shape the chez-httparse consumer needs to tell "present
+        ;; and empty" from "absent".
         (let ((tr (cadddr (feed-finish "GET / HTTP/1.1\r\nX-Empty:  \r\n\r\n"))))
-          (check "no header-value-data for the empty value" (= (count-of 'header-value-data
-                    (map (lambda (e) (if (pair? e) (car e) e)) tr)) 0))
+          (check-equal "exactly one header-value-data for the empty value"
+                       (count-of 'header-value-data
+                                 (map (lambda (e) (if (pair? e) (car e) e)) tr)) 1)
+          (check "and it is the empty string" (and (member '(header-value-data "") tr) #t))
           (check "header-value-complete still fires" (and (memq 'header-value-complete tr) #t)))))))
 
 ;; --- the no-body message loop (§21.3:1150) ------------------------------------

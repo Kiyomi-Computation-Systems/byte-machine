@@ -364,9 +364,9 @@
        (check-equal "the callback-outcome family is the four outcomes (§13:805-808)"
                     (sortsym (family-members 'callback-outcome))
                     (sortsym '(continue pause declared-branch-key explicit-failure)))
-       (check-equal "the span-event family is the five events (§14:830-836)"
+       (check-equal "the span-event family is the five events (§14:830-836, §14:834 amended by decision 0042)"
                     (sortsym (family-members 'span-event))
-                    (sortsym '(span-open boundary-fragment end-fragment completion suppressed-empty)))
+                    (sortsym '(span-open boundary-fragment end-fragment completion empty-fragment)))
        (check-equal "the schedule-shape family is the six shapes (§22.5:1278-1283)"
                     (sortsym (family-members 'schedule-shape))
                     (sortsym '(every-split-point split-point-pair random-multi-split empty-feeds nonzero-slice padded-bytevector))))))
