@@ -1,24 +1,105 @@
 ;;; SPDX-License-Identifier: BSD-3-Clause
-;;; (byte-machine graph): the public construction API. It re-exports the source-IR
-;;; constructors from the private ir library so grammar authors build machines
-;;; without touching internals. Constructors validate local shape only;
-;;; verification is (byte-machine verify)'s job (parent §9.1).
+;;; (byte-machine graph): the public construction API. It re-exports the
+;;; source-IR constructors, predicates and accessors from the private ir library
+;;; so grammar authors build machines without touching internals. Constructors
+;;; validate local shape only; whole-machine verification is (byte-machine
+;;; verify)'s job.
 ;;;
-;;; Milestone 3 Slice ① adds the three class matchers and `ascii-bytes`
-;;; (§9.1:292-294, :299) together with the matcher predicates and accessors, so a
-;;; grammar author can test what they built. `matcher-bytes` -- the internal
-;;; canonicalization spine the verifier, normalizer and interpreter share -- is
-;;; deliberately NOT re-exported: §9.1's construction list does not contain it.
+;;; What is deliberately withheld from this surface: matcher-bytes -- the
+;;; internal canonicalization spine the verifier, normalizer and interpreter
+;;; share -- is not re-exported, being no part of the construction API. Machine
+;;; accessors are likewise private: this library fixes a construction surface,
+;;; and reading a built machine back is not part of it. Most node kinds are
+;;; re-exported as constructors only; their predicates and accessors stay in the
+;;; private library. The exceptions surfaced here are the matcher family and the
+;;; sequence-dispatch node/case, whose predicates and accessors are re-exported.
 ;;;
-;;; Milestone 4 Slice ①b adds `make-uint-field` (§9.1:283) with its predicate and
-;;; one accessor per §10.2:488-491 part, on the same precedent. Machine
-;;; ACCESSORS stay private: §9.1 fixes a construction surface, and reading a
-;;; built machine back is not part of it.
+;;; Signatures of the re-exported families (types: see (byte-machine private ir)):
 ;;;
-;;; Milestone 5 Slice ② adds `make-callback-node` (§9.1:307-308) -- the
-;;; constructor only, on the same rule: its six accessors and its predicate stay
-;;; in the private library, where every other node kind's do. Slice ③ adds
-;;; `make-span-start-node` and `make-span-end-node` (§9.1:309-310) the same way.
+;;;   Machine / node / declaration constructors --
+;;;   make-machine : Symbol NodeName (Listof UintField) (Listof CallbackDeclaration)
+;;;                  (Listof SpanDeclaration) (Listof ErrorDeclaration) (Listof Node)
+;;;                  ErrorName Label -> Machine
+;;;   make-byte-dispatch-node : Symbol (Listof ByteCase) Edge (Option NodeName) Label
+;;;                             -> ByteDispatchNode
+;;;   make-sequence-dispatch-node : Symbol (Listof SequenceCase) Edge (Option NodeName)
+;;;                                 Label -> SequenceDispatchNode
+;;;   make-stop-node   : Symbol Label -> StopNode
+;;;   make-finish-node : Symbol Label -> FinishNode
+;;;   make-pause-node  : Symbol NodeName Label -> PauseNode
+;;;   make-error-node  : Symbol ErrorName Label -> ErrorNode
+;;;   make-field-action-node : Symbol FieldOperation (Listof (U Symbol ExactInteger))
+;;;                            NodeName (Option NodeName) Label -> FieldActionNode
+;;;   make-field-branch-node : Symbol FieldPredicate (Listof (U Symbol ExactInteger))
+;;;                            NodeName NodeName Label -> FieldBranchNode
+;;;   make-integer-accumulate-node : Symbol Symbol AccumulateBase NodeName Edge NodeName
+;;;                                  (Option NodeName) Label -> IntegerAccumulateNode
+;;;   make-callback-node : Symbol Symbol NodeName (Listof (List Symbol NodeName)) NodeName
+;;;                        Label -> CallbackNode
+;;;   make-span-start-node : Symbol Symbol NodeName Label -> SpanStartNode
+;;;   make-span-end-node   : Symbol Symbol NodeName Label -> SpanEndNode
+;;;   make-counted-consume-node : Symbol Symbol NodeName (Option NodeName) Label
+;;;                               -> CountedConsumeNode
+;;;   make-byte-case     : Matcher Edge Label -> ByteCase
+;;;   make-sequence-case : (Listof Byte) NodeName Label -> SequenceCase
+;;;   make-edge          : NodeName EdgeMode -> Edge
+;;;   make-uint-field    : Symbol UintWidth ExactInteger Label -> UintField
+;;;   make-callback-declaration : Symbol CallbackKind Boolean (Listof Symbol)
+;;;                               (Option Symbol) Label -> CallbackDeclaration
+;;;   make-span-declaration  : Symbol Symbol (Option Symbol) Label -> SpanDeclaration
+;;;   make-error-declaration : Symbol Symbol String Label -> ErrorDeclaration
+;;;
+;;;   Matcher constructors and text helper --
+;;;   make-exact-byte-matcher      : Byte -> ExactByteMatcher
+;;;   make-byte-set-matcher        : (Listof Byte) -> ByteSetMatcher
+;;;   make-byte-range-matcher      : Byte Byte -> ByteRangeMatcher
+;;;   make-byte-complement-matcher : Matcher -> ByteComplementMatcher
+;;;   ascii-bytes                  : String -> (Listof Byte)
+;;;
+;;;   Matcher predicates and accessors --
+;;;   matcher?                        : Any -> Boolean
+;;;   exact-byte-matcher?             : Any -> Boolean
+;;;   exact-byte-matcher-byte         : ExactByteMatcher -> Byte
+;;;   byte-set-matcher?               : Any -> Boolean
+;;;   byte-set-matcher-bytes          : ByteSetMatcher -> (Listof Byte)   ; fresh copy
+;;;   byte-range-matcher?             : Any -> Boolean
+;;;   byte-range-matcher-low          : ByteRangeMatcher -> Byte
+;;;   byte-range-matcher-high         : ByteRangeMatcher -> Byte
+;;;   byte-complement-matcher?        : Any -> Boolean
+;;;   byte-complement-matcher-matcher : ByteComplementMatcher -> Matcher
+;;;
+;;;   uint-field family --
+;;;   uint-field?             : Any -> Boolean
+;;;   uint-field-name         : UintField -> Symbol
+;;;   uint-field-width        : UintField -> UintWidth
+;;;   uint-field-initial      : UintField -> ExactInteger
+;;;   uint-field-source-label : UintField -> Label
+;;;
+;;;   callback-declaration family --
+;;;   callback-declaration?               : Any -> Boolean
+;;;   callback-declaration-name           : CallbackDeclaration -> Symbol
+;;;   callback-declaration-kind           : CallbackDeclaration -> CallbackKind
+;;;   callback-declaration-required?      : CallbackDeclaration -> Boolean
+;;;   callback-declaration-branch-keys    : CallbackDeclaration -> (Listof Symbol)
+;;;   callback-declaration-default-branch : CallbackDeclaration -> (Option Symbol)
+;;;   callback-declaration-source-label   : CallbackDeclaration -> Label
+;;;
+;;;   span-declaration family --
+;;;   span-declaration?                  : Any -> Boolean
+;;;   span-declaration-name              : SpanDeclaration -> Symbol
+;;;   span-declaration-data-callback     : SpanDeclaration -> Symbol
+;;;   span-declaration-complete-callback : SpanDeclaration -> (Option Symbol)
+;;;   span-declaration-source-label      : SpanDeclaration -> Label
+;;;
+;;;   sequence-dispatch-node / sequence-case accessors --
+;;;   sequence-dispatch-node?           : Any -> Boolean
+;;;   sequence-dispatch-node-name       : SequenceDispatchNode -> Symbol
+;;;   sequence-dispatch-node-cases      : SequenceDispatchNode -> (Listof SequenceCase)
+;;;   sequence-dispatch-node-mismatch   : SequenceDispatchNode -> Edge
+;;;   sequence-dispatch-node-eof-target : SequenceDispatchNode -> (Option NodeName)
+;;;   sequence-case?                    : Any -> Boolean
+;;;   sequence-case-bytes               : SequenceCase -> (Listof Byte)   ; fresh copy
+;;;   sequence-case-target              : SequenceCase -> NodeName
 (library (byte-machine graph)
   (export make-uint-field uint-field? uint-field-name uint-field-width
           uint-field-initial uint-field-source-label

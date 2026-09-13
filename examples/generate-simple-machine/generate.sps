@@ -1,8 +1,7 @@
 ;;; byte-machine example: generate, compile, and run a simple parser.
 ;;;
-;;; Milestone 9 Slice ④ (§26:1682, §27:1703, parent §9.6). A standalone program
-;;; that demonstrates the whole v0.1 flow end to end, using ONLY the public
-;;; procedural API — never the private tagged-vector constructors:
+;;; A standalone program that demonstrates the whole v0.1 flow end to end, using
+;;; ONLY the public procedural API — never the private tagged-vector constructors:
 ;;;
 ;;;   1. construct a machine through (byte-machine graph);
 ;;;   2. compile it offline with (byte-machine compile) — verification is

@@ -1,19 +1,18 @@
 ;;; SPDX-License-Identifier: BSD-3-Clause
-;;; (byte-machine compile): the offline emitter (parent §9.2, §19, §20;
-;;; decisions 0008, 0009, 0010). compile-machine re-verifies internally and
-;;; normalizes; render-machine renders the normalized IR to a complete importable
-;;; R6RS .sls as a canonical UTF-8/LF bytevector (no implementation `write`);
-;;; emit-machine writes those bytes to the supplied binary port only. The
-;;; generated library imports only (rnrs) and (byte-machine runtime), owns the
-;;; derived library name (generated <machine-name>), and defines the single
-;;; caller-named compiled-machine binding through the one unversioned
-;;; byte-machine-make-compiled-machine (decision 0018), whose first action is the
-;;; ABI version check and whose trailing quoted vector is the growable payload.
-;;; Pure but for emit-machine's port write.
+;;; (byte-machine compile): the offline emitter. compile-machine re-verifies
+;;; internally and normalizes; render-machine renders the normalized IR to a
+;;; complete importable R6RS .sls as a canonical UTF-8/LF bytevector (no
+;;; implementation `write`); emit-machine writes those bytes to the supplied
+;;; binary port only. The generated library imports only (rnrs) and
+;;; (byte-machine runtime), owns the derived library name (generated
+;;; <machine-name>), and defines the single caller-named compiled-machine
+;;; binding through the one unversioned byte-machine-make-compiled-machine,
+;;; whose first action is the ABI version check and whose trailing quoted
+;;; vector is the growable payload. Pure but for emit-machine's port write.
 (library (byte-machine compile)
   (export compile-machine compilation-ok? compilation-diagnostics
           render-machine emit-machine
-          reserved-member-2 reserved-member-3) ; test-support: the drift guards read them
+          reserved-member-2 reserved-member-3) ; exported for test support only
   (import (rnrs)
           (byte-machine verify)
           (only (byte-machine private ir) machine-name machine-errors
@@ -24,11 +23,14 @@
   (define c-tag (vector 'byte-machine-compilation))
   ;; (vector c-tag ok? diagnostics machine normal) ; normal #f when not ok
   (define (make-compilation ok? diags machine normal) (vector c-tag ok? diags machine normal))
+  ;; compilation-ok? : Compilation -> Boolean
   (define (compilation-ok? c) (vector-ref c 1))
+  ;; compilation-diagnostics : Compilation -> (Listof Diagnostic)
   (define (compilation-diagnostics c) (vector-ref c 2))
   (define (compilation-machine c) (vector-ref c 3))
   (define (compilation-normal c) (vector-ref c 4))
 
+  ;; compile-machine : Machine (Listof Any) -> Compilation
   (define (compile-machine machine options)
     (unless (null? options)
       (assertion-violation 'compile-machine "v0.1 accepts only the empty option list" options))
@@ -38,14 +40,16 @@
                             (normalize-machine (verification-machine v)))
           (make-compilation #f (verification-diagnostics v) (verification-machine v) #f))))
 
-  ;; --- reserved-output-binding set (all three members now exist, design §3.3) ---
+  ;; --- reserved-output-binding set ---
   (define reserved-member-1
     '(library import export define define-syntax let let* letrec lambda quote
       if begin set! cond case and or when unless do quasiquote unquote))
-  ;; The hand-maintained mirror of (byte-machine runtime)'s exports. Exported
-  ;; solely so reserved-drift-tests.sps can assert it against the runtime's actual
-  ;; environment-symbols: a new runtime export not added here would let the emitter
-  ;; accept a binding that collides with it (Slice B; Slice A design §6).
+  ;; The hand-maintained mirror of (byte-machine runtime)'s exports: it must list
+  ;; exactly the runtime's live exports, because a new runtime export not added
+  ;; here would let the emitter accept an output binding that collides with it.
+  ;; Checked by set-equality against the runtime's live exports, so it reddens in
+  ;; BOTH directions and must move in the same commit the exports do.
+  ;; reserved-member-2 : (Listof Symbol)
   (define reserved-member-2
     '(make-compiled-machine compiled-machine?
       byte-machine-make-compiled-machine/v1 byte-machine-make-compiled-machine/v2
@@ -61,65 +65,31 @@
       byte-machine-make-compiled-machine
       parser-field-ref
       callback-continue callback-pause
-      ;; Milestone 5 Slice ①b's SEVEN new names: the five §9.3 owes -- design §6's
-      ;; six minus `parser-state-name`, deferred whole to Slice ② -- plus
-      ;; `callback-failure-code` and `callback-failure-detail`, which §9.3:415-416
-      ;; does not list. Those two are accessors for a record §13:808 defines and
-      ;; §9.3 gives a constructor and a predicate but no readers, so an
-      ;; application could build a failure and never read it back. Recorded here
-      ;; rather than exported silently; if the owner would rather §9.3 grow an
-      ;; appended disposition naming them, that is the alternative.
-      ;; This mirror is asserted by SET EQUALITY
-      ;; against (byte-machine runtime)'s live exports, so it reddens in BOTH
-      ;; directions and must move in the same commit the exports do -- the
-      ;; obligation Slice ①a recorded for exactly this moment.
       parser-stream-offset parser-user-context parser-active-span
       make-callback-failure callback-failure?
       callback-failure-code callback-failure-detail
-      ;; Milestone 5 Slice ②'s two, and the set-equality guard is what made them
-      ;; land here in the same commit as the exports: both are called from
-      ;; EMITTED code -- the callback arm's invocation and its error record -- so
-      ;; a machine or node named after either would shadow the thing its own
-      ;; emitted body calls.
       byte-machine-callback-step/v1 byte-machine-make-callback-error/v1
-      ;; And `parser-state-name`, the sixth §9.3 accessor: ①b deferred it whole
-      ;; and ② carries the table it needs as ABI payload member 2.
       parser-state-name
-      ;; Slice ③'s three, on the same rule: the span arms CALL all three from
-      ;; emitted code. The boundary flush is not among them -- §19.3:1024 makes
-      ;; it runtime work and it runs at the `parser-feed!` seam, where no emitted
-      ;; text can reach it.
       byte-machine-span-open/v1 byte-machine-span-fragment-step/v1
       byte-machine-span-close/v1))
   ;; Every identifier the emitted body binds, so a caller-chosen output binding
-  ;; cannot collide with one. `fieldv` is emitted `exec`'s seventh parameter,
-  ;; reserved empty by Milestone 4 Slice ①a and filled by its Slice ② (decision
-  ;; 0019 item 3(c)); it is deliberately not spelled `fields`, which `(rnrs)`
-  ;; binds as define-record-type's auxiliary keyword and which the drift guard's
-  ;; own `(rnrs)` subtraction would therefore swallow.
-  ;;
-  ;; `psr` and `cbv` are the eighth and ninth, added by Milestone 5 Slice ①a
-  ;; (decision 0025 point 3) and reserved the same way: the emitted body ignores
-  ;; both, and Slice ② emits the arms that read them. `psr` is the parser a
-  ;; callback receives as its first argument (§13:784) and BOTH call sites
-  ;; already pass the real one -- there is no sentinel, because the value exists
-  ;; and passing it now spares ② a second call-site edit. `cbv` is the resolved
-  ;; callback slot vector.
-  ;;
-  ;; *** Both are READ from Milestone 5 Slice ② on: the callback arm indexes
-  ;; `cbv` with a literal slot and hands `psr` to the invocation. *** That slice
-  ;; also retired the `empty-callbacks` sentinel this paragraph used to name --
-  ;; both /v2 call sites now pass the parser's own slot vector -- and adds `o`
-  ;; below, the arm's outcome binding.
+  ;; cannot collide with one. `fieldv` is emitted `exec`'s field-value vector
+  ;; parameter; it is deliberately not spelled `fields`, which `(rnrs)` binds as
+  ;; define-record-type's auxiliary keyword and which the member-3 drift guard's
+  ;; own `(rnrs)` subtraction would therefore swallow -- so a real output-binding
+  ;; collision on that name would go unguarded. `psr` is the parser a callback
+  ;; receives as its first argument, `cbv` the resolved callback slot vector, and
+  ;; `o` the outcome binding an emitted callback/span arm reads. The callback and
+  ;; span arms index `cbv` with a literal slot and hand `psr` to the invocation.
+  ;; reserved-member-3 : (Listof Symbol)
   (define reserved-member-3
     '(exec loop pos st off b bv start end state offset finish? fieldv errs pk
       v r d o psr cbv n))
-  ;; The grammar half is (byte-machine private names)' `portable-name?` since
-  ;; Milestone 6 Slice ⓪ (design §4.12 item 2): one body with verify.sls's
-  ;; name check and runtime.sls's callback-code check, where this file carried
-  ;; the second of two identical copies through Milestone 5. The three reserved
-  ;; sets stay here -- an output BINDING is barred from all three, a declared
-  ;; name from member 1 alone, and that difference is this site's.
+  ;; The grammar half is (byte-machine private names)' `portable-name?`: one
+  ;; body shared with verify.sls's name check and runtime.sls's callback-code
+  ;; check. The three reserved sets stay here -- an output BINDING is barred from
+  ;; all three, a declared name from member 1 alone, and that difference is this
+  ;; site's.
   (define (valid-binding? sym)
     (and (portable-name? sym)
          (not (memq sym reserved-member-1))
@@ -133,12 +103,12 @@
       (assertion-violation 'render-machine "invalid-output-binding" binding)))
 
   ;; --- canonical source writer ---
-  ;; §20:1039's explicit escaping, for the one class of author-controlled text the
-  ;; emitter writes into generated source: an error declaration's static reason,
-  ;; carried by decision 0022 item 7's per-library `errs` table. `pass-names-valid`
-  ;; refuses any reason outside printable ASCII plus LF (§10.1:480), so exactly
-  ;; three characters can reach here needing an escape and the set is closed
-  ;; rather than defensive. Its one caller is the `errs` table below.
+  ;; Explicit escaping, for the one class of author-controlled text the emitter
+  ;; writes into generated source: an error declaration's static reason, carried
+  ;; by the per-library `errs` table. `pass-names-valid` refuses any reason
+  ;; outside printable ASCII plus LF, so exactly three characters can reach here
+  ;; needing an escape and the set is closed rather than defensive. Its one caller
+  ;; is the `errs` table below.
   (define (escape-string s)
     (let loop ((i 0) (acc '()))
       (if (>= i (string-length s))
@@ -153,18 +123,11 @@
   ;; Each transition/fallback lowers to a loop tail: advance bumps pos and off,
   ;; reexecute keeps both. Rendered as one string with explicit, counted parens.
   ;;
-  ;; The fourth argument is the POSITION KIND (decision 0022 item 5). It is a
-  ;; property of the transition that ARRIVED, not of the error state: one error
-  ;; node reached by a reexecute edge reports `byte` and the same node reached by
-  ;; an advance edge reports `boundary`, and the emitted arm is keyed on state id
-  ;; alone, so it cannot be a per-site literal there. Each jump therefore carries
-  ;; its own kind forward.
-  ;; *** Hazard for Slice ③: this helper's two rendered strings are each pinned
-  ;; at SITES=1 across three shipped mutations. Re-inlining the tail, or
-  ;; changing either string's text, is a CONFIGURE-TIME failure of the mutation
-  ;; suite rather than a test failure -- "pattern occurs 0 times ... expected
-  ;; 1". ③'s overflow tail wants to look like this one; extend it here rather
-  ;; than writing a parallel renderer. ***
+  ;; The fourth argument is the POSITION KIND. It is a property of the transition
+  ;; that ARRIVED, not of the error state: one error node reached by a reexecute
+  ;; edge reports `byte` and the same node reached by an advance edge reports
+  ;; `boundary`, and the emitted arm is keyed on state id alone, so it cannot be a
+  ;; per-site literal there. Each jump therefore carries its own kind forward.
   (define (loop-tail target mode)
     (if (eq? mode 'advance)
         (string-append "(loop (+ pos 1) " (number->string target) " (+ off 1) (quote boundary))")
@@ -172,14 +135,11 @@
 
   (define (render-transition-arm tr)
     ;; tr = (byte target mode) -> "((<byte>) <loop-tail>)"
-    ;; Milestone 3 Slice ① changed nothing here, and that is a decision rather
-    ;; than an oversight: byte classes lower to one transition per byte
-    ;; (decision 0014), so a complement renders up to 256 sibling arms inside the
-    ;; single `(case b ...)` below. §19.2:1009 asks for "canonical membership
-    ;; code selected for simplicity, not speculative density optimization", and a
-    ;; grouped datum list or a membership table is the optimization §29:1743
-    ;; defers and §23.3:1369 gates behind compiled benchmarks that cannot exist
-    ;; yet (`bench/` holds two .gitkeep files).
+    ;; Byte classes lower to one transition per byte, so a complement renders up
+    ;; to 256 sibling arms inside the single `(case b ...)` below: membership code
+    ;; is kept simple rather than optimized for density. A grouped datum list or a
+    ;; membership table is a deliberately deferred optimization, gated behind
+    ;; compiled benchmarks.
     (string-append "               ((" (number->string (car tr)) ") "
                    (loop-tail (cadr tr) (caddr tr)) ")\n"))
 
@@ -187,10 +147,10 @@
   ;; (continue the eof-target chain) or to the machine default-eof error.
   ;; The node case is the EOF-chain hop and carries `eof` forward. The default
   ;; case is a terminal construction reached by no jump at all, so it takes a
-  ;; per-site (quote eof) literal rather than the loop variable -- §12.7:771
-  ;; fixes `eof` whether or not a prior hop ran. Its node-name is the DISPATCH
-  ;; node's, which is where truncation was detected: a default-EOF error has no
-  ;; error node of its own (decision 0022 item 9).
+  ;; per-site (quote eof) literal rather than the loop variable, fixing `eof`
+  ;; whether or not a prior hop ran. Its node-name is the DISPATCH node's, which
+  ;; is where truncation was detected: a default-EOF error has no error node of
+  ;; its own.
   (define (render-eof-branch eof id name reason index-of)
     (if (eq? (car eof) 'node)
         (string-append "(loop pos " (number->string (cdr eof)) " off (quote eof))")
@@ -199,29 +159,21 @@
                        (number->string (index-of (cdr eof) reason)) ") (quote " (symbol->string name)
                        ") " id " off (quote eof)) " id " off)")))
 
-  ;; Milestone 3 Slice ② changed nothing here either, and that is decision 0015
-  ;; point 1 rather than an oversight: a lowered sequence-prefix state IS an
-  ;; ordinary normalized dispatch state, so it renders through this same arm, the
-  ;; encoding gains no tag, and the need-input
-  ;; resume point below gives cross-feed resumability with no new mechanism. No
-  ;; new emitted local means reserved-member-3 (decision 0012 item 4) is
-  ;; unchanged. That was true through Milestone 3 and is not true here: Slice ①a
-  ;; adds `fieldv`, `errs` and `pk`, and the gap the second half of this sentence
-  ;; named -- "no automated drift guard" -- is closed by
-  ;; member3-drift-tests.sps, which walks the emitted datum for every symbol
-  ;; outside a quote form and asserts the remainder is a subset of this list.
-  ;; `names` maps a state id to its public source-node name (§17:963's debug
-  ;; map, normalizer output) and `index-of` a (code, reason) pair to that
+  ;; A lowered sequence-prefix state IS an ordinary normalized dispatch state, so
+  ;; it renders through this same arm, the encoding gains no tag, and the
+  ;; need-input resume point below gives cross-feed resumability with no new
+  ;; mechanism.
+  ;;
+  ;; `names` maps a state id to its public source-node name (the debug map,
+  ;; normalizer output) and `index-of` a (code, reason) pair to that
   ;; declaration's position in the errs table. The name is not recoverable from a
   ;; normalized state at all, and the declaration is not recoverable from its
   ;; code alone -- codes need not be unique -- so both are threaded in from
   ;; render-machine rather than derived here.
-  ;; --- Slice ②'s two emitted arms ---
-  ;; The arithmetic is written TWICE on purpose (§18:970-972, decision 0015
-  ;; point 3): this is the emitter's copy and it shares no helper with
-  ;; interpret.sls. Widths come from the NORMALIZED table here and from
-  ;; `machine-fields` there, so a lowering bug in overflow checking stays visible
-  ;; to the differential -- the single class of defect this milestone introduces.
+  ;; The field arithmetic is written TWICE on purpose: this is the emitter's copy
+  ;; and it shares no helper with interpret.sls. Widths come from the NORMALIZED
+  ;; table here and from `machine-fields` there, so a lowering bug in overflow
+  ;; checking stays visible to the differential.
   ;;
   ;; `render-state-arm` could not see the declarations at all, so `fields` is
   ;; threaded in: the normalized (name width initial slot) table.
@@ -237,7 +189,7 @@
   ;; A jump that consumes nothing: same `pos`, same `off`, same `pk`. The
   ;; position kind is carried THROUGH for the reason runtime.sls records at its
   ;; own zero-width arms -- a zero-width step does not move the parser in the
-  ;; input, and §12.7:777 makes the two lanes' answers comparable.
+  ;; input, which makes the two lanes' answers comparable.
   (define (zero-width-jump target)
     (string-append "(loop pos " (num target) " off pk)"))
   (define (render-operation op k)
@@ -263,10 +215,8 @@
 
   ;; The exhausted-input preamble every BYTE-CONSUMING emitted arm opens with:
   ;; at end of slice, take the EOF branch under finish? and yield need-input
-  ;; otherwise. Shared by the dispatch arm and Slice ③'s accumulate arm, which
-  ;; render it identically -- written out twice it takes every pin on it to two
-  ;; sites, and no anchor separates them because the two preambles ARE the same
-  ;; decision. Each arm's call stays its own line.
+  ;; otherwise. Shared by the dispatch arm and the accumulate arm, which render it
+  ;; identically rather than duplicating these lines.
   (define (render-exhausted-preamble s id names index-of nm)
     (string-append
      "      ((" id ")\n"
@@ -278,8 +228,8 @@
      "               (byte-machine-make-feed-outcome/v1 (quote need-input) pos #f " id " off))\n"))
 
   ;; `spans` is threaded in for the same reason `fields` above it is, and for one
-  ;; more: a lowered span state carries the SPAN slot (§17:962), but the arm it
-  ;; renders indexes `cbv`. The normalizer publishes the crossing as
+  ;; more: a lowered span state carries the SPAN slot, but the arm it renders
+  ;; indexes `cbv`. The normalizer publishes the crossing as
   ;; `normal-machine-span-decls` -- (name data-slot complete-slot) in span-slot
   ;; order -- rather than leaving the emitter to re-walk the declarations, which
   ;; would put a second copy of that resolution in the lane being checked.
@@ -315,13 +265,12 @@
         ((pause)
          (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
                         (number->string (normal-pause-target s)) " off))\n"))
-        ;; Slice ③'s INPUT-READING kind. The digit test is rendered as a range
+        ;; The INPUT-READING kind. The digit test is rendered as a range
         ;; comparison per base rather than a `case` over literal bytes: base 16
         ;; has three disjoint ASCII ranges, so one `case` group with one `d`
-        ;; cannot express it (§8's own example contradicts its following
-        ;; sentence). §15:864-868's inequality is rendered as the spec writes it
-        ;; -- a check BEFORE the multiply-add, not a compute-then-check, because
-        ;; §15:856 forbids relying on host fixnum width.
+        ;; cannot express it. The inequality is rendered as a check BEFORE the
+        ;; multiply-add, not a compute-then-check, because relying on host fixnum
+        ;; width is forbidden.
         ((accumulate)
          (let* ((base (normal-field-selector s))
                 (fname (car (normal-field-arguments s)))
@@ -349,32 +298,20 @@
                                      " (+ (* v " (num base) ") d))\n"
             "                              (loop (+ pos 1) " (num digit) " (+ off 1) (quote boundary)))\n"
             "                       (loop pos " (num over) " off (quote byte))))))))\n")))
-        ;; *** OWED HERE, AND THIS IS THE ARTIFACT THE RECEIVER OPENS. ***
-        ;; `§12.7:770`'s row reads "Zero-width machine action or callback
-        ;; failure | `boundary` at the current stream offset". The callback half
-        ;; was fixed in Milestone 5 Slice ③. The MACHINE-ACTION half is still
-        ;; wrong, measured: a field-action increment that overflows a `u8`,
-        ;; reached over a reexecute edge, answers `(kind byte offset 1)` where
-        ;; the row says `boundary`. The accumulate OVERFLOW render two lines
-        ;; above emits `(quote byte)` for the same reason -- not the non-digit
-        ;; reexecute render ten lines above it, which is a different rule.
-        ;;
-        ;; It is a one-line change in THIS lane and more than that in the
-        ;; interpreted one -- see the same note at `interpret.sls`'s
-        ;; `field-step`, which is the other end. Then the fixtures:
-        ;; `position-kind-tests.sps` gains a row per producer, and every pin
-        ;; anchored on a `byte` verdict from a failed zero-width action has to be
-        ;; re-measured.
-        ;;
-        ;; Milestone 5's close-out (Slice ④, 2026-09-06) DEFERRED it rather than
-        ;; scheduling it, and wrote this note because the obligation is addressed
-        ;; to "whoever next touches these arms" -- a receiver who opens this file
-        ;; and has no reason to open the parent plan. Adjudicated at
-        ;; `byte-machine-implementation-plan.md` §12.7's disposition. Milestone
-        ;; 6's counted consume does NOT inherit it: the kind invokes no callback
-        ;; and takes no error edge of its own, so it can produce neither half of
-        ;; the row (Milestone 6 design §4.9, discharged by finding in Slice ①);
-        ;; the constant stays owed to whoever next touches THESE arms.
+        ;; KNOWN LIMITATION: the machine-action half of the zero-width
+        ;; position-kind rule is not yet correct. The rule wants `boundary` at the
+        ;; current stream offset for a zero-width machine action or callback
+        ;; failure; the callback half is correct, but a field-action operation
+        ;; that fails -- e.g. an increment that overflows a `u8` -- reached over a
+        ;; reexecute edge answers position-kind `byte` where it should answer
+        ;; `boundary`. The accumulate OVERFLOW render two lines above emits
+        ;; `(quote byte)` for the same reason (this is distinct from the non-digit
+        ;; reexecute render ten lines above it, which is a different rule). Fixing
+        ;; it is a one-line change in this lane and more in the interpreted one --
+        ;; see the matching note at `interpret.sls`'s `field-step`, the other end
+        ;; of the differential. The counted-consume kind does not inherit this: it
+        ;; invokes no callback and takes no error edge of its own, so it can
+        ;; produce neither half of the row.
         ((field-action)
          (let* ((args (normal-field-arguments s))
                 (sw (field-slot-width fields (car args)))
@@ -384,8 +321,8 @@
                 (expr (render-operation (normal-field-selector s) k)))
            (if (cdr tg)
                ;; A fallible operation. The bound check is emitted, and on
-               ;; failure NOTHING is written -- §25:1569 and §10.6:568: a failed
-               ;; operation leaves the prior value unchanged, not saturated.
+               ;; failure NOTHING is written: a failed operation leaves the prior
+               ;; value unchanged, not saturated.
                (string-append
                 "      ((" id ")\n"
                 "       (let* ((v (vector-ref fieldv " (num slot) ")) (r " expr "))\n"
@@ -395,7 +332,7 @@
                 "             " (zero-width-jump (cdr tg)) ")))\n")
                ;; An operation the constructor proved cannot fail, so no check is
                ;; emitted. Emitting one anyway would be a branch no input can
-               ;; take, and a mutation of it would survive.
+               ;; take.
                (string-append
                 "      ((" id ")\n"
                 "       (let ((v (vector-ref fieldv " (num slot) ")))\n"
@@ -413,32 +350,25 @@
             "         (if " (render-predicate (normal-field-selector s) a b) "\n"
             "             " (zero-width-jump (car tg)) "\n"
             "             " (zero-width-jump (cdr tg)) ")))\n")))
-        ;; *** The tenth kind, and the FIRST emitted arm that calls APPLICATION
-        ;; code -- it was "the only" until Slice ③, and this file's own rule
-        ;; twelve lines below the `else` is why that had to be corrected rather
-        ;; than left: a comment enumerating a closed set is a census. Three arms
-        ;; call out now. The span-completion arm renders this very procedure, and
-        ;; the span-end arm renders `byte-machine-span-fragment-step/v1`, which
-        ;; applies the caller's data callback. *** The invocation and
-        ;; §13:803-812's outcome vocabulary are the
-        ;; RUNTIME's -- `byte-machine-callback-step/v1`, the same procedure
-        ;; `parser-feed-op!` calls -- so this arm renders only the literals the
-        ;; node carries and the routing they select. A lane-local classifier
-        ;; here is precisely what §22.4:1268 compares and what decision 0024's
-        ;; Consequences require be produced "by both lanes from the same
-        ;; construction".
+        ;; This arm calls APPLICATION code. Three arms do: this one, the
+        ;; span-completion arm (which renders this very procedure), and the
+        ;; span-end arm (which renders `byte-machine-span-fragment-step/v1`,
+        ;; applying the caller's data callback). The invocation and the outcome
+        ;; vocabulary are the RUNTIME's -- `byte-machine-callback-step/v1`, the
+        ;; same procedure `parser-feed-op!` calls -- so this arm renders only the
+        ;; literals the node carries and the routing they select, keeping the
+        ;; classification out of the emitted lane so both lanes classify from the
+        ;; same construction.
         ;;
-        ;; `cbv` is read here for the first time since decision 0025 point 3
-        ;; reserved it: the slot is a literal, so the hot path is one
-        ;; `vector-ref` and never a symbolic lookup (§10.3:508).
+        ;; `cbv` is read here: the slot is a literal, so the hot path is one
+        ;; `vector-ref` and never a symbolic lookup.
         ;;
-        ;; Zero-width (§11.4:652), so the `goto` arm is `zero-width-jump`'s rule
-        ;; with a computed target -- same `pos`, same `off`, same `pk`.
+        ;; Zero-width, so the `goto` arm is `zero-width-jump`'s rule with a
+        ;; computed target -- same `pos`, same `off`, same `pk`.
         ;;
-        ;; *** The error arm renders the LITERAL `boundary`, not `pk`, and the
-        ;; emitted text is where that difference is visible. *** §12.7:770 puts a
-        ;; callback failure on the `boundary at the current stream offset` row
-        ;; unconditionally; rendering `pk` gave `byte` whenever the invoking node
+        ;; The error arm renders the LITERAL `boundary`, not `pk`: a callback
+        ;; failure is on the `boundary at the current stream offset` row
+        ;; unconditionally. Rendering `pk` gave `byte` whenever the invoking node
         ;; was reached over a reexecute edge, in BOTH lanes, so the differential
         ;; agreed on the wrong value. The runtime's own arms carry the same
         ;; correction under the name `callback-failure-position`.
@@ -463,28 +393,28 @@
             "           (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
             "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
             (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off)))))\n")))
-        ;; --- Slice ③'s three span arms -------------------------------------
-        ;; All three are ZERO-WIDTH (§10.6:590) and end in `zero-width-jump`'s
-        ;; rule -- same `pos`, same `off`, same `pk` -- literally so where the
-        ;; target is static and inline where it comes from `(cadr o)`, exactly
-        ;; as the callback arm above does.
+        ;; --- the three span arms -------------------------------------------
+        ;; All three are ZERO-WIDTH and end in `zero-width-jump`'s rule -- same
+        ;; `pos`, same `off`, same `pk` -- literally so where the target is static
+        ;; and inline where it comes from `(cadr o)`, exactly as the callback arm
+        ;; above does.
         ;;
-        ;; None of them binds a local beyond `o`, and that is deliberate: the
-        ;; mark lives in the parser and `byte-machine-span-fragment-step/v1`
-        ;; reads it, so no rendered `let` introduces a name `reserved-member-3`
-        ;; would have to grow to cover.
+        ;; None of them binds a local beyond `o`, and that is deliberate: the mark
+        ;; lives in the parser and `byte-machine-span-fragment-step/v1` reads it,
+        ;; so no rendered `let` introduces a name `reserved-member-3` would have to
+        ;; grow to cover.
         ((span-start)
-         ;; §14:830's "records the current cursor" -- `pos`, the slice index.
+         ;; Records the current cursor -- `pos`, the slice index.
          (let ((d (list-ref spans (normal-field-selector s))))
            (string-append
             "      ((" id ")\n"
             "       (begin (byte-machine-span-open/v1 psr (quote "
             (symbol->string (car d)) ") pos " (num (cadr d)) ")\n"
             "              " (zero-width-jump (normal-field-targets s)) "))\n")))
-        ;; The FIRST of §14:841's two substeps: the remaining fragment. Its
-        ;; continuation is the substep state -- `arguments`, which no other span
-        ;; kind uses -- and never the node's own successor, because §14:838
-        ;; resumes "at the next undelivered substep".
+        ;; The FIRST of the two substeps: the remaining fragment. Its continuation
+        ;; is the substep state -- `arguments`, which no other span kind uses --
+        ;; and never the node's own successor, because resuming happens at the next
+        ;; undelivered substep.
         ((span-end)
          (let ((d (list-ref spans (normal-field-selector s)))
                (cid (num (normal-field-arguments s))))
@@ -499,17 +429,17 @@
             "           (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
             "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
             (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off)))))\n")))
-        ;; The SECOND substep. §14:841 puts the close BEFORE the invocation, so
-        ;; it is the first thing rendered here in both shapes -- a completion
-        ;; callback that asks `parser-active-span` must see #f.
+        ;; The SECOND substep. The close comes BEFORE the invocation, so it is the
+        ;; first thing rendered here in both shapes -- a completion callback that
+        ;; asks `parser-active-span` must see #f.
         ((span-completion)
          (let* ((d (list-ref spans (normal-field-selector s)))
                 (c (caddr d))
                 (tgt (num (normal-field-targets s))))
            (if (not c)
-               ;; §10.4:516's optional completion callback, absent: the substep
-               ;; still exists -- it is what makes the span inactive -- and is
-               ;; simply not an invocation.
+               ;; The optional completion callback, absent: the substep still
+               ;; exists -- it is what makes the span inactive -- and is simply
+               ;; not an invocation.
                (string-append
                 "      ((" id ")\n"
                 "       (begin (byte-machine-span-close/v1 psr)\n"
@@ -526,15 +456,12 @@
                 "             (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
                 "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
                 (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off))))))\n"))))
-        ;; Counted consume (Milestone 6 Slice ①; decision 0030 items 1-3). A
-        ;; three-clause `cond` -- zero count, exhausted, commit -- and NOT the
-        ;; shared exhausted-input preamble, because the zero-count test comes
-        ;; first (§10.6:600) and the preamble opens with exhaustion; nor a
-        ;; re-rendering of the preamble's lines, which would take every pin on
-        ;; them to two sites. The zero-count clause is `zero-width-jump`, a
-        ;; call, carrying the position kind through. `n` is the committed count,
-        ;; the one local this arm adds to reserved-member-3 (design §4.5); the
-        ;; subtraction is exact (§15:872) and count completion wins by
+        ;; Counted consume. A three-clause `cond` -- zero count, exhausted, commit
+        ;; -- and NOT the shared exhausted-input preamble, because the zero-count
+        ;; test comes first and the preamble opens with exhaustion. The zero-count
+        ;; clause is `zero-width-jump`, a call, carrying the position kind
+        ;; through. `n` is the committed count, the one local this arm adds to
+        ;; reserved-member-3; the subtraction is exact and count completion wins by
         ;; construction -- `n = v` continues whether or not input remains.
         ((counted-consume)
          (let* ((fname (car (normal-field-arguments s)))
@@ -566,20 +493,13 @@
             "               (else " (loop-tail (car fb) (cdr fb)) ")))))\n")))
         ;; Unreachable today -- this case already covers every kind
         ;; normal-state-kind can produce: dispatch, stop, error, finish, pause,
-        ;; field-action, field-branch (Milestone 4 Slice ②), accumulate
-        ;; (Milestone 4 Slice ③), callback (Milestone 5 Slice ②), span-start,
-        ;; span-end and span-completion (Milestone 5 Slice ③), and
-        ;; counted-consume (Milestone 6 Slice ①) -- THIRTEEN.
-        ;; *** The parenthetical here listed only the first five until
-        ;; 2026-09-03, having survived both slices that widened the set --
-        ;; including the one eleven lines above this comment. A comment that
-        ;; enumerates a closed set is a census, and this milestone shipped three
-        ;; defects from exactly that shape; ***
-        ;; verified by inspection, not mutation (same convention as
-        ;; normal-ir.sls's own else guards).
+        ;; field-action, field-branch, accumulate, callback, span-start,
+        ;; span-end, span-completion, and counted-consume -- THIRTEEN. Verified by
+        ;; inspection (same convention as normal-ir.sls's own else guards).
         (else (assertion-violation 'render-machine "unknown state kind"
                                    (normal-state-kind s))))))
 
+  ;; render-machine : Compilation Symbol -> Bytevector
   (define (render-machine compilation binding)
     (unless (compilation-ok? compilation)
       (assertion-violation 'render-machine "cannot render an unverified machine"
@@ -595,54 +515,39 @@
            ;; errcode already walks. Per-SITE literals would repeat each reason
            ;; once per error site, and the default-eof arm alone renders at every
            ;; dispatch state: the http-version machine has nine error sites over
-           ;; two declarations. This is §19.1:996's "immutable field/callback/debug
-           ;; metadata", carried as one quoted vector.
+           ;; two declarations. This is immutable field/callback/debug metadata,
+           ;; carried as one quoted vector.
            ;; Only the declarations the NORMALIZED graph reaches. The encoding
            ;; writes a reason at exactly two sites -- an error state's, and a
            ;; dispatch state's default-eof routing -- so a declaration no node
            ;; names and that is not the machine default-eof never reaches the IR
            ;; fingerprint. Emitting it anyway made two machines the fingerprint
-           ;; calls identical emit DIFFERENT bytes, which is the converse of the
-           ;; property decision 0019 item 2 states and the one nothing asserted.
-           ;; Narrowing here rather than widening the encoding is what keeps
-           ;; every shipped fingerprint where Slice ①a measured it, which
-           ;; decision 0019 point 5 requires of every later slice.
+           ;; calls identical emit DIFFERENT bytes. Narrowing here rather than
+           ;; widening the encoding is what keeps every shipped fingerprint
+           ;; stable.
            (reached (let walk ((i 0) (acc '()))
                       (if (>= i (vector-length states)) (reverse acc)
                           (let* ((st (vector-ref states i))
                                  (r (normal-error-reason st))
                                  (c (cond ((eq? (normal-state-kind st) 'error)
                                            (normal-error-code st))
-                                          ;; *** Slice ③: `accumulate` belongs
-                                          ;; here too. *** It is the milestone's
-                                          ;; other INPUT-READING kind, it carries
-                                          ;; an eof route in the same slot, and
-                                          ;; render-exhausted-preamble renders
-                                          ;; that route for both kinds through
-                                          ;; the same code -- so an accumulate
-                                          ;; node whose eof-target is #f asks
-                                          ;; index-of for the machine default
-                                          ;; declaration exactly as a dispatch
-                                          ;; does. Testing only for `dispatch`
-                                          ;; left that declaration out of the
-                                          ;; reached set, the filter below
-                                          ;; dropped it from the errs table, and
-                                          ;; index-of then raised "no error
-                                          ;; declaration for code" while
-                                          ;; rendering a machine the verifier had
-                                          ;; just accepted.
-                                          ;;
-                                          ;; Invisible to every shipped
-                                          ;; accumulate fixture: each has an
-                                          ;; entry dispatch that ALSO defaults
-                                          ;; its eof route, so the pair was in
-                                          ;; the set for another state's sake.
-                                          ;; It takes a machine whose only
-                                          ;; default-eof consumer is the
-                                          ;; accumulate node -- which is what the
-                                          ;; property generator drew as soon as
-                                          ;; it could route the entry's eof to a
-                                          ;; finish node instead.
+                                          ;; `accumulate` belongs here too: it
+                                          ;; is the other INPUT-READING kind, it
+                                          ;; carries an eof route in the same
+                                          ;; slot, and render-exhausted-preamble
+                                          ;; renders that route for both kinds
+                                          ;; through the same code -- so an
+                                          ;; accumulate node whose eof-target is
+                                          ;; #f asks index-of for the machine
+                                          ;; default declaration exactly as a
+                                          ;; dispatch does. Testing only for
+                                          ;; `dispatch` would leave that
+                                          ;; declaration out of the reached set,
+                                          ;; the filter below would drop it from
+                                          ;; the errs table, and index-of would
+                                          ;; then raise "no error declaration for
+                                          ;; code" while rendering a machine the
+                                          ;; verifier had just accepted.
                                           ((and (memq (normal-state-kind st)
                                                       '(dispatch accumulate counted-consume))
                                                 (eq? (car (normal-dispatch-eof st)) 'default))
@@ -657,17 +562,10 @@
            ;; reason (normal-ir.sls's errcode/errreason) before the emitter sees
            ;; it, so `reached` is a set of pairs and membership is all there is to
            ;; test. Two declarations may agree on both -- nothing rejects
-           ;; duplicate codes or duplicate reasons, and §16.2's required-check
-           ;; list does not ask for uniqueness -- so an UNREACHED declaration
-           ;; duplicating a reached one passed the membership test and was
-           ;; emitted, giving two machines with the same IR fingerprint different
-           ;; emitted bytes.
-           ;;
-           ;; That is the same defect commit 51fd5f3 was written to close, and
-           ;; that commit did not close it: its filter fixed the case where the
-           ;; unreached declaration's pair is ABSENT from `reached` and left the
-           ;; case where it is present under another declaration's name.
-           ;; determinism-one-byte-tests.sps now carries both constructions.
+           ;; duplicate codes or duplicate reasons and nothing requires uniqueness
+           ;; -- so an UNREACHED declaration duplicating a reached one would pass
+           ;; the membership test and be emitted, giving two machines with the
+           ;; same IR fingerprint different emitted bytes.
            ;;
            ;; Dropping the later duplicate rather than keeping it is what leaves
            ;; every shipped golden where it is: a machine with no duplicate pair
@@ -690,18 +588,17 @@
                                                            acc))))
                                     (cons (car ds) acc) acc))))))
            ;; Keyed on code AND reason, not on code alone. Two declarations may
-           ;; share a code -- pass-names rejects duplicate declaration NAMES and
-           ;; nothing rejects duplicate codes, and §16.2's required-check list
-           ;; does not ask for uniqueness -- and the normalizer has already
-           ;; collapsed the node's declaration name to its resolved code by the
-           ;; time the emitter sees it. Keying on the code alone therefore
-           ;; returned the FIRST declaration carrying it, so a generated parser
-           ;; reported a different declaration's reason than the interpreter,
-           ;; on a machine the verifier accepts with zero diagnostics. The
-           ;; normalized state has carried the right reason in its own slot
-           ;; since format 2, which is what makes this recoverable without a new
-           ;; slot: (code, reason) selects the entry the SITE produced, and when
-           ;; two declarations agree on both, their errs entries are identical
+           ;; share a code -- pass-names rejects duplicate declaration NAMES,
+           ;; nothing rejects duplicate codes, and nothing requires uniqueness --
+           ;; and the normalizer has already collapsed the node's declaration name
+           ;; to its resolved code by the time the emitter sees it. Keying on the
+           ;; code alone therefore returned the FIRST declaration carrying it, so a
+           ;; generated parser reported a different declaration's reason than the
+           ;; interpreter, on a machine the verifier accepts with zero
+           ;; diagnostics. The normalized state has carried the right reason in its
+           ;; own slot since format 2, which is what makes this recoverable without
+           ;; a new slot: (code, reason) selects the entry the SITE produced, and
+           ;; when two declarations agree on both, their errs entries are identical
            ;; and either index yields the same record -- so this is total.
            (index-of (lambda (code reason)
                        (let walk ((ds decls) (i 0))
@@ -709,8 +606,7 @@
                                 ;; Unreachable: every code/reason pair the
                                 ;; emitter asks about was resolved FROM this
                                 ;; same list by the normalizer. Loud rather than
-                                ;; a silent fallback to 0, which is what the
-                                ;; first version of this walk would have done.
+                                ;; a silent fallback to 0.
                                 (assertion-violation
                                  'render-machine "no error declaration for code"
                                  code reason))
@@ -725,30 +621,20 @@
                                             "#(" (symbol->string (error-declaration-code (car ds)))
                                             " \"" (escape-string (error-declaration-reason (car ds)))
                                             "\")")))))
-           ;; Decision 0019 item 3(b)'s member 0, filled by Milestone 4 Slice
-           ;; ①b. It renders the field DECLARATIONS as (name . initial) pairs in
-           ;; slot order, not bare initials: the parser needs the initials AND
-           ;; the name-to-slot resolution parser-field-ref answers by, the slot
-           ;; is the pair's position, so one member determines both. That
-           ;; argument is about FIELD data and is NOT a prohibition on further
-           ;; members -- Milestone 5 Slice ①a adds member 1, reserved empty.
-           ;; Decision 0025 POINT 2 is what grants it; point 3 is the `exec`
-           ;; parameters, and 0025 explicitly declines to allocate member 1's
-           ;; contents, so this comment does not either. Rendered as a bare `#()`
-           ;; here and filled by whichever slice needs it. With no fields the payload is now
-           ;; `#(#() #())`.
+           ;; Member 0 renders the field DECLARATIONS as (name . initial) pairs in
+           ;; slot order, not bare initials: the parser needs the initials AND the
+           ;; name-to-slot resolution parser-field-ref answers by, the slot is the
+           ;; pair's position, so one member determines both.
            ;;
            ;; Rendered from the NORMALIZED table rather than from machine-fields,
            ;; so the emitted slot order is the same object the IR fingerprint was
            ;; computed over. Reading the source machine again would let the two
            ;; disagree with nothing to notice.
-           ;; Member 1, Milestone 5 Slice ①b. Four parts per callback --
-           ;; name, kind, required?, default-branch -- which is everything
-           ;; §9.3:419's binding resolution needs and nothing more. Branch KEYS
-           ;; stay behind: §16.2:901 and :902 are pass-declarations' and are
-           ;; settled before a parser exists, so carrying them across the seam
-           ;; would ship data no runtime reads. Empty for a machine that
-           ;; declares no callback, which is what keeps every golden still.
+           ;; Member 1. Four parts per callback -- name, kind, required?,
+           ;; default-branch -- which is everything binding resolution needs and
+           ;; nothing more. Branch KEYS stay behind: they are settled before a
+           ;; parser exists, so carrying them across the seam would ship data no
+           ;; runtime reads. Empty for a machine that declares no callback.
            (cbs (let cloop ((cs (normal-machine-callback-decls normal)) (acc ""))
                   (if (null? cs) acc
                       (cloop (cdr cs)
@@ -767,19 +653,17 @@
                                 acc (if (string=? acc "") "" " ")
                                 "(" (symbol->string (car (car fs)))
                                 " . " (number->string (caddr (car fs))) ")")))))
-           ;; ABI payload member 2, Milestone 5 Slice ②: §17:963's state-id to
-           ;; SOURCE-NAME table, as a vector indexed by state id. It is what
-           ;; makes `parser-state-name` answerable in the generated lane, which
-           ;; is why Slice ①b deferred that accessor whole rather than shipping
-           ;; it answering in one lane -- the debug map was read at exactly one
-           ;; site, at emission time, and never crossed the seam.
+           ;; ABI payload member 2: the state-id to SOURCE-NAME table, as a vector
+           ;; indexed by state id. It is what makes `parser-state-name` answerable
+           ;; in the generated lane; the debug map is otherwise read at exactly one
+           ;; site, at emission time, and never crosses the seam.
            ;;
            ;; Rendered here rather than as a separate top-level `define`: the
            ;; emitted library exports ONE name and the compiled-machine
-           ;; constructor's five arguments are the only channel to the runtime,
-           ;; so a top-level definition would still have to be passed in. It is a
-           ;; rendering choice, not a third transport, and the payload grows
-           ;; either way -- which §9.5:444 makes an ABI bump, 4 -> 5.
+           ;; constructor's five arguments are the only channel to the runtime, so
+           ;; a top-level definition would still have to be passed in. It is a
+           ;; rendering choice, not a third transport, and the payload grows either
+           ;; way -- an ABI bump.
            ;;
            ;; Total over internal prefix states, so a lowered sequence position
            ;; answers with its DECLARING node's public name.
@@ -806,11 +690,10 @@
         ;; The kind is initialized `boundary` UNCONDITIONALLY, with no finish?
         ;; key: nothing has been consumed since either kind of call began, so an
         ;; error state reached with no jump taken reports a boundary at the
-        ;; current stream offset regardless of which call observes it. Keying
-        ;; this on finish? made both lanes report `eof` at the default-EOF arm
-        ;; and made that arm's own literal observationally identical to the
-        ;; inherited variable -- agreement bought by making the difference
-        ;; unobservable, which is the repair AGENTS.md warns disarms its own test.
+        ;; current stream offset regardless of which call observes it. Keying this
+        ;; on finish? made both lanes report `eof` at the default-EOF arm and made
+        ;; that arm's own literal observationally identical to the inherited
+        ;; variable -- agreement bought by making the difference unobservable.
         "    (let loop ((pos start) (st state) (off offset) (pk (quote boundary)))\n"
         "      (case st\n"
         (let loop ((i 0) (acc ""))
@@ -825,6 +708,9 @@
         (number->string entry) " exec (quote #(#(" fields ") #(" cbs ") #("
         snames "))))))\n"))))
 
+  ;; emit-machine : Compilation Symbol Port -> Any
+  ;; Writes the rendered bytes to the binary output port; returns an
+  ;; emission-metadata vector carrying the fingerprint and byte length.
   (define (emit-machine compilation binding port)
     (let ((bytes (render-machine compilation binding)))
       (put-bytevector port bytes)
