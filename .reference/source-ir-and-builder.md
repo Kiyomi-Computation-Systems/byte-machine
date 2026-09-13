@@ -78,6 +78,30 @@ end of input.
 node); `mismatch` is an `make-edge`. No case may be a proper prefix of another
 (the verifier rejects `ambiguous-sequence-prefix`).
 
+**Keyword table** — match one of a set of keywords, *tolerating* proper prefixes
+(unlike sequence dispatch), optionally case-insensitively.
+
+```
+(make-keyword-table-node name entries no-match eof-target case-insensitive? label)
+(make-keyword-entry bytes target label)
+```
+
+`entries` is a non-empty list of `make-keyword-entry` (each a list of byte values
+and a target node). The walk is greedy and forward with no backtracking: it
+follows the longest live keyword path and accepts a keyword only when the next
+byte cannot extend the path and the walk sits on a keyword terminal — so `GET`
+and `GET-PARAMETER` may both be entries (the longer wins when the input reaches
+it; `GET` followed by a non-extending byte takes the short keyword, leaving that
+byte). The matched keyword's span closes at its own length; the byte that closed
+it is **not** consumed. `no-match` is an `make-edge` taken when no keyword
+matches; `eof-target` is a node name (or `#f` for the machine default) taken when
+end of input arrives mid-table — a keyword is never accepted at EOF, since no
+byte has closed it. When `case-insensitive?` is true the match folds ASCII
+letters (`A`–`Z` ↔ `a`–`z`) and nothing else, per table; the verifier rejects two
+entries that are identical bytes (`duplicate-keyword`). See
+[decisions 0043–0045](../.decisions/) for the node kind, its compact-table
+lowering, and the fold.
+
 **Terminals and control.**
 
 ```

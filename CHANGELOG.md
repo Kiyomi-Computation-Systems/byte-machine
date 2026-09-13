@@ -6,7 +6,42 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Milestone 11 — the keyword-table node kind (targets 0.3.0)
+
+**Added (Slice ①): a `keyword-table` node kind.** A fourteenth IR node kind that
+matches one of a set of keywords, *tolerating* proper prefixes — `GET` and
+`GET-PARAMETER` may both be entries, and the longer wins when the input reaches
+it (`GET` followed by a non-extending byte takes the short keyword, leaving that
+byte) — and, per table, folding ASCII case. Construct it through
+`(byte-machine graph)`:
+
+```
+(make-keyword-table-node name entries no-match eof-target case-insensitive? label)
+(make-keyword-entry bytes target label)
+```
+
+The walk is greedy, forward, and never backtracks; a matched keyword's span
+closes at its own length (the closing byte is not consumed); at end of input a
+parked table takes its `eof-target` rather than any keyword. When
+`case-insensitive?` is true the match folds `A`–`Z` ↔ `a`–`z` and nothing else;
+the verifier rejects two byte-identical entries (`duplicate-keyword`). The
+interpreter and the generated parser are proved equivalent over the mechanism by
+`byte-machine.differential.keyword-table`, and the interpreter's own walk is
+pinned absolutely by `byte-machine.unit.keyword-table`. See
+[the source-IR reference](.reference/source-ir-and-builder.md#nodes) and
+decisions 0043–0045.
+
+**Generated-parser ABI bumped 5 → 6.** The node lowers to a single compact table
+walked at run time by the new `byte-machine-keyword-step/v1` runtime op (decision
+0044), not to one dispatch state per prefix. A machine that uses no keyword table
+still emits a byte-identical parser but for the ABI version literal; a
+version-5 generated library and a version-6 runtime refuse each other. All six
+existing determinism goldens are re-baselined to the version-6 literal, and a
+seventh golden (a keyword table) is added.
+
+_Deferred to later slices: per-table case-insensitivity's folded-collision
+diagnostic and the HTTP-header demonstration (Slice ②); span composition and the
+47-keyword before/after size measurement (Slice ③)._
 
 ## [0.2.0] - 2026-09-13
 

@@ -610,7 +610,11 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
                 "BYTE_MACHINE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-one-byte.golden.sls"
                 "BYTE_MACHINE_HTTP_VERSION_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-http-version.golden.sls"
                 "BYTE_MACHINE_ACCUMULATE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-accumulate.golden.sls"
-                "BYTE_MACHINE_COUNTED_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-counted.golden.sls")
+                "BYTE_MACHINE_COUNTED_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-counted.golden.sls"
+                # Milestone 11 Slice ①: the keyword-table determinism pass reads
+                # its committed golden the same way, so the ABI-literal mutation's
+                # baseline is green rather than a missing-env failure.
+                "BYTE_MACHINE_KEYWORD_TABLE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-keyword-table.golden.sls")
 endif()
 
 # --- Provenance ------------------------------------------------------------
@@ -2177,3 +2181,89 @@ byte_machine_add_scheme_lane(
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/pause-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/member3-drift-tests.sps"
   TIMEOUT 120)
+
+# --- Milestone 11 Slice ①: the keyword-table node kind -----------------------
+# A new IR node kind (decision 0043) that matches a set of keywords tolerating
+# proper prefixes (GET vs GET-PARAMETER) and, per table, case-insensitively
+# (decision 0045's fold). It lowers to ONE compact table state walked by
+# `byte-machine-keyword-step/v1` (decision 0044), not a trie of dispatch states.
+# The two fixtures carry the same keyword set and differ only in the fold flag,
+# so the differential can show the case-sensitive table refusing a mixed-case
+# name the case-insensitive one accepts, with nothing else changed.
+
+# The interpreter-absolute oracle. Absolute rather than differential because both
+# executors read the same source IR: a walk-logic defect in the interpreter's own
+# kw-step (derived independently, decision 0015) is invisible to a comparison and
+# visible here.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.keyword-table.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/keyword-interpret-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/keyword-table-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/keyword-interpret-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.keyword-table.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/keyword-interpret-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_ALL}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/keyword-table-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/keyword-interpret-tests.sps"
+  TIMEOUT 120)
+
+# interpreter ≡ generated over the compact-table lowering. Every group but the
+# exhaustive byte sweep also asserts the generated side absolutely, so a fold or
+# walk mutation that hit both lanes identically cannot pass by agreement alone.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.keyword-table.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-keyword-table-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/keyword-table-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-keyword-table-tests.sps"
+  TIMEOUT 180)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.keyword-table.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-keyword-table-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/keyword-table-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-keyword-table-tests.sps"
+  TIMEOUT 180)
+
+# --- Milestone 11 Slice ①: determinism against a committed golden (keyword-table)
+# The SEVENTH golden, on the counted golden's reasoning: a keyword-table node
+# renders an arm no other golden contains -- the tag-15 compact table datum, the
+# keyword-step op, the resumable compound `current`, and the per-table fold byte
+# -- so a determinism claim about emission that excluded it would be a claim
+# about the other six machines. The case-insensitive fixture is the golden
+# because it is the strictly richer render (it carries the fold datum the
+# case-sensitive table omits).
+byte_machine_add_scheme_lane(
+  NAME byte-machine.determinism.keyword-table.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/determinism-keyword-table-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/keyword-table-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/determinism-keyword-table-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_KEYWORD_TABLE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-keyword-table.golden.sls")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.determinism.keyword-table.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/determinism-keyword-table-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/keyword-table-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/determinism-keyword-table-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_KEYWORD_TABLE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-keyword-table.golden.sls")

@@ -7,8 +7,9 @@ concerns, and a message.
 
 **This catalog is derived, not hand-maintained.** The authoritative code set is
 computed by `test/common/diagnostic-census-tests.sps`, which reads `verify.sls`
-as a datum and walks every `(make-diagnostic … )` site — **thirty codes over
-fifty-six sites** at v0.1. That lane also asserts the code set here matches the
+as a datum and walks every `(make-diagnostic … )` site — thirty codes over
+fifty-six sites at v0.1, **thirty-one over fifty-seven** since Milestone 11 added
+the `duplicate-keyword` code. That lane also asserts the code set here matches the
 census, so a code added to `verify.sls` (or dropped from it) fails until this list
 is updated; the catalog cannot silently drift from the verifier. Per-site counts
 live in that lane, the single place they are pinned.
@@ -29,6 +30,8 @@ The codes are grouped by the verifier pass that raises them.
 - `overlapping-cases` — two byte-dispatch cases match a common byte.
 - `ambiguous-sequence-prefix` — one sequence-dispatch case is a proper prefix of
   another.
+- `duplicate-keyword` — two keyword-table entries have the same bytes. Proper
+  prefixes are permitted; an exact duplicate is not.
 
 ## Fields (pass-schema)
 
@@ -82,5 +85,5 @@ The codes are grouped by the verifier pass that raises them.
 
 ---
 
-*Thirty codes. If this list and `verify.sls` disagree, `diagnostic-census-tests`
+*Thirty-one codes. If this list and `verify.sls` disagree, `diagnostic-census-tests`
 fails by name — see the [grammar-author testing guide](grammar-author-testing-guide.md).*

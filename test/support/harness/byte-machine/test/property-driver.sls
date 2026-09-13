@@ -300,6 +300,7 @@
   (define counter-specs
     (append
      (list (nk-spec 'byte-dispatch "reaches") (nk-spec 'sequence-dispatch "reaches")
+           (nk-spec 'keyword-table "reaches")
            (nk-spec 'stop "reaches") (nk-spec 'error "reaches")
            (nk-spec 'field-action "reaches") (nk-spec 'field-branch "reaches")
            (nk-spec 'callback "reaches") (nk-spec 'span-start "reaches")
@@ -377,7 +378,7 @@
            (let ((sn (tup-state t)))            ; the current node after this step
              (let ((k (assq sn decoder)))
                (when k (case (cdr k)
-                         ((byte-dispatch sequence-dispatch counted-consume span-start span-end callback field-branch field-action) (note! (cdr k)))
+                         ((byte-dispatch sequence-dispatch keyword-table counted-consume span-start span-end callback field-branch field-action) (note! (cdr k)))
                          (else #f)))))
            (let ((e (tup-error t)))             ; overflow: error node-name = an accumulate node's overflow error
              (when (and e (pair? e)) (when (memq (list-ref e 3) (accumulate-overflow-nodes m)) (note! 'accumulate-overflow))))))

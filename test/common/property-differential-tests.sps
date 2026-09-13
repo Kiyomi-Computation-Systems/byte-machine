@@ -69,7 +69,8 @@
 
 (define machine-count 64)
 (define floor-literal 32)   ; 0033 item 2: no lower than half the machine count;
-                            ; measured through this lane and this generator = 36.
+                            ; measured through this lane and this generator = 41
+                            ; (was 36 before Milestone 11 added keyword-table to the draw table).
 (define tmpdir
   (let ((d (adapter-environment-variable "BYTE_MACHINE_TEST_TMPDIR")))
     (if (and d (not (string=? d ""))) d
@@ -250,9 +251,9 @@
      ;; NEVER from the counter table's length, and registered in THIS case so it
      ;; fails under the floor mutant (in the second case it would be skipped by the
      ;; very condition it exists to witness).
-     (check-equal "the counter pass ran over the measured accepted machines" accepted-count 36)))
+     (check-equal "the counter pass ran over the measured accepted machines" accepted-count 41)))
 
-  ;; ---- SECOND harness-case: the 96 counter checks, entered only when the floor
+  ;; ---- SECOND harness-case: the 98 counter checks, entered only when the floor
   ;; held (F12). A rejects-everything mutant fails the floor and this case emits
   ;; NONE of the member labels, so every per-member pin resolves to one record. ----
   (harness-case "counters"
@@ -267,7 +268,7 @@
           (counter-keys))
          ;; both needed, neither catches the other: the literal catches a table
          ;; that silently shrank, the derived total a loop that stopped early.
-         (check-equal "the counter pass asserted ninety-six checks" asserted 96)
+         (check-equal "the counter pass asserted ninety-eight checks" asserted 98)
          (check-equal "and the counter table's length agrees" asserted (* 2 (length (counter-keys))))))))
 
   ;; ---- Layer 2/3 fixture validation (Task 5 Steps 2-4). The three comparison
@@ -308,18 +309,23 @@
      ;; rows 1/2/4/5/6; a feed error "ZZ" exercises the sticky rows 1/3). spanbare's
      ;; row 6 is applicable with conjunct (iii) DROPPED (no span-complete callback).
      (check-equal "invariant-rows has six members" (length invariant-rows) 6)
-     (let ((covered '()) (all-none #t))
+     ;; first-violation captures check-invariants' own (rowN . detail), not a bare
+     ;; boolean, so a row inversion caught here NAMES its row (the accepted-machine
+     ;; check above may not exercise every row -- which draws reach a completing
+     ;; span is seed- and draw-table-dependent -- but these fixed fixtures always
+     ;; do, so every row-inversion pin has a deterministic, row-naming witness).
+     (let ((covered '()) (first-violation 'none))
        (define (drive fx cm input)
          (for-each
           (lambda (r)
             (let-values (((v app) (check-invariants fx (fx-steps r) input (fx-span r))))
-              (unless (eq? v 'none) (set! all-none #f))
+              (when (and (eq? first-violation 'none) (not (eq? v 'none))) (set! first-violation v))
               (for-each (lambda (row) (unless (memq row covered) (set! covered (cons row covered)))) app)))
           (obs fx cm input)))
        (drive spanfull cm-full (bs 50 58 65 66 44))
        (drive spanfull cm-full (bs 90 90))
        (drive spanbare cm-bare (bs 50 58 65 66 44))
-       (check "check-invariants holds on every fixture schedule" all-none)
+       (check-equal "check-invariants holds on every fixture schedule" first-violation 'none)
        (for-each (lambda (row)
                    (check (string-append "layer-3 " (symbol->string row) " is applicable at least once")
                           (and (memq row covered) #t)))
@@ -351,7 +357,7 @@
        ;; (both needed: the set-equal catches a member swap, the count catches a
        ;; co-drift where source and table drop the same member together).
        (check-equal "the node-kind draw table covers exactly ir.sls's node? kinds" node-src (sortsym node-kind-draw-table))
-       (check-equal "ir.sls declares thirteen node kinds" (length node-src) 13)
+       (check-equal "ir.sls declares fourteen node kinds" (length node-src) 14)
        (check-equal "the matcher draw table covers exactly ir.sls's matcher kinds" matcher-src (sortsym matcher-kind-draw-table))
        (check-equal "ir.sls declares four matcher kinds" (length matcher-src) 4)
        (check-equal "the field-operation draw table covers exactly ir.sls's field-operations" (sortsym ops-src) (sortsym field-operation-draw-table))

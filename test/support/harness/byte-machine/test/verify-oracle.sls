@@ -55,6 +55,9 @@
      ((sequence-dispatch-node? n)
       (append (map sequence-case-target (sequence-dispatch-node-cases n))
               (list (edge-target (sequence-dispatch-node-mismatch n)))))
+     ((keyword-table-node? n)
+      (append (map keyword-entry-target (keyword-table-node-entries n))
+              (list (edge-target (keyword-table-node-no-match n)))))
      ((pause-node? n) (list (pause-node-continuation n)))
      ((field-action-node? n)
       (append (list (field-action-node-next n)) (sym (field-action-node-error n))))
@@ -75,6 +78,7 @@
   (define (eof-target-of n)
     (cond ((byte-dispatch-node? n) (byte-dispatch-node-eof-target n))
           ((sequence-dispatch-node? n) (sequence-dispatch-node-eof-target n))
+          ((keyword-table-node? n) (keyword-table-node-eof-target n))
           ((integer-accumulate-node? n) (integer-accumulate-node-eof-target n))
           ((counted-consume-node? n) (counted-consume-node-eof-target n))
           (else #f)))
@@ -84,7 +88,7 @@
   ;; input-reading nodes CONSUME a byte to advance; a parser can be PARKED on one
   ;; at EOF (0023). The zero-width kinds and terminals cannot be parked.
   (define (input-reading? n)
-    (or (byte-dispatch-node? n) (sequence-dispatch-node? n)
+    (or (byte-dispatch-node? n) (sequence-dispatch-node? n) (keyword-table-node? n)
         (integer-accumulate-node? n) (counted-consume-node? n)))
 
   ;; ---- reachability walks ---------------------------------------------------
@@ -254,6 +258,11 @@
      ((sequence-dispatch-node? n)
       (if (eq? (edge-mode (sequence-dispatch-node-mismatch n)) 'reexecute)
           (list (edge-target (sequence-dispatch-node-mismatch n))) '()))
+     ((keyword-table-node? n)
+      ;; only the no-match edge can be reexecute; a keyword-take consumes the
+      ;; keyword's bytes first, so those targets make progress (sequence's rule).
+      (if (eq? (edge-mode (keyword-table-node-no-match n)) 'reexecute)
+          (list (edge-target (keyword-table-node-no-match n))) '()))
      ((pause-node? n) (list (pause-node-continuation n)))
      ((field-action-node? n) (append (list (field-action-node-next n)) (sym (field-action-node-error n))))
      ((field-branch-node? n) (list (field-branch-node-true-target n) (field-branch-node-false-target n)))

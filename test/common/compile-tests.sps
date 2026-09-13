@@ -21,7 +21,7 @@
               byte-dispatch-node? sequence-dispatch-node? stop-node? error-node?
               finish-node? pause-node? field-action-node? field-branch-node?
               integer-accumulate-node? callback-node? span-start-node? span-end-node?
-              counted-consume-node? span-end-node-span span-declaration-name
+              counted-consume-node? keyword-table-node? span-end-node-span span-declaration-name
               span-declaration-complete-callback)
         (byte-machine compile))
 
@@ -205,7 +205,7 @@
         ;; `parser-state-name` reads. So the literal reads 5 and a zero-field
         ;; machine renders #(#() #() #(<its state names>)).
         (check "unversioned call"
-               (has? "(byte-machine-make-compiled-machine 5 14095574568398596535 0 exec (quote #(#() #() #(start stop reject))))"))
+               (has? "(byte-machine-make-compiled-machine 6 14095574568398596535 0 exec (quote #(#() #() #(start stop reject))))"))
         (check "no versioned name survives"
                (not (has? "byte-machine-make-compiled-machine/v")))))
     ;; Milestone 4 Slice ①b task 6 (decision 0019 item 3(b)). Member 0 stops
@@ -358,7 +358,7 @@
 ;; --- Milestone 7 Slice ④: the §16.2:910 structural witness (design §4.8, F10) --
 ;;
 ;; §25:1617's discharge and §4.12 item 1's witness: NO declared name becomes a
-;; generated identifier. Over an every-construct machine (all thirteen node kinds,
+;; generated identifier. Over an every-construct machine (all fourteen node kinds,
 ;; a span with a complete callback so the span-completion arm fires) hand-built in
 ;; this file's style, because the compile lane has neither the generator nor the
 ;; printer (F10). Its totality is a DERIVED row against the emitter's arms.
@@ -385,7 +385,10 @@
       (make-sequence-dispatch-node 'n-sd
         (list (make-sequence-case '(66 67) 'n-cc #f))
         (make-edge 'n-stop 'advance) 'n-fin #f)
-      (make-counted-consume-node 'n-cc 'fld 'n-acc 'n-fin #f)
+      (make-counted-consume-node 'n-cc 'fld 'n-kw 'n-fin #f)
+      (make-keyword-table-node 'n-kw
+        (list (make-keyword-entry '(68) 'n-acc #f))
+        (make-edge 'n-err 'reexecute) 'n-fin #f #f)
       (make-integer-accumulate-node 'n-acc 'fld 10 'n-acc (make-edge 'n-pause 'reexecute) 'n-err 'n-fin #f)
       (make-pause-node 'n-pause 'n-cb #f)
       (make-callback-node 'n-cb 'dc 'n-err '((a n-err) (b n-err)) 'n-err #f)
@@ -447,6 +450,7 @@
         (cons 'span-end        (lambda () (w910-any-node? span-end-node?)))
         (cons 'span-completion  w910-has-span-completion?)
         (cons 'counted-consume (lambda () (w910-any-node? counted-consume-node?)))
+        (cons 'keyword-table   (lambda () (w910-any-node? keyword-table-node?)))
         (cons 'dispatch        (lambda () (or (w910-any-node? byte-dispatch-node?)
                                               (w910-any-node? sequence-dispatch-node?))))))
 
@@ -481,7 +485,7 @@
       (lambda ()
         ;; found-it guards first: a reader returning #f would compare two empties.
         (check "render-state-arm's kind case was found in compile.sls" (pair? emitter-keys))
-        (check-equal "the emitter has thirteen state-kind arms" (length emitter-keys) 13)
+        (check-equal "the emitter has fourteen state-kind arms" (length emitter-keys) 14)
         (check "the witness rendered to a generated library form"
                (and (pair? w910-lib) (eq? (car w910-lib) 'library)))
         ;; the hand-written map's keys set-equal the emitter's keys.

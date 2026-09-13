@@ -38,7 +38,8 @@
           ;; code. `parser-active-span` is NOT one of them: no emitted text names
           ;; it.
           byte-machine-span-open/v1 byte-machine-span-fragment-step/v1
-          byte-machine-span-close/v1)
+          byte-machine-span-close/v1
+          byte-machine-keyword-step/v1)
   (import (rnrs)
           (byte-machine private conditions)
           (byte-machine private names))
@@ -82,11 +83,19 @@
   ;; answerable in the generated lane at all, and there is no other transport for
   ;; it: the emitted library exports one name and the constructor's arguments are
   ;; the only channel.
-  (define current-abi-version 5)
-  ;; How many payload members ABI 5 defines: field declarations, the callback
-  ;; declaration table, and the state-id to source-name table. Named beside the
-  ;; version because the two move together -- growing the payload is a version
-  ;; bump -- and read by the single length guard below.
+  ;; 6 since Milestone 11 (decision 0044): the keyword-table node lowers to a new
+  ;; normalized state whose emitted arm calls `byte-machine-keyword-step` here, a
+  ;; runtime binding generated code did not depend on at ABI 5. A generated
+  ;; library that calls it must be refused by an older runtime with the clean
+  ;; ABI-mismatch condition rather than an unbound-identifier error, so the
+  ;; contract change is a version bump -- §9.5:444.
+  (define current-abi-version 6)
+  ;; How many payload members ABI 6 defines: field declarations, the callback
+  ;; declaration table, and the state-id to source-name table. The keyword-table
+  ;; op adds no payload member -- its table rides the emitted state datum, not the
+  ;; compiled-machine metadata -- so this stays 3 while the version moves. Named
+  ;; beside the version because the two move together -- growing the payload is a
+  ;; version bump -- and read by the single length guard below.
   (define current-abi-members 3)
   ;; ABI payload member 1: the callback declaration table the generated lane
   ;; resolves bindings against. `#()` for a machine declaring none.
@@ -450,7 +459,11 @@
       (byte-machine-contract-violation 'parser-state-name 'invalid-argument parser))
     (case (parser-variant parser)
       ((op) ((parser-executor parser) 'state-name (parser-current parser)))
-      ((v2) (vector-ref (parser-state-names parser) (parser-current parser)))
+      ;; `current` is a state id, or the compound (state-id . path) while a parser
+      ;; is parked mid keyword-table (decision 0044); index by the id either way,
+      ;; as the interpreter's own `state-name` message unwraps the pair.
+      ((v2) (let ((c (parser-current parser)))
+              (vector-ref (parser-state-names parser) (if (pair? c) (car c) c))))
       ;; Unreachable for the same reason make-parser's own else arm is.
       (else (assertion-violation 'parser-state-name "unknown parser variant"
                                  (parser-variant parser)))))
@@ -663,6 +676,50 @@
       (if (or (>= from to) (unbound-callback? f))
           (list 'goto continue)
           (span-fragment-deliver! parser state offset f bv from to continue))))
+
+  ;; The resumable keyword-table walk (decision 0044). The keyword-table node
+  ;; lowers to ONE emitted arm that embeds its entries as data and calls this,
+  ;; rather than to a trie of dispatch states -- which is what makes 47 keywords a
+  ;; table, not 242 states, and is the whole point of the construct.
+  ;;
+  ;; `entries` is a list of (byte-list . target-id) with proper prefixes
+  ;; permitted; `no-match` a (target-id . mode) pair; `path` the bytes already
+  ;; consumed -- empty on fresh entry, the parked prefix on resume from a compound
+  ;; `current`. It walks [pos,end) greedily forward with NO backtracking: while the
+  ;; next byte extends toward some keyword it is consumed; at the first byte that
+  ;; does not, PATH's keyword is taken if PATH is one (the delimiter left unread,
+  ;; so a span closes at the keyword's length), else the no-match route. Answers
+  ;;   (jump target new-pos pk)  -- a decision reached; the arm loops to `target`
+  ;;   (need new-path new-pos)   -- the feed ran out mid-table; the arm parks the
+  ;;                                compound (state-id . new-path) and returns
+  ;;                                need-input, or takes the eof route under finish?.
+  ;; `ci?` folds ASCII case per table (decision 0045). Written twice on purpose --
+  ;; the interpreter's own fold is separate, so a fold defect is a differential
+  ;; result rather than a hidden agreement.
+  (define (kw-fold b ci?) (if (and ci? (>= b 65) (<= b 90)) (+ b 32) b))
+  (define (kw-prefix? ci? p bs)
+    (cond ((null? p) #t)
+          ((null? bs) #f)
+          ((= (kw-fold (car p) ci?) (kw-fold (car bs) ci?)) (kw-prefix? ci? (cdr p) (cdr bs)))
+          (else #f)))
+  ;; byte-machine-keyword-step/v1 : (Listof (Pair (Listof Byte) StateId)) (Pair StateId EdgeMode) Boolean (Listof Byte) Bytevector ExactInteger ExactInteger -> (U (List 'jump StateId ExactInteger Symbol) (List 'need (Listof Byte) ExactInteger))
+  (define (byte-machine-keyword-step/v1 entries no-match ci? path bv pos end)
+    (let walk ((p path) (i pos))
+      (if (>= i end)
+          (list 'need p i)
+          (let ((np (append p (list (bytevector-u8-ref bv i)))))
+            (if (exists (lambda (e) (kw-prefix? ci? np (car e))) entries)
+                (walk np (+ i 1))
+                (let ((term (let seek ((es entries))
+                              (cond ((null? es) #f)
+                                    ((and (= (length (car (car es))) (length p))
+                                          (kw-prefix? ci? p (car (car es))))
+                                     (car es))
+                                    (else (seek (cdr es)))))))
+                  (cond (term (list 'jump (cdr term) i (quote byte)))
+                        ((eq? (cdr no-match) (quote advance))
+                         (list 'jump (car no-match) (+ i 1) (quote boundary)))
+                        (else (list 'jump (car no-match) i (quote byte))))))))))
 
   ;; The boundary flush. It runs at the ONE seam both lanes cross -- after the
   ;; executor has answered and before `parser-feed!` records the lifecycle --

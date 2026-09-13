@@ -283,10 +283,10 @@
 ;; what they do, so a lane asserting the accessor names something checkable.
 (define stub-names (vector 's0 's1 's2 's3))
 (define (v2-machine)
-  (byte-machine-make-compiled-machine 5 99 0 stub-exec
+  (byte-machine-make-compiled-machine 6 99 0 stub-exec
                                       (vector (vector) (vector) stub-names)))
 (define (v2-pause-machine)
-  (byte-machine-make-compiled-machine 5 99 3 stub-exec
+  (byte-machine-make-compiled-machine 6 99 3 stub-exec
                                       (vector (vector) (vector) stub-names)))
 
 ;; Milestone 4 Slice ①a task 3 retired the whole 'v1 feed-only executor path.
@@ -454,12 +454,12 @@
                                       (eq? (condition-who e)
                                            'byte-machine-make-compiled-machine)))
                                (lambda () (byte-machine-make-compiled-machine
-                                           5 99 0 stub-exec payload))))))
+                                           6 99 0 stub-exec payload))))))
           (short-refused (vector (vector)))
           (short-refused (vector (vector) (vector))))
         (check "and a three-member payload is accepted"
                (compiled-machine? (byte-machine-make-compiled-machine
-                                   5 99 0 stub-exec
+                                   6 99 0 stub-exec
                                    (vector (vector) (vector) stub-names))))))))
 
 (harness-group "callback failure values (§13:808, decision 0024)"
@@ -505,13 +505,13 @@
   (lambda ()
     (harness-case "the superseded version is refused and the current one accepted"
       (lambda ()
-        (check-raises "abi 4 refused" assertion-violation?
+        (check-raises "abi 5 refused" assertion-violation?
                       (lambda () (byte-machine-make-compiled-machine
-                                  4 99 0 stub-exec
+                                  5 99 0 stub-exec
                                   (vector (vector) (vector) stub-names))))
-        (check "abi 5 accepted"
+        (check "abi 6 accepted"
                (compiled-machine? (byte-machine-make-compiled-machine
-                                   5 99 0 stub-exec
+                                   6 99 0 stub-exec
                                    (vector (vector) (vector) stub-names))))))
     (harness-case "the version check precedes every other guard"
       (lambda ()
@@ -531,11 +531,11 @@
                       (lambda () (byte-machine-make-compiled-machine 2 99 0 'not-a-procedure #f)))
         (check-raises "a non-vector payload is refused at the current version"
                       (irritant-is #f)
-                      (lambda () (byte-machine-make-compiled-machine 5 99 0 stub-exec #f)))
+                      (lambda () (byte-machine-make-compiled-machine 6 99 0 stub-exec #f)))
         (check-raises "an empty payload has no member 0"
                       (irritant-is (vector))
                       (lambda () (byte-machine-make-compiled-machine
-                                  5 99 0 stub-exec (vector))))))))
+                                  6 99 0 stub-exec (vector))))))))
 
 ;; Milestone 5 Slice ②: the member-2 guard, on the ABI-4 guard's own precedent.
 ;; Each states the minimum ONE version introduced, so a payload short by one

@@ -236,6 +236,17 @@
       (lambda (m) (build (edit (->d m) '(make-machine) 1 (machine-name m) 2 (q 'zz-ghost-entry))))
       (lambda (m) m)
       (lambda (m) (list (cons 'missing-target 'zz-ghost-entry))))
+     ;; Milestone 11: an exact duplicate keyword. dup-first duplicates the first
+     ;; keyword entry in the keyword-table's entries (list ...) operand (position 2).
+     (make-corruption-entry
+      'dup-keyword ':894
+      (lambda (m) (and (first-node-of m keyword-table-node?) #t))
+      (lambda (m) (let ((n (first-node-of m keyword-table-node?)))
+                    (build (dup-first (->d m) '(make-keyword-table-node) 1
+                                      (keyword-table-node-name n) 2))))
+      identity-twin
+      (lambda (m) (list (cons 'duplicate-keyword
+                              (keyword-table-node-name (first-node-of m keyword-table-node?))))))
      ;; :888 missing error declaration -- an error node names an undeclared error.
      (make-corruption-entry
       'missing-error-declaration ':888

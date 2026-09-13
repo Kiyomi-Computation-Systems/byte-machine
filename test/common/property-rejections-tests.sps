@@ -237,8 +237,8 @@
                (sentinel (uniq (append entry-codes unconstructible-codes)))
                (census (census-codes)))
           (check "the sentinel set-equals the census's derived code set" (set=? sentinel census))
-          (check-equal "and the census derives exactly thirty codes" (length census) 30)
-          (check-equal "and the sentinel is exactly thirty codes" (length sentinel) 30))))))
+          (check-equal "and the census derives exactly thirty-one codes" (length census) 31)
+          (check-equal "and the sentinel is exactly thirty-one codes" (length sentinel) 31))))))
 
 ;; ---- F5 row 2: the refusal table (Task 3 Step 7) -----------------------------
 (harness-group "the constructor refusals still refuse"
@@ -313,10 +313,10 @@
     (harness-case (string-append "sentinels" (seed-label seed))
       (lambda ()
         (check-equal "the property draw yields the differential lane's accepted literal"
-                     (length accepted) 36)
+                     (length accepted) 41)
         (check-equal "every property draw was accepted or rejected"
                      (+ (length accepted) (length rejections)) machine-count)
-        (check-equal "the entry table has thirty entries" (length corruption-entries) 30)
+        (check-equal "the entry table has thirty-one entries" (length corruption-entries) 31)
         ;; the (machine, entry) pairs actually driven equals the sum of per-entry counts.
         (check-equal "the (machine,entry) pairs driven equal the sum of per-entry counts"
                      (length corruptions)
