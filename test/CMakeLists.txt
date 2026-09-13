@@ -2294,3 +2294,52 @@ byte_machine_add_scheme_lane(
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/keyword-header-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/differential-keyword-header-tests.sps"
   TIMEOUT 180)
+
+# --- Milestone 11 Slice ③: span composition (criterion 5) ---------------------
+# A method span opened before a keyword table closes at the matched keyword's
+# length (span[method]="MKCOL" from six bytes of MKCOLA); interpreter ≡ generated
+# with the delivered span DATA asserted absolutely on the generated side.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.keyword-span.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-keyword-span-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/keyword-span-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-keyword-span-tests.sps"
+  TIMEOUT 180)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.keyword-span.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-keyword-span-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/keyword-span-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-keyword-span-tests.sps"
+  TIMEOUT 180)
+
+# --- Milestone 11 Slice ③: the emitted-size measurement (criterion 7) ---------
+# The 47 llhttp methods as ONE keyword-table node vs the equivalent 242-node
+# byte-dispatch trie, both rendered through the emitter; the compact table emits
+# ~34x fewer bytes. Labelled `unit` (an absolute self-contained measurement); an
+# invented layer would be rejected by the closed layer vocabulary at configure.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.keyword-size.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/unit-keyword-size-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/keyword-method-table.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/unit-keyword-size-tests.sps"
+  TIMEOUT 180)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.unit.keyword-size.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/unit-keyword-size-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/keyword-method-table.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/unit-keyword-size-tests.sps"
+  TIMEOUT 180)

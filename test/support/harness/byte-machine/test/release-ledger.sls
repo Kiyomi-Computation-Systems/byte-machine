@@ -156,25 +156,29 @@
       ("§27:1701" "changelog"                                        #t (five))))
 
   ;; §4.5 — the version surface. The CURRENT release string has ONE owner (the
-  ;; value here) and a mirror rule: every surface below carries it. Milestone 10
-  ;; (empty-span observability, decision 0042) bumps it to `0.2.0`; the `§26`/`§27`
-  ;; census above is UNCHANGED — those are the release exit criteria (the append
-  ;; rule freezes them, the empty-span behaviour adds no criterion row, and every
-  ;; one still holds, the two amended still the CI-blocked pair), so the ledger
-  ;; keeps checking them while this value tracks the release they were met for.
-  ;; The `(byte-machine version)` export stays DECLINED (§4.9 item 3): the public
-  ;; surface adds no name — Milestone 10's only src/ change was runtime.sls
-  ;; internals — so `release-version-export?` is #f and the leak sweep asserts no
-  ;; public library exports a `version` name. `current-abi-version` (5,
-  ;; runtime.sls) is the generated-runtime ABI — a different thing with a different
-  ;; lifecycle — and is deliberately NOT this value (it did not move at v0.2.0).
-  (define release-version "0.2.0")
+  ;; value here) and a mirror rule: every surface below carries it. Milestone 11
+  ;; (the keyword-table node kind, decisions 0043-0045) bumps it to `0.3.0`; the
+  ;; `§26`/`§27` census above is UNCHANGED — those are the release exit criteria
+  ;; (the append rule freezes them, the keyword table adds no criterion row, and
+  ;; every one still holds, the two amended still the CI-blocked pair), so the
+  ;; ledger keeps checking them while this value tracks the release they were met
+  ;; for. The `(byte-machine version)` export stays DECLINED (§4.9 item 3): no
+  ;; public library exports a `version` NAME, so `release-version-export?` is #f
+  ;; and the leak sweep asserts as much. (Milestone 11 DID add public API — the
+  ;; `keyword-table` node kind's `make-keyword-table-node`/`make-keyword-entry`
+  ;; through `(byte-machine graph)`, the first API addition since v0.1 — but that
+  ;; is a semver-minor's added constructors, not a version-string export.)
+  ;; `current-abi-version` (now 6, runtime.sls) is the generated-runtime ABI — a
+  ;; different thing with a different lifecycle — and is deliberately NOT this
+  ;; value (it moved 5->6 at v0.3.0 for the new keyword-step runtime op, whereas
+  ;; the semver release string tracks the public API).
+  (define release-version "0.3.0")
   (define release-version-export? #f)
   (define release-version-surfaces
-    '("CHANGELOG.md 0.2.0 entry (§26:1684)"
+    '("CHANGELOG.md 0.3.0 entry (§26:1684)"
       "README.org status paragraph"
       "the parent plan's dated disposition"
-      "the milestone-10-design.md status header"
+      "the milestone-11-design.md status header"
       "the git tag"))
 
   ;; --- accessors -----------------------------------------------------------
