@@ -397,8 +397,33 @@
           (check-equal "pe target" (normal-pause-target pe) 5))))
     (harness-case "the pause encoding is pinned by a fingerprint golden"
       (lambda ()
+        ;; Milestone 12: the shared pause machine's p1 and pe now declare reasons,
+        ;; so the pause encoding carries them and the golden re-baselines from the
+        ;; reason-less 17903327606435836645 -- the change is the point.
         (check-equal "pause fingerprint" (normal-machine-fingerprint n-pause)
-                     17903327606435836645)))))
+                     4328141021048275055)))
+    ;; Milestone 12: a pause reason enters the encoding (the decision-0019 rule),
+    ;; so two machines differing ONLY in a pause reason differ in fingerprint, and
+    ;; a reason-less pause is byte-identical to before the reason existed.
+    (harness-case "a pause reason changes the fingerprint; no reason leaves it unmoved"
+      (lambda ()
+        (define (pm reason)
+          (make-machine 'pfp 's0 '() '() '()
+            (list (make-error-declaration 'default-eof 'eof "eof" #f)
+                  (make-error-declaration 'rej 'unexpected-byte "rej" #f)
+                  (make-error-declaration 'r 'paused-x "why" #f))
+            (list (make-byte-dispatch-node 's0
+                    (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'p 'advance) #f))
+                    (make-edge 'e 'reexecute) #f #f)
+                  (if reason (make-pause-node 'p 's1 'r #f) (make-pause-node 'p 's1 #f))
+                  (make-byte-dispatch-node 's1
+                    (list (make-byte-case (make-exact-byte-matcher 2) (make-edge 'st 'advance) #f))
+                    (make-edge 'e 'reexecute) #f #f)
+                  (make-stop-node 'st #f) (make-error-node 'e 'rej #f))
+            'default-eof #f))
+        (check "reason changes the fingerprint"
+               (not (= (normal-machine-fingerprint (normalize (pm #t)))
+                       (normal-machine-fingerprint (normalize (pm #f))))))))))
 
 ;; Milestone 3 Slice ① Task 4 (decision 0014): a byte set, range or complement
 ;; lowers to ONE normalized transition per byte. Normalized IR gains no grouped

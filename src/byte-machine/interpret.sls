@@ -199,6 +199,25 @@
         (let ((d (lookup-error errors (error-node-error-name (lookup nodes name)))))
           (list (error-declaration-code d) (error-declaration-reason d)
                 name (declaration-index name))))
+      ;; The OPTIONAL pause reason (Milestone 12), for BOTH author-facing pause
+      ;; paths: a `pause` node's own reason and a `callback` node's (reported when
+      ;; its callback returns `callback-pause`). Same parts an error node's reason
+      ;; produces -- (code reason node-name state-id) -- resolved from the node's
+      ;; declared reason NAME, or #f when the node declares none (today's
+      ;; behaviour). A span-data/span-complete callback pause is NOT covered here
+      ;; (design §3.4): those are internal fragment-resumption steps, not
+      ;; author-declared pause points, and reach this only through a span node
+      ;; that has no reason -- so `node-reason` returns #f for them.
+      (define (node-reason node)
+        (cond ((pause-node? node) (pause-node-reason node))
+              ((callback-node? node) (callback-node-reason node))
+              (else #f)))
+      (define (pause-reason-parts name)
+        (let ((rname (node-reason (lookup nodes name))))
+          (and rname
+               (let ((d (lookup-error errors rname)))
+                 (list (error-declaration-code d) (error-declaration-reason d)
+                       name (declaration-index name))))))
       ;; A default-EOF error has no error node, so its node-name is the DISPATCH
       ;; node's -- the one whose EOF-target chain was exhausted, which is where
       ;; truncation was detected. `node` must be unwrapped first: for a lowered
@@ -520,5 +539,6 @@
            ((error-value) (error-parts (car args)))
            ((eof-target) (eof-target-of (car args)))
            ((pause-target) (pause-node-continuation (lookup nodes (car args))))
+           ((pause-reason) (pause-reason-parts (car args)))
            ((default-eof-value) (default-eof-parts (car args)))
            (else (byte-machine-contract-violation 'interpret 'internal msg))))))))

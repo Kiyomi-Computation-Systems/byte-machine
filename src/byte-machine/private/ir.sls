@@ -26,7 +26,7 @@
           make-stop-node stop-node? stop-node-name stop-node-source-label
           make-finish-node finish-node? finish-node-name finish-node-source-label
           make-pause-node pause-node? pause-node-name pause-node-continuation
-          pause-node-source-label
+          pause-node-reason pause-node-source-label
           make-error-node error-node? error-node-name error-node-error-name
           error-node-source-label
           machine-ir-version-of supported-ir-version
@@ -78,7 +78,8 @@
           make-callback-node callback-node?
           callback-node-name callback-node-callback
           callback-node-continue-target callback-node-branch-targets
-          callback-node-pause-continuation callback-node-source-label
+          callback-node-pause-continuation callback-node-reason
+          callback-node-source-label
           make-counted-consume-node counted-consume-node?
           counted-consume-node-name counted-consume-node-field
           counted-consume-node-next counted-consume-node-eof-target
@@ -353,19 +354,32 @@
   ;; One zero-width out-edge to `continuation`: pause reads no byte, so it has
   ;; no advance/reexecute mode (modes are defined only for byte reads).
   (define pause-node-tag (tag 'byte-machine-pause-node))
-  ;; make-pause-node : name:Symbol continuation:NodeName source-label:Label -> PauseNode
-  (define (make-pause-node name continuation source-label)
-    (require-symbol 'make-pause-node 'name name)
-    (require-symbol 'make-pause-node 'continuation continuation)
-    (vector pause-node-tag name continuation source-label))
+  ;; make-pause-node : name:Symbol continuation:NodeName [reason:(Option ErrorName)] source-label:Label -> PauseNode
+  ;; The OPTIONAL reason (Milestone 12) is a declared error-declaration NAME, or
+  ;; #f. `case-lambda` keeps the 3-arg arity, so no existing machine changes
+  ;; (M12 criterion 1); the reason is a leaf datum the verifier resolves and the
+  ;; normalizer carries -- it is NOT a node target, so it never enters
+  ;; `node-out-targets`, exactly as an error node's error name does not.
+  (define make-pause-node
+    (case-lambda
+      ((name continuation source-label)
+       (make-pause-node name continuation #f source-label))
+      ((name continuation reason source-label)
+       (require-symbol 'make-pause-node 'name name)
+       (require-symbol 'make-pause-node 'continuation continuation)
+       (unless (or (eq? reason #f) (symbol? reason))
+         (byte-machine-contract-violation 'make-pause-node 'invalid-argument 'reason))
+       (vector pause-node-tag name continuation reason source-label))))
   ;; pause-node? : Any -> Boolean
   (define (pause-node? x) (tagged? pause-node-tag x))
   ;; pause-node-name : PauseNode -> Symbol
   (define (pause-node-name n) (vector-ref n 1))
   ;; pause-node-continuation : PauseNode -> NodeName
   (define (pause-node-continuation n) (vector-ref n 2))
+  ;; pause-node-reason : PauseNode -> (Option ErrorName)
+  (define (pause-node-reason n) (vector-ref n 3))
   ;; pause-node-source-label : PauseNode -> Label
-  (define (pause-node-source-label n) (vector-ref n 3))
+  (define (pause-node-source-label n) (vector-ref n 4))
 
   ;; --- zero-width field nodes ---
   ;; Both are ZERO-WIDTH: they consume no byte.
@@ -699,31 +713,41 @@
   ;; verifier owns all three, and the comment on make-uint-field above states
   ;; what moving one of them here would cost.
   (define callback-node-tag (tag 'byte-machine-callback-node))
-  ;; make-callback-node : name:Symbol callback:Symbol continue-target:NodeName branch-targets:(Listof (List Symbol NodeName)) pause-continuation:NodeName source-label:Label -> CallbackNode
-  (define (make-callback-node name callback continue-target branch-targets
-                              pause-continuation source-label)
-    (require-symbol 'make-callback-node 'name name)
-    (require-symbol 'make-callback-node 'callback callback)
-    ;; Every invocation declares a continue target and a pause continuation.
-    ;; Both are mandatory symbols with no #f arm -- the field-branch precedent
-    ;; (an explicit target for every possible result), not the byte-dispatch
-    ;; eof-target one where #f means a default.
-    (require-symbol 'make-callback-node 'continue-target continue-target)
-    (require-symbol 'make-callback-node 'pause-continuation pause-continuation)
-    ;; An EMPTY branch list is legal here and is the ordinary event-callback
-    ;; shape: a callback node invokes one named event or decision callback, and
-    ;; only a decision has branch keys at all. Rejecting `'()` would make every
-    ;; event invocation unbuildable.
-    (unless (and (list? branch-targets)
-                 (for-all (lambda (b)
-                            (and (list? b) (= (length b) 2)
-                                 (symbol? (car b)) (symbol? (cadr b))))
-                          branch-targets))
-      (byte-machine-contract-violation 'make-callback-node
-                                       'invalid-argument 'branch-targets))
-    (vector callback-node-tag name callback continue-target
-            (map (lambda (b) (list (car b) (cadr b))) branch-targets)
-            pause-continuation source-label))
+  ;; make-callback-node : name:Symbol callback:Symbol continue-target:NodeName branch-targets:(Listof (List Symbol NodeName)) pause-continuation:NodeName [reason:(Option ErrorName)] source-label:Label -> CallbackNode
+  ;; The OPTIONAL reason (Milestone 12) is a declared error-declaration NAME, or
+  ;; #f, carried on the SECOND author-facing pause path: when this node's callback
+  ;; returns `callback-pause`, the runtime reports this reason. `case-lambda`
+  ;; keeps the 6-arg arity, so no existing machine changes (M12 criterion 1).
+  (define make-callback-node
+    (case-lambda
+      ((name callback continue-target branch-targets pause-continuation source-label)
+       (make-callback-node name callback continue-target branch-targets
+                           pause-continuation #f source-label))
+      ((name callback continue-target branch-targets pause-continuation reason source-label)
+       (require-symbol 'make-callback-node 'name name)
+       (require-symbol 'make-callback-node 'callback callback)
+       ;; Every invocation declares a continue target and a pause continuation.
+       ;; Both are mandatory symbols with no #f arm -- the field-branch precedent
+       ;; (an explicit target for every possible result), not the byte-dispatch
+       ;; eof-target one where #f means a default.
+       (require-symbol 'make-callback-node 'continue-target continue-target)
+       (require-symbol 'make-callback-node 'pause-continuation pause-continuation)
+       (unless (or (eq? reason #f) (symbol? reason))
+         (byte-machine-contract-violation 'make-callback-node 'invalid-argument 'reason))
+       ;; An EMPTY branch list is legal here and is the ordinary event-callback
+       ;; shape: a callback node invokes one named event or decision callback, and
+       ;; only a decision has branch keys at all. Rejecting `'()` would make every
+       ;; event invocation unbuildable.
+       (unless (and (list? branch-targets)
+                    (for-all (lambda (b)
+                               (and (list? b) (= (length b) 2)
+                                    (symbol? (car b)) (symbol? (cadr b))))
+                             branch-targets))
+         (byte-machine-contract-violation 'make-callback-node
+                                          'invalid-argument 'branch-targets))
+       (vector callback-node-tag name callback continue-target
+               (map (lambda (b) (list (car b) (cadr b))) branch-targets)
+               pause-continuation reason source-label))))
   ;; callback-node? : Any -> Boolean
   (define (callback-node? x) (tagged? callback-node-tag x))
   ;; callback-node-name : CallbackNode -> Symbol
@@ -736,8 +760,10 @@
   (define (callback-node-branch-targets n) (vector-ref n 4))
   ;; callback-node-pause-continuation : CallbackNode -> NodeName
   (define (callback-node-pause-continuation n) (vector-ref n 5))
+  ;; callback-node-reason : CallbackNode -> (Option ErrorName)
+  (define (callback-node-reason n) (vector-ref n 6))
   ;; callback-node-source-label : CallbackNode -> Label
-  (define (callback-node-source-label n) (vector-ref n 6))
+  (define (callback-node-source-label n) (vector-ref n 7))
 
   ;; --- span nodes ---
   ;; The pair that makes the machine hand out ranges of input it has already

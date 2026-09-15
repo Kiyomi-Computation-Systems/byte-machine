@@ -26,7 +26,8 @@
 ;;;                                 Label -> SequenceDispatchNode
 ;;;   make-stop-node   : Symbol Label -> StopNode
 ;;;   make-finish-node : Symbol Label -> FinishNode
-;;;   make-pause-node  : Symbol NodeName Label -> PauseNode
+;;;   make-pause-node  : Symbol NodeName [ErrorName] Label -> PauseNode
+;;;                      (the optional ErrorName is the pause's reason)
 ;;;   make-error-node  : Symbol ErrorName Label -> ErrorNode
 ;;;   make-field-action-node : Symbol FieldOperation (Listof (U Symbol ExactInteger))
 ;;;                            NodeName (Option NodeName) Label -> FieldActionNode
@@ -35,7 +36,8 @@
 ;;;   make-integer-accumulate-node : Symbol Symbol AccumulateBase NodeName Edge NodeName
 ;;;                                  (Option NodeName) Label -> IntegerAccumulateNode
 ;;;   make-callback-node : Symbol Symbol NodeName (Listof (List Symbol NodeName)) NodeName
-;;;                        Label -> CallbackNode
+;;;                        [ErrorName] Label -> CallbackNode
+;;;                        (the optional ErrorName is the callback-pause reason)
 ;;;   make-span-start-node : Symbol Symbol NodeName Label -> SpanStartNode
 ;;;   make-span-end-node   : Symbol Symbol NodeName Label -> SpanEndNode
 ;;;   make-counted-consume-node : Symbol Symbol NodeName (Option NodeName) Label

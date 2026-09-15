@@ -116,7 +116,7 @@
 ;; so that two rows moving in opposite directions cannot cancel.
 (define pinned-sites
   '((invalid-shape 2) (duplicate-name 1) (duplicate-error-declaration 1)
-    (missing-target 2) (missing-error-declaration 1) (invalid-field-declaration 2)
+    (missing-target 2) (missing-error-declaration 2) (invalid-field-declaration 2)
     (invalid-field-operand 7) (overlapping-cases 1) (ambiguous-sequence-prefix 1)
     (unreachable-node 1) (zero-progress-cycle 1) (invalid-eof-target 2)
     (non-eof-into-finish 2) (eof-reachable-stop 1) (eof-zero-progress-cycle 1)
@@ -605,18 +605,21 @@
                      (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b)))
                                 path-carrying-constructors)
                      '(make-diagnostic/edge make-diagnostic/path))))
-    (harness-case "the per-constructor site table sums to the fifty-eight sites"
+    (harness-case "the per-constructor site table sums to the fifty-nine sites"
       (lambda ()
         ;; Milestone 11 added plain make-diagnostic sites in pass-keyword-table:
         ;; Slice ① duplicate-keyword (14 -> 15, total 56 -> 57) and Slice ② the
         ;; case-insensitive fold collision (15 -> 16, total 57 -> 58).
+        ;; Milestone 12 added the pause/callback reason resolution arm in
+        ;; pass-names, a make-diagnostic/declarations site reusing the existing
+        ;; missing-error-declaration code (30 -> 31, total 58 -> 59).
         (check-equal "make-diagnostic sites" (site-count-of 'make-diagnostic) 16)
         (check-equal "make-diagnostic/declarations sites"
-                     (site-count-of 'make-diagnostic/declarations) 30)
+                     (site-count-of 'make-diagnostic/declarations) 31)
         (check-equal "make-diagnostic/path sites" (site-count-of 'make-diagnostic/path) 11)
         (check-equal "make-diagnostic/edge sites" (site-count-of 'make-diagnostic/edge) 1)
-        (check-equal "the site total is fifty-eight"
-                     (apply + (map site-count-of diagnostic-constructors)) 58)
+        (check-equal "the site total is fifty-nine"
+                     (apply + (map site-count-of diagnostic-constructors)) 59)
         (check-equal "twelve path-carrying sites"
                      (apply + (map site-count-of path-carrying-constructors)) 12)))
     (harness-case "the path-bearing code set is exactly item 4's eight codes"

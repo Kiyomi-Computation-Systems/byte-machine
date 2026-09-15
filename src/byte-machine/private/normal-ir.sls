@@ -24,7 +24,8 @@
                 byte-dispatch-node-eof-target
                 byte-case-matcher byte-case-edge matcher-bytes
                 edge-target edge-mode stop-node? error-node? error-node-error-name
-                finish-node? pause-node? pause-node-continuation
+                finish-node? pause-node? pause-node-continuation pause-node-reason
+                callback-node-reason
                 error-declaration-name error-declaration-code error-declaration-reason
                 node-name
                 sequence-dispatch-node? sequence-dispatch-node-cases
@@ -550,9 +551,17 @@
                                       (errreason (error-node-error-name n)) #f #f #f))
                              ((finish-node? n) (vector ns-tag 'finish i #f #f #f #f #f #f #f #f))
                              ((pause-node? n)
-                              (vector ns-tag 'pause i #f #f #f
-                                      (cons 'node (id-of (pause-node-continuation n))) #f
-                                      #f #f #f))
+                              ;; The OPTIONAL reason (M12) rides slots 5 (code) and
+                              ;; 7 (reason) -- the same slots an error state uses --
+                              ;; so the emitter reads it through `normal-error-code`
+                              ;; / `normal-error-reason`, and the reached-walk finds
+                              ;; its (code . reason) pair. #f when no reason.
+                              (let ((r (pause-node-reason n)))
+                                (vector ns-tag 'pause i #f #f
+                                        (and r (errcode r))
+                                        (cons 'node (id-of (pause-node-continuation n)))
+                                        (and r (errreason r))
+                                        #f #f #f)))
                              ;; The two ZERO-WIDTH kinds. The lowering is 1:1 --
                              ;; neither allocates an internal state -- so each is
                              ;; one source node becoming one normalized state, and
@@ -625,14 +634,19 @@
                              ;; only in order are two machines, and the encoder
                              ;; below writes the order.
                              ((callback-node? n)
-                              (vector ns-tag 'callback i #f #f #f #f #f
-                                      (callback-slot-of (callback-node-callback n))
-                                      (map (lambda (b)
-                                             (cons (car b) (id-of (cadr b))))
-                                           (callback-node-branch-targets n))
-                                      (list (id-of (callback-node-continue-target n))
-                                            (id-of (callback-node-pause-continuation n))
-                                            (callback-default-of n))))
+                              ;; slots 5/7 carry the OPTIONAL pause reason (M12),
+                              ;; reported when this callback returns callback-pause.
+                              (let ((r (callback-node-reason n)))
+                                (vector ns-tag 'callback i #f #f
+                                        (and r (errcode r))
+                                        #f (and r (errreason r))
+                                        (callback-slot-of (callback-node-callback n))
+                                        (map (lambda (b)
+                                               (cons (car b) (id-of (cadr b))))
+                                             (callback-node-branch-targets n))
+                                        (list (id-of (callback-node-continue-target n))
+                                              (id-of (callback-node-pause-continuation n))
+                                              (callback-default-of n)))))
                              ;; The two span kinds. `selector` carries the
                              ;; resolved span SLOT and `targets` the single
                              ;; successor -- the same three payload slots the
@@ -761,8 +775,16 @@
                ((error) (put-u8 p 2) (put-symbol p (normal-error-code s))
                         (put-reason p (normal-error-reason s)))
                ((finish) (put-u8 p 3))
-               ;; pause: tag 4 + u32be continuation state id.
-               ((pause) (put-u8 p 4) (put-u32be p (normal-pause-target s)))
+               ;; pause: tag 4 + u32be continuation state id, then the OPTIONAL
+               ;; reason (M12) -- code + reason string -- written ONLY when
+               ;; declared. A reason-less pause writes zero extra bytes, so its
+               ;; fingerprint is byte-identical to before this milestone
+               ;; (criterion 1); a reason changes the fingerprint exactly as an
+               ;; error reason does, so two machines emitting different libraries
+               ;; differ in fingerprint.
+               ((pause) (put-u8 p 4) (put-u32be p (normal-pause-target s))
+                (let ((code (normal-error-code s)))
+                  (when code (put-symbol p code) (put-reason p (normal-error-reason s)))))
                ;; field action: tag 5 + selector + operands + next + error tag.
                ;; field branch: tag 6 + selector + operands + both targets.
                ;; The operand list is encoded because every part of it is
@@ -837,7 +859,12 @@
                   (for-each (lambda (b)
                               (put-symbol p (car b))
                               (put-u32be p (cdr b)))
-                            bs)))
+                            bs))
+                ;; The OPTIONAL callback-pause reason (M12), guarded exactly as
+                ;; the pause arm's: written only when declared, so a reason-less
+                ;; callback's fingerprint is byte-identical to before.
+                (let ((code (normal-error-code s)))
+                  (when code (put-symbol p code) (put-reason p (normal-error-reason s)))))
                ;; The two span kinds and the internal substep. Tags ELEVEN,
                ;; TWELVE and THIRTEEN: the state-kind run holds 0-7 and 10, and
                ;; 8 and 9 are the trailing slot-table SECTION discriminators, so

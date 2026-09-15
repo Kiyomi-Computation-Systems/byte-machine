@@ -100,6 +100,18 @@
                                          (make-stop-node 'stop #f)
                                          (make-error-node 'reject 'ghost #f)))  ; no 'ghost decl
                           'missing-error-declaration))))
+    (harness-case "a pause node naming an undeclared reason is missing-error-declaration (M12)"
+      (lambda ()
+        ;; The optional pause reason resolves exactly as an error node's error
+        ;; name does -- an undeclared one is missing-error-declaration, no new code.
+        (check "missing-error-declaration"
+               (has-code? (machine (list (dispatch (list (make-byte-case (make-exact-byte-matcher 0)
+                                                                         (make-edge 'p 'advance) #f))
+                                                   (make-edge 'reject 'reexecute))
+                                         (make-pause-node 'p 'stop 'ghost #f)  ; 'ghost undeclared
+                                         (make-stop-node 'stop #f)
+                                         (make-error-node 'reject 'rejected #f)))
+                          'missing-error-declaration))))
     (harness-case "a default-eof-error naming no declared error is invalid-eof-target"
       (lambda ()
         (check "invalid-eof-target"

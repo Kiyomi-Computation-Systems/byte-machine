@@ -12,6 +12,7 @@
 (import (rnrs) (rnrs eval) (only (chezscheme) load)
         (byte-machine test harness)
         (byte-machine test error-projection) (byte-machine test pause-machine)
+        (byte-machine graph)
         (byte-machine verify) (byte-machine interpret)
         (byte-machine runtime) (byte-machine compile))
 (harness-begin "differential.pause")
@@ -32,6 +33,11 @@
 (define (rfields r p)
   (list (parser-result-status r) (parser-result-next r) (parser-result-consumed r)
         (parser-result-stream-offset r) (project-error (parser-result-error r))
+        ;; Milestone 12: the pause reason is projected too, so a lowering defect
+        ;; in the pause identity (wrong code/reason, or leaked into the error
+        ;; slot) shows as a cross-lane disagreement. project-error handles the
+        ;; parser-error-shaped pause value and #f alike.
+        (project-error (parser-result-pause r))
         (parser-lifecycle p)))
 
 (define (fresh-ref) (make-parser cm-ref '() #f))
@@ -113,5 +119,124 @@
             (check-equal "fields agree" (rfields rg pg) (rfields rr pr))
             (check-equal "error code" (parser-error-code (parser-result-error rr)) 'truncated-input)
             (check-equal "offset" (parser-result-stream-offset rr) 1)))))))
+
+;; --- Milestone 12: the pause reason, interpreter ≡ generated -----------------
+;; A local machine is emitted, loaded and eval'd the same way the shared pause
+;; machine is above; `gen-of` returns its compiled generated form so a reason
+;; defect that hit both lanes identically cannot pass by agreement.
+(define (gen-of m mname bind)
+  (let ((f (string-append tmpdir "/gen-" (symbol->string mname) ".sls")))
+    (call-with-port (open-file-output-port f (file-options no-fail))
+      (lambda (p) (emit-machine (compile-machine m '()) bind p)))
+    (load f)
+    (eval bind (environment (list 'generated mname)))))
+(define (pcode r) (let ((v (parser-result-pause r))) (and v (parser-error-code v))))
+(define (preason r) (let ((v (parser-result-pause r))) (and v (parser-error-reason v))))
+
+(harness-group "a pause reports its declared reason, error slot #f (both lanes)"
+  (lambda ()
+    ;; The shared pause machine's p1 (feed pause) carries paused-continue and pe
+    ;; (EOF pause) carries paused-at-eof -- two different nodes, two different
+    ;; reasons, which is criterion 4 across the feed and finish paths.
+    (harness-case "feed pause p1 reports paused-continue with error slot #f"
+      (lambda ()
+        (let* ((pr (fresh-ref)) (pg (fresh-gen)) (bv (make-bytevector 1 1))
+               (rr (parser-feed! pr bv 0 1)) (rg (parser-feed! pg bv 0 1)))
+          (check-equal "fields agree (incl pause reason)" (rfields rg pg) (rfields rr pr))
+          (check-equal "status paused" (parser-result-status rr) 'paused)
+          (check-equal "error slot #f (a pause is not an error)" (parser-result-error rr) #f)
+          (check-equal "pause code" (pcode rr) 'paused-continue)
+          (check-equal "pause reason" (preason rr) "paused mid-feed"))))
+    (harness-case "EOF pause pe reports paused-at-eof, a DIFFERENT reason"
+      (lambda ()
+        (let* ((pr (fresh-ref)) (pg (fresh-gen))
+               (rr (parser-finish! pr)) (rg (parser-finish! pg)))
+          (check-equal "fields agree" (rfields rg pg) (rfields rr pr))
+          (check-equal "paused" (parser-result-status rr) 'paused)
+          (check-equal "error slot #f" (parser-result-error rr) #f)
+          (check-equal "pause code" (pcode rr) 'paused-at-eof))))))
+
+(harness-group "the reason survives a resume and a re-pause (criterion 4)"
+  (lambda ()
+    ;; s0 --1--> p1(paused-a --> s1); s1 --2--> p2(paused-b --> s2); s2 --3--> stop.
+    (define (chain)
+      (make-machine 'pchain 's0 '() '() '()
+        (list (make-error-declaration 'default-eof 'eof "eof" #f)
+              (make-error-declaration 'rej 'unexpected-byte "rej" #f)
+              (make-error-declaration 'ra 'paused-a "Pause A" #f)
+              (make-error-declaration 'rb 'paused-b "Pause B" #f))
+        (list (make-byte-dispatch-node 's0
+                (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'p1 'advance) #f))
+                (make-edge 'r 'reexecute) #f #f)
+              (make-pause-node 'p1 's1 'ra #f)
+              (make-byte-dispatch-node 's1
+                (list (make-byte-case (make-exact-byte-matcher 2) (make-edge 'p2 'advance) #f))
+                (make-edge 'r 'reexecute) #f #f)
+              (make-pause-node 'p2 's2 'rb #f)
+              (make-byte-dispatch-node 's2
+                (list (make-byte-case (make-exact-byte-matcher 3) (make-edge 'stop 'advance) #f))
+                (make-edge 'r 'reexecute) #f #f)
+              (make-stop-node 'stop #f) (make-error-node 'r 'rej #f))
+        'default-eof #f))
+    (harness-case "pause A, resume, pause B reports B (not A twice), both lanes"
+      (lambda ()
+        (let ((ref (make-interpreted-machine (verify-machine (chain))))
+              (gen (gen-of (chain) 'pchain 'pchain-parser)))
+          (let ((pr (make-parser ref '() #f)) (pg (make-parser gen '() #f)))
+            (let ((r1r (parser-feed! pr (make-bytevector 1 1) 0 1))
+                  (r1g (parser-feed! pg (make-bytevector 1 1) 0 1)))
+              (check-equal "pause 1 fields agree" (rfields r1g pg) (rfields r1r pr))
+              (check-equal "pause 1 code A" (pcode r1r) 'paused-a))
+            (parser-resume! pr) (parser-resume! pg)
+            (let ((r2r (parser-feed! pr (make-bytevector 1 2) 0 1))
+                  (r2g (parser-feed! pg (make-bytevector 1 2) 0 1)))
+              (check-equal "re-pause fields agree" (rfields r2g pg) (rfields r2r pr))
+              (check-equal "re-pause reports B, NOT A" (pcode r2r) 'paused-b)
+              (check-equal "re-pause error slot still #f" (parser-result-error r2r) #f))
+            (parser-resume! pr) (parser-resume! pg)
+            (let ((r3r (parser-feed! pr (make-bytevector 1 3) 0 1))
+                  (r3g (parser-feed! pg (make-bytevector 1 3) 0 1)))
+              (check-equal "final fields agree" (rfields r3g pg) (rfields r3r pr))
+              (check-equal "final stops" (parser-result-status r3r) 'stopped)
+              (check-equal "stop has no pause reason" (parser-result-pause r3r) #f))))))))
+
+(harness-group "the SECOND author-facing pause path: a callback pause carries a reason"
+  (lambda ()
+    ;; s0 --1--> c(callback ev; pause -> kp; reason 'up); the callback returns
+    ;; callback-pause, so the parser pauses on kp and reports the callback node's
+    ;; reason. kp/k1 are dispatch nodes that finish at EOF so the machine verifies.
+    (define (cbm)
+      (make-machine 'pcb 's0 '()
+        (list (make-callback-declaration 'ev 'event #t '() #f #f)) '()
+        (list (make-error-declaration 'default-eof 'eof "eof" #f)
+              (make-error-declaration 'rej 'unexpected-byte "rej" #f)
+              (make-error-declaration 'up 'paused-upgrade "Pause on CONNECT/Upgrade" #f))
+        (list (make-byte-dispatch-node 's0
+                (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'c 'advance) #f))
+                (make-edge 'r 'reexecute) #f #f)
+              (make-callback-node 'c 'ev 'k1 '() 'kp 'up #f)
+              (make-byte-dispatch-node 'k1
+                (list (make-byte-case (make-exact-byte-matcher 2) (make-edge 'st 'advance) #f))
+                (make-edge 'r 'reexecute) 'fin #f)
+              (make-byte-dispatch-node 'kp
+                (list (make-byte-case (make-exact-byte-matcher 3) (make-edge 'st 'advance) #f))
+                (make-edge 'r 'reexecute) 'fin #f)
+              (make-stop-node 'st #f) (make-finish-node 'fin #f) (make-error-node 'r 'rej #f))
+        'default-eof #f))
+    ;; the callback returns callback-pause, bound at the declared 'ev slot;
+    ;; invoked as (f parser user-context).
+    (define (pausing-cb parser ctx) callback-pause)
+    (harness-case "callback-pause reports the callback node's reason, both lanes"
+      (lambda ()
+        (let ((ref (make-interpreted-machine (verify-machine (cbm))))
+              (gen (gen-of (cbm) 'pcb 'pcb-parser)))
+          (let ((pr (make-parser ref (list (list 'ev pausing-cb)) #f))
+                (pg (make-parser gen (list (list 'ev pausing-cb)) #f)))
+            (let ((rr (parser-feed! pr (make-bytevector 1 1) 0 1))
+                  (rg (parser-feed! pg (make-bytevector 1 1) 0 1)))
+              (check-equal "callback-pause fields agree" (rfields rg pg) (rfields rr pr))
+              (check-equal "paused" (parser-result-status rr) 'paused)
+              (check-equal "error slot #f" (parser-result-error rr) #f)
+              (check-equal "reason = paused-upgrade" (pcode rr) 'paused-upgrade))))))))
 
 (harness-finish)
