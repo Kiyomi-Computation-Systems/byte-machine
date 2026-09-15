@@ -352,6 +352,22 @@
                          (list (make-diagnostic/declarations 'missing-error-declaration (node-name n)
                                                 "error node names an undeclared error" (list (error-node-error-name n))))
                          '()))
+                   nodes))
+       ;; A pause or callback node's OPTIONAL reason (Milestone 12) names an error
+       ;; declaration, resolved exactly as an error node's error name is above --
+       ;; the reason IS an error-declaration, so an undeclared one is
+       ;; `missing-error-declaration` (no new code). #f means no reason. The reason
+       ;; is a declaration reference, not a node target, so it does not appear in
+       ;; `node-out-targets` and the missing-TARGET walk above never sees it.
+       (apply append
+              (map (lambda (n)
+                     (let ((r (cond ((pause-node? n) (pause-node-reason n))
+                                    ((callback-node? n) (callback-node-reason n))
+                                    (else #f))))
+                       (if (and r (not (memq r enames)))
+                           (list (make-diagnostic/declarations 'missing-error-declaration (node-name n)
+                                                  "pause names an undeclared reason" (list r)))
+                           '())))
                    nodes)))))
 
   ;; PASS 6a (DECLARATION HALF ONLY): field declarations, carrying exactly the

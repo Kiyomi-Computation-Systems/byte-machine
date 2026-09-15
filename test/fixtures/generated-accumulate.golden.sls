@@ -33,4 +33,4 @@
       ((5) (byte-machine-make-feed-outcome/v1 (quote error) pos (byte-machine-make-parser-error/v1 (vector-ref errs 2) (quote reject) 5 off pk) 5 off))
       (else (assertion-violation (quote exec) "unknown state" st)))))
   (define accm
-    (byte-machine-make-compiled-machine 6 15997144668070819532 0 exec (quote #(#((value . 0)) #() #(start acc done stopped over reject))))))
+    (byte-machine-make-compiled-machine 7 15997144668070819532 0 exec (quote #(#((value . 0)) #() #(start acc done stopped over reject))))))

@@ -58,6 +58,7 @@
       parser-lifecycle parser-reset!
       parser-result? parser-result-status parser-result-next
       parser-result-consumed parser-result-stream-offset parser-result-error
+      parser-result-pause
       byte-machine-make-parser-error/v1 parser-error?
       parser-error-domain parser-error-code parser-error-reason
       parser-error-detail parser-error-node-name parser-error-state-id
@@ -282,9 +283,21 @@
                         (nm (normal-state-id s)) ") " id " off pk) " id " off))\n"))
         ((finish)
          (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote finished) pos #f " id " off))\n"))
+        ;; A pause with an OPTIONAL reason (M12) builds a parser-error-shaped
+        ;; record into the outcome's error slot -- the SAME construction the error
+        ;; arm above makes, over the same errs table and the loop's `pk`. The
+        ;; feed-outcome→result boundary routes it to the result's PAUSE slot for a
+        ;; paused status, never the error slot (the §6 guarantee). A reason-less
+        ;; pause keeps `#f`, byte-identical to before.
         ((pause)
-         (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
-                        (number->string (normal-pause-target s)) " off))\n"))
+         (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote paused) pos "
+                        (let ((code (normal-error-code s)))
+                          (if code
+                              (string-append "(byte-machine-make-parser-error/v1 (vector-ref errs "
+                                             (number->string (index-of code (normal-error-reason s)))
+                                             ") (quote " (nm (normal-state-id s)) ") " id " off pk)")
+                              "#f"))
+                        " " (number->string (normal-pause-target s)) " off))\n"))
         ;; The INPUT-READING kind. The digit test is rendered as a range
         ;; comparison per base rather than a `case` over literal bytes: base 16
         ;; has three disjoint ASCII ranges, so one `case` group with one `d`
@@ -408,8 +421,19 @@
             (let ((d (caddr tg))) (if d (num d) "#f")) ")))\n"
             "         (case (car o)\n"
             "           ((goto) (loop pos (cadr o) off pk))\n"
-            "           ((pause) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
-            (num (cadr tg)) " off))\n"
+            ;; The OPTIONAL callback-pause reason (M12) rides the outcome's error
+            ;; slot, built like the pause node arm but with `boundary` -- a
+            ;; callback outcome reports boundary, as its error arm below does
+            ;; (callback-failure-position). The boundary routes it to the pause
+            ;; slot. A reason-less callback keeps `#f`, byte-identical to before.
+            "           ((pause) (byte-machine-make-feed-outcome/v1 (quote paused) pos "
+            (let ((code (normal-error-code s)))
+              (if code
+                  (string-append "(byte-machine-make-parser-error/v1 (vector-ref errs "
+                                 (number->string (index-of code (normal-error-reason s)))
+                                 ") (quote " (nm (normal-state-id s)) ") " id " off (quote boundary))")
+                  "#f"))
+            " " (num (cadr tg)) " off))\n"
             "           (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
             "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
             (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off)))))\n")))
@@ -600,6 +624,19 @@
                                                         keyword-table))
                                                 (eq? (car (normal-dispatch-eof st)) 'default))
                                            (cdr (normal-dispatch-eof st)))
+                                          ;; A pause/callback state's OPTIONAL
+                                          ;; reason (M12) carries its code in slot
+                                          ;; 5 and reason in slot 7 -- the error
+                                          ;; state's slots -- so a pause-only code
+                                          ;; (named by no error node) reaches the
+                                          ;; errs table and index-of finds it
+                                          ;; instead of raising at emit time. #f
+                                          ;; slot 5 means no reason, contributing
+                                          ;; nothing, exactly as before.
+                                          ((and (memq (normal-state-kind st)
+                                                      '(pause callback))
+                                                (normal-error-code st))
+                                           (normal-error-code st))
                                           (else #f))))
                             (walk (+ i 1)
                                   (if (and c (not (member (cons c r) acc)))
@@ -760,7 +797,7 @@
                                                                  (normal-machine-span-decls normal))))))
         "      (else (assertion-violation (quote exec) \"unknown state\" st)))))\n"
         "  (define " bstr "\n"
-        "    (byte-machine-make-compiled-machine 6 " (number->string fp) " "
+        "    (byte-machine-make-compiled-machine 7 " (number->string fp) " "
         (number->string entry) " exec (quote #(#(" fields ") #(" cbs ") #("
         snames "))))))\n"))))
 

@@ -17,6 +17,7 @@
           parser-feed! parser-finish! parser-resume! parser-lifecycle parser-reset!
           parser-result? parser-result-status parser-result-next
           parser-result-consumed parser-result-stream-offset parser-result-error
+          parser-result-pause
           byte-machine-make-parser-error/v1 parser-error?
           parser-error-domain parser-error-code parser-error-reason
           parser-error-detail parser-error-node-name parser-error-state-id
@@ -89,8 +90,11 @@
   ;; library that calls it must be refused by an older runtime with the clean
   ;; ABI-mismatch condition rather than an unbound-identifier error, so the
   ;; contract change is a version bump -- §9.5:444.
-  (define current-abi-version 6)
-  ;; How many payload members ABI 6 defines: field declarations, the callback
+  ;; 7 since Milestone 12 (decision 0046): a paused outcome's error slot may now
+  ;; carry a reason record where it was always #f, so a consumer decoding a v7
+  ;; generated parser must know the moved payload contract -- another version bump.
+  (define current-abi-version 7)
+  ;; How many payload members the current ABI defines: field declarations, the callback
   ;; declaration table, and the state-id to source-name table. The keyword-table
   ;; op adds no payload member -- its table rides the emitted state datum, not the
   ;; compiled-machine metadata -- so this stays 3 while the version moves. Named
@@ -177,8 +181,18 @@
   ;; would not be a public change; distinguishing finish-originated results was
   ;; deferred on cost, since enforcing it re-baselines a tuple in most of the
   ;; differential programs.
-  (define (make-parser-result status next consumed stream-offset error)
-    (vector parser-result-tag status next consumed stream-offset error))
+  ;; The OPTIONAL `pause` slot (Milestone 12) carries a parser-error-shaped reason
+  ;; for a paused result, and is #f otherwise; the error slot stays #f for a pause,
+  ;; so a consumer that checks only the error slot still reads "not failed" (brief
+  ;; §6). `case-lambda` keeps the 5-arg arity, so the many non-pause construction
+  ;; sites -- including the span-callback pause arms and the flush -- are unchanged
+  ;; and get `#f`.
+  (define make-parser-result
+    (case-lambda
+      ((status next consumed stream-offset error)
+       (make-parser-result status next consumed stream-offset error #f))
+      ((status next consumed stream-offset error pause)
+       (vector parser-result-tag status next consumed stream-offset error pause))))
   ;; parser-result? : Any -> Boolean
   (define (parser-result? x) (tagged? parser-result-tag x))
   ;; parser-result-status : ParserResult -> FeedStatus
@@ -191,6 +205,12 @@
   (define (parser-result-stream-offset r) (vector-ref r 4))
   ;; parser-result-error : ParserResult -> (Option ParserError)
   (define (parser-result-error r) (vector-ref r 5))
+  ;; parser-result-pause : ParserResult -> (Option ParserError) -- the pause
+  ;; reason (Milestone 12), #f for a non-pause result or a pause declaring none.
+  ;; Length-guarded: a 6-element result predates the pause slot and has none, so
+  ;; a value built before this ABI reads back #f rather than raising.
+  (define (parser-result-pause r)
+    (if (> (vector-length r) 6) (vector-ref r 6) #f))
 
   ;; --- parser error ---
   ;; Eight members, opaque.
@@ -916,8 +936,14 @@
             ((pause)
              ;; Commit current PAST the pause -- the resumed feed re-enters at the
              ;; continuation, mirroring the generated next-state.
+             ;; The OPTIONAL reason (M12) rides the PAUSE slot, built from the same
+             ;; parts (code reason node-name state-id) an error node produces, over
+             ;; the loop's `pk`; the error slot stays #f. #f when the pause declares
+             ;; no reason.
              (parser-set-current! parser (op 'pause-target node))
-             (make-parser-result 'paused pos (- pos start) (parser-offset parser) #f))
+             (make-parser-result 'paused pos (- pos start) (parser-offset parser) #f
+               (let ((rp (op 'pause-reason node)))
+                 (and rp (parts->parser-error rp (parser-offset parser) pk)))))
             ;; ZERO-WIDTH kinds. They consume no byte, so the loop re-enters at
             ;; the SAME `pos` with the same offset, and the only state that moves
             ;; is `current` plus whatever the op committed into the field vector.
@@ -961,8 +987,16 @@
                  ;; parked PAST the invocation, on the declared pause continuation.
                  ((pause)
                   (parser-set-current! parser (cadddr parts))
+                  ;; The OPTIONAL callback-pause reason (M12), the SECOND
+                  ;; author-facing pause path. Built with `callback-failure-position`
+                  ;; (boundary) -- a callback outcome reports boundary, as the
+                  ;; failure arm below does -- and routed to the PAUSE slot, not the
+                  ;; error slot. #f when the callback node declares no reason.
                   (make-parser-result 'paused pos (- pos start)
-                                      (parser-offset parser) #f))
+                                      (parser-offset parser) #f
+                    (let ((rp (op 'pause-reason node)))
+                      (and rp (parts->parser-error rp (parser-offset parser)
+                                                   callback-failure-position)))))
                  (else
                   (make-parser-result 'error pos (- pos start) (parser-offset parser)
                                       (byte-machine-make-callback-error/v1
@@ -1098,9 +1132,17 @@
                     (parser-field-values parser) parser (parser-callbacks parser))))
       (parser-set-current! parser (feed-outcome-next-state o))
       (parser-set-offset! parser (feed-outcome-offset o))
-      (make-parser-result (feed-outcome-status o) (feed-outcome-next o)
-                          (- (feed-outcome-next o) start)
-                          (feed-outcome-offset o) (feed-outcome-error o))))
+      ;; The generated outcome carries its reason record in slot 3 for BOTH an
+      ;; error and a (M12) pause; route it by status -- error slot for 'error, the
+      ;; new pause slot for 'paused, #f otherwise -- so the error slot stays #f for
+      ;; a pause (brief §6). One outcome has one status, and slot 3 is #f for every
+      ;; non-error/non-pause status, so this is total and cannot leak.
+      (let ((st (feed-outcome-status o)) (e (feed-outcome-error o)))
+        (make-parser-result st (feed-outcome-next o)
+                            (- (feed-outcome-next o) start)
+                            (feed-outcome-offset o)
+                            (if (eq? st 'paused) #f e)
+                            (if (eq? st 'paused) e #f)))))
 
   ;; parser-finish!: the paused rows are a prohibited cell and the sticky rows
   ;; (stopped/error/finished) short-circuit here without running anything;
@@ -1201,8 +1243,13 @@
                  (parser-set-stored-error! parser (feed-outcome-error o)))
         ((stopped) (parser-set-lifecycle! parser 'stopped))
         ((paused) (parser-set-lifecycle! parser 'paused-finish)))
-      (make-parser-result (feed-outcome-status o) (feed-outcome-offset o) 0
-                          (feed-outcome-offset o) (feed-outcome-error o))))
+      ;; Route slot 3 by status, as the feed boundary does: pause reason to the
+      ;; pause slot, error to the error slot, #f otherwise.
+      (let ((st (feed-outcome-status o)) (e (feed-outcome-error o)))
+        (make-parser-result st (feed-outcome-offset o) 0
+                            (feed-outcome-offset o)
+                            (if (eq? st 'paused) #f e)
+                            (if (eq? st 'paused) e #f)))))
 
   (define (parser-finish-op! parser)
     ;; No local cycle guard: termination relies on the verifier's
@@ -1243,7 +1290,9 @@
           ((pause)
            (parser-set-current! parser (op 'pause-target node))
            (parser-set-lifecycle! parser 'paused-finish)
-           (make-parser-result 'paused off 0 off #f))
+           (make-parser-result 'paused off 0 off #f
+             (let ((rp (op 'pause-reason node)))
+               (and rp (parts->parser-error rp off pk)))))
           ((stop)
            (parser-set-current! parser node)
            (parser-set-lifecycle! parser 'stopped)
@@ -1280,7 +1329,9 @@
                ((pause)
                 (parser-set-current! parser (cadddr parts))
                 (parser-set-lifecycle! parser 'paused-finish)
-                (make-parser-result 'paused off 0 off #f))
+                (make-parser-result 'paused off 0 off #f
+                  (let ((rp (op 'pause-reason node)))
+                    (and rp (parts->parser-error rp off callback-failure-position)))))
                (else
                 (parser-set-current! parser node)
                 (parser-set-lifecycle! parser 'error)

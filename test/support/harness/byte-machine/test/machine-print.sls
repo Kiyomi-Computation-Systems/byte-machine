@@ -118,8 +118,10 @@
   (define (print-finish n)
     (list 'make-finish-node (lit (finish-node-name n)) (lit (finish-node-source-label n))))
   (define (print-pause n)
+    ;; M12: the 4-arg form carrying the optional reason (a symbol or #f), so a
+    ;; reason-bearing pause survives print -> reparse.
     (list 'make-pause-node (lit (pause-node-name n)) (lit (pause-node-continuation n))
-          (lit (pause-node-source-label n))))
+          (lit (pause-node-reason n)) (lit (pause-node-source-label n))))
   (define (print-field-action n)
     (list 'make-field-action-node (lit (field-action-node-name n))
           (lit (field-action-node-operation n)) (lit (field-action-node-arguments n))
@@ -139,9 +141,11 @@
           (lit (integer-accumulate-node-eof-target n))
           (lit (integer-accumulate-node-source-label n))))
   (define (print-callback n)
+    ;; M12: the 7-arg form carrying the optional reason (a symbol or #f).
     (list 'make-callback-node (lit (callback-node-name n)) (lit (callback-node-callback n))
           (lit (callback-node-continue-target n)) (lit (callback-node-branch-targets n))
-          (lit (callback-node-pause-continuation n)) (lit (callback-node-source-label n))))
+          (lit (callback-node-pause-continuation n)) (lit (callback-node-reason n))
+          (lit (callback-node-source-label n))))
   (define (print-span-start n)
     (list 'make-span-start-node (lit (span-start-node-name n)) (lit (span-start-node-span n))
           (lit (span-start-node-next n)) (lit (span-start-node-source-label n))))

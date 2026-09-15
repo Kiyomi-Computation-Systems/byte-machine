@@ -1414,8 +1414,15 @@ cmake_minimum_required(VERSION 3.26)
 # wrong direction), each caught absolutely by the header lane's collision verify
 # group. No node kind, ABI, or golden moves; no shipped pin re-anchored (nothing
 # was pinned on node-keyword-defects).
-set(EXPECTED_PASSES 69)
-set(EXPECTED_MUTATIONS 622)
+# Milestone 12 (the pause reason, decision 0046) adds THREE passes (70th-72nd),
+# one per witnessing program because the verify command is set per group: the
+# verifier resolution arm (verify-tests), the fingerprint reason encoding
+# (normal-ir-tests), and the differential.pause lane (the interpreter read, the
+# §6 error-slot guard, and the errs reached-walk). Six new mutations (the
+# differential.pause pass carries four: the pause-node read, the callback read,
+# the §6 guard, and the reached-walk): 622 -> 628.
+set(EXPECTED_PASSES 72)
+set(EXPECTED_MUTATIONS 628)
 # Sixty-two is sixty-one plus one: Milestone 8 Slice ① adds one pass over the
 # request-line fixture (http-machine.sls) with three mutations (590 -> 593),
 # each caught by byte-machine.unit.http-request-line with a measured signature.
@@ -3705,9 +3712,15 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: the feed pause arm parks current on the continuation"
+  # Re-anchored (M12): the pause arm's make-parser-result gained the optional
+  # reason (pause slot); the mutation still drops the parser-set-current!.
   FIND [[(parser-set-current! parser (op 'pause-target node))
-             (make-parser-result 'paused pos (- pos start) (parser-offset parser) #f))]]
-  REPLACE [[(make-parser-result 'paused pos (- pos start) (parser-offset parser) #f))]]
+             (make-parser-result 'paused pos (- pos start) (parser-offset parser) #f
+               (let ((rp (op 'pause-reason node)))
+                 (and rp (parts->parser-error rp (parser-offset parser) pk)))))]]
+  REPLACE [[(make-parser-result 'paused pos (- pos start) (parser-offset parser) #f
+               (let ((rp (op 'pause-reason node)))
+                 (and rp (parts->parser-error rp (parser-offset parser) pk)))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "continues past the pause")
 
 byte_machine_mutation(
@@ -3724,10 +3737,19 @@ byte_machine_mutation(
   # its own). The detail is on the same FAIL line, so extending into it (the
   # measured expected/actual pair, unique to this one check) makes the match
   # exact instead of a prefix.
-  FIND [[(parser-set-lifecycle! parser 'paused-finish)
-           (make-parser-result 'paused off 0 off #f))]]
-  REPLACE [[(parser-set-lifecycle! parser 'paused-feed)
-           (make-parser-result 'paused off 0 off #f))]]
+  # Re-anchored (M12): include the pause-target line (unique to the pause NODE
+  # finish arm vs the callback arm, which uses callback-failure-position), and
+  # the make-parser-result's new optional-reason lines.
+  FIND [[(parser-set-current! parser (op 'pause-target node))
+           (parser-set-lifecycle! parser 'paused-finish)
+           (make-parser-result 'paused off 0 off #f
+             (let ((rp (op 'pause-reason node)))
+               (and rp (parts->parser-error rp off pk)))))]]
+  REPLACE [[(parser-set-current! parser (op 'pause-target node))
+           (parser-set-lifecycle! parser 'paused-feed)
+           (make-parser-result 'paused off 0 off #f
+             (let ((rp (op 'pause-reason node)))
+               (and rp (parts->parser-error rp off pk)))))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "resumes to finish-ready: lifecycle -- expected paused-finish, got paused-feed")
 
@@ -3915,8 +3937,14 @@ byte_machine_mutation(
   # Closed by a new nonzero-start case in runtime-tests.sps ("a nonzero-start
   # feed pause separates next, consumed, and stream offset"), which feeds
   # #vu8(9 1 2)[1,3) so next (2) separates from the other two (both still 1).
-  FIND [[(make-parser-result 'paused pos (- pos start) (parser-offset parser) #f))]]
-  REPLACE [[(make-parser-result 'paused pos pos pos #f))]]
+  # Re-anchored (M12): the make-parser-result gained the optional-reason lines;
+  # the REPLACE keeps them and mutates only the three field expressions.
+  FIND [[(make-parser-result 'paused pos (- pos start) (parser-offset parser) #f
+               (let ((rp (op 'pause-reason node)))
+                 (and rp (parts->parser-error rp (parser-offset parser) pk)))))]]
+  REPLACE [[(make-parser-result 'paused pos pos pos #f
+               (let ((rp (op 'pause-reason node)))
+                 (and rp (parts->parser-error rp (parser-offset parser) pk)))))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "separates next, consumed, and stream offset: consumed -- expected 1, got 2")
 
@@ -3936,8 +3964,13 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
   LABEL "runtime: the feed pause arm swaps consumed and stream offset"
-  FIND [[(make-parser-result 'paused pos (- pos start) (parser-offset parser) #f))]]
-  REPLACE [[(make-parser-result 'paused pos (parser-offset parser) (- pos start) #f))]]
+  # Re-anchored (M12): same arm, keep the optional-reason lines, swap the fields.
+  FIND [[(make-parser-result 'paused pos (- pos start) (parser-offset parser) #f
+               (let ((rp (op 'pause-reason node)))
+                 (and rp (parts->parser-error rp (parser-offset parser) pk)))))]]
+  REPLACE [[(make-parser-result 'paused pos (parser-offset parser) (- pos start) #f
+               (let ((rp (op 'pause-reason node)))
+                 (and rp (parts->parser-error rp (parser-offset parser) pk)))))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "separates consumed from stream offset: consumed -- expected 1, got 2")
 
@@ -3970,12 +4003,17 @@ byte_machine_mutation(
   # `pause-target` line, which is what makes this the pause node's decision and
   # not the callback node's; the callback arm's copy has its own mutation in
   # Slice ②'s pass at the foot of this file.
+  # Re-anchored (M12): keep the optional-reason lines; mutate only the offsets.
   FIND [[(parser-set-current! parser (op 'pause-target node))
            (parser-set-lifecycle! parser 'paused-finish)
-           (make-parser-result 'paused off 0 off #f))]]
+           (make-parser-result 'paused off 0 off #f
+             (let ((rp (op 'pause-reason node)))
+               (and rp (parts->parser-error rp off pk)))))]]
   REPLACE [[(parser-set-current! parser (op 'pause-target node))
            (parser-set-lifecycle! parser 'paused-finish)
-           (make-parser-result 'paused 0 0 0 #f))]]
+           (make-parser-result 'paused 0 0 0 #f
+             (let ((rp (op 'pause-reason node)))
+               (and rp (parts->parser-error rp off pk)))))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the persisted offset, not zero: next -- expected 1, got 0")
 
@@ -7855,10 +7893,17 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
   LABEL "normal-ir: the pause encode arm hashes tag and continuation"
-  FIND [[((pause) (put-u8 p 4) (put-u32be p (normal-pause-target s)))]]
-  REPLACE [[((pause) (put-u8 p 4))]]
+  # Re-anchored (M12): the arm gained the guarded optional-reason encoding; the
+  # REPLACE drops only the u32be continuation, keeping the reason lines, so the
+  # mutant changes one thing. Baseline re-measured to the reason-bearing golden.
+  FIND [[((pause) (put-u8 p 4) (put-u32be p (normal-pause-target s))
+                (let ((code (normal-error-code s)))
+                  (when code (put-symbol p code) (put-reason p (normal-error-reason s)))))]]
+  REPLACE [[((pause) (put-u8 p 4)
+                (let ((code (normal-error-code s)))
+                  (when code (put-symbol p code) (put-reason p (normal-error-reason s)))))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "pause fingerprint -- expected 17903327606435836645, got 355204278510953480")
+  EXPECT_OUTPUT_MATCHES "pause fingerprint -- expected 4328141021048275055, got 466673759874206136")
 
 # A third mutation targets the pause TAG VALUE alone (4 -> 3, colliding with
 # finish's own tag byte) rather than the whole payload mutation 2 above
@@ -7880,7 +7925,8 @@ byte_machine_mutation(
   FIND [[(put-u8 p 4)]]
   REPLACE [[(put-u8 p 3)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "pause fingerprint -- expected 17903327606435836645, got 15135366215981961045")
+  # Baseline and got re-measured (M12): the reason-bearing pause golden moved.
+  EXPECT_OUTPUT_MATCHES "pause fingerprint -- expected 4328141021048275055, got 1277720883081950411")
 
 # Milestone 3 Slice ② Task 2 (decisions 0015, 0016): the sequence prefix trie
 # and its two-phase state-id allocation. Each mutation witnesses one decision
@@ -8434,8 +8480,8 @@ byte_machine_mutation(
   # renders the same outcome constructor, so the bare form now occurs twice.
   # Anchored on the PAUSE ARM's `") (` prefix, which the callback arm -- whose
   # branch opens `((pause) (` inside a `case` -- does not share.
-  FIND [[") (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "]]
-  REPLACE [[") (byte-machine-make-feed-outcome/v1 (quote stopped) pos #f "]]
+  FIND [[") (byte-machine-make-feed-outcome/v1 (quote paused) pos "]]
+  REPLACE [[") (byte-machine-make-feed-outcome/v1 (quote stopped) pos "]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "pause arm p1 -- expected \"paused 2\", got \"stopped 2\"")
 
@@ -9786,9 +9832,10 @@ byte_machine_mutation(
   LABEL "ir: a callback node's continue target may be absent"
   # A SWAP PAIR with the mutation below: each REPLACE is the other's surviving
   # line, so the two move in lockstep. §10.6:586 makes both mandatory.
-  FIND [[    (require-symbol 'make-callback-node 'continue-target continue-target)
-    (require-symbol 'make-callback-node 'pause-continuation pause-continuation)]]
-  REPLACE [[    (require-symbol 'make-callback-node 'pause-continuation pause-continuation)]]
+  # Re-anchored (M12): the constructor moved into a case-lambda clause (+3 indent).
+  FIND [[       (require-symbol 'make-callback-node 'continue-target continue-target)
+       (require-symbol 'make-callback-node 'pause-continuation pause-continuation)]]
+  REPLACE [[       (require-symbol 'make-callback-node 'pause-continuation pause-continuation)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "mandatory symbols: continue-target absent -- expected a raise")
@@ -9796,9 +9843,10 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
   LABEL "ir: a callback node's pause continuation may be absent"
-  FIND [[    (require-symbol 'make-callback-node 'continue-target continue-target)
-    (require-symbol 'make-callback-node 'pause-continuation pause-continuation)]]
-  REPLACE [[    (require-symbol 'make-callback-node 'continue-target continue-target)]]
+  # Re-anchored (M12): case-lambda clause (+3 indent).
+  FIND [[       (require-symbol 'make-callback-node 'continue-target continue-target)
+       (require-symbol 'make-callback-node 'pause-continuation pause-continuation)]]
+  REPLACE [[       (require-symbol 'make-callback-node 'continue-target continue-target)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "mandatory symbols: pause-continuation absent -- expected a raise")
@@ -9809,9 +9857,10 @@ byte_machine_mutation(
   # §9.1:318's convention, and the one Slice ①b's review caught being
   # implemented as pairs. Narrowed to `list?` alone, the pair form and the
   # three-element form both build.
-  FIND [[                            (and (list? b) (= (length b) 2)
-                                 (symbol? (car b)) (symbol? (cadr b))))]]
-  REPLACE [[                            (list? b))]]
+  # Re-anchored (M12): case-lambda clause (+3 indent).
+  FIND [[                               (and (list? b) (= (length b) 2)
+                                    (symbol? (car b)) (symbol? (cadr b))))]]
+  REPLACE [[                               (list? b))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "branch targets are two-element lists, not pairs: a three-element list -- expected a raise")
@@ -11079,11 +11128,13 @@ byte_machine_mutation(
   # PROJECTION, whose "expected" is the generated lane's value -- the harness
   # prints the second `check-equal` argument as expected -- so the three read as
   # mirror images of each other and no two collide.
-  FIND [[            (num (cadr tg)) " off))\n"
+  # Re-anchored (M12): the callback pause arm's next-state line gained a `" "`
+  # separator when its #f became the optional-reason conditional.
+  FIND [[            " " (num (cadr tg)) " off))\n"
             "           (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
             "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
             (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off)))))\n")))]]
-  REPLACE [[            (num (cadr tg)) " off))\n"
+  REPLACE [[            " " (num (cadr tg)) " off))\n"
             "           (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
             "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
             (nm (normal-state-id s)) ") " id " off pk) " id " off)))))\n")))]]
@@ -12315,10 +12366,11 @@ byte_machine_mutation(
   # The generated half of the first mutation in this pass. Both are needed: each
   # edits one lane, and a lane that agreed with a mutated sibling would be the
   # defect neither alone can show.
-  FIND [[            "           ((pause) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
-            (num (cadr tg)) " off))\n"]]
-  REPLACE [[            "           ((pause) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
-            (num (car tg)) " off))\n"]]
+  # Re-anchored (M12): the callback pause arm's #f became the optional-reason
+  # conditional, so the next-state line is now anchored on its own (the only
+  # `(num (cadr tg))`); the mutation still swaps the pause next-state to continue.
+  FIND [[            " " (num (cadr tg)) " off))\n"]]
+  REPLACE [[            " " (num (car tg)) " off))\n"]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "resume then feed agrees, and the callback is not re-delivered: the two lanes agree on the whole walk")
@@ -13991,20 +14043,21 @@ byte_machine_mutation(
   FILE src/byte-machine/compile.sls
   SPEC byte-machine.determinism.keyword-table.chez.source
   LABEL "compile: the emitted ABI version literal is not the current one (decision 0044)"
-  # The keyword table lands together with the ABI bump 5->6 (decision 0044); the
-  # emitted literal must be the current version. Emitting 5 both diverges the
-  # rendered bytes from the committed golden AND makes the v6 runtime refuse the
+  # The keyword table landed with the ABI bump 5->6 (decision 0044); Milestone 12
+  # (the pause reason, decision 0046) bumps it 6->7. The emitted literal must be
+  # the current version. Emitting the prior version both diverges the rendered
+  # bytes from the committed golden AND makes the current runtime refuse the
   # library outright at construction -- `byte-machine-make-compiled-machine`
   # validates the version, so the determinism lane's top-level load of the
-  # generated file raises "generated-runtime ABI mismatch with irritant 5"
+  # generated file raises "generated-runtime ABI mismatch with irritant 6"
   # (status 255) before it can report the golden mismatch cleanly. That refusal
   # is the sharper witness -- it names the version the emitter stamped -- so the
   # pin asserts it by message, not by the raw-byte golden diff. This is the ONE
-  # pin on the emitted literal; there was none before this slice.
-  FIND [[(byte-machine-make-compiled-machine 6 ]]
-  REPLACE [[(byte-machine-make-compiled-machine 5 ]]
+  # pin on the emitted literal.
+  FIND [[(byte-machine-make-compiled-machine 7 ]]
+  REPLACE [[(byte-machine-make-compiled-machine 6 ]]
   EXPECT_STATUS 255
-  EXPECT_OUTPUT_MATCHES [[generated-runtime ABI mismatch with irritant 5]])
+  EXPECT_OUTPUT_MATCHES [[generated-runtime ABI mismatch with irritant 6]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -14062,6 +14115,124 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES [[the collision table does not verify -- expected a true value]])
 
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Milestone 12: the pause reason (decision 0046) --------------------------
+# THREE passes (one per witnessing program, since the verify command is set per
+# group), five mutations, covering the decisions the re-anchored pause pins above
+# do NOT: those cover the pause ARM mechanics (parking, offsets, lifecycle,
+# emitted arms, fingerprint tag/continuation, ABI); these cover the reason
+# CARRIED by the pause -- the verifier resolving it, the fingerprint encoding it,
+# the interpreter reading it, the §6 guard keeping the error slot #f, and the
+# errs-table reached-walk finding a pause-only code. Each signature was MEASURED
+# by staging the mutant and running its own witnessing program (AGENTS.md).
+
+# Pass A -- the verifier resolution arm, witnessed by verify-tests.sps.
+byte_machine_mutation_reset()
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/verify-tests.sps")
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
+  LABEL "verify: a pause node's reason is not resolved against the declarations"
+  FIND [[((pause-node? n) (pause-node-reason n))]]
+  REPLACE [[((pause-node? n) #f)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "a pause node naming an undeclared reason is missing-error-declaration .M12.: missing-error-declaration -- expected a true value")
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# Pass B -- the fingerprint reason encoding, witnessed by normal-ir-tests.sps.
+byte_machine_mutation_reset()
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/normal-ir-tests.sps")
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: the pause reason is dropped from the fingerprint encoding"
+  # Anchored on the pause arm's own `(put-u32be ... normal-pause-target ...)` so
+  # it targets the pause encode arm, not the callback arm's identical reason form.
+  FIND [[(put-u32be p (normal-pause-target s))
+                (let ((code (normal-error-code s)))
+                  (when code (put-symbol p code) (put-reason p (normal-error-reason s)))))]]
+  REPLACE [[(put-u32be p (normal-pause-target s))
+                (let ((code (normal-error-code s)))
+                  (when #f (put-symbol p code) (put-reason p (normal-error-reason s)))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "reason changes the fingerprint -- expected a true value")
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# Pass C -- the interpreter read, the §6 error-slot guard, and the reached-walk,
+# all witnessed by the differential.pause lane (interpreter ≡ generated).
+byte_machine_mutation_reset()
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/differential-pause-tests.sps")
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.pause.chez.source
+  LABEL "runtime: the interpreter feed pause arm drops the reason"
+  # `(parser-offset parser) pk` is unique to the feed pause NODE arm (the callback
+  # arm uses callback-failure-position; the finish arm uses `off pk`).
+  FIND [[(and rp (parts->parser-error rp (parser-offset parser) pk))]]
+  REPLACE [[#f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "feed pause p1 reports paused-continue with error slot #f: pause code -- expected paused-continue, got #f")
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.pause.chez.source
+  LABEL "runtime: the interpreter callback pause arm drops the reason (the second author-facing path)"
+  # The callback-pause path (brief §5 trap 2). `(parser-offset parser)` then
+  # `callback-failure-position` is unique to the FEED callback arm (the finish
+  # callback uses `off`; the pause node uses `pk`).
+  FIND [[(and rp (parts->parser-error rp (parser-offset parser)
+                                                   callback-failure-position))]]
+  REPLACE [[#f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "callback-pause reports the callback node's reason, both lanes: reason = paused-upgrade -- expected paused-upgrade, got #f")
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.pause.chez.source
+  LABEL "runtime: the feed-v2 boundary leaks the pause reason into the error slot (§6)"
+  # The brief's central safety property: a pause's error slot stays #f. Mutating
+  # the error-slot routing to always take `e` leaks the reason there for a pause;
+  # the generated lane then disagrees with the interpreter. Anchored on the
+  # feed-v2-only `(- (feed-outcome-next o) start)` (finish-v2 uses `0`).
+  FIND [[                            (- (feed-outcome-next o) start)
+                            (feed-outcome-offset o)
+                            (if (eq? st 'paused) #f e)]]
+  REPLACE [[                            (- (feed-outcome-next o) start)
+                            (feed-outcome-offset o)
+                            e]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "feed pause p1 reports paused-continue with error slot #f: fields agree .incl pause reason. -- expected .paused 1 1 1 #f .machine paused-continue")
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.pause.chez.source
+  LABEL "compile: the errs reached-walk drops the pause/callback reason code"
+  # Without the pause/callback arm, a pause-only code never reaches the errs
+  # table, and the emitted pause arm's (vector-ref errs (index-of ...)) raises at
+  # emit time when the reason-bearing pause machine is rendered.
+  FIND [[                                          ((and (memq (normal-state-kind st)
+                                                      '(pause callback))
+                                                (normal-error-code st))
+                                           (normal-error-code st))]]
+  REPLACE [[                                          ((and #f
+                                                (normal-error-code st))
+                                           (normal-error-code st))]]
+  EXPECT_STATUS 255
+  EXPECT_OUTPUT_MATCHES "no error declaration for code")
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # Every pass above has now run exactly once, so the accumulated total is

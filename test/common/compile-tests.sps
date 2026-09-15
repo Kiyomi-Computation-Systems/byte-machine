@@ -202,10 +202,13 @@
         ;; and grows the payload with a second member, reserved empty. Slice ②
         ;; moves it to 5 and adds member 2, §17:963's state-id to source-name
         ;; table -- which is not reservable-empty, because it is what
-        ;; `parser-state-name` reads. So the literal reads 5 and a zero-field
-        ;; machine renders #(#() #() #(<its state names>)).
+        ;; `parser-state-name` reads. The version literal has since moved to 6
+        ;; (Milestone 11, the keyword-step op) and to 7 (Milestone 12, the pause
+        ;; reason in the outcome), while the 3-member payload is unchanged -- so
+        ;; the literal reads 7 and a zero-field machine renders
+        ;; #(#() #() #(<its state names>)).
         (check "unversioned call"
-               (has? "(byte-machine-make-compiled-machine 6 14095574568398596535 0 exec (quote #(#() #() #(start stop reject))))"))
+               (has? "(byte-machine-make-compiled-machine 7 14095574568398596535 0 exec (quote #(#() #() #(start stop reject))))"))
         (check "no versioned name survives"
                (not (has? "byte-machine-make-compiled-machine/v")))))
     ;; Milestone 4 Slice ①b task 6 (decision 0019 item 3(b)). Member 0 stops
