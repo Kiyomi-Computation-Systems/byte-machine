@@ -109,7 +109,8 @@ lowering, and the fold.
 ```
 (make-stop-node name label)              accept: parsing stops here
 (make-finish-node name label)            clean end of input (reachable only over an EOF route)
-(make-pause-node name continue-target label)   yield to the caller, resume at continue-target
+(make-pause-node name continue-target label)              yield to the caller, resume at continue-target
+(make-pause-node name continue-target reason label)       ... reporting the (code, reason) of the declared `reason` error
 (make-error-node name error-declaration label)  reject with the named declared error
 ```
 
@@ -138,6 +139,8 @@ operation and predicate, accumulation, and overflow behaviour.
     kind ∈ { event , decision , span-data , span-complete }
 (make-span-declaration name data-callback complete-callback label)
 (make-callback-node name callback continue-target branch-targets pause-continuation label)
+(make-callback-node name callback continue-target branch-targets pause-continuation reason label)
+    the optional `reason` (a declared error name) is reported when the callback returns callback-pause
 (make-span-start-node name span next label)
 (make-span-end-node name span next label)
 (make-error-declaration name code reason label)

@@ -96,12 +96,17 @@ uses the runtime API on the compiled-machine value the library exports.
   pause and full reset, respectively.
 
 Read a parser-result with `parser-result-status`, `parser-result-next`,
-`parser-result-consumed`, `parser-result-stream-offset`, and
-`parser-result-error`. Feed statuses are `need-input`, `stopped`, `error`,
-`finished`, and `paused`; for a feed, `next` is the absolute index past the last
-consumed byte and `consumed` is `next - start`. On `error`,
-`parser-result-error` holds a parser-error read with `parser-error-code`,
-`-reason`, `-node-name`, `-offset`, `-position-kind`, and the rest of that family.
+`parser-result-consumed`, `parser-result-stream-offset`,
+`parser-result-error`, and `parser-result-pause`. Feed statuses are
+`need-input`, `stopped`, `error`, `finished`, and `paused`; for a feed, `next` is
+the absolute index past the last consumed byte and `consumed` is `next - start`.
+On `error`, `parser-result-error` holds a parser-error read with
+`parser-error-code`, `-reason`, `-node-name`, `-offset`, `-position-kind`, and the
+rest of that family. On `paused`, `parser-result-error` stays `#f` (a pause is not
+an error, and it is resumable) and `parser-result-pause` holds the pause's reason
+— the SAME parser-error shape, so the same accessors read its code and reason —
+when the pause node (or a callback node whose callback returned `callback-pause`)
+declared one, else `#f`.
 Other live accessors: `parser-field-ref`, `parser-state-name`,
 `parser-stream-offset`, `parser-active-span`, `parser-user-context`,
 `parser-lifecycle`. Callback outcomes are the runtime singletons
@@ -119,7 +124,7 @@ execution modes (`§7.3`, `§24.2`):
   it; `§24.3` keeps those objects per version/OS/architecture and never commits
   them.
 
-The compiled machine carries an ABI version (currently `5`), and
+The compiled machine carries an ABI version (currently `7`), and
 `byte-machine-make-compiled-machine` checks it as its first action, raising
 `"generated-runtime ABI mismatch"` on a mismatch. This guard is load-bearing in
 the AOT lane: Chez prefers a compiled object over source and staleness is

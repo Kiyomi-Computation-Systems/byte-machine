@@ -84,7 +84,10 @@ implemented — the values are simply inapplicable there).
   unconsumed byte; an EOF pause leaves lifecycle `paused-finish`, for which
   `next`/`consumed` are inapplicable and only the stream offset is exposed
   (`§12.3`). The caller must call `parser-resume!` before feeding or finishing
-  again.
+  again. `parser-result-error` stays `#f` (a pause is not an error); if the pause
+  node — or the callback node whose callback returned `callback-pause` — declared
+  an optional reason, `parser-result-pause` carries it as a `parser-error`-shaped
+  `(code, reason)` value, else `#f`.
 - **`stopped`** — a successful explicit one-shot terminal. Sticky until reset.
 - **`finished`** — the successful EOF terminal, reachable only through
   `parser-finish!` (`§10.6:616`). Sticky until reset.
