@@ -1,9 +1,12 @@
 # Milestone 12 Design — A pause says why
 
-**Status: Milestone 12 OPEN — design draft (2026-09-14).** Gate 0 is decision
+**Status: Milestone 12 CLOSED 2026-09-14 — v0.4.0 released.** Delivered as this
+design plus Gate 0 = decision
 [0046](../.decisions/0046-a-pause-carries-a-reason.md) (the M8–M11 pattern: the
-gate is folded into one decision, no separate gate-0 plan). Two slices, both
-below. Ships as **v0.4.0**.
+gate is folded into one decision, no separate gate-0 plan) plus two slices —
+Slice ① (the mechanism end to end; PR #128 = `f8fc243`) and Slice ② (this
+v0.4.0 release and close). The six acceptance criteria are dispositioned in the
+[Close](#close-2026-09-14--the-six-criteria-dispositioned) section below.
 
 Written against **`9c027fd`** (`main`; v0.3.0 released as `9c027fd`, tag
 `v0.3.0` — Milestone 11 Slice ③ was the release commit). Every anchor below was
@@ -456,3 +459,40 @@ row to its trace adapter's error table, and move its seven pause fixtures from
 - Decision [0042](../.decisions/0042-empty-span-delivers-one-fragment-on-the-feed-side.md)
   — the ABI-tracks-shape principle this milestone's honest bump respects.
 - Parent plan `§9`, `§12`, `§13`, `§22.4`, `§29:1767`.
+
+## Close (2026-09-14) — the six criteria dispositioned
+
+Delivered as Gate 0 (decision 0046) plus two slices; the brief's six acceptance
+criteria, each against the tree:
+
+| # | Criterion | Met by |
+|---|---|---|
+| 1 | `make-pause-node` takes an OPTIONAL reason (a pause without one is unchanged) | Slice ① — `make-pause-node`/`make-callback-node` `case-lambda` (`private/ir.sls`); the reason-less arm proved unchanged by every pre-existing pause lane |
+| 2 | a paused `parser-result` reports a `(code, reason)` value, `parser-error`-shaped | Slice ① — `parser-result-pause` (new slot, `runtime.sls`); `byte-machine.differential.pause` reads it on both executors |
+| 3 | `status` stays `'paused`; `paused-feed`/`paused-finish` lifecycle rows unchanged | Slice ① — the pause-machine interpret lane (reads status/offset/lifecycle only) is unaffected; `parser-result-error` stays `#f` |
+| 4 | the reason survives resume-and-re-pause (two nodes → two reasons) | Slice ① — `byte-machine.differential.pause`'s resume+re-pause group over the local `chain` machine (`paused-cont` then a second distinct reason, not the first twice) |
+| 5 | interpreted and generated executors agree; ABI bumped as the outcome shape moved | Slice ① — `byte-machine.differential.pause` (both lanes); ABI **6 → 7** read out of the emitted text, all seven determinism goldens re-baselined |
+| 6 | a before/after size measurement | §3.6, recorded in the `CHANGELOG.md [0.4.0]` entry: a two-node pause machine emits **1,825 bytes** without a reason and **1,942 bytes** with one declared reason (**+117 bytes**), measured through the emitter |
+
+**Brief §6 honoured.** The reason does not ride the error slot:
+`parser-result-error` stays `#f` for a pause, in a NEW `parser-result-pause`
+slot, so a slot-only consumer keeps the paused/errored distinction; the reason
+is optional (criterion 1); `status` and the lifecycle rows do not move.
+
+**Out of scope, deferred with rationale (unchanged):** a reason on
+span-data/span-complete callback pauses (needs a span-declaration field no
+consumer wants), and a mandatory reason.
+
+**Coordination (§4.6) closed.** Decision 0046 landed as taken; the ABI bump 6→7
+was clean (M11 held ABI 6); the `CHANGELOG` head and the release ledger were
+reconciled at each slice. The `§26`/`§27` release census is **unchanged** —
+13 met / 2 amended / 0 open, the two amended still the CI-blocked Tier-1 pair; a
+pause reason adds no criterion row. The mutation lane closes at 72 passes / 628
+mutations, all caught; `pr` 156/156; the diagnostic census is unchanged.
+
+**Version surfaces at 0.4.0:** README.org status, `CHANGELOG.md [0.4.0]`, the
+parent plan's status line and its Milestone 12 foot disposition, the release
+ledger's `release-version` (single owner) and its five mirror surfaces, this
+design's status header, and the annotated `v0.4.0` tag. The consumer
+(`chez-httparse`) picks up ABI 7 downstream (its own PR, re-measured
+fingerprints) per the brief's §10.

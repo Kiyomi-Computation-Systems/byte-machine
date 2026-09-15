@@ -17,13 +17,20 @@ fields with checked accumulation, zero-width actions and branches, callbacks,
 spans, and counted consumption. The [[file:.reference/source-ir-and-builder.md][source IR and builder reference]] documents
 every constructor and node kind.
 
-*Status:* =0.3.0=. v0.3 makes the **first public-API addition since v0.1**: a
+*Status:* =0.4.0=. v0.4 adds a **second public-API addition since v0.1**: a
+=pause= node (and a =callback= node returning =callback-pause=) may name an
+OPTIONAL reason — a declared =error-declaration= — so a paused parser reports its
+own =(code, reason)= through a new =parser-result-pause= accessor, while
+=parser-result-error= stays =#f= (a pause is not an error, and it remains
+resumable). =make-pause-node= / =make-callback-node= gain the trailing argument
+via =case-lambda=, so no existing machine changes; the generated-runtime ABI
+bumps 6 → 7 (decision 0046). v0.3 made the first public-API addition since v0.1: a
 =keyword-table= node kind (=make-keyword-table-node= / =make-keyword-entry=,
 through =(byte-machine graph)=) that matches a set of keywords tolerating proper
 prefixes (=GET= ⊂ =GET-PARAMETER=) with optional per-table ASCII case-folding, and
 lowers to one compact table walked by a new runtime op — replacing hundreds of
 generated dispatch states (the 47 HTTP methods go from a 242-node trie to one
-state). It bumps the generated-runtime ABI 5 → 6 (decisions 0043–0045). v0.2 added
+state); it bumped the ABI 5 → 6 (decisions 0043–0045). v0.2 added
 empty-span observability (decision 0042). =src/byte-machine/= holds the
 construction API, the verifier, the normalizer and emitter, the reference
 interpreter, and the runtime.

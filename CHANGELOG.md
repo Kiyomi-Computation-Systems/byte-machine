@@ -6,6 +6,47 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-14
+
+### Milestone 12 — a pause carries a reason
+
+**Added: an optional reason on a pause, read through `parser-result-pause`.** A
+`pause` node — and a `callback` node whose callback returns `callback-pause` —
+may now name an OPTIONAL reason: a declared `error-declaration` (the same
+name/code/reason shape an error uses), referenced by name. Construct it through
+the existing builders, which gained the trailing argument via `case-lambda`, so
+no existing machine changes:
+
+```
+(make-pause-node name continuation reason label)      ; reason optional
+(make-callback-node name callback reason label ...)   ; reason optional
+```
+
+A paused `parser-result` then reports that reason as a `parser-error`-shaped
+`(code, reason)` value in a NEW slot, read by the accessor **`parser-result-pause`**
+— the first read accessor added to the `§9.3` parser-result family since v0.1.
+`parser-result-error` stays `#f` for a pause: a pause is *not* an error and
+remains resumable, so a slot-only consumer still sees the paused/errored
+distinction, and `status` together with the `paused-feed` / `paused-finish`
+lifecycle rows are unchanged. The reason survives resume-and-re-pause — two
+paused nodes report their two distinct reasons, not the first one twice. The
+interpreter and the generated parser are proved to agree over the mechanism by
+`byte-machine.differential.pause`. See decision 0046 and
+[the source-IR reference](.reference/source-ir-and-builder.md#nodes).
+
+### Changed
+
+**Generated-parser ABI bumped 6 → 7.** The emitted paused-outcome's payload
+contract moves: its error slot goes from always-`#f` to `#f | ParserError` (the
+carried reason, when the pause declares one). A version-6 generated library and
+a version-7 runtime refuse each other. A pause that declares no reason still
+emits a byte-identical parser but for the ABI version literal — the reason
+enters the normalized encoding and the fingerprint only under a presence guard
+(the "a datum the ABI carries must be in the encoding" rule). Measured through
+the emitter: a two-node pause machine emits **1,825 bytes** without a reason and
+**1,942 bytes** with one declared reason — **+117 bytes**, the single errs-table
+entry the reason adds plus its wiring.
+
 ## [0.3.0] - 2026-09-13
 
 ### Milestone 11 — the keyword-table node kind
