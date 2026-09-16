@@ -445,6 +445,14 @@
             ((eq? (uint-field-name (car fs)) name) (uint-field-width (car fs)))
             (else (loop (cdr fs))))))
 
+  ;; Whether the declared field `name` is settable (Milestone 13). #f for an
+  ;; undeclared name too, so the caller checks declaredness (width) first.
+  (define (field-settable-of fs name)
+    (let loop ((fs fs))
+      (cond ((null? fs) #f)
+            ((eq? (uint-field-name (car fs)) name) (uint-field-settable? (car fs)))
+            (else (loop (cdr fs))))))
+
   (define (operand-in-width? v width)
     (and (integer? v) (exact? v) (<= 0 v (- (expt 2 width) 1))))
 
@@ -513,11 +521,26 @@
   ;; "incompatible" reduces to "undeclared". When a second field type arrives,
   ;; this arm is where the incompatibility check gains content. Reported under
   ;; the NODE's name, on the operand walk's convention.
+  ;; Two diagnostics, in order. First the shared "no declared field". Then, for a
+  ;; declared field, the Milestone 13 rule: the counter may NOT be settable. A
+  ;; settable field's initial is embedder-chosen at `make-parser`, but
+  ;; `parked-eof-start` (PASS EOF-execution) reasons that a counted-consume node
+  ;; reachable at ENTRY holds "the field's initial and may be zero, so it starts
+  ;; at itself" -- a claim about the DECLARED initial that an embedder override
+  ;; would falsify. A count's whole meaning is a known start that decreases, so a
+  ;; settable counter is refused outright (decision 0047 item 4), which keeps that
+  ;; entry reasoning sound for every real machine (a settable field is a
+  ;; mode/bitset selector, never a counter). Reported under the NODE's name, on
+  ;; the operand walk's convention.
   (define (counted-operand-diagnostics fs n)
-    (if (field-width-of fs (counted-consume-node-field n))
-        '()
-        (list (make-diagnostic/declarations 'invalid-field-operand (node-name n)
-                               "counted consume names no declared field" (list (counted-consume-node-field n))))))
+    (let ((fname (counted-consume-node-field n)))
+      (cond ((not (field-width-of fs fname))
+             (list (make-diagnostic/declarations 'invalid-field-operand (node-name n)
+                                    "counted consume names no declared field" (list fname))))
+            ((field-settable-of fs fname)
+             (list (make-diagnostic/declarations 'settable-consume-counter (node-name n)
+                                    "counted consume names a settable field; a settable field's initial is embedder-chosen and cannot be a count" (list fname))))
+            (else '()))))
 
   (define (pass-field-operands m fs)
     (apply append
@@ -1110,7 +1133,11 @@
           ;; set only through its `(symbol? (node-eof-target n))` clause. The
           ;; ENTRY falls through: a fresh parser is parked there without having
           ;; executed it, its count is the field's initial and may be zero, so it
-          ;; starts at itself and takes `classify`'s join.
+          ;; starts at itself and takes `classify`'s join. "The field's initial"
+          ;; is the DECLARED initial: a settable field (Milestone 13) has an
+          ;; embedder-chosen one, which would falsify this -- so
+          ;; `counted-operand-diagnostics` refuses a settable counter outright
+          ;; (decision 0047 item 4), keeping this reasoning sound.
           ((and (counted-consume-node? n) (not (eq? (node-name n) (machine-entry m))))
            (counted-consume-node-eof-target n))
           (else (node-name n))))

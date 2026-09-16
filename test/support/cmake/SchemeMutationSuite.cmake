@@ -1421,8 +1421,18 @@ cmake_minimum_required(VERSION 3.26)
 # §6 error-slot guard, and the errs reached-walk). Six new mutations (the
 # differential.pause pass carries four: the pause-node read, the callback read,
 # the §6 guard, and the reached-walk): 622 -> 628.
-set(EXPECTED_PASSES 72)
-set(EXPECTED_MUTATIONS 628)
+# Milestone 13 (a parser can start in a mode, decision 0047) adds FOUR passes --
+# make-parser's override validation and reset source (runtime-tests, 4 mutations),
+# the verifier's settable-consume-counter rule (diagnostic-census, 1), the
+# fingerprint's settable encoding (normal-ir-tests, 1), and the emitted+interpreted
+# settable table (the settable differential, 2: compile member 3 and the op lane's
+# settable-fields message). Plus one pin each in two EXISTING passes -- the
+# ir settable? boolean guard (ir pass) and the make-uint-field settable? flag --
+# and the retirement of the Pass-60 "drops the unconstructible list" survivor,
+# now caught because settable-consume-counter is unconstructible-only. Nine new
+# mutations across four new passes plus two existing: 628 -> 637, 72 -> 76.
+set(EXPECTED_PASSES 76)
+set(EXPECTED_MUTATIONS 637)
 # Sixty-two is sixty-one plus one: Milestone 8 Slice ① adds one pass over the
 # request-line fixture (http-machine.sls) with three mutations (590 -> 593),
 # each caught by byte-machine.unit.http-request-line with a measured signature.
@@ -6755,8 +6765,11 @@ byte_machine_mutation(
   # The Slice ① sweep: also satisfied by "verify: pass-fields is never run" and
   # "verify: the operand half is never run" -- pass containment, the nesting every
   # pin inside pass-fields shares. By construction.
-  FIND [[    (if (field-width-of fs (counted-consume-node-field n))]]
-  REPLACE [[    (if #t]]
+  # Milestone 13 re-anchor: counted-operand-diagnostics became a cond whose first
+  # clause is the undeclared check; forcing that clause's test #f skips it, the
+  # same fault the old `(if (field-width-of ...))` mutation named.
+  FIND [[      (cond ((not (field-width-of fs fname))]]
+  REPLACE [[      (cond (#f]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "undeclared: reported under the node -- expected ..invalid-field-operand . body.., got .[)]")
 
@@ -7788,11 +7801,17 @@ byte_machine_mutation(
   # this mutation moves no golden and the table assertion is its only witness --
   # the reason that assertion states each entry WHOLE, (name width initial slot),
   # rather than checking the length and the names.
-  FIND [[                            slot)]]
-  REPLACE [[                            0)]]
+  # Milestone 13 re-anchor: the field record gained a fifth element (settable?),
+  # so `slot)` became `slot` followed by the settable read. The mutation is
+  # unchanged in effect -- force every slot to 0 -- and the whole-entry table
+  # assertion (now carrying the settable column) is still its only witness.
+  FIND [[                            slot
+                            (uint-field-settable? (car fs)))]]
+  REPLACE [[                            0
+                            (uint-field-settable? (car fs)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "slots are declaration indices, and the table carries name, width and initial: second -- expected \\(limit 16 65535 1\\), got \\(limit 16 65535 0\\)")
+    "and settable.*second -- expected .limit 16 65535 1 #f., got .limit 16 65535 0 #f.")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
@@ -9553,6 +9572,16 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
+  LABEL "ir: the uint field settable? flag is not boolean-checked (Milestone 13)"
+  # Forcing the guard true lets a non-boolean settable? through, so a settable
+  # field could carry junk the verifier and both lanes then read as truthy.
+  FIND [[       (unless (boolean? settable?)]]
+  REPLACE [[       (unless #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the optional settable. flag must be a boolean .Milestone 13.: non-boolean -- expected a raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
   LABEL "ir: make-machine accepts fields that are not field descriptors"
   # Without this guard the collection loop checks only list?, so any proper list
   # passes -- measured before the guard landed, a machine could carry
@@ -11268,11 +11297,16 @@ byte_machine_mutation(
   # unchanged: member 0 is the field table and dropping it must be caught.
   # Re-anchored again by Milestone 5 Slice ②, which added member 2 (§17:963's
   # state-name table) and so a third `vector-ref` on the same line. The decision
+  # is still member 0's. Re-anchored by Milestone 13, which added the OPTIONAL
+  # member 3 (the settable table) on the next line, so the constructor no longer
+  # closes on the member-2 line; the FIND stops before member 3 and the decision
   # is still member 0's.
   FIND [[            (vector-ref metadata 0) (vector-ref metadata 1)
-            (vector-ref metadata 2)))]]
+            (vector-ref metadata 2)
+]]
   REPLACE [[            (vector) (vector-ref metadata 1)
-            (vector-ref metadata 2)))]]
+            (vector-ref metadata 2)
+]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "parser-field-ref \\(generated\\).a fresh parser reads the declared initial at every width: case raised")
@@ -11356,7 +11390,12 @@ byte_machine_mutation(
   # restoring a constant is a no-op. A parse now changes it, and the difference
   # between a reset that restores and one that does not is two numbers. The
   # suite's declared survivors go back to TEN.
-  FIND [[    (vector-set! parser 8 (initial-values (parser-field-decls parser)))))]]
+  # Milestone 13 re-anchor: reset now restores slot 8 from the canonical merged
+  # initials (slot 17) via copy-values, not from the declared decls. With no
+  # make-parser override slot 17 equals the declared initials, so the fixture's
+  # expected 254 is unchanged; deleting the restore still leaves the parse-changed
+  # 255.
+  FIND [[    (vector-set! parser 8 (copy-values (parser-field-initials parser)))))]]
   REPLACE [[    ))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
@@ -12988,8 +13027,11 @@ byte_machine_mutation(
   # the two lanes reach `user-context` by different routes (`make-parser` builds
   # both vectors here, but only this arm's literal moves), and a pin that
   # mutated both would not show it.
-  FIND [[                 user-context #f #f 0 #f #f)))]]
-  REPLACE [[                 'not-the-input #f #f 0 #f #f)))]]
+  # Milestone 13 re-anchor: make-parser became a case-lambda (deeper indent) and
+  # the op vector gained slot 17 (`merged`, the canonical initials), so the arm
+  # ends `... #f #f merged)))`; the pin still edits only the op arm's user-context.
+  FIND [[                    user-context #f #f 0 #f #f merged)))]]
+  REPLACE [[                    'not-the-input #f #f 0 #f #f merged)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "user context may retain it, and does: retained, and permitted -- expected ..interpreted . #t. .generated . #t.., got ..interpreted . #f. .generated . #t."
 )
@@ -13311,20 +13353,23 @@ byte_machine_mutation(
       (lambda (m) (let ((ns (node-names m))) (rename-to m all-node-ctors ns (car ns))))]]
   EXPECT_OUTPUT_MATCHES "dup-node-name twins verify and lack the entry's code -- expected a true value")
 
-# mut4: the code sentinel drops the unconstructible list. DECLARED SURVIVOR
-# (Task 9 Step 8 reconciliation): invalid-shape is redundantly the not-a-machine
-# entry's expected code, so dropping the unconstructible {invalid-shape} leaves the
-# union unchanged. Every census code has an entry, so no code is unconstructible-
-# only; the unconstructible list is a documented belt-and-braces, not a load-bearing
-# sentinel term. The plan's Step 1 predicted this caught "naming invalid-shape"; the
-# measurement is that it is not catchable, recorded here.
+# mut4: the code sentinel drops the unconstructible list. This SURVIVED at v0.4.0
+# because invalid-shape (the only unconstructible member then) was redundantly the
+# not-a-machine entry's expected code, so dropping the list left the union
+# unchanged -- the list was documentary. Milestone 13 makes it LOAD-BEARING:
+# settable-consume-counter is unconstructible-ONLY (no corruption entry produces a
+# settable field), so it reaches the sentinel through this list alone. Dropping the
+# list now drops it from the union, and the sentinel no longer set-equals the
+# 33-code census -- the mutation is caught. (The uncatchable-becomes-catchable turn:
+# a real unconstructible-only code retired this survivor.)
 byte_machine_mutation(
   FILE test/common/property-rejections-tests.sps
   SPEC byte-machine.property.rejections.chez.source
   LABEL "the code sentinel drops the unconstructible list"
   FIND [[               (sentinel (uniq (append entry-codes unconstructible-codes)))]]
   REPLACE [[               (sentinel (uniq entry-codes))]]
-  EXPECT_SURVIVES "invalid-shape is redundantly the not-a-machine entry's expected code, so the union is unchanged when the unconstructible list is dropped; every census code has an entry, so no code is unconstructible-only and the list is documentary rather than load-bearing")
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the sentinel set-equals the census.s derived code set -- expected a true value")
 
 # mut5: one refusal thunk is made legal -> F5 row 2 sees no raise.
 byte_machine_mutation(
@@ -14049,15 +14094,15 @@ byte_machine_mutation(
   # bytes from the committed golden AND makes the current runtime refuse the
   # library outright at construction -- `byte-machine-make-compiled-machine`
   # validates the version, so the determinism lane's top-level load of the
-  # generated file raises "generated-runtime ABI mismatch with irritant 6"
+  # generated file raises "generated-runtime ABI mismatch with irritant 7"
   # (status 255) before it can report the golden mismatch cleanly. That refusal
   # is the sharper witness -- it names the version the emitter stamped -- so the
   # pin asserts it by message, not by the raw-byte golden diff. This is the ONE
   # pin on the emitted literal.
-  FIND [[(byte-machine-make-compiled-machine 7 ]]
-  REPLACE [[(byte-machine-make-compiled-machine 6 ]]
+  FIND [[(byte-machine-make-compiled-machine 8 ]]
+  REPLACE [[(byte-machine-make-compiled-machine 7 ]]
   EXPECT_STATUS 255
-  EXPECT_OUTPUT_MATCHES [[generated-runtime ABI mismatch with irritant 6]])
+  EXPECT_OUTPUT_MATCHES [[generated-runtime ABI mismatch with irritant 7]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -14233,6 +14278,132 @@ byte_machine_mutation(
                                            (normal-error-code st))]]
   EXPECT_STATUS 255
   EXPECT_OUTPUT_MATCHES "no error declaration for code")
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Milestone 13: a parser can start in a mode (decision 0047) --------------
+# FOUR passes (one per witnessing program, the verify command being set per
+# group), seven mutations, covering the decisions the re-anchored field/reset
+# pins above do NOT: the make-parser initial-values validation (range, settable
+# gate, apply), the reset-survival RESTORE SOURCE (slot 17 vs the declared
+# decls), the verifier's settable-consume-counter rule, the fingerprint's
+# settable encoding, and the emitted settable table. Each signature was measured
+# by staging the mutant and running its own witnessing program.
+
+# Pass α -- make-parser's override validation and reset source, via runtime-tests.
+byte_machine_mutation_reset()
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/runtime-tests.sps")
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a settable override is validated but never applied"
+  FIND [[                   (vector-set! values slot val)))]]
+  REPLACE [[                   (if #f #f)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[override applied -- expected 1, got 0]])
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: an override's upper width bound is not checked"
+  FIND [[                   (unless (and (<= 0 val) (<= val (- (expt 2 w) 1)))]]
+  REPLACE [[                   (unless (and (<= 0 val) #t)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[a value outside the field.s declared width -- expected a raise]])
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: a non-settable field is treated as settable"
+  # settable-width returns #f for a non-settable field; forcing a width past it
+  # lets a non-settable override through, so the non-settable refusal reddens.
+  FIND [[                 (let ((w (settable-width settable name)))]]
+  REPLACE [[                 (let ((w (or (settable-width settable name) 8)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[a declared but NON-settable field -- expected a raise]])
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
+  LABEL "runtime: parser-reset! restores the DECLARED initials, not the embedder's"
+  # Distinct from the field-pass pin that DELETES the restore (caught with no
+  # override): this restores the wrong SOURCE, observable only with an override,
+  # so runtime-tests' reset case (mode := 1) is its witness.
+  FIND [[    (vector-set! parser 8 (copy-values (parser-field-initials parser)))))]]
+  REPLACE [[    (vector-set! parser 8 (initial-values (parser-field-decls parser)))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[reset restores the merged initial, not the declared -- expected 1, got 0]])
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# Pass β -- the verifier's settable-consume-counter rule, via diagnostic-census.
+byte_machine_mutation_reset()
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/diagnostic-census-tests.sps")
+byte_machine_mutation(
+  FILE src/byte-machine/verify.sls SPEC byte-machine.unit.diagnostic-census.chez.source
+  LABEL "verify: a settable field used as a counted-consume counter is not refused"
+  FIND [[            ((field-settable-of fs fname)]]
+  REPLACE [[            ((and #f (field-settable-of fs fname))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[settable-consume-counter is emitted -- expected a true value]])
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# Pass γ -- the fingerprint's settable encoding, via normal-ir-tests.
+byte_machine_mutation_reset()
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/normal-ir-tests.sps")
+byte_machine_mutation(
+  FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
+  LABEL "normal-ir: settability is not encoded into the fingerprint"
+  # Forcing the collector to skip every settable field leaves settable-slots
+  # empty, so no machine writes the tag-10 section and a settable machine shares a
+  # fingerprint with a non-settable one. (Inverting the `unless` guard instead
+  # would wrongly WRITE an empty section for every field-less machine and move the
+  # baseline goldens, masking this witness.)
+  FIND [[                      ((list-ref (car fs) 4) (loop (cdr fs) (cons (cadddr (car fs)) acc)))]]
+  REPLACE [[                      (#f (loop (cdr fs) (cons (cadddr (car fs)) acc)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[SETTABLE flag differ in fingerprint: different -- expected a true value]])
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# Pass δ -- the emitted settable table, via the settable differential.
+byte_machine_mutation_reset()
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/differential-settable-tests.sps")
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.settable.chez.source
+  LABEL "compile: the settable table is never emitted as payload member 3"
+  # Without member 3 the generated lane has no settable table, so its make-parser
+  # refuses the mode override the differential supplies -- the generated arm of
+  # the fork raises instead of agreeing with the interpreter.
+  FIND [[        (if (string=? settable "") "" (string-append " #(" settable ")"))]]
+  REPLACE [[        ""]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[non-settable-field]])
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.settable.chez.source
+  LABEL "interpret: the settable-fields message reports no field as settable"
+  # The interpreter lane's counterpart to compile's member 3 (the settable
+  # differential witnesses both lanes). Dropping every settable field makes the op
+  # lane's make-parser refuse the mode override the differential supplies -- the
+  # interpreter arm raises where the generated agrees.
+  FIND [[                    ((uint-field-settable? (car fs))]]
+  REPLACE [[                    ((and #f (uint-field-settable? (car fs)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[non-settable-field]])
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # Every pass above has now run exactly once, so the accumulated total is

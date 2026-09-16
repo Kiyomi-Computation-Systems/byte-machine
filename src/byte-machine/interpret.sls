@@ -502,6 +502,19 @@
             (list->vector (map (lambda (f) (cons (uint-field-name f)
                                                  (uint-field-initial f)))
                                (machine-fields m))))
+           ;; The settable table (Milestone 13): `(name width)` per SETTABLE
+           ;; field, what make-parser range-checks an embedder override against.
+           ;; This lane answers from the source machine; the generated lane reads
+           ;; the equivalent ABI payload member 3. A list here, a vector there --
+           ;; make-parser converts the v2 vector to a list, so the two shapes meet.
+           ((settable-fields)
+            (let loop ((fs (machine-fields m)) (acc '()))
+              (cond ((null? fs) (reverse acc))
+                    ((uint-field-settable? (car fs))
+                     (loop (cdr fs) (cons (list (uint-field-name (car fs))
+                                                (uint-field-width (car fs)))
+                                          acc)))
+                    (else (loop (cdr fs) acc)))))
            ;; The same per-lane asymmetry the field table established: this lane
            ;; holds the verified source machine and is asked, the generated lane
            ;; reads the equivalent shape out of ABI payload member 1. Four parts

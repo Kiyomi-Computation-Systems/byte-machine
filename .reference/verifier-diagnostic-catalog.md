@@ -8,9 +8,11 @@ concerns, and a message.
 **This catalog is derived, not hand-maintained.** The authoritative code set is
 computed by `test/common/diagnostic-census-tests.sps`, which reads `verify.sls`
 as a datum and walks every `(make-diagnostic … )` site — thirty codes over
-fifty-six sites at v0.1, and **thirty-two over fifty-eight** since Milestone 11
+fifty-six sites at v0.1, thirty-two over fifty-eight since Milestone 11
 added the `duplicate-keyword` (Slice ①) and `case-insensitive-keyword-collision`
-(Slice ②) codes. That lane also asserts the code set here matches the
+(Slice ②) codes, fifty-nine sites since Milestone 12 added a pause-reason
+resolution site (same code set), and **thirty-three over sixty** since Milestone
+13 added `settable-consume-counter`. That lane also asserts the code set here matches the
 census, so a code added to `verify.sls` (or dropped from it) fails until this list
 is updated; the catalog cannot silently drift from the verifier. Per-site counts
 live in that lane, the single place they are pinned.
@@ -45,6 +47,12 @@ The codes are grouped by the verifier pass that raises them.
 - `invalid-field-operand` — a field action or branch names operands that do not
   fit its operand schema (wrong arity, or a value outside the field's width — for
   example a `range` bound wider than the field).
+- `settable-consume-counter` — a counted-consume node's counter is a settable
+  field. A settable field's initial is chosen by the embedder at `make-parser`,
+  but the EOF-execution pass reasons that a counted-consume at the entry state
+  holds its declared initial (and may be zero); an embedder override would
+  falsify that, so a settable field may not be a count (Milestone 13, decision
+  0047).
 
 ## Reachability and EOF (pass-reachability)
 

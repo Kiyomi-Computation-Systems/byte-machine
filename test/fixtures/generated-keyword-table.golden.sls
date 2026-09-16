@@ -21,4 +21,4 @@
       ((6) (byte-machine-make-feed-outcome/v1 (quote error) pos (byte-machine-make-parser-error/v1 (vector-ref errs 0) (quote reject) 6 off pk) 6 off))
       (else (assertion-violation (quote exec) "unknown state" st)))))
   (define kwtableci
-    (byte-machine-make-compiled-machine 7 359790446523106613 0 exec (quote #(#() #() #(table got-get got-gp got-close got-closed eof-incomplete reject))))))
+    (byte-machine-make-compiled-machine 8 359790446523106613 0 exec (quote #(#() #() #(table got-get got-gp got-close got-closed eof-incomplete reject))))))

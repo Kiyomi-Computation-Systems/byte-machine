@@ -144,15 +144,18 @@
 
 (harness-group "the field table (§17:962)"
   (lambda ()
-    (harness-case "slots are declaration indices, and the table carries name, width and initial"
+    (harness-case "slots are declaration indices, and the table carries name, width, initial and settable? (Milestone 13)"
       (lambda ()
         (let ((t (normal-machine-fields
                   (normalize (one-byte/fields
                               (list (make-uint-field 'count 8 0 #f)
-                                    (make-uint-field 'limit 16 65535 #f)))))))
-          (check-equal "two entries" (length t) 2)
-          (check-equal "first" (car t) '(count 8 0 0))
-          (check-equal "second" (cadr t) '(limit 16 65535 1)))))
+                                    (make-uint-field 'limit 16 65535 #f)
+                                    (make-uint-field 'mode 8 0 #t #f)))))))
+          (check-equal "three entries" (length t) 3)
+          (check-equal "first" (car t) '(count 8 0 0 #f))
+          (check-equal "second" (cadr t) '(limit 16 65535 1 #f))
+          ;; the settable flag is the fifth element, #t only for a settable field
+          (check-equal "third (settable)" (caddr t) '(mode 8 0 2 #t)))))
     (harness-case "a zero-field machine has an empty table"
       (lambda ()
         (check-equal "empty" (normal-machine-fields n1) '())))
@@ -191,6 +194,19 @@
                         (normalize (one-byte/fields (list (make-uint-field 'count 8 0 #f)))))
                        (normal-machine-fingerprint
                         (normalize (one-byte/fields (list (make-uint-field 'count 8 1 #f))))))))))
+    ;; Milestone 13: settability is observable to a generated parser -- a settable
+    ;; field carries a table in the emitted payload that make-parser range-checks
+    ;; against -- so two machines differing only in one field's settable flag must
+    ;; differ in fingerprint, or the tag-10 settable section is not encoded and a
+    ;; settable and a non-settable machine share a fingerprint but emit different
+    ;; bytes (the decision-0019 rule).
+    (harness-case "two machines differing only in a field's SETTABLE flag differ in fingerprint"
+      (lambda ()
+        (check "different"
+               (not (= (normal-machine-fingerprint
+                        (normalize (one-byte/fields (list (make-uint-field 'count 8 0 #f #f)))))
+                       (normal-machine-fingerprint
+                        (normalize (one-byte/fields (list (make-uint-field 'count 8 0 #t #f))))))))))
     ;; Declaration ORDER is the slot assignment, so it must be encoded too: the
     ;; same two fields swapped are a different machine, and without this case a
     ;; per-field encoding that summed or sorted would pass every case above.

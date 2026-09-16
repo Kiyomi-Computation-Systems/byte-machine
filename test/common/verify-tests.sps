@@ -1535,6 +1535,37 @@
                       (mask-none (count))))
           (check-equal "all seven predicates" seen 7))))))
 
+;; Milestone 13 (decision 0047 item 4): a settable field may not be a
+;; counted-consume counter -- its embedder-chosen initial would falsify the
+;; EOF-execution pass's reasoning that an entry counter holds its declared
+;; initial. A settable field used as a field-branch SELECTOR stays legal.
+(define (counter-machine field)
+  (make-machine 'm 'consume (list field) '() '() (list eof-decl rej-decl)
+                (list (make-counted-consume-node 'consume (uint-field-name field) 'next 'next #f)
+                      (make-stop-node 'next #f) (make-error-node 'oops 'rejected #f))
+                'default-eof #f))
+(harness-group "settable-consume-counter (Milestone 13, §16.3)"
+  (lambda ()
+    (harness-case "a SETTABLE field used as a counted-consume counter is refused"
+      (lambda ()
+        (check "the code appears"
+               (and (memq 'settable-consume-counter
+                          (codes (counter-machine (make-uint-field 'n 8 0 #t #f)))) #t))))
+    (harness-case "a NON-settable counter is not flagged"
+      (lambda ()
+        (check "clean"
+               (not (memq 'settable-consume-counter
+                          (codes (counter-machine (make-uint-field 'n 8 0 #f #f))))))))
+    (harness-case "a settable field used as a field-branch SELECTOR is legal"
+      (lambda ()
+        (let ((m (make-machine 'm 'br (list (make-uint-field 'mode 8 0 #t #f)) '() '()
+                               (list eof-decl rej-decl)
+                               (list (make-field-branch-node 'br 'equal '(mode 1) 'next 'next #f)
+                                     (make-stop-node 'next #f))
+                               'default-eof #f)))
+          (check "not flagged as a settable counter"
+                 (not (memq 'settable-consume-counter (codes m)))))))))
+
 
 ;; Milestone 4 Slice ③ task 2: the verifier census for the INPUT-READING kind.
 ;;

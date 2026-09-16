@@ -187,8 +187,12 @@
           (lit (error-declaration-code d)) (error-declaration-reason d)
           (lit (error-declaration-source-label d))))
   (define (print-uint-field f)
+    ;; The 5-arg form, always: the settable flag (Milestone 13) is the field's
+    ;; fourth element, so a settable machine printed and reparsed keeps it -- the
+    ;; 4-arg form would silently reparse settable? to #f.
     (list 'make-uint-field (lit (uint-field-name f)) (uint-field-width f)
-          (uint-field-initial f) (lit (uint-field-source-label f))))
+          (uint-field-initial f) (lit (uint-field-settable? f))
+          (lit (uint-field-source-label f))))
   (define (print-callback-declaration d)
     (list 'make-callback-declaration (lit (callback-declaration-name d))
           (lit (callback-declaration-kind d)) (callback-declaration-required? d)

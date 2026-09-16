@@ -522,10 +522,17 @@
        "terminal node constructors (make-stop-node/make-finish-node/make-error-node) take name and source-label only -- there is no out-edge slot to give")))
 
   ;; ---- the unconstructible list (Step 7) ------------------------------------
-  ;; Census codes reachable neither by an entry nor by a refusal, because no
-  ;; machine can carry the fault through the public API. One member: `invalid-shape`
-  ;; via its unsupported-version half (§9.1:320-322) -- `verify-tests.sps` forges
-  ;; such a descriptor with a test-only vector, and this catalogue does not. Its
-  ;; NOT-a-machine half IS an entry (`shape-not-a-machine`). The code sentinel
-  ;; (F5 row 1) adds these codes to the entry codes' union.
-  (define unconstructible-codes '(invalid-shape)))
+  ;; Census codes reachable neither by a catalogue entry nor by a constructor
+  ;; refusal, so this corruption catalogue -- which corrupts ACCEPTED machines --
+  ;; never produces them. Two members:
+  ;;   - `invalid-shape` via its unsupported-version half (§9.1:320-322) --
+  ;;     `verify-tests.sps` forges such a descriptor with a test-only vector, and
+  ;;     this catalogue does not. Its NOT-a-machine half IS an entry
+  ;;     (`shape-not-a-machine`).
+  ;;   - `settable-consume-counter` (Milestone 13, decision 0047): a settable
+  ;;     field used as a counted-consume counter. It IS constructible through the
+  ;;     public API, but no corruption of an accepted machine makes a field
+  ;;     settable, so the catalogue cannot reach it; `diagnostic-census-tests.sps`
+  ;;     and `verify-tests.sps` cover it directly.
+  ;; The code sentinel (F5 row 1) adds these codes to the entry codes' union.
+  (define unconstructible-codes '(invalid-shape settable-consume-counter)))

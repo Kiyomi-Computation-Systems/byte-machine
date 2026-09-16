@@ -84,10 +84,17 @@ produce byte-identical source on every platform cell (`§20`).
 The consumer imports the generated library and `(byte-machine runtime)`, then
 uses the runtime API on the compiled-machine value the library exports.
 
-- **`(make-parser compiled-machine callback-bindings user-context)`** —
+- **`(make-parser compiled-machine callback-bindings user-context [field-initials])`** —
   `callback-bindings` is a proper list of two-element lists `(list (list 'name
   proc) ...)`, or `'()` when the machine declares no callbacks; `user-context` is
-  opaque application data (or `#f`).
+  opaque application data (or `#f`). The OPTIONAL fourth argument `field-initials`
+  (Milestone 13) is an alist `((field-name . value) ...)` overriding the DECLARED
+  initials of fields the machine declared **settable** (`make-uint-field`'s
+  optional `settable?` flag), so two parsers built from one machine can start in
+  two modes. An override naming an unknown field, a non-settable field, a
+  duplicate name, or a value outside the field's declared width is refused at
+  construction; it cannot apply mid-parse. `parser-reset!` restores these
+  embedder-given initials, so the mode survives a reset.
 - **`(parser-feed! parser bv start end)`** — runs the parser over the slice
   `[start, end)` of bytevector `bv` (absolute indices; `0 <= start <= end <=
   (bytevector-length bv)`). Returns a *parser-result*.
@@ -124,7 +131,7 @@ execution modes (`§7.3`, `§24.2`):
   it; `§24.3` keeps those objects per version/OS/architecture and never commits
   them.
 
-The compiled machine carries an ABI version (currently `7`), and
+The compiled machine carries an ABI version (currently `8`), and
 `byte-machine-make-compiled-machine` checks it as its first action, raising
 `"generated-runtime ABI mismatch"` on a mismatch. This guard is load-bearing in
 the AOT lane: Chez prefers a compiled object over source and staleness is

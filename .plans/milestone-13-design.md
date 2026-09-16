@@ -206,8 +206,11 @@ discipline ("bytes only when the feature is present"):
   `#(#(fields) #(cbs) #(snames))` when NO field is settable — byte-identical to v7
   except the ABI literal — and a four-member `#(#(fields) #(cbs) #(snames)
   #(settable-table))` when at least one field is settable, where the settable
-  table carries `(slot width)` per settable field, everything the generated
-  `make-parser` needs to validate and apply an override. The runtime's
+  table carries `(name width)` per settable field (Slice ① shipped it keyed by
+  NAME, not slot: `make-parser` resolves an override by field name, and member 0
+  already fixes name→slot — the fingerprint's tag-10 section uses the slot),
+  everything the generated `make-parser` needs to validate and apply an override.
+  The runtime's
   compiled-machine decoder length-guards the fourth member (absent ⇒ no field is
   settable ⇒ every override is refused). This mirrors decision 0046's refusal of a
   sixth feed-outcome slot: reuse/append rather than move every site.

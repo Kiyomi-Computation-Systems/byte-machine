@@ -738,6 +738,23 @@
                                 acc (if (string=? acc "") "" " ")
                                 "(" (symbol->string (car (car fs)))
                                 " . " (number->string (caddr (car fs))) ")")))))
+           ;; ABI payload member 3 (Milestone 13): the settable table, `(name
+           ;; width)` per SETTABLE field. Member 0 carries `(name . initial)` with
+           ;; no width, so the generated `make-parser` cannot range-check an
+           ;; embedder override without this. It is an OPTIONAL member, emitted
+           ;; only when some field is settable (`settable?` is the field record's
+           ;; 5th element, `list-ref 4`; `cadr` is the width) -- a machine with
+           ;; none emits the three members it always has, byte-identical but for
+           ;; the ABI literal.
+           (settable (let loop ((fs (normal-machine-fields normal)) (acc ""))
+                       (if (null? fs) acc
+                           (loop (cdr fs)
+                                 (if (list-ref (car fs) 4)
+                                     (string-append
+                                      acc (if (string=? acc "") "" " ")
+                                      "(" (symbol->string (car (car fs)))
+                                      " " (number->string (cadr (car fs))) ")")
+                                     acc)))))
            ;; ABI payload member 2: the state-id to SOURCE-NAME table, as a vector
            ;; indexed by state id. It is what makes `parser-state-name` answerable
            ;; in the generated lane; the debug map is otherwise read at exactly one
@@ -797,9 +814,16 @@
                                                                  (normal-machine-span-decls normal))))))
         "      (else (assertion-violation (quote exec) \"unknown state\" st)))))\n"
         "  (define " bstr "\n"
-        "    (byte-machine-make-compiled-machine 7 " (number->string fp) " "
+        "    (byte-machine-make-compiled-machine 8 " (number->string fp) " "
         (number->string entry) " exec (quote #(#(" fields ") #(" cbs ") #("
-        snames "))))))\n"))))
+        snames ")"
+        ;; The optional fourth member: emitted only when a field is settable, so
+        ;; a machine with none renders the identical three-member metadata it did
+        ;; at ABI 7 -- the present guard, matching the fingerprint's tag-10
+        ;; trailing section. The runtime decoder length-guards it (absent => no
+        ;; settable field => every override refused).
+        (if (string=? settable "") "" (string-append " #(" settable ")"))
+        ")))))\n"))))
 
   ;; emit-machine : Compilation Symbol Port -> Any
   ;; Writes the rendered bytes to the binary output port; returns an

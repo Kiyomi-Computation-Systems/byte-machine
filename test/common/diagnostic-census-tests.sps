@@ -161,7 +161,12 @@
     ;; Milestone 11: `pass-keyword-table`. Two codes, two sites -- an exact
     ;; duplicate keyword (Slice ①) and, Slice ②, a fold collision in a
     ;; case-insensitive table (decision 0045 item 3).
-    (duplicate-keyword 1) (case-insensitive-keyword-collision 1)))
+    (duplicate-keyword 1) (case-insensitive-keyword-collision 1)
+    ;; Milestone 13: `counted-operand-diagnostics`. ONE code, ONE site -- a
+    ;; counted-consume node whose counter is a SETTABLE field, whose
+    ;; embedder-chosen initial would falsify `parked-eof-start`'s entry reasoning
+    ;; (decision 0047 item 4). A make-diagnostic/declarations site, 31 -> 32.
+    (settable-consume-counter 1)))
 
 ;; *** RE-MEASURED 2026-09-03, Slice ⓪b task 2: `non-eof-into-finish` went 3 -> 1
 ;; and the total 31 -> 29. *** This is the ratchet FIRING, not a regression: ⓪b
@@ -390,6 +395,13 @@
                                         (make-keyword-entry '(97) 'stop #f))
                                   (make-edge 'rej 'reexecute) #f #t #f)
                                 (make-stop-node 'stop #f) (an-error 'rej)) 'default-eof)))
+   ;; Milestone 13: a counted-consume node whose counter is a SETTABLE field --
+   ;; its embedder-chosen initial would falsify parked-eof-start's entry
+   ;; reasoning (decision 0047 item 4).
+   (cons 'settable-consume-counter
+         (verify-of (mach 'a 'start (list (make-uint-field 'n 8 0 #t #f)) (list ed rd)
+                          (list (make-counted-consume-node 'start 'n 'stop 'stop #f)
+                                (make-stop-node 'stop #f) (an-error 'rej)) 'default-eof)))
    (cons 'unreachable-node
          (verify-of (mach 'a 'start '() (list ed rd)
                           (list (one-case-dispatch 'start 'stop 'advance #f)
@@ -613,13 +625,16 @@
         ;; Milestone 12 added the pause/callback reason resolution arm in
         ;; pass-names, a make-diagnostic/declarations site reusing the existing
         ;; missing-error-declaration code (30 -> 31, total 58 -> 59).
+        ;; Milestone 13 added the settable-consume-counter site in
+        ;; counted-operand-diagnostics, a new make-diagnostic/declarations site
+        ;; with a new code (31 -> 32, total 59 -> 60).
         (check-equal "make-diagnostic sites" (site-count-of 'make-diagnostic) 16)
         (check-equal "make-diagnostic/declarations sites"
-                     (site-count-of 'make-diagnostic/declarations) 31)
+                     (site-count-of 'make-diagnostic/declarations) 32)
         (check-equal "make-diagnostic/path sites" (site-count-of 'make-diagnostic/path) 11)
         (check-equal "make-diagnostic/edge sites" (site-count-of 'make-diagnostic/edge) 1)
-        (check-equal "the site total is fifty-nine"
-                     (apply + (map site-count-of diagnostic-constructors)) 59)
+        (check-equal "the site total is sixty"
+                     (apply + (map site-count-of diagnostic-constructors)) 60)
         (check-equal "twelve path-carrying sites"
                      (apply + (map site-count-of path-carrying-constructors)) 12)))
     (harness-case "the path-bearing code set is exactly item 4's eight codes"

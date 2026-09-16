@@ -4,6 +4,12 @@ Date: 2026-09-15
 Status: accepted
 Milestone: 13, Gate 0 (milestone-13-design.md §4)
 
+> **Amendments**
+> - 2026-09-15 (Slice ①) amends item 5: the emitted settable table is keyed by
+>   `(name width)`, not `(slot width)` as written below. `make-parser` resolves an
+>   override by field NAME, and payload member 0 already fixes name→slot, so the
+>   table carries the name. Only the fingerprint's tag-10 section uses the slot.
+
 ## Context
 
 Decided against `main` at `18fcc8b` (v0.4.0 released, tag `v0.4.0`). This is the
@@ -130,7 +136,8 @@ lane's `make-parser` must reject an override of a non-settable or unknown field
 and range-check a settable one to its width, IDENTICALLY to the interpreter, or
 the two lanes diverge — which the differential lanes exist to forbid. The
 interpreter has the full uint-fields; the generated lane has only `(name .
-initial)`. So the settable table (`(slot width)` per settable field) rides as a
+initial)`. So the settable table (`(slot width)` per settable field — **amended
+2026-09-15 (Slice ①): shipped keyed by `(name width)`, see the header**) rides as a
 FOURTH emitted-metadata member, present only when at least one field is settable
 — a machine with none emits the current three members, byte-identical except the
 ABI literal — and the runtime's decoder length-guards it (absent ⇒ no settable

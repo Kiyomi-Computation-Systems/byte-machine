@@ -48,7 +48,7 @@
 ;;;                             Boolean Label -> KeywordTableNode
 ;;;   make-keyword-entry : (Listof Byte) NodeName Label -> KeywordEntry
 ;;;   make-edge          : NodeName EdgeMode -> Edge
-;;;   make-uint-field    : Symbol UintWidth ExactInteger Label -> UintField
+;;;   make-uint-field    : Symbol UintWidth ExactInteger [Boolean] Label -> UintField
 ;;;   make-callback-declaration : Symbol CallbackKind Boolean (Listof Symbol)
 ;;;                               (Option Symbol) Label -> CallbackDeclaration
 ;;;   make-span-declaration  : Symbol Symbol (Option Symbol) Label -> SpanDeclaration
@@ -78,6 +78,7 @@
 ;;;   uint-field-name         : UintField -> Symbol
 ;;;   uint-field-width        : UintField -> UintWidth
 ;;;   uint-field-initial      : UintField -> ExactInteger
+;;;   uint-field-settable?    : UintField -> Boolean
 ;;;   uint-field-source-label : UintField -> Label
 ;;;
 ;;;   callback-declaration family --
@@ -107,7 +108,7 @@
 ;;;   sequence-case-target              : SequenceCase -> NodeName
 (library (byte-machine graph)
   (export make-uint-field uint-field? uint-field-name uint-field-width
-          uint-field-initial uint-field-source-label
+          uint-field-initial uint-field-settable? uint-field-source-label
           make-callback-declaration callback-declaration?
           callback-declaration-name callback-declaration-kind
           callback-declaration-required? callback-declaration-branch-keys
@@ -135,7 +136,7 @@
           make-keyword-table-node make-keyword-entry)
   (import (only (byte-machine private ir)
                 make-uint-field uint-field? uint-field-name uint-field-width
-                uint-field-initial uint-field-source-label
+                uint-field-initial uint-field-settable? uint-field-source-label
                 make-callback-declaration callback-declaration?
                 callback-declaration-name callback-declaration-kind
                 callback-declaration-required? callback-declaration-branch-keys

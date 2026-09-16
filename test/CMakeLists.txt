@@ -1303,6 +1303,30 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-pause-tests.sps"
   TIMEOUT 120)
 
+# --- Milestone 13: interpreter≡generated settable-mode differential -----------
+# Two parsers from one machine started in two modes through make-parser's
+# initial-values argument agree across executors, survive reset, and refuse an
+# illegal override identically (decision 0047).
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.settable.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-settable-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/settable-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-settable-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.settable.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-settable-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/settable-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-settable-tests.sps"
+  TIMEOUT 120)
+
 # --- Milestone 3 Slice ①: all-byte class coverage through the interpreter ----
 # ABSOLUTE expected outcomes over all 256 bytes for a set, a range, a complement,
 # a nested complement and an ASCII set. Absolute rather than differential because
