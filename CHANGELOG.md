@@ -6,6 +6,52 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-15
+
+### Milestone 13 — a parser can start in a mode
+
+**Added: a settable field and an embedder-chosen initial at `make-parser`.** A
+uint field may be declared **settable**, and a parser built from a machine may
+then start that field somewhere other than its declared initial — so two parsers
+from one machine can start in two modes (a request/response selector, a
+lenient-flags bitset), where before a grammar had to spend entry nodes writing
+the mode. Both are optional and existing machines are unchanged:
+
+```
+(make-uint-field name width initial settable? label)         ; settable? optional, default #f
+(make-parser compiled-machine callbacks user-context inits)  ; inits optional: ((field . value) ...)
+```
+
+The `inits` alist overrides the declared initial of **settable** fields only,
+range-checked to the field's declared width, and is refused for an unknown or
+non-settable field name, a duplicate, or an out-of-range value. It applies at
+CONSTRUCTION, so it can never corrupt a field mid-parse — the reason a general
+`parser-field-set!` was declined. `parser-reset!` restores the embedder-given
+initials, so a mode chosen at construction survives a reset rather than reverting
+on the first one. The new accessor `uint-field-settable?` reads the flag. The
+interpreter and the generated parser are proved to agree over the mechanism by
+`byte-machine.differential.settable`. See decision 0047 and
+[the field reference](.reference/field-and-overflow.md).
+
+For the downstream consumer this collapses a two-integer mode surface — request
+vs response (1 required callback + 3 nodes) and an 11-bit lenient-flags bitset
+(11 optional callbacks + 22 entry nodes) — to **two settable field declarations
+and one `make-parser` argument**.
+
+### Changed
+
+**Generated-parser ABI bumped 7 → 8.** A machine with a settable field now emits
+an optional fourth metadata member — a `(name width)` settable table the
+generated `make-parser` range-checks an override against. The member is present
+only when a field is settable, so a machine with none emits byte-identically
+except the ABI literal (all seven determinism goldens re-baselined; only the
+literal moved). A consumer decoding a v8 generated parser must know a settable
+machine carries the extra member.
+
+**The verifier gains `settable-consume-counter`.** A settable field may not be a
+counted-consume node's counter: its embedder-chosen initial would falsify the
+EOF-execution pass's reasoning about a counter's value at the entry state.
+
 ## [0.4.0] - 2026-09-14
 
 ### Milestone 12 — a pause carries a reason

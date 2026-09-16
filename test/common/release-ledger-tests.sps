@@ -3,7 +3,7 @@
 ;;; set-compare against the ledger, so a drift in either side fails by name
 ;;; (self-ratcheting; no mutation entry). Mechanical rows are executed here;
 ;;; judgement rows are recorded, not re-checked. The §4.5 version surface is
-;;; checked: `0.4.0` is the single owner (Milestone 12 bumped it; the §26/§27
+;;; checked: `0.5.0` is the single owner (Milestone 13 bumped it; the §26/§27
 ;;; census stays the still-met v0.1 criteria), the export is declined, and no
 ;;; public library exports a `version` name.
 (import (rnrs)
@@ -95,7 +95,7 @@
 ;; ---- the disposition partition (the design Appendix, authoritative) --------
 (define (refs-with-state st)
   (sort-strings (map criterion-ref (filter (lambda (r) (eq? (criterion-state r) st)) release-criteria))))
-(harness-group "the disposition partition (the release criteria, met through v0.4.0: 13 met, 2 amended, 0 open)"
+(harness-group "the disposition partition (the release criteria, met through v0.5.0: 13 met, 2 amended, 0 open)"
   (lambda ()
     (harness-case "met rows are exactly the thirteen (Slice ⑤ added §26:1682, §26:1684)"
       (lambda ()
@@ -178,7 +178,7 @@
                (file-exists? (string-append repo "/examples/generate-simple-machine/generate.sps")))
         (check "example README present"
                (file-exists? (string-append repo "/examples/generate-simple-machine/README.md")))))
-    (harness-case "§26:1684 CHANGELOG.md carries the 0.1.0, 0.2.0, 0.3.0 and 0.4.0 release entries"
+    (harness-case "§26:1684 CHANGELOG.md carries the 0.1.0, 0.2.0, 0.3.0, 0.4.0 and 0.5.0 release entries"
       (lambda ()
         (check "kind mechanical" (mechanical? "§26:1684"))
         (let ((cl (string-append repo "/CHANGELOG.md")))
@@ -192,9 +192,12 @@
           ;; Milestone 11's entry, kept in history.
           (check "has the [0.3.0] entry"
                  (harness-string-contains? (file-string cl) "[0.3.0]"))
-          ;; Milestone 12: the current release's own entry (release-version 0.4.0).
+          ;; Kept in history through Milestone 12.
           (check "has the [0.4.0] entry"
-                 (harness-string-contains? (file-string cl) "[0.4.0]")))))
+                 (harness-string-contains? (file-string cl) "[0.4.0]"))
+          ;; Milestone 13: the current release's own entry (release-version 0.5.0).
+          (check "has the [0.5.0] entry"
+                 (harness-string-contains? (file-string cl) "[0.5.0]")))))
     (harness-case "§26:1685 no native artifact is tracked; the leak lane guards HTTP re-export"
       (lambda ()
         (check "kind mechanical" (mechanical? "§26:1685"))
@@ -256,10 +259,10 @@
        '("graph" "verify" "compile" "interpret" "runtime")))
 (harness-group "§4.5: the version surface and the declined export"
   (lambda ()
-    (harness-case "0.4.0 is the single owner and the export is declined"
+    (harness-case "0.5.0 is the single owner and the export is declined"
       (lambda ()
-        (check-equal "release-version" release-version "0.4.0")
-        (check "export still declined at v0.4" (not release-version-export?))
+        (check-equal "release-version" release-version "0.5.0")
+        (check "export still declined at v0.5" (not release-version-export?))
         (check "five mirror surfaces named" (= (length release-version-surfaces) 5))))
     (harness-case "no public library exports a `version` name"
       (lambda ()

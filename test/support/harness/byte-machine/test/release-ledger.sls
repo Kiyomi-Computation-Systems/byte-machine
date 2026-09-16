@@ -156,30 +156,30 @@
       ("§27:1701" "changelog"                                        #t (five))))
 
   ;; §4.5 — the version surface. The CURRENT release string has ONE owner (the
-  ;; value here) and a mirror rule: every surface below carries it. Milestone 12
-  ;; (a pause carries a reason, decision 0046) bumps it to `0.4.0`; the
+  ;; value here) and a mirror rule: every surface below carries it. Milestone 13
+  ;; (a parser can start in a mode, decision 0047) bumps it to `0.5.0`; the
   ;; `§26`/`§27` census above is UNCHANGED — those are the release exit criteria
-  ;; (the append rule freezes them, the pause reason adds no criterion row, and
+  ;; (the append rule freezes them, a settable field adds no criterion row, and
   ;; every one still holds, the two amended still the CI-blocked pair), so the
   ;; ledger keeps checking them while this value tracks the release they were met
   ;; for. The `(byte-machine version)` export stays DECLINED (§4.9 item 3): no
   ;; public library exports a `version` NAME, so `release-version-export?` is #f
-  ;; and the leak sweep asserts as much. (Milestone 12 DID add public API — the
-  ;; `parser-result-pause` read accessor in the `§9.3` parser-result family, the
-  ;; first accessor added since v0.1 — but that is a semver-minor's added
-  ;; accessor, not a version-string export.)
-  ;; `current-abi-version` (now 7, runtime.sls) is the generated-runtime ABI — a
+  ;; and the leak sweep asserts as much. (Milestone 13 DID add public API — the
+  ;; optional `settable?` on `make-uint-field` with `uint-field-settable?`, and
+  ;; the optional `field-initials` argument to `make-parser` — but that is a
+  ;; semver-minor's added optional API, not a version-string export.)
+  ;; `current-abi-version` (now 8, runtime.sls) is the generated-runtime ABI — a
   ;; different thing with a different lifecycle — and is deliberately NOT this
-  ;; value (it moved 6->7 at v0.4.0 for the paused-outcome payload contract —
-  ;; its error slot goes from always-#f to #f|ParserError — whereas the semver
-  ;; release string tracks the public API).
-  (define release-version "0.4.0")
+  ;; value (it moved 7->8 at v0.5.0 for the settable table — an OPTIONAL fourth
+  ;; payload member the generated make-parser range-checks an override against —
+  ;; whereas the semver release string tracks the public API).
+  (define release-version "0.5.0")
   (define release-version-export? #f)
   (define release-version-surfaces
-    '("CHANGELOG.md 0.4.0 entry (§26:1684)"
+    '("CHANGELOG.md 0.5.0 entry (§26:1684)"
       "README.org status paragraph"
       "the parent plan's dated disposition"
-      "the milestone-12-design.md status header"
+      "the milestone-13-design.md status header"
       "the git tag"))
 
   ;; --- accessors -----------------------------------------------------------

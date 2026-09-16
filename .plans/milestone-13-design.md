@@ -1,11 +1,12 @@
 # Milestone 13 Design — A parser can start in a mode
 
-**Status: Milestone 13 OPEN 2026-09-15 — design and Gate 0.** To be delivered as
-this design plus Gate 0 = decision
+**Status: Milestone 13 CLOSED 2026-09-15 — v0.5.0 released.** Delivered as this
+design plus Gate 0 = decision
 [0047](../.decisions/0047-a-parser-can-start-in-a-mode.md) (the M8–M12 pattern:
 the gate is folded into one decision, no separate gate-0 plan) plus two slices —
-Slice ① (the mechanism end to end) and Slice ② (the v0.5.0 release and close).
-The brief's acceptance is dispositioned in the Close section at close.
+Slice ① (the mechanism end to end; PR #131 = `a99357c`) and Slice ② (this v0.5.0
+release and close). The brief's ask is dispositioned in the
+[Close](#close-2026-09-15--the-mechanism-shipped) section below.
 
 Written against **`18fcc8b`** (`main`; v0.4.0 released as `18fcc8b`, tag
 `v0.4.0` — Milestone 12 Slice ② was the release commit). Every anchor below was
@@ -486,3 +487,44 @@ change). Decision 0047 records the mechanism.
   — "a datum the ABI carries must be in the encoding", the fingerprint rule the
   settable section obeys.
 - Parent plan `§9`, `§10`, `§12`, `§16.2`, `§29:1767`.
+
+## Close (2026-09-15) — the mechanism shipped
+
+Delivered as Gate 0 (decision 0047) plus two slices; the brief's ask, against the
+tree:
+
+| # | The brief asks | Met by |
+|---|---|---|
+| 1 | a way to start a parser somewhere other than the declared initials | Slice ① — `make-parser`'s optional `field-initials` argument over **settable** fields (`make-uint-field`'s optional `settable?`); two parsers from one machine fork by mode in `byte-machine.differential.settable`, both lanes |
+| 2 | NOT a general field writer (mid-parse corruption) | Slice ① — the override is a CONSTRUCTION argument, refused for a non-settable field; a general `parser-field-set!` was declined (decision 0047 item 2) |
+| 3 | reset must not silently forget the mode (brief §2) | Slice ① — `parser-reset!` restores the embedder-given initials from the canonical merged vector (parser slot 17); the differential proves the mode survives reset in both lanes |
+| 4 | the verifier must know a settable initial no longer bounds the entry value (brief §3) | Slice ① — `settable-consume-counter` refuses a settable counted-consume counter (`verify.sls`), closing the `parked-eof-start` hole; census 32 → 33 codes / 59 → 60 sites |
+| — | carry an arbitrary integer a branch key cannot (the 2048-subset bitset, brief §2) | Slice ① — the override is the integer itself, applied to one field |
+
+**The consumer's cost collapses.** The request/response `type` (1 required callback
++ 3 nodes) and the eleven-bit `lenient-flags` (11 optional callbacks + 22 entry
+nodes) become two settable field declarations and one `make-parser` argument — the
+"two-line change at the seam" decision 0017 priced.
+
+**Out of scope, deferred with rationale (unchanged):** a general `parser-field-set!`
+(a mid-parse writer is corruption), a settable non-uint field (there is no other
+field kind), and an initial-values argument that restores the DECLARED initials on
+reset (the brief §2 bug, not offered).
+
+**Coordination closed.** The generated ABI bumped **7 → 8** for the optional
+settable table (an honest emitted-contract move, decision 0042's principle); a
+machine with no settable field is byte-identical except the ABI literal, so all
+seven determinism goldens re-baselined only that literal. The `§26`/`§27` release
+census is **unchanged** — 13 met / 2 amended / 0 open, the two amended still the
+CI-blocked Tier-1 pair; a settable field adds no criterion row. `§4.7`'s gate did
+NOT apply (Slice ① ships new `src/` mechanism; Slice ② ships none). The mutation
+lane closes at **76 passes / 637 mutations**, all caught; the diagnostic census at
+33 codes / 60 sites; `pr` 158/158 both Chez modes.
+
+**Version surfaces at 0.5.0:** README.org status, `CHANGELOG.md [0.5.0]`, the
+parent plan's status line and its Milestone 13 foot disposition, the release
+ledger's `release-version` (single owner) and its five mirror surfaces, this
+design's status header, and the annotated `v0.5.0` tag. The consumer
+(`chez-httparse`) picks up ABI 8 downstream (its own PR, re-measured fingerprints)
+per the brief's §4 — declaring `type` and `lenient-flags` settable and deleting
+the mode-writing nodes.

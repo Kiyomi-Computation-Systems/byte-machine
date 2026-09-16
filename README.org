@@ -17,14 +17,22 @@ fields with checked accumulation, zero-width actions and branches, callbacks,
 spans, and counted consumption. The [[file:.reference/source-ir-and-builder.md][source IR and builder reference]] documents
 every constructor and node kind.
 
-*Status:* =0.4.0=. v0.4 adds a **second public-API addition since v0.1**: a
-=pause= node (and a =callback= node returning =callback-pause=) may name an
+*Status:* =0.5.0=. v0.5 lets a parser **start in a mode**: a =uint= field may be
+declared =settable= (=make-uint-field='s optional trailing flag, read by
+=uint-field-settable?=), and =make-parser= takes an OPTIONAL trailing
+=field-initials= alist overriding the declared initials of settable fields — so
+two parsers built from one machine can start in two states (a request/response
+selector, a lenient-flags bitset) with no entry nodes writing the mode. The
+override is range-checked and refused for an unknown, non-settable, duplicate or
+out-of-range field; it applies at construction (never mid-parse), and
+=parser-reset!= restores it so the mode survives a reset. Both additions are
+optional, so no existing machine changes; the generated-runtime ABI bumps 7 → 8
+for the settable table it carries (decision 0047). v0.4 added a **pause reason**:
+a =pause= node (and a =callback= node returning =callback-pause=) may name an
 OPTIONAL reason — a declared =error-declaration= — so a paused parser reports its
 own =(code, reason)= through a new =parser-result-pause= accessor, while
 =parser-result-error= stays =#f= (a pause is not an error, and it remains
-resumable). =make-pause-node= / =make-callback-node= gain the trailing argument
-via =case-lambda=, so no existing machine changes; the generated-runtime ABI
-bumps 6 → 7 (decision 0046). v0.3 made the first public-API addition since v0.1: a
+resumable); it bumped the ABI 6 → 7 (decision 0046). v0.3 made the first public-API addition since v0.1: a
 =keyword-table= node kind (=make-keyword-table-node= / =make-keyword-entry=,
 through =(byte-machine graph)=) that matches a set of keywords tolerating proper
 prefixes (=GET= ⊂ =GET-PARAMETER=) with optional per-table ASCII case-folding, and
