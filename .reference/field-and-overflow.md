@@ -18,6 +18,7 @@ identically here.
 
 ```scheme
 (make-uint-field name width initial source-label)
+(make-uint-field name width initial settable? source-label)   ; Milestone 13
 ```
 
 - `name` — a symbol in the portable grammar `[a-z][a-z0-9-]*`.
@@ -25,6 +26,15 @@ identically here.
 - `initial` — an exact integer with `0 <= initial <= (- (expt 2 width) 1)`,
   inclusive at both ends. The `u64` bound is a bignum on every supported runtime;
   the check uses exact integer arithmetic, never fixnum.
+- `settable?` — an optional boolean (default `#f`). A **settable** field's initial
+  may be overridden by the embedder at `make-parser` (its optional `field-initials`
+  argument), so a grammar with an embedder-chosen mode — a request/response
+  selector, a lenient-flags bitset — needs no entry nodes to write it. The
+  override is range-checked to the field's width and cannot apply mid-parse, and
+  `parser-reset!` restores it, so the mode survives a reset. A settable field may
+  not be a counted-consume counter (the verifier refuses one): its embedder-chosen
+  initial would falsify the EOF-execution pass's reasoning about a counter's value
+  at the entry state.
 - `source-label` — an optional diagnostic label (`#f`, a symbol, or a string).
 
 A field's value ranges over `0 .. 2^width - 1`. There is exactly **one** field

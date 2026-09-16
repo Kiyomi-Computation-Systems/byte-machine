@@ -36,6 +36,7 @@
                 keyword-table-node-case-insensitive?
                 keyword-entry-bytes keyword-entry-target
                 machine-fields uint-field-name uint-field-width uint-field-initial
+                uint-field-settable?
                 machine-callbacks machine-spans
                 callback-declaration-name span-declaration-name
                 callback-declaration-kind callback-declaration-required?
@@ -743,7 +744,7 @@
        ;; declaring neither leaves the stream, and therefore the fingerprint,
        ;; byte-identical to a machine that has no such declarations -- so it costs
        ;; nothing on machines that do not use it. The full shape is:
-       ;;   [... state records...][callback table?][span table?]
+       ;;   [... state records...][callback table?][span table?][settable table?]
        ;; each table wholly inside its own emptiness guard, the count included,
        ;; because an unconditional count would be two bytes on every machine in
        ;; the tree.
@@ -925,8 +926,8 @@
        ;; are ambiguous: one callback and no spans, versus no callbacks and one
        ;; span, both emit [count][one record]. Both record kinds are
        ;; symbol-shaped, so they can collide, and a collision would falsify the
-       ;; claim that declaration identity is fingerprint-visible. Tags 8 and 9:
-       ;; the state-kind tags run 0-7.
+       ;; claim that declaration identity is fingerprint-visible. Tags 8, 9 and
+       ;; 10: the state-kind tags run 0-7.
        ;;
        ;; EVERY PART THAT REACHES THE ABI IS ENCODED. A datum must enter the
        ;; ENCODING, not merely be read from the source machine: two machines
@@ -961,11 +962,36 @@
                        (if (symbol? c)
                            (begin (put-u8 p 1) (put-symbol p c))
                            (put-u8 p 0))))
-                   spans)))))
+                   spans))
+       ;; Tag 10: the settable-field slots (Milestone 13). Settability is a datum
+       ;; the ABI carries -- the emitted payload gains a settable table so the
+       ;; generated `make-parser` range-checks an override -- so two machines
+       ;; differing only in one field's settability must differ in fingerprint.
+       ;; It rides as the same kind of optional trailing section the callback and
+       ;; span tables do: present only when some field is settable, so a machine
+       ;; with none is byte-identical (only the initial + width already in the
+       ;; header field record identify the field, and the slot fixes WHICH one is
+       ;; settable). The width is not re-written here -- it is in the field record
+       ;; at that slot -- so this section is a sparse slot marker, and the slot
+       ;; MUST be written because the list is sparse (unlike the dense field
+       ;; records, whose slot is their position).
+       (let ((settable-slots
+              (let loop ((fs fields) (acc '()))
+                (cond ((null? fs) (reverse acc))
+                      ((list-ref (car fs) 4) (loop (cdr fs) (cons (cadddr (car fs)) acc)))
+                      (else (loop (cdr fs) acc))))))
+         (unless (null? settable-slots)
+           (put-u8 p 10)
+           (put-u16be p (length settable-slots))
+           (for-each (lambda (slot) (put-u16be p slot)) settable-slots))))))
 
   ;; Slot = declaration index. `machine-fields` is the declaration list in
   ;; declaration order, so the slot is the position and this is a numbering, not
   ;; a choice.
+  ;; A field record is (name width initial slot settable?). The first four are
+  ;; the original table; `settable?` (Milestone 13) is appended, so the emitter's
+  ;; and encoder's `(car ...)` / `(caddr ...)` / `(cadddr ...)` reads of name,
+  ;; initial and slot are unmoved -- only the new 5th position carries the flag.
   (define (field-table machine)
     (let loop ((fs (machine-fields machine)) (slot 0) (out '()))
       (if (null? fs) (reverse out)
@@ -973,7 +999,8 @@
                 (cons (list (uint-field-name (car fs))
                             (uint-field-width (car fs))
                             (uint-field-initial (car fs))
-                            slot)
+                            slot
+                            (uint-field-settable? (car fs)))
                       out)))))
 
   ;; The callback and span halves. Slot IS the position, so these are the

@@ -237,8 +237,8 @@
                (sentinel (uniq (append entry-codes unconstructible-codes)))
                (census (census-codes)))
           (check "the sentinel set-equals the census's derived code set" (set=? sentinel census))
-          (check-equal "and the census derives exactly thirty-two codes" (length census) 32)
-          (check-equal "and the sentinel is exactly thirty-two codes" (length sentinel) 32))))))
+          (check-equal "and the census derives exactly thirty-three codes" (length census) 33)
+          (check-equal "and the sentinel is exactly thirty-three codes" (length sentinel) 33))))))
 
 ;; ---- F5 row 2: the refusal table (Task 3 Step 7) -----------------------------
 (harness-group "the constructor refusals still refuse"

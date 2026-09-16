@@ -31,7 +31,7 @@
           error-node-source-label
           machine-ir-version-of supported-ir-version
           make-uint-field uint-field? uint-field-name uint-field-width
-          uint-field-initial uint-field-source-label
+          uint-field-initial uint-field-settable? uint-field-source-label
           make-error-declaration error-declaration? error-declaration-name
           error-declaration-code error-declaration-reason
           error-declaration-source-label
@@ -924,19 +924,33 @@
   ;;
   ;; There is exactly one field TYPE in v0.1; additional ones are deferred.
   (define uint-field-tag (tag 'byte-machine-uint-field))
-  ;; make-uint-field : name:Symbol width:UintWidth initial:ExactInteger source-label:Label -> UintField
-  (define (make-uint-field name width initial source-label)
-    (require-symbol 'make-uint-field 'name name)
-    (unless (memq width '(8 16 32 64))
-      (byte-machine-contract-violation 'make-uint-field 'invalid-argument 'width))
-    ;; `exact-integer?` is not R6RS; the pair below is what (rnrs) gives, and
-    ;; the range is inclusive at both ends. The u64 upper bound is a bignum on
-    ;; every supported runtime -- (greatest-fixnum) is 2^60-1 -- so this
-    ;; comparison must not be narrowed to fixnum arithmetic.
-    (unless (and (integer? initial) (exact? initial)
-                 (<= 0 initial (- (expt 2 width) 1)))
-      (byte-machine-contract-violation 'make-uint-field 'invalid-argument 'initial))
-    (vector uint-field-tag name width initial source-label))
+  ;; make-uint-field : name:Symbol width:UintWidth initial:ExactInteger [settable?:Boolean] source-label:Label -> UintField
+  ;; The OPTIONAL `settable?` (Milestone 13) marks a field whose INITIAL an
+  ;; embedder may override at `make-parser`, so a grammar with an embedder-chosen
+  ;; mode (llhttp's request/response `type`, its `lenient_flags` bitset) needs no
+  ;; entry nodes to write it. `case-lambda` keeps the 4-arg arity, so no existing
+  ;; machine changes (M13 criterion 1); default `#f`. The flag is a leaf datum:
+  ;; local shape (a boolean) is checked here, and that a settable field is used
+  ;; LEGALLY -- never as a counted-consume counter, whose entry-value the verifier
+  ;; reasons about -- is the verifier's (decision 0047 item 4).
+  (define make-uint-field
+    (case-lambda
+      ((name width initial source-label)
+       (make-uint-field name width initial #f source-label))
+      ((name width initial settable? source-label)
+       (require-symbol 'make-uint-field 'name name)
+       (unless (memq width '(8 16 32 64))
+         (byte-machine-contract-violation 'make-uint-field 'invalid-argument 'width))
+       ;; `exact-integer?` is not R6RS; the pair below is what (rnrs) gives, and
+       ;; the range is inclusive at both ends. The u64 upper bound is a bignum on
+       ;; every supported runtime -- (greatest-fixnum) is 2^60-1 -- so this
+       ;; comparison must not be narrowed to fixnum arithmetic.
+       (unless (and (integer? initial) (exact? initial)
+                    (<= 0 initial (- (expt 2 width) 1)))
+         (byte-machine-contract-violation 'make-uint-field 'invalid-argument 'initial))
+       (unless (boolean? settable?)
+         (byte-machine-contract-violation 'make-uint-field 'invalid-argument 'settable?))
+       (vector uint-field-tag name width initial settable? source-label))))
   ;; uint-field? : Any -> Boolean
   (define (uint-field? x) (tagged? uint-field-tag x))
   ;; uint-field-name : UintField -> Symbol
@@ -945,8 +959,10 @@
   (define (uint-field-width f) (vector-ref f 2))
   ;; uint-field-initial : UintField -> ExactInteger
   (define (uint-field-initial f) (vector-ref f 3))
+  ;; uint-field-settable? : UintField -> Boolean
+  (define (uint-field-settable? f) (vector-ref f 4))
   ;; uint-field-source-label : UintField -> Label
-  (define (uint-field-source-label f) (vector-ref f 4))
+  (define (uint-field-source-label f) (vector-ref f 5))
 
   ;; --- callback declaration ---
   ;; The six parts of a callback declaration: a symbolic name, a kind from a

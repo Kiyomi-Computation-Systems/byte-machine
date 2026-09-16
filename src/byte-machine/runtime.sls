@@ -93,12 +93,16 @@
   ;; 7 since Milestone 12 (decision 0046): a paused outcome's error slot may now
   ;; carry a reason record where it was always #f, so a consumer decoding a v7
   ;; generated parser must know the moved payload contract -- another version bump.
-  (define current-abi-version 7)
-  ;; How many payload members the current ABI defines: field declarations, the callback
-  ;; declaration table, and the state-id to source-name table. The keyword-table
-  ;; op adds no payload member -- its table rides the emitted state datum, not the
-  ;; compiled-machine metadata -- so this stays 3 while the version moves. Named
-  ;; beside the version because the two move together -- growing the payload is a
+  (define current-abi-version 8)
+  ;; How many payload members the current ABI defines AS REQUIRED: field
+  ;; declarations, the callback declaration table, and the state-id to
+  ;; source-name table. The keyword-table op adds no payload member -- its table
+  ;; rides the emitted state datum, not the compiled-machine metadata. The
+  ;; Milestone 13 settable table is an OPTIONAL fourth member (read below only
+  ;; when present), so this REQUIRED minimum stays 3 while the version moves to 8
+  ;; -- a machine with no settable field emits exactly three members and is
+  ;; byte-identical to its ABI-7 self but for the version literal. Named beside
+  ;; the version because the two move together -- growing the payload is a
   ;; version bump -- and read by the single length guard below.
   (define current-abi-members 3)
   ;; ABI payload member 1: the callback declaration table the generated lane
@@ -141,7 +145,14 @@
                            metadata))
     (vector compiled-machine-tag 'v2 exec entry-state ir-fingerprint
             (vector-ref metadata 0) (vector-ref metadata 1)
-            (vector-ref metadata 2)))
+            (vector-ref metadata 2)
+            ;; The OPTIONAL fourth member: the settable table `#((name width) ...)`
+            ;; a generated `make-parser` range-checks an override against
+            ;; (Milestone 13). Present only when some field is settable, so absent
+            ;; here means no field is settable and every override is refused; read
+            ;; behind the length guard, not the required-member minimum above, so
+            ;; a three-member payload stays legal.
+            (if (>= (vector-length metadata) 4) (vector-ref metadata 3) '#())))
 
   ;; Tombstones. /v1 and /v2 stay exported so a stale generated file fails with a
   ;; clean ABI-mismatch assertion instead of an unbound-identifier import error,
@@ -159,6 +170,10 @@
   (define (compiled-machine-v2-exec cm) (vector-ref cm 2))
   (define (compiled-machine-v2-entry-state cm) (vector-ref cm 3))
   (define (compiled-machine-v2-fields cm) (vector-ref cm 5))
+  ;; The optional fourth payload member: `#((name width) ...)` for the settable
+  ;; fields, or `#()` when none (Milestone 13). What the generated lane's
+  ;; make-parser resolves an embedder override against.
+  (define (compiled-machine-v2-settable cm) (vector-ref cm 8))
   (define empty-bv (make-bytevector 0))
 
   ;; --- feed outcome (the runtime<-generated seam; accessors private) ---
@@ -290,7 +305,8 @@
 
   ;; --- parser (mutable state behind procedures) ---
   ;; (vector tag variant executor entry current offset lifecycle stored-error
-  ;;         field-values field-decls)
+  ;;         field-values field-decls callbacks user-context active-span
+  ;;         state-names span-mark span-data-slot span-delivered? field-initials)
   ;; lifecycle: ready | paused-feed | paused-finish | finish-ready | stopped |
   ;; error | finished | poisoned | busy. Sticky rows short-circuit at the
   ;; operation entry and synthesize the result tuple (next = the new call's start
@@ -302,10 +318,14 @@
   ;;
   ;; field-values (slot 8) is a MUTABLE vector of exact integers indexed by slot;
   ;; field-decls (slot 9) is the IMMUTABLE (name . initial) vector the compiled
-  ;; machine carries, in slot order. Two slots rather than one pair: they have
-  ;; different lifetimes and different owners -- the decls are per compiled
-  ;; machine and never written, the values per parser and written constantly --
-  ;; and parser-reset! must restore exactly one of them FROM the other.
+  ;; machine carries, in slot order; field-initials (slot 17, Milestone 13) is
+  ;; the IMMUTABLE canonical merged initials -- the declared initials with the
+  ;; make-parser embedder overrides applied, the source parser-reset! restores
+  ;; slot 8 FROM. Three slots rather than one: they have different lifetimes and
+  ;; owners -- the decls are per compiled machine and never written, the merged
+  ;; initials per parser and never written after construction, the values per
+  ;; parser and written constantly -- and parser-reset! restores slot 8 from slot
+  ;; 17 (not slot 9), so an embedder-chosen mode survives a reset.
   ;;
   ;; The storage cannot live in the shared op/exec closure. That closure is built
   ;; once per compiled machine and every parser from it copies the same reference
@@ -378,37 +398,120 @@
                     (else #t))
               (rloop (+ i 1)))))))
 
-  ;; make-parser : CompiledMachine (Listof (List Symbol Procedure)) Any -> Parser
-  (define (make-parser compiled-machine callback-bindings user-context)
-    (unless (compiled-machine? compiled-machine)
-      (assertion-violation 'make-parser "not a compiled machine" compiled-machine))
-    (cond
-      ;; The two arms reach the declarations by the SHIPPED per-lane asymmetry
-      ;; rather than a uniform mechanism: the interpreter holds the verified
-      ;; source machine and is asked, the generated lane holds only what the ABI
-      ;; payload carried and reads member 0. There is nothing both could consult.
-      ((eq? (compiled-machine-variant compiled-machine) 'op)
-       (let* ((op (vector-ref compiled-machine 2)) (entry (op 'entry))
-              (decls (op 'field-initials)))
-         (vector parser-tag 'op op entry entry 0 'ready #f
-                 (initial-values decls) decls
-                 (resolve-callbacks (op 'callback-decls) callback-bindings)
-                 user-context #f #f 0 #f #f)))
-      ((eq? (compiled-machine-variant compiled-machine) 'v2)
-       (let ((exec (compiled-machine-v2-exec compiled-machine))
-             (entry-state (compiled-machine-v2-entry-state compiled-machine))
-             (decls (compiled-machine-v2-fields compiled-machine)))
-         (vector parser-tag 'v2 exec entry-state entry-state 0 'ready #f
-                 (initial-values decls) decls
-                 (resolve-callbacks (compiled-machine-v2-callbacks compiled-machine)
-                                    callback-bindings)
-                 user-context #f
-                 (compiled-machine-v2-state-names compiled-machine) 0 #f #f)))
-      ;; Unreachable through the public API: the only two constructors build 'op
-      ;; and 'v2. Kept LOUD rather than deleted, the same convention as
-      ;; compile.sls's and normal-ir.sls's own unreachable else arms.
-      (else (assertion-violation 'make-parser "unknown compiled-machine variant"
-                                 (compiled-machine-variant compiled-machine)))))
+  ;; --- embedder-chosen field initials (Milestone 13) ------------------------
+  ;; A fresh copy of an integer vector. R6RS base has no `vector-copy`; the field
+  ;; VALUES vector (slot 8) must be a copy of the canonical merged initials (slot
+  ;; 17) so a parser's field writes never reach the restore source
+  ;; `parser-reset!` reads.
+  (define (copy-values v)
+    (let* ((n (vector-length v)) (out (make-vector n 0)))
+      (let loop ((i 0))
+        (if (= i n) out (begin (vector-set! out i (vector-ref v i)) (loop (+ i 1)))))))
+  ;; The slot of `name` in the `(name . initial)` decls, or #f -- the same
+  ;; name->slot walk `parser-field-ref` does, so "unknown field" here means the
+  ;; same thing it does there.
+  (define (field-slot-of decls name)
+    (let ((n (vector-length decls)))
+      (let loop ((i 0))
+        (cond ((>= i n) #f)
+              ((eq? (car (vector-ref decls i)) name) i)
+              (else (loop (+ i 1)))))))
+  ;; The declared width of settable field `name`, or #f when `name` is not
+  ;; settable. `settable` is the per-lane settable table -- a list of `(name
+  ;; width)`; both lanes hand the same shape (the op lane asks the source
+  ;; machine, the v2 lane reads ABI payload member 3).
+  (define (settable-width settable name)
+    (let loop ((s settable))
+      (cond ((null? s) #f)
+            ((eq? (car (car s)) name) (cadr (car s)))
+            (else (loop (cdr s))))))
+  ;; The merged initials: the declared initials, then each override applied to
+  ;; its slot. An override naming an UNKNOWN field, a KNOWN-BUT-NOT-SETTABLE
+  ;; field, a DUPLICATE name, or a value OUTSIDE the field's declared width is a
+  ;; caller error -- each with a distinct code -- refused at CONSTRUCTION, so it
+  ;; can never apply mid-parse (decision 0047 item 2, the reason a general
+  ;; `parser-field-set!` is refused).
+  (define (resolve-field-initials decls settable overrides)
+    (unless (list? overrides)
+      (byte-machine-contract-violation 'make-parser 'invalid-argument 'field-initials))
+    (let ((values (initial-values decls)))
+      (let loop ((os overrides) (seen '()))
+        (cond
+          ((null? os) values)
+          (else
+           (let ((o (car os)))
+             (unless (and (pair? o) (symbol? (car o))
+                          (integer? (cdr o)) (exact? (cdr o)))
+               (byte-machine-contract-violation 'make-parser 'invalid-argument
+                                                'field-initials))
+             (let ((name (car o)) (val (cdr o)))
+               (when (memq name seen)
+                 (byte-machine-contract-violation 'make-parser 'invalid-argument
+                                                  'duplicate-field-initial))
+               (let ((slot (field-slot-of decls name)))
+                 (unless slot
+                   (byte-machine-contract-violation 'make-parser 'invalid-argument
+                                                    'unknown-field))
+                 (let ((w (settable-width settable name)))
+                   (unless w
+                     (byte-machine-contract-violation 'make-parser 'invalid-argument
+                                                      'non-settable-field))
+                   (unless (and (<= 0 val) (<= val (- (expt 2 w) 1)))
+                     (byte-machine-contract-violation 'make-parser 'invalid-argument
+                                                      'field-initial-out-of-range))
+                   (vector-set! values slot val)))
+               (loop (cdr os) (cons name seen)))))))))
+
+  ;; make-parser : CompiledMachine (Listof (List Symbol Procedure)) Any [(Listof (Pair Symbol ExactInteger))] -> Parser
+  ;; The OPTIONAL fourth argument overrides the DECLARED initials of SETTABLE
+  ;; fields (Milestone 13), so two parsers from one machine can start in two
+  ;; modes. `case-lambda` keeps the 3-arg arity, so no existing caller changes.
+  ;; The merged initials are stored canonically in slot 17, a COPY is the working
+  ;; field-values (slot 8), and `parser-reset!` restores slot 8 from slot 17 --
+  ;; so a reset returns the parser to its just-constructed state INCLUDING the
+  ;; embedder's mode (decision 0047 item 3).
+  (define make-parser
+    (case-lambda
+      ((compiled-machine callback-bindings user-context)
+       (make-parser compiled-machine callback-bindings user-context '()))
+      ((compiled-machine callback-bindings user-context field-initials)
+       (unless (compiled-machine? compiled-machine)
+         (assertion-violation 'make-parser "not a compiled machine" compiled-machine))
+       (cond
+         ;; The two arms reach the declarations AND the settable table by the
+         ;; SHIPPED per-lane asymmetry: the interpreter holds the verified source
+         ;; machine and is asked (`field-initials`, `settable-fields`); the
+         ;; generated lane holds only what the ABI payload carried and reads
+         ;; member 0 and the optional member 3. There is nothing both could
+         ;; consult.
+         ((eq? (compiled-machine-variant compiled-machine) 'op)
+          (let* ((op (vector-ref compiled-machine 2)) (entry (op 'entry))
+                 (decls (op 'field-initials))
+                 (merged (resolve-field-initials decls (op 'settable-fields)
+                                                 field-initials)))
+            (vector parser-tag 'op op entry entry 0 'ready #f
+                    (copy-values merged) decls
+                    (resolve-callbacks (op 'callback-decls) callback-bindings)
+                    user-context #f #f 0 #f #f merged)))
+         ((eq? (compiled-machine-variant compiled-machine) 'v2)
+          (let* ((exec (compiled-machine-v2-exec compiled-machine))
+                 (entry-state (compiled-machine-v2-entry-state compiled-machine))
+                 (decls (compiled-machine-v2-fields compiled-machine))
+                 (merged (resolve-field-initials
+                          decls
+                          (vector->list (compiled-machine-v2-settable compiled-machine))
+                          field-initials)))
+            (vector parser-tag 'v2 exec entry-state entry-state 0 'ready #f
+                    (copy-values merged) decls
+                    (resolve-callbacks (compiled-machine-v2-callbacks compiled-machine)
+                                       callback-bindings)
+                    user-context #f
+                    (compiled-machine-v2-state-names compiled-machine) 0 #f #f merged)))
+         ;; Unreachable through the public API: the only two constructors build
+         ;; 'op and 'v2. Kept LOUD rather than deleted, the same convention as
+         ;; compile.sls's and normal-ir.sls's own unreachable else arms.
+         (else (assertion-violation 'make-parser "unknown compiled-machine variant"
+                                    (compiled-machine-variant compiled-machine)))))))
   ;; parser? : Any -> Boolean
   (define (parser? x) (tagged? parser-tag x))
   (define (parser-variant p) (vector-ref p 1))
@@ -461,6 +564,13 @@
   ;; tail of a span whose bytes already went (suppress) -- decision 0042.
   (define (parser-span-delivered? p) (vector-ref p 16))
   (define (parser-set-span-delivered?! p v) (vector-set! p 16 v))
+  ;; Slot 17 (Milestone 13): the CANONICAL merged field initials -- the declared
+  ;; initials with the `make-parser` embedder overrides applied. Immutable: the
+  ;; working field-values (slot 8) is a COPY of it, and `parser-reset!` restores
+  ;; slot 8 from it, so a reset returns the parser to its just-constructed state
+  ;; INCLUDING the embedder's mode. Equals the declared initials when no override
+  ;; was given, so a reset with no override is exactly the pre-M13 behaviour.
+  (define (parser-field-initials p) (vector-ref p 17))
   ;; The absolute offset, which the parser already tracks; this is the public
   ;; name for it, and it is one of the values committed before a callback sees
   ;; the parser.
@@ -1477,17 +1587,23 @@
   ;; cleared. `current := entry` is also what clears the pause continuation under
   ;; this representation -- it is parked on `current` with no separate
   ;; saved-continuation field, so restoring `current` restores both. FIELD state
-  ;; is restored here, to the DECLARED initials rather than to zero: reset
-  ;; returns the parser to its just-constructed state, and a just-constructed
-  ;; parser holds the declared initials. Zeroing would silently make `u8 count =
-  ;; 3` mean 3 before the first reset and 0 after it. SPAN state is cleared
-  ;; through the same procedure the span-end arms call, so "inactive" has exactly
-  ;; one definition. `busy` and `poisoned` are not reset state at all: the guard
+  ;; is restored here, to the CANONICAL merged initials (slot 17) rather than to
+  ;; zero OR the declared initials: reset returns the parser to its
+  ;; just-constructed state, and a just-constructed parser holds the declared
+  ;; initials WITH the `make-parser` embedder overrides applied (Milestone 13).
+  ;; Restoring the declared initials would silently drop the embedder's mode on
+  ;; the first reset -- the same bug as a wrong default arriving later (decision
+  ;; 0047 item 3); with no override slot 17 equals the declared initials, so this
+  ;; is exactly the pre-M13 behaviour. Zeroing would silently make `u8 count = 3`
+  ;; mean 3 before the first reset and 0 after it. SPAN state is cleared through
+  ;; the same procedure the span-end arms call, so "inactive" has exactly one
+  ;; definition. `busy` and `poisoned` are not reset state at all: the guard
   ;; below rejects the first, and reset is the operation that clears the second,
   ;; which the lifecycle write already does. Returns unspecified.
   ;;
-  ;; It writes slot 8 and never slot 9: the declarations belong to the compiled
-  ;; machine and outlive every reset.
+  ;; It writes slot 8 and never slot 9 or 17: the declarations and the canonical
+  ;; merged initials belong to the compiled machine and to construction, and
+  ;; outlive every reset.
   ;; parser-reset! : Parser -> Void
   (define (parser-reset! parser)
     ;; THE ONLY OPERATION THAT LETS A POISONED PARSER RUN. Every operation's
@@ -1507,4 +1623,4 @@
     (parser-set-lifecycle! parser 'ready)
     (parser-set-stored-error! parser #f)
     (byte-machine-span-close/v1 parser)
-    (vector-set! parser 8 (initial-values (parser-field-decls parser)))))
+    (vector-set! parser 8 (copy-values (parser-field-initials parser)))))

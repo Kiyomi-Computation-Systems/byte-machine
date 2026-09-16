@@ -77,4 +77,4 @@
       ((9) (byte-machine-make-feed-outcome/v1 (quote error) pos (byte-machine-make-parser-error/v1 (vector-ref errs 1) (quote reject) 9 off pk) 9 off))
       (else (assertion-violation (quote exec) "unknown state" st)))))
   (define countedm
-    (byte-machine-make-compiled-machine 7 15395597449669407401 0 exec (quote #(#((len . 0)) #() #(idle len colon body comma clear fin trunc over reject))))))
+    (byte-machine-make-compiled-machine 8 15395597449669407401 0 exec (quote #(#((len . 0)) #() #(idle len colon body comma clear fin trunc over reject))))))

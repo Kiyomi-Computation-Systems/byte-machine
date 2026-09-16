@@ -31,4 +31,4 @@
       ((7) (byte-machine-make-feed-outcome/v1 (quote error) pos (byte-machine-make-parser-error/v1 (vector-ref errs 0) (quote reject) 7 off pk) 7 off))
       (else (assertion-violation (quote exec) "unknown state" st)))))
   (define pausem
-    (byte-machine-make-compiled-machine 7 4328141021048275055 0 exec (quote #(#() #() #(s0 p1 s1 pe stop done trunc reject))))))
+    (byte-machine-make-compiled-machine 8 4328141021048275055 0 exec (quote #(#() #() #(s0 p1 s1 pe stop done trunc reject))))))

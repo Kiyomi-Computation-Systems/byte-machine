@@ -550,7 +550,15 @@
     (harness-case "the name must be a symbol"
       (lambda ()
         (check-raises "string" (contract-violation? 'make-uint-field 'name)
-                      (lambda () (make-uint-field "count" 8 0 #f)))))))
+                      (lambda () (make-uint-field "count" 8 0 #f)))))
+    (harness-case "the optional settable? flag must be a boolean (Milestone 13)"
+      (lambda ()
+        (check-raises "non-boolean" (contract-violation? 'make-uint-field 'settable?)
+                      (lambda () (make-uint-field 'f 8 0 'yes #f)))
+        (check-equal "settable #t is carried"
+                     (uint-field-settable? (make-uint-field 'f 8 0 #t #f)) #t)
+        (check-equal "the 4-arg form defaults settable? to #f"
+                     (uint-field-settable? (make-uint-field 'f 8 0 #f)) #f)))))
 
 (harness-group "the machine guard over fields"
   (lambda ()

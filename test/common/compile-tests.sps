@@ -208,7 +208,7 @@
         ;; the literal reads 7 and a zero-field machine renders
         ;; #(#() #() #(<its state names>)).
         (check "unversioned call"
-               (has? "(byte-machine-make-compiled-machine 7 14095574568398596535 0 exec (quote #(#() #() #(start stop reject))))"))
+               (has? "(byte-machine-make-compiled-machine 8 14095574568398596535 0 exec (quote #(#() #() #(start stop reject))))"))
         (check "no versioned name survives"
                (not (has? "byte-machine-make-compiled-machine/v")))))
     ;; Milestone 4 Slice ①b task 6 (decision 0019 item 3(b)). Member 0 stops

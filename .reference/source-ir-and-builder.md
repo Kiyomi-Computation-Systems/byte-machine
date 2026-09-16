@@ -118,6 +118,8 @@ lowering, and the fold.
 
 ```
 (make-uint-field name width initial label)   an unsigned integer field, `width` bits
+(make-uint-field name width initial settable? label)   settable? (M13): the embedder
+    may override this field's initial at make-parser (a mode field); default #f
 (make-field-action-node name operation arguments next error label)
     operation ∈ { store , clear , increment , decrement , add , set-mask , clear-mask }
     (the infallible four — store, clear, set-mask, clear-mask — take error = #f;

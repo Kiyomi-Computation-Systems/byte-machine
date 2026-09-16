@@ -83,4 +83,4 @@
                (else (loop pos 3 off (quote byte)))))))
       (else (assertion-violation (quote exec) "unknown state" st)))))
   (define http-version-parser
-    (byte-machine-make-compiled-machine 7 16999772257989587335 0 exec (quote #(#() #() #(ver zero one reject ver ver ver ver ver ver ver))))))
+    (byte-machine-make-compiled-machine 8 16999772257989587335 0 exec (quote #(#() #() #(ver zero one reject ver ver ver ver ver ver ver))))))

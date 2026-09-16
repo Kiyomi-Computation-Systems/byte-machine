@@ -37,6 +37,7 @@
     ;; declarations, so every hand-written stub answers it. These stubs declare
     ;; no fields, which is what keeps their parsers byte-for-byte what they were.
     ((field-initials) (vector))
+    ((settable-fields) '())
     ;; Slice ①b: the op interface gained `callback-decls`. A stub standing in
     ;; for the interpreter must answer it, and a missing arm is LOUD by design.
     ((callback-decls) (vector))
@@ -114,6 +115,7 @@
     ;; declarations, so every hand-written stub answers it. These stubs declare
     ;; no fields, which is what keeps their parsers byte-for-byte what they were.
     ((field-initials) (vector))
+    ((settable-fields) '())
     ;; Slice ①b: the op interface gained `callback-decls`. A stub standing in
     ;; for the interpreter must answer it, and a missing arm is LOUD by design.
     ((callback-decls) (vector))
@@ -130,6 +132,7 @@
     ;; declarations, so every hand-written stub answers it. These stubs declare
     ;; no fields, which is what keeps their parsers byte-for-byte what they were.
     ((field-initials) (vector))
+    ((settable-fields) '())
     ;; Slice ①b: the op interface gained `callback-decls`. A stub standing in
     ;; for the interpreter must answer it, and a missing arm is LOUD by design.
     ((callback-decls) (vector))
@@ -146,6 +149,7 @@
     ;; declarations, so every hand-written stub answers it. These stubs declare
     ;; no fields, which is what keeps their parsers byte-for-byte what they were.
     ((field-initials) (vector))
+    ((settable-fields) '())
     ;; Slice ①b: the op interface gained `callback-decls`. A stub standing in
     ;; for the interpreter must answer it, and a missing arm is LOUD by design.
     ((callback-decls) (vector))
@@ -175,6 +179,7 @@
     ;; declarations, so every hand-written stub answers it. These stubs declare
     ;; no fields, which is what keeps their parsers byte-for-byte what they were.
     ((field-initials) (vector))
+    ((settable-fields) '())
     ;; Slice ①b: the op interface gained `callback-decls`. A stub standing in
     ;; for the interpreter must answer it, and a missing arm is LOUD by design.
     ((callback-decls) (vector))
@@ -284,10 +289,10 @@
 ;; what they do, so a lane asserting the accessor names something checkable.
 (define stub-names (vector 's0 's1 's2 's3))
 (define (v2-machine)
-  (byte-machine-make-compiled-machine 7 99 0 stub-exec
+  (byte-machine-make-compiled-machine 8 99 0 stub-exec
                                       (vector (vector) (vector) stub-names)))
 (define (v2-pause-machine)
-  (byte-machine-make-compiled-machine 7 99 3 stub-exec
+  (byte-machine-make-compiled-machine 8 99 3 stub-exec
                                       (vector (vector) (vector) stub-names)))
 
 ;; Milestone 4 Slice ①a task 3 retired the whole 'v1 feed-only executor path.
@@ -352,6 +357,7 @@
         (case msg
           ((entry) 'start)
           ((field-initials) (vector))
+          ((settable-fields) '())
           ((callback-decls) decls)
           (else (assertion-violation 'cb-op "bad message" msg)))))
     (define (cm decls) (make-compiled-machine (cb-op decls)))
@@ -455,13 +461,65 @@
                                       (eq? (condition-who e)
                                            'byte-machine-make-compiled-machine)))
                                (lambda () (byte-machine-make-compiled-machine
-                                           7 99 0 stub-exec payload))))))
+                                           8 99 0 stub-exec payload))))))
           (short-refused (vector (vector)))
           (short-refused (vector (vector) (vector))))
         (check "and a three-member payload is accepted"
                (compiled-machine? (byte-machine-make-compiled-machine
-                                   7 99 0 stub-exec
+                                   8 99 0 stub-exec
                                    (vector (vector) (vector) stub-names))))))))
+
+;; Milestone 13 (decision 0047): make-parser's optional initial-values argument.
+;; A mock op declaring two fields -- `mode` SETTABLE (width 8), `n` NOT -- drives
+;; every branch of the override validation and the reset-survival restore. The
+;; interpreter≡generated agreement and the mode fork are the differential lane's;
+;; here the direct-API refusal codes (including the non-settable one the modal
+;; machine cannot reach) and the field read-back are pinned.
+(define (settable-op msg . args)
+  (case msg
+    ((entry) 'start)
+    ((field-initials) (vector (cons 'mode 0) (cons 'n 0)))
+    ((settable-fields) (list (list 'mode 8)))
+    ((callback-decls) (vector))
+    (else (assertion-violation 'settable-op "bad message" msg))))
+(harness-group "make-parser initial-values (Milestone 13, decision 0047)"
+  (lambda ()
+    (define (cm) (make-compiled-machine settable-op))
+    (harness-case "a settable field's declared initial is overridden at construction"
+      (lambda ()
+        (let ((p (make-parser (cm) '() #f (list (cons 'mode 1)))))
+          (check-equal "override applied" (parser-field-ref p 'mode) 1)
+          (check-equal "a non-overridden field keeps its declared initial"
+                       (parser-field-ref p 'n) 0))))
+    (harness-case "no initial-values argument leaves the declared initials (the 3-arg arity)"
+      (lambda ()
+        (check-equal "mode declared" (parser-field-ref (make-parser (cm) '() #f) 'mode) 0)))
+    (harness-case "the embedder's initial survives parser-reset!, the declared one does not"
+      (lambda ()
+        (let ((p (make-parser (cm) '() #f (list (cons 'mode 1)))))
+          (parser-reset! p)
+          (check-equal "reset restores the merged initial, not the declared"
+                       (parser-field-ref p 'mode) 1))))
+    (harness-case "each illegal override is refused with its own code"
+      (lambda ()
+        (check-raises "an unknown field name"
+                      (contract-violation? 'make-parser 'unknown-field)
+                      (lambda () (make-parser (cm) '() #f (list (cons 'nope 1)))))
+        (check-raises "a declared but NON-settable field"
+                      (contract-violation? 'make-parser 'non-settable-field)
+                      (lambda () (make-parser (cm) '() #f (list (cons 'n 1)))))
+        (check-raises "a value outside the field's declared width"
+                      (contract-violation? 'make-parser 'field-initial-out-of-range)
+                      (lambda () (make-parser (cm) '() #f (list (cons 'mode 999)))))
+        (check-raises "the same field overridden twice"
+                      (contract-violation? 'make-parser 'duplicate-field-initial)
+                      (lambda () (make-parser (cm) '() #f (list (cons 'mode 1) (cons 'mode 0)))))
+        (check-raises "a non-list initial-values argument"
+                      (contract-violation? 'make-parser 'field-initials)
+                      (lambda () (make-parser (cm) '() #f 'not-a-list)))
+        (check-raises "a malformed override pair (non-integer value)"
+                      (contract-violation? 'make-parser 'field-initials)
+                      (lambda () (make-parser (cm) '() #f (list (cons 'mode 'x)))))))))
 
 (harness-group "callback failure values (§13:808, decision 0024)"
   (lambda ()
@@ -506,13 +564,13 @@
   (lambda ()
     (harness-case "the superseded version is refused and the current one accepted"
       (lambda ()
-        (check-raises "abi 6 refused" assertion-violation?
+        (check-raises "abi 7 refused" assertion-violation?
                       (lambda () (byte-machine-make-compiled-machine
-                                  6 99 0 stub-exec
+                                  7 99 0 stub-exec
                                   (vector (vector) (vector) stub-names))))
-        (check "abi 7 accepted"
+        (check "abi 8 accepted"
                (compiled-machine? (byte-machine-make-compiled-machine
-                                   7 99 0 stub-exec
+                                   8 99 0 stub-exec
                                    (vector (vector) (vector) stub-names))))))
     (harness-case "the version check precedes every other guard"
       (lambda ()
@@ -532,11 +590,11 @@
                       (lambda () (byte-machine-make-compiled-machine 2 99 0 'not-a-procedure #f)))
         (check-raises "a non-vector payload is refused at the current version"
                       (irritant-is #f)
-                      (lambda () (byte-machine-make-compiled-machine 7 99 0 stub-exec #f)))
+                      (lambda () (byte-machine-make-compiled-machine 8 99 0 stub-exec #f)))
         (check-raises "an empty payload has no member 0"
                       (irritant-is (vector))
                       (lambda () (byte-machine-make-compiled-machine
-                                  7 99 0 stub-exec (vector))))))))
+                                  8 99 0 stub-exec (vector))))))))
 
 ;; Milestone 5 Slice ②: the member-2 guard, on the ABI-4 guard's own precedent.
 ;; Each states the minimum ONE version introduced, so a payload short by one
@@ -654,6 +712,7 @@
     ;; declarations, so every hand-written stub answers it. These stubs declare
     ;; no fields, which is what keeps their parsers byte-for-byte what they were.
     ((field-initials) (vector))
+    ((settable-fields) '())
     ;; Slice ①b: the op interface gained `callback-decls`. A stub standing in
     ;; for the interpreter must answer it, and a missing arm is LOUD by design.
     ((callback-decls) (vector))

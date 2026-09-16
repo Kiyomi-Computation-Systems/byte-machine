@@ -105,6 +105,12 @@ result consuming zero, offset unchanged (`§12.2:701`). Operations against a
 (`busy`), and a `poisoned` parser each raise a distinct coded contract condition;
 only `parser-reset!` clears a poisoned parser.
 
+`parser-reset!` returns the parser to its just-constructed state: field values go
+back to the initials `make-parser` started from, which for a settable field
+(Milestone 13) are the embedder's overrides, not the declared initials — so a mode
+chosen at construction survives a reset rather than silently reverting on the
+first one.
+
 ## 4. Position kinds
 
 `parser-error-position-kind` is one of `byte`, `boundary`, or `eof`
