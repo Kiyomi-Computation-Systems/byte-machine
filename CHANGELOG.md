@@ -8,6 +8,31 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ### Changed
 
+- **A byte class is a range, and a linear scan of its members is not**
+  ([0050](.decisions/0050-a-byte-class-is-a-range.md)). The same defect 0049
+  fixed in the state dispatch was one level down in the byte dispatch. Over a
+  94-byte set, a flat `case` costs 21.60 ns for a lowercase letter -- which is
+  what HTTP is mostly made of -- against **1.25 ns** for range tests. A
+  dispatch now renders one clause per run of consecutive bytes sharing a
+  destination, which is the source byte class that lowering had flattened.
+
+  Generated lane, five rounds of two thousand iterations, `tarm64osx`:
+  `long-method-target-header-spans` 85 -> 8 ms, `long-exact-sequence-matching`
+  40 -> 14, `many-small-headers` 37 -> 11, `dense-byte-dispatch` 37 -> 11. Four
+  admissible workloads, none regressing. Downstream a request target scans at
+  7.2 ns/byte where it scanned at 27.5, and the ratio against llhttp's own
+  bench mode falls from 104x to 44x.
+
+  **The emitted text shrinks 44%**, which pays back most of what 0049 cost:
+  a `case` arm per byte was most of what a generated parser was made of. No
+  fingerprint moves; the IR is untouched.
+
+  One of the two candidates the old comment at that site named turns out to be
+  worse than what it would have replaced: a grouped datum list costs 57.40 ns,
+  because `memv` over 94 elements loses to the nested-if expansion `case`
+  already gets.
+
+
 - **A state is a procedure, not a case arm**
   ([0049](.decisions/0049-a-state-is-a-procedure-not-a-case-arm.md)).
   `render-machine` emitted one `(case st ...)` re-entered per transition, and

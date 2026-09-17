@@ -35,11 +35,26 @@
 (define eof-decl (make-error-declaration 'default-eof 'eof "unexpected end of input" #f))
 (define rej-decl (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))
 
-;; the 256 exact-byte cases, every byte 0..255 to the complement dispatch.
+;; The 256 exact-byte cases, alternating between two identical destinations.
+;;
+;; THE ALTERNATION IS THE POINT, AND IT IS NEW. This witness used to send every
+;; byte to one target, which made it the largest emittable dispatch when a byte
+;; class rendered one `case` arm per byte. It no longer does: consecutive bytes
+;; sharing a destination now collapse into one range clause, so 256 identical
+;; edges render as a SINGLE test and the witness measured nothing -- the
+;; emitted source fell from 18 757 bytes to a few hundred, which is what made
+;; this lane go red rather than quietly vacuous.
+;;
+;; So the witness is rebuilt as the worst case of the lowering that exists,
+;; not the one that used to: no two consecutive bytes share a destination, so
+;; every byte is its own run and the dispatch cannot collapse at all. That is
+;; the arity a backend limit would have to survive.
 (define (bytes-0-255)
   (let loop ((i 255) (a '())) (if (< i 0) a (loop (- i 1) (cons i a)))))
 (define cases256
-  (map (lambda (i) (make-byte-case (make-exact-byte-matcher i) (make-edge 'd-comp 'advance) #f))
+  (map (lambda (i)
+         (make-byte-case (make-exact-byte-matcher i)
+                         (make-edge (if (even? i) 'd-comp 'd-comp-odd) 'advance) #f))
        (bytes-0-255)))
 
 ;; the largest emittable machine: a 256-exact-case dispatch, and a dispatch over a
@@ -52,6 +67,14 @@
     (list
       (make-byte-dispatch-node 'd256 cases256 (make-edge 'rej 'advance) 'fin #f)
       (make-byte-dispatch-node 'd-comp
+        (list (make-byte-case (make-byte-complement-matcher (make-byte-set-matcher '(0)))
+                              (make-edge 'stopn 'advance) #f))
+        (make-edge 'stopn 'advance) 'fin #f)
+      ;; d-comp's twin, and the only reason it exists: an odd byte at d256 needs
+      ;; a destination that is not its neighbour's, or the run collapses again.
+      ;; Identical in every other respect, so which of the two a feed lands in
+      ;; cannot change the result the two lanes are compared on.
+      (make-byte-dispatch-node 'd-comp-odd
         (list (make-byte-case (make-byte-complement-matcher (make-byte-set-matcher '(0)))
                               (make-edge 'stopn 'advance) #f))
         (make-edge 'stopn 'advance) 'fin #f)
@@ -105,9 +128,12 @@
     (harness-case "it verifies and renders a large generated library"
       (lambda ()
         (check "the witness verifies" (verification-ok? v))
-        ;; the source is large -- the case-arity/source-size probe. P4 measured
-        ;; 18 757 bytes for the 256-case dispatch alone; this machine adds the
-        ;; complement dispatch, so it is larger.
+        ;; The source is large -- the case-arity/source-size probe. P4 measured
+        ;; 18 757 bytes when every byte rendered its own `case` arm. A
+        ;; non-collapsing range lowering renders one clause per byte instead,
+        ;; which is wider per byte but still bounded by the same 256, so the
+        ;; floor is kept where it was rather than re-tuned to whatever this
+        ;; happens to measure now.
         (check "the emitted source is large" (> emitted-size 10000))))
     (harness-case "compile-file wrote an object, and it is what was loaded"
       (lambda ()
@@ -130,7 +156,8 @@
     (harness-case "identifier length, source size, case arity, literal size"
       (lambda ()
         (display "compile-limits: emitted source size = ") (display emitted-size)
-        (display " bytes; case arity = 256 exact cases + 1 complement case; ")
+        (display " bytes; 256 exact cases, alternating so none collapse, ")
+        (display "+ 1 complement case; ")
         (display "generated identifier length <= the length of the binding 'lim-parser; ")
         (display "largest literal = a 256-byte complement census.") (newline)
         ;; the assertion is that the artifact ran -- the reachability of any limit is

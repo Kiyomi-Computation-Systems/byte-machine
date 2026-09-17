@@ -8793,7 +8793,9 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.property.differential.chez.source
   LABEL "compile: the dispatch byte test is inverted, diverging from the oracle"
-  FIND [[(number->string (car tr)) ") "]]
+  FIND [[       (if (= lo hi)
+           (string-append "(fx=? b " (num lo) ")")
+           (string-append "(and (fx>=? b " (num lo) ") (fx<=? b " (num hi) "))"))]]
   # The emitted dispatch's `case` key is the source byte, unshifted, so the
   # generated executor agrees with the interpreter oracle; inverting it diverges
   # on every machine. RE-ANCHORED (F13 LABEL 1): compile.sls is unchanged by this
@@ -8803,7 +8805,9 @@ byte_machine_mutation(
   # 20260823, re-measured after the rewrite) with its parens escaped, so it
   # matches exactly one record. The whole-machine "byte agreement" substring would
   # match all 36.
-  REPLACE [[(number->string (mod (+ 1 (car tr)) 256)) ") "]]
+  REPLACE [[       (if (= lo hi)
+           (string-append "(fx=? b " (num (mod (+ 1 lo) 256)) ")")
+           (string-append "(and (fx>=? b " (num (mod (+ 1 lo) 256)) ") (fx<=? b " (num (mod (+ 1 hi) 256)) "))"))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES [[machine 0 \(seed 20260823\) byte agreement]])
 
@@ -10176,8 +10180,12 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.byte-class.chez.source
   LABEL "compile: every rendered transition byte is shifted by one"
-  FIND [[(string-append "               ((" (number->string (car tr)) ") "]]
-  REPLACE [[(string-append "               ((" (number->string (+ 1 (car tr))) ") "]]
+  FIND [[       (if (= lo hi)
+           (string-append "(fx=? b " (num lo) ")")
+           (string-append "(and (fx>=? b " (num lo) ") (fx<=? b " (num hi) "))"))]]
+  REPLACE [[       (if (= lo hi)
+           (string-append "(fx=? b " (num (+ 1 lo)) ")")
+           (string-append "(and (fx>=? b " (num (+ 1 lo)) ") (fx<=? b " (num (+ 1 hi)) "))"))]]
   # Measured against a scratch tree: byte-set is the first fixture in
   # class-machines, so it is the first case in "interpreter and generated agree
   # on every byte, for every class" to run, and its lowest class byte (0) is the
@@ -10337,8 +10345,12 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.sequence-node.chez.source
   LABEL "compile: every rendered transition byte is shifted by one (sequence-node lane)"
-  FIND [[(string-append "               ((" (number->string (car tr)) ") "]]
-  REPLACE [[(string-append "               ((" (number->string (+ 1 (car tr))) ") "]]
+  FIND [[       (if (= lo hi)
+           (string-append "(fx=? b " (num lo) ")")
+           (string-append "(and (fx>=? b " (num lo) ") (fx<=? b " (num hi) "))"))]]
+  REPLACE [[       (if (= lo hi)
+           (string-append "(fx=? b " (num (+ 1 lo)) ")")
+           (string-append "(and (fx>=? b " (num (+ 1 lo)) ") (fx<=? b " (num (+ 1 hi)) "))"))]]
   # Same FIND/REPLACE as Pass 44's byte-class mutation, and (for the small
   # byte values this lane's sequence uses) functionally the same shift as
   # Pass 39's mod-256 mutation. Legitimate per AGENTS.md/SITES being
@@ -10681,8 +10693,8 @@ byte_machine_mutation(
   # exactly: (reexecute 7 49) is prefix position 7 -- the branch -- and byte 49,
   # `HTTP/1.1`'s distinguishing byte, the one this truncation drops. The
   # sibling's is the mirror, (reexecute 7 48).
-  FIND [[(apply string-append (map render-transition-arm (normal-dispatch-transitions s)))]]
-  REPLACE [[(apply string-append (map render-transition-arm (list (car (normal-dispatch-transitions s)))))]]
+  FIND [[(render-byte-clauses (normal-dispatch-transitions s))]]
+  REPLACE [[(render-byte-clauses (list (car (normal-dispatch-transitions s))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
     "256 x 8 positions match, in both mismatch modes: no \\(mode position byte\\) disagreed -- expected none, got \\(reexecute 7 49\\)")
 
@@ -10719,8 +10731,8 @@ byte_machine_mutation(
   # so there is no prior baseline to re-measure; the meaningful control is the
   # neighbouring-lane measurement recorded in this pass's header, which shows
   # both mutants surviving the two lanes they are NOT declared under.
-  FIND [[(apply string-append (map render-transition-arm (normal-dispatch-transitions s)))]]
-  REPLACE [[(apply string-append (map render-transition-arm (list (car (reverse (normal-dispatch-transitions s))))))]]
+  FIND [[(render-byte-clauses (normal-dispatch-transitions s))]]
+  REPLACE [[(render-byte-clauses (list (car (reverse (normal-dispatch-transitions s)))))]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
     "256 x 8 positions match, in both mismatch modes: no \\(mode position byte\\) disagreed -- expected none, got \\(reexecute 7 48\\)")
 
