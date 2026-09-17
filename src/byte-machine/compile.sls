@@ -246,6 +246,48 @@
   ;; input, which makes the two lanes' answers comparable.
   (define (zero-width-jump target)
     (string-append "(%s" (num target) " pos " (num target) " off pk)"))
+
+  ;; A GOTO TARGET IS CHOSEN AT RUN TIME FROM A SET FIXED AT EMIT TIME.
+  ;;
+  ;; `%dispatch` below is the linear `case` over every state id, and the three
+  ;; arms that call application code -- callback, span fragment, span completion
+  ;; -- used to answer `goto` through it. At 0.31ns per arm skipped that is
+  ;; about 34ns per crossing on a 217-state machine, and an HTTP grammar crosses
+  ;; one about four times per header. The comment beside `%dispatch` argued the
+  ;; cost away on the grounds that these happen once per callback and never once
+  ;; per byte: true, and it does not follow.
+  ;;
+  ;; What the arm knows is stronger than the target. The runtime's classifier can
+  ;; answer only the node's continue target, one of its declared branch targets,
+  ;; or its default -- and the emitter renders all three as literals INTO that
+  ;; very call, two lines above. So the arm tests the literals it already wrote
+  ;; and jumps directly, which is the same move `render-byte-clauses` makes one
+  ;; level down: a set known here does not need a search there.
+  ;;
+  ;; CONTINUE IS RENDERED FIRST. The clauses are a linear scan, so their order is
+  ;; the optimization, and a bound callback answering `continue` is the outcome
+  ;; that actually happens.
+  ;;
+  ;; `%dispatch` STAYS as the final clause. Dropping it would turn an
+  ;; optimization of a total function into a claim about what the runtime can
+  ;; return -- checkable only by reading runtime.sls, and silently wrong the day
+  ;; a fourth outcome is added. It costs one comparison on a path no construction
+  ;; reaches.
+  ;;
+  ;; Targets repeat (a default-branch resolves to a branch target) and may be
+  ;; absent (`#f`, a required callback's default), so the walk dedupes and skips.
+  ;; render-goto-clauses : String (Listof (U ExactInteger #f)) -> String
+  (define (render-goto-clauses expr targets)
+    (string-append
+     "(cond "
+     (let loop ((ts targets) (seen '()) (acc ""))
+       (cond ((null? ts) acc)
+             ((or (not (car ts)) (memv (car ts) seen)) (loop (cdr ts) seen acc))
+             (else
+              (loop (cdr ts) (cons (car ts) seen)
+                    (string-append acc "((eqv? " expr " " (num (car ts)) ") "
+                                   (zero-width-jump (car ts)) ") ")))))
+     "(else (%dispatch pos " expr " off pk)))"))
   (define (render-operation op k)
     (case op
       ((store) (num k))
@@ -472,7 +514,11 @@
             ")) " (num (car tg)) " "
             (let ((d (caddr tg))) (if d (num d) "#f")) ")))\n"
             "         (case (car o)\n"
-            "           ((goto) (%dispatch pos (cadr o) off pk))\n"
+            "           ((goto) " (render-goto-clauses
+                                   "(cadr o)"
+                                   (cons (car tg)
+                                         (append (map cdr (normal-field-arguments s))
+                                                 (list (caddr tg))))) ")\n"
             ;; The OPTIONAL callback-pause reason (M12) rides the outcome's error
             ;; slot, built like the pause node arm but with `boundary` -- a
             ;; callback outcome reports boundary, as its error arm below does
@@ -519,7 +565,8 @@
             "       (let ((o (byte-machine-span-fragment-step/v1 psr " id
             " off (vector-ref cbv " (num (cadr d)) ") bv pos " cid ")))\n"
             "         (case (car o)\n"
-            "           ((goto) (%dispatch pos (cadr o) off pk))\n"
+            "           ((goto) " (render-goto-clauses
+                                   "(cadr o)" (list (normal-field-arguments s))) ")\n"
             "           ((pause) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
             cid " off))\n"
             "           (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
@@ -546,7 +593,9 @@
                 "         (let ((o (byte-machine-callback-step/v1 psr " id
                 " off (vector-ref cbv " (num c) ") (quote ()) " tgt " " tgt ")))\n"
                 "           (case (car o)\n"
-                "             ((goto) (%dispatch pos (cadr o) off pk))\n"
+                "             ((goto) " (render-goto-clauses
+                                         "(cadr o)"
+                                         (list (normal-field-targets s))) ")\n"
                 "             ((pause) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
                 tgt " off))\n"
                 "             (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
@@ -875,11 +924,22 @@
                                                                  names index-of
                                                                  (normal-machine-fields normal)
                                                                  (normal-machine-span-decls normal))))))
-        ;; The one dispatch that survives, and the three places that need it: the
-        ;; entry into a feed, a callback answering `goto`, and a keyword table's
-        ;; jump. All three carry a target computed at RUN time, and all three
-        ;; happen once per call, per callback and per keyword -- never once per
-        ;; byte -- so a linear case here costs nothing the per-byte path can see.
+        ;; The one dispatch that survives, and the two places that still enter it:
+        ;; the entry into a feed, and a keyword table's jump. A callback answering
+        ;; `goto` used to be the third, and the sentence that stood here --
+        ;; "these happen once per callback and never once per byte, so a linear
+        ;; case costs nothing the per-byte path can see" -- was true in its
+        ;; premise and wrong in its conclusion: at 0.31ns per arm skipped, four
+        ;; callback crossings per header on a 217-state machine is about 136ns of
+        ;; header, and `many-small-headers` lost 36% of its time to it.
+        ;; `render-goto-clauses` above now tests the literals that arm already
+        ;; wrote, and reaches this only on a target no construction produces.
+        ;;
+        ;; The feed entry is once per `parser-feed!` call and genuinely cannot be
+        ;; a literal -- the state comes from the parser. The keyword jump's target
+        ;; set IS known here (the table's entries and its no-match edge), so the
+        ;; same treatment applies and is not yet measured; it is left alone rather
+        ;; than assumed, which is the rule the sentence above broke.
         "      (define (%dispatch pos st off pk)\n"
         "        (case " (if has-kw "(if (pair? st) (car st) st)" "st") "\n"
         (let loop ((i 0) (acc ""))

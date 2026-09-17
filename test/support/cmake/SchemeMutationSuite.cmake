@@ -12579,16 +12579,21 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.callback.chez.source
-  LABEL "compile: the emitted callback jump consumes a byte"
-  # Re-anchored in Slice ③, for the same reason its interpreted sibling above
-  # was: the emitted span-end arm renders the identical `goto` line. The FIND
-  # carries the invocation line above it, which is this arm's alone.
-  FIND [[            (let ((d (caddr tg))) (if d (num d) "#f")) ")))\n"
-            "         (case (car o)\n"
-            "           ((goto) (%dispatch pos (cadr o) off pk))\n"]]
-  REPLACE [[            (let ((d (caddr tg))) (if d (num d) "#f")) ")))\n"
-            "         (case (car o)\n"
-            "           ((goto) (%dispatch (+ pos 1) (cadr o) off pk))\n"]]
+  LABEL "compile: the emitted goto jump consumes a byte"
+  # Re-anchored twice. In Slice ③ it carried the invocation line above it,
+  # because the span-end arm rendered an identical `goto` line and the FIND had
+  # to pick one arm. That disambiguation is now unnecessary AND the old anchor
+  # would be dishonest: all three arms build their jump through
+  # `render-goto-clauses`, and the `%dispatch` the old FIND mutated is the
+  # fallback clause no construction reaches -- mutating it would survive and
+  # this check would silently stop covering anything. The anchor therefore
+  # moves into the renderer, onto the clause that actually runs, and the label
+  # widens from "callback" to "goto" to say so.
+  FIND [[                    (string-append acc "((eqv? " expr " " (num (car ts)) ") "
+                                   (zero-width-jump (car ts)) ") ")))))]]
+  REPLACE [[                    (string-append acc "((eqv? " expr " " (num (car ts)) ") "
+                                   "(%s" (num (car ts)) " (+ pos 1) " (num (car ts))
+                                   " off pk)" ") ")))))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the lanes agree -- expected .stopped 2 2 1 #f stopped., got .stopped 1 1 1")
