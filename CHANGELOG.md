@@ -6,6 +6,55 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **A state is a procedure, not a case arm**
+  ([0049](.decisions/0049-a-state-is-a-procedure-not-a-case-arm.md)).
+  `render-machine` emitted one `(case st ...)` re-entered per transition, and
+  Chez compiles a large `case` over integer keys as a **linear scan** -- about
+  0.31 ns per arm skipped, measured against 10.4.1, identical at every optimize
+  level. A machine's per-byte cost therefore depended on where decision 0016
+  happened to number its hot states. Every state now renders as a procedure and
+  a transition to a target known at emit time is a direct tail call: 0.80 ns
+  against 185.85 ns for the same state, and independent of its id.
+
+  Generated lane, five rounds of two thousand iterations, `tarm64osx`:
+  `long-exact-sequence-matching` 90 -> 40 ms, `pipelined-requests` 23 -> 10 ms,
+  `dense-byte-dispatch` 60 -> 37 ms, `many-small-headers` 59 -> 37 ms,
+  `long-method-target-header-spans` 101 -> 85 ms. No workload regresses.
+  Downstream, a 530-state HTTP message machine scans a request target at
+  27.9 ns/byte where it scanned at 241.9.
+
+  **The emitted text grows about 12%**, and all seven committed goldens move.
+  No fingerprint moves: the machine fingerprint is over the IR, which is
+  untouched.
+
+- **The emitter's private names carry a `%` prefix.** `%s<id>` and `%dispatch`
+  cannot be enumerated in `reserved-member-3` -- a machine's state count has no
+  bound -- so instead they are unforgeable: `portable-name?` admits
+  `[a-z][a-z0-9-]*`, so no output binding and no declared name can begin with
+  `%`. Both guards assert the prefix rather than trusting it.
+
+### Added
+
+- **A threshold for admitting an optimization, derived rather than chosen**
+  ([0048](.decisions/0048-what-material-improvement-means.md)). `§23.3` forbids
+  setting one until the baselines establish normal variance, and no record had
+  done it. A workload is admissible evidence only when its median is at least
+  20 ms -- above that the observed dispersion span is at most 4.3% of the
+  median, below it the span reaches 25% and then unbounded. Material
+  improvement is 20% on at least three admissible workloads with none
+  regressing; significant regression is 10% on any one.
+
+### Fixed
+
+- **The committed baseline could not be the denominator of anything.** It was
+  recorded at one hundred iterations per round, where ten of its twelve
+  generated-lane medians are 0, 1 or 3 ms against a one-millisecond clock. It is
+  re-recorded at two thousand.
+
+## [Unreleased]
+
 ## [0.5.0] - 2026-09-15
 
 ### Milestone 13 — a parser can start in a mode

@@ -8409,15 +8409,19 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: an advance transition is lowered as a reexecute"
-  FIND [[(string-append "(loop (+ pos 1) " (number->string target) " (+ off 1) (quote boundary))")]]
-  REPLACE [[(string-append "(loop pos " (number->string target) " off (quote byte))")]]
+  FIND [[(string-append "(%s" (number->string target) " (+ pos 1) " (number->string target)
+                       " (+ off 1) (quote boundary))")]]
+  REPLACE [[(string-append "(%s" (number->string target) " pos " (number->string target)
+                       " off (quote byte))")]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "advance arm")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: the reexecute fallback is lowered as an advance"
-  FIND [[(string-append "(loop pos " (number->string target) " off (quote byte))")]]
-  REPLACE [[(string-append "(loop (+ pos 1) " (number->string target) " (+ off 1) (quote boundary))")]]
+  FIND [[(string-append "(%s" (number->string target) " pos " (number->string target)
+                       " off (quote byte))")]]
+  REPLACE [[(string-append "(%s" (number->string target) " (+ pos 1) " (number->string target)
+                       " (+ off 1) (quote boundary))")]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "the accepted byte advances and the fallback reexecutes: fallback")
 
 byte_machine_mutation(
@@ -8499,8 +8503,8 @@ byte_machine_mutation(
   # renders the same outcome constructor, so the bare form now occurs twice.
   # Anchored on the PAUSE ARM's `") (` prefix, which the callback arm -- whose
   # branch opens `((pause) (` inside a `case` -- does not share.
-  FIND [[") (byte-machine-make-feed-outcome/v1 (quote paused) pos "]]
-  REPLACE [[") (byte-machine-make-feed-outcome/v1 (quote stopped) pos "]]
+  FIND [[pk) (byte-machine-make-feed-outcome/v1 (quote paused) pos "]]
+  REPLACE [[pk) (byte-machine-make-feed-outcome/v1 (quote stopped) pos "]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "pause arm p1 -- expected \"paused 2\", got \"stopped 2\"")
 
@@ -8539,7 +8543,7 @@ byte_machine_mutation(
   FIND [[            "                (let ((n (min v (- end pos))))\n"
             "                  (vector-set! fieldv " slot " (- v n))\n"
             "                  (if (= n v)\n"
-            "                      (loop (+ pos n) " (num next-id) " (+ off n) (quote boundary))\n"
+            "                      (%s" (num next-id) " (+ pos n) " (num next-id) " (+ off n) (quote boundary))\n"
             "                      (byte-machine-make-feed-outcome/v1 (quote need-input) (+ pos n) #f " id " (+ off n))))))))\n")))]]
   REPLACE [[            "                (begin (vector-set! fieldv " slot " (- v 1))\n"
             "                       (loop (+ pos 1) " id " (+ off 1) (quote boundary)))))))\n")))]]
@@ -10981,8 +10985,10 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.position-kind.chez.source
   LABEL "compile: an emitted reexecute jump carries the advance position kind"
-  FIND [[(string-append "(loop pos " (number->string target) " off (quote byte))")]]
-  REPLACE [[(string-append "(loop pos " (number->string target) " off (quote boundary))")]]
+  FIND [[(string-append "(%s" (number->string target) " pos " (number->string target)
+                       " off (quote byte))")]]
+  REPLACE [[(string-append "(%s" (number->string target) " pos " (number->string target)
+                       " off (quote boundary))")]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "reexecute mismatch reports byte at the offending byte: kind -- expected byte, got boundary")
 
@@ -11107,8 +11113,8 @@ byte_machine_mutation(
   # `pos` -- so it does not re-read the byte -- while advancing the ABSOLUTE
   # offset, which is precisely the inconsistency a kind-only assertion cannot
   # see: the error still says `byte`, it just says it about the wrong byte.
-  FIND [["                       (loop pos " (num over) " off (quote byte))))))))\n")))]]
-  REPLACE [["                       (loop pos " (num over) " (+ off 1) (quote byte))))))))\n")))]]
+  FIND [["                       (%s" (num over) " pos " (num over) " off (quote byte))))))))\n")))]]
+  REPLACE [["                       (%s" (num over) " pos " (num over) " (+ off 1) (quote byte))))))))\n")))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "an accumulate overflow reports byte at the unconsumed digit: offset -- expected 2, got 3")
@@ -11527,8 +11533,8 @@ byte_machine_mutation(
   LABEL "compile: an emitted zero-width step consumes a byte"
   # Zero-width means zero-width in the generated lane too: the emitted jump
   # keeps pos, off and pk. Advancing would eat the byte the next dispatch reads.
-  FIND [[(string-append "(loop pos " (num target) " off pk)"))]]
-  REPLACE [[(string-append "(loop (+ pos 1) " (num target) " off pk)"))]]
+  FIND [[(string-append "(%s" (num target) " pos " (num target) " off pk)"))]]
+  REPLACE [[(string-append "(%s" (num target) " (+ pos 1) " (num target) " off pk)"))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "fields a parse actually writes \\(Slice ②\\)\\.both lanes agree over every input the fixture can take: lifecycle \\[00\\] -- expected error, got ready")
@@ -11682,8 +11688,8 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
   LABEL "compile: an emitted overflow consumes the offending digit"
-  FIND [[            "                       (loop pos " (num over) " off (quote byte))))))))\n"]]
-  REPLACE [[            "                       (loop (+ pos 1) " (num over) " (+ off 1) (quote boundary))))))))\n"]]
+  FIND [[            "                       (%s" (num over) " pos " (num over) " off (quote byte))))))))\n"]]
+  REPLACE [[            "                       (%s" (num over) " (+ pos 1) " (num over) " (+ off 1) (quote boundary))))))))\n"]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the checked multiply-add, both lanes \\(Slice ③\\).an overflow reports position kind BYTE, at the offending digit: generated")
@@ -11860,8 +11866,8 @@ byte_machine_mutation(
   # The operand nothing could see while every accumulate node in the tree WAS its
   # own digit-target: a self-loop is indistinguishable from reading the operand
   # until one fixture points the digit edge somewhere else.
-  FIND [[                              (loop (+ pos 1) " (num digit) " (+ off 1) (quote boundary)))]]
-  REPLACE [[                              (loop (+ pos 1) " id " (+ off 1) (quote boundary)))]]
+  FIND [[                              (%s" (num digit) " (+ pos 1) " (num digit) " (+ off 1) (quote boundary)))]]
+  REPLACE [[                              (%s" id " (+ pos 1) " id " (+ off 1) (quote boundary)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "one digit is taken and the DECLARED digit-target stops the parse: generated stopped")
 
@@ -12567,10 +12573,10 @@ byte_machine_mutation(
   # carries the invocation line above it, which is this arm's alone.
   FIND [[            (let ((d (caddr tg))) (if d (num d) "#f")) ")))\n"
             "         (case (car o)\n"
-            "           ((goto) (loop pos (cadr o) off pk))\n"]]
+            "           ((goto) (%dispatch pos (cadr o) off pk))\n"]]
   REPLACE [[            (let ((d (caddr tg))) (if d (num d) "#f")) ")))\n"
             "         (case (car o)\n"
-            "           ((goto) (loop (+ pos 1) (cadr o) off pk))\n"]]
+            "           ((goto) (%dispatch (+ pos 1) (cadr o) off pk))\n"]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the lanes agree -- expected .stopped 2 2 1 #f stopped., got .stopped 1 1 1")
@@ -13160,8 +13166,8 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.determinism.counted.chez.source
   LABEL "compile: the emitted counted arm spells its position kind with a quote mark"
-  FIND [[            "                      (loop (+ pos n) " (num next-id) " (+ off n) (quote boundary))\n"]]
-  REPLACE [[            "                      (loop (+ pos n) " (num next-id) " (+ off n) 'boundary)\n"]]
+  FIND [[            "                      (%s" (num next-id) " (+ pos n) " (num next-id) " (+ off n) (quote boundary))\n"]]
+  REPLACE [[            "                      (%s" (num next-id) " (+ pos n) " (num next-id) " (+ off n) 'boundary)\n"]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "the emitted bytes equal the committed golden: golden")
 

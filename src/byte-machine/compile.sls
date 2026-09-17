@@ -83,6 +83,15 @@
   ;; receives as its first argument, `cbv` the resolved callback slot vector, and
   ;; `o` the outcome binding an emitted callback/span arm reads. The callback and
   ;; span arms index `cbv` with a literal slot and hand `psr` to the invocation.
+  ;; THE STATE PROCEDURES AND THEIR DISPATCHER ARE NOT IN THIS LIST, AND CANNOT
+  ;; BE. The emitted body also binds one procedure per state and one dispatcher,
+  ;; and there is no bound on how many states a machine has -- so enumerating
+  ;; them here is not possible and a growing list would be the wrong shape
+  ;; anyway. They are spelled `%s<id>` and `%dispatch` instead: `portable-name?`
+  ;; admits `[a-z][a-z0-9-]*` and nothing else, so no output binding and no
+  ;; declared name can begin with `%`, and the collision this list exists to
+  ;; prevent is impossible by construction rather than by enumeration. The
+  ;; member-3 drift guard asserts that prefix rather than trusting this comment.
   ;; reserved-member-3 : (Listof Symbol)
   (define reserved-member-3
     '(exec loop pos st off b bv start end state offset finish? fieldv errs pk
@@ -132,8 +141,10 @@
   ;; per-site literal there. Each jump therefore carries its own kind forward.
   (define (loop-tail target mode)
     (if (eq? mode 'advance)
-        (string-append "(loop (+ pos 1) " (number->string target) " (+ off 1) (quote boundary))")
-        (string-append "(loop pos " (number->string target) " off (quote byte))")))
+        (string-append "(%s" (number->string target) " (+ pos 1) " (number->string target)
+                       " (+ off 1) (quote boundary))")
+        (string-append "(%s" (number->string target) " pos " (number->string target)
+                       " off (quote byte))")))
 
   (define (render-transition-arm tr)
     ;; tr = (byte target mode) -> "((<byte>) <loop-tail>)"
@@ -155,7 +166,8 @@
   ;; its own.
   (define (render-eof-branch eof id name reason index-of)
     (if (eq? (car eof) 'node)
-        (string-append "(loop pos " (number->string (cdr eof)) " off (quote eof))")
+        (string-append "(%s" (number->string (cdr eof)) " pos " (number->string (cdr eof))
+                       " off (quote eof))")
         (string-append "(byte-machine-make-feed-outcome/v1 (quote error) pos "
                        "(byte-machine-make-parser-error/v1 (vector-ref errs "
                        (number->string (index-of (cdr eof) reason)) ") (quote " (symbol->string name)
@@ -193,7 +205,7 @@
   ;; own zero-width arms -- a zero-width step does not move the parser in the
   ;; input, which makes the two lanes' answers comparable.
   (define (zero-width-jump target)
-    (string-append "(loop pos " (num target) " off pk)"))
+    (string-append "(%s" (num target) " pos " (num target) " off pk)"))
   (define (render-operation op k)
     (case op
       ((store) (num k))
@@ -221,7 +233,7 @@
   ;; identically rather than duplicating these lines.
   (define (render-exhausted-preamble s id names index-of nm)
     (string-append
-     "      ((" id ")\n"
+     "      (define (%s" id " pos st off pk)\n"
      "       (if (>= pos end)\n"
      "           (if finish?\n"
      "               " (render-eof-branch (normal-dispatch-eof s) id
@@ -269,20 +281,20 @@
                   (symbol->string (cdr hit))))))
       (case (normal-state-kind s)
         ((stop)
-         (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote stopped) pos #f " id " off))\n"))
+         (string-append "      (define (%s" id " pos st off pk) (byte-machine-make-feed-outcome/v1 (quote stopped) pos #f " id " off))\n"))
         ((error)
          ;; The record's five call-site arguments: the errs entry (code and
          ;; reason together), the public source-node name, the state id, the
          ;; absolute offset, and the loop's position-kind variable. Reading `pk`
          ;; rather than a literal is what lets one error node report `byte` when
          ;; a reexecute edge arrives and `boundary` when an advance edge does.
-         (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote error) pos "
+         (string-append "      (define (%s" id " pos st off pk) (byte-machine-make-feed-outcome/v1 (quote error) pos "
                         "(byte-machine-make-parser-error/v1 (vector-ref errs "
                         (number->string (index-of (normal-error-code s)
                                                   (normal-error-reason s))) ") (quote "
                         (nm (normal-state-id s)) ") " id " off pk) " id " off))\n"))
         ((finish)
-         (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote finished) pos #f " id " off))\n"))
+         (string-append "      (define (%s" id " pos st off pk) (byte-machine-make-feed-outcome/v1 (quote finished) pos #f " id " off))\n"))
         ;; A pause with an OPTIONAL reason (M12) builds a parser-error-shaped
         ;; record into the outcome's error slot -- the SAME construction the error
         ;; arm above makes, over the same errs table and the loop's `pk`. The
@@ -290,7 +302,7 @@
         ;; paused status, never the error slot (the §6 guarantee). A reason-less
         ;; pause keeps `#f`, byte-identical to before.
         ((pause)
-         (string-append "      ((" id ") (byte-machine-make-feed-outcome/v1 (quote paused) pos "
+         (string-append "      (define (%s" id " pos st off pk) (byte-machine-make-feed-outcome/v1 (quote paused) pos "
                         (let ((code (normal-error-code s)))
                           (if code
                               (string-append "(byte-machine-make-parser-error/v1 (vector-ref errs "
@@ -323,14 +335,14 @@
             "           (let* ((b (bytevector-u8-ref bv pos)) (d " dexpr "))\n"
             "             (if (not d)\n"
             "                 " (if (eq? (cdr nd) 'advance)
-                                    (string-append "(loop (+ pos 1) " (num (car nd)) " (+ off 1) (quote boundary))")
-                                    (string-append "(loop pos " (num (car nd)) " off (quote byte))")) "\n"
+                                    (string-append "(%s" (num (car nd)) " (+ pos 1) " (num (car nd)) " (+ off 1) (quote boundary))")
+                                    (string-append "(%s" (num (car nd)) " pos " (num (car nd)) " off (quote byte))")) "\n"
             "                 (let ((v (vector-ref fieldv " (num slot) ")))\n"
             "                   (if (<= v (div (- " (num mx) " d) " (num base) "))\n"
             "                       (begin (vector-set! fieldv " (num slot)
                                      " (+ (* v " (num base) ") d))\n"
-            "                              (loop (+ pos 1) " (num digit) " (+ off 1) (quote boundary)))\n"
-            "                       (loop pos " (num over) " off (quote byte))))))))\n")))
+            "                              (%s" (num digit) " (+ pos 1) " (num digit) " (+ off 1) (quote boundary)))\n"
+            "                       (%s" (num over) " pos " (num over) " off (quote byte))))))))\n")))
         ;; KNOWN LIMITATION: the machine-action half of the zero-width
         ;; position-kind rule is not yet correct. The rule wants `boundary` at the
         ;; current stream offset for a zero-width machine action or callback
@@ -357,7 +369,7 @@
                ;; failure NOTHING is written: a failed operation leaves the prior
                ;; value unchanged, not saturated.
                (string-append
-                "      ((" id ")\n"
+                "      (define (%s" id " pos st off pk)\n"
                 "       (let* ((v (vector-ref fieldv " (num slot) ")) (r " expr "))\n"
                 "         (if (and (>= r 0) (<= r " (num (- (expt 2 width) 1)) "))\n"
                 "             (begin (vector-set! fieldv " (num slot) " r) "
@@ -367,7 +379,7 @@
                ;; emitted. Emitting one anyway would be a branch no input can
                ;; take.
                (string-append
-                "      ((" id ")\n"
+                "      (define (%s" id " pos st off pk)\n"
                 "       (let ((v (vector-ref fieldv " (num slot) ")))\n"
                 "         (vector-set! fieldv " (num slot) " " expr ")\n"
                 "         " (zero-width-jump (car tg)) "))\n"))))
@@ -378,7 +390,7 @@
                 (b (and (pair? (cdr args)) (pair? (cddr args)) (caddr args)))
                 (tg (normal-field-targets s)))
            (string-append
-            "      ((" id ")\n"
+            "      (define (%s" id " pos st off pk)\n"
             "       (let ((v (vector-ref fieldv " (num (car sw)) ")))\n"
             "         (if " (render-predicate (normal-field-selector s) a b) "\n"
             "             " (zero-width-jump (car tg)) "\n"
@@ -408,7 +420,7 @@
         ((callback)
          (let ((tg (normal-field-targets s)))
            (string-append
-            "      ((" id ")\n"
+            "      (define (%s" id " pos st off pk)\n"
             "       (let ((o (byte-machine-callback-step/v1 psr " id " off (vector-ref cbv "
             (num (normal-field-selector s)) ") (quote ("
             (let join ((bs (normal-field-arguments s)) (acc ""))
@@ -420,7 +432,7 @@
             ")) " (num (car tg)) " "
             (let ((d (caddr tg))) (if d (num d) "#f")) ")))\n"
             "         (case (car o)\n"
-            "           ((goto) (loop pos (cadr o) off pk))\n"
+            "           ((goto) (%dispatch pos (cadr o) off pk))\n"
             ;; The OPTIONAL callback-pause reason (M12) rides the outcome's error
             ;; slot, built like the pause node arm but with `boundary` -- a
             ;; callback outcome reports boundary, as its error arm below does
@@ -451,7 +463,7 @@
          ;; Records the current cursor -- `pos`, the slice index.
          (let ((d (list-ref spans (normal-field-selector s))))
            (string-append
-            "      ((" id ")\n"
+            "      (define (%s" id " pos st off pk)\n"
             "       (begin (byte-machine-span-open/v1 psr (quote "
             (symbol->string (car d)) ") pos " (num (cadr d)) ")\n"
             "              " (zero-width-jump (normal-field-targets s)) "))\n")))
@@ -463,11 +475,11 @@
          (let ((d (list-ref spans (normal-field-selector s)))
                (cid (num (normal-field-arguments s))))
            (string-append
-            "      ((" id ")\n"
+            "      (define (%s" id " pos st off pk)\n"
             "       (let ((o (byte-machine-span-fragment-step/v1 psr " id
             " off (vector-ref cbv " (num (cadr d)) ") bv pos " cid ")))\n"
             "         (case (car o)\n"
-            "           ((goto) (loop pos (cadr o) off pk))\n"
+            "           ((goto) (%dispatch pos (cadr o) off pk))\n"
             "           ((pause) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
             cid " off))\n"
             "           (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
@@ -485,16 +497,16 @@
                ;; exists -- it is what makes the span inactive -- and is simply
                ;; not an invocation.
                (string-append
-                "      ((" id ")\n"
+                "      (define (%s" id " pos st off pk)\n"
                 "       (begin (byte-machine-span-close/v1 psr)\n"
                 "              " (zero-width-jump (normal-field-targets s)) "))\n")
                (string-append
-                "      ((" id ")\n"
+                "      (define (%s" id " pos st off pk)\n"
                 "       (begin (byte-machine-span-close/v1 psr)\n"
                 "         (let ((o (byte-machine-callback-step/v1 psr " id
                 " off (vector-ref cbv " (num c) ") (quote ()) " tgt " " tgt ")))\n"
                 "           (case (car o)\n"
-                "             ((goto) (loop pos (cadr o) off pk))\n"
+                "             ((goto) (%dispatch pos (cadr o) off pk))\n"
                 "             ((pause) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
                 tgt " off))\n"
                 "             (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
@@ -512,7 +524,7 @@
                 (slot (num (car (field-slot-width fields fname))))
                 (next-id (car (normal-field-targets s))))
            (string-append
-            "      ((" id ")" "\n"
+            "      (define (%s" id " pos st off pk)" "\n"
             "       (let ((v (vector-ref fieldv " slot ")))\n"
             "         (cond ((= v 0) " (zero-width-jump next-id) ")\n"
             "               ((>= pos end)\n"
@@ -525,7 +537,7 @@
             "                (let ((n (min v (- end pos))))\n"
             "                  (vector-set! fieldv " slot " (- v n))\n"
             "                  (if (= n v)\n"
-            "                      (loop (+ pos n) " (num next-id) " (+ off n) (quote boundary))\n"
+            "                      (%s" (num next-id) " (+ pos n) " (num next-id) " (+ off n) (quote boundary))\n"
             "                      (byte-machine-make-feed-outcome/v1 (quote need-input) (+ pos n) #f " id " (+ off n))))))))\n")))
         ((dispatch)
          (let ((fb (normal-dispatch-fallback s)))
@@ -548,14 +560,14 @@
          (let ((kwid (number->string (normal-state-id s)))
                (nomatch (normal-keyword-no-match s)))
            (string-append
-            "      ((" id ")\n"
+            "      (define (%s" id " pos st off pk)\n"
             "       (let* ((kpath (if (pair? st) (cdr st) (quote ())))\n"
             "              (r (byte-machine-keyword-step/v1 (quote "
             (render-kw-entries (normal-keyword-entries s)) ") (quote ("
             (num (car nomatch)) " . " (symbol->string (cdr nomatch)) ")) "
             (if (normal-keyword-ci? s) "#t" "#f") " kpath bv pos end)))\n"
             "         (if (eq? (car r) (quote jump))\n"
-            "             (loop (caddr r) (cadr r) (+ off (- (caddr r) pos)) (cadddr r))\n"
+            "             (%dispatch (caddr r) (cadr r) (+ off (- (caddr r) pos)) (cadddr r))\n"
             "             (if finish?\n"
             "                 " (render-eof-branch (normal-dispatch-eof s) id
                                                   (string->symbol (nm (normal-state-id s)))
@@ -804,15 +816,38 @@
         ;; on finish? made both lanes report `eof` at the default-EOF arm and made
         ;; that arm's own literal observationally identical to the inherited
         ;; variable -- agreement bought by making the difference unobservable.
-        "    (let loop ((pos start) (st state) (off offset) (pk (quote boundary)))\n"
-        "      (case " (if has-kw "(if (pair? st) (car st) st)" "st") "\n"
+        ;; EVERY STATE IS A PROCEDURE, AND A TRANSITION IS A DIRECT TAIL CALL.
+        ;; These arms were one `(case st ...)` re-entered per transition, which
+        ;; Chez compiles as a LINEAR SCAN: measured against 10.4.1 on a 530-arm
+        ;; case, the arm at index 5 dispatches in 1.90ns and the arm at index 295
+        ;; in 93.15ns -- about 0.31ns per arm skipped, the total arm count
+        ;; irrelevant, identical at optimize-level 0, 2 and 3. A machine's cost
+        ;; therefore depended on where decision 0016 happened to number its hot
+        ;; states, which is not a property anyone chose. As mutually tail-calling
+        ;; procedures that never escape, a transition to a target known at emit
+        ;; time is a direct jump: 0.80ns against 185.85ns for the same arm, and
+        ;; independent of the state's id. Bucketing the case into nested range
+        ;; tests was measured too and plateaus near 11.65ns, so it is not what
+        ;; this emits.
         (let loop ((i 0) (acc ""))
           (if (>= i (vector-length states)) acc
               (loop (+ i 1) (string-append acc (render-state-arm (vector-ref states i)
                                                                  names index-of
                                                                  (normal-machine-fields normal)
                                                                  (normal-machine-span-decls normal))))))
-        "      (else (assertion-violation (quote exec) \"unknown state\" st)))))\n"
+        ;; The one dispatch that survives, and the three places that need it: the
+        ;; entry into a feed, a callback answering `goto`, and a keyword table's
+        ;; jump. All three carry a target computed at RUN time, and all three
+        ;; happen once per call, per callback and per keyword -- never once per
+        ;; byte -- so a linear case here costs nothing the per-byte path can see.
+        "      (define (%dispatch pos st off pk)\n"
+        "        (case " (if has-kw "(if (pair? st) (car st) st)" "st") "\n"
+        (let loop ((i 0) (acc ""))
+          (if (>= i (vector-length states)) acc
+              (let ((n (number->string (normal-state-id (vector-ref states i)))))
+                (loop (+ i 1) (string-append acc "          ((" n ") (%s" n " pos st off pk))\n")))))
+        "          (else (assertion-violation (quote exec) \"unknown state\" st))))\n"
+        "      (%dispatch start state offset (quote boundary)))\n"
         "  (define " bstr "\n"
         "    (byte-machine-make-compiled-machine 8 " (number->string fp) " "
         (number->string entry) " exec (quote #(#(" fields ") #(" cbs ") #("

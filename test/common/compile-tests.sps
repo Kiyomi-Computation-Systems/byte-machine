@@ -10,6 +10,7 @@
         ;; environments from the emitted identifiers. (byte-machine runtime) is
         ;; imported statically so the AOT lane compiles it (reserved-drift's surprise).
         (only (chezscheme) environment-symbols)
+        (only (byte-machine private names) portable-name?)
         (byte-machine test harness)
         (byte-machine graph)
         (byte-machine runtime)
@@ -138,22 +139,24 @@
           ((string=? (car fs) "") (loop (cdr fs) acc))
           (else (loop (cdr fs) (cons (car fs) acc))))))
 (define (pause-arm st)
-  (let ((head (string-append "((" (number->string st)
-                             ") (byte-machine-make-feed-outcome/v1 (quote ")))
+  (let ((head (string-append "(define (%s" (number->string st)
+                             " pos st off pk) (byte-machine-make-feed-outcome/v1 (quote ")))
     (let loop ((lines (harness-split (pause-text) #\newline)))
       (cond
         ((null? lines) "no such arm")
         ((harness-string-contains? (car lines) head)
-         ;; ("((1)" "(byte-machine-make-feed-outcome/v1" "(quote" "paused)"
-         ;;  "pos" "#f" "2" "off))") -- the status loses its closing paren, and
-         ;; the next state is the field before "off))". Any other shape is
-         ;; reported whole rather than indexed into, so a mutation that
-         ;; changes the arm's arity fails the comparison instead of raising.
+         ;; ("(define" "(%s1" "pos" "st" "off" "pk)"
+         ;;  "(byte-machine-make-feed-outcome/v1" "(quote" "paused)" "pos" "#f"
+         ;;  "2" "off))") -- the six-field define header precedes what used to
+         ;; be the whole line, so the status is field 8 and the next state is
+         ;; field 11, still the one before "off))". Any other shape is reported
+         ;; whole rather than indexed into, so a mutation that changes the
+         ;; arm's arity fails the comparison instead of raising.
          (let ((fields (pause-arm-fields (car lines))))
-           (if (= (length fields) 8)
-               (string-append (substring (list-ref fields 3) 0
-                                         (- (string-length (list-ref fields 3)) 1))
-                              " " (list-ref fields 6))
+           (if (= (length fields) 13)
+               (string-append (substring (list-ref fields 8) 0
+                                         (- (string-length (list-ref fields 8)) 1))
+                              " " (list-ref fields 11))
                (harness-join fields " "))))
         (else (loop (cdr lines)))))))
 
@@ -255,8 +258,15 @@
                (has? "(define (exec state offset bv start end finish? fieldv psr cbv)"))))
     (harness-case "the accepted byte advances and the fallback reexecutes"
       (lambda ()
-        (check "advance arm" (has? "((0) (loop (+ pos 1) 1 (+ off 1) (quote boundary)))"))
-        (check "fallback"    (has? "(else (loop pos 2 off (quote byte)))"))))
+        ;; A transition is a direct tail call to the target state's procedure,
+        ;; so the target appears TWICE: once as the callee and once as the `st`
+        ;; it is called with. Both are checked -- a mutation that changed only
+        ;; the callee would otherwise leave a well-formed call to the wrong
+        ;; state carrying the right id.
+        (check "advance arm" (has? "((0) (%s1 (+ pos 1) 1 (+ off 1) (quote boundary)))"))
+        (check "fallback"    (has? "(else (%s2 pos 2 off (quote byte)))"))
+        (check "the state is a procedure, not a case arm"
+               (has? "(define (%s0 pos st off pk)"))))
     (harness-case "the error state emits the resolved code"
       (lambda ()
         (check "error arm"
@@ -333,16 +343,19 @@
   (read (open-string-input-port
          (utf8->string (render-machine (compile-machine cc-witness '()) 'ccw-parser)))))
 
-;; The emitted exec dispatches on `st`; find that `case` and the clause whose
-;; datum list holds `id`. Node order is state order, so `body` is state 1.
+;; The emitted exec defines one procedure per state; find `(define (%s<id> ...))`.
+;; Node order is state order, so `body` is state 1. The `%dispatch` procedure
+;; CALLS every `%s<id>` but defines none of them, so keying on the define form
+;; cannot match there -- which matters, since a call site would otherwise be
+;; returned as though it were the arm and every count below would read zero.
 (define (find-state-arm x id)
-  (cond ((not (pair? x)) #f)
-        ((and (eq? (car x) 'case) (pair? (cdr x)) (eq? (cadr x) 'st))
-         (let loop ((cs (cddr x)))
-           (cond ((not (pair? cs)) #f)
-                 ((and (pair? (car cs)) (pair? (caar cs)) (memv id (caar cs))) (car cs))
-                 (else (loop (cdr cs))))))
-        (else (or (find-state-arm (car x) id) (find-state-arm (cdr x) id)))))
+  (let ((want (string->symbol (string-append "%s" (number->string id)))))
+    (let walk ((x x))
+      (cond ((not (pair? x)) #f)
+            ((and (eq? (car x) 'define) (pair? (cdr x)) (pair? (cadr x))
+                  (eq? (car (cadr x)) want))
+             x)
+            (else (or (walk (car x)) (walk (cdr x))))))))
 (define (count-forms x pred)
   (cond ((not (pair? x)) 0)
         (else (+ (if (pred x) 1 0) (count-forms (car x) pred) (count-forms (cdr x) pred)))))
@@ -475,12 +488,43 @@
 ;; Subtract the TEMPLATE only -- the (rnrs) and (byte-machine runtime) environments,
 ;; reserved-member-3 (the exec's own locals), and the library-form words -- leaving
 ;; exactly the output binding and the machine name, and NO declared name.
+
+;; THE STATE PROCEDURES AND THEIR DISPATCHER CARRY AN UNFORGEABLE PREFIX.
+;; The emitted body binds `%s<id>` for every state and one `%dispatch`, and
+;; they are deliberately NOT in reserved-member-3: a machine's state count has
+;; no bound, so the list could not enumerate them. What keeps them safe is the
+;; prefix. `portable-name?` admits `[a-z][a-z0-9-]*` and nothing else, so no
+;; output binding and no declared name can begin with `%`, and the collision
+;; reserved-member-3 exists to prevent is impossible by construction rather
+;; than by enumeration.
+;;
+;; Subtracting them is therefore sound -- but subtracting a whole PREFIX is a
+;; hole in a guard whose entire job is to notice new emitter locals, so the
+;; case below closes it: every name subtracted here is asserted to be one the
+;; emitter is known to emit AND to be unforgeable. A future local introduced
+;; without the prefix lands in the leftover and still fails; one introduced
+;; WITH the prefix but under a new spelling fails the shape check.
+(define (emitter-private? sym)
+  (let ((s (symbol->string sym)))
+    (and (> (string-length s) 0) (char=? (string-ref s 0) #\%))))
+(define (state-procedure-name? sym)
+  (let ((s (symbol->string sym)))
+    (and (> (string-length s) 2)
+         (char=? (string-ref s 0) #\%)
+         (char=? (string-ref s 1) #\s)
+         (let loop ((i 2))
+           (or (>= i (string-length s))
+               (and (char<=? #\0 (string-ref s i)) (char<=? (string-ref s i) #\9)
+                    (loop (+ i 1))))))))
+
+(define w910-private (filter emitter-private? w910-identifiers))
 (define w910-leftover
-  (subtract (subtract (subtract (subtract w910-identifiers
-                                          (environment-symbols (environment '(rnrs))))
-                                (environment-symbols (environment '(byte-machine runtime))))
-                      reserved-member-3)
-            w910-structural))
+  (filter (lambda (sym) (not (emitter-private? sym)))
+          (subtract (subtract (subtract (subtract w910-identifiers
+                                                  (environment-symbols (environment '(rnrs))))
+                                        (environment-symbols (environment '(byte-machine runtime))))
+                              reserved-member-3)
+                    w910-structural)))
 
 (harness-group "the every-construct witness exercises every emitter arm (§16.2:910 totality, F10)"
   (lambda ()
@@ -502,6 +546,19 @@
 
 (harness-group "no declared name reaches identifier position (§16.2:910, §25:1617)"
   (lambda ()
+    (harness-case "the subtracted emitter-private names are unforgeable, and only the two known shapes"
+      (lambda ()
+        ;; A found-it guard first: with no private names the two checks below
+        ;; would pass over an empty list and say nothing at all.
+        (check "the emitted body binds emitter-private names" (pair? w910-private))
+        (check "every one of them is a state procedure or the dispatcher"
+               (for-all (lambda (sym)
+                          (or (state-procedure-name? sym) (eq? sym (quote %dispatch))))
+                        w910-private))
+        ;; The safety property itself, not a restatement of the spelling: none
+        ;; of these can be written as a declared name or an output binding.
+        (check "no declared name or output binding could collide with one"
+               (for-all (lambda (sym) (not (portable-name? sym))) w910-private))))
     (harness-case "the identifier-position set is exactly the output binding and the machine name"
       (lambda ()
         (check "the emitted library binds identifiers at all" (> (length w910-identifiers) 20))
