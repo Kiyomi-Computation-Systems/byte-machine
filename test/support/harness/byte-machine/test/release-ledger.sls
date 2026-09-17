@@ -108,7 +108,7 @@
       ("§26:1679"
        "compiled benchmark baselines are recorded without speculative optimization"
        met mechanical
-       "bench/runner/benchmark.sps produces the committed baseline bench/fixtures/baseline-tarm64osx.sls with the §23.1 fields (canonical bytes, seeds, harness version, exact command, raw samples, summary, required-vs-unavailable, twelve §23.2 workloads); recorded, no perf gate (§23.1); no optimisation attempted (§23.3 admission rule unmet)"
+       "bench/runner/benchmark.sps produces the committed baseline bench/fixtures/baseline-tarm64osx.sls with the §23.1 fields (canonical bytes, seeds, harness version, exact command, raw samples, summary, required-vs-unavailable, twelve §23.2 workloads); recorded, no perf gate (§23.1). §23.3's admission rule is now MET rather than unmet: decision 0048 derives material improvement and significant regression from the observed dispersion, and decision 0049 is admitted against them -- five admissible workloads improving, none regressing. The baseline is re-recorded at two thousand iterations per round, because at the hundred it used to carry, ten of the twelve medians sat inside the millisecond clock and could be the denominator of nothing"
        ())
       ("§26:1680"
        "generated per-byte paths contain no deliberate list/vector/string/result construction, and fixnum-sized allocation measurements are recorded with callbacks disabled"

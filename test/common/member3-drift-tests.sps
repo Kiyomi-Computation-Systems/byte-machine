@@ -12,6 +12,7 @@
 ;;; sorts two lists and asserts one check-equal. Nothing in the tree walked a
 ;;; read datum before this.
 (import (rnrs)
+        (only (byte-machine private names) portable-name?)
         (rnrs eval)
         ;; environment-symbols is a Chez extension, not R6RS -- the same import
         ;; reserved-drift-tests.sps needs, and its header records that the AOT
@@ -197,14 +198,58 @@
 
 (define (subtract xs ys) (filter (lambda (x) (not (memq x ys))) xs))
 
+
+;; THE STATE PROCEDURES AND THEIR DISPATCHER CARRY AN UNFORGEABLE PREFIX.
+;; The emitted body binds `%s<id>` for every state and one `%dispatch`, and
+;; they are deliberately NOT in reserved-member-3: a machine's state count has
+;; no bound, so the list could not enumerate them. What keeps them safe is the
+;; prefix. `portable-name?` admits `[a-z][a-z0-9-]*` and nothing else, so no
+;; output binding and no declared name can begin with `%`, and the collision
+;; reserved-member-3 exists to prevent is impossible by construction rather
+;; than by enumeration.
+;;
+;; Subtracting them is therefore sound -- but subtracting a whole PREFIX is a
+;; hole in a guard whose entire job is to notice new emitter locals, so the
+;; case below closes it: every name subtracted here is asserted to be one the
+;; emitter is known to emit AND to be unforgeable. A future local introduced
+;; without the prefix lands in the leftover and still fails; one introduced
+;; WITH the prefix but under a new spelling fails the shape check.
+(define (emitter-private? sym)
+  (let ((s (symbol->string sym)))
+    (and (> (string-length s) 0) (char=? (string-ref s 0) #\%))))
+(define (state-procedure-name? sym)
+  (let ((s (symbol->string sym)))
+    (and (> (string-length s) 2)
+         (char=? (string-ref s 0) #\%)
+         (char=? (string-ref s 1) #\s)
+         (let loop ((i 2))
+           (or (>= i (string-length s))
+               (and (char<=? #\0 (string-ref s i)) (char<=? (string-ref s i) #\9)
+                    (loop (+ i 1))))))))
+
+(define observed-private (filter emitter-private? observed))
 (define leftover
-  (subtract (subtract (subtract (subtract observed (environment-symbols (environment '(rnrs))))
-                                (environment-symbols (environment '(byte-machine runtime))))
-                      (list binding machine-name-sym))
-            structural))
+  (filter (lambda (sym) (not (emitter-private? sym)))
+          (subtract (subtract (subtract (subtract observed (environment-symbols (environment '(rnrs))))
+                                        (environment-symbols (environment '(byte-machine runtime))))
+                              (list binding machine-name-sym))
+                    structural)))
 
 (harness-group "reserved member 3 covers every emitted local"
   (lambda ()
+    (harness-case "the subtracted emitter-private names are unforgeable, and only the two known shapes"
+      (lambda ()
+        ;; A found-it guard first: with no private names the two checks below
+        ;; would pass over an empty list and say nothing at all.
+        (check "the emitted body binds emitter-private names" (pair? observed-private))
+        (check "every one of them is a state procedure or the dispatcher"
+               (for-all (lambda (sym)
+                          (or (state-procedure-name? sym) (eq? sym (quote %dispatch))))
+                        observed-private))
+        ;; The safety property itself, not a restatement of the spelling: none
+        ;; of these can be written as a declared name or an output binding.
+        (check "no declared name or output binding could collide with one"
+               (for-all (lambda (sym) (not (portable-name? sym))) observed-private))))
     (harness-case "the walk reaches the emitted body at all"
       (lambda ()
         ;; A sentinel over the measurement itself, read from what the walk
