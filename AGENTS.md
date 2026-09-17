@@ -1119,6 +1119,24 @@ each step is easy to skip and each one left undone costs someone else later.
    discipline* below): a PR touching `src/`, `test/` or CMake gets the `ci`
    label once its branch is final and merges after that run is green; a
    docs-only PR needs no run at all.
+
+   **A run that never started is a billing refusal, not a red lane, and the
+   difference is `steps=0`.** This account's Actions minutes are exhausted, so
+   the labelled run comes back `failure` having tested nothing. Read it, do not
+   infer it:
+
+   ```sh
+   gh api repos/<owner>/<repo>/check-runs/<id> --jq '{conclusion,steps:(.steps|length)}'
+   gh api repos/<owner>/<repo>/check-runs/<id>/annotations --jq '.[].message'
+   ```
+
+   `steps: 0` plus *"The job was not started because recent account payments
+   have failed or your spending limit needs to be increased"* is the signature.
+   **The duration is not** — a four-second failure is scheduling latency and a
+   four-second success would look the same, so a fast red proves nothing either
+   way. When it is a refusal, say so on the PR with the two readings quoted,
+   name the local selection that stands in for it, and merge. When it is not,
+   it is an ordinary red lane and the ritual has not been satisfied.
 2. **Catch up local `main`.** Fetch and fast-forward, so the next branch starts
    from what was actually merged rather than from where this one began.
 3. **Clean up branches.** Delete the merged branch locally and on the remote.
@@ -1129,3 +1147,30 @@ each step is easy to skip and each one left undone costs someone else later.
    project standards into this file, and anything the code should say about
    itself into a comment at the site. A finding recorded only in a session
    transcript has not been recorded.
+
+## A median inside the clock is not a measurement
+
+`bench/fixtures/baseline-tarm64osx.sls` was committed at one hundred iterations
+per round. Read back, **ten of its twelve generated-lane medians are 0, 1 or 3
+milliseconds** against a one-millisecond clock, with a recorded dispersion of
+one or two milliseconds around them. Every `bytes-per-second` figure in that
+artifact is a quotient over one of those, so the artifact recorded twelve
+workloads and could measure none of them.
+
+Nothing was wrong until someone tried to *use* it. `§23.3` asks for a threshold
+derived from observed variance, and the variance there is the clock's, not the
+parser's — so decision 0048 had to re-record the baseline at two thousand
+iterations before it could derive anything. That is the cost of the original
+omission: not a wrong number, an unusable one, found a milestone later by the
+first person who needed a denominator.
+
+**So: a recorded number needs a resolution claim beside it, and the way to
+check one is to read the raw medians rather than the rates.** A rate hides the
+problem — it is the small, unresolvable interval that produces the largest and
+most impressive quotient. The two readings that matter are the median and the
+dispersion, and if the dispersion is an appreciable fraction of the median, the
+instrument is measuring itself. `chez-httparse` found the identical defect in
+its own throughput lane the same day, from the other direction: it floored
+elapsed time with `(max 1 ...)` before dividing, so a fast enough machine would
+have printed a fabricated rate that sailed over every floor asserted below it.
+
