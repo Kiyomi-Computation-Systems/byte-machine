@@ -17,7 +17,21 @@ fields with checked accumulation, zero-width actions and branches, callbacks,
 spans, and counted consumption. The [[file:.reference/source-ir-and-builder.md][source IR and builder reference]] documents
 every constructor and node kind.
 
-*Status:* =0.5.0=. v0.5 lets a parser **start in a mode**: a =uint= field may be
+*Status:* =0.6.0=. v0.6 makes the emitted parser stop scanning. Chez compiles a
+large =case= over integer keys as a **linear scan** — about 0.31 ns per arm
+skipped — and the emitter had four of them nested: the state dispatch, the byte
+dispatch inside each state, a callback answering =goto=, and the feed entry.
+Every one is now a jump, a range test or a binary search, and the callback seam
+stopped consing an outcome list nobody read (128 bytes per HTTP header). On
+=tarm64osx=, =many-small-headers= runs 90 → 51 ms and a byte-at-a-time parse 39
+→ 32; downstream, a 308-byte HTTP request parses **twelve times faster** than
+before this release with its llhttp differential unchanged. **The
+generated-runtime ABI breaks, 8 → 9** (decision 0052): regenerate, or the
+runtime refuses the parser at construction. No graph or parser API changes.
+[[file:.plans/milestone-14-close.md][Milestone 14's close]] records the five
+decisions, and that one of them ships without meeting this project's own
+admission rule — recorded as an exception rather than resolved by widening the
+rule. v0.5 lets a parser **start in a mode**: a =uint= field may be
 declared =settable= (=make-uint-field='s optional trailing flag, read by
 =uint-field-settable?=), and =make-parser= takes an OPTIONAL trailing
 =field-initials= alist overriding the declared initials of settable fields — so
