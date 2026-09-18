@@ -6,6 +6,39 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-18
+
+Milestone 14 — **the emitted dispatches stop being linear scans**, at four
+depths, plus the allocation the last of them hid.
+[Its close](.plans/milestone-14-close.md) records what shipped, and that this
+milestone had no design document: it began as a consumer's question and each
+slice was chosen from the measurement the previous one produced.
+
+**BREAKING for generated parsers: the ABI is 9.** Regenerate. An ABI-8 library
+decodes the callback seam's answer with `car`, which a fixnum does not answer,
+so the mismatch is refused at construction. `byte-machine-callback-step/v1` and
+`byte-machine-span-fragment-step/v1` are retired to tombstones and replaced by
+`/v2`.
+
+Nine rounds of sixteen thousand on `tarm64osx`, generated lane:
+`long-exact-sequence-matching` 118 -> 60 ms, `many-small-headers` and
+`dense-byte-dispatch` 90 -> 51, `byte-at-a-time-fragmentation` 39 -> 32.
+Per-header allocation 128 B -> 0. Downstream, `chez-httparse` parses a 308-byte
+request at 175,342 msg/s where it parsed at 14,925 before this milestone, with
+its live llhttp differential unchanged at `agreed=9557` throughout.
+
+**Decision 0053 ships without meeting `§23.3`'s admission rule** -- 22% on one
+admissible workload where 0048 asks for 20% on three -- and says so rather than
+adding workloads to reach three. The bench machine is 217 states with no
+keyword table, so every workload but the byte-at-a-time one crosses the feed
+entry once per message. Recorded as an exception in the decision, in the
+release ledger's `§26:1679` claim, and in the milestone close.
+
+The `§26`/`§27` census is unchanged at 13 met / 2 amended / 0 open. The
+diagnostic census (33 codes / 60 sites) and the mutation lane (76 passes / 637
+mutations) are identical to 0.5.0: twenty-three mutations were re-anchored
+across the five slices and not one was added or dropped.
+
 ### Changed
 
 - **The feed entry is a search, not a scan**
@@ -165,8 +198,6 @@ All notable changes to byte-machine are recorded here. The format follows
   recorded at one hundred iterations per round, where ten of its twelve
   generated-lane medians are 0, 1 or 3 ms against a one-millisecond clock. It is
   re-recorded at two thousand.
-
-## [Unreleased]
 
 ## [0.5.0] - 2026-09-15
 

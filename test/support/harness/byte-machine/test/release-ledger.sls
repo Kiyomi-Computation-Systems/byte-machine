@@ -156,8 +156,14 @@
       ("§27:1701" "changelog"                                        #t (five))))
 
   ;; §4.5 — the version surface. The CURRENT release string has ONE owner (the
-  ;; value here) and a mirror rule: every surface below carries it. Milestone 13
-  ;; (a parser can start in a mode, decision 0047) bumps it to `0.5.0`; the
+  ;; value here) and a mirror rule: every surface below carries it. Milestone 14
+  ;; (the emitted dispatches stop being linear scans, decisions 0048-0053) bumps
+  ;; it to `0.6.0`. It adds NO public API at all — no node kind, no graph
+  ;; constructor, no diagnostic — so by the reading below it would be a patch;
+  ;; it is a MINOR because the generated-runtime ABI breaks (8 -> 9) and two
+  ;; runtime bindings generated code calls are retired to tombstones, which is
+  ;; the same call M11 and M13 made for their own ABI bumps. Milestone 13
+  ;; (a parser can start in a mode, decision 0047) bumped it to `0.5.0`; the
   ;; `§26`/`§27` census above is UNCHANGED — those are the release exit criteria
   ;; (the append rule freezes them, a settable field adds no criterion row, and
   ;; every one still holds, the two amended still the CI-blocked pair), so the
@@ -168,18 +174,30 @@
   ;; optional `settable?` on `make-uint-field` with `uint-field-settable?`, and
   ;; the optional `field-initials` argument to `make-parser` — but that is a
   ;; semver-minor's added optional API, not a version-string export.)
-  ;; `current-abi-version` (now 8, runtime.sls) is the generated-runtime ABI — a
+  ;; `current-abi-version` (now 9, runtime.sls) is the generated-runtime ABI — a
   ;; different thing with a different lifecycle — and is deliberately NOT this
-  ;; value (it moved 7->8 at v0.5.0 for the settable table — an OPTIONAL fourth
-  ;; payload member the generated make-parser range-checks an override against —
-  ;; whereas the semver release string tracks the public API).
-  (define release-version "0.5.0")
+  ;; value. It moved 7->8 at v0.5.0 for the settable table (an OPTIONAL fourth
+  ;; payload member the generated make-parser range-checks an override against)
+  ;; and 8->9 at v0.6.0 for decision 0052, where the callback seam changed what
+  ;; it ANSWERS — the outcome object rather than a list tagged with the
+  ;; outcome's name — so an ABI-8 parser would decode every callback wrong and
+  ;; is refused at construction. The two lifecycles have now diverged twice in
+  ;; the same direction and once in the other: an ABI bump has never been a
+  ;; major here, and v0.5.0's minor carried no ABI-breaking change at all.
+  ;; THIS COMMENT IS WHY THE VALUE BELOW IS NOT THE ONLY THING TO MOVE AT A
+  ;; RELEASE: it read `now 8` for the whole of Milestone 14, through an ABI bump
+  ;; the lane could not catch because prose is not a checked value.
+  (define release-version "0.6.0")
   (define release-version-export? #f)
   (define release-version-surfaces
-    '("CHANGELOG.md 0.5.0 entry (§26:1684)"
+    '("CHANGELOG.md 0.6.0 entry (§26:1684)"
       "README.org status paragraph"
       "the parent plan's dated disposition"
-      "the milestone-13-design.md status header"
+      ;; NOT `milestone-14-design.md`: this milestone has no design document,
+      ;; because it was chosen a slice at a time from the previous slice's
+      ;; measurement. The close record carries the status header instead, and
+      ;; says why it is a close rather than a design.
+      "the milestone-14-close.md status header"
       "the git tag"))
 
   ;; --- accessors -----------------------------------------------------------
