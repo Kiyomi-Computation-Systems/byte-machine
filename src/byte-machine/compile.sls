@@ -146,15 +146,55 @@
         (string-append "(%s" (number->string target) " pos " (number->string target)
                        " off (quote byte))")))
 
-  (define (render-transition-arm tr)
-    ;; tr = (byte target mode) -> "((<byte>) <loop-tail>)"
-    ;; Byte classes lower to one transition per byte, so a complement renders up
-    ;; to 256 sibling arms inside the single `(case b ...)` below: membership code
-    ;; is kept simple rather than optimized for density. A grouped datum list or a
-    ;; membership table is a deliberately deferred optimization, gated behind
-    ;; compiled benchmarks.
-    (string-append "               ((" (number->string (car tr)) ") "
-                   (loop-tail (cadr tr) (caddr tr)) ")\n"))
+  ;; A BYTE CLASS IS A RANGE, AND A LINEAR SCAN OF ITS MEMBERS IS NOT.
+  ;;
+  ;; Byte classes lower to one transition per byte, so a token set renders ~90
+  ;; of them and a complement up to 256. Emitted as sibling `(case b ...)` arms
+  ;; that cost what Chez charges for a large `case`, which is a LINEAR SCAN:
+  ;; measured against 10.4.1 on 2026-09-17 over a 94-byte set, the first arm
+  ;; dispatches in 0.95ns and a byte in the middle -- a lowercase letter, which
+  ;; is what HTTP is mostly made of -- in 21.60ns.
+  ;;
+  ;; The transitions arrive sorted ascending by byte (decision 0014), so a
+  ;; maximal run of consecutive bytes sharing a target and a mode is exactly
+  ;; what the source byte class said before lowering flattened it. Rendered
+  ;; back as one range test per run, the same dispatch costs **1.25ns**.
+  ;;
+  ;; The two candidates the old comment here named were measured, and one of
+  ;; them is worse than what it would have replaced: a grouped datum list
+  ;; (`((97 98 99 ...) target)`) costs 57.40ns, because `memv` over 94 elements
+  ;; loses to the nested-if expansion `case` already gets. A 256-entry
+  ;; membership bytevector is 1.75ns -- fine, but it answers only "is b in the
+  ;; class", so a state with several classes needs several tables and a target
+  ;; per table, where ranges carry the target in the clause.
+  ;;
+  ;; `fx` comparisons rather than generic: `b` is `bytevector-u8-ref`'s result
+  ;; and a fixnum by construction, `(rnrs)` exports them, and the pair measured
+  ;; 1.25ns against 1.40ns.
+  ;;
+  ;; render-byte-clauses : (Listof (byte target mode)) -> String
+  (define (render-byte-clauses trs)
+    (define (clause lo hi target mode)
+      (string-append
+       "               ("
+       (if (= lo hi)
+           (string-append "(fx=? b " (num lo) ")")
+           (string-append "(and (fx>=? b " (num lo) ") (fx<=? b " (num hi) "))"))
+       " " (loop-tail target mode) ")\n"))
+    ;; One pass, carrying the open run. A new transition extends it when it is
+    ;; the next byte with the same destination; otherwise the open run is
+    ;; flushed and it starts a new one. Clauses stay in ascending byte order,
+    ;; which is the order the transitions came in: the runs partition the byte
+    ;; space, so no clause can shadow another and the order is free to be the
+    ;; deterministic one rather than a chosen one.
+    (let walk ((ts trs) (lo #f) (hi #f) (tgt #f) (mode #f) (acc ""))
+      (if (null? ts)
+          (if lo (string-append acc (clause lo hi tgt mode)) acc)
+          (let ((b (car (car ts))) (t (cadr (car ts))) (m (caddr (car ts))))
+            (if (and lo (= b (+ hi 1)) (= t tgt) (eq? m mode))
+                (walk (cdr ts) lo b tgt mode acc)
+                (walk (cdr ts) b b t m
+                      (if lo (string-append acc (clause lo hi tgt mode)) acc)))))))
 
   ;; An exhausted dispatch (finish? #t) routes eof: to a named node's loop
   ;; (continue the eof-target chain) or to the machine default-eof error.
@@ -544,8 +584,8 @@
            (string-append
             (render-exhausted-preamble s id names index-of nm)
             "           (let ((b (bytevector-u8-ref bv pos)))\n"
-            "             (case b\n"
-            (apply string-append (map render-transition-arm (normal-dispatch-transitions s)))
+            "             (cond\n"
+            (render-byte-clauses (normal-dispatch-transitions s))
             "               (else " (loop-tail (car fb) (cdr fb)) ")))))\n")))
         ;; Keyword table (decision 0044). ONE arm: it reads the parked prefix from
         ;; a compound `st` (empty on fresh entry), calls the runtime walk over its

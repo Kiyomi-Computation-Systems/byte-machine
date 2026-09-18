@@ -9,8 +9,8 @@
                (%s3 pos 3 off (quote eof))
                (byte-machine-make-feed-outcome/v1 (quote need-input) pos #f 0 off))
            (let ((b (bytevector-u8-ref bv pos)))
-             (case b
-               ((1) (%s1 (+ pos 1) 1 (+ off 1) (quote boundary)))
+             (cond
+               ((fx=? b 1) (%s1 (+ pos 1) 1 (+ off 1) (quote boundary)))
                (else (%s7 pos 7 off (quote byte)))))))
       (define (%s1 pos st off pk) (byte-machine-make-feed-outcome/v1 (quote paused) pos (byte-machine-make-parser-error/v1 (vector-ref errs 2) (quote p1) 1 off pk) 2 off))
       (define (%s2 pos st off pk)
@@ -19,8 +19,8 @@
                (%s6 pos 6 off (quote eof))
                (byte-machine-make-feed-outcome/v1 (quote need-input) pos #f 2 off))
            (let ((b (bytevector-u8-ref bv pos)))
-             (case b
-               ((2) (%s4 (+ pos 1) 4 (+ off 1) (quote boundary)))
+             (cond
+               ((fx=? b 2) (%s4 (+ pos 1) 4 (+ off 1) (quote boundary)))
                (else (%s7 pos 7 off (quote byte)))))))
       (define (%s3 pos st off pk) (byte-machine-make-feed-outcome/v1 (quote paused) pos (byte-machine-make-parser-error/v1 (vector-ref errs 3) (quote pe) 3 off pk) 5 off))
       (define (%s4 pos st off pk) (byte-machine-make-feed-outcome/v1 (quote stopped) pos #f 4 off))

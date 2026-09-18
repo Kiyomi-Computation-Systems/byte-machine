@@ -263,7 +263,9 @@
         ;; it is called with. Both are checked -- a mutation that changed only
         ;; the callee would otherwise leave a well-formed call to the wrong
         ;; state carrying the right id.
-        (check "advance arm" (has? "((0) (%s1 (+ pos 1) 1 (+ off 1) (quote boundary)))"))
+        ;; A byte class is rendered as range clauses now, so a single accepted
+        ;; byte is an equality clause rather than a `case` datum.
+        (check "advance arm" (has? "((fx=? b 0) (%s1 (+ pos 1) 1 (+ off 1) (quote boundary)))"))
         (check "fallback"    (has? "(else (%s2 pos 2 off (quote byte)))"))
         (check "the state is a procedure, not a case arm"
                (has? "(define (%s0 pos st off pk)"))))
