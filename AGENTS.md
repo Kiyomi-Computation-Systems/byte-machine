@@ -1137,11 +1137,28 @@ each step is easy to skip and each one left undone costs someone else later.
    way. When it is a refusal, say so on the PR with the two readings quoted,
    name the local selection that stands in for it, and merge. When it is not,
    it is an ordinary red lane and the ritual has not been satisfied.
+
+   **A push after the label re-runs nothing.** `ci.yml` subscribes to the
+   `labeled` event only, by design, and its own comment says so — so a branch
+   rebased or amended after labelling still shows the run from the OLD head,
+   and reading that run is reading a different tree. Remove and re-add the
+   label, or `gh workflow run ci.yml --ref <branch>`, and check the run you
+   quote is against the head you are merging.
 2. **Catch up local `main`.** Fetch and fast-forward, so the next branch starts
    from what was actually merged rather than from where this one began.
 3. **Clean up branches.** Delete the merged branch locally and on the remote.
    A branch list that still shows finished work makes the unfinished work
    harder to see.
+
+   **A stacked PR is retargeted BEFORE its base is deleted.** GitHub closes a
+   pull request when its base branch disappears, and will not reopen one whose
+   base is missing — `reopenPullRequest` fails outright — so the review trail
+   is stranded until the deleted branch is pushed back. Merge the parent,
+   rebase the child onto `main` (the squash commit is patch-equivalent to the
+   parent's, so the rebase skips it and says so), point the child's base at
+   `main`, force-push, and only then delete. In the other order it is
+   recoverable — push the old base commit back, reopen, retarget, delete
+   again — but only while that commit is still reachable locally.
 4. **Reflect.** Put what was learned where it will be found again, choosing the
    destination by who needs it: durable facts and corrections into memory,
    project standards into this file, and anything the code should say about
