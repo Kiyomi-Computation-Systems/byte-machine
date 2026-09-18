@@ -8,6 +8,36 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ### Changed
 
+- **The feed entry is a search, not a scan**
+  ([0053](.decisions/0053-the-feed-entry-is-a-search.md)). The fourth and last
+  instance of the defect 0049, 0050 and 0051 fixed, and the one 0051 left
+  standing: `%dispatch` answers the only target that genuinely cannot be a
+  literal -- the state comes from the parser -- but it did not have to be
+  linear about it. It is now a balanced binary search over the state ids,
+  ceil(log2 N) comparisons where the scan averaged N/2 arms, with the same tail
+  calls at the leaves so 0049's direct jumps are untouched.
+
+  A jump table is rejected with a reason: a vector of the state procedures is
+  O(1) but makes every one of them escape, and they close over `exec`'s
+  parameters, so Chez would build N closures on every `exec` entry -- which is
+  the per-feed path this exists to make cheaper.
+
+  Measured in situ on the largest machine the ecosystem generates
+  (`chez-httparse`, 530 states, keyword tables), three runs each side with a
+  load marker: whole buffer **167,224 -> 176,522 msg/s (+5.6%)**, byte at a
+  time **25,141 -> 44,395 (+77%)**.
+
+  **On this project's own benchmark it is -22.0% on
+  `byte-at-a-time-fragmentation` and flat on the other four admissible
+  workloads, which does NOT meet 0048 rule 2's three-workload bar.** The reason
+  is the instrument: the bench machine is 217 states with no keyword table, so
+  its whole-buffer workloads cross the dispatch exactly once per message and
+  there is nothing there to remove. 0053 records that rather than adding
+  workloads to reach three.
+
+  Emitted text grows 9.6% (118,023 -> 129,379 bytes for the HTTP golden). No
+  fingerprint moves.
+
 - **A callback outcome is the object, not a list naming it** -- ABI 9
   ([0052](.decisions/0052-a-callback-outcome-is-the-object.md)). The callback
   seam answered `(goto TARGET)`, `(pause)` or `(failure CODE DETAIL)`: two

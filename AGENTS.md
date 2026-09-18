@@ -1221,3 +1221,44 @@ measuring the dimension that mattered least while asserting a property about
 "the per-byte path". Every new slope gets its own live control for the same
 reason the first one did — a slope of zero is indistinguishable from a
 measurement that cannot move, in whichever dimension it is taken.
+
+## A fix that names what it is not fixing has named the next defect
+
+Four records in a row fixed the same defect — a linear scan over emitted arms
+— one level further out each time, and **three of them pointed at the next one
+on their way past**:
+
+- 0049 replaced the state `case` and wrote, beside the dispatch it left: *"the
+  entry into a feed, a callback answering `goto`, and a keyword table's jump …
+  so a linear case here costs nothing the per-byte path can see."* Two of
+  those three were the next two records.
+- 0050 replaced the byte `case`, closing a comment that had been open since
+  Milestone 3: *"a grouped datum list or a membership table is a deliberately
+  deferred optimization, gated behind compiled benchmarks."* When finally
+  measured, one of the two candidates that comment proposed was **2.7× worse
+  than the status quo**.
+- 0051 replaced the callback `goto` and wrote: *"the keyword jump's target set
+  IS known here … and is not yet measured; it is left alone rather than
+  assumed."* It was worth 5.6% on a whole-buffer parse.
+
+None of those sentences was wrong about the mechanism. Every one was wrong
+about the size, and none had a number. The pattern is not carelessness — it is
+what scoping a change looks like from the inside: you fix the thing you
+measured, you can see the neighbouring thing has the same shape, and you say
+so honestly instead of silently widening the change.
+
+**So: a sentence in a shipped comment that says "this one is fine" or "this
+one is deferred" is a work item with no ticket.** Two rules follow. When you
+write one, write what would settle it — the workload, the instrument, the
+number that would change your mind — so the next person inherits an experiment
+rather than an opinion. And when you *read* one while working nearby, treat it
+as unmeasured until you find the measurement, because the comment is evidence
+about what its author had time for, not about what the cost is.
+
+A corollary about instruments. `byte-at-a-time-fragmentation` is the one
+benchmark cell that re-enters `exec` once per byte, so it is the only one that
+measures the feed entry. For three records it stood still or slipped a few
+percent while everything else improved, and each time that was recorded as
+unexplained. **A cell that only ever moves the wrong way is measuring
+something none of the others are** — which makes it the most informative row
+in the table, not the noisiest one.
