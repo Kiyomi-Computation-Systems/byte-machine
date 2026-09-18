@@ -69,9 +69,11 @@
       parser-stream-offset parser-user-context parser-active-span
       make-callback-failure callback-failure?
       callback-failure-code callback-failure-detail
-      byte-machine-callback-step/v1 byte-machine-make-callback-error/v1
+      byte-machine-callback-step/v1 byte-machine-callback-step/v2
+      byte-machine-make-callback-error/v1
       parser-state-name
-      byte-machine-span-open/v1 byte-machine-span-fragment-step/v1
+      byte-machine-span-open/v1
+      byte-machine-span-fragment-step/v1 byte-machine-span-fragment-step/v2
       byte-machine-span-close/v1
       byte-machine-keyword-step/v1))
   ;; Every identifier the emitted body binds, so a caller-chosen output binding
@@ -276,18 +278,22 @@
   ;;
   ;; Targets repeat (a default-branch resolves to a branch target) and may be
   ;; absent (`#f`, a required callback's default), so the walk dedupes and skips.
+  ;; The clauses ALONE: each arm opens the `cond`, puts its pause and failure
+  ;; clauses after these, and closes with `render-dispatch-else`. The order is
+  ;; that and not the reverse because the outcome cases are disjoint by type
+  ;; (decision 0052) and the target clauses are the ones that run.
   ;; render-goto-clauses : String (Listof (U ExactInteger #f)) -> String
   (define (render-goto-clauses expr targets)
-    (string-append
-     "(cond "
-     (let loop ((ts targets) (seen '()) (acc ""))
-       (cond ((null? ts) acc)
-             ((or (not (car ts)) (memv (car ts) seen)) (loop (cdr ts) seen acc))
-             (else
-              (loop (cdr ts) (cons (car ts) seen)
-                    (string-append acc "((eqv? " expr " " (num (car ts)) ") "
-                                   (zero-width-jump (car ts)) ") ")))))
-     "(else (%dispatch pos " expr " off pk)))"))
+    (let loop ((ts targets) (seen '()) (acc ""))
+      (cond ((null? ts) acc)
+            ((or (not (car ts)) (memv (car ts) seen)) (loop (cdr ts) seen acc))
+            (else
+             (loop (cdr ts) (cons (car ts) seen)
+                   (string-append acc (if (string=? acc "") "" " ")
+                                  "((eqv? " expr " " (num (car ts)) ") "
+                                  (zero-width-jump (car ts)) ")"))))))
+  (define (render-dispatch-else expr)
+    (string-append "(else (%dispatch pos " expr " off pk))"))
   (define (render-operation op k)
     (case op
       ((store) (num k))
@@ -503,7 +509,7 @@
          (let ((tg (normal-field-targets s)))
            (string-append
             "      (define (%s" id " pos st off pk)\n"
-            "       (let ((o (byte-machine-callback-step/v1 psr " id " off (vector-ref cbv "
+            "       (let ((o (byte-machine-callback-step/v2 psr " id " off (vector-ref cbv "
             (num (normal-field-selector s)) ") (quote ("
             (let join ((bs (normal-field-arguments s)) (acc ""))
               (if (null? bs) acc
@@ -513,18 +519,17 @@
                                        " . " (num (cdr (car bs))) ")"))))
             ")) " (num (car tg)) " "
             (let ((d (caddr tg))) (if d (num d) "#f")) ")))\n"
-            "         (case (car o)\n"
-            "           ((goto) " (render-goto-clauses
-                                   "(cadr o)"
-                                   (cons (car tg)
-                                         (append (map cdr (normal-field-arguments s))
-                                                 (list (caddr tg))))) ")\n"
+            "         (cond " (render-goto-clauses
+                              "o"
+                              (cons (car tg)
+                                    (append (map cdr (normal-field-arguments s))
+                                            (list (caddr tg))))) "\n"
             ;; The OPTIONAL callback-pause reason (M12) rides the outcome's error
             ;; slot, built like the pause node arm but with `boundary` -- a
             ;; callback outcome reports boundary, as its error arm below does
             ;; (callback-failure-position). The boundary routes it to the pause
             ;; slot. A reason-less callback keeps `#f`, byte-identical to before.
-            "           ((pause) (byte-machine-make-feed-outcome/v1 (quote paused) pos "
+            "               ((eq? o callback-pause) (byte-machine-make-feed-outcome/v1 (quote paused) pos "
             (let ((code (normal-error-code s)))
               (if code
                   (string-append "(byte-machine-make-parser-error/v1 (vector-ref errs "
@@ -532,9 +537,10 @@
                                  ") (quote " (nm (normal-state-id s)) ") " id " off (quote boundary))")
                   "#f"))
             " " (num (cadr tg)) " off))\n"
-            "           (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
-            "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
-            (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off)))))\n")))
+            "               ((callback-failure? o) (byte-machine-make-feed-outcome/v1 (quote error) pos "
+            "(byte-machine-make-callback-error/v1 (callback-failure-code o) (callback-failure-detail o) (quote "
+            (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off))\n"
+            "               " (render-dispatch-else "o") ")))\n")))
         ;; --- the three span arms -------------------------------------------
         ;; All three are ZERO-WIDTH and end in `zero-width-jump`'s rule -- same
         ;; `pos`, same `off`, same `pk` -- literally so where the target is static
@@ -562,16 +568,16 @@
                (cid (num (normal-field-arguments s))))
            (string-append
             "      (define (%s" id " pos st off pk)\n"
-            "       (let ((o (byte-machine-span-fragment-step/v1 psr " id
+            "       (let ((o (byte-machine-span-fragment-step/v2 psr " id
             " off (vector-ref cbv " (num (cadr d)) ") bv pos " cid ")))\n"
-            "         (case (car o)\n"
-            "           ((goto) " (render-goto-clauses
-                                   "(cadr o)" (list (normal-field-arguments s))) ")\n"
-            "           ((pause) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
+            "         (cond " (render-goto-clauses
+                               "o" (list (normal-field-arguments s))) "\n"
+            "               ((eq? o callback-pause) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
             cid " off))\n"
-            "           (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
-            "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
-            (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off)))))\n")))
+            "               ((callback-failure? o) (byte-machine-make-feed-outcome/v1 (quote error) pos "
+            "(byte-machine-make-callback-error/v1 (callback-failure-code o) (callback-failure-detail o) (quote "
+            (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off))\n"
+            "               " (render-dispatch-else "o") ")))\n")))
         ;; The SECOND substep. The close comes BEFORE the invocation, so it is the
         ;; first thing rendered here in both shapes -- a completion callback that
         ;; asks `parser-active-span` must see #f.
@@ -590,17 +596,16 @@
                (string-append
                 "      (define (%s" id " pos st off pk)\n"
                 "       (begin (byte-machine-span-close/v1 psr)\n"
-                "         (let ((o (byte-machine-callback-step/v1 psr " id
+                "         (let ((o (byte-machine-callback-step/v2 psr " id
                 " off (vector-ref cbv " (num c) ") (quote ()) " tgt " " tgt ")))\n"
-                "           (case (car o)\n"
-                "             ((goto) " (render-goto-clauses
-                                         "(cadr o)"
-                                         (list (normal-field-targets s))) ")\n"
-                "             ((pause) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
+                "           (cond " (render-goto-clauses
+                                     "o" (list (normal-field-targets s))) "\n"
+                "                 ((eq? o callback-pause) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f "
                 tgt " off))\n"
-                "             (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
-                "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
-                (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off))))))\n"))))
+                "                 ((callback-failure? o) (byte-machine-make-feed-outcome/v1 (quote error) pos "
+                "(byte-machine-make-callback-error/v1 (callback-failure-code o) (callback-failure-detail o) (quote "
+                (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off))\n"
+                "                 " (render-dispatch-else "o") "))))\n"))))
         ;; Counted consume. A three-clause `cond` -- zero count, exhausted, commit
         ;; -- and NOT the shared exhausted-input preamble, because the zero-count
         ;; test comes first and the preamble opens with exhaustion. The zero-count
@@ -949,12 +954,12 @@
         "          (else (assertion-violation (quote exec) \"unknown state\" st))))\n"
         "      (%dispatch start state offset (quote boundary)))\n"
         "  (define " bstr "\n"
-        "    (byte-machine-make-compiled-machine 8 " (number->string fp) " "
+        "    (byte-machine-make-compiled-machine 9 " (number->string fp) " "
         (number->string entry) " exec (quote #(#(" fields ") #(" cbs ") #("
         snames ")"
         ;; The optional fourth member: emitted only when a field is settable, so
         ;; a machine with none renders the identical three-member metadata it did
-        ;; at ABI 7 -- the present guard, matching the fingerprint's tag-10
+        ;; at ABI 8 -- the present guard, matching the fingerprint's tag-10
         ;; trailing section. The runtime decoder length-guards it (absent => no
         ;; settable field => every override refused).
         (if (string=? settable "") "" (string-append " #(" settable ")"))

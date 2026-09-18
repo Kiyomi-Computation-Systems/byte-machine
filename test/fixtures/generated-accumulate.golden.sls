@@ -40,4 +40,4 @@
           (else (assertion-violation (quote exec) "unknown state" st))))
       (%dispatch start state offset (quote boundary)))
   (define accm
-    (byte-machine-make-compiled-machine 8 15997144668070819532 0 exec (quote #(#((value . 0)) #() #(start acc done stopped over reject))))))
+    (byte-machine-make-compiled-machine 9 15997144668070819532 0 exec (quote #(#((value . 0)) #() #(start acc done stopped over reject))))))

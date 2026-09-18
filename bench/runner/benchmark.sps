@@ -36,6 +36,22 @@
 (define tmpdir (env "BYTE_MACHINE_TEST_TMPDIR" "/tmp"))
 (define rounds (string->number (env "BYTE_MACHINE_BENCH_ROUNDS" "7")))
 (define inner  (string->number (env "BYTE_MACHINE_BENCH_INNER" "200")))
+;; WHICH EXECUTORS TO RUN. The default runs both, and the COMMITTED artefact is
+;; always taken that way -- the interpreted figures are §23.1's record of the
+;; oracle and a baseline without them is not a baseline.
+;;
+;; `generated` exists for the A/B loop that decision 0048 governs: the
+;; interpreter is ~200x slower, so it is ~95% of a run's wall clock and none of
+;; it is the thing being optimized. Measuring a change against a baseline taken
+;; by a DIFFERENT program is the sort of instrument mixing 0048 was written
+;; about, and the alternative -- a hand-rolled generated-only script -- is
+;; exactly that. This keeps one instrument and lets it answer faster. The
+;; setting is recorded in the artefact, so a partial run cannot be mistaken for
+;; a baseline.
+(define executors (env "BYTE_MACHINE_BENCH_EXECUTORS" "both"))
+(define both-executors? (string=? executors "both"))
+(unless (or both-executors? (string=? executors "generated"))
+  (assertion-violation 'benchmark "BYTE_MACHINE_BENCH_EXECUTORS is both or generated" executors))
 
 ;; --- the two executors ------------------------------------------------------
 (define ok (compile-machine (make-http-machine) '()))
@@ -151,6 +167,7 @@
                         (list 'os (adapter-os))
                         (list 'architecture (adapter-architecture))))
    (list 'mode (adapter-execution-mode))
+   (list 'executors (string->symbol executors))
    (list 'compiler-options '())            ; none passed to compile-machine
    (list 'cpu-info 'unavailable)           ; not portably available from Chez
    (list 'warmup (string-append (number->string inner) " iterations, discarded"))
@@ -179,7 +196,10 @@
                         (list 'feed-strategy strategy)
                         (list 'canonical-bytes (cadr w))
                         (list 'generated (per-executor generated bv strategy size))
-                        (list 'interpreted (per-executor interpreted bv strategy size)))))
+                        (list 'interpreted
+                              (if both-executors?
+                                  (per-executor interpreted bv strategy size)
+                                  'not-run)))))
               workloads))))
 
 (define out (env "BYTE_MACHINE_BENCH_OUT" ""))

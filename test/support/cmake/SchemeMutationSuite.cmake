@@ -11176,15 +11176,17 @@ byte_machine_mutation(
   # prints the second `check-equal` argument as expected -- so the three read as
   # mirror images of each other and no two collide.
   # Re-anchored (M12): the callback pause arm's next-state line gained a `" "`
-  # separator when its #f became the optional-reason conditional.
+  # separator when its #f became the optional-reason conditional. Re-anchored
+  # again (M14, decision 0052): the arm reads the failure's code and detail off
+  # the CallbackFailure the seam now answers, rather than off a consed list.
   FIND [[            " " (num (cadr tg)) " off))\n"
-            "           (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
-            "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
-            (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off)))))\n")))]]
+            "               ((callback-failure? o) (byte-machine-make-feed-outcome/v1 (quote error) pos "
+            "(byte-machine-make-callback-error/v1 (callback-failure-code o) (callback-failure-detail o) (quote "
+            (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off))\n"]]
   REPLACE [[            " " (num (cadr tg)) " off))\n"
-            "           (else (byte-machine-make-feed-outcome/v1 (quote error) pos "
-            "(byte-machine-make-callback-error/v1 (cadr o) (caddr o) (quote "
-            (nm (normal-state-id s)) ") " id " off pk) " id " off)))))\n")))]]
+            "               ((callback-failure? o) (byte-machine-make-feed-outcome/v1 (quote error) pos "
+            "(byte-machine-make-callback-error/v1 (callback-failure-code o) (callback-failure-detail o) (quote "
+            (nm (normal-state-id s)) ") " id " off pk) " id " off))\n"]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "a callback failure reports boundary at the committed offset: the lanes agree on the projection -- expected .callback said-no .callback failure. inv 1 byte."
@@ -11197,9 +11199,11 @@ byte_machine_mutation(
   # edge in practice -- the delimiter must not be consumed into the payload --
   # so this arm is the one where the defect was easiest to reach and hardest to
   # see, both lanes having agreed on `byte`.
-  FIND [[            (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off)))))\n")))
+  FIND [[            (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off))\n"
+            "               " (render-dispatch-else "o") ")))\n")))
         ;; The SECOND substep.]]
-  REPLACE [[            (nm (normal-state-id s)) ") " id " off pk) " id " off)))))\n")))
+  REPLACE [[            (nm (normal-state-id s)) ") " id " off pk) " id " off))\n"
+            "               " (render-dispatch-else "o") ")))\n")))
         ;; The SECOND substep.]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
@@ -11212,8 +11216,10 @@ byte_machine_mutation(
   # The third, and the reason the lane builds a THIRD machine: a span whose
   # completion callback is declared and fails. Neither row above reaches this
   # arm, and its projection differs from the span end's only by the check label.
-  FIND [[                (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off))))))\n"))))]]
-  REPLACE [[                (nm (normal-state-id s)) ") " id " off pk) " id " off))))))\n"))))]]
+  FIND [[                (nm (normal-state-id s)) ") " id " off (quote boundary)) " id " off))\n"
+                "                 " (render-dispatch-else "o") "))))\n"))))]]
+  REPLACE [[                (nm (normal-state-id s)) ") " id " off pk) " id " off))\n"
+                "                 " (render-dispatch-else "o") "))))\n"))))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "a span completion callback failure reports boundary too: the lanes agree on the projection -- expected .callback said-no .callback failure. cl 2 byte."
@@ -12383,10 +12389,12 @@ byte_machine_mutation(
   # the four outcomes are four DISTINCT tuples -- without which a lane pair
   # agreeing on one wrong answer for every outcome would pass.
   # Re-anchored in Slice ③: the classifier moved into `classify-callback-result`
-  # (one `cond` serving both arities), so this arm lost six leading spaces. The
-  # mutant and its verdict are unchanged.
-  FIND [[          ((eq? r callback-pause) (list 'pause))]]
-  REPLACE [[          ((eq? r callback-pause) (list 'goto continue))]]
+  # (one `cond` serving both arities), so this arm lost six leading spaces.
+  # Re-anchored again (M14, decision 0052): the classifier answers the outcome
+  # object, so "routed as a continue" is now literally answering the continue
+  # TARGET. The mutant and its verdict are unchanged.
+  FIND [[          ((eq? r callback-pause) callback-pause)]]
+  REPLACE [[          ((eq? r callback-pause) continue)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "and the pause is neither -- expected a true value")
 
@@ -12563,16 +12571,21 @@ byte_machine_mutation(
   # Re-anchored in Slice ③: the span-end arm's `goto` is textually identical to
   # this one -- both are zero-width, which is the point -- so the FIND now
   # carries the invocation above it, which names the kind it belongs to.
-  FIND [[                        (caddr parts) (cadr parts) (list-ref parts 4))))
-               (case (car o)
-                 ((goto)
-                  (parser-set-current! parser (cadr o))
-                  (loop pos pk))]]
-  REPLACE [[                        (caddr parts) (cadr parts) (list-ref parts 4))))
-               (case (car o)
-                 ((goto)
-                  (parser-set-current! parser (cadr o))
-                  (loop (+ pos 1) pk))]]
+  # Re-anchored again (M14, decision 0052): the goto arm is now the `else` of a
+  # `cond` over the outcome OBJECT and the target is `o` itself, so it no longer
+  # sits next to the invocation. It is textually identical to the span-end arm's
+  # else, so the FIND carries the failure clause above it -- `(list-ref parts 5)`
+  # in that shape is this arm's alone.
+  FIND [[                                       node (list-ref parts 5)
+                                       (parser-offset parser) callback-failure-position)))
+                 (else
+                  (parser-set-current! parser o)
+                  (loop pos pk)))))]]
+  REPLACE [[                                       node (list-ref parts 5)
+                                       (parser-offset parser) callback-failure-position)))
+                 (else
+                  (parser-set-current! parser o)
+                  (loop (+ pos 1) pk)))))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the lanes agree -- expected .stopped 1 1 1 #f stopped., got .stopped 2 2 1")
@@ -12589,11 +12602,13 @@ byte_machine_mutation(
   # this check would silently stop covering anything. The anchor therefore
   # moves into the renderer, onto the clause that actually runs, and the label
   # widens from "callback" to "goto" to say so.
-  FIND [[                    (string-append acc "((eqv? " expr " " (num (car ts)) ") "
-                                   (zero-width-jump (car ts)) ") ")))))]]
-  REPLACE [[                    (string-append acc "((eqv? " expr " " (num (car ts)) ") "
-                                   "(%s" (num (car ts)) " (+ pos 1) " (num (car ts))
-                                   " off pk)" ") ")))))]]
+  FIND [[                   (string-append acc (if (string=? acc "") "" " ")
+                                  "((eqv? " expr " " (num (car ts)) ") "
+                                  (zero-width-jump (car ts)) ")"))))))]]
+  REPLACE [[                   (string-append acc (if (string=? acc "") "" " ")
+                                  "((eqv? " expr " " (num (car ts)) ") "
+                                  "(%s" (num (car ts)) " (+ pos 1) " (num (car ts))
+                                  " off pk)" ")"))))))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "the lanes agree -- expected .stopped 2 2 1 #f stopped., got .stopped 1 1 1")
@@ -12801,8 +12816,10 @@ byte_machine_mutation(
   # -- a flush that ran and mis-reported its status still delivered `bc`, one
   # that never ran delivered nothing -- so the lane grew a case asserting the
   # PAIR, and each mutation now names its own half of it. Measured both ways.
-  FIND [[            ((pause) (make-parser-result 'paused (parser-result-next r)]]
-  REPLACE [[            ((pause) (make-parser-result 'need-input (parser-result-next r)]]
+  FIND [[            ((eq? o callback-pause)
+             (make-parser-result 'paused (parser-result-next r)]]
+  REPLACE [[            ((eq? o callback-pause)
+             (make-parser-result 'need-input (parser-result-next r)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "separates two mutants: delivered, and reported as a pause -- expected ..#vu8.98 99.. .paused 3 3 3 #f paused-feed.., got ..#vu8.98 99.. .need-input 3 3 3 #f ready.."
@@ -12842,9 +12859,9 @@ byte_machine_mutation(
   # its sibling below is the one that does not, and each needs its own witness
   # because a single machine renders only one of them.
   FIND [[                "       (begin (byte-machine-span-close/v1 psr)\n"
-                "         (let ((o (byte-machine-callback-step/v1 psr " id]]
+                "         (let ((o (byte-machine-callback-step/v2 psr " id]]
   REPLACE [[                "       (begin #t\n"
-                "         (let ((o (byte-machine-callback-step/v1 psr " id]]
+                "         (let ((o (byte-machine-callback-step/v2 psr " id]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "and its span is inactive too -- expected #f, got payload"
 )
@@ -14112,20 +14129,21 @@ byte_machine_mutation(
   SPEC byte-machine.determinism.keyword-table.chez.source
   LABEL "compile: the emitted ABI version literal is not the current one (decision 0044)"
   # The keyword table landed with the ABI bump 5->6 (decision 0044); Milestone 12
-  # (the pause reason, decision 0046) bumps it 6->7. The emitted literal must be
+  # (the pause reason, decision 0046) bumped it 6->7, and Milestone 14 (the
+  # callback outcome, decision 0052) bumps it 8->9. The emitted literal must be
   # the current version. Emitting the prior version both diverges the rendered
   # bytes from the committed golden AND makes the current runtime refuse the
   # library outright at construction -- `byte-machine-make-compiled-machine`
   # validates the version, so the determinism lane's top-level load of the
-  # generated file raises "generated-runtime ABI mismatch with irritant 7"
+  # generated file raises "generated-runtime ABI mismatch with irritant 8"
   # (status 255) before it can report the golden mismatch cleanly. That refusal
   # is the sharper witness -- it names the version the emitter stamped -- so the
   # pin asserts it by message, not by the raw-byte golden diff. This is the ONE
   # pin on the emitted literal.
-  FIND [[(byte-machine-make-compiled-machine 8 ]]
-  REPLACE [[(byte-machine-make-compiled-machine 7 ]]
+  FIND [[(byte-machine-make-compiled-machine 9 ]]
+  REPLACE [[(byte-machine-make-compiled-machine 8 ]]
   EXPECT_STATUS 255
-  EXPECT_OUTPUT_MATCHES [[generated-runtime ABI mismatch with irritant 7]])
+  EXPECT_OUTPUT_MATCHES [[generated-runtime ABI mismatch with irritant 8]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

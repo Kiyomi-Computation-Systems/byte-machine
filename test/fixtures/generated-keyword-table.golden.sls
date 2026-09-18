@@ -29,4 +29,4 @@
           (else (assertion-violation (quote exec) "unknown state" st))))
       (%dispatch start state offset (quote boundary)))
   (define kwtableci
-    (byte-machine-make-compiled-machine 8 359790446523106613 0 exec (quote #(#() #() #(table got-get got-gp got-close got-closed eof-incomplete reject))))))
+    (byte-machine-make-compiled-machine 9 359790446523106613 0 exec (quote #(#() #() #(table got-get got-gp got-close got-closed eof-incomplete reject))))))

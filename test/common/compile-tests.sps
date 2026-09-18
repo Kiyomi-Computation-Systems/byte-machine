@@ -211,7 +211,7 @@
         ;; the literal reads 7 and a zero-field machine renders
         ;; #(#() #() #(<its state names>)).
         (check "unversioned call"
-               (has? "(byte-machine-make-compiled-machine 8 14095574568398596535 0 exec (quote #(#() #() #(start stop reject))))"))
+               (has? "(byte-machine-make-compiled-machine 9 14095574568398596535 0 exec (quote #(#() #() #(start stop reject))))"))
         (check "no versioned name survives"
                (not (has? "byte-machine-make-compiled-machine/v")))))
     ;; Milestone 4 Slice ①b task 6 (decision 0019 item 3(b)). Member 0 stops
@@ -361,15 +361,16 @@
 (define (count-forms x pred)
   (cond ((not (pair? x)) 0)
         (else (+ (if (pred x) 1 0) (count-forms (car x) pred) (count-forms (cdr x) pred)))))
-;; The `((goto) (cond ...))` clause of an emitted arm's outcome `case`, as its
-;; list of cond clauses -- #f when the goto arm is not a cond at all, which is
-;; what the caller's found-it guard reports.
+;; An emitted arm's outcome `cond`, as its list of clauses: the first `cond`
+;; whose first clause tests `eqv?`, which is a target test and nothing else in
+;; the emitted text is. #f when the arm has no such cond, which is what the
+;; caller's found-it guard reports.
 (define (find-goto-clauses arm)
   (let walk ((x arm))
     (cond ((not (pair? x)) #f)
-          ((and (equal? (car x) '(goto))
-                (pair? (cdr x)) (pair? (cadr x)) (eq? (car (cadr x)) 'cond))
-           (cdr (cadr x)))
+          ((and (eq? (car x) 'cond) (pair? (cdr x)) (pair? (cadr x))
+                (pair? (car (cadr x))) (eq? (car (car (cadr x))) 'eqv?))
+           (cdr x))
           (else (or (walk (car x)) (walk (cdr x)))))))
 
 (harness-group "the counted arm consumes in bulk (§25:1607, a structural witness)"

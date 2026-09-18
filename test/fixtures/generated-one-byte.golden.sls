@@ -22,4 +22,4 @@
           (else (assertion-violation (quote exec) "unknown state" st))))
       (%dispatch start state offset (quote boundary)))
   (define one-byte-parser
-    (byte-machine-make-compiled-machine 8 14095574568398596535 0 exec (quote #(#() #() #(start stop reject))))))
+    (byte-machine-make-compiled-machine 9 14095574568398596535 0 exec (quote #(#() #() #(start stop reject))))))
