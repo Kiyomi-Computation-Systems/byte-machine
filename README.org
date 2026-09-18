@@ -89,6 +89,33 @@ The Chez version is a floor recording what has actually been verified. v0.1 is
 verified on macOS arm64; Linux/Windows amd64 and Linux arm64 are supported but
 not yet CI-verified — see the [[file:.reference/portability-matrix.md][portability matrix]].
 
+** R6RS portability
+
+Everything under =src/byte-machine/= imports only =(rnrs)=, and a generated
+parser imports only =(rnrs)= and =(byte-machine runtime)=. Porting to another
+R6RS system is therefore a question of that system's library search, not of
+changing Scheme code. What is Chez-specific is the build and test layer — CMake's
+runtime discovery, =--libdirs=/=--program=, the ahead-of-time =compile-program=
+lane, and the harness reading =(machine-type)= — so =make test= is Chez-only.
+
+Checked locally, not CI-gated: on *Guile 3.0.11* the whole toolchain runs
+unchanged; on *Racket 9.3* it runs once each =.sls= begins with a =#!r6rs= line,
+which Chez and Guile accept too. In both, the emitter produced a library
+byte-identical to the Chez one, and the generated parser returned the same
+statuses and offsets.
+
+#+begin_src bash
+guile --r6rs -L src your-program.scm
+plt-r6rs ++path src your-program.sps
+#+end_src
+
+Generation and execution split cleanly, so a port can be partial: generate on
+Chez and deploy only the emitted =.sls= and =(byte-machine runtime)=. The one
+=(chezscheme)= import outside =test/= and =bench/= is in
+[[file:examples/generate-simple-machine/generate.sps][the example]], which =load=s
+the file it just wrote; a consumer importing a generated parser through the
+ordinary library path needs nothing like it.
+
 ** Building and testing
 
 #+begin_src bash
