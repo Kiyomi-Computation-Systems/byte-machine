@@ -8,6 +8,64 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ### Changed
 
+- **A callback outcome is the object, not a list naming it** -- ABI 9
+  ([0052](.decisions/0052-a-callback-outcome-is-the-object.md)). The callback
+  seam answered `(goto TARGET)`, `(pause)` or `(failure CODE DETAIL)`: two
+  conses, 32 bytes, on every crossing, and an HTTP grammar crosses it four
+  times per header. It now answers the outcome itself -- a target, the
+  `callback-pause` singleton, or the `CallbackFailure` the application already
+  allocated -- and both lanes decode with the same two predicates, the three
+  cases being disjoint by type. The single producer is unchanged; what is gone
+  is a tag that told a consumer nothing the object did not already say.
+
+  **Per-header allocation in the generated lane goes from 128 bytes to zero**,
+  callbacks bound or disabled, now asserted. Per-message allocation stops
+  depending on the message's shape: `long-exact-sequence-matching` 8 800 ->
+  1 168 B, `many-small-headers` 5 216 -> 1 168, `pipelined-requests` 3 040 ->
+  1 168, `short-normal-requests` 1 504 -> 1 168. Five shapes, one figure.
+
+  **BREAKING for generated parsers.** `byte-machine-callback-step/v1` and
+  `byte-machine-span-fragment-step/v1` are retired to tombstones and replaced
+  by `/v2`, and the emitted ABI literal is 9. An ABI-8 generated library is
+  refused at construction with the usual clean mismatch; regenerate it. This
+  takes up the revisit
+  [0010](.decisions/0010-direct-executor-abi.md) reserved and gated on
+  benchmark evidence.
+
+- **A goto target is chosen at run time from a set fixed at emit time**
+  ([0051](.decisions/0051-a-goto-target-comes-from-a-known-set.md)). The third
+  instance of the defect 0049 and 0050 fixed, and the one 0049 itself argued
+  away in a comment: the three arms that call application code answered `goto`
+  through `%dispatch`, the last linear `case` over every state id. The target
+  is not known until the callback returns, but the SET is -- continue, a
+  declared branch, or the default, all of them literals the emitter wrote into
+  that very call -- so the arm tests them and jumps directly, continue first.
+  `%dispatch` stays as the clause no construction reaches.
+
+  Generated lane, nine rounds of sixteen thousand iterations, `tarm64osx`,
+  with 0052: `long-exact-sequence-matching` 118 -> 59 ms,
+  `many-small-headers` 90 -> 51, `dense-byte-dispatch` 90 -> 51,
+  `long-method-target-header-spans` 69 -> 67. Three admissible workloads past
+  the 20% bar. `byte-at-a-time-fragmentation` costs 5.1% (39 -> 41 ms) --
+  real, below the significance bar, and not attributed; 0051 records the
+  hypothesis the measurement rules out.
+
+### Added
+
+- **The allocation audit grows a second slope, per HEADER**, with its own live
+  control. The per-byte slope holds the header count fixed, so it could not
+  see 128 B/header and the figure landed in an intercept that is deliberately
+  never divided by anything. The new leg asserts zero in both wordings
+  (`0040` item 4's callbacks-disabled and the bound figure beside it).
+
+- `bench/runner/benchmark.sps` takes `BYTE_MACHINE_BENCH_EXECUTORS`
+  (`both`, the default, or `generated`). The interpreter is ~200x slower and is
+  ~95% of a run, none of it the thing being optimized; this keeps the A/B loop
+  on the shipped instrument instead of a hand-rolled script, which is the
+  instrument mixing 0048 was written about. The setting is recorded in the
+  artefact, so a partial run cannot be mistaken for a baseline. The committed
+  baseline is always taken with both.
+
 - **A byte class is a range, and a linear scan of its members is not**
   ([0050](.decisions/0050-a-byte-class-is-a-range.md)). The same defect 0049
   fixed in the state dispatch was one level down in the byte dispatch. Over a

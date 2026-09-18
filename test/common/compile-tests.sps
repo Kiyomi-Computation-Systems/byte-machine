@@ -211,7 +211,7 @@
         ;; the literal reads 7 and a zero-field machine renders
         ;; #(#() #() #(<its state names>)).
         (check "unversioned call"
-               (has? "(byte-machine-make-compiled-machine 8 14095574568398596535 0 exec (quote #(#() #() #(start stop reject))))"))
+               (has? "(byte-machine-make-compiled-machine 9 14095574568398596535 0 exec (quote #(#() #() #(start stop reject))))"))
         (check "no versioned name survives"
                (not (has? "byte-machine-make-compiled-machine/v")))))
     ;; Milestone 4 Slice ①b task 6 (decision 0019 item 3(b)). Member 0 stops
@@ -361,6 +361,17 @@
 (define (count-forms x pred)
   (cond ((not (pair? x)) 0)
         (else (+ (if (pred x) 1 0) (count-forms (car x) pred) (count-forms (cdr x) pred)))))
+;; An emitted arm's outcome `cond`, as its list of clauses: the first `cond`
+;; whose first clause tests `eqv?`, which is a target test and nothing else in
+;; the emitted text is. #f when the arm has no such cond, which is what the
+;; caller's found-it guard reports.
+(define (find-goto-clauses arm)
+  (let walk ((x arm))
+    (cond ((not (pair? x)) #f)
+          ((and (eq? (car x) 'cond) (pair? (cdr x)) (pair? (cadr x))
+                (pair? (car (cadr x))) (eq? (car (car (cadr x))) 'eqv?))
+           (cdr x))
+          (else (or (walk (car x)) (walk (cdr x)))))))
 
 (harness-group "the counted arm consumes in bulk (§25:1607, a structural witness)"
   (lambda ()
@@ -372,6 +383,93 @@
             (check-equal "exactly one min" (count-forms arm (lambda (f) (eq? (car f) 'min))) 1)
             (check-equal "no per-byte advance"
                          (count-forms arm (lambda (f) (equal? f '(+ pos 1)))) 0)))))))
+
+;; --- Milestone 14: a callback's goto target is drawn from a known set --------
+;;
+;; A callback answers `goto TARGET`, and the emitted arm handed that target to
+;; `%dispatch` -- the one linear `case` over every state id the emitter still
+;; writes. The target is not known until the callback returns, but the SET it
+;; is drawn from is: the runtime's seam can only answer the node's continue
+;; target, one of its declared branch targets, or its default, and the emitter
+;; renders all three as literals into that very call. So the arm can test the
+;; literals it already wrote and call the state procedure directly.
+;;
+;; The witness declares three DISTINCT goto targets -- a continue, and two
+;; branches, the second of which is also the unbound default -- so the
+;; assertion is over a set and not over one id repeated three times. Its pause
+;; continuation is a fourth state that is NOT a goto target, so a clause for it
+;; would be wrong rather than merely redundant.
+(define (gt-one-byte-node name)
+  (make-byte-dispatch-node name
+    (list (make-byte-case (make-exact-byte-matcher 65) (make-edge 'gt-done 'advance) #f))
+    (make-edge 'gt-reject 'reexecute) #f #f))
+;; Node order is state order: start 0, go-cont 1, go-a 2, go-b 3, go-pause 4.
+(define gt-witness
+  (make-machine 'gtw 'start '()
+    (list (make-callback-declaration 'pick 'decision #f '(a b) 'b #f))
+    '()
+    (list eof-decl rej-decl)
+    (list (make-callback-node 'start 'pick 'go-cont '((a go-a) (b go-b)) 'go-pause #f)
+          (gt-one-byte-node 'go-cont)
+          (gt-one-byte-node 'go-a)
+          (gt-one-byte-node 'go-b)
+          (gt-one-byte-node 'go-pause)
+          (make-stop-node 'gt-done #f)
+          (make-error-node 'gt-reject 'rejected #f))
+    'default-eof #f))
+(define gt-datum
+  (read (open-string-input-port
+         (utf8->string (render-machine (compile-machine gt-witness '()) 'gtw-parser)))))
+;; A direct jump to state `id`: the zero-width shape every arm of this kind
+;; renders -- same pos, same off, same pk, with the id as the new state.
+(define (gt-direct-jump id)
+  (list (string->symbol (string-append "%s" (number->string id)))
+        'pos id 'off 'pk))
+(define (gt-count-jumps arm id)
+  (count-forms arm (lambda (f) (equal? f (gt-direct-jump id)))))
+
+(harness-group "a callback's goto target is chosen from a set known at emit time"
+  (lambda ()
+    (harness-case "the arm jumps directly to every target the node declares"
+      (lambda ()
+        (let ((arm (find-state-arm gt-datum 0)))
+          (check "the callback state's arm was found" (and arm #t))
+          (when arm
+            ;; continue, and the two branch targets. The default resolves to
+            ;; branch `b`, so the SET has three members and not four.
+            (check-equal "one direct jump to the continue target" (gt-count-jumps arm 1) 1)
+            (check-equal "one direct jump to branch a" (gt-count-jumps arm 2) 1)
+            (check-equal "one direct jump to branch b, which is also the default"
+                         (gt-count-jumps arm 3) 1)))))
+    (harness-case "the pause continuation is not a goto clause"
+      (lambda ()
+        ;; State 4 is reachable only by parking on a pause, which leaves the
+        ;; feed rather than jumping. A clause for it would route a `goto` the
+        ;; runtime cannot answer.
+        (let ((arm (find-state-arm gt-datum 0)))
+          (when arm
+            (check-equal "no direct jump to the pause continuation"
+                         (gt-count-jumps arm 4) 0)))))
+    (harness-case "the continue target is tested first"
+      (lambda ()
+        ;; The clauses are a linear scan, so their ORDER is the optimization:
+        ;; a bound callback answering `continue` is the overwhelmingly common
+        ;; outcome and must not pay for the branch keys ahead of it.
+        (let* ((arm (find-state-arm gt-datum 0))
+               (cl (and arm (find-goto-clauses arm))))
+          (check "the goto arm renders a clause list" (pair? cl))
+          (when (pair? cl)
+            (check-equal "the first clause jumps to the continue target"
+                         (cadr (car cl)) (gt-direct-jump 1))))))
+    (harness-case "%dispatch survives as the clause no construction reaches"
+      (lambda ()
+        ;; Kept, not deleted: the fallback is what makes the clause list an
+        ;; optimization of a total function rather than a claim about which
+        ;; targets the runtime can answer.
+        (let ((arm (find-state-arm gt-datum 0)))
+          (when arm
+            (check-equal "exactly one %dispatch in the arm"
+                         (count-forms arm (lambda (f) (eq? (car f) '%dispatch))) 1)))))))
 
 ;; --- Milestone 7 Slice ④: the §16.2:910 structural witness (design §4.8, F10) --
 ;;

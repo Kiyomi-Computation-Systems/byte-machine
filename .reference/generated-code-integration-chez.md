@@ -131,7 +131,7 @@ execution modes (`§7.3`, `§24.2`):
   it; `§24.3` keeps those objects per version/OS/architecture and never commits
   them.
 
-The compiled machine carries an ABI version (currently `8`), and
+The compiled machine carries an ABI version (currently `9`), and
 `byte-machine-make-compiled-machine` checks it as its first action, raising
 `"generated-runtime ABI mismatch"` on a mismatch. This guard is load-bearing in
 the AOT lane: Chez prefers a compiled object over source and staleness is

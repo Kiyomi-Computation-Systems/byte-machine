@@ -95,6 +95,36 @@
       (make-bytevector len 0))
     (- (sstats-bytes (statistics)) before)))
 
+;; --- Milestone 14: the second slope, per HEADER ------------------------------
+;;
+;; The slope above varies one header VALUE's length, so it holds the header
+;; count fixed and cannot see a cost paid once per header. There was one: the
+;; callback seam returned a freshly consed outcome list on every crossing, and
+;; an HTTP grammar crosses it about four times per header. It read as a
+;; per-MESSAGE intercept -- decision 0040 item 1 reports that separately and
+;; never divides it by anything -- so the audit was green while allocation grew
+;; linearly in the one dimension real traffic actually varies.
+;;
+;; Two requests differing only in header COUNT. They differ in length too, of
+;; course; what makes the difference attributable to headers is the slope above
+;; being ZERO per byte, asserted in the same lane, with callbacks bound as well
+;; as disabled. Without that this would be two confounded variables.
+(define (headers-request n)
+  (u8-list->bytevector
+   (bytes (string-append "GET / HTTP/1.1\r\n"
+                         (let loop ((i 0) (acc ""))
+                           (if (= i n) acc (loop (+ i 1) (string-append acc "X-H: v\r\n"))))
+                         "\r\n"))))
+(define few-headers-req  (headers-request 1))
+(define many-headers-req (headers-request 201))
+(define header-difference 200)
+
+;; per-header slope = (alloc(many) - alloc(few)) / (reps * header-difference)
+(define (header-slope cm bindings reps)
+  (/ (- (alloc-feeding cm bindings many-headers-req reps)
+        (alloc-feeding cm bindings few-headers-req reps))
+     (* reps header-difference)))
+
 (harness-group "the generated per-byte path allocates nothing (§26:1680, callbacks disabled)"
   (lambda ()
     (harness-case "the generated executor's allocation does not grow with message length"
@@ -148,5 +178,38 @@
            (string-append "byte-machine-alloc: generated per-message disabled="
                           (adapter-value->string (div disabled-short gen-reps))
                           "B bound=" (adapter-value->string (div bound-short gen-reps)) "B")))))))
+
+(harness-group "the generated path allocates nothing per HEADER either"
+  (lambda ()
+    (harness-case "the live control proves the apparatus can see a per-header cost"
+      (lambda ()
+        ;; Decision 0040 item 2, applied to the second dimension: a slope of zero
+        ;; is indistinguishable from a measurement that cannot move, so the
+        ;; control moves first. It allocates in proportion to the header count.
+        (let ((few  (control-alloc 1 gen-reps))
+              (many (control-alloc 201 gen-reps)))
+          (check "control: alloc(many headers) > alloc(few)" (> many few)))))
+    (harness-case "the generated executor's allocation does not grow with header count"
+      (lambda ()
+        ;; Both wordings, as the per-byte group does: §26:1680 gates the
+        ;; callbacks-disabled figure, and the bound figure is asserted here too
+        ;; because an UNBOUND callback crossed the same seam and paid the same
+        ;; cost -- the defect this leg was added for was visible in both.
+        (let* ((noop (lambda (ps ux) callback-continue))
+               (bound (list (list 'message-begin noop) (list 'message-complete noop)))
+               (disabled (header-slope generated '() gen-reps))
+               (with-callbacks (header-slope generated bound gen-reps)))
+          (say (string-append "byte-machine-alloc: generated B/header disabled="
+                              (adapter-value->string disabled)
+                              " bound=" (adapter-value->string with-callbacks)))
+          (check-equal "disabled: per-header slope zero" disabled 0)
+          (check-equal "bound: per-header slope zero" with-callbacks 0))))
+    (harness-case "the interpreter's per-header allocation is recorded, not asserted"
+      (lambda ()
+        ;; §18 asks nothing of the oracle's allocation here either.
+        (let ((interp (header-slope interpreted '() interp-reps)))
+          (check "the interpreter per-header slope is a measured number" (rational? interp))
+          (say (string-append "byte-machine-alloc: interpreter B/header="
+                              (adapter-value->string interp))))))))
 
 (harness-finish)

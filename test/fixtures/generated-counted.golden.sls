@@ -79,4 +79,4 @@
           (else (assertion-violation (quote exec) "unknown state" st))))
       (%dispatch start state offset (quote boundary)))
   (define countedm
-    (byte-machine-make-compiled-machine 8 15395597449669407401 0 exec (quote #(#((len . 0)) #() #(idle len colon body comma clear fin trunc over reject))))))
+    (byte-machine-make-compiled-machine 9 15395597449669407401 0 exec (quote #(#((len . 0)) #() #(idle len colon body comma clear fin trunc over reject))))))

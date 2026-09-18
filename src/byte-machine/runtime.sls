@@ -31,14 +31,19 @@
           parser-state-name
           make-callback-failure callback-failure?
           callback-failure-code callback-failure-detail
-          ;; Both are called from EMITTED code, which is why they carry the /v1
-          ;; seam suffix and why they are exported at all -- the generated library
-          ;; imports (byte-machine runtime) and nothing else.
-          byte-machine-callback-step/v1 byte-machine-make-callback-error/v1
+          ;; Both are called from EMITTED code, which is why they carry a seam
+          ;; suffix and why they are exported at all -- the generated library
+          ;; imports (byte-machine runtime) and nothing else. The two /v1 step
+          ;; entry points are TOMBSTONES at ABI 9: an ABI-8 generated library
+          ;; names them, and it has to expand before its own ABI check can fail
+          ;; cleanly.
+          byte-machine-callback-step/v1 byte-machine-callback-step/v2
+          byte-machine-make-callback-error/v1
           ;; The span machinery both lanes call, every one called from EMITTED
           ;; code. `parser-active-span` is NOT one of them: no emitted text names
           ;; it.
-          byte-machine-span-open/v1 byte-machine-span-fragment-step/v1
+          byte-machine-span-open/v1
+          byte-machine-span-fragment-step/v1 byte-machine-span-fragment-step/v2
           byte-machine-span-close/v1
           byte-machine-keyword-step/v1)
   (import (rnrs)
@@ -93,7 +98,15 @@
   ;; 7 since Milestone 12 (decision 0046): a paused outcome's error slot may now
   ;; carry a reason record where it was always #f, so a consumer decoding a v7
   ;; generated parser must know the moved payload contract -- another version bump.
-  (define current-abi-version 8)
+  ;; 9 since Milestone 14 (decision 0052): the callback seam answers the OUTCOME
+  ;; OBJECT rather than a list tagged with the outcome's name, so the two step
+  ;; entry points emitted code calls changed their return contract and are now
+  ;; spelled /v2. An ABI-8 generated library decodes the answer with `car`, which
+  ;; a target -- a fixnum -- does not answer, so the mismatch must be caught at
+  ;; construction rather than at the first callback. That is exactly what the
+  ;; strict equality below does, and it is the direction this repository's own
+  ;; build actually produces (a stale object meeting a newer runtime).
+  (define current-abi-version 9)
   ;; How many payload members the current ABI defines AS REQUIRED: field
   ;; declarations, the callback declaration table, and the state-id to
   ;; source-name table. The keyword-table op adds no payload member -- its table
@@ -644,10 +657,26 @@
   ;; The unbound-optional short circuit reads the sentinel installed at
   ;; resolution and the closure is NEVER called.
   ;;
-  ;; Answers one of:
-  ;;   (goto TARGET)          -- continue, a declared branch, or the default
-  ;;   (pause)                -- park on the node's pause continuation
-  ;;   (failure CODE DETAIL)  -- the stored callback-domain error
+  ;; Answers the OUTCOME ITSELF, not a list naming it:
+  ;;   a TARGET                  -- continue, a declared branch, or the default
+  ;;   `callback-pause`          -- park on the node's pause continuation
+  ;;   a CallbackFailure         -- the callback-domain error, code and detail
+  ;;                                already inside it
+  ;; and a consumer decodes with the two predicates below, in either order,
+  ;; because the three cases are disjoint BY TYPE. A target is an exact integer
+  ;; in the generated lane and a symbol in the interpreted one; `callback-pause`
+  ;; and a failure are tagged vectors. Nothing a machine can declare closes that
+  ;; gap: a state id is not a vector and `portable-name?` keeps a node name from
+  ;; being one either.
+  ;;
+  ;; It used to cons `(goto TARGET)`, `(pause)` and `(failure CODE DETAIL)`, and
+  ;; the tag was pure overhead -- 32 bytes per crossing, four crossings per HTTP
+  ;; header, 128 B/header of garbage that the allocation audit's per-byte slope
+  ;; could not see because it holds the header count fixed. The tag told a
+  ;; consumer nothing the object did not already say about itself. What is NOT
+  ;; given up is the single producer: this procedure is still the only thing that
+  ;; decides which of the three an application's return value is, so neither lane
+  ;; can invent its own vocabulary.
   ;;
   ;; A span-data callback takes five arguments where every other kind takes two,
   ;; so the invocation cannot be shared -- but the CLASSIFICATION can and must,
@@ -655,14 +684,20 @@
   ;; both lanes from the same construction. A widened rest-arg was rejected: it
   ;; would put the arity decision inside the classifier, where neither lane can
   ;; see which kind it holds.
+
+  ;; The contract violation is the one failure no application constructed, so it
+  ;; is built ONCE here rather than per occurrence: it carries no detail and no
+  ;; per-call state, and a shared immutable record is indistinguishable from a
+  ;; fresh one to every reader (the two accessors, and `callback-failure?`).
+  (define contract-violation-failure
+    (make-callback-failure callback-contract-code #f))
   (define (classify-callback-result r branches continue)
-    (cond ((eq? r callback-continue) (list 'goto continue))
-          ((eq? r callback-pause) (list 'pause))
-          ((callback-failure? r)
-           (list 'failure (callback-failure-code r) (callback-failure-detail r)))
-          ((and (symbol? r) (assq r branches))
-           => (lambda (hit) (list 'goto (cdr hit))))
-          (else (list 'failure callback-contract-code #f))))
+    (cond ((eq? r callback-continue) continue)
+          ((eq? r callback-pause) callback-pause)
+          ;; Passed THROUGH, not rebuilt: the application already allocated it.
+          ((callback-failure? r) r)
+          ((and (symbol? r) (assq r branches)) => cdr)
+          (else contract-violation-failure)))
 
   ;; Commits `current` and the offset BEFORE invoking, because at callback entry
   ;; both lanes must expose identical committed parser state: the stream offset
@@ -680,17 +715,25 @@
     (parser-set-current! parser state)
     (parser-set-offset! parser offset))
 
-  ;; byte-machine-callback-step/v1 : Parser (U NodeName StateId) ExactInteger (U Procedure Unbound) (Listof (Pair Symbol (U NodeName StateId))) (U NodeName StateId) (U NodeName StateId) -> (U (List 'goto (U NodeName StateId)) (List 'pause) (List 'failure Symbol (Option Any)))
-  (define (byte-machine-callback-step/v1 parser state offset f branches continue default)
+  ;; byte-machine-callback-step/v2 : Parser (U NodeName StateId) ExactInteger (U Procedure Unbound) (Listof (Pair Symbol (U NodeName StateId))) (U NodeName StateId) (U NodeName StateId) -> CallbackOutcome
+  (define (byte-machine-callback-step/v2 parser state offset f branches continue default)
     (callback-commit! parser state offset)
     (if (unbound-callback? f)
         ;; An optional decision callback must declare `default-branch`; other
         ;; optional callbacks default to `continue`. Both are resolved to a
         ;; TARGET at lowering time, so this arm is one jump and carries no rule of
         ;; its own.
-        (list 'goto default)
+        default
         (classify-callback-result (f parser (parser-user-context parser))
                                   branches continue)))
+  ;; The ABI-8 spelling, retired. It is not a thinner wrapper over /v2 returning
+  ;; the old list: an ABI-8 generated library is refused by the version check
+  ;; before it can call this, so a working body would only make the refusal
+  ;; conditional on which entry point the stale object happened to reach first.
+  ;; byte-machine-callback-step/v1 : Any ... -> Void
+  (define (byte-machine-callback-step/v1 . ignored)
+    (assertion-violation 'byte-machine-callback-step/v1
+                         "retired generated-runtime ABI" 8))
 
   ;; --- the span runtime ------------------------------------------------------
   ;;
@@ -776,10 +819,10 @@
      (f parser (parser-user-context parser) bv from to)
      '() continue))
 
-  ;; byte-machine-span-fragment-step/v1 : Parser (U NodeName StateId) ExactInteger (U Procedure Unbound) Bytevector ExactInteger (U NodeName StateId) -> (U (List 'goto (U NodeName StateId)) (List 'pause) (List 'failure Symbol (Option Any)))
-  (define (byte-machine-span-fragment-step/v1 parser state offset f bv to continue)
+  ;; byte-machine-span-fragment-step/v2 : Parser (U NodeName StateId) ExactInteger (U Procedure Unbound) Bytevector ExactInteger (U NodeName StateId) -> CallbackOutcome
+  (define (byte-machine-span-fragment-step/v2 parser state offset f bv to continue)
     (let ((from (parser-span-mark parser)))
-      (cond ((unbound-callback? f) (list 'goto continue))
+      (cond ((unbound-callback? f) continue)
             ;; Real bytes.
             ((< from to)
              (span-fragment-deliver! parser state offset f bv from to continue))
@@ -794,7 +837,7 @@
             ;; `parser-finish!` re-anchors EOF marks to 0 (decision 0042 item 4) --
             ;; so this arm suppresses only the flag-set final fragment; guarding the
             ;; backwards range is defence, not a live path.
-            (else (list 'goto continue)))))
+            (else continue))))
 
   ;; The feed-boundary flush -- and only it. A nonempty fragment is delivered
   ;; exactly as above; an empty one is ALWAYS suppressed, because the flush is not
@@ -804,8 +847,14 @@
   (define (span-fragment-suppress-empty parser state offset f bv to continue)
     (let ((from (parser-span-mark parser)))
       (if (or (>= from to) (unbound-callback? f))
-          (list 'goto continue)
+          continue
           (span-fragment-deliver! parser state offset f bv from to continue))))
+  ;; The ABI-8 spelling, retired for the reason the callback tombstone above
+  ;; records.
+  ;; byte-machine-span-fragment-step/v1 : Any ... -> Void
+  (define (byte-machine-span-fragment-step/v1 . ignored)
+    (assertion-violation 'byte-machine-span-fragment-step/v1
+                         "retired generated-runtime ABI" 8))
 
   ;; The resumable keyword-table walk (decision 0044). The keyword-table node
   ;; lowers to ONE emitted arm that embeds its entries as data and calls this,
@@ -880,18 +929,21 @@
                   bv (parser-result-next r)
                   ;; No target: a flush is not a machine step. The span stays
                   ;; open and the parser parked exactly where the executor left
-                  ;; it, so the `goto` payload is discarded below.
+                  ;; it, so the continue target is discarded below.
                   #f)))
-          (case (car o)
-            ((goto) r)
+          ;; The three outcomes are disjoint by type, so the order is free; a
+          ;; TARGET is whatever is neither of the two the predicates name, which
+          ;; here is the `#f` passed in above.
+          (cond
             ;; The fragment is committed, the span remains open, and resume
             ;; begins with the next supplied input. Committed means not delivered
             ;; again, which the re-anchor on the NEXT feed guarantees; this arm
             ;; only changes what the feed REPORTS, keeping the resume state the
             ;; executor chose.
-            ((pause) (make-parser-result 'paused (parser-result-next r)
-                                         (parser-result-consumed r)
-                                         (parser-offset parser) #f))
+            ((eq? o callback-pause)
+             (make-parser-result 'paused (parser-result-next r)
+                                 (parser-result-consumed r)
+                                 (parser-offset parser) #f))
             ;; The node name is asked for rather than passed: `parser-state-name`
             ;; answers the source node in BOTH lanes (member 2's table on one
             ;; side, the executor on the other), and a flush has no state id of
@@ -901,13 +953,15 @@
             ;;
             ;; `boundary`: the flush happens with the slice exhausted, which is a
             ;; byte boundary by definition.
-            (else
+            ((callback-failure? o)
              (make-parser-result 'error (parser-result-next r)
                                  (parser-result-consumed r) (parser-offset parser)
                                  (byte-machine-make-callback-error/v1
-                                  (cadr o) (caddr o) (parser-state-name parser)
+                                  (callback-failure-code o) (callback-failure-detail o)
+                                  (parser-state-name parser)
                                   (parser-span-data-slot parser)
-                                  (parser-offset parser) 'boundary)))))
+                                  (parser-offset parser) 'boundary)))
+            (else r)))
         r))
 
   ;; A FRESH vector every call, never a shared one: two parsers from one compiled
@@ -1079,23 +1133,20 @@
             ;; `byte-machine-make-callback-error/v1`.
             ;;
             ;; The parts are (slot continue branches pause default state-id) and
-            ;; the vocabulary lives in `byte-machine-callback-step/v1`, which the
+            ;; the vocabulary lives in `byte-machine-callback-step/v2`, which the
             ;; emitted arm calls too.
             ((callback)
              (let* ((parts (op 'callback-parts node))
-                    (o (byte-machine-callback-step/v1
+                    (o (byte-machine-callback-step/v2
                         parser node (parser-offset parser)
                         (vector-ref (parser-callbacks parser) (car parts))
                         (caddr parts) (cadr parts) (list-ref parts 4))))
-               (case (car o)
-                 ((goto)
-                  (parser-set-current! parser (cadr o))
-                  (loop pos pk))
+               (cond
                  ;; A callback-requested pause occurs after the callback's
                  ;; delivered event has been committed. Resume continues after
                  ;; that event; it is never delivered twice. So `current` is
                  ;; parked PAST the invocation, on the declared pause continuation.
-                 ((pause)
+                 ((eq? o callback-pause)
                   (parser-set-current! parser (cadddr parts))
                   ;; The OPTIONAL callback-pause reason (M12), the SECOND
                   ;; author-facing pause path. Built with `callback-failure-position`
@@ -1107,11 +1158,15 @@
                     (let ((rp (op 'pause-reason node)))
                       (and rp (parts->parser-error rp (parser-offset parser)
                                                    callback-failure-position)))))
-                 (else
+                 ((callback-failure? o)
                   (make-parser-result 'error pos (- pos start) (parser-offset parser)
                                       (byte-machine-make-callback-error/v1
-                                       (cadr o) (caddr o) node (list-ref parts 5)
-                                       (parser-offset parser) callback-failure-position))))))
+                                       (callback-failure-code o) (callback-failure-detail o)
+                                       node (list-ref parts 5)
+                                       (parser-offset parser) callback-failure-position)))
+                 (else
+                  (parser-set-current! parser o)
+                  (loop pos pk)))))
             ;; The span kinds, and the interpreter's own arm for the completion
             ;; substep. All three are zero-width, so `pos`, the offset and `pk`
             ;; carry through unchanged, exactly as the callback arm's do.
@@ -1131,27 +1186,28 @@
              ;; substep", so the fragment's continuation is the substep below and
              ;; never the node's own successor.
              (let* ((parts (op 'span-end-parts node))
-                    (o (byte-machine-span-fragment-step/v1
+                    (o (byte-machine-span-fragment-step/v2
                         parser node (parser-offset parser)
                         (vector-ref (parser-callbacks parser) (car parts))
                         bv pos (cadr parts))))
-               (case (car o)
-                 ((goto)
-                  (parser-set-current! parser (cadr o))
-                  (loop pos pk))
+               (cond
                  ;; The never-delivered-twice rule again, and the fragment is
                  ;; committed: the park is PAST the delivery, on the substep that
                  ;; has not run.
-                 ((pause)
+                 ((eq? o callback-pause)
                   (parser-set-current! parser (cadr parts))
                   (make-parser-result 'paused pos (- pos start)
                                       (parser-offset parser) #f))
-                 (else
+                 ((callback-failure? o)
                   (make-parser-result 'error pos (- pos start) (parser-offset parser)
                                       (byte-machine-make-callback-error/v1
-                                       (cadr o) (caddr o) (cadddr parts)
+                                       (callback-failure-code o) (callback-failure-detail o)
+                                       (cadddr parts)
                                        (caddr parts) (parser-offset parser)
-                                       callback-failure-position))))))
+                                       callback-failure-position)))
+                 (else
+                  (parser-set-current! parser o)
+                  (loop pos pk)))))
             ((span-completion)
              ;; Before invoking the completion callback, execution makes the span
              ;; inactive. BEFORE -- a completion callback asking
@@ -1164,25 +1220,26 @@
                    ;; lookup, straight to the node's successor.
                    (begin (parser-set-current! parser (cadr parts))
                           (loop pos pk))
-                   (let ((o (byte-machine-callback-step/v1
+                   (let ((o (byte-machine-callback-step/v2
                              parser node (parser-offset parser)
                              (vector-ref (parser-callbacks parser) (car parts))
                              '() (cadr parts) (cadr parts))))
-                     (case (car o)
-                       ((goto)
-                        (parser-set-current! parser (cadr o))
-                        (loop pos pk))
-                       ((pause)
+                     (cond
+                       ((eq? o callback-pause)
                         (parser-set-current! parser (cadr parts))
                         (make-parser-result 'paused pos (- pos start)
                                             (parser-offset parser) #f))
-                       (else
+                       ((callback-failure? o)
                         (make-parser-result 'error pos (- pos start)
                                             (parser-offset parser)
                                             (byte-machine-make-callback-error/v1
-                                             (cadr o) (caddr o) (cadddr parts)
+                                             (callback-failure-code o)
+                                             (callback-failure-detail o) (cadddr parts)
                                              (caddr parts) (parser-offset parser)
-                                             callback-failure-position))))))))
+                                             callback-failure-position)))
+                       (else
+                        (parser-set-current! parser o)
+                        (loop pos pk)))))))
             ;; An INPUT-READING kind. It needs a byte, so it yields `need-input`
             ;; at the end of a slice and resumes at the same node on the next
             ;; feed -- its whole split-point behaviour, inherited from the dispatch
@@ -1428,28 +1485,29 @@
           ;; arms here stay separate.
           ((callback)
            (let* ((parts (op 'callback-parts node))
-                  (o (byte-machine-callback-step/v1
+                  (o (byte-machine-callback-step/v2
                       parser node (parser-offset parser)
                       (vector-ref (parser-callbacks parser) (car parts))
                       (caddr parts) (cadr parts) (list-ref parts 4))))
-             (case (car o)
-               ((goto)
-                (parser-set-current! parser (cadr o))
-                (loop (cadr o) pk))
-               ((pause)
+             (cond
+               ((eq? o callback-pause)
                 (parser-set-current! parser (cadddr parts))
                 (parser-set-lifecycle! parser 'paused-finish)
                 (make-parser-result 'paused off 0 off #f
                   (let ((rp (op 'pause-reason node)))
                     (and rp (parts->parser-error rp off callback-failure-position)))))
-               (else
+               ((callback-failure? o)
                 (parser-set-current! parser node)
                 (parser-set-lifecycle! parser 'error)
                 (let ((e (byte-machine-make-callback-error/v1
-                          (cadr o) (caddr o) node (list-ref parts 5) off
+                          (callback-failure-code o) (callback-failure-detail o)
+                          node (list-ref parts 5) off
                           callback-failure-position)))
                   (parser-set-stored-error! parser e)
-                  (make-parser-result 'error off 0 off e))))))
+                  (make-parser-result 'error off 0 off e)))
+               (else
+                (parser-set-current! parser o)
+                (loop o pk)))))
           ;; The span kinds on the EOF side. The SAME three arms as the feed
           ;; loop's -- including the SAME public span-end step -- written out for
           ;; the reason this file's own comment above `parser-feed!` gives (each
@@ -1474,52 +1532,54 @@
              (loop (caddr parts) pk)))
           ((span-end)
            (let* ((parts (op 'span-end-parts node))
-                  (o (byte-machine-span-fragment-step/v1
+                  (o (byte-machine-span-fragment-step/v2
                       parser node off
                       (vector-ref (parser-callbacks parser) (car parts))
                       empty-bv 0 (cadr parts))))
-             (case (car o)
-               ((goto)
-                (parser-set-current! parser (cadr o))
-                (loop (cadr o) pk))
-               ((pause)
+             (cond
+               ((eq? o callback-pause)
                 (parser-set-current! parser (cadr parts))
                 (parser-set-lifecycle! parser 'paused-finish)
                 (make-parser-result 'paused off 0 off #f))
-               (else
+               ((callback-failure? o)
                 (parser-set-current! parser node)
                 (parser-set-lifecycle! parser 'error)
                 (let ((e (byte-machine-make-callback-error/v1
-                          (cadr o) (caddr o) (cadddr parts) (caddr parts) off
+                          (callback-failure-code o) (callback-failure-detail o)
+                          (cadddr parts) (caddr parts) off
                           callback-failure-position)))
                   (parser-set-stored-error! parser e)
-                  (make-parser-result 'error off 0 off e))))))
+                  (make-parser-result 'error off 0 off e)))
+               (else
+                (parser-set-current! parser o)
+                (loop o pk)))))
           ((span-completion)
            (let ((parts (op 'span-completion-parts node)))
              (byte-machine-span-close/v1 parser)
              (if (not (car parts))
                  (begin (parser-set-current! parser (cadr parts))
                         (loop (cadr parts) pk))
-                 (let ((o (byte-machine-callback-step/v1
+                 (let ((o (byte-machine-callback-step/v2
                            parser node off
                            (vector-ref (parser-callbacks parser) (car parts))
                            '() (cadr parts) (cadr parts))))
-                   (case (car o)
-                     ((goto)
-                      (parser-set-current! parser (cadr o))
-                      (loop (cadr o) pk))
-                     ((pause)
+                   (cond
+                     ((eq? o callback-pause)
                       (parser-set-current! parser (cadr parts))
                       (parser-set-lifecycle! parser 'paused-finish)
                       (make-parser-result 'paused off 0 off #f))
-                     (else
+                     ((callback-failure? o)
                       (parser-set-current! parser node)
                       (parser-set-lifecycle! parser 'error)
                       (let ((e (byte-machine-make-callback-error/v1
-                                (cadr o) (caddr o) (cadddr parts) (caddr parts)
+                                (callback-failure-code o) (callback-failure-detail o)
+                                (cadddr parts) (caddr parts)
                                 off callback-failure-position)))
                         (parser-set-stored-error! parser e)
-                        (make-parser-result 'error off 0 off e))))))))
+                        (make-parser-result 'error off 0 off e)))
+                     (else
+                      (parser-set-current! parser o)
+                      (loop o pk)))))))
           ;; At finish there is no input, so an accumulate node takes its own
           ;; declared EOF edge exactly as a dispatch node does.
           ((accumulate dispatch) (take-eof-route! node loop))

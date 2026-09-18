@@ -1174,3 +1174,33 @@ its own throughput lane the same day, from the other direction: it floored
 elapsed time with `(max 1 ...)` before dividing, so a fast enough machine would
 have printed a fabricated rate that sailed over every floor asserted below it.
 
+
+## A slope is blind in the dimension it holds fixed
+
+The allocation audit (decision 0040) measures a **slope**: two messages
+differing only in length, allocation differenced, divided by the byte
+difference. It was green, and it was right — the generated lane allocates
+exactly 0 bytes per input byte, with a live control proving the apparatus can
+see one.
+
+It was also blind to 128 bytes per HEADER. Its two messages differ in the
+length of one header *value*, so the header count is held fixed and a
+per-header cost cannot appear in the quotient. It landed instead in the
+per-message intercept, which that decision deliberately reports separately and
+never divides by anything — so the number was on screen, in a figure whose
+whole job is to not be a slope.
+
+It was also visible in the committed baseline, to anyone who subtracted two
+rows: `many-small-headers` at 5 216 B/message against `short-normal-requests`
+at 1 504, over 29 extra headers, is 128 B/header exactly. Nobody subtracted
+them for six milestones.
+
+**So: a slope answers only the question its held-fixed variables allow, and
+the variables it holds fixed are the ones nobody chose deliberately.** Before
+trusting a zero, ask which dimension it is zero *in*, and whether that is the
+dimension the thing being measured actually varies along. Real HTTP traffic
+varies in header count far more than in header-value length, so the audit was
+measuring the dimension that mattered least while asserting a property about
+"the per-byte path". Every new slope gets its own live control for the same
+reason the first one did — a slope of zero is indistinguishable from a
+measurement that cannot move, in whichever dimension it is taken.

@@ -105,7 +105,7 @@ At callback entry both executors expose **identical committed parser state**
   *read* accessor answers normally;
 - **a span-data callback sees its span active** (`§13:822`). The plan's same
   sentence adds "with the delivered mark already advanced to the fragment end",
-  and **the code does not do that** — `byte-machine-span-fragment-step/v1` reads
+  and **the code does not do that** — `byte-machine-span-fragment-step/v2` reads
   the mark as the fragment's *start* and leaves it alone, with a comment
   recording that the advance was written, measured to fail nothing in either
   lane, and deleted: every path out of a delivery either closes the span or
