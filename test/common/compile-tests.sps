@@ -678,4 +678,100 @@
           (check "no occurring declared name is in identifier position"
                  (for-all (lambda (nm) (not (memq nm w910-identifiers))) occurring)))))))
 
+;; --- Milestone 14: the feed entry is a search, not a scan -------------------
+;;
+;; `%dispatch` is the last linear scan the emitter writes, and the one target
+;; that genuinely cannot be a literal: the state comes from the parser. What it
+;; CAN stop being is linear. A byte-at-a-time parse re-enters it once per feed
+;; and a keyword table jumps through it, so on a large machine the scan was the
+;; single largest per-feed cost.
+;;
+;; The assertion is the PROPERTY, not the shape: no state is reached by more
+;; comparisons than a balanced tree over the state count needs. A scan would
+;; put the last state at N tests and fail this at any N above the bound; a tree
+;; that grew lopsided -- a midpoint computed wrongly, say -- would fail it too,
+;; which a shape check on the emitted text would not catch.
+;;
+;; Measured over the every-construct witness (14 states) and the counted
+;; witness (4), because the bound is a function of the state count and a single
+;; size cannot tell `<= ceil(log2 N) + 1` from a constant that happens to fit.
+(define (ceil-log2 n)
+  (let loop ((bits 0) (v 1)) (if (>= v n) bits (loop (+ bits 1) (* v 2)))))
+;; Every `(%s<id> pos st off pk)` call in `x`, with the number of enclosing
+;; `if` tests on the path to it. `%dispatch`'s body is all `if`, so counting
+;; them IS counting comparisons.
+(define (dispatch-depths x)
+  (let walk ((x x) (d 0) (acc '()))
+    (cond ((not (pair? x)) acc)
+          ((and (symbol? (car x)) (state-procedure-name? (car x))
+                (equal? (cdr x) '(pos st off pk)))
+           (cons (cons (car x) d) acc))
+          ((eq? (car x) 'if)
+           ;; the test contributes no depth; the two arms are one test deeper.
+           (walk (cadddr x) (+ d 1) (walk (caddr x) (+ d 1) (walk (cadr x) d acc))))
+          (else (walk (cdr x) d (walk (car x) d acc))))))
+(define (find-dispatch x)
+  (let walk ((x x))
+    (cond ((not (pair? x)) #f)
+          ((and (eq? (car x) 'define) (pair? (cdr x)) (pair? (cadr x))
+                (eq? (car (cadr x)) '%dispatch))
+           x)
+          (else (or (walk (car x)) (walk (cdr x)))))))
+(define (count-states x)
+  (let walk ((x x) (n 0))
+    (cond ((not (pair? x)) n)
+          ((and (eq? (car x) 'define) (pair? (cdr x)) (pair? (cadr x))
+                (symbol? (car (cadr x))) (state-procedure-name? (car (cadr x))))
+           (+ n 1))
+          (else (walk (cdr x) (walk (car x) n))))))
+
+(harness-group "the feed entry dispatch is a search, not a scan"
+  (lambda ()
+    (harness-case "every state is reachable from the dispatch, exactly once"
+      (lambda ()
+        ;; A tree that dropped or duplicated a leaf would route a live state to
+        ;; its neighbour, which no fixture need notice; this is what makes the
+        ;; depth bound below a statement about a TOTAL function.
+        (for-each
+         (lambda (lib)
+           (let* ((d (find-dispatch lib))
+                  (ds (and d (dispatch-depths d)))
+                  (n (count-states lib)))
+             (check "the dispatch was found" (and d #t))
+             (when d
+               (check-equal "one leaf per state" (length ds) n)
+               (check "no state appears twice"
+                      (let dup ((xs (map car ds)))
+                        (cond ((null? xs) #t)
+                              ((memq (car xs) (cdr xs)) #f)
+                              (else (dup (cdr xs)))))))))
+         (list w910-lib cc-datum))))
+    (harness-case "no state is more than a balanced tree deep"
+      (lambda ()
+        ;; ceil(log2 N) for the tree, plus one for the in-range guard that
+        ;; stands where the `case`'s else arm did.
+        (for-each
+         (lambda (lib)
+           (let* ((d (find-dispatch lib))
+                  (ds (and d (dispatch-depths d)))
+                  (n (count-states lib))
+                  (bound (+ (ceil-log2 n) 1)))
+             (when (and d (pair? ds))
+               (check-equal (string-append "deepest leaf within the bound for "
+                                           (adapter-value->string n) " states")
+                            (apply max (map cdr ds)) bound))))
+         (list w910-lib cc-datum))))
+    (harness-case "an unknown state is still refused"
+      (lambda ()
+        ;; The guard the `case`'s else arm used to be. A search with no bound
+        ;; check answers SOME state for every integer, which is worse than the
+        ;; scan it replaces.
+        (let ((d (find-dispatch w910-lib)))
+          (when d
+            (check-equal "exactly one unknown-state refusal"
+                         (count-forms d (lambda (f)
+                                          (and (eq? (car f) 'assertion-violation)
+                                               (member "unknown state" f))))
+                         1)))))))
+
 (harness-finish)

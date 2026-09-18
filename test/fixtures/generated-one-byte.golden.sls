@@ -15,11 +15,13 @@
       (define (%s1 pos st off pk) (byte-machine-make-feed-outcome/v1 (quote stopped) pos #f 1 off))
       (define (%s2 pos st off pk) (byte-machine-make-feed-outcome/v1 (quote error) pos (byte-machine-make-parser-error/v1 (vector-ref errs 1) (quote reject) 2 off pk) 2 off))
       (define (%dispatch pos st off pk)
-        (case st
-          ((0) (%s0 pos st off pk))
-          ((1) (%s1 pos st off pk))
-          ((2) (%s2 pos st off pk))
-          (else (assertion-violation (quote exec) "unknown state" st))))
+        (if (and (fixnum? st) (fx>=? st 0) (fx<? st 3))
+            (if (fx<? st 1)
+              (%s0 pos st off pk)
+              (if (fx<? st 2)
+                (%s1 pos st off pk)
+                (%s2 pos st off pk)))
+            (assertion-violation (quote exec) "unknown state" st)))
       (%dispatch start state offset (quote boundary)))
   (define one-byte-parser
     (byte-machine-make-compiled-machine 9 14095574568398596535 0 exec (quote #(#() #() #(start stop reject))))))

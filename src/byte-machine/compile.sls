@@ -294,6 +294,45 @@
                                   (zero-width-jump (car ts)) ")"))))))
   (define (render-dispatch-else expr)
     (string-append "(else (%dispatch pos " expr " off pk))"))
+
+  ;; THE FEED ENTRY IS A SEARCH, NOT A SCAN.
+  ;;
+  ;; `%dispatch` answers the one target that genuinely cannot be a literal: the
+  ;; state comes from the parser, so `render-goto-clauses`' trick does not
+  ;; apply. What it CAN stop being is linear. A `case` over N state ids costs
+  ;; about 0.31ns per arm skipped, so on a 530-state machine the mean entry
+  ;; costs ~48ns -- once per `parser-feed!` call and once per keyword-table
+  ;; jump. A whole-buffer parse pays it twice and does not care; a parse fed a
+  ;; byte at a time pays it once per byte, and measured on that grammar it was
+  ;; **37% of the parse**.
+  ;;
+  ;; A balanced binary search over the ids is ceil(log2 N) comparisons -- ten
+  ;; where the scan averaged 265 -- and costs nothing structurally: the leaves
+  ;; are the same tail calls, so the state procedures still never escape and
+  ;; decision 0049's direct jumps are untouched.
+  ;;
+  ;; A JUMP TABLE WAS REJECTED, and not on taste. A vector of the state
+  ;; procedures indexed by id is O(1), but storing them makes every one of them
+  ;; ESCAPE, and they close over `exec`'s `bv`, `end`, `finish?`, `fieldv`,
+  ;; `psr` and `cbv` -- so Chez would have to build N closures on every `exec`
+  ;; entry, which is the per-feed path. That is the same reason 0050 rejected
+  ;; bucketing: the fast shape is the one that keeps them local.
+  ;;
+  ;; The leaves carry no test of their own, which requires the ids to be
+  ;; exactly 0..N-1 -- checked in `render-machine` rather than assumed, because
+  ;; a lowering that ever skipped an id would otherwise route a live state to
+  ;; its neighbour, silently, with no fixture obliged to notice.
+  ;;
+  ;; render-dispatch-tree : String ExactInteger ExactInteger ExactInteger -> String
+  (define (render-dispatch-tree key lo hi ind)
+    (let ((p (make-string ind #\space)))
+      (if (= (- hi lo) 1)
+          (string-append p "(%s" (num lo) " pos st off pk)")
+          (let ((mid (div (+ lo hi) 2)))
+            (string-append
+             p "(if (fx<? " key " " (num mid) ")\n"
+             (render-dispatch-tree key lo mid (+ ind 2)) "\n"
+             (render-dispatch-tree key mid hi (+ ind 2)) ")")))))
   (define (render-operation op k)
     (case op
       ((store) (num k))
@@ -685,6 +724,21 @@
     (let* ((normal (compilation-normal compilation))
            (mname (symbol->string (machine-name (compilation-machine compilation))))
            (states (normal-machine-states normal))
+           ;; `%dispatch` is a binary search whose leaves carry no test of their
+           ;; own, which is sound only if the ids are exactly 0..N-1 in order.
+           ;; Lowering assigns them that way (one per node, then one per
+           ;; synthesised state), but this renderer would answer the WRONG state
+           ;; for a gap rather than fail -- a live state routed to its
+           ;; neighbour, which no fixture is obliged to notice. So it is checked
+           ;; here, at emit time, where the failure is loud and local.
+           (ignore-id-check
+            (let idloop ((i 0))
+              (cond ((>= i (vector-length states)) #t)
+                    ((= (normal-state-id (vector-ref states i)) i) (idloop (+ i 1)))
+                    (else (assertion-violation
+                           'render-machine
+                           "state ids must be 0..N-1 in order for the dispatch search"
+                           i (normal-state-id (vector-ref states i)))))))
            (entry (normal-machine-entry normal))
            (fp (normal-machine-fingerprint normal))
            (names (normal-machine-debug-map normal))
@@ -946,12 +1000,21 @@
         ;; same treatment applies and is not yet measured; it is left alone rather
         ;; than assumed, which is the rule the sentence above broke.
         "      (define (%dispatch pos st off pk)\n"
-        "        (case " (if has-kw "(if (pair? st) (car st) st)" "st") "\n"
-        (let loop ((i 0) (acc ""))
-          (if (>= i (vector-length states)) acc
-              (let ((n (number->string (normal-state-id (vector-ref states i)))))
-                (loop (+ i 1) (string-append acc "          ((" n ") (%s" n " pos st off pk))\n")))))
-        "          (else (assertion-violation (quote exec) \"unknown state\" st))))\n"
+        ;; A machine with no keyword table binds nothing: its key IS `st`, and
+        ;; the `let` would be a name in the emitted text for no reason. The
+        ;; keyword shape binds `n` -- already in reserved-member-3, so the set
+        ;; of legal output bindings does not narrow for this.
+        (let ((key (if has-kw "n" "st"))
+              (count (vector-length states)))
+          (string-append
+           (if has-kw "        (let ((n (if (pair? st) (car st) st)))\n" "")
+           (if has-kw "  " "")
+           "        (if (and (fixnum? " key ") (fx>=? " key " 0) (fx<? " key " "
+           (num count) "))\n"
+           (render-dispatch-tree key 0 count (if has-kw 14 12)) "\n"
+           (if has-kw "  " "")
+           "            (assertion-violation (quote exec) \"unknown state\" st))"
+           (if has-kw ")" "") ")\n"))
         "      (%dispatch start state offset (quote boundary)))\n"
         "  (define " bstr "\n"
         "    (byte-machine-make-compiled-machine 9 " (number->string fp) " "
