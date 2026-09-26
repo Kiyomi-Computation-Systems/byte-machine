@@ -198,9 +198,12 @@
           ;; Kept in history through Milestone 14.
           (check "has the [0.5.0] entry"
                  (harness-string-contains? (file-string cl) "[0.5.0]"))
-          ;; Milestone 14: the current release's own entry (release-version 0.6.0).
+          ;; Milestone 14's entry, kept in history.
           (check "has the [0.6.0] entry"
-                 (harness-string-contains? (file-string cl) "[0.6.0]")))))
+                 (harness-string-contains? (file-string cl) "[0.6.0]"))
+          ;; The current release's own entry (release-version 0.6.1, issue #139).
+          (check "has the [0.6.1] entry"
+                 (harness-string-contains? (file-string cl) "[0.6.1]")))))
     (harness-case "§26:1685 no native artifact is tracked; the leak lane guards HTTP re-export"
       (lambda ()
         (check "kind mechanical" (mechanical? "§26:1685"))
@@ -262,9 +265,9 @@
        '("graph" "verify" "compile" "interpret" "runtime")))
 (harness-group "§4.5: the version surface and the declined export"
   (lambda ()
-    (harness-case "0.6.0 is the single owner and the export is declined"
+    (harness-case "0.6.1 is the single owner and the export is declined"
       (lambda ()
-        (check-equal "release-version" release-version "0.6.0")
+        (check-equal "release-version" release-version "0.6.1")
         (check "export still declined at v0.6" (not release-version-export?))
         (check "five mirror surfaces named" (= (length release-version-surfaces) 5))))
     (harness-case "no public library exports a `version` name"
