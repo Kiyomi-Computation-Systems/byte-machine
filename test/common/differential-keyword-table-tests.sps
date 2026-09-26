@@ -318,4 +318,88 @@
             (check-equal "the machine default eof code" (parser-error-code (parser-result-error r)) 'eof)
             (check-equal "position kind eof" (parser-error-position-kind (parser-result-error r)) 'eof)))))))
 
+;; --- the prefix read in place (issue #139, decision 0054) ---------------------
+;; The runtime walk compares each keyword, in one pass, against the prefix as two
+;; parts -- the `path` a previous feed parked, then this feed's bytes where they
+;; lie -- instead of building one list, and stops where the longest shared
+;; prefix ends. The shared fixture cannot tell most wrong versions of that apart:
+;; its keywords never agree after a byte on which they differ, so a walk that
+;; stopped comparing its PARKED bytes still picks the right one; and none of its
+;; inputs runs on past a completed keyword that is no other's prefix. GET and SET
+;; agree on every byte but the first, so a walk resumed after that byte has only
+;; the parked byte to choose by. Each case below separates one Pass 67 mutant
+;; from its neighbours; two drive the op directly, for answers no executor
+;; reaches on its own.
+(define (build-shared-tail)
+  (make-machine 'tailkw 'table '() '() '()
+    (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
+          (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f)
+          (make-error-declaration 'incomplete 'truncated-keyword "incomplete keyword at end of input" #f))
+    (list (make-keyword-table-node 'table
+            (map (lambda (p) (make-keyword-entry (map char->integer (string->list (car p))) (cdr p) #f))
+                 '(("GET" . got-get) ("SET" . got-set)))
+            (make-edge 'reject 'reexecute) 'eof-incomplete #f #f)
+          (make-stop-node 'got-get #f) (make-stop-node 'got-set #f)
+          (make-error-node 'eof-incomplete 'incomplete #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+(harness-group "the walk reads its parked prefix and this feed's bytes in place"
+  (lambda ()
+    (define tail-ref (make-interpreted-machine (verify-machine (build-shared-tail))))
+    (define tail-gen (generated-machine 'tailkw (build-shared-tail)))
+    (harness-case "resumed after its first byte, SET is chosen by the parked byte alone"
+      (lambda ()
+        (check-equal "generated SET|ET" (feed-split tail-gen "SET " 1) '(stopped 2 3 3 got-set #f #f))
+        (check-equal "generated GET|ET" (feed-split tail-gen "GET " 1) '(stopped 2 3 3 got-get #f #f))
+        (check-equal "agree SET|ET" (feed-split tail-ref "SET " 1) (feed-split tail-gen "SET " 1))
+        (check-equal "agree GET|ET" (feed-split tail-ref "GET " 1) (feed-split tail-gen "GET " 1))))
+    (harness-case "a completed keyword that prefixes no other stops the walk at its end"
+      (lambda ()
+        (check-equal "generated GETXY" (feed1 cs-gen "GETXY ") '(stopped 3 3 3 got-get #f #f))
+        (check-equal "agree GETXY" (feed1 cs-ref "GETXY ") (feed1 cs-gen "GETXY "))))
+    ;; Each input below separates one wrong split from its neighbours, which the
+    ;; rows above leave indistinguishable (measured against the Pass 67 mutants).
+    (harness-case "resumed two bytes in, a wrong third byte is refused where it stands"
+      (lambda ()
+        ;; The parked SE counts toward the prefix's length: a walk that counted
+        ;; only this feed's bytes would lag two bytes behind and refuse at Y.
+        (check-equal "generated SE|XY" (feed-split tail-gen "SEXY " 2) '(error 0 2 2 reject unexpected-byte 2))
+        (check-equal "agree SE|XY" (feed-split tail-ref "SEXY " 2) (feed-split tail-gen "SEXY " 2))))
+    (harness-case "a feed that ends mid-table parks the byte it consumed"
+      (lambda ()
+        ;; G parked, then GET: GG begins no keyword. A walk that parked nothing
+        ;; would start afresh and take GET.
+        (check-equal "generated G|GET" (feed-split cs-gen "GGET " 1) '(error 0 1 1 reject unexpected-byte 1))
+        (check-equal "agree G|GET" (feed-split cs-ref "GGET " 1) (feed-split cs-gen "GGET " 1))))
+    (harness-case "a feed that starts part-way into its bytevector walks from its own start"
+      (lambda ()
+        (define (feed-from cm s from)
+          (let* ((bv (str->bv s)) (p (make-parser cm '() #f))
+                 (r (parser-feed! p bv from (bytevector-length bv))))
+            (rfields r p)))
+        (check-equal "generated zz|GET" (feed-from cs-gen "zzGET " 2) '(stopped 3 5 3 got-get #f #f))
+        (check-equal "agree zz|GET" (feed-from cs-ref "zzGET " 2) (feed-from cs-gen "zzGET " 2))))
+    (harness-case "a case-insensitive walk folds the bytes it parked, not only the ones it is fed"
+      (lambda ()
+        ;; CL parked in capitals against the table's lower-case close/closed.
+        (check-equal "generated CL|OSED" (feed-split ci-gen "CLOSED " 2) '(stopped 4 6 6 got-closed #f #f))
+        (check-equal "agree CL|OSED" (feed-split ci-ref "CLOSED " 2) (feed-split ci-gen "CLOSED " 2))
+        ;; And the op directly, fed from its bytevector's start: every end-to-end
+        ;; resume above also reddens when the parked bytes are DROPPED, reversed
+        ;; or misread, identically; only here does an unfolded parked byte alone
+        ;; change the answer.
+        (check-equal "op G|et"
+                     (byte-machine-keyword-step/v1 '(((103 101 116) . 1)) '(9 . reexecute) #t
+                                                   '(71) (str->bv "et ") 0 3)
+                     '(jump 1 2 byte))))
+    (harness-case "a parked prefix that begins no keyword stops the walk where it resumed"
+      (lambda ()
+        ;; The op directly, since no executor parks such a prefix: the walk never
+        ;; stops before the length it resumed at, so it refuses at pos rather
+        ;; than reporting a position behind the feed.
+        (check-equal "op X|GET"
+                     (byte-machine-keyword-step/v1 '(((71 69 84) . 1)) '(9 . reexecute) #f
+                                                   '(88) (str->bv "zGET") 1 4)
+                     '(jump 9 1 byte))))))
+
 (harness-finish)

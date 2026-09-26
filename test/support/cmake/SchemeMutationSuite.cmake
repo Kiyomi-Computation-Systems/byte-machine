@@ -1431,8 +1431,15 @@ cmake_minimum_required(VERSION 3.26)
 # and the retirement of the Pass-60 "drops the unconstructible list" survivor,
 # now caught because settable-consume-counter is unconstructible-only. Nine new
 # mutations across four new passes plus two existing: 628 -> 637, 72 -> 76.
-set(EXPECTED_PASSES 76)
-set(EXPECTED_MUTATIONS 637)
+# Issue #139 (the keyword walk reads its prefix in place, decision 0054) adds
+# twelve mutations to Pass 67 (differential.keyword-table: each way the one-pass
+# longest-shared-prefix walk can compare, count, choose or park wrongly) and ONE
+# new pass, 77 (unit.allocation-audit, 2: the walk allocating per compared byte,
+# and a walk that consumed nothing copying its parked prefix). One shipped pin
+# re-anchored (the generated terminal-length pin, onto `whole?`). 637 -> 651,
+# 76 -> 77.
+set(EXPECTED_PASSES 77)
+set(EXPECTED_MUTATIONS 651)
 # Sixty-two is sixty-one plus one: Milestone 8 Slice ① adds one pass over the
 # request-line fixture (http-machine.sls) with three mutations (590 -> 593),
 # each caught by byte-machine.unit.http-request-line with a measured signature.
@@ -14047,9 +14054,12 @@ byte_machine_mutation(
   LABEL "runtime: a walk position is a terminal even when the path is a proper prefix (decision 0043, generated lane)"
   # The generated twin of the interpreter's terminal-length pin: without the
   # length test the op accepts a proper prefix as a terminal, so GET-X takes the
-  # GET-PARAMETER path's target rather than no-matching.
-  FIND [[(= (length (car (car es))) (length p))]]
-  REPLACE [[#t]]
+  # GET-PARAMETER path's target rather than no-matching. Re-anchored for issue
+  # #139 (decision 0054): the walk no longer tests a candidate's length against
+  # the prefix's; it records as terminal only an entry the shared prefix covers
+  # WHOLE, so the same decision is that `whole?`. The pin is unchanged.
+  FIND [[(scan (cdr es) n (and whole? (car es)))]]
+  REPLACE [[(scan (cdr es) n (car es))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES [[agrees with the interpreter: no case misbehaved -- expected none, got .gen "GET-X" .stopped 4 4 4 got-gp #f #f..]])
 
@@ -14110,6 +14120,152 @@ byte_machine_mutation(
   REPLACE [[                                                      '(dispatch accumulate counted-consume))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES [[the default-eof machine renders and its EOF route takes the machine default error: case raised.*no error declaration for code]])
+
+# The twelve below are issue #139's (decision 0054). The walk finds, in ONE
+# pass over the entries, the longest prefix any keyword shares with the parked
+# `path` followed by this feed's bytes -- compared in place, never built -- and
+# the entry that is all of it. Each mutation names one way of getting that
+# wrong. The shared fixture could tell few of them apart, so the lane's "reads
+# its parked prefix ... in place" group adds a GET/SET table, one input per
+# mutant, and two direct op calls for the two answers no executor can reach
+# alone. Every pin below is on a record (or, for the parked-fold pin, a pair of
+# records) no other Pass 67 mutant emits: measured by a whole-pass sweep in both
+# directions, each pin resolving exactly once in its own mutant's output.
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.keyword-table.chez.source
+  LABEL "runtime: a parked prefix's bytes are not compared (issue #139)"
+  # Every parked byte was matched by an earlier feed, so skipping its comparison
+  # looks harmless -- until two keywords agree after a byte on which they differ.
+  # Resumed after G, GET and SET then share the whole prefix, and SET, later in
+  # the table, is taken.
+  FIND [[(if (= (kw-fold (car p) ci?) (kw-fold (car k) ci?))]]
+  REPLACE [[(if #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[generated GET.ET -- expected .stopped 2 3 3 got-get #f #f., got .stopped 2 3 3 got-set #f #f.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.keyword-table.chez.source
+  LABEL "runtime: a parked prefix's bytes are not case-folded (issue #139)"
+  # A case-insensitive table resumed after capitals compares them raw. The
+  # end-to-end CL|OSED record is shared with the drop/reverse/misread mutants and
+  # the direct op record with the fold-direction one; only this mutant emits both,
+  # so the pin requires the pair (the AGENTS.md whole-set rule).
+  FIND [[(if (= (kw-fold (car p) ci?) (kw-fold (car k) ci?))]]
+  REPLACE [[(if (= (car p) (kw-fold (car k) ci?))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[generated CL.OSED -- expected .stopped 4 6 6 got-closed #f #f., got .error 0 2 2 reject unexpected-byte 2..*op G.et -- expected .jump 1 2 byte., got .jump 9 0 byte.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.keyword-table.chez.source
+  LABEL "runtime: this feed's bytes are not compared (issue #139)"
+  # Every fed byte agrees with every keyword, so the walk runs to the end of
+  # the longest keyword or of the feed.
+  FIND [[((= (kw-fold (bytevector-u8-ref bv at) ci?) (kw-fold (car k) ci?))]]
+  REPLACE [[(#t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the case-sensitive generated table refuses a lowercase method: gen -- expected .error 0 0 0 reject unexpected-byte 0., got .need-input 4 4 4 table #f #f.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.keyword-table.chez.source
+  LABEL "runtime: this feed's bytes are read from the bytevector's start, not from pos (issue #139)"
+  # A fresh walk at pos > 0 compares bv[0..] -- here `zz` -- and refuses a
+  # keyword that starts where the feed does.
+  FIND [[(let loop ((p path) (k kw) (j 0) (at pos))]]
+  REPLACE [[(let loop ((p path) (k kw) (j 0) (at 0))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[generated zz.GET -- expected .stopped 3 5 3 got-get #f #f., got .error 0 2 0 reject unexpected-byte 0.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.keyword-table.chez.source
+  LABEL "runtime: a walk compares one byte past the end of its feed (issue #139)"
+  # The first feed of a split then sees the second feed's first byte, and a
+  # walk that should park is decided early.
+  FIND [[((>= at end) (values j #f))]]
+  REPLACE [[((> at end) (values j #f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[generated CL.OSED -- expected .stopped 4 6 6 got-closed #f #f., got .error 0 2 3 reject unexpected-byte 3.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.keyword-table.chez.source
+  LABEL "runtime: a keyword is credited one byte past its own end (issue #139)"
+  # Every keyword the input covers whole then outruns the input by one, so a
+  # completed GET-PARAMETER keeps walking instead of being taken.
+  FIND [[((null? k) (values j #t))]]
+  REPLACE [[((null? k) (values (+ j 1) #t))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[get-parameter -- expected .stopped 13 13 13 got-gp #f #f., got .need-input 14 14 14 table #f #f.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.keyword-table.chez.source
+  LABEL "runtime: the matched length leaves out the parked prefix (issue #139)"
+  # With the parked length taken as 0 the stop position overshoots by it: G|GET
+  # refuses one byte late.
+  FIND [[(let ((plen (length path)))]]
+  REPLACE [[(let ((plen 0))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[agree G.GET -- expected .error 1 2 2 reject unexpected-byte 2., got .error 0 1 1 reject unexpected-byte 1.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.keyword-table.chez.source
+  LABEL "runtime: a walk may stop before where it resumed (issue #139)"
+  # The longest shared prefix starts at the parked length. From 0, a parked
+  # prefix that begins no keyword reports a stop behind the feed; no executor
+  # parks one, so the op is driven directly.
+  FIND [[(let scan ((es entries) (best plen) (term #f))]]
+  REPLACE [[(let scan ((es entries) (best 0) (term #f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[op X.GET -- expected .jump 9 1 byte., got .jump 9 0 byte.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.keyword-table.chez.source
+  LABEL "runtime: an entry the prefix covers only in part becomes the terminal when it tied (issue #139)"
+  # At an equal length only an entry the prefix covers WHOLE is a terminal;
+  # without that test GET-PARAMETER, tied with GET at 3, displaces it.
+  FIND [[((and (= n best) whole?) (scan (cdr es) best (car es)))]]
+  REPLACE [[((= n best) (scan (cdr es) best (car es)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[each input matches its expected generated tuple and agrees with the interpreter: no case misbehaved -- expected none, got .gen "GET " .stopped 3 3 3 got-gp #f #f..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.keyword-table.chez.source
+  LABEL "runtime: a tie on the longest prefix clears the terminal (issue #139)"
+  # Only a strictly longer prefix replaces the terminal; `>=` lets GET-PARAMETER,
+  # tied with GET at 3 but not whole, wipe GET out.
+  FIND [[(cond ((> n best) (scan (cdr es) n (and whole? (car es))))]]
+  REPLACE [[(cond ((>= n best) (scan (cdr es) n (and whole? (car es))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[each input matches its expected generated tuple and agrees with the interpreter: no case misbehaved -- expected none, got .gen "GET " .error 3 3 3 reject unexpected-byte 3..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.keyword-table.chez.source
+  LABEL "runtime: a need answer parks the old prefix without this feed's bytes (issue #139)"
+  # G parked by the first feed is dropped, so GGET's second feed starts afresh
+  # and takes GET.
+  FIND [[(let copy ((j (- i 1)) (acc '()))]]
+  REPLACE [[(let copy ((j (- pos 1)) (acc '()))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[generated G.GET -- expected .error 0 1 1 reject unexpected-byte 1., got .stopped 3 4 4 got-get #f #f.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.keyword-table.chez.source
+  LABEL "runtime: a need answer parks this feed's bytes in reverse (issue #139)"
+  # Two parked bytes GE come back EG, which begins no keyword.
+  FIND [[(copy (- j 1) (cons (bytevector-u8-ref bv j) acc))]]
+  REPLACE [[(copy (- j 1) (append acc (list (bytevector-u8-ref bv j))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[no split misbehaved -- expected none, got .gen 2 .error 0 2 2 reject unexpected-byte 2..]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -14445,6 +14601,46 @@ byte_machine_mutation(
   REPLACE [[                    ((and #f (uint-field-settable? (car fs)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES [[non-settable-field]])
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 77: the keyword walk's allocation (unit.allocation-audit) -----------
+# Issue #139, decision 0054. What the walk allocates is invisible to every
+# differential -- the answers are equal whether or not a prefix is copied -- so
+# its two allocation decisions are witnessed only by the allocation lane's
+# keyword group, which drives `byte-machine-keyword-step/v1` directly.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/allocation-audit-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "runtime: the keyword walk allocates for every byte it compares (issue #139)"
+  # One pair per fed byte compared, with every answer unchanged -- smaller than
+  # the defect it stands for (a copy of the whole prefix per byte) and caught by
+  # the same check. It appends to the loop's own `p`, which the compiler cannot
+  # know is empty, so the allocation cannot be folded away.
+  FIND [[(loop p (cdr k) (+ j 1) (+ at 1))]]
+  REPLACE [[(loop p (cdr k) (+ j 1) (+ at (- (length (append p (list at))) (length p))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[no k allocated more than k=0 .k . extra bytes. -- expected .., got ..1 . 16000. .2 . 32000.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "runtime: a walk that consumed nothing copies its parked prefix (issue #139)"
+  # `(append path '())` is `equal?` to path, so no answer changes; only the
+  # prefix's identity and the allocation do.
+  FIND [[(if (= i pos)]]
+  REPLACE [[(if #f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[parks its prefix without copying it: the prefix comes back as the same object -- expected a true value]])
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # Every pass above has now run exactly once, so the accumulated total is
