@@ -19,9 +19,10 @@
 ;;; repetition count to bound its allocation churn; the generated executor is
 ;;; allocation-free per byte, so equality holds at any count.
 (import (rnrs) (rnrs eval)
-        (only (chezscheme) load statistics sstats-bytes collect)
+        (only (chezscheme) load statistics sstats-bytes collect environment-symbols)
         (byte-machine test harness)
         (byte-machine test http-machine)
+        (byte-machine test keyword-header-machine)
         (byte-machine verify)
         (byte-machine interpret)
         (byte-machine runtime)
@@ -336,5 +337,407 @@
                                                 (bytes "transfer-encod") bv 0 3)))
           (check-equal "need with the grown prefix at the feed's end"
                        r (list 'need (bytes "transfer-encoding") 3)))))))
+
+;; --- Decision 0055: the runtime op census ------------------------------------
+;;
+;; Every slope above is a claim about the code its fixture RUNS, and issue #139
+;; was a runtime op no fixture here ran: the keyword walk, called from an arm the
+;; HTTP machine does not have. So the claim "generated per-byte paths allocate
+;; nothing" is a census over the `(byte-machine runtime)` procedures emitted code
+;; can call, and the lane must reach each one. Both halves are measured here,
+;; neither declared:
+;;
+;;   DERIVED -- the runtime's live exports that occur as a token in some string
+;;     literal of compile.sls. The emitter writes generated code ONLY as string
+;;     literals (render-machine builds text), so a new op any lowering calls is
+;;     in this set the moment its template is written, whether or not any
+;;     fixture renders it. compile.sls is read as a datum from the tree that is
+;;     running (BYTE_MACHINE_SOURCE_ROOT), so comments and the quoted
+;;     reserved-member-2 list are not strings and do not count.
+;;   REACHED -- the ops a COUNTING TWIN of each audited machine actually calls.
+;;     The twin is the same rendered text with one import changed, to a library
+;;     this lane writes that re-exports the runtime with a call counter in front
+;;     of every procedure. Allocation is measured on the real machine, calls on
+;;     the twin; the code paths are the same text.
+;;
+;; A witness registers what it reached only from inside the case that asserts
+;; its allocation shape, so deleting a witness group deletes its reach too. The
+;; totality row at the end then fails for a future node kind whose lowering
+;; calls an op no witness runs, naming the op, until a witness is added.
+;;
+;; Scope, stated as measured: the census covers calls EMITTED code makes. The
+;; runtime's own per-feed work (parser-feed!'s boundary flush, make-parser) is
+;; not in it; the per-byte and per-header slopes above run those paths on every
+;; feed.
+
+(define source-root
+  (let ((r (adapter-environment-variable "BYTE_MACHINE_SOURCE_ROOT")))
+    (if (and r (not (string=? r ""))) r
+        ;; Loud, not defaulted: under the mutation suite a census reading the
+        ;; pristine tree would compare the running mutant against a file it is
+        ;; not executing (diagnostic-census-tests.sps records the same trap).
+        (assertion-violation 'allocation-audit "BYTE_MACHINE_SOURCE_ROOT is unset" r))))
+
+;; A .sls file is exactly one datum; the second value guards against a walk
+;; that silently stops at the first form.
+(define compile-src
+  (call-with-input-file (string-append source-root "/byte-machine/compile.sls")
+    (lambda (p) (let* ((d (read p)) (clean (eof-object? (read p)))) (cons d clean)))))
+
+(define (string-literals d acc)
+  (cond ((string? d) (cons d acc))
+        ((pair? d) (string-literals (cdr d) (string-literals (car d) acc)))
+        ((vector? d) (fold-left (lambda (a x) (string-literals x a)) acc (vector->list d)))
+        (else acc)))
+
+;; Split on whitespace and parentheses: the delimiters of the emitted text.
+(define (tokens s)
+  (let loop ((cs (string->list s)) (cur '()) (acc '()))
+    (define (flush) (if (null? cur) acc (cons (list->string (reverse cur)) acc)))
+    (cond ((null? cs) (reverse (flush)))
+          ((memv (car cs) '(#\space #\newline #\tab #\( #\)))
+           (loop (cdr cs) '() (flush)))
+          (else (loop (cdr cs) (cons (car cs) cur) acc)))))
+
+(define runtime-env (environment '(byte-machine runtime)))
+(define runtime-exports
+  (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b)))
+             (environment-symbols runtime-env)))
+
+(define literal-tokens
+  (let ((h (make-hashtable string-hash string=?)))
+    (for-each (lambda (s) (for-each (lambda (t) (hashtable-set! h t #t)) (tokens s)))
+              (string-literals (car compile-src) '()))
+    h))
+
+;; The derived census, split by what the export IS: a procedure is an op emitted
+;; code calls; anything else (today `callback-pause`, compared by `eq?`) is a
+;; constant it reads and cannot allocate.
+(define derived
+  (filter (lambda (x) (hashtable-contains? literal-tokens (symbol->string x)))
+          runtime-exports))
+(define derived-ops (filter (lambda (x) (procedure? (eval x runtime-env))) derived))
+(define derived-constants (remp (lambda (x) (procedure? (eval x runtime-env))) derived))
+
+;; The counting runtime, written as a datum from the LIVE export list, so it
+;; cannot drift from the runtime it stands in for.
+(define (with-text-file path proc)
+  (let ((p (open-file-output-port path (file-options no-fail) (buffer-mode block)
+                                   (native-transcoder))))
+    (proc p)
+    (close-port p)))
+(define counting-library-file (string-append tmpdir "/counting-runtime.sls"))
+(with-text-file counting-library-file
+  (lambda (p)
+    (write
+     `(library (byte-machine-census counting-runtime)
+        (export census-counts census-reset! ,@runtime-exports)
+        (import (rnrs) (prefix (byte-machine runtime) rt:))
+        (define counts (make-eq-hashtable))
+        (define (census-reset!) (hashtable-clear! counts))
+        (define (census-counts)
+          (let-values (((ks vs) (hashtable-entries counts)))
+            (map cons (vector->list ks) (vector->list vs))))
+        ,@(map (lambda (x)
+                 (let ((rt (string->symbol (string-append "rt:" (symbol->string x)))))
+                   (if (procedure? (eval x runtime-env))
+                       `(define (,x . args)
+                          (hashtable-update! counts ',x (lambda (n) (+ n 1)) 0)
+                          (apply ,rt args))
+                       `(define ,x ,rt))))
+               runtime-exports))
+     p)))
+(load counting-library-file)
+(define counting-env (environment '(byte-machine-census counting-runtime)))
+(define census-counts (eval 'census-counts counting-env))
+(define census-reset! (eval 'census-reset! counting-env))
+
+;; Replace the one occurrence of `old` in `s`; raise unless there is exactly one,
+;; because a twin still importing the real runtime anywhere would undercount.
+(define (replace-once s old new)
+  (let ((n (string-length s)) (m (string-length old)))
+    (let loop ((i 0) (hits '()))
+      (cond ((> (+ i m) n)
+             (unless (= (length hits) 1)
+               (assertion-violation 'replace-once "expected exactly one occurrence" old hits))
+             (let ((at (car hits)))
+               (string-append (substring s 0 at) new (substring s (+ at m) n))))
+            ((string=? (substring s i (+ i m)) old) (loop (+ i 1) (cons i hits)))
+            (else (loop (+ i 1) hits))))))
+
+;; Emit `machine` twice: the real library, loaded for allocation, and its
+;; counting twin, identical but for its name and the runtime it imports. (The
+;; HTTP witnesses measure `generated`, loaded above from the same machine and
+;; emitter; its text differs from this pair's only in the output binding.)
+;; Returns (real twin load-calls rendered-datum).
+(define (load-pair machine name)
+  (let* ((ok (compile-machine machine '()))
+         (text (utf8->string (render-machine ok name)))
+         (real-file (string-append tmpdir "/" (symbol->string name) "-real.sls"))
+         (twin-file (string-append tmpdir "/" (symbol->string name) "-twin.sls"))
+         (lib (cadr (read (open-string-input-port text)))))
+    (with-text-file real-file (lambda (p) (put-string p text)))
+    (with-text-file twin-file
+      (lambda (p)
+        (put-string p (replace-once
+                       (replace-once text "(library (generated " "(library (generated-census ")
+                       "(byte-machine runtime)" "(byte-machine-census counting-runtime)"))))
+    (load real-file)
+    (load twin-file)
+    (census-reset!)
+    (let* ((twin (eval name (environment (cons 'generated-census (cdr lib)))))
+           (load-calls (census-counts)))
+      (list (eval name (environment lib)) twin load-calls
+            (read (open-string-input-port text))))))
+
+(define http-pair (load-pair (make-http-machine) 'httpcensus))
+(define kw-pair (load-pair (make-keyword-header-ci-machine) 'kwcensus))
+
+;; What the audited inputs reached, and the load-time calls, both observed.
+(define witnessed '())
+(define (note-reached! calls)
+  (for-each (lambda (c)
+              (when (and (> (cdr c) 0) (not (memq (car c) witnessed)))
+                (set! witnessed (cons (car c) witnessed))))
+            calls))
+(note-reached! (caddr http-pair))
+(note-reached! (caddr kw-pair))
+;; Every call the twin saw, across every feed, for the derivation's control.
+(define ever-called '())
+(define (calls-feeding twin bindings req)
+  (census-reset!)
+  (feed-once! twin bindings req)
+  (let ((calls (census-counts)))
+    (for-each (lambda (c) (unless (memq (car c) ever-called)
+                            (set! ever-called (cons (car c) ever-called))))
+              calls)
+    calls))
+;; Called from inside a witness case: feed the twin what the case measured.
+(define (witness! twin bindings req) (note-reached! (calls-feeding twin bindings req)))
+;; The same for a witness that feeds without finishing: an input the machine
+;; refuses leaves the parser in `error`, and only the feed's result is asserted.
+(define (witness-feed! twin bindings req)
+  (census-reset!)
+  (feed-only twin bindings req)
+  (let ((calls (census-counts)))
+    (for-each (lambda (c) (unless (memq (car c) ever-called)
+                            (set! ever-called (cons (car c) ever-called))))
+              calls)
+    (note-reached! calls)))
+
+;; One feed and nothing after it; the result is what an error witness reads.
+(define (feed-only cm bindings req)
+  (parser-feed! (make-parser cm bindings #f) req 0 (bytevector-length req)))
+(define (alloc-feeding-only cm bindings req reps)
+  (collect)
+  (let ((before (sstats-bytes (statistics))))
+    (do ((i 0 (+ i 1))) ((= i reps))
+      (feed-only cm bindings req))
+    (- (sstats-bytes (statistics)) before)))
+
+;; --- the three witnesses the census found missing ----------------------------
+;;
+;; Measured before they existed: the HTTP slopes feed only valid messages, and
+;; the keyword group drives its op directly, so six ops had never run under this
+;; lane -- `byte-machine-make-parser-error/v1`, `byte-machine-make-callback-error/v1`,
+;; the three `callback-failure` readers, and the keyword walk as EMITTED code
+;; calls it. Each is an event, not a per-byte step: an error or a callback
+;; failure ends the feed, and the walk is entered once per table. So the shape
+;; each asserts is the per-byte one -- what the event costs does not depend on
+;; how many bytes came before it -- which is exactly what a copy of the input,
+;; or of a prefix, into the record would break.
+
+;; A request refused inside a header value (NUL is not a field-value byte), after
+;; `value-len` good value bytes: the same 40000-byte difference the first slope
+;; takes, ending at an error arm instead of the message's end.
+(define (bad-value-request value-len)
+  (u8-list->bytevector
+   (append (bytes (string-append "GET / HTTP/1.1\r\nX-Pad: " (make-string value-len #\a)))
+           (list 0))))
+(define short-bad-req (bad-value-request 44))
+(define long-bad-req (bad-value-request 40044))
+
+;; The application's failure, built ONCE: what the callback allocates is the
+;; application's, and the claim is about what the seam does with it.
+(define audit-failure (make-callback-failure 'audit-refused 'audit-detail))
+(define failing-bindings
+  (list (list 'message-complete (lambda (ps ux) audit-failure))))
+
+(harness-group "an error arm allocates the same however many bytes precede it (decision 0055)"
+  (lambda ()
+    (harness-case "a machine error's record does not grow with the offset it reports"
+      (lambda ()
+        (let* ((r-short (feed-only generated '() short-bad-req))
+               (r-long (feed-only generated '() long-bad-req))
+               (e (parser-result-error r-long)))
+          ;; The answer first, so an arm that stopped erroring could not pass by
+          ;; allocating nothing.
+          (check-equal "machine error: status" (parser-result-status r-long) 'error)
+          (check-equal "machine error: domain and code"
+                       (list (parser-error-domain e) (parser-error-code e))
+                       '(machine invalid-header-value))
+          (check-equal "machine error: the offsets differ by the value bytes"
+                       (- (parser-error-offset e)
+                          (parser-error-offset (parser-result-error r-short)))
+                       value-byte-difference)
+          (check "control: alloc(40044) > alloc(44)"
+                 (> (control-alloc 40044 gen-reps) (control-alloc 44 gen-reps)))
+          (check-equal "machine error: alloc(short prefix) = alloc(long prefix)"
+                       (alloc-feeding-only generated '() long-bad-req gen-reps)
+                       (alloc-feeding-only generated '() short-bad-req gen-reps))
+          (witness-feed! (cadr http-pair) '() short-bad-req)
+          (witness-feed! (cadr http-pair) '() long-bad-req))))
+    (harness-case "a callback failure's record does not grow with the offset it reports"
+      (lambda ()
+        ;; message-complete answers the prebuilt failure, so the seam reads its
+        ;; code and detail and builds the callback-domain error at the message's
+        ;; end, 40000 bytes later in the long request.
+        (let* ((r (feed-only generated failing-bindings long-req))
+               (e (parser-result-error r)))
+          (check-equal "callback failure: status" (parser-result-status r) 'error)
+          (check-equal "callback failure: domain and code"
+                       (list (parser-error-domain e) (parser-error-code e))
+                       '(callback audit-refused))
+          (check "callback failure: the application's detail passes through"
+                 (eq? (parser-error-detail e) 'audit-detail))
+          (check "control: alloc(40044) > alloc(44)"
+                 (> (control-alloc 40044 gen-reps) (control-alloc 44 gen-reps)))
+          (check-equal "callback failure: alloc(short) = alloc(long)"
+                       (alloc-feeding-only generated failing-bindings long-req gen-reps)
+                       (alloc-feeding-only generated failing-bindings short-req gen-reps))
+          (witness-feed! (cadr http-pair) failing-bindings short-req)
+          (witness-feed! (cadr http-pair) failing-bindings long-req))))))
+
+(harness-group "an emitted keyword arm allocates the same however much it matched (decision 0055)"
+  (lambda ()
+    (harness-case "the arm around the walk adds nothing per matched byte"
+      (lambda ()
+        ;; The keyword group above drives the op directly; this drives the
+        ;; EMITTED arm that calls it, in the four-header case-insensitive
+        ;; machine. Every k below 17 is refused at byte k by the no-match route
+        ;; (reexecute), so every one ends at the same error arm, and its record
+        ;; reports offset k. k = 17 takes the keyword.
+        (let* ((kw-real (car kw-pair)) (kw-twin (cadr kw-pair))
+               (base (alloc-feeding-only kw-real '() (kw-field 0) kw-reps))
+               (hit-parser (make-parser kw-real '() #f))
+               (hit (parser-feed! hit-parser (kw-field 17) 0 18)))
+          (check "control: a copying walk allocates more at k=16 than at k=1"
+                 (> (alloc-walking copying-keyword-step '() (kw-field 16) kw-reps)
+                    (alloc-walking copying-keyword-step '() (kw-field 1) kw-reps)))
+          (check-equal "k=17 takes transfer-encoding"
+                       (list (parser-result-status hit) (parser-state-name hit-parser))
+                       '(stopped got-transfer-encoding))
+          (let loop ((k 0) (measured 0) (grew '()) (wrong '()))
+            (if (<= k 16)
+                (let* ((r (feed-only kw-real '() (kw-field k)))
+                       (e (parser-result-error r))
+                       (got (list (parser-result-status r) (and e (parser-error-offset e))))
+                       (a (alloc-feeding-only kw-real '() (kw-field k) kw-reps)))
+                  (loop (+ k 1) (+ measured 1)
+                        (if (= a base) grew (cons (cons k (- a base)) grew))
+                        (if (equal? got (list 'error k)) wrong (cons (cons k got) wrong))))
+                (begin
+                  (check-equal "every k from 0 to 16 was fed through the arm" measured 17)
+                  (check-equal "every k was refused at byte k" (reverse wrong) '())
+                  (check-equal "no emitted k allocated more than k=0 (k . extra bytes)"
+                               (reverse grew) '()))))
+          (witness-feed! kw-twin '() (kw-field 0))
+          (witness-feed! kw-twin '() (kw-field 16))
+          (witness-feed! kw-twin '() (kw-field 17)))))))
+
+(define (sorted xs)
+  (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b))) xs))
+
+(harness-group "the per-byte and per-header slopes reach the ops they claim (decision 0055)"
+  (lambda ()
+    (harness-case "the HTTP slopes' messages drive the counting twin"
+      (lambda ()
+        (let ((twin (cadr http-pair))
+              (noop (lambda (ps ux) callback-continue)))
+          (for-each (lambda (req) (witness! twin '() req))
+                    (list short-req long-req few-headers-req many-headers-req))
+          (witness! twin (list (list 'message-begin noop) (list 'message-complete noop))
+                    short-req))))))
+
+(harness-group "the runtime op census: every op emitted code can call has a witness (decision 0055)"
+  (lambda ()
+    (harness-case "the census is derived from compile.sls's emitted text"
+      (lambda ()
+        (check "compile.sls is exactly one datum" (cdr compile-src))
+        ;; No floor on the census's size: a derivation that read nothing leaves
+        ;; every op the twins call outside it, and the called-ops case below
+        ;; names them.
+        (say (string-append "byte-machine-alloc: census ops="
+                            (adapter-value->string (sorted derived-ops))
+                            " constants=" (adapter-value->string (sorted derived-constants))))))
+    (harness-case "every runtime export a rendered machine names is in the derived census"
+      (lambda ()
+        ;; The second method: the symbols actually present in the two rendered
+        ;; libraries, read as data. A name the emitter assembles from two
+        ;; literals would be missing from the derivation and present here.
+        (let walk ((ds (list (cadddr http-pair) (cadddr kw-pair))) (missing '()))
+          (define (syms d acc)
+            (cond ((symbol? d) (if (and (memq d runtime-exports) (not (memq d derived))
+                                        (not (memq d acc)))
+                                   (cons d acc) acc))
+                  ((pair? d) (syms (cdr d) (syms (car d) acc)))
+                  ((vector? d) (fold-left (lambda (a x) (syms x a)) acc (vector->list d)))
+                  (else acc)))
+          (if (null? ds)
+              (check-equal "rendered runtime names absent from the census" (sorted missing) '())
+              (walk (cdr ds) (syms (car ds) missing))))))
+    (harness-case "every op the twins were seen calling is in the derived census"
+      (lambda ()
+        ;; The third method, over what ran: a call the derivation cannot see.
+        (check-equal "called ops absent from the census"
+                     (sorted (filter (lambda (x) (not (memq x derived-ops)))
+                                     (append ever-called
+                                             (map car (caddr http-pair))
+                                             (map car (caddr kw-pair)))))
+                     '())))
+    (harness-case "each op is entered per event, never per byte of a header value"
+      (lambda ()
+        ;; The "per byte or per event" question, answered by call counts on the
+        ;; twin rather than by reading the arms: 40000 more value bytes, 200
+        ;; more headers, and 16 more matched keyword bytes. An op whose count
+        ;; moved with the value bytes would be on the per-byte path itself; the
+        ;; slopes above gate what it ALLOCATES, this records where it SITS.
+        (let* ((twin (cadr http-pair)) (kw-twin (cadr kw-pair))
+               (count-of (lambda (calls op) (cond ((assq op calls) => cdr) (else 0))))
+               (short (calls-feeding twin '() short-req))
+               (long (calls-feeding twin '() long-req))
+               (few (calls-feeding twin '() few-headers-req))
+               (many (calls-feeding twin '() many-headers-req))
+               (k0 (begin (census-reset!) (feed-only kw-twin '() (kw-field 0)) (census-counts)))
+               (k16 (begin (census-reset!) (feed-only kw-twin '() (kw-field 16)) (census-counts)))
+               (per-byte (filter (lambda (op) (not (= (count-of short op) (count-of long op))))
+                                 derived-ops))
+               (per-matched (filter (lambda (op) (not (= (count-of k0 op) (count-of k16 op))))
+                                    derived-ops)))
+          (check-equal "ops whose calls grow with a header value's length" per-byte '())
+          (check-equal "ops whose calls grow with bytes matched in a keyword" per-matched '())
+          ;; Recorded, not asserted: which ops the per-header slope enters, and
+          ;; how often. Its zero is a claim about these ops only because they
+          ;; appear here with a nonzero rate.
+          (for-each
+           (lambda (op)
+             (say (string-append
+                   "byte-machine-alloc: op " (symbol->string op)
+                   " calls/short-message=" (adapter-value->string (count-of short op))
+                   " calls/header=" (adapter-value->string
+                                     (/ (- (count-of many op) (count-of few op)) header-difference))
+                   " calls/load=" (adapter-value->string
+                                   (+ (count-of (caddr http-pair) op)
+                                      (count-of (caddr kw-pair) op))))))
+           (sorted derived-ops)))))
+    (harness-case "every derived op is reached by an audited input"
+      (lambda ()
+        ;; The totality row. An op here and not witnessed is code the allocation
+        ;; audit has never run -- issue #139's shape, found before a consumer.
+        ;; One direction only: a witnessed op outside the census is a called op
+        ;; outside it, which the called-ops case reports by name.
+        (check-equal "census ops no witness reached"
+                     (sorted (filter (lambda (x) (not (memq x witnessed))) derived-ops))
+                     '())))))
 
 (harness-finish)

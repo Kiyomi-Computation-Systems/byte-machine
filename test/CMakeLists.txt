@@ -1746,6 +1746,13 @@ byte_machine_add_scheme_lane(
 # by bench/runner/benchmark.sps and recorded in bench/fixtures/ — not a gating
 # lane (§23.1: no noisy CI perf gate); its existence and shape are checked by the
 # release-ledger lane.
+#
+# The op census (decision 0055) READS compile.sls as data to derive every
+# runtime procedure emitted code can call, so it needs the source tree that is
+# actually running -- the same BYTE_MACHINE_SOURCE_ROOT contract as the
+# diagnostic census, overridden to the staged copy by the mutation suite. The
+# keyword-header machine is the census's witness that emitted code reaches the
+# keyword walk, not only a direct call.
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.allocation-audit.chez.source
   BACKEND chez
@@ -1753,8 +1760,10 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_EMIT}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-machine.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/keyword-header-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/allocation-audit-tests.sps"
-  TIMEOUT 180)
+  TIMEOUT 180
+  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src")
 
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.allocation-audit.chez.aot
@@ -1763,8 +1772,10 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_EMIT}
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/http-machine.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/keyword-header-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/allocation-audit-tests.sps"
-  TIMEOUT 180)
+  TIMEOUT 180
+  ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src")
 
 # --- Milestone 4 Slice ①a task 7: all three §12.7 position kinds -------------
 byte_machine_add_scheme_lane(

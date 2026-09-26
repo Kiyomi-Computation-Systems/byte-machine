@@ -393,6 +393,13 @@
                  es))
      ")"))
 
+  ;; EVERY RUNTIME NAME AN ARM WRITES IS A CENSUS ENTRY. The allocation audit
+  ;; (test/common/allocation-audit-tests.sps, decision 0055) derives the set of
+  ;; `(byte-machine runtime)` procedures emitted code can call from this file's
+  ;; string literals, and fails until an input whose allocation it asserts runs
+  ;; each one. An arm that calls a runtime op no arm called before therefore
+  ;; owes that lane a witness in the same change. Write the op's name as one
+  ;; literal: a name assembled from pieces is invisible to the derivation.
   (define (render-state-arm s names index-of fields spans)
     (let ((id (number->string (normal-state-id s)))
           ;; Total by construction: the debug map and the internal state list

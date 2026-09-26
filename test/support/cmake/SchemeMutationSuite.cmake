@@ -1438,8 +1438,13 @@ cmake_minimum_required(VERSION 3.26)
 # and a walk that consumed nothing copying its parked prefix). One shipped pin
 # re-anchored (the generated terminal-length pin, onto `whole?`). 637 -> 651,
 # 76 -> 77.
+# Decision 0055 (the runtime op census) adds nine mutations to Pass 77
+# (unit.allocation-audit): an unreached arm calling an underived-or-unwitnessed
+# op three ways, a per-byte and a per-matched-byte op call, the keyword arm and
+# both error records allocating per byte, and a second datum in compile.sls.
+# 651 -> 660, passes unchanged at 77.
 set(EXPECTED_PASSES 77)
-set(EXPECTED_MUTATIONS 651)
+set(EXPECTED_MUTATIONS 660)
 # Sixty-two is sixty-one plus one: Milestone 8 Slice ① adds one pass over the
 # request-line fixture (http-machine.sls) with three mutations (590 -> 593),
 # each caught by byte-machine.unit.http-request-line with a measured signature.
@@ -14641,6 +14646,122 @@ byte_machine_mutation(
   REPLACE [[(if #f]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES [[parks its prefix without copying it: the prefix comes back as the same object -- expected a true value]])
+
+# Decision 0055: the runtime op census. The allocation lane derives every
+# runtime procedure emitted code can call from compile.sls's string literals,
+# counts which of them the audited inputs reach through a counting twin of each
+# machine, and gives the six the HTTP slopes never ran a witness. Nine
+# mutations, each pinned on the one check naming its decision, measured against
+# a staged copy with every pin in this pass resolving exactly once and only in
+# its own mutant's output (Pass 77's two earlier mutants included).
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: an arm no audited input reaches calls a runtime op nothing else emits"
+  # The census's reason to exist: a lowering that calls an op the allocation
+  # audit has never run. `parser-error?` of a count is #f, so no answer moves;
+  # the counted-consume arm is on the body path, which no audited message takes.
+  FIND [["         (cond ((= v 0) "]]
+  REPLACE [["         (cond ((parser-error? v) #f) ((= v 0) "]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[every derived op is reached by an audited input: census ops no witness reached -- expected .., got .parser-error..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: an unreached arm names a runtime op the derivation cannot see"
+  # The same call, its name split across two literals: the emitted text is
+  # identical, the derivation misses it, and no twin calls it. Only the rendered
+  # libraries, read as data, still carry the name -- the check this pins.
+  FIND [["         (cond ((= v 0) "]]
+  REPLACE [["         (cond ((parser-" "error? v) #f) ((= v 0) "]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[every runtime export a rendered machine names is in the derived census: rendered runtime names absent from the census -- expected .., got .parser-error..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: a reached op's name is split across two literals"
+  # Emitted text unchanged; the derivation loses span-open, which every HTTP
+  # header runs. The rendered-names check fires too; this pins the check over
+  # what RAN, which is the one that sees a name no rendered fixture carries.
+  FIND [["       (begin (byte-machine-span-open/v1 psr (quote "]]
+  REPLACE [["       (begin (byte-machine-span-" "open/v1 psr (quote "]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[every op the twins were seen calling is in the derived census: called ops absent from the census -- expected .., got .byte-machine-span-open/v1.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: the dispatch arm enters a runtime op for every byte it reads"
+  # A pure predicate per byte: nothing allocates, so every slope stays zero,
+  # and only the per-op call census sees an op move onto the per-byte path.
+  FIND [["           (let ((b (bytevector-u8-ref bv pos)))\n"]]
+  REPLACE [["           (let ((b (begin (callback-failure? pos) (bytevector-u8-ref bv pos))))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[never per byte of a header value: ops whose calls grow with a header value's length -- expected .., got .callback-failure..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: the keyword arm enters a runtime op for every byte it matched"
+  # The keyword machine has no dispatch arm, so this is the arm's own
+  # dimension: a call per matched byte, allocating nothing.
+  FIND [["             (%dispatch (caddr r) (cadr r) (+ off (- (caddr r) pos)) (cadddr r))\n"]]
+  REPLACE [["             (begin (do ((i pos (+ i 1))) ((>= i (caddr r))) (callback-failure? i)) (%dispatch (caddr r) (cadr r) (+ off (- (caddr r) pos)) (cadddr r)))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[never per byte of a header value: ops whose calls grow with bytes matched in a keyword -- expected .., got .callback-failure..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: the keyword arm allocates in proportion to the bytes it matched"
+  # `(length (vector->list (make-vector n 0)))` is n, so the offset is unchanged
+  # and n pairs are consed per jump. The direct keyword group cannot see it --
+  # the op is untouched -- only the emitted-arm witness can.
+  FIND [[(%dispatch (caddr r) (cadr r) (+ off (- (caddr r) pos)) (cadddr r))]]
+  REPLACE [[(%dispatch (caddr r) (cadr r) (+ off (length (vector->list (make-vector (- (caddr r) pos) 0)))) (cadddr r))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the arm around the walk adds nothing per matched byte: no emitted k allocated more than k=0 .k . extra bytes. -- expected .., got ..1 . 32000. .2 . 64000.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "runtime: a machine error's record grows with the offset it reports"
+  # A tenth slot no accessor reads, sized by the offset -- the shape of a
+  # record that copied the input it refused. Also reddens the emitted keyword
+  # arm (every k there ends at an error), with a different got.
+  FIND [[(vector-ref entry 1) #f
+            node-name state-id offset position-kind))]]
+  REPLACE [[(vector-ref entry 1) #f
+            node-name state-id offset position-kind (make-bytevector offset 0)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[a machine error's record does not grow with the offset it reports: machine error: alloc.short prefix. = alloc.long prefix. -- expected]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "runtime: a callback failure's record grows with the offset it reports"
+  FIND [[callback-error-reason detail
+            node-name state-id offset position-kind))]]
+  REPLACE [[callback-error-reason detail
+            node-name state-id offset position-kind (make-bytevector offset 0)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[a callback failure's record does not grow with the offset it reports: callback failure: alloc.short. = alloc.long. -- expected]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: compile.sls carries a second top-level datum"
+  # Chez loads the library with the trailing form in place, so nothing else
+  # notices; a census reading only the first datum would walk past any string
+  # the second one held.
+  FIND [[(bytevector-length bytes)))))]]
+  REPLACE [[(bytevector-length bytes)))))
+(define census-trailing-datum 0)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[the census is derived from compile.sls's emitted text: compile.sls is exactly one datum -- expected a true value]])
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # Every pass above has now run exactly once, so the accumulated total is
