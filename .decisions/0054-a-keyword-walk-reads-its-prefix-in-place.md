@@ -1,7 +1,7 @@
 # 0054: A keyword walk reads its prefix in place
 
 Date: 2026-09-26
-Status: accepted
+Status: accepted; released in 0.6.1 (2026-09-26)
 Milestone: none. From [issue #139](https://github.com/Kiyomi-Computation-Systems/byte-machine/issues/139), filed from chez-http-server's M3 exit record, after 0.6.0
 Builds on: [0044](0044-keyword-table-lowers-to-a-compact-table-and-bumps-the-abi.md) (the walk and its `/v1` contract), [0040](0040-allocation-audit-is-a-slope-with-a-control.md) and [0052](0052-a-callback-outcome-is-the-object.md) (the allocation audit's two slopes)
 
