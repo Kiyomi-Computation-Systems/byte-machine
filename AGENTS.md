@@ -1301,3 +1301,27 @@ Two smaller lessons from the same fix:
   could, because none of the other mutants' defects is reachable there. The
   pin needs both records together, since each is shared with a different
   sibling.
+
+**The census is a check now, and it found five more (2026-09-26, decision
+0055).** The allocation lane derives the runtime procedures emitted code can
+call from `compile.sls`'s string literals. It counts which ones its inputs
+reach on a *counting twin* of each audited machine: the same rendered text,
+importing a lane-written runtime that counts every call. It then fails, naming
+the op, for any derived op no witness runs. The first run found twelve ops and
+six never run. Besides the keyword walk as its emitted arm calls it, those
+were both error-record constructors and the three callback-failure readers.
+The audit had fed only valid messages, so no error path had ever been in the
+measurement either. So the rule above is enforced rather than remembered: a
+lowering that calls a new op reddens the lane until it gains a witness. Two
+things carry over:
+
+- **Reach is a measurement, not a reading of the fixture.** "The HTTP machine
+  exercises the callback seam" was true. "It exercises the failure arm of the
+  callback seam" was false, and nothing but a call count could tell the two
+  apart. When a claim is about what a fixture *runs*, count it.
+- **A derived census has a blind spot the size of its recogniser.** A runtime
+  name assembled from two literals is invisible to the derivation. Two checks
+  close most of that gap. Every runtime name in the rendered libraries, read
+  as data, must be derived, and so must every op the twin is seen calling. A
+  split name in an arm that no fixture renders and no input reaches still
+  passes all of them, and decision 0055 says so rather than claiming totality.
