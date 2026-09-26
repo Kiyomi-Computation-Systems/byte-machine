@@ -6,6 +6,22 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The allocation audit is a census of the runtime ops emitted code can call**
+  ([0055](.decisions/0055-the-allocation-audit-is-a-census-of-runtime-ops.md)).
+  Issue #139 was an op the audit never ran, so `§26:1680`'s coverage now rests
+  on a measurement, not on the fixture. The lane derives the op set from
+  `compile.sls`'s emitted-text literals: twelve procedures and one constant. It
+  counts, on a counting twin of each audited machine, which ops its inputs
+  reach. Six had never run under it. Three new witnesses now reach them: a
+  machine error, a callback failure, and the emitted keyword arm. Each asserts
+  that the event costs the same however many bytes precede it, against a live
+  control. A totality row fails for any derived op no witness reaches. The lane
+  also asserts that no op is entered per byte of a header value or per matched
+  keyword byte. The mutation lane goes from 77 passes / 651 mutations to
+  77 / 660.
+
 ### Fixed
 
 - **A keyword walk no longer copies its matched prefix on every byte**
