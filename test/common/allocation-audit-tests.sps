@@ -212,4 +212,129 @@
           (say (string-append "byte-machine-alloc: interpreter B/header="
                               (adapter-value->string interp))))))))
 
+;; --- Issue #139: the third dimension, per MATCHED keyword byte ---------------
+;;
+;; Neither slope above can see a keyword table: the HTTP fixture machine has
+;; none. The walk (`byte-machine-keyword-step/v1`, decision 0044) once copied the
+;; whole matched prefix for every byte it consumed, so a header name matching k
+;; bytes of a keyword allocated about k²/2 pairs -- measured downstream at 138
+;; times a request's own size for 97 `Transfer-Encodinx` fields. The claim here
+;; is a SHAPE, not a number: what one walk allocates does not depend on how much
+;; of a keyword it matched, on how long a prefix it resumed with, or on how long
+;; a prefix it parks unchanged. The op is driven directly, as the generated arm
+;; calls it, so the figure is the walk's own and no executor's.
+;;
+;; The table is the five header names chez-httparse's parser reads by name,
+;; case-insensitive (decision 0045), with a reexecute no-match.
+(define kw-entries
+  (let loop ((ns '("connection" "content-length" "proxy-connection"
+                   "transfer-encoding" "upgrade"))
+             (id 0) (acc '()))
+    (if (null? ns) (reverse acc)
+        (loop (cdr ns) (+ id 1) (cons (cons (bytes (car ns)) id) acc)))))
+(define kw-no-match '(99 . reexecute))
+(define kw-reps 1000)
+
+;; A 17-byte field name whose first k bytes are `Transfer-Encoding` and whose
+;; rest is `x`, then the `:` that ends it -- the downstream brief's k table.
+(define (kw-field k)
+  (u8-list->bytevector
+   (bytes (string-append (substring "Transfer-Encoding" 0 k)
+                         (make-string (- 17 k) #\x) ":"))))
+
+;; Bytes allocated by `reps` walks of `step` over all of `bv` from `path`.
+(define (alloc-walking step path bv reps)
+  (collect)
+  (let ((before (sstats-bytes (statistics))))
+    (do ((i 0 (+ i 1))) ((= i reps))
+      (step kw-entries kw-no-match #t path bv 0 (bytevector-length bv)))
+    (- (sstats-bytes (statistics)) before)))
+
+;; The live control: the walk as it stood before issue #139, copying its prefix
+;; on every consumed byte. Kept here verbatim so the apparatus is shown able to
+;; see the defect it guards against -- decision 0040 item 2, a third time.
+(define (copying-keyword-step entries no-match ci? path bv pos end)
+  (define (fold b) (if (and ci? (>= b 65) (<= b 90)) (+ b 32) b))
+  (define (prefix? p bs)
+    (cond ((null? p) #t)
+          ((null? bs) #f)
+          ((= (fold (car p)) (fold (car bs))) (prefix? (cdr p) (cdr bs)))
+          (else #f)))
+  (let walk ((p path) (i pos))
+    (if (>= i end)
+        (list 'need p i)
+        (let ((np (append p (list (bytevector-u8-ref bv i)))))
+          (if (exists (lambda (e) (prefix? np (car e))) entries)
+              (walk np (+ i 1))
+              (let ((term (find (lambda (e) (and (= (length (car e)) (length p))
+                                                 (prefix? p (car e))))
+                                entries)))
+                (cond (term (list 'jump (cdr term) i 'byte))
+                      ((eq? (cdr no-match) 'advance)
+                       (list 'jump (car no-match) (+ i 1) 'boundary))
+                      (else (list 'jump (car no-match) i 'byte)))))))))
+
+(harness-group "the keyword walk allocates nothing per matched byte (issue #139)"
+  (lambda ()
+    (harness-case "the live control proves the apparatus can see a prefix copy"
+      (lambda ()
+        (let ((k1  (alloc-walking copying-keyword-step '() (kw-field 1) kw-reps))
+              (k16 (alloc-walking copying-keyword-step '() (kw-field 16) kw-reps)))
+          (check "control: a copying walk allocates more at k=16 than at k=1" (> k16 k1)))))
+    (harness-case "a walk's allocation does not grow with how much of a keyword it matched"
+      (lambda ()
+        ;; Every k from 0 to 17, each walk's answer read back, so a table that
+        ;; stopped matching could not pass by allocating nothing.
+        (let ((base (alloc-walking byte-machine-keyword-step/v1 '() (kw-field 0) kw-reps)))
+          (let loop ((k 0) (measured 0) (grew '()) (wrong '()))
+            (if (<= k 17)
+                (let* ((bv (kw-field k))
+                       (r (byte-machine-keyword-step/v1 kw-entries kw-no-match #t '()
+                                                        bv 0 (bytevector-length bv)))
+                       (want (if (= k 17) '(jump 3 17 byte) (list 'jump 99 k 'byte)))
+                       (a (alloc-walking byte-machine-keyword-step/v1 '() bv kw-reps)))
+                  (loop (+ k 1) (+ measured 1)
+                        (if (= a base) grew (cons (cons k (- a base)) grew))
+                        (if (equal? r want) wrong (cons (cons k r) wrong))))
+                (begin
+                  (check-equal "every k from 0 to 17 was walked" measured 18)
+                  (check-equal "every walk answered its expected jump" (reverse wrong) '())
+                  (check-equal "no k allocated more than k=0 (k . extra bytes)"
+                               (reverse grew) '())
+                  (say (string-append "byte-machine-alloc: keyword walk B/call="
+                                      (adapter-value->string (div base kw-reps))))))))))
+    (harness-case "a resumed walk allocates what a fresh one does, however long its prefix"
+      (lambda ()
+        ;; `transfer-encod` parked, `ing:` fed: the same answer as a fresh walk
+        ;; over the whole name, and the same allocation as a fresh one-byte miss.
+        (let* ((parked (bytes "transfer-encod"))
+               (rest (u8-list->bytevector (bytes "ing:")))
+               (r (byte-machine-keyword-step/v1 kw-entries kw-no-match #t parked
+                                                rest 0 (bytevector-length rest))))
+          (check-equal "the resumed walk takes transfer-encoding" r '(jump 3 3 byte))
+          (check-equal "resumed alloc = fresh alloc"
+                       (alloc-walking byte-machine-keyword-step/v1 parked rest kw-reps)
+                       (alloc-walking byte-machine-keyword-step/v1 '() (kw-field 0) kw-reps)))))
+    (harness-case "a walk that consumes nothing parks its prefix without copying it"
+      (lambda ()
+        ;; The finish path enters the arm at pos = end; so does a feed that ends
+        ;; exactly at the table. The parked prefix is handed back as it came, so
+        ;; the call costs its answer and nothing in proportion to the prefix.
+        (let* ((parked (bytes "transfer-encod"))
+               (none (make-bytevector 0))
+               (r (byte-machine-keyword-step/v1 kw-entries kw-no-match #t parked none 0 0)))
+          (check "the prefix comes back as the same object" (eq? (cadr r) parked))
+          (check-equal "alloc with a 14-byte prefix = alloc with none"
+                       (alloc-walking byte-machine-keyword-step/v1 parked none kw-reps)
+                       (alloc-walking byte-machine-keyword-step/v1 '() none kw-reps)))))
+    (harness-case "a walk the feed interrupts parks exactly the bytes it consumed"
+      (lambda ()
+        ;; The one answer that must build a list: the prefix plus this feed's
+        ;; bytes, in order, and a position at the end of the feed.
+        (let* ((bv (u8-list->bytevector (bytes "ing")))
+               (r (byte-machine-keyword-step/v1 kw-entries kw-no-match #t
+                                                (bytes "transfer-encod") bv 0 3)))
+          (check-equal "need with the grown prefix at the feed's end"
+                       r (list 'need (bytes "transfer-encoding") 3)))))))
+
 (harness-finish)

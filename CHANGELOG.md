@@ -6,6 +6,37 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A keyword walk no longer copies its matched prefix on every byte**
+  ([0054](.decisions/0054-a-keyword-walk-reads-its-prefix-in-place.md),
+  [issue #139](https://github.com/Kiyomi-Computation-Systems/byte-machine/issues/139)).
+  `byte-machine-keyword-step/v1` built the prefix it had matched as a new list
+  for each byte it consumed, so a header name matching k bytes of a keyword
+  allocated about k²/2 pairs. Downstream this was 2,944 B for one
+  `Connection: keep-alive` field, and 138 times a request's own size for one
+  that repeated a near-miss of `Transfer-Encoding`. The walk now makes one pass
+  over the table. It compares each keyword in place against the parked prefix
+  and then this feed's bytes, and stops where the longest shared prefix ends,
+  which is where greedy consumption stopped. It builds a list only for the
+  `need` answer that parks one, and allocates a flat 64 B, its answer, however
+  much of a keyword it matched. Time per walk now grows linearly in k instead of
+  quadratically: 17.8 ms against 267 ms for 200,000 walks at k = 17.
+  `bench/runner/keyword-walk.sps` reproduces both columns.
+
+  **No regeneration is needed.** The `/v1` contract, the ABI, the emitted text
+  and every golden are unchanged.
+
+  The allocation audit could not see this: its fixture has no keyword table,
+  and both of its slopes hold a header name's match length fixed. It now
+  asserts a third shape: what one walk allocates does not depend on how much
+  of a keyword it matched, on how long a prefix it resumed with, or on how long
+  a prefix it parks unchanged. A live control, the pre-fix walk, shows the
+  lane can see the difference. The keyword differential gains a GET/SET table,
+  one input for each wrong way the walk could compare, count, choose or park,
+  and two direct op cases. The mutation lane goes from 76 passes / 637
+  mutations to 77 / 651, with one shipped pin re-anchored.
+
 ## [0.6.0] - 2026-09-18
 
 Milestone 14 — **the emitted dispatches stop being linear scans**, at four

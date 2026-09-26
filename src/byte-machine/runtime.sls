@@ -875,30 +875,62 @@
   ;; `ci?` folds ASCII case per table (decision 0045). Written twice on purpose --
   ;; the interpreter's own fold is separate, so a fold defect is a differential
   ;; result rather than a hidden agreement.
+  ;;
+  ;; The walk allocates its answer and nothing else, and reads each byte once per
+  ;; entry (issue #139, decision 0054). Greedy consumption stops exactly where the
+  ;; LONGEST prefix any keyword shares with `path ++ bv[pos,end)` ends: the walk
+  ;; goes on while some keyword agrees one byte further. So one pass over the
+  ;; entries, each compared in place against the parked path and then bv, finds
+  ;; that length and the terminal together. A list is made only for a `need`
+  ;; answer, whose parked prefix must be one, and not even then when this call
+  ;; consumed nothing. It once appended each consumed byte to a copy of the
+  ;; prefix and re-tested every entry against it, so a k-byte match cost about
+  ;; k²/2 pairs -- measured downstream at 138 times a request's own size.
+  ;; `test/common/allocation-audit-tests.sps` holds the shape: what one walk
+  ;; allocates does not depend on how much of a keyword it matched.
   (define (kw-fold b ci?) (if (and ci? (>= b 65) (<= b 90)) (+ b 32) b))
-  (define (kw-prefix? ci? p bs)
-    (cond ((null? p) #t)
-          ((null? bs) #f)
-          ((= (kw-fold (car p) ci?) (kw-fold (car bs) ci?)) (kw-prefix? ci? (cdr p) (cdr bs)))
-          (else #f)))
+  ;; How many leading bytes kw shares with `path ++ bv[pos,end)`, and whether
+  ;; that is all of kw. Two values; nothing is allocated.
+  (define (kw-common ci? path bv pos end kw)
+    (let loop ((p path) (k kw) (j 0) (at pos))
+      (cond ((null? k) (values j #t))
+            ((pair? p)
+             (if (= (kw-fold (car p) ci?) (kw-fold (car k) ci?))
+                 (loop (cdr p) (cdr k) (+ j 1) at)
+                 (values j #f)))
+            ((>= at end) (values j #f))
+            ((= (kw-fold (bytevector-u8-ref bv at) ci?) (kw-fold (car k) ci?))
+             (loop p (cdr k) (+ j 1) (+ at 1)))
+            (else (values j #f)))))
   ;; byte-machine-keyword-step/v1 : (Listof (Pair (Listof Byte) StateId)) (Pair StateId EdgeMode) Boolean (Listof Byte) Bytevector ExactInteger ExactInteger -> (U (List 'jump StateId ExactInteger Symbol) (List 'need (Listof Byte) ExactInteger))
   (define (byte-machine-keyword-step/v1 entries no-match ci? path bv pos end)
-    (let walk ((p path) (i pos))
-      (if (>= i end)
-          (list 'need p i)
-          (let ((np (append p (list (bytevector-u8-ref bv i)))))
-            (if (exists (lambda (e) (kw-prefix? ci? np (car e))) entries)
-                (walk np (+ i 1))
-                (let ((term (let seek ((es entries))
-                              (cond ((null? es) #f)
-                                    ((and (= (length (car (car es))) (length p))
-                                          (kw-prefix? ci? p (car (car es))))
-                                     (car es))
-                                    (else (seek (cdr es)))))))
-                  (cond (term (list 'jump (cdr term) i (quote byte)))
-                        ((eq? (cdr no-match) (quote advance))
-                         (list 'jump (car no-match) (+ i 1) (quote boundary)))
-                        (else (list 'jump (car no-match) i (quote byte))))))))))
+    (let ((plen (length path)))
+      ;; best: the longest shared prefix so far, starting from the parked length
+      ;; (a walk never stops before where it resumed). term: the entry that is
+      ;; ALL of a best-length prefix -- the keyword taken if the walk stops there.
+      ;; At most one entry can be: two would be equal, which the verifier refuses
+      ;; (`duplicate-keyword`, and `case-insensitive-keyword-collision` for two
+      ;; that fold equal), so no tie-break is needed.
+      (let scan ((es entries) (best plen) (term #f))
+        (if (pair? es)
+            (let-values (((n whole?) (kw-common ci? path bv pos end (car (car es)))))
+              (cond ((> n best) (scan (cdr es) n (and whole? (car es))))
+                    ((and (= n best) whole?) (scan (cdr es) best (car es)))
+                    (else (scan (cdr es) best term))))
+            (let ((i (+ pos (- best plen))))
+              (cond ((>= i end)
+                     (list 'need
+                           (if (= i pos)
+                               path
+                               (append path (let copy ((j (- i 1)) (acc '()))
+                                              (if (< j pos)
+                                                  acc
+                                                  (copy (- j 1) (cons (bytevector-u8-ref bv j) acc))))))
+                           i))
+                    (term (list 'jump (cdr term) i (quote byte)))
+                    ((eq? (cdr no-match) (quote advance))
+                     (list 'jump (car no-match) (+ i 1) (quote boundary)))
+                    (else (list 'jump (car no-match) i (quote byte)))))))))
 
   ;; The boundary flush. It runs at the ONE seam both lanes cross -- after the
   ;; executor has answered and before `parser-feed!` records the lifecycle --
