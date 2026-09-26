@@ -1262,3 +1262,42 @@ percent while everything else improved, and each time that was recorded as
 unexplained. **A cell that only ever moves the wrong way is measuring
 something none of the others are** — which makes it the most informative row
 in the table, not the noisiest one.
+
+## An audit covers only what its fixture calls
+
+`§26:1680` — "generated per-byte paths contain no deliberate list ...
+construction" — was recorded `met` from Milestone 9 to 0.6.0, and the
+allocation audit behind it was right about every path it ran. The keyword
+table (Milestone 11) lowers to a call into `byte-machine-keyword-step/v1`,
+which copied its matched prefix on every byte: k²/2 pairs for a k-byte match,
+138 times a request's size downstream (issue #139, decision 0054). The audit's
+fixture is the HTTP machine, which has no keyword table, so no slope it takes
+could reach that op. Decision 0054 names the slope rule as the reason, and
+that is half of it: the missing variable was not one the audit held fixed.
+The code was never in the measurement.
+
+**So: a claim about "every generated per-byte path" is a census over the
+runtime entry points emitted code can call, and the fixture must reach each
+one.** When a node kind is added whose lowering calls a new runtime op, the
+allocation audit gains a witness for that op in the same slice. That is the
+"teaching a lookup a new kind does not teach the filters" rule, applied to a
+measurement instead of a verifier. A consumer found this one, not the suite.
+
+Two smaller lessons from the same fix:
+
+- **A consumer's patch is a proposal about the mechanism, not the altitude.**
+  The issue's patch read the prefix in place and was correct. It kept the
+  byte-by-byte loop, though, so every step still re-compared the whole prefix
+  against every entry: O(entries × k²), measured before merge. The review
+  that found this asked what the loop was computing. A greedy walk with no
+  backtracking stops where the longest shared prefix ends. Once named that
+  way, it is one pass per entry and 15× faster at k = 17. Before adopting an
+  outside patch, ask what it computes, not only whether it is right.
+- **When no end-to-end input can separate a mutant, drive the unit directly.**
+  Dropping the case fold on *parked* bytes failed every resume fixture in the
+  same way as dropping, reversing or misreading those bytes: each is "refuse
+  at the resume point". No split of any input could tell them apart. A
+  direct call to the op (a parked capital, fed from its bytevector's start)
+  could, because none of the other mutants' defects is reachable there. The
+  pin needs both records together, since each is shared with a different
+  sibling.
