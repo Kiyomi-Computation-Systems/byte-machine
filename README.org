@@ -17,7 +17,15 @@ fields with checked accumulation, zero-width actions and branches, callbacks,
 spans, and counted consumption. The [[file:.reference/source-ir-and-builder.md][source IR and builder reference]] documents
 every constructor and node kind.
 
-*Status:* =0.6.0=. v0.6 makes the emitted parser stop scanning. Chez compiles a
+*Status:* =0.6.1=. v0.6.1 fixes a keyword table's allocation: the runtime walk
+every keyword-table state calls copied the prefix it had matched on every byte,
+so a header name matching k bytes of a keyword allocated about k²/2 pairs —
+downstream, 138 times a request's own size for a run of near-miss
+=Transfer-Encoding= fields. The walk now makes one pass over the table and
+allocates only its answer, 64 bytes, however much it matched
+([[file:.decisions/0054-a-keyword-walk-reads-its-prefix-in-place.md][decision 0054]]).
+No regeneration is needed: the ABI, the emitted text and the API are
+unchanged. v0.6 makes the emitted parser stop scanning. Chez compiles a
 large =case= over integer keys as a **linear scan** — about 0.31 ns per arm
 skipped — and the emitter had four of them nested: the state dispatch, the byte
 dispatch inside each state, a callback answering =goto=, and the feed entry.
