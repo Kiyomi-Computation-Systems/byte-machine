@@ -1250,6 +1250,44 @@
           (check-equal "nothing delivered" (cadr (car r)) '())
           (check-equal "and it finished" (map car (car (car r))) '(finished)))))))
 
+;; TWO spans in one stream: the first opens and closes inside the feed, the
+;; second opens at the feed's end and is closed on the EOF chain. The other
+;; cases in the group below each carry ONE empty span, so a runtime that
+;; suppresses every empty span and one that only skips parser-finish!'s re-anchor
+;; fail them with identical records. One trace holding an empty span of each kind
+;; is where they part: the first loses both empty fragments, the second only the
+;; one carried into finish.
+(define twice-machine
+  (make-machine 'twicespan 'start '()
+    (list (make-callback-declaration 'ondone 'span-complete #f '() #f #f)
+          (make-callback-declaration 'ondata 'span-data #t '() #f #f))
+    (list (make-span-declaration 'payload 'ondata 'ondone #f))
+    (list eof-decl rej-decl)
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 65)
+                                  (make-edge 'sopen 'advance) #f))
+            (make-edge 'reject 'reexecute) 'fin #f)
+          (make-span-start-node 'sopen 'payload 'body #f)
+          (make-byte-dispatch-node 'body
+            (list (make-byte-case (make-exact-byte-matcher 90)
+                                  (make-edge 'sclose 'reexecute) #f))
+            (make-edge 'body 'advance) 'bclose #f)
+          (make-span-end-node 'bclose 'payload 'fin #f)
+          (make-span-end-node 'sclose 'payload 'after #f)
+          ;; Past the delimiter and back to `start`, so a second span can open.
+          (make-byte-dispatch-node 'after
+            (list (make-byte-case (make-exact-byte-matcher 90)
+                                  (make-edge 'start 'advance) #f))
+            (make-edge 'reject 'reexecute) 'fin #f)
+          (make-finish-node 'fin #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+
+(define v-twice (verify-machine twice-machine))
+(define cm-twice-ref (make-interpreted-machine v-twice))
+(define cm-twice-gen
+  (generated twice-machine v-twice "span-twice" 'twice-span-parser 'twicespan))
+
 (harness-group "an empty span carried into finish delivers once, regardless of slicing (decision 0042 item 4)"
   (lambda ()
     ;; A span opens in a feed, stays EMPTY, and closes on the EOF chain (bclose).
@@ -1274,7 +1312,24 @@
                            '() callback-continue)))
           (check-equal "the lanes agree" (caddr r) #t)
           (check-equal "slicing-independent: one empty fragment, then the completion"
-                       (cadr (car r)) (list (bytes) 'complete)))))))
+                       (cadr (car r)) (list (bytes) 'complete)))))
+    (harness-case "an empty span closed in the feed, then one carried into finish"
+      (lambda ()
+        ;; `AZ` opens and closes the first span at cursor 1, so from == to there
+        ;; without any re-anchor; the second `A` opens one at the slice's end,
+        ;; which only parser-finish!'s re-anchor brings to from == to.
+        ;; Both lanes' traces in ONE value: a span close skipped in either lane
+        ;; leaves the delivered flag set and silences the second span too, so a
+        ;; single lane's trace cannot tell that defect from the missing re-anchor,
+        ;; which is shared code and moves both lanes at once.
+        (check-equal "the two-span machine verifies clean"
+                     (map diagnostic-code (verification-diagnostics v-twice)) '())
+        (let* ((script (list (list 'feed (bytes 65 90 65)) (list 'finish)))
+               (a (run (make-lane cm-twice-ref '() callback-continue #t) script))
+               (b (run (make-lane cm-twice-gen '() callback-continue #t) script))
+               (each-once (list (bytes) 'complete (bytes) 'complete)))
+          (check-equal "each empty span delivers once, in both lanes"
+                       (list (cadr a) (cadr b)) (list each-once each-once)))))))
 
 (harness-group "reset while parked BETWEEN the span-end substeps (§25:1589 reset)"
   (lambda ()
