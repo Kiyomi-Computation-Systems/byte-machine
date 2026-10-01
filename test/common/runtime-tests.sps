@@ -20,6 +20,16 @@
          (let walk ((xs (condition-irritants e)))
            (and (pair? xs) (or (equal? (car xs) v) (walk (cdr xs))))))))
 
+;; The first irritant of whatever a constructor raises, or `accepted` when it
+;; returns: which guard fired, as a value, so a case can put two calls in one
+;; check and two different misorderings report two different values.
+(define (refusal-irritant thunk)
+  (guard (e ((and (assertion-violation? e) (irritants-condition? e)
+                  (pair? (condition-irritants e)))
+             (car (condition-irritants e))))
+    (thunk)
+    'accepted))
+
 ;; Slice ①a task 5: the error slot holds a parser-error record and is #f on
 ;; every non-error result. These cases assert the CODE; the record's own shape
 ;; is pinned by the dedicated parser-error group below.
@@ -242,7 +252,15 @@
             (check-equal "status" (parser-result-status r) 'paused)
             (check-equal "next" (parser-result-next r) 1)
             (check-equal "consumed" (parser-result-consumed r) 0)
-            (check-equal "stream offset" (parser-result-stream-offset r) 1)))))))
+            (check-equal "stream offset" (parser-result-stream-offset r) 1)
+            ;; The result's offset beside the parser's OWN, as one value. The
+            ;; checks above read only the result, so an offset that is never
+            ;; incremented and one that is incremented but reported as 0 at the
+            ;; EOF pause fail them with identical records; only the parser's own
+            ;; offset tells the lost write from the lost read.
+            (check-equal "and it is the offset the parser holds"
+                         (list (parser-result-stream-offset r) (parser-stream-offset p))
+                         '(1 1))))))))
 
 ;; The unified-executor ABI (/v2, Slice ②b-2). One `exec` closure carries the
 ;; whole dispatch loop and a `finish?` flag: feed calls it with #f over the real
@@ -496,10 +514,17 @@
         (check-equal "mode declared" (parser-field-ref (make-parser (cm) '() #f) 'mode) 0)))
     (harness-case "the embedder's initial survives parser-reset!, the declared one does not"
       (lambda ()
-        (let ((p (make-parser (cm) '() #f (list (cons 'mode 1)))))
+        (let* ((p (make-parser (cm) '() #f (list (cons 'mode 1))))
+               (before (parser-field-ref p 'mode)))
           (parser-reset! p)
           (check-equal "reset restores the merged initial, not the declared"
-                       (parser-field-ref p 'mode) 1))))
+                       (parser-field-ref p 'mode) 1)
+          ;; Before and after the reset as one value. The check above reads only
+          ;; the after, so an override that is never applied and a reset that
+          ;; discards an applied one fail it with identical records; the before
+          ;; is what tells them apart.
+          (check-equal "the override held before the reset and after it"
+                       (list before (parser-field-ref p 'mode)) '(1 1)))))
     (harness-case "each illegal override is refused with its own code"
       (lambda ()
         (check-raises "an unknown field name"
@@ -588,6 +613,19 @@
         (check-raises "the VERSION is named, not the payload"
                       (irritant-is 2)
                       (lambda () (byte-machine-make-compiled-machine 2 99 0 'not-a-procedure #f)))
+        ;; Both halves of "first" as one value: what is named with a second
+        ;; defect present, and with none. A version check moved behind the exec
+        ;; guard changes only the first; a deleted one changes both. Wherever the
+        ;; moved check misbehaves the deleted one misbehaves identically, so only
+        ;; a value spanning both inputs tells the two decisions apart.
+        (check-equal "the version is named with a second defect and without one"
+                     (list (refusal-irritant
+                            (lambda () (byte-machine-make-compiled-machine
+                                        2 99 0 'not-a-procedure #f)))
+                           (refusal-irritant
+                            (lambda () (byte-machine-make-compiled-machine
+                                        2 99 0 stub-exec (vector (vector) (vector) stub-names)))))
+                     '(2 2))
         (check-raises "a non-vector payload is refused at the current version"
                       (irritant-is #f)
                       (lambda () (byte-machine-make-compiled-machine 9 99 0 stub-exec #f)))
@@ -794,8 +832,15 @@
       (lambda ()
         (let ((p (pause-parser)))
           (parser-feed! p (make-bytevector 1 1) 0 1)
-          (check-equal "ack" (parser-resume! p) 'feed-ready)
-          (check-equal "lifecycle" (parser-lifecycle p) 'ready)
+          (let ((ack (parser-resume! p)))
+            (check-equal "ack" ack 'feed-ready)
+            (check-equal "lifecycle" (parser-lifecycle p) 'ready)
+            ;; The ack and the lifecycle as one value. Resuming a feed pause into
+            ;; the wrong lifecycle, and recording the feed pause as paused-finish
+            ;; in the first place, both leave this parser finish-ready; only the
+            ;; ack that resume returns separates the two.
+            (check-equal "the ack and the reopened lifecycle, together"
+                         (list ack (parser-lifecycle p)) '(feed-ready ready)))
           (let ((r (parser-feed! p (make-bytevector 1 2) 0 1)))
             (check-equal "continues past the pause" (parser-result-status r) 'stopped)))))
     (harness-case "finish! pauses on the EOF path and resumes to finish-ready"
@@ -804,8 +849,15 @@
                (r (parser-finish! p)))
           (check-equal "status" (parser-result-status r) 'paused)
           (check-equal "lifecycle" (parser-lifecycle p) 'paused-finish)
-          (check-equal "ack" (parser-resume! p) 'finish-ready)
-          (check-equal "lifecycle now" (parser-lifecycle p) 'finish-ready)
+          (let ((ack (parser-resume! p)))
+            (check-equal "ack" ack 'finish-ready)
+            (check-equal "lifecycle now" (parser-lifecycle p) 'finish-ready)
+            ;; The ack and the lifecycle as one value, for the mirror of the
+            ;; feed-pause case above: a wrong ack from the paused-finish row and
+            ;; an EOF pause parked as paused-feed both answer feed-ready, and only
+            ;; the lifecycle the resume leaves separates the two.
+            (check-equal "the ack and the lifecycle it leaves, together"
+                         (list ack (parser-lifecycle p)) '(finish-ready finish-ready)))
           (let ((r2 (parser-finish! p)))
             (check-equal "continues to finished" (parser-result-status r2) 'finished)
             (check-equal "lifecycle final" (parser-lifecycle p) 'finished)))))))

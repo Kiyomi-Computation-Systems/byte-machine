@@ -22,6 +22,21 @@ All notable changes to byte-machine are recorded here. The format follows
   keyword byte. The mutation lane goes from 77 passes / 651 mutations to
   77 / 660.
 
+### Fixed
+
+- **Every mutation pin in six lanes names its own mutant and no other.** A
+  sweep of `unit.runtime`, `property.differential` and the field, callback,
+  span and sequence-node differentials judged each pin against every mutant in
+  its lane. Sixty-one findings came back: pins matching a sibling's output, or
+  more than one record of their own. Forty pins are re-pinned on measured
+  records. In nine places one mutant's records all sat inside another's; there
+  a check now asserts a pair, or a fixture carries both cases, so that each
+  reports its own value. Those nine are the two resume rows an earlier audit
+  had filed as unseparable, the EOF pause's offset, the source a reset
+  restores from, the field bound's two ends (three mutants), the ABI version
+  guard's order, and an empty span carried into finish. No source changes, and
+  the mutation lane stays at 77 passes / 660 mutations.
+
 ## [0.6.1] - 2026-09-26
 
 A patch: one runtime fix, from a consumer's allocation gate. **No

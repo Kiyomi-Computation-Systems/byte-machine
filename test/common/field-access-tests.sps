@@ -482,7 +482,21 @@
                  (list '(2) 'lo 0 'error)
                  ;; and the success control, without which every row above
                  ;; passes on a machine that simply never writes.
-                 (list '(3) 'lo 1 'ready)))))
+                 (list '(3) 'lo 1 'ready)))
+               ;; Both ends of the bound as one value per lane. Each row above
+               ;; reads one end, so a lane that loosens one end of the bound and
+               ;; a lane that drops the whole check fail the same rows with
+               ;; identical records; only a value spanning the overflow AND the
+               ;; underflow tells the three apart. Outside the `checks` count:
+               ;; that sentinel counts the rows, and this is not one.
+               (check-equal (tag "interp both ends" '(0 2))
+                            (list (parser-field-ref (feed-bytes ref '(0)) 'hi)
+                                  (parser-field-ref (feed-bytes ref '(2)) 'lo))
+                            (list mx 0))
+               (check-equal (tag "gen both ends" '(0 2))
+                            (list (parser-field-ref (feed-bytes gen '(0)) 'hi)
+                                  (parser-field-ref (feed-bytes gen '(2)) 'lo))
+                            (list mx 0))))
            matrix-lanes)
           (check-equal "every width was exercised" widths 4)
           (check-equal "every schedule was exercised" checks 16))))

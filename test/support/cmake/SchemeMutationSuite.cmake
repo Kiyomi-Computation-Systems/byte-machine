@@ -1468,6 +1468,10 @@ set(EXPECTED_MUTATIONS 660)
 
 # --- Slice ③ pin re-audit: what an EXPECT_OUTPUT_MATCHES can and cannot say --
 #
+# *** Two later notes reach back into this record, both below its original
+# text: Milestone 3 Slice ①'s amendment, for the p33 entries, and the
+# 2026-10-01 note at the foot of this block, for the p32 and p39 entries. ***
+#
 # EXPECT_OUTPUT_MATCHES is an UNANCHORED regex over the verify command's
 # stdout+stderr, so a pin matching text that every failing run prints is a
 # bare nonzero-exit catch wearing a disguise. Text that is unconditional in
@@ -1503,15 +1507,17 @@ set(EXPECTED_MUTATIONS 660)
 # again by a switch above it. No pin can separate these, and that sentence is
 # the complete record -- there is no text in the narrow mutant's output that is
 # not also in the broad one's.
-#   p32 resume-on-paused-feed   < feed-pause maps to paused-feed
-#   p32 resume-on-paused-finish < EOF pause parks paused-finish
+#   p32 resume-on-paused-feed   < feed-pause maps to paused-feed    [2026-10-01]
+#   p32 resume-on-paused-finish < EOF pause parks paused-finish     [2026-10-01]
 #   p32 /v2 finish error stored < /v2 finish drives exec with finish? true
+#                                                                   [2026-10-01]
 #   p33 pause joins zero-progress walk    < zero-progress never fires
 #   p33 pause-only zero-progress cycle    < zero-progress never fires, AND
 #                                         < pause joins the walk (two pairs)
 #   p33 byte-reachable pause chain is EOF < EOF-reachable stop accepted
 #   p33 byte-reachability gate (:908)     < pause continuation out-target
 #   p39 pause draw, eof draw              < inverted dispatch byte test (two)
+#                                                                   [2026-10-01]
 #
 # (b) SEPARABLE, DECLINED -- two pairs. The sets DIFFER, so a pin separating
 # that pair does exist. Measured against the whole lane, each one only moves
@@ -1590,6 +1596,36 @@ set(EXPECTED_MUTATIONS 660)
 # pause instead would separate them, but it would weaken what the guard asserts
 # (that the LANE drove a real agreeing pause) for a pin-specificity gain, and
 # both mutations are already caught at their own checks.
+#
+# NOTE 2026-10-01 (fix/inherited-pin-collisions): the p32 and p39 entries,
+# re-measured at 719e055 -- which this record's "nothing here re-measures the
+# p32/p39 lanes" left owed. The method was the one this record names: stage each
+# mutant of a lane, run that pass's verify program, and judge every pin of the
+# lane against every mutant's captured stdout+stderr, counting matches with `.`
+# spanning newlines. Run over six lanes (unit.runtime, property.differential,
+# differential.{field,callback,span,sequence-node}): 159 mutations and 61
+# findings. Five had a record in the tree -- the two p32 resume pairs here, the
+# EOF-pause offset pair beside its own pin, the floor check's two co-firings in
+# Pass 39's header -- and all 61 are now closed. Per entry:
+#   p32 resume-on-paused-feed, p32 resume-on-paused-finish -- still contained at
+#     719e055, and SEPARATED now: each pair answers the same lifecycle with
+#     different acks (or the reverse), and runtime-tests.sps asserted the ack and
+#     the lifecycle as two checks. Asserted as one pair, each mutant reports its
+#     own value. "No pin can separate these" was a claim about those checks.
+#   p32 /v2 finish error stored -- no longer contained. Milestone 5 Slice ②'s
+#     busy invariant on the finish path now ends both of the broad mutant's
+#     cases with a raise, so its records changed; this mutant's one record is
+#     its own. Its pin collided instead with "runtime: the errs entry is
+#     unpacked reason-first" and now carries the measured `got #f`.
+#   p39 pause draw, eof draw -- no longer contained: both own records the
+#     inverted dispatch test does not emit (4 of 5, and 2 of 3), and neither pin
+#     matches any sibling. Milestone 7 Slice ②'s rewrite re-anchored both.
+# The six passes' own pins carry the details, each with the sibling it collided
+# with, by LABEL. A clean sweep holds only for the mutants and checks that
+# existed when it ran: a branch that measured these lanes against an earlier
+# tree re-runs it after merging -- issue #145's branch (open as of 2026-10-01)
+# among them, since it re-pins shipped pins in the callback and span lanes and
+# widens the error projection both print.
 
 include("${CMAKE_CURRENT_LIST_DIR}/MutationRunner.cmake")
 
@@ -3456,7 +3492,11 @@ byte_machine_mutation(
                        (make-parser-result 'error off 0 off e))))))]]
   REPLACE [[(let ((e (parts->parser-error (op 'default-eof-value node) off 'eof)))
                        (make-parser-result 'error off 0 off e))))))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "default-EOF truncation: stored error value")
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): "runtime: the errs
+  # entry is unpacked reason-first" fails this check too, reading back the REASON
+  # string. Nothing stored reads back as #f, and only here.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "the error row returns the stored error after a default-EOF truncation: stored error value -- expected eof, got #f")
 
 # Code-review fix for Task 2 (§12.2 finished x feed!): parser-feed-op!'s own
 # `finish` arm -- a parser parked at a finish node re-fed returns finished,
@@ -3513,7 +3553,12 @@ byte_machine_mutation(
                  (>= (vector-length metadata) current-abi-members))]]
   REPLACE [[    (unless (vector? metadata)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "a payload short of the current minimum is refused")
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): the bare CASE name
+  # resolved FOUR times in this mutant's own output -- two failing checks, each
+  # followed by a FAIL-CONTEXT line quoting the same id. The check label and the
+  # raise pick one: the payload exactly one member short of the minimum.
+  EXPECT_OUTPUT_MATCHES
+    "a payload short of the current minimum is refused: refused BY THE CONSTRUCTOR, not by vector-ref -- raised object did not satisfy the predicate: Exception in vector-ref: 2 is not a valid index")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -3543,8 +3588,11 @@ byte_machine_mutation(
   # writes is always overwritten before it returns -- now catches that by name
   # and irritant. The old pin was the default-eof code, which is a downstream
   # consequence; this one names the thing the mutation actually breaks.
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): that raise ends two
+  # cases, so the bare message resolved twice in this mutant's own output; the
+  # case name picks the one whose finish has no input at all.
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
-    "the finish path left the parser busy with irritant need-input")
+    "finish with no input routes to the default-eof error: case raised -- Exception in parser-finish!: the finish path left the parser busy with irritant need-input")
 
 # Second: the /v2 TOMBSTONE. Milestone 4 Slice ①a task 3 rewrote both retired
 # constructors to refuse EVERY version rather than the one they are named for,
@@ -3595,7 +3643,16 @@ byte_machine_mutation(
   # the check that failed -- pinned to the owning case's own words instead.
   FIND [[((paused-feed) (parser-set-lifecycle! parser 'ready) 'feed-ready)]]
   REPLACE [[((paused-feed) (parser-set-lifecycle! parser 'finish-ready) 'feed-ready)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "acks feed-ready and reopens feed: lifecycle")
+  # *** Re-pinned 2026-10-01 (two-direction sweep at 719e055) onto a check added
+  # for it. *** The Slice ③ pin re-audit filed this mutation SUBSUMED by "runtime:
+  # a feed pause maps to paused-feed, not paused-finish": both records it emits
+  # that one emits too. Re-measured, the containment was the case's, not the
+  # decisions': the two leave the parser in the same lifecycle but resume with
+  # different ACKS, and the case asserted the two separately. Asserted as one
+  # pair, the sibling reports `(finish-ready finish-ready)` and this mutant
+  # `(feed-ready finish-ready)`.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "acks feed-ready and reopens feed: the ack and the reopened lifecycle, together -- expected .feed-ready ready., got .feed-ready finish-ready.")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -3607,7 +3664,14 @@ byte_machine_mutation(
   # owning case's own words instead.
   FIND [[((paused-finish) (parser-set-lifecycle! parser 'finish-ready) 'finish-ready)]]
   REPLACE [[((paused-finish) (parser-set-lifecycle! parser 'finish-ready) 'feed-ready)]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "EOF path and resumes to finish-ready: ack")
+  # *** Re-pinned 2026-10-01 (two-direction sweep at 719e055) onto a check added
+  # for it, the mirror of the paused-feed row above. *** Filed SUBSUMED by the
+  # Slice ③ pin re-audit under "runtime: an EOF pause parks paused-finish, not
+  # paused-feed", whose record set held this mutant's one record. The two answer
+  # the same wrong ack but leave different lifecycles: as one pair, the sibling
+  # reports `(feed-ready ready)` and this mutant `(feed-ready finish-ready)`.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "EOF path and resumes to finish-ready: the ack and the lifecycle it leaves, together -- expected .finish-ready finish-ready., got .feed-ready finish-ready.")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -3714,7 +3778,11 @@ byte_machine_mutation(
   FIND [[((error) (parser-set-lifecycle! parser 'error)
                           (parser-set-stored-error! parser (parser-result-error r)))]]
   REPLACE [[((error) (parser-set-lifecycle! parser 'error))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "feed-stored error value")
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): "runtime: the errs
+  # entry is unpacked reason-first" fails this check too, reading back the reason
+  # string; nothing stored reads back as #f.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "the error row returns the stored error after a feed error: feed-stored error value -- expected unexpected-byte, got #f")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -3810,7 +3878,10 @@ byte_machine_mutation(
   # one decision.
   REPLACE [[(let ((e (parts->parser-error (op 'error-value node) off pk)))
              (make-parser-result 'error off 0 off e)))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish repeats the finish-stored error")
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055), for the same sibling
+  # and the same reason as the feed-side store above.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "finish reaches a named error node via the eof-target chain and stores it: finish repeats the finish-stored error -- expected truncated-input, got #f")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -3822,7 +3893,10 @@ byte_machine_mutation(
   FIND [[((error) (parser-set-lifecycle! parser 'error)
                  (parser-set-stored-error! parser (feed-outcome-error o)))]]
   REPLACE [[((error) (parser-set-lifecycle! parser 'error))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "finish repeats the stored /v2 error")
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055), for the same sibling
+  # and the same reason as the two op-path stores above.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    "a /v2 finish error is stored and repeated on the next call: finish repeats the stored /v2 error -- expected eof, got #f")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -4019,6 +4093,15 @@ byte_machine_mutation(
   # only write site for parser-offset). No pin can separate them -- the
   # SUBSUMED pattern this file's pin re-audit already documents for ten
   # other pairs above.
+  #
+  # *** AMENDED 2026-10-01: separated, and the paragraph above described the
+  # fixture rather than the decisions. *** "Proving `off` is nonzero" needs the
+  # increment, but separating the two mutants does not: this one keeps the
+  # parser's own offset at 1 and reports 0, the sibling holds 0 in both. The
+  # case now asserts the result's offset and `parser-stream-offset` as one pair,
+  # `(0 1)` here and `(0 0)` there, and the pin moved onto it. Kept above
+  # because a "no pin can separate them" that a second reader closed is the
+  # record worth keeping.
   # Re-anchored by Milestone 5 Slice ②: `parser-finish-op!` gained a callback
   # arm whose pause branch parks and reports identically, so the bare result
   # form now occurs twice. Widened to include the PAUSE NODE's own
@@ -4037,7 +4120,8 @@ byte_machine_mutation(
              (let ((rp (op 'pause-reason node)))
                (and rp (parts->parser-error rp off pk)))))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the persisted offset, not zero: next -- expected 1, got 0")
+  EXPECT_OUTPUT_MATCHES
+    "the persisted offset, not zero: and it is the offset the parser holds -- expected .1 1., got .0 1.")
 
 # Minor finding, same review: finish-ready's own membership in parser-feed!'s
 # prohibited clause had a test (runtime-tests.sps's "feed on finish-ready"
@@ -4084,7 +4168,16 @@ byte_machine_mutation(
       (assertion-violation 'byte-machine-make-compiled-machine
                            "generated-runtime ABI mismatch" abi-version))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the VERSION is named, not the payload")
+  # *** Re-pinned 2026-10-01 (two-direction sweep at 719e055) onto a check added
+  # for it. *** Its one record was also emitted by "runtime: a mismatched
+  # generated-runtime ABI version is accepted": a check moved behind the exec
+  # guard and a check deleted outright misbehave identically on every input
+  # where the moved one misbehaves at all, so no single-input check can part
+  # them -- the deleted check is strictly more permissive. A value spanning two
+  # inputs can: named with a second defect and without one, this mutant reports
+  # `(not-a-procedure 2)` and the sibling `(not-a-procedure accepted)`.
+  EXPECT_OUTPUT_MATCHES
+    "the version is named with a second defect and without one -- expected .2 2., got .not-a-procedure 2.")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -8743,7 +8836,8 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # pre-existing checks.
 #
 # --- Slice ② Task 11 sweep (2026-09-11, scratchpad sweep.py over all 27 property
-# mutations; re-run after any change here). RESULT: the per-pin match-count matrix
+# mutations; re-run after any change here). [A note dated 2026-10-01 follows this
+# record and reaches back into its four cells.] RESULT: the per-pin match-count matrix
 # has an all-ONE diagonal (every pin matches its own mutant's output exactly once)
 # and an all-ZERO off-diagonal EXCEPT four cells -- the floor check
 # ("the accepted count is at least the floor") co-firing on the four floor-dropping
@@ -8767,6 +8861,17 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # retirements below re-confirmed over the full set -- `accp` survives only in a
 # header comment and the fixed `'n 8 25` field is gone, so neither mutation has a
 # FIND site; verdict RETIRE, unchanged from Task 9.
+#
+# NOTE 2026-10-01, re-measured at 719e055 over this pass's 28 mutations: the
+# floor-check cells were two, not four -- the removals that now drop acceptance
+# below the floor are counted-consume and exact-byte, and byte-set,
+# integer-accumulate and mask-none no longer do. And "by construction" described
+# the CHECK, which every floor-dropping draw must trip; it did not describe the
+# PIN, which belongs to "machine-gen: the entry names a node that is never built
+# (rejects everything)" and whose mutant owns two records no removal emits (the
+# sentinel's count of zero, and the reproducibility case's raise). That pin is
+# now a conjunction of the floor record and the zero; the off-diagonal is all
+# zero.
 #
 # WHAT A CLEAN SWEEP DOES NOT SAY (AGENTS.md): a whole-pass sweep re-judges the pins
 # that EXIST; it cannot notice a decision no pin names -- not the two retirements
@@ -8917,7 +9022,17 @@ byte_machine_mutation(
   LABEL "machine-gen: the entry names a node that is never built (rejects everything)"
   FIND [[(make-machine 'gen 'cova]]
   REPLACE [[(make-machine 'gen 'no-such-entry]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES [[the accepted count is at least the floor]])
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055) on a CONJUNCTION. The
+  # floor check alone is reddened by every removal that drops acceptance below
+  # the floor -- measured: "machine-gen: the counted-consume node kind is dropped
+  # from the draw table" and "machine-gen: the exact-byte matcher kind is dropped
+  # from the draw table" -- so it cannot say which mutant fired. The floor stays
+  # in the pin, because it is the check this mutant exists to witness; the
+  # sentinel's count of ZERO is what only a draw that rejects everything
+  # produces. Its expected count is left open (`[0-9]+`): the decision is the
+  # zero, and the measured total moves whenever the generator does.
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
+    [[the accepted count is at least the floor -- expected a true value.*the counter pass ran over the measured accepted machines -- expected [0-9]+, got 0]])
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/machine-gen.sls
@@ -10488,8 +10603,12 @@ byte_machine_mutation(
   FIND [[           ((state-name) (let ((c (car args))) (if (pair? c) (car c) c)))]]
   REPLACE [[           ((state-name) (car args))]]
   EXPECT_STATUS 1
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): the bare check label
+  # was also satisfied by "compile: every rendered transition byte is shifted by
+  # one (sequence-node lane)", which fails the same check with a different list.
+  # The measured got -- the compound at every depth -- is this mutant's alone.
   EXPECT_OUTPUT_MATCHES
-    "both lanes answer the declaring node at every prefix depth: and each names the sequence node")
+    "both lanes answer the declaring node at every prefix depth: and each names the sequence node -- expected \\(\\), got \\(\\(3 \\(seq 1 2 3\\) seq\\) \\(2 \\(seq 1 2\\) seq\\) \\(1 \\(seq 1\\) seq\\)\\)")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.sequence-node.chez.source
@@ -10503,8 +10622,10 @@ byte_machine_mutation(
   FIND [[      ((v2) (let ((c (parser-current parser)))]]
   REPLACE [[      ((v2) (let ((c (parser-entry parser)))]]
   EXPECT_STATUS 1
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055), against the same
+  # sibling as the pin above, which reddens this check with `(reject error)`.
   EXPECT_OUTPUT_MATCHES
-    "a fresh parser names the entry, and a finished one its terminal: stopped, both lanes")
+    "a fresh parser names the entry, and a finished one its terminal: stopped, both lanes -- expected \\(seq stopped\\), got \\(stop stopped\\)")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -11395,8 +11516,11 @@ byte_machine_mutation(
                                                 field-name))]]
   REPLACE [[        (cond ((>= i n) 0)]]
   EXPECT_STATUS 1
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): the pin resolved
+  # TWICE in this mutant's own output -- the accessor is shared, so both
+  # executors' groups carry the same failure. The group name picks one.
   EXPECT_OUTPUT_MATCHES
-    "an undeclared field name is accessor-misuse: code -- expected accessor-misuse, got no-raise")
+    "parser-field-ref \\(interpreter\\)\\.an undeclared field name is accessor-misuse: code -- expected accessor-misuse, got no-raise")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
@@ -11409,8 +11533,11 @@ byte_machine_mutation(
   FIND [[               (vector-ref (parser-field-values parser) i))]]
   REPLACE [[               (vector-ref (parser-field-values parser) 0))]]
   EXPECT_STATUS 1
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): resolved twice in this
+  # mutant's own output, once per executor's group, for the reason the pin above
+  # did.
   EXPECT_OUTPUT_MATCHES
-    "a fresh parser reads the declared initial at every width: limit -- expected 65535, got 7")
+    "parser-field-ref \\(interpreter\\)\\.a fresh parser reads the declared initial at every width: limit -- expected 65535, got 7")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
@@ -11486,8 +11613,15 @@ byte_machine_mutation(
   REPLACE [[               (parser-set-current! parser t)
                (loop (+ pos 1) pk)))]]
   EXPECT_STATUS 1
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): an operation that
+  # never fails is what that lifecycle record says, and "runtime: a fresh
+  # parser's field values are zero instead of the declared initials", "interpret:
+  # the field bound is never checked" and "interpret: increment does not
+  # increment" all say it too. The two-field accumulate machine shows the eaten
+  # byte itself: `bump`, the zero-width hop after each digit, swallows the `a` of
+  # `#1aF`, so n reads 0x1F = 31 rather than 0x1aF = 431.
   EXPECT_OUTPUT_MATCHES
-    "fields a parse actually writes \\(Slice ②\\)\\.a failed operation leaves the prior value unchanged \\(§25:1569\\): lifecycle -- expected error, got ready")
+    "the accumulate commits into the field it NAMES, not into slot zero: interpreter n -- expected 431, got 31")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.field.chez.source
@@ -11532,8 +11666,16 @@ byte_machine_mutation(
   FIND [[(num (- (expt 2 width) 1))]]
   REPLACE [[(num (expt 2 width))]]
   EXPECT_STATUS 1
+  # *** Re-pinned 2026-10-01 (two-direction sweep at 719e055) onto a check added
+  # for it. *** Every record this mutant emitted, "compile: the emitted bound
+  # check is absent" emitted too: that mutant drops BOTH ends of the bound, this
+  # one loosens the upper end by one, and on any single input where this one
+  # misbehaves the other misbehaves identically -- containment by construction,
+  # per input. The matrix now asserts both ends as one value per width, which
+  # spans an overflow AND an underflow: `(256 0)` here, `(256 -1)` there, and
+  # `(255 -1)` for the lower-end mutant below.
   EXPECT_OUTPUT_MATCHES
-    "fields a parse actually writes \\(Slice ②\\)\\.both lanes agree over every input the fixture can take: count \\[00\\] -- expected 255, got 256")
+    "the operation matrix over every width \\(§25:1568, §25:1569\\)\\.overflow, underflow and success agree across widths and lanes: gen both ends u8 \\[02\\] -- expected \\(255 0\\), got \\(256 0\\)")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
@@ -11566,8 +11708,14 @@ byte_machine_mutation(
   FIND [[(string-append "(%s" (num target) " pos " (num target) " off pk)"))]]
   REPLACE [[(string-append "(%s" (num target) " (+ pos 1) " (num target) " off pk)"))]]
   EXPECT_STATUS 1
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055), the emitter's half of
+  # the runtime pin above: that lifecycle record was shared with four siblings
+  # ("compile: an emitted field declaration carries initial zero", "compile: the
+  # emitted bound check is absent", "compile: the emitted upper bound is off by
+  # one", "compile: an emitted increment does not increment"); the eaten `a` is
+  # this mutant's own.
   EXPECT_OUTPUT_MATCHES
-    "fields a parse actually writes \\(Slice ②\\)\\.both lanes agree over every input the fixture can take: lifecycle \\[00\\] -- expected error, got ready")
+    "the accumulate commits into the field it NAMES, not into slot zero: generated n -- expected 431, got 31")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
@@ -11593,8 +11741,13 @@ byte_machine_mutation(
   FIND [[          (if (<= 0 r m*)]]
   REPLACE [[          (if (<= r m*)]]
   EXPECT_STATUS 1
+  # *** Re-pinned 2026-10-01 (two-direction sweep at 719e055) onto the matrix's
+  # both-ends check. *** Every record this mutant emitted, "interpret: the field
+  # bound is never checked" emitted too: one end of the bound is an arm of the
+  # whole check, contained per input by construction. Both ends as one value
+  # part them -- `(255 -1)` here, `(256 -1)` there.
   EXPECT_OUTPUT_MATCHES
-    "the operation matrix over every width \\(§25:1568, §25:1569\\)\\.overflow, underflow and success agree across widths and lanes: interp lo u8 \\[2\\] -- expected 0, got -1")
+    "the operation matrix over every width \\(§25:1568, §25:1569\\)\\.overflow, underflow and success agree across widths and lanes: interp both ends u8 \\[02\\] -- expected \\(255 0\\), got \\(255 -1\\)")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
@@ -11604,8 +11757,13 @@ byte_machine_mutation(
   FIND [[         (if (and (>= r 0) (<= r "]]
   REPLACE [[         (if (and #t (<= r "]]
   EXPECT_STATUS 1
+  # *** Re-pinned 2026-10-01 (two-direction sweep at 719e055), the emitter's half
+  # of the pin above. *** Contained by construction in "compile: the emitted
+  # bound check is absent", and its lower-bound records also emitted by
+  # "compile: an emitted overflow writes the value anyway". Both ends as one
+  # value: `(255 -1)` here, `(256 -1)` for each of those two.
   EXPECT_OUTPUT_MATCHES
-    "the operation matrix over every width \\(§25:1568, §25:1569\\)\\.overflow, underflow and success agree across widths and lanes: gen lo u8 \\[2\\] -- expected 0, got -1")
+    "the operation matrix over every width \\(§25:1568, §25:1569\\)\\.overflow, underflow and success agree across widths and lanes: gen both ends u8 \\[02\\] -- expected \\(255 0\\), got \\(255 -1\\)")
 
 byte_machine_mutation(
   FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
@@ -11615,8 +11773,13 @@ byte_machine_mutation(
   FIND [[                    ((decrement) (- v 1))]]
   REPLACE [[                    ((decrement) v)]]
   EXPECT_STATUS 1
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): the matrix's lifecycle
+  # disagreement is also how "interpret: the field bound is never checked" and
+  # "interpret: the field lower bound is not checked" fail that row. The coverage
+  # group's operation value -- a decrement from 12 that stays at 12 -- is this
+  # mutant's alone.
   EXPECT_OUTPUT_MATCHES
-    "the operation matrix over every width \\(§25:1568, §25:1569\\)\\.overflow, underflow and success agree across widths and lanes: lifecycle u8 \\[2\\] -- expected ready, got error")
+    "every operation computes the same value in both lanes: interp decrement -- expected 11, got 12")
 
 # *** Slice ②'s whole-branch review found that SIX of the fourteen operations
 # and predicates appeared in no fixture at all -- clear-mask, equal, nonzero,
@@ -11654,8 +11817,11 @@ byte_machine_mutation(
   FIND [[                      ((mask-all) (= a (bitwise-and v a)))]]
   REPLACE [[                      ((mask-all) (not (= 0 (bitwise-and v a))))]]
   EXPECT_STATUS 1
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): `got 1` was a prefix
+  # of "runtime: parser-field-ref always reads slot zero"'s `got 12` on the same
+  # row. `[^0-9]` ends the number, since `$` cannot end a line here.
   EXPECT_OUTPUT_MATCHES
-    "every predicate takes the same arm in both lanes: interp mask-all 14 -- expected 2, got 1")
+    "every predicate takes the same arm in both lanes: interp mask-all 14 -- expected 2, got 1[^0-9]")
 
 # Slice ③ task 4 adds FIVE pinned and TWO survivors for the checked
 # multiply-add, written twice as §18:970-972 requires.
@@ -11841,7 +12007,11 @@ byte_machine_mutation(
   REPLACE [[((and (memq (normal-state-kind st)
                                                       '(dispatch))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "no error declaration for code")
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): the render raises in
+  # both cases of its group, so the bare message resolved twice in this mutant's
+  # own output; the case name picks the accumulate node's own route.
+  EXPECT_OUTPUT_MATCHES
+    "the accumulate node.s own eof route resolves the default declaration: case raised -- Exception in render-machine: no error declaration for code")
 
 # --- Whole-branch review, 2026-09-03: FOUR operands of the accumulate node that
 # no EXECUTING fixture reached. Every accumulate machine in the tree declared one
@@ -11859,7 +12029,12 @@ byte_machine_mutation(
   REPLACE [[               (slot 0) (m* (field-max (cdr sw)))
                (base (integer-accumulate-node-base n))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the accumulate commits into the field it NAMES, not into slot zero: interpreter n")
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): this check also fails
+  # under "runtime: parser-field-ref always reads slot zero", "runtime: a
+  # zero-width step consumes a byte" and "interpret: base 16's lowercase digits
+  # are not digits", each with its own wrong n. Committed to slot zero, n is
+  # never written at all.
+  EXPECT_OUTPUT_MATCHES "the accumulate commits into the field it NAMES, not into slot zero: interpreter n -- expected 431, got 0")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
@@ -11867,7 +12042,11 @@ byte_machine_mutation(
   FIND [[(slot (car sw)) (mx (- (expt 2 (cdr sw)) 1))]]
   REPLACE [[(slot 0) (mx (- (expt 2 (cdr sw)) 1))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the accumulate commits into the field it NAMES, not into slot zero: generated n")
+  # Re-pinned 2026-10-01 with its interpreted half above, against the generated
+  # lane's counterparts: "runtime: parser-field-ref always reads slot zero",
+  # "compile: an emitted zero-width step consumes a byte" and "compile: base 16's
+  # lowercase digits are not emitted as digits".
+  EXPECT_OUTPUT_MATCHES "the accumulate commits into the field it NAMES, not into slot zero: generated n -- expected 431, got 0")
 
 byte_machine_mutation(
   FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
@@ -11880,7 +12059,12 @@ byte_machine_mutation(
   FIND [[(div (- m* d) base)]]
   REPLACE [[(div (- m* d) 10)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the overflow bound divides by the node's OWN base, at base 16: interpreter leaves 0x1000")
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): the check label alone
+  # was also failed by "runtime: parser-field-ref always reads slot zero",
+  # "runtime: a zero-width step consumes a byte" and "interpret: the accumulate
+  # commits into slot zero instead of the field it names". The value the comment
+  # above predicts -- 65551, written past the u16 -- is this mutant's alone.
+  EXPECT_OUTPUT_MATCHES "the overflow bound divides by the node's OWN base, at base 16: interpreter leaves 0x1000 -- expected 4096, got 65551")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
@@ -11888,7 +12072,11 @@ byte_machine_mutation(
   FIND [[(div (- " (num mx) " d) " (num base) ")]]
   REPLACE [[(div (- " (num mx) " d) 10)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the overflow bound divides by the node's OWN base, at base 16: generated leaves 0x1000")
+  # Re-pinned 2026-10-01 with its interpreted half above, against the generated
+  # lane's counterparts: "runtime: parser-field-ref always reads slot zero",
+  # "compile: an emitted zero-width step consumes a byte" and "compile: the
+  # emitted accumulate commits into slot zero instead of the field it names".
+  EXPECT_OUTPUT_MATCHES "the overflow bound divides by the node's OWN base, at base 16: generated leaves 0x1000 -- expected 4096, got 65551")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
@@ -12377,8 +12565,13 @@ byte_machine_mutation(
   FIND [[                  (parser-set-current! parser (cadddr parts))]]
   REPLACE [[                  (parser-set-current! parser (cadr parts))]]
   EXPECT_STATUS 1
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): the bare check label
+  # was shared with its generated half, "compile: the emitted callback pause
+  # resumes at the continue target". The two fail it with the same two walks,
+  # transposed -- the harness prints the generated lane as "expected" -- so the
+  # DIRECTION is the discriminator, and each pin spells both walks.
   EXPECT_OUTPUT_MATCHES
-    "resume then feed agrees, and the callback is not re-delivered: the two lanes agree on the whole walk")
+    "resume then feed agrees, and the callback is not re-delivered: the two lanes agree on the whole walk -- expected ..paused 1 1 1 #f stopped. .decide. feed-ready .decide. .stopped 1 1 2 #f stopped. .decide.., got ..paused 1 1 1 #f stopped. .decide. feed-ready .decide. .stopped 0 0 1 #f stopped. .decide..")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.callback.chez.source
@@ -12390,8 +12583,11 @@ byte_machine_mutation(
   REPLACE [[                (parser-set-current! parser (cadddr parts))
                 (parser-set-lifecycle! parser 'paused-feed)]]
   EXPECT_STATUS 1
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): "compile: the emitted
+  # callback arm renders an empty branch map" fails the same check with its own
+  # list of disagreements. This one is the pause row's alone.
   EXPECT_OUTPUT_MATCHES
-    "finish reaching a callback agrees across the lanes: and every one agrees")
+    "finish reaching a callback agrees across the lanes: and every one agrees -- expected .., got ..pause ..paused 0 0 0 #f paused-feed. 1. ..paused 0 0 0 #f paused-finish. 1...")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.callback.chez.source
@@ -12434,8 +12630,12 @@ byte_machine_mutation(
   FIND [[                (else (callback-node-continue-target n)))))]]
   REPLACE [[                (else (callback-node-pause-continuation n)))))]]
   EXPECT_STATUS 1
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): the two
+  # consumes-a-byte mutants below fail this check too, with a stopped tuple one
+  # byte on. Taking the pause continuation leaves the parser asking for input,
+  # and that tuple is this mutant's alone.
   EXPECT_OUTPUT_MATCHES
-    "both lanes take the default with no closure called: the lanes agree")
+    "both lanes take the default with no closure called: the lanes agree -- expected .stopped 1 1 1 #f stopped., got .need-input 1 1 1 #f ready.")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.callback.chez.source
@@ -12449,8 +12649,10 @@ byte_machine_mutation(
   FIND [[            " " (num (cadr tg)) " off))\n"]]
   REPLACE [[            " " (num (car tg)) " off))\n"]]
   EXPECT_STATUS 1
+  # Re-pinned 2026-10-01 with its interpreted half above: the same two walks,
+  # in the other direction.
   EXPECT_OUTPUT_MATCHES
-    "resume then feed agrees, and the callback is not re-delivered: the two lanes agree on the whole walk")
+    "resume then feed agrees, and the callback is not re-delivered: the two lanes agree on the whole walk -- expected ..paused 1 1 1 #f stopped. .decide. feed-ready .decide. .stopped 0 0 1 #f stopped. .decide.., got ..paused 1 1 1 #f stopped. .decide. feed-ready .decide. .stopped 1 1 2 #f stopped. .decide..")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.callback.chez.source
@@ -12462,8 +12664,13 @@ byte_machine_mutation(
   FIND [[            (let join ((bs (normal-field-arguments s)) (acc ""))]]
   REPLACE [[            (let join ((bs '()) (acc ""))]]
   EXPECT_STATUS 1
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): the bare check label
+  # was shared with both consumes-a-byte mutants below, which fail the same
+  # check with lists of their own. The halting decision is where an empty branch
+  # map shows directly -- the generated lane errors where the interpreted one
+  # stops -- and it carries no error projection to re-pin when that grows.
   EXPECT_OUTPUT_MATCHES
-    "all six outcomes produce the identical tuple in both lanes: and every one agrees")
+    "a decision that halts is ordered and stops there: the lanes agree -- expected ..note pick. error 2., got ..note pick. stopped 2.")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.callback.chez.source
@@ -12529,8 +12736,13 @@ byte_machine_mutation(
   FIND [[       (byte-machine-contract-violation 'parser-feed! 'reentrancy]]
   REPLACE [[       (byte-machine-contract-violation 'parser-feed! 'lifecycle-violation]]
   EXPECT_STATUS 1
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): the pin stopped after
+  # the first entry of the got list, so "runtime: a feed does not mark the parser
+  # busy while it runs" -- whose list starts the same way, every entry #f --
+  # satisfied it too; and `expected .*got` could bridge to a later record. Both
+  # lists in full: only the FEED's code is wrong here.
   EXPECT_OUTPUT_MATCHES
-    "the reentrancy code -- expected .*got ..parser-feed! #f")
+    "four operations, each with its own who and the reentrancy code -- expected ..parser-feed! #t. .parser-finish! #t. .parser-resume! #t. .parser-reset! #t.., got ..parser-feed! #f. .parser-finish! #t. .parser-resume! #t. .parser-reset! #t..")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.callback.chez.source
@@ -12544,8 +12756,10 @@ byte_machine_mutation(
   REPLACE [[    (when #f
       (byte-machine-contract-violation 'parser-reset! 'reentrancy]]
   EXPECT_STATUS 1
+  # Re-pinned 2026-10-01 with the feed row above, for the same bridge and the
+  # same sibling: only RESET's entry is wrong here.
   EXPECT_OUTPUT_MATCHES
-    "the reentrancy code -- expected .*got .*.parser-reset! #f")
+    "four operations, each with its own who and the reentrancy code -- expected ..parser-feed! #t. .parser-finish! #t. .parser-resume! #t. .parser-reset! #t.., got ..parser-feed! #t. .parser-finish! #t. .parser-resume! #t. .parser-reset! #f..")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.callback.chez.source
@@ -12570,8 +12784,13 @@ byte_machine_mutation(
   FIND [[       (byte-machine-contract-violation 'parser-feed! 'poisoned-parser]]
   REPLACE [[       (byte-machine-contract-violation 'parser-feed! 'lifecycle-violation]]
   EXPECT_STATUS 1
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): "runtime: an escaping
+  # callback does not poison the parser" fails the same check -- with the
+  # reentrancy code, since its parser is left busy. The code in the condition
+  # dump separates them; `[^:]*` crosses the dump's line breaks and indentation
+  # but cannot reach the next record, every one of which carries a colon.
   EXPECT_OUTPUT_MATCHES
-    "a poisoned parser raises parser-poisoned, and only reset reuses it: feed -- raised object did not satisfy the predicate")
+    "a poisoned parser raises parser-poisoned, and only reset reuses it: feed -- raised object did not satisfy the predicate: Exception occurred with condition components:[^:]*code: lifecycle-violation")
 
 # Milestone 5 Slice ② task 8: a callback CONSUMES NO INPUT (§11.4:652), one
 # mutation per lane. Their records are mirror images -- each mutant advances its
@@ -12668,7 +12887,11 @@ byte_machine_mutation(
   FIND [[      (if (or (>= from to) (unbound-callback? f))]]
   REPLACE [[      (if (or (> from to) (unbound-callback? f))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the flush delivered nothing -- expected .., got .#vu8..."
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): `.#vu8...` matched
+  # any bytevector, and "interpret loop: a span start records the mark at 0
+  # instead of the cursor" fails this check with `(#vu8(65))`. `[)][)]` says the
+  # delivered fragment is EMPTY, which is this mutant's whole defect.
+  EXPECT_OUTPUT_MATCHES "the flush delivered nothing -- expected .., got .#vu8.[)][)]"
 )
 
 byte_machine_mutation(
@@ -12704,7 +12927,18 @@ byte_machine_mutation(
        (let ((completed #f))]]
   REPLACE [[       (let ((completed #f))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "slicing-independent: one empty fragment, then the completion -- expected .#vu8.. complete., got .complete."
+  # *** Re-pinned 2026-10-01 (two-direction sweep at 719e055), and the lane grew
+  # a case to make it possible. *** Every record this mutant emitted was emitted,
+  # byte for byte, by "runtime: an empty span is suppressed instead of delivered
+  # once": each carried-empty case holds ONE empty span, and that one is silenced
+  # by both. The containment was the fixture's, not the decisions': on a trace
+  # holding an empty span closed inside the feed AND one carried into finish,
+  # this mutant silences only the second and the sibling both. The two-span case
+  # also had to compare BOTH lanes as one value -- a skipped span close in either
+  # lane leaves the delivered flag set and silences the second span exactly as
+  # this does, but in one lane only. Measured: seven mutants in this pass redden
+  # the case, and they report seven different pairs.
+  EXPECT_OUTPUT_MATCHES "each empty span delivers once, in both lanes -- expected ..#vu8.. complete #vu8.. complete. .#vu8.. complete #vu8.. complete.., got ..#vu8.. complete complete. .#vu8.. complete complete.."
 )
 
 byte_machine_mutation(
@@ -12798,7 +13032,10 @@ byte_machine_mutation(
                (byte-machine-span-close/v1 parser)]]
   REPLACE [[             (let ((parts (op 'span-completion-parts node)))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "and the span is inactive afterwards -- expected #f, got payload"
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): the bare check label
+  # resolved TWICE in this mutant's own output -- the nonempty-span case and the
+  # AZ empty-span case both carry it. The case name picks one.
+  EXPECT_OUTPUT_MATCHES "one feed, one nonempty fragment, then the completion: and the span is inactive afterwards -- expected #f, got payload"
 )
 
 byte_machine_mutation(
@@ -12992,7 +13229,13 @@ byte_machine_mutation(
   REPLACE [[          ((span-completion)
            (let ((parts (op 'span-completion-parts node)))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the fragment comes from the feed and the completion from finish: the lanes agree -- expected #t, got #f"
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055): "the lanes agree" in
+  # this case is also reddened by "interpret loop: a span start records the mark
+  # at 0 instead of the cursor", "compile: the emitted span start records the
+  # mark at 0" and "compile: the emitted completion substep does not close the
+  # span". The same case's by-value check -- the span still active after finish
+  # -- names this decision and no sibling's.
+  EXPECT_OUTPUT_MATCHES "the fragment comes from the feed and the completion from finish: and the span is inactive at the end -- expected #f, got payload"
 )
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
@@ -14532,7 +14775,11 @@ byte_machine_mutation(
   FIND [[    (vector-set! parser 8 (copy-values (parser-field-initials parser)))))]]
   REPLACE [[    (vector-set! parser 8 (initial-values (parser-field-decls parser)))))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES [[reset restores the merged initial, not the declared -- expected 1, got 0]])
+  # Re-pinned 2026-10-01 (two-direction sweep at 719e055) onto a check added for
+  # it: "runtime: a settable override is validated but never applied" also reads
+  # 0 after the reset, so the after-value alone named both. The override's value
+  # BEFORE the reset is what differs -- `(1 0)` here, `(0 0)` there.
+  EXPECT_OUTPUT_MATCHES [[the override held before the reset and after it -- expected .1 1., got .1 0.]])
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # Pass β -- the verifier's settable-consume-counter rule, via diagnostic-census.
