@@ -255,10 +255,10 @@
   asymmetry it leaves — once the union mutation is written, each ARM becomes a
   subset of it, which is subsumption **by construction** (the union mutant is
   strictly more permissive on every machine, so no fixture can redden an arm
-  while leaving it green). That kind is genuinely closed rather than
-  under-specified: there is nothing to separate, not merely nothing found. Keep
-  the arm mutations anyway when they name distinct decisions — the cost is
-  attribution, not detection — and record which kind you have.
+  while leaving it green). That closes detection, per input, not attribution: a
+  value spanning an input only the union breaks still parts them (measured: "A
+  containment is a fact about the checks", at the foot). Keep the arm mutations
+  when they name distinct decisions, and record which kind you have.
   Re-sweep the whole pass after **each** fix, not once at the end: adding a
   *check* widens pins just as adding a mutation does (a new `no unreachable-node`
   check contained a bare pin as a substring and broke a pin sixteen mutations
@@ -1372,3 +1372,50 @@ Two smaller lessons from the same slice:
   This is "a fixture that always declares the subject first cannot see a
   hard-coded 0", applied to coordinates. When code converts between two
   coordinate systems, the fixture must make them differ.
+
+## A containment is a fact about the checks, not the mutants
+
+PR #147 judged every pin in six lanes against every mutant in its lane: 159
+mutations, 61 findings. Five were already in the tree as closed. Two resume rows
+were filed SUBSUMED by the Slice ③ re-audit ("no pin can separate these"). The
+EOF-pause offset said the same beside its own pin. The property floor's
+co-firings were filed "BY CONSTRUCTION". None held. The floor's mutant already
+had two records of its own and needed only a new pin. Each of the others fell to
+one new check:
+
+- **A pair over two readings of one state.** The resume rows asserted the ack
+  and the lifecycle as two checks, so each narrow mutant's records were a
+  subset of its sibling's; asserted as one pair, each reports its own value.
+  The EOF-pause offset was read only from the result, so a lost increment and
+  a lost read looked the same. The result's offset beside
+  `parser-stream-offset` tells them apart.
+- **A value spanning two inputs.** An arm inside its union misbehaves exactly as
+  the union does, on every input where it misbehaves at all. That covers one end
+  of the field bound inside "the bound check is absent", and a version check
+  moved behind the exec guard inside one deleted outright. It is the "by
+  construction" of the subsumption bullet above, and it closes detection only.
+  Read as one value, `(hi after an overflow, lo after an underflow)` gives
+  `(256 0)` for the upper arm, `(255 -1)` for the lower arm and `(256 -1)` for
+  the union.
+- **One trace carrying both cases.** Every carried-empty case held one empty
+  span. So "every empty span suppressed" and "the finish re-anchor skipped"
+  reported identically. A trace with an empty span closed inside the feed and
+  another carried into finish parts them.
+
+**So: before recording a containment as closed, try the pair, the two-input
+value and the two-case trace.** "No pin can separate these" is a claim about
+the checks it was measured against. It goes stale the day a check is added.
+
+Three smaller lessons from the same sweep:
+
+- **The FAIL-CONTEXT line quotes the case id.** A pin made of a case name alone
+  matches that line as well as the FAIL line, once per failing check. One such
+  pin resolved four times in its own mutant's output. End the pin with the check
+  label: `: ` follows the case name only on the FAIL line, and the context line
+  has `"` there.
+- **A number needs an end.** `got 1` was a prefix of a sibling's `got 12` on the
+  same row, and `$` cannot end a line in a pin. `[^0-9]` ends the number, the way
+  `got .[)]` ends an empty list.
+- **Pin around a shape an open branch will change.** #146 was growing the error
+  projection while #147 was open, so #147 pinned records that print none
+  wherever one existed. After the merge, the re-sweep re-measured no pin.
