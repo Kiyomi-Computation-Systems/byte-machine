@@ -570,13 +570,12 @@
           (check "generated reports a state id" (integer? (error-state-id ge)))
           ;; Against a LITERAL, not against projected-members: comparing the
           ;; library's output to the library's own constant five lines away is a
-          ;; self-consistency check that one edit satisfies in both places. Six
-          ;; is §22.4:1271's five plus `reason`; a seventh member appearing here
-          ;; means the exclusion was widened or narrowed and this must be
-          ;; re-derived from the spec, not from the code.
-          ;; Re-derived 2026-10-01 for decision 0056, which adds two comparable
-          ;; members to the record -- the span an error abandoned and where its
-          ;; withheld bytes begin -- and nothing to the exclusion: eight.
+          ;; self-consistency check that one edit satisfies in both places. Eight
+          ;; is §22.4:1271's five plus `reason` plus decision 0056's two (the
+          ;; span an error abandoned and where its withheld bytes begin); a
+          ;; ninth member appearing here means the exclusion was widened or
+          ;; narrowed and this must be re-derived from the spec, not from the
+          ;; code.
           (check-equal "the projection is §22.4:1271's five plus reason plus the abandoned span"
                        (length (project-error ie)) 8)
           (check-equal "and the library agrees with the spec" projected-members 8)
@@ -584,9 +583,10 @@
                        (project-error ie) (project-error ge)))))
     (harness-case "reason and detail are compared rather than left as orphans"
       (lambda ()
-        ;; §9.3 ships eight accessors, §22.4:1271 names five, §12.7:777 excludes
-        ;; one -- leaving `reason` and `detail` neither required to match nor
-        ;; licensed to differ. Both lanes build them from the same declaration,
+        ;; The parser-error family has ten accessors -- §9.3's eight and the two
+        ;; decision 0056 added. §22.4:1271 names five, §12.7:777 excludes one,
+        ;; and 0056 compares its own two -- leaving `reason` and `detail` neither
+        ;; required to match nor licensed to differ. Both lanes build them from the same declaration,
         ;; so the agreement is real and is asserted here rather than left for a
         ;; later slice to re-derive.
         (let ((ie (feed-then-error (interpreted rx) bad-version))

@@ -22,6 +22,10 @@ Milestone: 4, Gate 0 (milestone-4-design.md §4.5)
 >   records where the reached-but-unencoded declaration shape it names is now
 >   produced (the Slice ② generator's `orphan-prob`/`dangling-prob` draws) and
 >   consumed (Slice ④). Nothing above became false.
+> - **2026-10-01 (issue #145)** — **amends item 1** (the member count) and
+>   **item 8** (the projection's width):
+>   [decision 0056](./0056-an-error-records-the-span-it-abandoned.md). See the
+>   note at the foot.
 
 ## Context
 
@@ -120,6 +124,11 @@ overflow rider to a table that already works.
    names are mirrored into `reserved-member-2` (compile.sls:44-52, twenty
    symbols at `a942327`) in the same commit that exports them, per decision 0012
    item 4, so the `reserved-drift-tests.sps` guard stays load-bearing.
+
+   > **Amended 2026-10-01 (issue #145)** by
+   > [decision 0056](./0056-an-error-records-the-span-it-abandoned.md) — the
+   > member count. See the dated note below; the sentence above is left as
+   > decided.
 
    **The reserved constructor takes five arguments per call site, not eight.**
    `(byte-machine-make-parser-error/v1 (vector-ref errs N) (quote name) id off
@@ -294,6 +303,11 @@ overflow rider to a table that already works.
    because the differential's obvious repair for the red this record causes is
    to narrow the comparison back to the code symbol it compared before the
    family existed.
+
+   > **Amended 2026-10-01 (issue #145)** by
+   > [decision 0056](./0056-an-error-records-the-span-it-abandoned.md) — the
+   > projection's width. See the dated note below; the sentence above is left as
+   > decided.
 9. **The §17:963 debug map is normalizer output, total over internal prefix
    states, and cannot perturb the IR fingerprint.** It is what makes
    `parser-error-node-name` answerable in the generated lane, where the emitter
@@ -489,3 +503,24 @@ Both are turned on by **Slice ④**, whose corruption catalogue and independent
 oracle drive `free-steering` (`§4.6`) and consume the ledger. Recorded here so the
 next reader of 0022 finds where the shape is produced and where it is consumed,
 rather than re-deriving the shipped generator's avoidance of it.
+
+## 2026-10-01 (issue #145) — the record gains two members
+
+Item 1 decided "one tagged vector with eight members and nine public names".
+[Decision 0056](./0056-an-error-records-the-span-it-abandoned.md) adds two
+members: `span`, the span an error abandoned, and `span-offset`, the stream
+offset where that span's withheld bytes begin. They are read by
+`parser-error-span` and `parser-error-span-offset`, so the record now has ten
+members and eleven public names; both are mirrored into `reserved-member-2`
+under the same decision-0012 rule item 1 cites. The member order of the first
+eight is unchanged, and the reserved constructor still takes five arguments:
+neither constructor sets the new members, which are filled where both executors
+hand an error back.
+
+Item 8 places the exclusion in "one shared projection over the §22.4:1271
+five". The projection that shipped with this record
+(`test/support/harness/byte-machine/test/error-projection.sls`, `d89899b`) was
+already six members wide, the five plus `reason`, and that file records why.
+Decision 0056 widens it to eight with the two new members. The exclusion
+itself — `state-id` only — is unchanged, and the positive check item 8
+describes now asserts eight.

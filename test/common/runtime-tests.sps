@@ -992,7 +992,7 @@
     (harness-case "both constructors record no abandoned span (decision 0056)"
       (lambda ()
         ;; Neither constructor can know the span: generated code calls the first
-        ;; with the five members above, and ABI 9 is unchanged. The span an error
+        ;; with the five arguments above, and ABI 9 is unchanged. The span an error
         ;; abandons is added where both executors hand the error back, in
         ;; `parser-feed!` and `parser-finish!`, and only when one is open -- so
         ;; what a constructor builds must say "none", and so must a pause reason,

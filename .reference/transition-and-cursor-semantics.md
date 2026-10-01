@@ -9,7 +9,8 @@ This is `§27:1693` of
 below was checked against the code — `(byte-machine runtime)`,
 `(byte-machine interpret)`, and `(byte-machine private ir)` — not against the
 plan; where the two would differ, the code is described and the difference named.
-Applies to byte-machine at Milestone 8. Both executors — the reference
+Written at Milestone 8; §4's last subsection was added for decision 0056 (an
+error reports the span it abandoned). Both executors — the reference
 interpreter and a generated parser — behave identically here except where a
 difference is called out.
 
@@ -158,10 +159,10 @@ The position kind says where the error sits, not whether the range ends with a
 refused byte. When the error node was entered over an `advance` edge — which
 records `boundary` — the parser took the byte whose transition led to the error,
 so it is the range's last byte; over a `reexecute` edge (`byte`) it was not
-taken and is not in the range. But `boundary` is recorded in other cases too,
-and in one of them the range is empty: a span data callback that fails was
-handed its bytes. Subtracting one "at `boundary`" is a rule about one grammar,
-not about this record.
+taken and is not in the range. But `boundary` is also recorded where no byte
+was refused, and the range can then be empty: a span data callback that fails
+records it, and was handed its bytes. Subtracting one "at `boundary`" is a rule
+about one grammar, not about this record.
 
 Both members are compared across the two executors, like the five above.
 

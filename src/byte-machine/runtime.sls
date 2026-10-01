@@ -248,7 +248,7 @@
   ;; `abandon-span!` fills them where both executors hand an error back.
   (define parser-error-tag (tag 'byte-machine-parser-error))
   ;; The reserved constructor generated code calls takes FIVE arguments, not
-  ;; eight: an errs-table entry packing this declaration's code and reason, the
+  ;; one per member: an errs-table entry packing this declaration's code and reason, the
   ;; public source-node name, the state id, the absolute offset, and the position
   ;; kind. `domain` and `detail` are fixed here rather than passed, so no emitted
   ;; site ever writes them -- `machine` because these are machine errors, and #f
@@ -328,9 +328,10 @@
   ;; span was open. `[span-offset, parser-error-offset)` is exactly what §14:839
   ;; withholds -- bytes the parser took for the span and neither flushed nor
   ;; delivered -- and every byte the span took before `span-offset` went out in
-  ;; an earlier fragment. It can be empty: a data callback that FAILS was handed
-  ;; its bytes, and at finish the last feed's boundary flush already handed over
-  ;; every byte the span took.
+  ;; an earlier fragment. It is empty whenever the span took nothing since its
+  ;; last fragment: always at finish, where the last feed's boundary flush handed
+  ;; every byte over; when a data callback FAILS, because it was handed its
+  ;; bytes; and when a byte is refused before the span takes any in that feed.
   ;; parser-error-span-offset : ParserError -> (Option ExactInteger)
   (define (parser-error-span-offset e) (vector-ref e 10))
 
@@ -822,11 +823,12 @@
   ;; every path out of a delivery either CLOSES the span (the completion substep
   ;; sets the mark to 0) or crosses a feed boundary, where the re-anchor
   ;; overwrites the mark with the next slice's `start`, and no accessor read the
-  ;; mark between the two. Decision 0056 adds the third path and the reader: a
-  ;; data callback that FAILS leaves the span open with no feed boundary after
-  ;; it, and `parser-error-span-offset` reads the mark at that error. Without the
-  ;; advance it would report as withheld the very bytes the callback was just
-  ;; handed, so an embedder counting them would count them twice.
+  ;; mark between the two. That count missed a third path, which already
+  ;; existed: a data callback that FAILS leaves the span open with no feed
+  ;; boundary after it. What decision 0056 adds is the reader --
+  ;; `parser-error-span-offset` reads the mark at that error. Without the advance
+  ;; it would report as withheld the very bytes the callback was just handed, so
+  ;; an embedder counting them would count them twice.
   ;;
   ;; The five-argument application is the ONLY thing `span-fragment-deliver!` does
   ;; differently from the two-argument entry point above. `branches` is '() because
@@ -966,14 +968,16 @@
   ;;   stopped   -- reaching either with a span active is a VERIFIER rejection
   ;;   finished     (`span-active-at-exit`), so neither is reachable.
   ;;   paused    -- a feed that exits `paused` leaves the span active with the
-  ;;                fragment the span end has just delivered; nothing advances the
-  ;;                mark (see the fragment step above), so an arm here would not
-  ;;                be inert -- it would DELIVER THAT FRAGMENT A SECOND TIME,
-  ;;                against "it is never delivered twice". The row is omitted
-  ;;                because a flush there is WRONG, not because it would do
-  ;;                nothing -- and the difference matters, because "a guard that
-  ;;                cannot fire" is this project's standing invitation to add the
-  ;;                guard.
+  ;;                fragment the span end has just delivered, and the delivery
+  ;;                advanced the mark to the cursor (decision 0056), so an arm
+  ;;                here would find `[cursor,cursor)` and suppress it: it would
+  ;;                be INERT, and is not written for that reason. Before 0056 it
+  ;;                would have been WRONG -- the mark stayed at the fragment's
+  ;;                start, so the arm would have delivered that fragment a second
+  ;;                time, against "it is never delivered twice". Measured by
+  ;;                adding `paused` to the guard: at 719e055 two span cases and
+  ;;                one counted-span case fail; here every span, counted-span,
+  ;;                pause, callback and abandoned-span case passes.
   (define (span-boundary-flush! parser bv r)
     (if (and (eq? (parser-result-status r) 'need-input)
              (parser-active-span parser))
@@ -1047,8 +1051,8 @@
   ;;
   ;; The record is filled IN PLACE, and that is safe because it has not left the
   ;; runtime: the executor built it for this error alone -- one constructor call
-  ;; per error, which nothing can hoist or share because the offset is one of
-  ;; its arguments -- and nothing has returned it yet. In place is also what
+  ;; per error, and `vector` returns a fresh record on every call -- and nothing
+  ;; has returned it yet. In place is also what
   ;; keeps ONE record per error. Both finish paths STORE their error before this
   ;; seam sees it, so the record they stored and the one this call returns are
   ;; the same object and gain the span together. A copy was tried first: it

@@ -1,7 +1,8 @@
 ;;; The §22.4:1271 cross-lane error projection, with ONE owner.
 ;;;
 ;;; The differential compares "error domain, code, public source-node name,
-;;; absolute position, and position kind" -- five members. It does NOT compare
+;;; absolute position, and position kind" -- five members, to which this library
+;;; adds three (see `projected-members` below). It does NOT compare
 ;;; parser-error-state-id: §12.7:777 says generated IDs "are deterministic for a
 ;;; given normalized graph, but an independently interpreted machine need not
 ;;; report the same ID. Differential tests do not compare that accessor across
@@ -37,19 +38,21 @@
         e))
 
   ;; What project-error yields, named so a test can assert the width rather than
-  ;; counting a literal list. Six, not five: §22.4:1271's five plus `reason`,
-  ;; which §12.7:777 neither requires to match nor licenses to differ. It is
-  ;; compared here rather than left as an orphan, and comparing it earned its
-  ;; keep: the two lanes resolved the declaration by different keys -- the
+  ;; counting a literal list. Eight, not five: §22.4:1271's five, plus `reason`,
+  ;; plus the two members decision 0056 added.
+  ;;
+  ;; `reason` is one §12.7:777 neither requires to match nor licenses to differ.
+  ;; It is compared here rather than left as an orphan, and comparing it earned
+  ;; its keep: the two lanes resolved the declaration by different keys -- the
   ;; interpreter by name, the emitter by resolved code -- and `reason` is the
   ;; only member that divergence moved, so this is the projection member that
   ;; caught it. Do not narrow this list on the argument that both lanes "build
   ;; it from the same declaration"; that was the assumption the defect broke.
   ;;
-  ;; Eight since decision 0056: the span an error abandoned and the stream offset
-  ;; where its withheld bytes begin. Both are comparable for the same reason the
-  ;; position kind is -- each lane reaches them through its OWN span-open, at its
-  ;; own cursor -- so they are compared, not left as two more orphans.
+  ;; The span an error abandoned and the stream offset where its withheld bytes
+  ;; begin are comparable for the same reason the position kind is -- each lane
+  ;; reaches them through its OWN span-open, at its own cursor -- so they are
+  ;; compared, not left as two more orphans.
   (define projected-members 8)
 
   ;; The deliberately excluded member. Exposed so a lane can assert that both

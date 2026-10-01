@@ -4,6 +4,7 @@ Date: 2026-10-01
 Status: accepted; unreleased
 Milestone: none. From [issue #145](https://github.com/Kiyomi-Computation-Systems/byte-machine/issues/145), filed from chez-http-server's cut-off-span PR record, after 0.6.1
 Builds on: [0028](0028-callback-slots-and-visible-state.md) (`parser-active-span`, a plain accessor added rather than an existing one widened to a compound), [0022](0022-structured-parser-error-record.md) (the parser-error family, and the five-argument constructor generated code calls), [0042](0042-empty-span-delivers-one-fragment-on-the-feed-side.md) (the span-end and flush delivery steps)
+Amends: [0022](0022-structured-parser-error-record.md) (item 1's member count, item 8's projection width)
 
 ## Context
 
@@ -52,7 +53,10 @@ accessor reads the mark.
    in an earlier fragment. So for a machine error mid-feed the offset is the
    span's own start when it opened in the failing feed, and the failing feed's
    start when the span was carried into it — the issue's two cases. The range
-   can be empty, on two paths the issue did not list (item 4).
+   is empty whenever the span took nothing since its last fragment: at every
+   finish error (item 3), when a data callback fails (item 4), and when a byte
+   is refused before the span takes any in the failing feed (the new lane's
+   `A!` case: `tok 1` at offset 1).
 
 3. **It is filled where both executors hand the error back**, not by either
    executor: in `parser-feed!` after the boundary flush, and in
@@ -114,10 +118,11 @@ accessor reads the mark.
    suggests the embedder take `[span-offset, error-offset)`, "less one at
    `boundary`, where the parser took the refused byte before refusing it". That
    is a fact about the issue's grammar, not about position kinds. `boundary` is
-   also what a callback failure records, and there the withheld range is empty
-   (measured in both the new lane and `position-kind-tests.sps`'s span-data
-   row, `cl 2 boundary body 2`), so subtracting one would give a range that runs
-   backwards. What the record states is what the parser took. When the error
+   also recorded where no byte was refused, and the range can then be empty. A
+   span data callback that fails records it, and was handed its bytes: the new
+   lane asserts `close 3 boundary tok 3` for a failure at the span end.
+   Subtracting one there gives a range that runs backwards. What the record
+   states is what the parser took. When the error
    node was entered over an `advance` edge, the last withheld byte is the one
    whose transition led to the error. Whether that byte belongs to the token is
    the grammar's call.
@@ -130,14 +135,16 @@ accessor reads the mark.
 ## What it costs
 
 Every error record is two slots larger, eleven where it was nine, whether or
-not a span was open. Filling the two costs two slot writes, on the error path
-only. A delivery costs one more slot write per fragment, not per byte. Nothing
-changes on the per-byte path. The allocation lane's two error witnesses (an
-error costs the same however many bytes precede it) pass unchanged, and their
-two record-growth mutations were re-anchored onto the eleven-slot constructors.
-This is reasoned, not benchmarked. The cell that would show a per-delivery cost
-is `byte-at-a-time-fragmentation`, the one benchmark that delivers a fragment
-for every byte.
+not a span was open. `abandon-span!` runs once per `parser-feed!` and
+`parser-finish!` call, error or not: a call, two slot reads and a test, plus
+two slot writes when it fills a record. A delivery costs one more slot write
+per fragment. None of it is per byte, except where the caller feeds one byte
+at a time, which makes the per-call and per-fragment costs per byte. The
+allocation lane's two error witnesses (an error costs the same however many
+bytes precede it) pass unchanged, and their two record-growth mutations were
+re-anchored onto the eleven-slot constructors. This is reasoned, not
+benchmarked. The cell that would show either cost is
+`byte-at-a-time-fragmentation`, which feeds one byte per call.
 
 `compile.sls`'s `reserved-member-2` mirrors the runtime's exports, so it gains
 the two names. An output binding spelled `parser-error-span` or
@@ -149,37 +156,68 @@ collided with the runtime import of every generated library.
 - **It does not flush on error.** `§14:839` stands: the bytes are reported, not
   delivered.
 - **It does not record a carried span's own start.** For a span carried into
-  the failing feed, the offset is that feed's start. The earlier bytes went out
-  at feed boundaries, and the embedder already counted them. Recording the
-  start too would need a parser slot per span start. Nothing here needs it.
+  the failing feed, the offset is never earlier than that feed's start (and
+  later when a data callback failed). The earlier bytes went out at feed
+  boundaries, and the embedder already counted them. Recording the start too
+  would need a parser slot per span start. Nothing here needs it.
 - **A pause reason carries no span.** The parser is live after a pause, and
   `parser-active-span` answers.
 
 ## Witnesses
 
-- `byte-machine.differential.abandoned-span` (source and AOT), a new lane over
-  a token machine that refuses a byte from inside the span by reexecute and by
-  advance. It has one group per path: no span open, a machine error in the
-  failing feed, a span carried across a feed, a span opened inside a sub-slice,
-  a data callback failing at the span end and at a flush, a completion callback
-  failing after the span closed, truncation at finish, the stored error on
-  both sticky rows, reset, and a pause. Its last group is the property itself.
-  Under every schedule of up to three slices of one input (113 schedules per
-  lane across four inputs), the delivered fragments followed by
-  `[span-offset, error-offset)` are the span's bytes up to the error, in both
-  lanes.
+- `byte-machine.differential.abandoned-span` (source and AOT), a new lane. Its
+  token machine refuses a byte from inside the span by reexecute and by
+  advance. Each path has an expected-value case:
+  - no span open, in a first feed and in a later one;
+  - a machine error in the failing feed, including one before the span takes a
+    byte;
+  - a span carried across a feed, and a span opened inside a sub-slice;
+  - a data callback failing at the span end, at a flush, and at a later flush;
+  - a completion callback failing after the span closed, in a first feed and
+    in a later one;
+  - truncation at finish;
+  - the stored error on both sticky rows, reset, and a pause.
+
+  Its last group is the property itself, over three machines: the token
+  machine, a keyword table inside a span (the prefix it parks across feeds), and
+  a counted body inside a span. Every way to feed one input in up to three
+  slices is run, each slice copied behind its own padding so that no slice index
+  is a stream offset. That is 174 schedules per lane across eight inputs. In
+  both lanes, the delivered fragments followed by `[span-offset, error-offset)`
+  are the span's bytes up to the error. Each row's schedule count is checked
+  against a number written into the row, and the number of rows against eight.
 - The cross-lane error projection (`error-projection.sls`) carries both members,
-  six to eight, so every differential lane and the property differential compare
-  them across executors.
+  six to eight. Every differential program that compares errors through it
+  compares them across executors, and so does the property differential. That
+  is 12 of the 17 differential programs (`rg -l error-projection
+  test/common/differential-*.sps`). The counted-span, keyword-span,
+  keyword-table, keyword-header and settable differentials do not use it. The
+  new lane's keyword-table and counted rows cover the two span shapes among
+  them.
 - `byte-machine.unit.runtime`: both constructors build the two members as `#f`.
-- Mutation Pass 78 has thirteen mutations. They cover the guard's two
-  conjuncts, each seam's call, two operands of the offset arithmetic, each
-  seam's cursor, the mark advance, the two slot writes, an accessor's slot and
-  each constructor's default. Each is pinned on one record measured by staging
-  the mutant, and a 13 × 13 sweep finds every pin once in its own mutant's
-  output and in no sibling's. One conjunct, `e`, is caught by a raise: a
-  `need-input` or `paused` result has no record to write into. Eight shipped
-  pins were re-pinned and none retired. Two record-growth pins in Pass 77
-  follow the eleven-slot constructors. Five pins spelled the error projection
-  that grew. Pass 54's re-anchor pin is the one item 4 describes. The suite
-  goes from 77 passes / 660 mutations to 78 / 673.
+- Mutation Pass 78 has twenty mutations, nineteen pinned and one declared
+  survivor:
+  - the guard's two conjuncts;
+  - each seam's call and cursor, and the fill's order against the flush;
+  - two operands of the offset arithmetic;
+  - each slot written and each slot read;
+  - the span recorded and the mark advance;
+  - each constructor's two defaults.
+
+  Each pin sits on one record measured by staging the mutant. A 19 × 20 sweep
+  finds every pin once in its own mutant's output, in no sibling's, and not in
+  the baseline's. One conjunct, `e`, is caught by a raise: a `need-input` or
+  `paused` result has no record to write into.
+
+  The survivor narrows the advance to failing deliveries. A mark advanced on a
+  successful delivery is overwritten before anything reads it, so no lane can
+  tell the two apart (measured across the eleven lanes that drive a span). It
+  is declared because the boundary flush's absent `paused` arm is inert only
+  while every delivery advances.
+- Eight shipped pins moved, and none was retired:
+  - five pins that spelled the error projection, re-pinned;
+  - Pass 54's re-anchor pin, re-pinned (item 4 describes it);
+  - Pass 77's two record-growth pins, re-anchored onto the eleven-slot
+    constructors.
+
+  The suite goes from 77 passes / 660 mutations to 78 / 680.

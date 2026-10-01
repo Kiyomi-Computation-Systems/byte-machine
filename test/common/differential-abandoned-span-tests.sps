@@ -194,7 +194,21 @@
           (check-equal "both accessors answer #f, in both lanes"
                        (map (lambda (e) (list (parser-error-span e) (parser-error-span-offset e)))
                             (list (error-at r ref 0) (error-at r gen 0)))
-                       '((#f #f) (#f #f))))))))
+                       '((#f #f) (#f #f))))))
+    (harness-case "and in a later feed, where an offset computed anyway would not be 0"
+      (lambda ()
+        ;; The span closed in the first feed and the refusal comes in the
+        ;; second, at stream offset 3. An offset computed for an error with no
+        ;; span open would read 3 here, not the 0 a first feed gives -- which is
+        ;; what separates that defect from a constructor building 0.
+        (let ((r (both (list (list 'feed (b "AxZ")) (list 'feed (b "!")))
+                       '() callback-continue)))
+          (check-equal "the lanes agree" (caddr r) #t)
+          (check-equal "the error records no span"
+                       (tuple-at r ref 1)
+                       '(error 0 0 3 (machine unexpected-byte "unexpected byte" reject 3 byte
+                                      #f #f)
+                         error)))))))
 
 (harness-group "a machine error abandons the span it cut off (§14:839)"
   (lambda ()
@@ -214,6 +228,17 @@
                        (map (lambda (e) (list (parser-error-span e) (parser-error-span-offset e)))
                             (list (error-at r ref 0) (error-at r gen 0)))
                        '((tok 1) (tok 1))))))
+    (harness-case "refused before the span takes a byte: nothing is withheld"
+      (lambda ()
+        ;; The span opens at offset 1 and `!` is refused at 1, so the error
+        ;; abandons the span with an empty range, [1,1). Empty is not "no span".
+        (let ((r (both (list (list 'feed (b "A!"))) '() callback-continue)))
+          (check-equal "the lanes agree" (caddr r) #t)
+          (check-equal "the error"
+                       (tuple-at r ref 0)
+                       '(error 1 1 1 (machine bad-token-byte "refused token byte" bad 1 byte
+                                      tok 1)
+                         error)))))
     (harness-case "refused AFTER taking the byte: the refused byte is withheld too"
       (lambda ()
         ;; `#` advances into the error, so the parser took it: the error is at 4
@@ -319,6 +344,20 @@
                        (tuple-at r ref 0)
                        '(error 2 2 2 (callback too-long "callback failure" close 2 boundary
                                       #f #f)
+                         error)))))
+    (harness-case "a completion callback failing in a later feed"
+      (lambda ()
+        ;; The same, where an offset computed anyway would not be 0.
+        ;; `x` went out at the first boundary; the second feed's span end has
+        ;; nothing new to deliver, so the next callback is the completion, and
+        ;; it fails at stream offset 2 with the span already closed.
+        (let ((r (both (list (list 'feed (b "Ax")) (list 'feed (b "Z."))) '() too-long)))
+          (check-equal "the lanes agree" (caddr r) #t)
+          (check-equal "the fragment, then the completion" (trace-of r ref) (list (b "x") 'complete))
+          (check-equal "the error records no span"
+                       (tuple-at r ref 1)
+                       '(error 0 0 2 (callback too-long "callback failure" close 2 boundary
+                                      #f #f)
                          error)))))))
 
 (harness-group "at finish, the flush already handed over every byte the span took"
@@ -394,6 +433,7 @@
           (check-equal "the lanes agree" (caddr r) #t)
           (check-equal "the pause"
                        (tuple-at r ref 0) '(paused 3 3 3 #f paused-feed))
+          (check-equal "the flush delivered before it paused" (trace-of r ref) (list (b "xy")))
           (check-equal "and the error after it"
                        (tuple-at r ref 1)
                        '(error 1 1 4 (machine bad-token-byte "refused token byte" bad 4 byte
@@ -402,14 +442,94 @@
 
 ;; --- the property ------------------------------------------------------------
 ;;
-;; Every way to feed one input in up to three contiguous slices of ONE
-;; bytevector -- so the second and third feeds start at a nonzero slice index --
-;; then finish. For each schedule, in each lane: the span the first error names
-;; is `tok`, and the delivered fragments followed by the withheld range
+;; Every way to feed one input in up to three contiguous slices, then finish.
+;; Each slice is COPIED into its own bytevector behind a different amount of
+;; padding, so no feed's slice index is its stream offset: a record that carried
+;; a slice offset where a stream offset belongs fails here, not only in the
+;; sub-slice cases above. For each schedule, in each lane: the first error names
+;; the span, and the delivered fragments followed by the withheld range
 ;; `[span-offset, error-offset)` are exactly the bytes the span took before the
-;; error, `[1, error-offset)`. That is the sentence decision 0056 rests on, and it
-;; is the property the issue measured missing: without the two accessors the
-;; delivered bytes alone depend on the schedule.
+;; error. That is the sentence decision 0056 rests on, and it is the property
+;; the issue measured missing: without the two accessors the delivered bytes
+;; alone depend on the schedule.
+;;
+;; Three machines, because the bytes inside a span reach the parser through
+;; different arms: `abm`'s byte dispatch, a keyword table that parks a matched
+;; prefix across feeds (how a request method is matched downstream), and a
+;; counted consume that commits a body in bulk.
+(define (decl-callbacks)
+  (list (make-callback-declaration 'ondone 'span-complete #f '() #f #f)
+        (make-callback-declaration 'ondata 'span-data #t '() #f #f)))
+
+;; The span opens at the entry, before any byte, and closes on the keyword's
+;; delimiter, which a keyword table leaves unread. `GEX` is refused at `X` after
+;; `GE` was taken as a prefix of `GET` -- the prefix a split feed parks.
+(define kwm
+  (make-machine 'kwm 'start '()
+    (decl-callbacks)
+    (list (make-span-declaration 'meth 'ondata 'ondone #f))
+    (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
+          (make-error-declaration 'unknown 'bad-method "unknown method" #f)
+          (make-error-declaration 'truncated 'eof "method truncated" #f)
+          (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))
+    (list (make-span-start-node 'start 'meth 'kw #f)
+          (make-keyword-table-node 'kw
+            (list (make-keyword-entry (bytevector->u8-list (b "GET")) 'close #f)
+                  (make-keyword-entry (bytevector->u8-list (b "POST")) 'close #f))
+            (make-edge 'unknown 'reexecute) 'trunc #f #f)
+          (make-span-end-node 'close 'meth 'sp #f)
+          (make-byte-dispatch-node 'sp
+            (list (make-byte-case (make-exact-byte-matcher 32) (make-edge 'done 'advance) #f))
+            (make-edge 'reject 'reexecute) 'fin #f)
+          (make-stop-node 'done #f)
+          (make-finish-node 'fin #f)
+          (make-error-node 'unknown 'unknown #f)
+          (make-error-node 'trunc 'truncated #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+
+;; `B` opens a body span over a counted consume of three bytes; the byte after
+;; the body must be `;`. `Babc!` is refused at `!` with the whole body withheld
+;; or flushed, depending on the schedule.
+(define cbm
+  (make-machine 'cbm 'start (list (make-uint-field 'n 8 3 #f))
+    (decl-callbacks)
+    (list (make-span-declaration 'body 'ondata 'ondone #f))
+    (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
+          (make-error-declaration 'unterminated 'bad-body "body not terminated" #f)
+          (make-error-declaration 'truncated 'eof "body truncated" #f)
+          (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))
+    (list (make-byte-dispatch-node 'start
+            (list (make-byte-case (make-exact-byte-matcher 66) (make-edge 'open 'advance) #f))
+            (make-edge 'reject 'reexecute) 'fin #f)
+          (make-span-start-node 'open 'body 'count #f)
+          (make-counted-consume-node 'count 'n 'term 'trunc #f)
+          (make-byte-dispatch-node 'term
+            (list (make-byte-case (make-exact-byte-matcher 59) (make-edge 'close 'reexecute) #f))
+            (make-edge 'unterminated 'reexecute) 'trunc #f)
+          (make-span-end-node 'close 'body 'after #f)
+          (make-byte-dispatch-node 'after
+            (list (make-byte-case (make-exact-byte-matcher 59) (make-edge 'done 'advance) #f))
+            (make-edge 'reject 'reexecute) 'fin #f)
+          (make-stop-node 'done #f)
+          (make-finish-node 'fin #f)
+          (make-error-node 'unterminated 'unterminated #f)
+          (make-error-node 'trunc 'truncated #f)
+          (make-error-node 'reject 'rejected #f))
+    'default-eof #f))
+
+(define (lanes-of m name)
+  (let ((f (string-append tmpdir "/generated-abandoned-span-" (symbol->string name) ".sls"))
+        (binding (string->symbol (string-append (symbol->string name) "-parser"))))
+    (call-with-port (open-file-output-port f (file-options no-fail))
+      (lambda (p) (emit-machine (compile-machine m '()) binding p)))
+    (load f)
+    (list (make-interpreted-machine (verify-machine m))
+          (eval binding (environment (list 'generated name))))))
+
+(define kw-lanes (lanes-of kwm 'kwm))
+(define cb-lanes (lanes-of cbm 'cbm))
+
 (define (schedules n)
   (let iloop ((i 0) (acc '()))
     (if (> i n) (reverse acc)
@@ -419,53 +539,79 @@
 
 (define (first-error errs) (find (lambda (e) e) errs))
 
-;; Answers, per schedule, `(span error-offset position-kind ok?)`.
-(define (schedule-check cm bv answers ij)
+;; `bv[i,j)` copied behind `pad` filler bytes the parser must never read, fed as
+;; the slice `[pad, pad + (j - i))`.
+(define (padded-feed bv i j pad)
+  (let ((out (make-bytevector (+ pad (- j i)) #xEE)))
+    (bytevector-copy! bv i out pad (- j i))
+    (list 'feed-slice out pad (+ pad (- j i)))))
+
+;; Answers, per schedule, `(span error-offset position-kind ok? span-offset
+;; delivered)`. `from` is the stream offset of the span's first byte. The last
+;; two are there for the cross-lane comparison: two lanes that split fragments
+;; differently with compensating offsets would agree on the first four.
+(define (schedule-check cm bv answers from ij)
   (let* ((n (bytevector-length bv)) (i (car ij)) (j (cadr ij))
          (out (run (make-lane cm answers callback-continue)
-                   (list (list 'feed-slice bv 0 i) (list 'feed-slice bv i j)
-                         (list 'feed-slice bv j n) (list 'finish))))
+                   (list (padded-feed bv 0 i 2) (padded-feed bv i j 3)
+                         (padded-feed bv j n 5) (list 'finish))))
          (e (first-error (caddr out)))
          (delivered (apply append (map bytevector->u8-list
                                        (filter bytevector? (cadr out))))))
-    ;; A withheld range that runs backwards is a failed property, not a raise:
+    ;; An offset that is not an integer, or a withheld range that runs
+    ;; backwards or starts before the span, is a failed property, not a raise:
     ;; it is what a wrong span offset looks like, and it must be reported by the
     ;; check below rather than abort the lane.
-    (if (and e (parser-error-span-offset e)
-             (<= 1 (parser-error-span-offset e) (parser-error-offset e)))
+    (if (and e (integer? (parser-error-span-offset e))
+             (<= from (parser-error-span-offset e) (parser-error-offset e)))
         (let ((withheld (bytevector->u8-list
                          (slice bv (parser-error-span-offset e) (parser-error-offset e)))))
           (list (parser-error-span e) (parser-error-offset e)
                 (parser-error-position-kind e)
                 (equal? (append delivered withheld)
-                        (bytevector->u8-list (slice bv 1 (parser-error-offset e))))))
+                        (bytevector->u8-list (slice bv from (parser-error-offset e))))
+                (parser-error-span-offset e) delivered))
         (list (and e (parser-error-span e)) (and e (parser-error-offset e))
-              (and e (parser-error-position-kind e)) #f))))
+              (and e (parser-error-position-kind e)) #f
+              (and e (parser-error-span-offset e)) delivered))))
 
-(define (property-rows bv answers)
-  (map (lambda (cm) (map (lambda (ij) (schedule-check cm bv answers ij))
+(define (property-rows lanes bv answers from)
+  (map (lambda (cm) (map (lambda (ij) (schedule-check cm bv answers from ij))
                          (schedules (bytevector-length bv))))
-       (list cm-ref cm-gen)))
+       lanes))
+
+;; How many rows' cases actually ran: the sentinel for the loop over the rows.
+(define rows-run 0)
 
 (harness-group "under every schedule, delivered then withheld is the span's bytes (decision 0056)"
   (lambda ()
+    (harness-case "the keyword-table and counted fixtures verify clean"
+      (lambda ()
+        (check-equal "no diagnostics"
+                     (map (lambda (m) (map diagnostic-code
+                                           (verification-diagnostics (verify-machine m))))
+                          (list kwm cbm))
+                     '(() ()))))
     (for-each
      (lambda (row)
-       (let* ((label (car row)) (bv (cadr row)) (answers (caddr row))
-              (fixed (cadddr row))
-              (expected-count (length (schedules (bytevector-length bv)))))
+       (let* ((label (list-ref row 0)) (lanes (list-ref row 1)) (bv (list-ref row 2))
+              (answers (list-ref row 3)) (span (list-ref row 4)) (from (list-ref row 5))
+              (fixed (list-ref row 6)) (expected-count (list-ref row 7)))
          (harness-case label
            (lambda ()
              ;; The rows are computed INSIDE the case, so a lane that raises is
              ;; reported against this case rather than aborting the program.
-             (define rows (property-rows bv answers))
-             ;; Sentinel on the OBSERVED rows: a schedule list that silently
-             ;; came back short would otherwise pass every check below.
+             (define rows (property-rows lanes bv answers from))
+             (set! rows-run (+ rows-run 1))
+             ;; Sentinel on the OBSERVED rows against a count written down
+             ;; independently -- (n+1)(n+2)/2 schedules for an n-byte input --
+             ;; so a schedule generator that came back short fails here instead
+             ;; of passing every check below over nothing.
              (check-equal "every schedule ran, in both lanes"
                           (map length rows) (list expected-count expected-count))
              (check-equal "the lanes agree on every schedule" (car rows) (cadr rows))
-             (check-equal "every schedule abandons tok with delivered ++ withheld intact"
-                          (filter (lambda (x) (not (and (eq? (car x) 'tok) (cadddr x))))
+             (check-equal "every schedule abandons the span with delivered ++ withheld intact"
+                          (filter (lambda (x) (not (and (eq? (car x) span) (cadddr x))))
                                   (car rows))
                           '())
              (when fixed
@@ -473,13 +619,26 @@
                             (filter (lambda (x) (not (equal? (list (cadr x) (caddr x)) fixed)))
                                     (car rows))
                             '()))))))
-     ;; label, input, data answers, the schedule-independent (offset kind) or #f.
-     (list (list "a refusal at the byte" (b "Awxyz!") '() '(5 byte))
-           (list "a refusal after taking the byte" (b "Awxyz#") '() '(6 boundary))
-           (list "truncation at EOF" (b "Awxyz") '() '(5 eof))
+     ;; label, lanes, input, data answers, span, its first byte's offset, the
+     ;; schedule-independent (offset kind) or #f, and how many schedules.
+     (list (list "a refusal at the byte" (list cm-ref cm-gen) (b "Awxyz!") '() 'tok 1
+                 '(5 byte) 28)
+           (list "a refusal after taking the byte" (list cm-ref cm-gen) (b "Awxyz#") '() 'tok 1
+                 '(6 boundary) 28)
+           (list "truncation at EOF" (list cm-ref cm-gen) (b "Awxyz") '() 'tok 1 '(5 eof) 21)
            ;; The first delivery fails, so WHERE the error lands depends on the
            ;; schedule -- a flush or the span end -- and only the property holds.
-           (list "a data callback failing on its first fragment" (b "AwxyzZ.")
-                 (list too-long) #f)))))
+           (list "a data callback failing on its first fragment" (list cm-ref cm-gen)
+                 (b "AwxyzZ.") (list too-long) 'tok 1 #f 36)
+           (list "a keyword prefix refused" kw-lanes (b "GEX ") '() 'meth 0 '(2 byte) 15)
+           (list "a longer keyword prefix refused" kw-lanes (b "POSX") '() 'meth 0 '(3 byte) 15)
+           (list "a counted body refused at its terminator" cb-lanes (b "Babc!") '() 'body 1
+                 '(4 byte) 21)
+           (list "a counted body truncated at EOF" cb-lanes (b "Bab") '() 'body 1 '(3 eof) 10)))
+    (harness-case "every row above ran"
+      (lambda ()
+        ;; The loop over the rows needs its own sentinel: a row dropped from the
+        ;; list would shrink the group and leave it green.
+        (check-equal "eight rows" rows-run 8)))))
 
 (harness-finish)
