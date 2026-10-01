@@ -1325,3 +1325,50 @@ things carry over:
   as data, must be derived, and so must every op the twin is seen calling. A
   split name in an arm that no fixture renders and no input reaches still
   passes all of them, and decision 0055 says so rather than claiming totality.
+
+## Restoring a deleted line re-opens what was decided while it was gone
+
+Milestone 5 deleted the mark advance from the span-fragment step. Measured, it
+failed nothing in either lane, because every path out of a delivery either
+closed the span or crossed a feed boundary, and no accessor read a mark.
+Decision 0056 (issue #145) gave the mark a reader, `parser-error-span-offset`.
+That exposed a path the old count had missed: a data callback that fails leaves
+the span open with no boundary after it. So the advance came back. Three things
+written while it was absent moved, and no FIND census could see any of them:
+
+- **An absent-arm comment.** The boundary flush justified its absent `paused`
+  arm as WRONG: "it would deliver the fragment a second time". With the advance,
+  the arm would be INERT. Measured, two span cases and one counted-span case
+  fail at `719e055`, and none after. This file's own rule says the difference
+  matters. The slice had edited the `error` row of the same comment block and
+  left this row alone; every reviewer found it.
+- **A shipped mutant's output.** With no re-anchor, the stale mark now lies past
+  the next span end's cursor, so the fragment is suppressed rather than
+  mis-sliced. Its pin was caught for the wrong reason.
+- **The suite's own record of the deletion.** It needed a dated note.
+
+**So: a line deleted as unobservable is load-bearing in every comment and pin
+written while it was gone.** When you restore one, grep for the sentences that
+reasoned from its absence ("nothing advances", "cannot fire", "would deliver
+twice") and re-decide inert-versus-wrong for each. Then run the whole mutation
+lane, not just the new pass.
+
+Two smaller lessons from the same slice:
+
+- **A copy that has to be stored again makes every original store dead.** The
+  first draft filled the abandoned span into a copy of the error record. The
+  finish seam then had to store the copy over the record both finish paths had
+  already stored. The full mutation run reported those paths' three pins
+  UNCAUGHT ("... does not store its value"). An uncatchable pin is a finding
+  about the code, the same shape as "in a chain of widening minimums, only the
+  LAST guard discriminates anything". Filling the record in place, before it
+  leaves the runtime, kept one store per path, and the three pins were caught
+  again with nothing loosened.
+- **A fixture whose feeds all start at slice 0 cannot tell a slice offset from
+  a stream offset.** The new lane's property group cut every schedule from one
+  bytevector starting at index 0, so every slice index was its stream offset.
+  The review measured a record carrying the raw mark passing three of its four
+  rows. Copying each feed behind its own padding made all eight rows catch it.
+  This is "a fixture that always declares the subject first cannot see a
+  hard-coded 0", applied to coordinates. When code converts between two
+  coordinate systems, the fixture must make them differ.
