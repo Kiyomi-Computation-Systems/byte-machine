@@ -17,15 +17,26 @@ fields with checked accumulation, zero-width actions and branches, callbacks,
 spans, and counted consumption. The [[file:.reference/source-ir-and-builder.md][source IR and builder reference]] documents
 every constructor and node kind.
 
-*Status:* =0.6.1=. v0.6.1 fixes a keyword table's allocation: the runtime walk
+*Status:* =0.7.0=. v0.7 lets a parse error say which span bytes it withheld.
+When an error stops the parser with a span open, the bytes that span took in
+the failing feed are never delivered, so an embedder counting a span's bytes
+against a size limit got an answer that depended on how the network split the
+input. Two new accessors on the error record, =parser-error-span= and
+=parser-error-span-offset=, name the abandoned span and the stream offset where
+its withheld bytes begin, or =#f= when no span was open. With the span's data
+callback bound, the delivered fragments followed by that range are the span's
+bytes up to the error, however the input was split
+([[file:.decisions/0056-an-error-records-the-span-it-abandoned.md][decision 0056]]).
+No regeneration is needed: the ABI (9), the emitted text and every golden are
+unchanged, though the two names can no longer be a generated parser's output
+binding. v0.6.1 fixed a keyword table's allocation: the runtime walk
 every keyword-table state calls copied the prefix it had matched on every byte,
 so a header name matching k bytes of a keyword allocated about k²/2 pairs —
 downstream, 138 times a request's own size for a run of near-miss
 =Transfer-Encoding= fields. The walk now makes one pass over the table and
 allocates only its answer, 64 bytes, however much it matched
-([[file:.decisions/0054-a-keyword-walk-reads-its-prefix-in-place.md][decision 0054]]).
-No regeneration is needed: the ABI, the emitted text and the API are
-unchanged. v0.6 makes the emitted parser stop scanning. Chez compiles a
+([[file:.decisions/0054-a-keyword-walk-reads-its-prefix-in-place.md][decision 0054]]),
+with no regeneration. v0.6 makes the emitted parser stop scanning. Chez compiles a
 large =case= over integer keys as a **linear scan** — about 0.31 ns per arm
 skipped — and the emitter had four of them nested: the state dispatch, the byte
 dispatch inside each state, a callback answering =goto=, and the feed entry.

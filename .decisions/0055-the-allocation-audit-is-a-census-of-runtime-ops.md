@@ -1,7 +1,7 @@
 # 0055: The allocation audit is a census of runtime ops
 
 Date: 2026-09-26
-Status: accepted
+Status: accepted; released in 0.7.0 (2026-10-01)
 Milestone: none. Follows [0054](0054-a-keyword-walk-reads-its-prefix-in-place.md) and [issue #139](https://github.com/Kiyomi-Computation-Systems/byte-machine/issues/139), after 0.6.1
 Builds on: [0040](0040-allocation-audit-is-a-slope-with-a-control.md) (the slope and its live control), [0052](0052-a-callback-outcome-is-the-object.md) (the per-header slope), [0054](0054-a-keyword-walk-reads-its-prefix-in-place.md) (the per-matched-byte shape)
 
