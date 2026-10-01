@@ -1,7 +1,7 @@
 # 0056: An error records the span it abandoned
 
 Date: 2026-10-01
-Status: accepted; unreleased
+Status: accepted; released in 0.7.0 (2026-10-01)
 Milestone: none. From [issue #145](https://github.com/Kiyomi-Computation-Systems/byte-machine/issues/145), filed from chez-http-server's cut-off-span PR record, after 0.6.1
 Builds on: [0028](0028-callback-slots-and-visible-state.md) (`parser-active-span`, a plain accessor added rather than an existing one widened to a compound), [0022](0022-structured-parser-error-record.md) (the parser-error family, and the five-argument constructor generated code calls), [0042](0042-empty-span-delivers-one-fragment-on-the-feed-side.md) (the span-end and flush delivery steps)
 Amends: [0022](0022-structured-parser-error-record.md) (item 1's member count, item 8's projection width)

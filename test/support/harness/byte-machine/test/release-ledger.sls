@@ -156,12 +156,19 @@
       ("§27:1701" "changelog"                                        #t (five))))
 
   ;; §4.5 — the version surface. The CURRENT release string has ONE owner (the
-  ;; value here) and a mirror rule: every surface below carries it. `0.6.1` is
-  ;; the first PATCH, and the first release no milestone ships: issue #139's
-  ;; keyword-walk fix (decision 0054) changes no public API, no generated-runtime
-  ;; ABI (still 9), no emitted text and no golden, so by the reading below it is
-  ;; a patch and nothing makes it more. With no milestone there is no close
-  ;; record, so the fifth surface is decision 0054's own status block, which
+  ;; value here) and a mirror rule: every surface below carries it. `0.7.0` is
+  ;; a MINOR that, like 0.6.1, no milestone ships: issue #145 (decision 0056)
+  ;; adds two public accessors, `parser-error-span` and
+  ;; `parser-error-span-offset`, and added public API is a minor. The
+  ;; generated-runtime ABI (still 9), the emitted text and every golden are
+  ;; unchanged, so nothing makes it more. Decision 0055's op census ships with
+  ;; it and adds no API. The fifth surface is again a decision's status block:
+  ;; 0056's, the decision that makes this a minor. `0.6.1` was
+  ;; the first PATCH, and the first release no milestone shipped: issue #139's
+  ;; keyword-walk fix (decision 0054) changed no public API, no generated-runtime
+  ;; ABI (still 9), no emitted text and no golden, so by the reading below it was
+  ;; a patch and nothing made it more. With no milestone there was no close
+  ;; record, so its fifth surface was decision 0054's own status block, which
   ;; names the release that carries it. Milestone 14
   ;; (the emitted dispatches stop being linear scans, decisions 0048-0053) bumps
   ;; it to `0.6.0`. It adds NO public API at all — no node kind, no graph
@@ -193,16 +200,17 @@
   ;; THIS COMMENT IS WHY THE VALUE BELOW IS NOT THE ONLY THING TO MOVE AT A
   ;; RELEASE: it read `now 8` for the whole of Milestone 14, through an ABI bump
   ;; the lane could not catch because prose is not a checked value.
-  (define release-version "0.6.1")
+  (define release-version "0.7.0")
   (define release-version-export? #f)
   (define release-version-surfaces
-    '("CHANGELOG.md 0.6.1 entry (§26:1684)"
+    '("CHANGELOG.md 0.7.0 entry (§26:1684)"
       "README.org status paragraph"
       "the parent plan's dated disposition"
-      ;; NOT a milestone document: 0.6.1 is a patch no milestone ships (see
-      ;; above). The decision it carries names the release in its status block.
-      ;; At 0.6.0 this row was `the milestone-14-close.md status header`.
-      "decision 0054's status block"
+      ;; NOT a milestone document: 0.7.0, like 0.6.1, is a release no milestone
+      ;; ships (see above). The decision that makes it a minor names the
+      ;; release in its status block. At 0.6.1 this row was `decision 0054's
+      ;; status block`; at 0.6.0, `the milestone-14-close.md status header`.
+      "decision 0056's status block"
       "the git tag"))
 
   ;; --- accessors -----------------------------------------------------------
