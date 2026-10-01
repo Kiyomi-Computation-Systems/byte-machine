@@ -574,9 +574,12 @@
           ;; is §22.4:1271's five plus `reason`; a seventh member appearing here
           ;; means the exclusion was widened or narrowed and this must be
           ;; re-derived from the spec, not from the code.
-          (check-equal "the projection is §22.4:1271's five plus reason"
-                       (length (project-error ie)) 6)
-          (check-equal "and the library agrees with the spec" projected-members 6)
+          ;; Re-derived 2026-10-01 for decision 0056, which adds two comparable
+          ;; members to the record -- the span an error abandoned and where its
+          ;; withheld bytes begin -- and nothing to the exclusion: eight.
+          (check-equal "the projection is §22.4:1271's five plus reason plus the abandoned span"
+                       (length (project-error ie)) 8)
+          (check-equal "and the library agrees with the spec" projected-members 8)
           (check-equal "and both lanes project identically"
                        (project-error ie) (project-error ge)))))
     (harness-case "reason and detail are compared rather than left as orphans"

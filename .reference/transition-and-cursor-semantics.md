@@ -143,6 +143,28 @@ offset are compared across the two executors; the internal state id
 > unconditional `boundary`, so a machine-action error reached over a prior
 > `reexecute` edge can report `byte` where `§12.7:770` specifies `boundary`.
 
+### The span an error abandons
+
+An error that stops the parser with a span open abandons that span (`§14:839`):
+no final fragment is flushed and no completion is synthesized. The error
+records it (decision 0056). `parser-error-span` names the span and
+`parser-error-span-offset` is the stream offset where its withheld bytes begin,
+both `#f` when no span was open. The bytes in
+`[parser-error-span-offset, parser-error-offset)` are the ones the parser took
+for the span and never delivered; every earlier byte of the span went out in a
+fragment.
+
+The position kind says where the error sits, not whether the range ends with a
+refused byte. When the error node was entered over an `advance` edge — which
+records `boundary` — the parser took the byte whose transition led to the error,
+so it is the range's last byte; over a `reexecute` edge (`byte`) it was not
+taken and is not in the range. But `boundary` is recorded in other cases too,
+and in one of them the range is empty: a span data callback that fails was
+handed its bytes. Subtracting one "at `boundary`" is a rule about one grammar,
+not about this record.
+
+Both members are compared across the two executors, like the five above.
+
 ## 5. `need-input` on a partial feed, and EOF at `parser-finish!`
 
 `parser-feed!` and `parser-finish!` are different operations (`§12.4:723`), and an

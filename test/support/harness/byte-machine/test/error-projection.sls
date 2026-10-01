@@ -31,7 +31,9 @@
               (parser-error-reason e)
               (parser-error-node-name e)
               (parser-error-offset e)
-              (parser-error-position-kind e))
+              (parser-error-position-kind e)
+              (parser-error-span e)
+              (parser-error-span-offset e))
         e))
 
   ;; What project-error yields, named so a test can assert the width rather than
@@ -43,7 +45,12 @@
   ;; only member that divergence moved, so this is the projection member that
   ;; caught it. Do not narrow this list on the argument that both lanes "build
   ;; it from the same declaration"; that was the assumption the defect broke.
-  (define projected-members 6)
+  ;;
+  ;; Eight since decision 0056: the span an error abandoned and the stream offset
+  ;; where its withheld bytes begin. Both are comparable for the same reason the
+  ;; position kind is -- each lane reaches them through its OWN span-open, at its
+  ;; own cursor -- so they are compared, not left as two more orphans.
+  (define projected-members 8)
 
   ;; The deliberately excluded member. Exposed so a lane can assert that both
   ;; executors REPORT a state id while the comparison omits it -- positively,

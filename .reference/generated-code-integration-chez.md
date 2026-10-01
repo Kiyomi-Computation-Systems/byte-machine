@@ -109,7 +109,9 @@ Read a parser-result with `parser-result-status`, `parser-result-next`,
 the absolute index past the last consumed byte and `consumed` is `next - start`.
 On `error`, `parser-result-error` holds a parser-error read with
 `parser-error-code`, `-reason`, `-node-name`, `-offset`, `-position-kind`, and the
-rest of that family. On `paused`, `parser-result-error` stays `#f` (a pause is not
+rest of that family — including `-span` and `-span-offset`, which name the span
+an error abandoned and where its withheld bytes begin, or `#f` when none was
+open (decision 0056). On `paused`, `parser-result-error` stays `#f` (a pause is not
 an error, and it is resumable) and `parser-result-pause` holds the pause's reason
 — the SAME parser-error shape, so the same accessors read its code and reason —
 when the pause node (or a callback node whose callback returned `callback-pause`)

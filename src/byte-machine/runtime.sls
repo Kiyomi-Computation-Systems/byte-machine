@@ -22,6 +22,7 @@
           parser-error-domain parser-error-code parser-error-reason
           parser-error-detail parser-error-node-name parser-error-state-id
           parser-error-offset parser-error-position-kind
+          parser-error-span parser-error-span-offset
           parser-field-ref
           callback-continue callback-pause
           ;; `parser-state-name` must name a source node, not a generated
@@ -241,7 +242,10 @@
     (if (> (vector-length r) 6) (vector-ref r 6) #f))
 
   ;; --- parser error ---
-  ;; Eight members, opaque.
+  ;; Ten members, opaque. The last two -- the span the error abandoned and the
+  ;; stream offset where that span's withheld bytes begin (decision 0056) -- are
+  ;; never a constructor's: both constructors below leave them #f, and
+  ;; `abandon-span!` fills them where both executors hand an error back.
   (define parser-error-tag (tag 'byte-machine-parser-error))
   ;; The reserved constructor generated code calls takes FIVE arguments, not
   ;; eight: an errs-table entry packing this declaration's code and reason, the
@@ -253,7 +257,7 @@
   ;; byte-machine-make-parser-error/v1 : (Vector Symbol String) NodeName (U ExactInteger Symbol) ExactInteger PositionKind -> ParserError
   (define (byte-machine-make-parser-error/v1 entry node-name state-id offset position-kind)
     (vector parser-error-tag 'machine (vector-ref entry 0) (vector-ref entry 1) #f
-            node-name state-id offset position-kind))
+            node-name state-id offset position-kind #f #f))
   ;; --- the callback domain ---------------------------------------------------
   ;; Two producers: an explicit callback failure, whose code and detail are the
   ;; APPLICATION's and pass through, and a return outside the declared outcomes,
@@ -288,7 +292,7 @@
   (define (byte-machine-make-callback-error/v1 code detail node-name state-id
                                                offset position-kind)
     (vector parser-error-tag 'callback code callback-error-reason detail
-            node-name state-id offset position-kind))
+            node-name state-id offset position-kind #f #f))
   ;; parser-error? : Any -> Boolean
   (define (parser-error? x) (tagged? parser-error-tag x))
   ;; The interpreter's executor hands back (code reason node-name state-id); the
@@ -315,6 +319,20 @@
   (define (parser-error-offset e) (vector-ref e 7))
   ;; parser-error-position-kind : ParserError -> PositionKind
   (define (parser-error-position-kind e) (vector-ref e 8))
+  ;; The span the error abandoned (§14:839), or #f when none was open. A pause
+  ;; reason answers #f: a pause abandons nothing, and the parser it came from can
+  ;; still be asked `parser-active-span`.
+  ;; parser-error-span : ParserError -> (Option Symbol)
+  (define (parser-error-span e) (vector-ref e 9))
+  ;; Where that span's WITHHELD bytes begin, as a stream offset, or #f when no
+  ;; span was open. `[span-offset, parser-error-offset)` is exactly what §14:839
+  ;; withholds -- bytes the parser took for the span and neither flushed nor
+  ;; delivered -- and every byte the span took before `span-offset` went out in
+  ;; an earlier fragment. It can be empty: a data callback that FAILS was handed
+  ;; its bytes, and at finish the last feed's boundary flush already handed over
+  ;; every byte the span took.
+  ;; parser-error-span-offset : ParserError -> (Option ExactInteger)
+  (define (parser-error-span-offset e) (vector-ref e 10))
 
   ;; --- parser (mutable state behind procedures) ---
   ;; (vector tag variant executor entry current offset lifecycle stored-error
@@ -797,16 +815,18 @@
   ;; end -- an empty flush means "no new bytes this slice" and the span stays open,
   ;; so a delivery there would announce empty for a span still being built.
   ;;
-  ;; NEITHER ENTRY POINT ADVANCES THE MARK, and that is measured rather than
-  ;; assumed. The data callback is specified to see "its mark advanced to the
-  ;; current cursor", and an advance was written here first; deleting it fails
-  ;; nothing, in either lane. The reason is a construction: every path out of a
-  ;; delivery either CLOSES the span (the completion substep sets the mark to 0)
-  ;; or crosses a feed boundary, where the re-anchor overwrites the mark with the
-  ;; next slice's `start`. There is no third path, and no public accessor reads the
-  ;; mark, so nothing can observe the value between the two -- the "mark advanced"
-  ;; sentence is discharged by the feed-boundary re-anchor, which is where the
-  ;; re-anchoring lives entirely.
+  ;; EVERY DELIVERY ADVANCES THE MARK TO THE FRAGMENT'S END, before the callback
+  ;; runs -- §13:822's "with the delivered mark already advanced to the fragment
+  ;; end". Through Milestone 14 this line was absent, and on purpose: an advance
+  ;; written here first was measured to fail nothing in either lane, because
+  ;; every path out of a delivery either CLOSES the span (the completion substep
+  ;; sets the mark to 0) or crosses a feed boundary, where the re-anchor
+  ;; overwrites the mark with the next slice's `start`, and no accessor read the
+  ;; mark between the two. Decision 0056 adds the third path and the reader: a
+  ;; data callback that FAILS leaves the span open with no feed boundary after
+  ;; it, and `parser-error-span-offset` reads the mark at that error. Without the
+  ;; advance it would report as withheld the very bytes the callback was just
+  ;; handed, so an embedder counting them would count them twice.
   ;;
   ;; The five-argument application is the ONLY thing `span-fragment-deliver!` does
   ;; differently from the two-argument entry point above. `branches` is '() because
@@ -814,6 +834,7 @@
   ;; for spans rather than absent, which is what keeps ONE classifier.
   (define (span-fragment-deliver! parser state offset f bv from to continue)
     (parser-set-span-delivered?! parser #t)
+    (parser-set-span-mark! parser to)
     (callback-commit! parser state offset)
     (classify-callback-result
      (f parser (parser-user-context parser) bv from to)
@@ -939,7 +960,9 @@
   ;;
   ;; *** ONLY ON `need-input`, and every other status has a reason rather than an
   ;; omission. ***
-  ;;   error     -- a final partial fragment is forbidden outright.
+  ;;   error     -- a final partial fragment is forbidden outright. What it
+  ;;                would have carried is recorded on the error instead, by
+  ;;                `abandon-span!` below (decision 0056).
   ;;   stopped   -- reaching either with a span active is a VERIFIER rejection
   ;;   finished     (`span-active-at-exit`), so neither is reachable.
   ;;   paused    -- a feed that exits `paused` leaves the span active with the
@@ -995,6 +1018,49 @@
                                   (parser-offset parser) 'boundary)))
             (else r)))
         r))
+
+  ;; The span an error abandons (decision 0056). It runs at the same seam as the
+  ;; flush, after it -- the flush can itself produce the error -- and it is the
+  ;; reason the error row of the flush needs no fragment: §14:839 withholds the
+  ;; bytes, and this records where they begin.
+  ;;
+  ;; An error leaves span state alone (`parser-active-span` still names the span
+  ;; afterwards), so at this seam the parser holds the span's name and its MARK:
+  ;; the slice offset where its next fragment would begin. Every byte the span
+  ;; took before the mark went out already -- a delivery advances the mark to
+  ;; the fragment's end, and a feed boundary re-anchors it to the next slice's
+  ;; `start` after flushing -- so the mark is where the withheld bytes begin, and
+  ;; what remains is to say it as a STREAM offset.
+  ;;
+  ;; `cursor` is the slice offset that the result's stream offset names. For a
+  ;; feed that is `next`: a feed result reports the same point twice, once in
+  ;; the slice (`next`) and once in the stream (`stream-offset`), so the mark
+  ;; lies `cursor - mark` bytes before the stream offset. For a finish it is 0:
+  ;; finish runs over the empty slice `[0,0)` and `parser-finish!` re-anchors an
+  ;; open span's mark to 0, so the mark IS the cursor there and the span's
+  ;; withheld range is empty -- the last feed's flush handed every byte over.
+  ;; (A finish result's `next` repeats the stream offset; it is not a slice
+  ;; offset, which is why the cursor is passed rather than read from it.)
+  ;;
+  ;; Only an error result carries a record to fill. A `need-input` or `paused`
+  ;; result can leave a span open too, and has none: a pause abandons nothing.
+  ;;
+  ;; The record is filled IN PLACE, and that is safe because it has not left the
+  ;; runtime: the executor built it for this error alone -- one constructor call
+  ;; per error, which nothing can hoist or share because the offset is one of
+  ;; its arguments -- and nothing has returned it yet. In place is also what
+  ;; keeps ONE record per error. Both finish paths STORE their error before this
+  ;; seam sees it, so the record they stored and the one this call returns are
+  ;; the same object and gain the span together. A copy was tried first: it
+  ;; needed the finish seam to store the copy again, which made every finish
+  ;; path's own store redundant -- three shipped mutation pins on those stores
+  ;; went UNCAUGHT, measured.
+  (define (abandon-span! parser r cursor)
+    (let ((e (parser-result-error r)) (s (parser-active-span parser)))
+      (when (and e s)
+        (vector-set! e 9 s)
+        (vector-set! e 10 (- (parser-result-stream-offset r)
+                             (- cursor (parser-span-mark parser)))))))
 
   ;; A FRESH vector every call, never a shared one: two parsers from one compiled
   ;; machine must not share storage, and parser-reset! must not hand back a
@@ -1066,6 +1132,7 @@
                         ((v2) (parser-feed-v2! parser bv start end))
                         (else (assertion-violation 'parser-feed! "unknown parser variant"
                                                    (parser-variant parser)))))))
+               (abandon-span! parser r (parser-result-next r))
                (case (parser-result-status r)
                  ((stopped) (parser-set-lifecycle! parser 'stopped))
                  ((error) (parser-set-lifecycle! parser 'error)
@@ -1410,6 +1477,10 @@
                         ;; Unreachable for the same reason as make-parser's else.
                         (else (assertion-violation 'parser-finish! "unknown parser variant"
                                                    (parser-variant parser))))))
+               ;; The cursor is 0, the cursor of the empty slice finish runs
+               ;; over -- not the result's `next`, which a finish result fills
+               ;; with the stream offset.
+               (abandon-span! parser r 0)
                ;; Unlike the feed path, BOTH finish paths record their own
                ;; terminal lifecycle before returning -- and every EOF outcome is
                ;; terminal or paused, so there is no `need-input` arm to restore.
