@@ -1011,6 +1011,12 @@ cmake_minimum_required(VERSION 3.26)
 #   announced uniformly rather than by the last feed's slice start. It now has its
 #   own pin ("parser-finish! does not re-anchor the span mark to 0"). The M5
 #   record above is left as it was measured then.]
+#   [2026-10-01, issue #145, decision 0056: the mark advance was RE-ADDED too,
+#   because a public accessor now reads a mark -- `parser-error-span-offset`, at
+#   an error. The nesting above missed a path that already existed: a data
+#   callback that FAILS leaves the span open with no feed boundary after it.
+#   Pass 78's "a delivery does not advance the mark" pins it. The M5 record
+#   above is left as it was measured then.]
 #
 # FOUR shipped pins moved. Two because the F1 split re-indented the classifier
 # and relocated the `busy` write, and TWO because a span arm became a second site
@@ -1443,8 +1449,20 @@ cmake_minimum_required(VERSION 3.26)
 # op three ways, a per-byte and a per-matched-byte op call, the keyword arm and
 # both error records allocating per byte, and a second datum in compile.sls.
 # 651 -> 660, passes unchanged at 77.
-set(EXPECTED_PASSES 77)
-set(EXPECTED_MUTATIONS 660)
+# Issue #145 (an error records the span it abandoned, decision 0056) adds ONE
+# new pass, 78 (differential.abandoned-span, 20 mutations: the guard's two
+# conjuncts, each seam's call and cursor, the fill's order against the flush,
+# two operands of the offset arithmetic, each slot written and each slot read,
+# the span recorded, the mark advance on delivery, each constructor's two
+# defaults, and one declared survivor -- the advance narrowed to failing
+# deliveries, which no lane can tell apart). Eight shipped pins moved, none
+# retired: six re-pinned on measured output -- five that spelled the error
+# projection, which gained two members, and Pass 54's re-anchor pin, whose
+# mutant's got moved because a delivery now advances the mark -- and two
+# re-anchored, the record-growth pins in Pass 77, whose FIND and REPLACE follow
+# the eleven-slot constructors. 660 -> 680, 77 -> 78.
+set(EXPECTED_PASSES 78)
+set(EXPECTED_MUTATIONS 680)
 # Sixty-two is sixty-one plus one: Milestone 8 Slice ① adds one pass over the
 # request-line fixture (http-machine.sls) with three mutations (590 -> 593),
 # each caught by byte-machine.unit.http-request-line with a measured signature.
@@ -11176,8 +11194,12 @@ byte_machine_mutation(
   FIND [[  (define callback-failure-position 'boundary)]]
   REPLACE [[  (define callback-failure-position 'byte)]]
   EXPECT_STATUS 1
+  # Re-pinned 2026-10-01 for decision 0056: the projection gained the abandoned
+  # span and its offset, so each side now ends `#f #f` (no span is open at a
+  # callback node -- the verifier refuses one there). Measured by staging the
+  # mutant: the bare `boundary.,` no longer reached the comma.
   EXPECT_OUTPUT_MATCHES
-    "the lanes agree on the projection -- expected .callback said-no .callback failure. inv 1 boundary., got .callback said-no .callback failure. inv 1 byte."
+    "the lanes agree on the projection -- expected .callback said-no .callback failure. inv 1 boundary #f #f., got .callback said-no .callback failure. inv 1 byte #f #f."
 )
 
 byte_machine_mutation(
@@ -11200,8 +11222,11 @@ byte_machine_mutation(
             "(byte-machine-make-callback-error/v1 (callback-failure-code o) (callback-failure-detail o) (quote "
             (nm (normal-state-id s)) ") " id " off pk) " id " off))\n"]]
   EXPECT_STATUS 1
+  # Re-pinned 2026-10-01 for decision 0056 with the whole projection, both
+  # sides, measured: it still matched as `byte.`, but only by reaching the space
+  # before the two new members.
   EXPECT_OUTPUT_MATCHES
-    "a callback failure reports boundary at the committed offset: the lanes agree on the projection -- expected .callback said-no .callback failure. inv 1 byte."
+    "a callback failure reports boundary at the committed offset: the lanes agree on the projection -- expected .callback said-no .callback failure. inv 1 byte #f #f., got .callback said-no .callback failure. inv 1 boundary #f #f."
 )
 
 byte_machine_mutation(
@@ -11218,8 +11243,12 @@ byte_machine_mutation(
             "               " (render-dispatch-else "o") ")))\n")))
         ;; The SECOND substep.]]
   EXPECT_STATUS 1
+  # Re-pinned 2026-10-01 for decision 0056, measured: the data callback fails
+  # with its span still open, so both sides now name the span (`body`) and an
+  # empty withheld range at the error offset -- the failing callback was handed
+  # its bytes.
   EXPECT_OUTPUT_MATCHES
-    "a span data callback failure reports boundary at the committed offset: the lanes agree on the projection -- expected .callback said-no .callback failure. cl 2 byte."
+    "a span data callback failure reports boundary at the committed offset: the lanes agree on the projection -- expected .callback said-no .callback failure. cl 2 byte body 2., got .callback said-no .callback failure. cl 2 boundary body 2."
 )
 
 byte_machine_mutation(
@@ -11233,8 +11262,10 @@ byte_machine_mutation(
   REPLACE [[                (nm (normal-state-id s)) ") " id " off pk) " id " off))\n"
                 "                 " (render-dispatch-else "o") "))))\n"))))]]
   EXPECT_STATUS 1
+  # Re-pinned 2026-10-01 for decision 0056, measured: the span is closed before
+  # its completion callback runs, so both sides end `#f #f`.
   EXPECT_OUTPUT_MATCHES
-    "a span completion callback failure reports boundary too: the lanes agree on the projection -- expected .callback said-no .callback failure. cl 2 byte."
+    "a span completion callback failure reports boundary too: the lanes agree on the projection -- expected .callback said-no .callback failure. cl 2 byte #f #f., got .callback said-no .callback failure. cl 2 boundary #f #f."
 )
 
 # --- Milestone 6 Slice ① task 2: the runtime's counted arm, witnessed here -----
@@ -12751,13 +12782,22 @@ byte_machine_mutation(
   # Measured, not derived: the sub-slice case below does NOT fail under this
   # mutant, because there the stale mark happens to land on the right byte. Two
   # mutations, two cases, and neither case covers both.
+  #
+  # 2026-10-01, decision 0056: the paragraphs above describe the tree before a
+  # delivery advanced the mark. The advance is restored (`§13:822`), so this is
+  # no longer the only place a mark moves after a span opens, and the stale mark
+  # this mutant leaves is the previous slice's END -- past the next span end's
+  # cursor, so that end delivers NOTHING (`from > to` is suppressed), not one
+  # wrong byte. The sub-slice case fails under it now too (six cases, measured
+  # by staging the mutant). Re-pinned on the measured got; the FIND and REPLACE
+  # are unchanged.
   FIND [[       (when (parser-active-span parser)
          (parser-set-span-mark! parser start))
        (let ((completed #f))]]
   REPLACE [[       (let ((completed #f))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "bc then de, never bc twice -- expected .#vu8.98 99. #vu8.100 101. complete., got .#vu8.98 99. #vu8.101. complete."
+    "bc then de, never bc twice -- expected .#vu8.98 99. #vu8.100 101. complete., got .#vu8.98 99. complete."
 )
 
 byte_machine_mutation(
@@ -13133,7 +13173,9 @@ byte_machine_mutation(
   FIND [[            "                (let ((n (min v (- end pos))))\n"]]
   REPLACE [[            "                (let ((n (- end pos)))\n"]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "generated: surplus into a rejection -- expected ..error 5 5 .machine unexpected-byte .unexpected byte. reject 5 byte. error reject 0.., got ..need-input")
+  # Re-pinned 2026-10-01 for decision 0056, measured: the projection gained two
+  # members, `#f #f` here, and `byte. error` no longer reached them.
+  EXPECT_OUTPUT_MATCHES "generated: surplus into a rejection -- expected ..error 5 5 .machine unexpected-byte .unexpected byte. reject 5 byte #f #f. error reject 0.., got ..need-input")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.counted.chez.source
@@ -14732,10 +14774,14 @@ byte_machine_mutation(
   # A tenth slot no accessor reads, sized by the offset -- the shape of a
   # record that copied the input it refused. Also reddens the emitted keyword
   # arm (every k there ends at an error), with a different got.
+  # Re-anchored 2026-10-01 for decision 0056: the record gained the two
+  # abandoned-span members, which both constructors build as `#f #f`, so the
+  # slot this appends is now the twelfth. FIND and REPLACE moved together and
+  # still differ by the one appended slot.
   FIND [[(vector-ref entry 1) #f
-            node-name state-id offset position-kind))]]
+            node-name state-id offset position-kind #f #f))]]
   REPLACE [[(vector-ref entry 1) #f
-            node-name state-id offset position-kind (make-bytevector offset 0)))]]
+            node-name state-id offset position-kind #f #f (make-bytevector offset 0)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES [[a machine error's record does not grow with the offset it reports: machine error: alloc.short prefix. = alloc.long prefix. -- expected]])
 
@@ -14743,10 +14789,11 @@ byte_machine_mutation(
   FILE src/byte-machine/runtime.sls
   SPEC byte-machine.unit.allocation-audit.chez.source
   LABEL "runtime: a callback failure's record grows with the offset it reports"
+  # Re-anchored 2026-10-01 for decision 0056, as the machine-error pin above.
   FIND [[callback-error-reason detail
-            node-name state-id offset position-kind))]]
+            node-name state-id offset position-kind #f #f))]]
   REPLACE [[callback-error-reason detail
-            node-name state-id offset position-kind (make-bytevector offset 0)))]]
+            node-name state-id offset position-kind #f #f (make-bytevector offset 0)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES [[a callback failure's record does not grow with the offset it reports: callback failure: alloc.short. = alloc.long. -- expected]])
 
@@ -14762,6 +14809,279 @@ byte_machine_mutation(
 (define census-trailing-datum 0)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES [[the census is derived from compile.sls's emitted text: compile.sls is exactly one datum -- expected a true value]])
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 78: the span an error abandons (differential.abandoned-span) -------
+# Issue #145, decision 0056. Every mutation below was measured by staging it
+# and running this lane's program through the source launcher: each pin
+# resolves exactly once in its own mutant's output, in no other mutant's in
+# this pass, and not in the baseline's (a 19 x 20 sweep, re-run after the last
+# pin moved). The last mutation is a declared survivor.
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/differential-abandoned-span-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.abandoned-span.chez.source
+  LABEL "runtime: an error records an abandoned span when none was open"
+  # The `s` conjunct. Without it every error is filled, and one with no span
+  # open reports `#f` beside an offset computed from the mark a closed span
+  # left at 0 -- which reads that feed's start, so it is pinned in a LATER feed,
+  # where it is not the 0 a constructor default would give.
+  FIND [[(when (and e s)]]
+  REPLACE [[(when e]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[and in a later feed, where an offset computed anyway would not be 0: the error records no span -- expected .error 0 0 3 .machine unexpected-byte .unexpected byte. reject 3 byte #f #f. error., got .error 0 0 3 .machine unexpected-byte .unexpected byte. reject 3 byte #f 3. error.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.abandoned-span.chez.source
+  LABEL "runtime: a result that is not an error is filled as one that abandoned its span"
+  # The `e` conjunct. Its removal is caught by a RAISE, not a comparison, and
+  # the raise is the decision's own failure: a result with a span open that is
+  # not an error -- `need-input` at every feed boundary, `paused` at a flush --
+  # has no record to fill. Measured, 15 of 30 cases raise identically, each one
+  # a case in which some feed ends with the span open; pinned on the case named
+  # for the decision. The opposite constant, `(and #f s)`, is the union of the
+  # two seam mutants below and names no decision of its own.
+  FIND [[(when (and e s)]]
+  REPLACE [[(when s]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[a flush that pauses, then an error after resume: case raised -- Exception in vector-set!]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.abandoned-span.chez.source
+  LABEL "runtime: a feed's error does not record the span it abandoned"
+  # The feed seam's call. Every finish case stays green under it.
+  FIND [[(abandon-span! parser r (parser-result-next r))]]
+  REPLACE [[(parser-result-next r)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[refused AT the byte: the withheld bytes are the span's own: read through the accessors, in both lanes -- expected ..tok 1. .tok 1.., got ..#f #f. .#f #f..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.abandoned-span.chez.source
+  LABEL "runtime: a finish's error does not record the span it abandoned"
+  # The finish seam's call. Every feed case stays green under it.
+  FIND [[(abandon-span! parser r 0)]]
+  REPLACE [[0]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[a span truncated at EOF: the finish is the truncation error -- expected .error 3 0 3 .machine eof .token truncated. trunc 3 eof tok 3. error., got .error 3 0 3 .machine eof .token truncated. trunc 3 eof #f #f. error.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.abandoned-span.chez.source
+  LABEL "runtime: the withheld bytes begin at the error's own stream offset"
+  # Drops the slice distance back to the mark, so the withheld range is always
+  # empty. Finish is unaffected: its range is empty anyway.
+  FIND [[(- cursor (parser-span-mark parser))]]
+  REPLACE [[0]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[refused AT the byte: the withheld bytes are the span's own: read through the accessors, in both lanes -- expected ..tok 1. .tok 1.., got ..tok 3. .tok 3..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.abandoned-span.chez.source
+  LABEL "runtime: the withheld offset forgets the mark and names slice index 0"
+  # Drops the mark: the offset becomes the stream offset of the failing feed's
+  # slice index 0 -- the feed's own start only when its slice starts at 0, and
+  # right then only for a span carried into it.
+  FIND [[(- cursor (parser-span-mark parser))]]
+  REPLACE [[(- cursor 0)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[refused AT the byte: the withheld bytes are the span's own: read through the accessors, in both lanes -- expected ..tok 1. .tok 1.., got ..tok 0. .tok 0..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.abandoned-span.chez.source
+  LABEL "runtime: a feed's cursor is taken as 0, as a finish's is"
+  # The feed seam passes a finish's cursor, so the mark reads as a distance
+  # past the error rather than a position before it.
+  FIND [[(abandon-span! parser r (parser-result-next r))]]
+  REPLACE [[(abandon-span! parser r 0)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[refused AT the byte: the withheld bytes are the span's own: read through the accessors, in both lanes -- expected ..tok 1. .tok 1.., got ..tok 4. .tok 4..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.abandoned-span.chez.source
+  LABEL "runtime: a finish's cursor is the stream offset it reports as next"
+  # The finish seam reads its cursor from the result's `next`, which a
+  # finish result fills with the stream offset.
+  FIND [[(abandon-span! parser r 0)]]
+  REPLACE [[(abandon-span! parser r (parser-result-next r))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[a span truncated at EOF: the finish is the truncation error -- expected .error 3 0 3 .machine eof .token truncated. trunc 3 eof tok 3. error., got .error 3 0 3 .machine eof .token truncated. trunc 3 eof tok 0. error.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.abandoned-span.chez.source
+  LABEL "runtime: a delivery does not advance the mark"
+  # The advance this decision restored (§13:822). Without it a data callback
+  # that fails reports as withheld the bytes it was just handed.
+  FIND [[    (parser-set-span-mark! parser to)]]
+  REPLACE [[    #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[failing at the span end: the error -- expected .error 3 3 3 .callback too-long .callback failure. close 3 boundary tok 3. error., got .error 3 3 3 .callback too-long .callback failure. close 3 boundary tok 1. error.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.abandoned-span.chez.source
+  LABEL "runtime: parser-error-span reads the offset's slot"
+  FIND [[  (define (parser-error-span e) (vector-ref e 9))]]
+  REPLACE [[  (define (parser-error-span e) (vector-ref e 10))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[refused AT the byte: the withheld bytes are the span's own: read through the accessors, in both lanes -- expected ..tok 1. .tok 1.., got ..1 1. .1 1..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.abandoned-span.chez.source
+  LABEL "runtime: parser-error-span-offset reads the span's slot"
+  FIND [[  (define (parser-error-span-offset e) (vector-ref e 10))]]
+  REPLACE [[  (define (parser-error-span-offset e) (vector-ref e 9))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[refused AT the byte: the withheld bytes are the span's own: read through the accessors, in both lanes -- expected ..tok 1. .tok 1.., got ..tok tok. .tok tok..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.abandoned-span.chez.source
+  LABEL "runtime: the abandoned span is written to its offset's slot"
+  # The span lands in the offset's slot and the offset overwrites it: the
+  # record names no span beside a right offset.
+  FIND [[(vector-set! e 9 s)]]
+  REPLACE [[(vector-set! e 10 s)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[refused AT the byte: the withheld bytes are the span's own: read through the accessors, in both lanes -- expected ..tok 1. .tok 1.., got ..#f 1. .#f 1..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.abandoned-span.chez.source
+  LABEL "runtime: the withheld offset is written to the span's slot"
+  # The offset lands in the span's slot: the record names a number as its
+  # span and no offset.
+  FIND [[(vector-set! e 10 (- (parser-result-stream-offset r)]]
+  REPLACE [[(vector-set! e 9 (- (parser-result-stream-offset r)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[refused AT the byte: the withheld bytes are the span's own: read through the accessors, in both lanes -- expected ..tok 1. .tok 1.., got ..1 #f. .1 #f..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.abandoned-span.chez.source
+  LABEL "runtime: the record names a span other than the one open"
+  # A constant name. `abm` declares one span, so only the property rows over
+  # the keyword-table and counted fixtures, whose spans are `meth` and `body`,
+  # can tell it from the open span's own name.
+  FIND [[(vector-set! e 9 s)]]
+  REPLACE [[(vector-set! e 9 'tok)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[a keyword prefix refused: every schedule abandons the span with delivered .. withheld intact -- expected .., got ..tok 2 byte #t 0 ..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.abandoned-span.chez.source
+  LABEL "runtime: a feed's error is filled before the boundary flush"
+  # Fills the executor's result before the boundary flush runs, so an error the
+  # flush itself produces -- a data callback failing at a feed boundary -- goes
+  # unfilled. Separated from the feed seam's deleted call by the property row,
+  # whose span-end failures this mutant still fills.
+  FIND [[             (let ((r (span-boundary-flush!
+                       parser bv
+                       (case (parser-variant parser)
+                        ((op) (parser-feed-op! parser bv start end))
+                        ((v2) (parser-feed-v2! parser bv start end))
+                        (else (assertion-violation 'parser-feed! "unknown parser variant"
+                                                   (parser-variant parser)))))))
+               (abandon-span! parser r (parser-result-next r))]]
+  REPLACE [[             (let ((r (span-boundary-flush!
+                       parser bv
+                       (let ((x (case (parser-variant parser)
+                        ((op) (parser-feed-op! parser bv start end))
+                        ((v2) (parser-feed-v2! parser bv start end))
+                        (else (assertion-violation 'parser-feed! "unknown parser variant"
+                                                   (parser-variant parser))))))
+                         (abandon-span! parser x (parser-result-next x))
+                         x))))
+               #t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[a data callback failing on its first fragment: every schedule abandons the span with delivered .. withheld intact -- expected .., got ..#f 2 boundary #f #f .119..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.abandoned-span.chez.source
+  LABEL "runtime: a machine error is built naming a span"
+  # Neither constructor can know the span; what they build must say none.
+  FIND [[(vector-ref entry 1) #f
+            node-name state-id offset position-kind #f #f))]]
+  REPLACE [[(vector-ref entry 1) #f
+            node-name state-id offset position-kind 'tok #f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[a span that closed before the error leaves nothing behind: both accessors answer #f, in both lanes -- expected ..#f #f. .#f #f.., got ..tok #f. .tok #f..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.abandoned-span.chez.source
+  LABEL "runtime: a machine error is built with a withheld offset"
+  # The machine constructor's offset default. Separated from the `s`
+  # conjunct's mutant only by the later-feed case, where that one reads 3.
+  FIND [[(vector-ref entry 1) #f
+            node-name state-id offset position-kind #f #f))]]
+  REPLACE [[(vector-ref entry 1) #f
+            node-name state-id offset position-kind #f 0))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[and in a later feed, where an offset computed anyway would not be 0: the error records no span -- expected .error 0 0 3 .machine unexpected-byte .unexpected byte. reject 3 byte #f #f. error., got .error 0 0 3 .machine unexpected-byte .unexpected byte. reject 3 byte #f 0. error.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.abandoned-span.chez.source
+  LABEL "runtime: a callback error is built naming a span"
+  FIND [[callback-error-reason detail
+            node-name state-id offset position-kind #f #f))]]
+  REPLACE [[callback-error-reason detail
+            node-name state-id offset position-kind 'tok #f))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[a completion callback that fails finds the span already closed: the error records no span -- expected .error 2 2 2 .callback too-long .callback failure. close 2 boundary #f #f. error., got .error 2 2 2 .callback too-long .callback failure. close 2 boundary tok #f. error.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.abandoned-span.chez.source
+  LABEL "runtime: a callback error is built with a withheld offset"
+  # The callback constructor's offset default, separated from the `s`
+  # conjunct's mutant by the later-feed completion failure, where that one
+  # reads 2.
+  FIND [[callback-error-reason detail
+            node-name state-id offset position-kind #f #f))]]
+  REPLACE [[callback-error-reason detail
+            node-name state-id offset position-kind #f 0))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[a completion callback failing in a later feed: the error records no span -- expected .error 0 0 2 .callback too-long .callback failure. close 2 boundary #f #f. error., got .error 0 0 2 .callback too-long .callback failure. close 2 boundary #f 0. error.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/runtime.sls
+  SPEC byte-machine.differential.abandoned-span.chez.source
+  LABEL "runtime: the mark advances only when the delivery fails"
+  FIND [[    (parser-set-span-delivered?! parser #t)
+    (parser-set-span-mark! parser to)
+    (callback-commit! parser state offset)
+    (classify-callback-result
+     (f parser (parser-user-context parser) bv from to)
+     '() continue))]]
+  REPLACE [[    (parser-set-span-delivered?! parser #t)
+    (callback-commit! parser state offset)
+    (let ((o (classify-callback-result
+              (f parser (parser-user-context parser) bv from to)
+              '() continue)))
+      (when (callback-failure? o) (parser-set-span-mark! parser to))
+      o))]]
+  EXPECT_SURVIVES
+    "a mark advanced on a SUCCESSFUL delivery is overwritten before anything reads it -- the completion substep closes the span and zeroes the mark, a pause resumes into a feed or a finish that re-anchors it, and a flush that continues ends the feed at a boundary -- so only a FAILING delivery's advance is observable, through parser-error-span-offset. Measured surviving every lane that drives a span: the span, counted-span, pause, callback, keyword-span and abandoned-span differentials, position-kind, the property differential, retention, and the HTTP message and chunked lanes. Declared rather than left unwritten because the boundary flush's absent `paused` arm is INERT only while every delivery advances the mark: narrowed to failing deliveries, that arm would deliver a fragment twice.")
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # Every pass above has now run exactly once, so the accumulated total is

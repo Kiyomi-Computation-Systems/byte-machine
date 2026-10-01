@@ -21,7 +21,9 @@
 ;; machine domain, the resolved code and reason, the public source-node name of
 ;; the error node, that same absolute offset, and `byte` -- the reexecute edge's
 ;; kind, since a mismatch does not consume the offending byte.
-(define (reject-at k) (list 'machine 'unexpected-byte "unexpected byte" 'reject k 'byte))
+;; The last two members are the span the error abandoned and where its withheld
+;; bytes begin (decision 0056) -- #f here, where no span is ever open.
+(define (reject-at k) (list 'machine 'unexpected-byte "unexpected byte" 'reject k 'byte #f #f))
 
 (harness-begin "differential.sequence")
 

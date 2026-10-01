@@ -389,8 +389,11 @@
                        (cadr (car r)) (list (bytes 98 99)))
           (check-equal "and the feed is an error at the boundary"
                        (car (car (car r)))
+                       ;; Decision 0056: the failure leaves `payload` open, and the
+                       ;; flush HANDED `bc` to the callback that failed -- so the
+                       ;; error names the span with nothing withheld, [3,3).
                        '(error 3 3 3 (callback flush-said-no "callback failure"
-                                      body 3 boundary)
+                                      body 3 boundary payload 3)
                          error)))))
     (harness-case "the state id it carries is the DATA callback's slot, in both lanes"
       (lambda ()
@@ -519,7 +522,10 @@
           ;; reason text.
           (check-equal "the finish is the truncation error"
                        (cadr (car (car r)))
-                       '(error 3 0 3 (machine eof "span truncated" trunc 3 eof) error)))))
+                       ;; Decision 0056: the error abandons `payload`, whose bytes
+                       ;; the flush already handed over -- nothing withheld, [3,3).
+                       '(error 3 0 3 (machine eof "span truncated" trunc 3 eof payload 3)
+                         error)))))
     (harness-case "an error mid-slice flushes nothing either"
       (lambda ()
         ;; The other error shape: the span never opens, so there is nothing to

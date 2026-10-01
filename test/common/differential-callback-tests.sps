@@ -177,11 +177,11 @@
               (c (car (drive cm-ref 'not-a-declared-key (bv1 65)))))
           (check-equal "the explicit failure's application code"
                        (list-ref f 4)
-                       '(callback app-said-no "callback failure" inv 1 boundary))
+                       '(callback app-said-no "callback failure" inv 1 boundary #f #f))
           (check-equal "and the minted out-of-contract code"
                        (list-ref c 4)
                        '(callback callback-contract-violation "callback failure"
-                                  inv 1 boundary)))))
+                                  inv 1 boundary #f #f)))))
     (harness-case "the explicit failure's detail passes through in BOTH lanes"
       (lambda ()
         ;; Per lane rather than through the projection: §22.4:1271 does not

@@ -63,6 +63,7 @@
       parser-error-domain parser-error-code parser-error-reason
       parser-error-detail parser-error-node-name parser-error-state-id
       parser-error-offset parser-error-position-kind
+      parser-error-span parser-error-span-offset
       byte-machine-make-compiled-machine
       parser-field-ref
       callback-continue callback-pause

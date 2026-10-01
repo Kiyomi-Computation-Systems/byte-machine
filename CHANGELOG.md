@@ -8,6 +8,33 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ### Added
 
+- **An error records the span it abandoned**
+  ([0056](.decisions/0056-an-error-records-the-span-it-abandoned.md),
+  [issue #145](https://github.com/Kiyomi-Computation-Systems/byte-machine/issues/145)).
+  When a parse error stops the parser with a span open, `§14:839` flushes no
+  final fragment, so the bytes the span took in the failing feed never reached
+  the application. An embedder that counts a span's bytes, for a size limit on
+  a request target say, got an answer that depended on how the network split
+  the input. Two accessors on the parser-error record now say what was
+  withheld. `parser-error-span` names the abandoned span, and
+  `parser-error-span-offset` is the stream offset where its withheld bytes
+  begin. Both are `#f` when no span was open. With the span's data callback
+  bound, the delivered fragments followed by `[span-offset, parser-error-offset)`
+  are the span's bytes up to the error, however the input was split into feeds.
+  A new lane asserts this in both executors over every schedule of up to three
+  feeds, on a byte-dispatch span, a keyword table inside a span and a counted
+  body inside a span.
+
+  Internally, a span delivery now advances the span's mark to the fragment's
+  end, as `§13:822` specifies; the code had dropped it while nothing could
+  observe it. Without it, a data callback that fails would see its own bytes
+  reported as withheld. **No regeneration is needed.** The generated-runtime
+  ABI stays 9, the emitted text and every golden are unchanged, and the two
+  values are filled where both executors hand an error back. Every parser-error
+  record carries the two new members, so the cross-lane error projection grows
+  from six members to eight. The mutation lane goes from 77 passes / 660
+  mutations to 78 / 680.
+
 - **The allocation audit is a census of the runtime ops emitted code can call**
   ([0055](.decisions/0055-the-allocation-audit-is-a-census-of-runtime-ops.md)).
   Issue #139 was an op the audit never ran, so `§26:1680`'s coverage now rests
@@ -21,6 +48,14 @@ All notable changes to byte-machine are recorded here. The format follows
   also asserts that no op is entered per byte of a header value or per matched
   keyword byte. The mutation lane goes from 77 passes / 651 mutations to
   77 / 660.
+
+### Changed
+
+- **`parser-error-span` and `parser-error-span-offset` are refused as output
+  bindings**, like every other runtime export
+  ([0056](.decisions/0056-an-error-records-the-span-it-abandoned.md)). A
+  generated library imports `(byte-machine runtime)` whole, so a binding with
+  either name would collide with the import.
 
 ## [0.6.1] - 2026-09-26
 

@@ -10,9 +10,10 @@ exist — `:1701`'s changelog predates it by several milestones. Everything belo
 code, not against the plan; where the two would differ, the code is described and
 the difference is named.
 
-Applies to byte-machine at Milestone 5. Both executors — the interpreter and a
-generated parser — behave identically here except where a difference is called
-out.
+Written at Milestone 5; brought up to date for decisions 0042 (an empty span is
+observable) and 0056 (an error reports the span it abandoned). Both executors —
+the interpreter and a generated parser — behave identically here except where a
+difference is called out.
 
 ---
 
@@ -103,16 +104,16 @@ At callback entry both executors expose **identical committed parser state**
 - **lifecycle is `busy`** (`§13:821`), so `parser-feed!`, `parser-finish!`,
   `parser-resume!` and `parser-reset!` all raise from inside a callback. Every
   *read* accessor answers normally;
-- **a span-data callback sees its span active** (`§13:822`). The plan's same
-  sentence adds "with the delivered mark already advanced to the fragment end",
-  and **the code does not do that** — `byte-machine-span-fragment-step/v2` reads
-  the mark as the fragment's *start* and leaves it alone, with a comment
-  recording that the advance was written, measured to fail nothing in either
-  lane, and deleted: every path out of a delivery either closes the span or
-  crosses a feed boundary, where `§14:833`'s re-anchor overwrites the mark. The
-  difference cannot reach you — `parser-span-mark` is not exported, so no
-  callback can observe the mark at all — but it is named here rather than
-  papered over;
+- **a span-data callback sees its span active** (`§13:822`), **with the
+  delivered mark already advanced to the fragment end**, as the plan's same
+  sentence says. Through 0.6.1 the code did not advance it: the advance had been
+  written, measured to fail nothing in either lane, and deleted, on the reading
+  that every path out of a delivery either closed the span or crossed a feed
+  boundary, where `§14:833`'s re-anchor overwrites the mark. That reading missed
+  a callback that *fails*, which leaves the span open with no boundary after it,
+  and decision 0056 added the reader that sees it: `parser-error-span-offset`
+  (§6) reads the mark at that error, so the advance is back.
+  `parser-span-mark` itself is still not exported;
 - **a span-complete callback sees that span inactive** (`§13:823`) — the span is
   closed before the completion callback runs, not after;
 - **no error is installed** until a callback returns failure (`§13:824`).
@@ -160,10 +161,13 @@ A logical span produces **zero or more data fragments followed by exactly one
 completion event** (`§14:835`). How the fragments divide is decided by your feed
 boundaries and your pauses, not by the grammar:
 
-- ending a span emits `[mark,cursor)` if nonempty (`§14:831`);
+- ending a span emits `[mark,cursor)` if nonempty (`§14:831`) — and a span that
+  ends having delivered nothing at all emits one *empty* fragment, so an empty
+  span is observable (`§14:831` as amended by decision 0042);
 - at a feed boundary an open span emits `[mark,end)` if nonempty, stays open, and
   begins its next fragment at the next feed's `start` (`§14:833`);
-- **empty fragments are suppressed** (`§14:834`).
+- **every other empty fragment is suppressed** (`§14:834`): a flush that finds
+  nothing new, and the empty tail of a span whose bytes already went out.
 
 **Do not treat fragment boundaries as semantic boundaries** (`§14:836`). Feeding
 the same bytes in a different number of calls gives you a different sequence of
@@ -174,6 +178,27 @@ and *different* raw traces across schedules whose coalesced form is invariant.
 On an error, the runtime does **not** flush a final partial fragment and does
 **not** synthesize a completion; fragments already emitted at earlier feed
 boundaries remain observable (`§14:839`).
+
+What the error withheld is reported on the error instead (decision 0056).
+`(parser-error-span e)` names the span the error abandoned, and
+`(parser-error-span-offset e)` is the stream offset where its withheld bytes
+begin; both are `#f` when no span was open. The bytes from there to
+`(parser-error-offset e)` are exactly the ones the span took and you were never
+handed, and every byte it took before that offset reached your data callback in
+an earlier fragment, if you bound one. So, with the data callback bound, the
+fragments you received followed by that range are the span's bytes up to the
+error, whichever way the input was split into feeds: a size limit counted that
+way no longer depends on where the network split the bytes. The lane that checks
+this runs every schedule of up to three feeds over three machines, in both
+executors.
+
+The range is empty whenever the span took nothing since its last fragment:
+always at `parser-finish!`, where the last feed's boundary flush already handed
+over everything the span took; when a data callback returns a failure, because
+it was handed its fragment; and when a byte is refused before the span takes
+any in that feed. Whether the range's last byte belongs to the
+token is your grammar's question: when the error node was entered over an
+`advance` edge, that byte is the one whose transition led to the error.
 
 A body's ordinary carrier is a counted consume (`§10.6:596`), which commits its
 bytes in bulk; that changes nothing above — fragment boundaries are still your
@@ -217,4 +242,5 @@ document without passing `verify-machine` has not earned it.
 | all three exemptions really carry | same file, layer 3 — user context, a callback closure, and callback error detail |
 | the weak-reference instrument discriminates | `test/common/liveness-probe-tests.sps` |
 | fragment rules, in both executors | `test/common/differential-span-tests.sps` |
+| an error reports the span it abandoned and where its withheld bytes begin, under every schedule of up to three feeds | `test/common/differential-abandoned-span-tests.sps` |
 | pause, escape and poisoning | `test/common/differential-callback-tests.sps` |

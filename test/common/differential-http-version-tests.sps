@@ -37,9 +37,11 @@
 ;; mismatch reports `byte` AT the offending byte; an advance mismatch reports
 ;; `boundary` after the committed one. Same error node, different arriving
 ;; transition, different position kind -- which is decision 0022's whole point.
-(define (reject-at k) (list 'machine 'unexpected-byte "unexpected byte" 'reject k 'byte))
+;; The last two members are the span the error abandoned and where its withheld
+;; bytes begin (decision 0056) -- #f here, where no span is ever open.
+(define (reject-at k) (list 'machine 'unexpected-byte "unexpected byte" 'reject k 'byte #f #f))
 (define (advance-reject-at k)
-  (list 'machine 'unexpected-byte "unexpected byte" 'reject k 'boundary))
+  (list 'machine 'unexpected-byte "unexpected byte" 'reject k 'boundary #f #f))
 
 (harness-begin "differential.http-version")
 

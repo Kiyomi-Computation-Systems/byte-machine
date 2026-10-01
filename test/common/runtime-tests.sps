@@ -988,6 +988,19 @@
         ;; errors" -- and `callback` had no producer until Milestone 5, which is
         ;; the ordinary condition of a closed enumeration mid-plan.
         (check-equal "domain" (parser-error-domain (err)) 'machine)
-        (check-equal "detail" (parser-error-detail (err)) #f)))))
+        (check-equal "detail" (parser-error-detail (err)) #f)))
+    (harness-case "both constructors record no abandoned span (decision 0056)"
+      (lambda ()
+        ;; Neither constructor can know the span: generated code calls the first
+        ;; with the five arguments above, and ABI 9 is unchanged. The span an error
+        ;; abandons is added where both executors hand the error back, in
+        ;; `parser-feed!` and `parser-finish!`, and only when one is open -- so
+        ;; what a constructor builds must say "none", and so must a pause reason,
+        ;; which is built by the same two and never reaches that seam.
+        (let ((ce (byte-machine-make-callback-error/v1 'too-long #f 'close 1 3 'boundary)))
+          (check-equal "machine: span" (parser-error-span (err)) #f)
+          (check-equal "machine: span offset" (parser-error-span-offset (err)) #f)
+          (check-equal "callback: span" (parser-error-span ce) #f)
+          (check-equal "callback: span offset" (parser-error-span-offset ce) #f))))))
 
 (harness-finish)
