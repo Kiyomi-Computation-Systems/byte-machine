@@ -31,9 +31,11 @@
 ;; the same node, a different arriving transition, a different position kind.
 ;; That contrast is the clearest in-tree evidence that the kind is a property of
 ;; the transition rather than of the state (decision 0022).
-(define (reject-at k) (list 'machine 'unexpected-byte "unexpected byte" 'reject k 'byte))
+;; The last two members are the span the error abandoned and where its withheld
+;; bytes begin (decision 0056) -- #f here, where no span is ever open.
+(define (reject-at k) (list 'machine 'unexpected-byte "unexpected byte" 'reject k 'byte #f #f))
 (define (advance-reject-at k)
-  (list 'machine 'unexpected-byte "unexpected byte" 'reject k 'boundary))
+  (list 'machine 'unexpected-byte "unexpected byte" 'reject k 'boundary #f #f))
 
 (harness-begin "differential.sequence-node")
 

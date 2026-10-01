@@ -1128,6 +1128,31 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-span-tests.sps"
   TIMEOUT 120)
 
+# --- Issue #145: the span an error abandons (decision 0056) -------------------
+# §14:839 withholds the bytes an open span took in the feed that failed, so an
+# embedder counting a span's delivered bytes got an answer that depended on the
+# schedule. The error now names the span and where its withheld bytes begin; this
+# lane pins each path to that, and checks the property itself -- delivered then
+# withheld is the span's bytes up to the error -- under every schedule of up to
+# three slices, in both lanes.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.abandoned-span.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-abandoned-span-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/differential-abandoned-span-tests.sps"
+  TIMEOUT 120)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.abandoned-span.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-abandoned-span-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${CMAKE_SOURCE_DIR}/test/common/differential-abandoned-span-tests.sps"
+  TIMEOUT 120)
+
 # --- Milestone 6 Slice ①: the counted consume in both lanes -------------------
 # §22.3:1254's four cases under §22.5's schedules, EOF truncation, the two-message
 # feed of §25:1609, the u64 count, decision 0030 item 1's two ordering witnesses,

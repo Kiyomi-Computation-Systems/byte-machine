@@ -94,7 +94,7 @@
         ;; `d` reaches the delimiter dispatch and is rejected AT offset 5; a
         ;; commit of `(- end pos)` instead of the min would swallow it.
         (both "surplus into a rejection" '((feed "3:abcd"))
-              (list (list 'error 5 5 '(machine unexpected-byte "unexpected byte" reject 5 byte)
+              (list (list 'error 5 5 '(machine unexpected-byte "unexpected byte" reject 5 byte #f #f)
                           'error 'reject 0)))))))
 
 (harness-group "every schedule of one message (§22.5:1278-1281)"
@@ -138,12 +138,12 @@
       (lambda ()
         (both "truncation mid-body" '((feed "3:ab") (finish))
               (list (ok 'need-input 4 4 'body 1)
-                    (list 'error 0 4 '(machine eof "truncated message" trunc 4 eof) 'error 'trunc 1)))))
+                    (list 'error 0 4 '(machine eof "truncated message" trunc 4 eof #f #f) 'error 'trunc 1)))))
     (harness-case "EOF with the whole count still owed is the same truncation"
       (lambda ()
         (both "truncation with nothing consumed" '((feed "3:") (finish))
               (list (ok 'need-input 2 2 'body 3)
-                    (list 'error 0 2 '(machine eof "truncated message" trunc 2 eof) 'error 'trunc 3)))))
+                    (list 'error 0 2 '(machine eof "truncated message" trunc 2 eof #f #f) 'error 'trunc 3)))))
     (harness-case "EOF between messages is finished; EOF before the delimiter is truncation"
       (lambda ()
         (both "fresh parser finishes" '((finish)) (list (list 'finished 0 0 #f 'finished 'fin 0)))
@@ -151,7 +151,7 @@
               (list (ok 'need-input 6 6 'idle 0) (list 'finished 0 6 #f 'finished 'fin 0)))
         (both "finish parked on the delimiter" '((feed "3:abc") (finish))
               (list (ok 'need-input 5 5 'comma 0)
-                    (list 'error 0 5 '(machine eof "truncated message" trunc 5 eof) 'error 'trunc 0)))))))
+                    (list 'error 0 5 '(machine eof "truncated message" trunc 5 eof #f #f) 'error 'trunc 0)))))))
 
 (harness-group "reset restores the count (§12.5:738)"
   (lambda ()
