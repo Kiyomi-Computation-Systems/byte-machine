@@ -6052,6 +6052,10 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "punctuated binding is refused: grammar -- expected a raise")
 
+# Each reserved-member pin starts at its case-name tail and runs into its check
+# label: the case name reads "(reserved member N)" and the FAIL-CONTEXT line
+# quotes the case id, so a bare "member N" matched its own mutant's output
+# three times.
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: reserved member 1 is not checked"
@@ -6111,10 +6115,16 @@ byte_machine_mutation(
   # through the errs-table INDEX rather than as a rendered symbol. Dropping the
   # index to a constant 0 makes every error report the first declaration's
   # code.
+  #
+  # The pin carries the arm's measured tail, not the bare check label: the
+  # unquoted-source-node mutation below breaks the same "error arm" check (its
+  # tail reads "1) (reject) ..."), so only the `got` separates the two.
   FIND [[(number->string (index-of (normal-error-code s)
                                                   (normal-error-reason s))) ") (quote "]]
   REPLACE [["0" ") (quote "]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "error arm")
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "error arm -- expected \"1. .quote reject. 2 off pk. 2 off..\", got \"0. .quote reject. 2 off pk. 2 off..\"")
 
 # The emitter renders the unified `exec` with a finish? EOF branch and a
 # distinct finish terminal arm. compile-tests.sps has a finish-node fixture
@@ -6227,20 +6237,23 @@ byte_machine_mutation(
 # mutation drops a quote wrapper in one render-state-arm arm, so a DECLARED name
 # is emitted in identifier position; the identifier-position walk over the
 # every-construct witness catches it (the leftover is no longer exactly the
-# binding and the machine name).
+# binding and the machine name). Both mutants fail that same check, so each pin
+# ends on the identifier its own arm leaks -- the span name `sp`, or the error
+# node's name `n-err` -- and `[)]` closes the list, so neither pin is satisfied
+# by the other mutant's `got`.
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "the span-open arm emits the span name unquoted (identifier position)"
   FIND [[            "       (begin (byte-machine-span-open/v1 psr (quote "]]
   REPLACE [[            "       (begin (byte-machine-span-open/v1 psr ("]]
-  EXPECT_OUTPUT_MATCHES "only the binding and the machine name remain -- expected .ecw ecw-parser., got .ecw")
+  EXPECT_OUTPUT_MATCHES "only the binding and the machine name remain -- expected .ecw ecw-parser., got .ecw ecw-parser sp[)]")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "the error arm emits the source-node name unquoted (identifier position)"
   FIND [[                                                  (normal-error-reason s))) ") (quote "]]
   REPLACE [[                                                  (normal-error-reason s))) ") ("]]
-  EXPECT_OUTPUT_MATCHES "only the binding and the machine name remain -- expected .ecw ecw-parser., got .ecw")
+  EXPECT_OUTPUT_MATCHES "only the binding and the machine name remain -- expected .ecw ecw-parser., got .ecw ecw-parser n-err[)]")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
