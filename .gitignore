@@ -35,6 +35,9 @@ CMakeUserPresets.json
 # the command). The suffix keeps them clear of real source, which is never
 # `*.generated.sls`.
 *.generated.sls
+# examples/words imports its generated parser as (generated words), so the file
+# has to be generated/words.sls; the whole directory is build output.
+examples/words/generated/
 
 # Akku's install directory, written by `akku install`. Akku.manifest is
 # tracked; this package has no dependencies, so there is no Akku.lock.

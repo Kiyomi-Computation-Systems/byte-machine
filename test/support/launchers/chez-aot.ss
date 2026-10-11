@@ -73,8 +73,14 @@
 ;;; (source-directories '()) and once left at Chez's unset default ((".")),
 ;;; produces byte-identical outcomes. Library resolution goes through
 ;;; library-directories, not source-directories, and no Scheme file in this
-;;; tree includes another -- so nothing this launcher does depends on the
-;;; line above. It is kept anyway: it narrows what a `load` or top-level
+;;; tree includes another. --program itself does resolve through the list:
+;;; load-program searches source-directories for a relative path that does
+;;; not begin ./ or ../, so once the list is emptied such a path is refused
+;;; ("not found in source directories"), and a relative --program must begin
+;;; ./ or ../ or the path must be absolute. The two runs agree because no
+;;; lane passes such a path; one that did would fail under the emptied list.
+;;; The program inherits the list, so the same holds for a relative path it
+;;; hands to load. It is kept anyway: it narrows what a `load` or top-level
 ;;; `include` added to this file could reach, and an empty list costs nothing to state. It is not,
 ;;; on its own, what makes this lane honest -- the source guard above is.
 

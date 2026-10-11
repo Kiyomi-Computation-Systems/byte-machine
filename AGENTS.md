@@ -14,8 +14,11 @@
 
 * Internal working documents live in hidden top-level directories — plans in
   `/.plans`, decision records in `/.decisions`, the v0.1 reference set in
-  `/.reference`. `/docs` is reserved for **public** documentation only (it holds
-  none yet), keeping the published surface separate from the development record.
+  `/.reference`. `/docs` is reserved for **public** documentation only, keeping
+  the published surface separate from the development record. It is rendered
+  as the docs site by `make site` (generator in `/site`, tests in `/test/site`),
+  and `make check-site` gates it: every page in the nav, every link and anchor
+  resolving, and `docs/reference.md` documenting exactly the public exports.
 * Add entries to `CHANGELOG.md` for each release
 * Makefile should have a `help` command which lists all of the make commands.
 * Libraries are R6RS `.sls`; libraries and programs contain their own code —
