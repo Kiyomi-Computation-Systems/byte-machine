@@ -82,11 +82,14 @@ BYTE_MACHINE_TEST_TMPDIR=$(mktemp -d) \
 chez --script test/support/launchers/chez-source.ss \
   --library-root test/support/harness --library-root src \
   --object-guard build/dev/chez-object-guard \
-  --program "$PWD/bench/runner/benchmark.sps"
+  --program ./bench/runner/benchmark.sps
 ```
 
-The program path must be absolute: the launcher resolves nothing relative
-to the current directory.
+Keep the `./`. The launcher empties Chez's `source-directories`, and
+`load-program` looks a relative path up there unless it starts with `./` or
+`../`, so a bare `bench/runner/benchmark.sps` is "not found in source
+directories". An absolute path works too. The runner records this command in
+its results as `exact-command`.
 
 `BYTE_MACHINE_BENCH_ROUNDS` and `BYTE_MACHINE_BENCH_INNER` set the number of
 rounds and iterations, and `BYTE_MACHINE_BENCH_OUT` writes the results to a
