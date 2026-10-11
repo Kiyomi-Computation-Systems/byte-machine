@@ -160,6 +160,7 @@ The documentation is in [[file:docs/][=docs/=]], starting at [[file:docs/README.
 - [[file:docs/building.md][Building]]: build and test byte-machine, and render the docs as a site
 
 See the [[file:CHANGELOG.md][changelog]] for release history.
+To work on byte-machine itself, see [[file:CONTRIBUTING.md][CONTRIBUTING.md]].
 
 -----
 
