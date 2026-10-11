@@ -73,7 +73,7 @@
 (define ci-gen (generated-machine 'kwtableci (make-keyword-table-ci-machine)))
 
 ;; --- the keyword-match cases, agreement AND generated-absolute (case-sensitive)
-(harness-group "the brief criteria hold on the generated table and both lanes agree"
+(harness-group "the keyword-match cases hold on the generated table and both lanes agree"
   (lambda ()
     (define cases
       ;; input . expected 7-tuple
@@ -97,7 +97,7 @@
                        ((not (equal? i g)) (set! bad (list 'disagree (car c) i g)))))))
            cases)
           (check-equal "no case misbehaved" bad 'none)
-          (check-equal "all eight criteria cases ran" ran 8))))))
+          (check-equal "all eight keyword-match cases ran" ran 8))))))
 
 ;; --- the per-table fold, agreement AND generated-absolute -------------------
 (harness-group "the fold holds on the generated table and both lanes agree"

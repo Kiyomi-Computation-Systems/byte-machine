@@ -121,14 +121,14 @@
     (parser-feed! p (u8-list->bytevector bs) 0 (length bs))
     p))
 
-(harness-group "fields a parse actually writes (Slice ②)"
+(harness-group "fields a parse actually writes"
   (lambda ()
     (harness-case "an increment commits into the parser's own storage"
       (lambda ()
         (let ((p (feed-bytes wm-ref '(0))))
           (check-equal "count" (parser-field-ref p 'count) 255)
           (check-equal "seen" (parser-field-ref p 'seen) 1))))
-    (harness-case "a failed operation leaves the prior value unchanged (§25:1569)"
+    (harness-case "a failed operation leaves the prior value unchanged"
       (lambda ()
         ;; 254 -> 255 on the first byte; the second increment overflows a u8 and
         ;; must route to the error target WITHOUT writing: overflow leaves the
@@ -425,7 +425,7 @@
                                 (string-append tmpdir "/generated-" (symbol->string nm) ".sls")))))
        matrix-widths))
 
-(harness-group "the operation matrix over every width (§25:1568, §25:1569)"
+(harness-group "the operation matrix over every width"
   (lambda ()
     (harness-case "overflow, underflow and success agree across widths and lanes"
       (lambda ()
@@ -628,7 +628,7 @@
     (parser-feed! p (str->bytes str) 0 (string-length str))
     p))
 
-(harness-group "the checked multiply-add, both lanes (Slice ③)"
+(harness-group "the checked multiply-add, both lanes"
   (lambda ()
     (harness-case "base 10 accumulates across a run of digits"
       (lambda ()
@@ -707,7 +707,7 @@
     (parser-feed! p bs at (bytevector-length bs))
     p))
 
-(harness-group "split-point fragmentation (Slice ③)"
+(harness-group "split-point fragmentation"
   (lambda ()
     (harness-case "a number split across a feed boundary accumulates whole"
       (lambda ()
@@ -772,7 +772,7 @@
     (parser-feed! p (make-bytevector 1 b) 0 1)
     (cons (parser-field-ref p 'n) (parser-lifecycle p))))
 
-(harness-group "all 256 bytes, both bases, both lanes (Slice ③)"
+(harness-group "all 256 bytes, both bases, both lanes"
   (lambda ()
     (harness-case "base 10 partitions every byte identically in both lanes"
       (lambda ()
@@ -913,7 +913,7 @@
                                (string-append tmpdir "/generated-acc-eof-only.sls")))))
   acc-eof-cache)
 
-(harness-group "an accumulate node is a default-EOF consumer (Slice ③)"
+(harness-group "an accumulate node is a default-EOF consumer"
   (lambda ()
     (harness-case "the verifier accepts a machine whose only default-eof consumer is the accumulate node"
       (lambda ()
@@ -1022,7 +1022,7 @@
     (cons (parser-feed! p (str->bytes str) 0 (string-length str)) p)))
 (define tf-run tf-run-on)
 
-(harness-group "the accumulate node's four unreached operands (Slice ③, review)"
+(harness-group "the accumulate node's four unreached operands"
   (lambda ()
     (harness-case "the machine verifies clean"
       (lambda ()

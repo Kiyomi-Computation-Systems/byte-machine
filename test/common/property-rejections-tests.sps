@@ -23,7 +23,7 @@
 ;;; every rule fires and stays silent. A reachability rule is not compared on a
 ;;; machine whose node names are not unique (reachability is ill-defined there --
 ;;; only the dup-node-name entry produces such a machine, and it is compared on the
-;;; `:885-duplicates` rule, which is its point).
+;;; `name-duplicates` rule, which is its point).
 ;;;
 ;;; THE SEED: BYTE_MACHINE_PROPERTY_SEED, unset LEGAL (the committed
 ;;; default), malformed LOUD -- the parsing rule replicated from
@@ -261,7 +261,7 @@
      constructor-refusals)))
 
 ;; ---- the matcher-bytes prohibition, made checkable ---------------------------
-(harness-group "the oracle's :893 row never reads matcher-bytes"
+(harness-group "the oracle's overlapping-cases row never reads matcher-bytes"
   (lambda ()
     (harness-case "matcher-bytes occurs zero times in verify-oracle.sls"
       (lambda ()

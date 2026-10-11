@@ -210,7 +210,7 @@
     '((idle boundary
             "idle reads one byte to decide whether a message begins; it has no zero-width boundary decision")
       (idle eof
-            "clean finish, not an error: idle's eof-target is the finish terminal, so EOF between messages is `finished` (decision 0037)")
+            "clean finish, not an error: idle's eof-target is the finish terminal, so EOF between messages is `finished`")
       (method boundary
             "the method is a byte span; it takes no zero-width boundary decision")
       (target boundary

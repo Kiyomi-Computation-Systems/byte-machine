@@ -29,7 +29,7 @@
     (lambda (p) (emit-machine ok 'httpreq p)))
   (adapter-file-bytes file))
 
-(harness-group "deterministic emission (§22.9)"
+(harness-group "deterministic emission"
   (lambda ()
     (harness-case "rendering twice yields byte-identical output"
       (lambda ()
@@ -41,7 +41,7 @@
 ;; every cell and lane compares against gives cross-process, cross-lane and
 ;; cross-cell identity transitively -- the golden is the fixed point. The
 ;; cross-cell width is the set of cells that actually run this lane.
-(harness-group "the committed golden (§24.2 stage 7, transitive)"
+(harness-group "the committed golden (transitive)"
   (lambda ()
     (harness-case "the emitted bytes equal the committed golden"
       (lambda ()

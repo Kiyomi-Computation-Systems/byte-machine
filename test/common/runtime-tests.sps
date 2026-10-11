@@ -99,7 +99,7 @@
                (returned 'not-yet-run))
           (set! returned (parser-result-status (parser-feed! p (make-bytevector 0) 0 0)))
           (check-equal "status" returned 'need-input))))
-    (harness-case "a repeat feed on a terminal parser reports a fresh empty result (§12.2)"
+    (harness-case "a repeat feed on a terminal parser reports a fresh empty result"
       (lambda ()
         (let* ((p (make-parser (make-compiled-machine one-byte-op) '() #f))
                (r1 (parser-feed! p (make-bytevector 1 0) 0 1))
@@ -222,7 +222,7 @@
         (let ((r (parser-finish! (make-parser (make-compiled-machine default-eof-op) '() #f))))
           (check-equal "default-eof status" (parser-result-status r) 'error)
           (check-equal "default-eof code" (error-code-of r) 'eof))))
-    (harness-case "a parser parked at a finish node re-feeds to finished, consuming zero (§12.2)"
+    (harness-case "a parser parked at a finish node re-feeds to finished, consuming zero"
       (lambda ()
         (let* ((p (make-parser (make-compiled-machine finish-feed-op) '() #f))
                (r (parser-feed! p (make-bytevector 1 0) 0 1)))
@@ -350,7 +350,7 @@
          (eq? (byte-machine-contract-condition-who e) who)
          (eq? (byte-machine-contract-condition-detail e) detail))))
 
-(harness-group "callback binding resolution (§9.3:419, Slice ①b)"
+(harness-group "callback binding resolution"
   (lambda ()
     ;; A stub whose callback table is declared per case, so resolution is driven
     ;; rather than read. Four parts per decl: name, kind, required?, default.
@@ -478,7 +478,7 @@
     ((settable-fields) (list (list 'mode 8)))
     ((callback-decls) (vector))
     (else (assertion-violation 'settable-op "bad message" msg))))
-(harness-group "make-parser initial-values (Milestone 13, decision 0047)"
+(harness-group "make-parser initial-values"
   (lambda ()
     (define (cm) (make-compiled-machine settable-op))
     (harness-case "a settable field's declared initial is overridden at construction"
@@ -524,7 +524,7 @@
                       (contract-violation? 'make-parser 'field-initials)
                       (lambda () (make-parser (cm) '() #f (list (cons 'mode 'x)))))))))
 
-(harness-group "callback failure values (§13:808, decision 0024)"
+(harness-group "callback failure values"
   (lambda ()
     (harness-case "a failure carries an application code and an optional detail"
       (lambda ()
@@ -535,11 +535,11 @@
     (harness-case "the detail is optional and opaque"
       (lambda ()
         (check-equal "absent" (callback-failure-detail (make-callback-failure 'e #f)) #f)))
-    (harness-case "the code must be symbolic (§9.3:423)"
+    (harness-case "the code must be symbolic"
       (lambda ()
         (check-raises "refused" (contract-violation? 'make-callback-failure 'code)
                       (lambda () (make-callback-failure "too-long" #f)))))
-    (harness-case "the code must satisfy the portable name grammar (§9.3:423)"
+    (harness-case "the code must satisfy the portable name grammar"
       (lambda ()
         ;; The grammar is (byte-machine private names)' `portable-name?`, the
         ;; one body verify.sls and compile.sls check declared names and output
@@ -750,7 +750,7 @@
          (eq? (car (byte-machine-contract-condition-detail e)) state)
          (eq? (cadr (byte-machine-contract-condition-detail e)) op))))
 
-(harness-group "pause + resume (§12.1)"
+(harness-group "pause + resume"
   (lambda ()
     (harness-case "feed pauses at the pause node with the first unconsumed index"
       (lambda ()
@@ -829,7 +829,7 @@
             (check-equal "continues to finished" (parser-result-status r2) 'finished)
             (check-equal "lifecycle final" (parser-lifecycle p) 'finished)))))))
 
-(harness-group "operation matrix (§12.2)"
+(harness-group "operation matrix"
   (lambda ()
     (harness-case "feed is prohibited in paused-feed, paused-finish, and finish-ready"
       (lambda ()
@@ -998,7 +998,7 @@
         ;; get their domain from their own constructor.
         (check-equal "domain" (parser-error-domain (err)) 'machine)
         (check-equal "detail" (parser-error-detail (err)) #f)))
-    (harness-case "both constructors record no abandoned span (decision 0056)"
+    (harness-case "both constructors record no abandoned span"
       (lambda ()
         ;; Neither constructor can know the span: generated code calls the first
         ;; with the five arguments above. The span an error abandons is added where both executors hand the error back, in

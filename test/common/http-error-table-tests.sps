@@ -69,17 +69,17 @@
 
 ;; --- shape guards ------------------------------------------------------------
 
-(harness-group "the table's shape (decision 0034 item 2)"
+(harness-group "the table's shape"
   (lambda ()
-    (harness-case "there are eighteen §21.4 codes, no more, no fewer"
+    (harness-case "there are eighteen HTTP error codes, no more, no fewer"
       (lambda ()
-        (check-equal "eighteen codes spelled from §21.4" (length catalog-21.4) 18)
+        (check-equal "eighteen codes in the catalog" (length catalog-21.4) 18)
         (check "the eighteen are distinct" (not (has-duplicate? catalog-21.4)))))
     (harness-case "the regions are distinct and in stream order"
       (lambda ()
         (check "no region repeats" (not (has-duplicate? http-error-regions)))
         (check-equal "eighteen regions" (length http-error-regions) 18)))
-    (harness-case "the three triggers are exactly §21.4:1175's three"
+    (harness-case "the three triggers are exactly byte, boundary and eof"
       (lambda ()
         (check-equal "triggers" (sort-syms http-error-triggers) '(boundary byte eof))))
     (harness-case "every row is a well-formed six-tuple over the declared domains"
@@ -119,24 +119,24 @@
 
 ;; --- totality row (a): the codes --------------------------------------------
 
-(harness-group "the code column is total over §21.4 (decision 0034 item 3a)"
+(harness-group "the code column is total over the eighteen HTTP error codes"
   (lambda ()
-    (harness-case "every row's code is one of the eighteen -- no fixture-invented code at Slice ⓪"
+    (harness-case "every row's code is one of the eighteen -- no fixture-invented code"
       (lambda ()
-        (check "row codes ⊆ §21.4"
+        (check "row codes ⊆ the eighteen"
                (subset? (distinct (map row-code http-error-rows)) catalog-21.4))))
-    (harness-case "the row codes contain all eighteen -- the §21.4:1154 floor"
+    (harness-case "the row codes contain all eighteen"
       (lambda ()
-        (check "§21.4 ⊆ row codes"
+        (check "the eighteen ⊆ row codes"
                (subset? catalog-21.4 (map row-code http-error-rows)))))
-    (harness-case "at Slice ⓪ the union set-equals the eighteen (⑤ closes the read-from-machine half)"
+    (harness-case "the union of the row codes set-equals the eighteen"
       (lambda ()
         (check "union of row codes = the eighteen"
                (set-equal? (map row-code http-error-rows) catalog-21.4))))))
 
 ;; --- totality row (b): every region x trigger is covered exactly once --------
 
-(harness-group "the region x trigger grid is total and partitioned (decision 0034 item 3b)"
+(harness-group "the region x trigger grid is total and partitioned"
   (lambda ()
     (harness-case "every (region trigger) has a row XOR an inapplicable reason"
       (lambda ()
@@ -158,7 +158,7 @@
                        (not (and has-row has-reason)))))
             http-error-triggers))
          http-error-regions)))
-    (harness-case "every non-idle region carries an unexpected-eof row (§21.4:1175 EOF sentence)"
+    (harness-case "every non-idle region carries an unexpected-eof row"
       (lambda ()
         (for-each
          (lambda (region)
@@ -169,7 +169,7 @@
                                              (eq? (row-code r) 'unexpected-eof)))
                             http-error-rows))))
          http-error-regions)))
-    (harness-case "idle's eof is a clean finish, not an error (decision 0037)"
+    (harness-case "idle's eof is a clean finish, not an error"
       (lambda ()
         (check "idle has no eof row"
                (not (exists (lambda (r) (and (eq? (row-region r) 'idle)
@@ -181,7 +181,7 @@
 
 ;; --- the two rows decided by the grammar -------------------------------------
 
-(harness-group "the two grammar-decided rows (design Appendix)"
+(harness-group "the two grammar-decided rows"
   (lambda ()
     (harness-case "forbidden-trailer is a `byte` at the colon, not a boundary"
       (lambda ()
@@ -216,7 +216,7 @@
 
 ;; --- the fixture-region -> node-name map -------------------------------------
 
-(harness-group "the fixture-region -> node-name map (§4.9 item 2, owner-approved)"
+(harness-group "the fixture-region -> node-name map"
   (lambda ()
     (harness-case "the map covers exactly the declared regions, once each"
       (lambda ()
@@ -224,11 +224,11 @@
                (set-equal? (map car http-error-region-nodes) http-error-regions))
         (check "no region keyed twice"
                (not (has-duplicate? (map car http-error-region-nodes))))))
-    (harness-case "at Slice ⓪ no node exists, so every region maps to the empty list"
+    (harness-case "the fixture declares no nodes, so every region maps to the empty list"
       (lambda ()
         (check "every node list is empty"
                (for-all (lambda (kv) (null? (cdr kv))) http-error-region-nodes))))
-    (harness-case "every declared node is in exactly one region (vacuous at ⓪, bites once nodes exist)"
+    (harness-case "every declared node is in exactly one region (vacuous while the fixture declares no nodes)"
       (lambda ()
         (let ((all-nodes (apply append (map cdr http-error-region-nodes))))
           (check "no node appears in two regions" (not (has-duplicate? all-nodes))))))))

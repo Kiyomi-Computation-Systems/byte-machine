@@ -123,7 +123,7 @@
         (alloc-feeding cm bindings few-headers-req reps))
      (* reps header-difference)))
 
-(harness-group "the generated per-byte path allocates nothing (§26:1680, callbacks disabled)"
+(harness-group "the generated per-byte path allocates nothing (callbacks disabled)"
   (lambda ()
     (harness-case "the generated executor's allocation does not grow with message length"
       (lambda ()
@@ -142,7 +142,7 @@
           (check "control: alloc(long) > alloc(short)" (> long short))
           (check "control per-byte slope is nonzero" (positive? (- long short))))))))
 
-(harness-group "both executors measured; only the generated one is gated (§18)"
+(harness-group "both executors measured; only the generated one is gated"
   (lambda ()
     (harness-case "the interpreter's per-byte allocation is recorded, not asserted"
       (lambda ()
@@ -157,7 +157,7 @@
            (string-append "byte-machine-alloc: interpreter B/byte="
                           (adapter-value->string interp-slope))))))))
 
-(harness-group "callbacks-disabled vs callbacks-bound, both recorded (§26:1680 wording)"
+(harness-group "callbacks-disabled vs callbacks-bound, both recorded"
   (lambda ()
     (harness-case "the generated slope is zero with callbacks disabled AND with callbacks bound"
       (lambda ()
@@ -270,7 +270,7 @@
                        (list 'jump (car no-match) (+ i 1) 'boundary))
                       (else (list 'jump (car no-match) i 'byte)))))))))
 
-(harness-group "the keyword walk allocates nothing per matched byte (issue #139)"
+(harness-group "the keyword walk allocates nothing per matched byte"
   (lambda ()
     (harness-case "the live control proves the apparatus can see a prefix copy"
       (lambda ()
@@ -558,7 +558,7 @@
 (define failing-bindings
   (list (list 'message-complete (lambda (ps ux) audit-failure))))
 
-(harness-group "an error arm allocates the same however many bytes precede it (decision 0055)"
+(harness-group "an error arm allocates the same however many bytes precede it"
   (lambda ()
     (harness-case "a machine error's record does not grow with the offset it reports"
       (lambda ()
@@ -603,7 +603,7 @@
           (witness-feed! (cadr http-pair) failing-bindings short-req)
           (witness-feed! (cadr http-pair) failing-bindings long-req))))))
 
-(harness-group "an emitted keyword arm allocates the same however much it matched (decision 0055)"
+(harness-group "an emitted keyword arm allocates the same however much it matched"
   (lambda ()
     (harness-case "the arm around the walk adds nothing per matched byte"
       (lambda ()
@@ -643,7 +643,7 @@
 (define (sorted xs)
   (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b))) xs))
 
-(harness-group "the per-byte and per-header slopes reach the ops they claim (decision 0055)"
+(harness-group "the per-byte and per-header slopes reach the ops they claim"
   (lambda ()
     (harness-case "the HTTP slopes' messages drive the counting twin"
       (lambda ()
@@ -654,7 +654,7 @@
           (witness! twin (list (list 'message-begin noop) (list 'message-complete noop))
                     short-req))))))
 
-(harness-group "the runtime op census: every op emitted code can call has a witness (decision 0055)"
+(harness-group "the runtime op census: every op emitted code can call has a witness"
   (lambda ()
     (harness-case "the census is derived from compile.sls's emitted text"
       (lambda ()

@@ -63,7 +63,7 @@
     (harness-case "the full sequence stops at stream-offset 4"
       (lambda ()
         (check-equal "stopped" (feed-bytes one seq-bytes) '(stopped 1 1 4 #f))))
-    (harness-case "every proper prefix is need-input, never paused (decision 0015 point 5)"
+    (harness-case "every proper prefix is need-input, never paused"
       (lambda ()
         ;; `bad` alone proves no prefix MISBEHAVED, not that the loop ran; `seen`
         ;; counts what the parser actually returned, so a machine that reached a

@@ -103,7 +103,7 @@
 
 ;; --- the request-line events, absolutely and by the oracle -----------------
 
-(harness-group "a well-formed request line fires §21.3's events in order"
+(harness-group "a well-formed request line fires the request-line events in order"
   (lambda ()
     (harness-case "the request-line events fire in order, then the machine awaits the header section"
       (lambda ()
@@ -151,7 +151,7 @@
 
 ;; --- the request-line error rows, byte for byte ----------------------------
 
-(harness-group "lexical errors at the first offending unconsumed byte (§21.4:1175)"
+(harness-group "lexical errors at the first offending unconsumed byte"
   (lambda ()
     (harness-case "invalid-method: a non-tchar where the method begins, and inside it"
       (lambda ()
@@ -177,12 +177,12 @@
 
 ;; --- EOF: clean while idle, unexpected-eof at the final offset otherwise ------
 
-(harness-group "EOF is clean only while idle (decision 0037), unexpected-eof otherwise"
+(harness-group "EOF is clean only while idle, unexpected-eof otherwise"
   (lambda ()
     (harness-case "an empty stream finishes clean"
       (lambda ()
         (check-equal "finished, no error" (feed-then-finish "") '(finished 0 #f))))
-    (harness-case "unexpected-eof reports position-kind eof at the final stream offset (§12.7:771)"
+    (harness-case "unexpected-eof reports position-kind eof at the final stream offset"
       (lambda ()
         (check-equal "in the method span (offset 3)"
                      (feed-then-finish "GET") '(error 3 (unexpected-eof eof 3)))
@@ -199,7 +199,7 @@
 
 ;; --- split points: the event skeleton is invariant, the raw trace is not ------
 
-(harness-group "every split point of a complete no-body message preserves the event order (§22.5)"
+(harness-group "every split point of a complete no-body message preserves the event order"
   (lambda ()
     (harness-case "the coalesced skeleton is invariant across all 22 single-cut splits"
       (lambda ()

@@ -155,7 +155,7 @@
           (check-equal "error slot #f" (parser-result-error rr) #f)
           (check-equal "pause code" (pcode rr) 'paused-at-eof))))))
 
-(harness-group "the reason survives a resume and a re-pause (criterion 4)"
+(harness-group "the reason survives a resume and a re-pause"
   (lambda ()
     ;; s0 --1--> p1(paused-a --> s1); s1 --2--> p2(paused-b --> s2); s2 --3--> stop.
     (define (chain)

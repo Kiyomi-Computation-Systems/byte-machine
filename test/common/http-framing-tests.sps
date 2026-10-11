@@ -49,7 +49,7 @@
 
 ;; --- the recognizer: hit/miss, and the name delivered on both paths ---------
 
-(harness-group "case-insensitive framing recognition keeps the opaque path's bytes (decision 0035)"
+(harness-group "case-insensitive framing recognition keeps the opaque path's bytes"
   (lambda ()
     ;; A recognized Content-Length with a value of 5 expects a 5-octet body, so a
     ;; body-less feed truncates as unexpected-eof; an unrecognized (opaque) name
@@ -107,7 +107,7 @@
         (let ((tr (trace-of "GET / HTTP/1.1\r\nContent-Length: 0\r\n\r\n")))
           (check "no body-data" (not (has-entry? '(body-data "") tr)))
           (check "message-complete fires" (has-entry? 'message-complete tr)))))
-    (harness-case "invalid and overflowing Content-Length reject at the offending byte (§12.7:773)"
+    (harness-case "invalid and overflowing Content-Length reject at the offending byte"
       (lambda ()
         (check-equal "a non-digit value is invalid-content-length"
                      (err (rl "Content-Length: abc\r\n\r\n")) '(invalid-content-length byte 32))
@@ -117,7 +117,7 @@
 
 ;; --- the framing refusals, at the boundary after the later line's LF --------
 
-(harness-group "framing refusals at the between-byte boundary (§21.4:1175, decision 0035)"
+(harness-group "framing refusals at the between-byte boundary"
   (lambda ()
     (harness-case "a second Content-Length is a duplicate at the boundary"
       (lambda ()
@@ -140,7 +140,7 @@
 
 ;; --- the body across split points -------------------------------------------
 
-(harness-group "the fixed body coalesces identically across every split (§22.5)"
+(harness-group "the fixed body coalesces identically across every split"
   (lambda ()
     (harness-case "a Content-Length message split at every point delivers the same body and finishes"
       (lambda ()

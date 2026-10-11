@@ -27,7 +27,7 @@
 ;;; THE ENTRY TABLE AND THE REFUSAL TABLE ARE HAND-WRITTEN AND EXPORTED, as
 ;;; machine-gen's draw tables and machine-print's arm tables are: a row read out of
 ;;; the artifact at run time would compare the artifact to itself and close nothing.
-;;; Every row carries a `bullet` label -- a symbol such as `:884` naming the
+;;; Every row carries a `bullet` label -- a symbol such as `invalid-shape` naming the
 ;;; verifier rule it exercises -- which the rejections program prints in its
 ;;; check labels; rows sharing a rule share a label.
 (library (byte-machine test machine-corrupt)
@@ -156,7 +156,7 @@
   ;; ---- the entry record -----------------------------------------------------
   (define-record-type corruption-entry
     (fields name bullet applies? corrupt twin expected))
-  ;; A refusal row: a thunk that must raise (`:906` has no thunk -- it records the
+  ;; A refusal row: a thunk that must raise (`terminal-out-edges` has no thunk -- it records the
   ;; reason "no slot", asserted structurally by the program against ir.sls).
   (define-record-type refusal (fields bullet name thunk reason))
 
@@ -179,60 +179,60 @@
   ;; drive; the positive half is CONTAINMENT (collateral diagnostics are expected).
   (define corruption-entries
     (list
-     ;; :884 shape -- the not-a-machine half is an entry; the version half is
+     ;; invalid-shape shape -- the not-a-machine half is an entry; the version half is
      ;; unconstructible (constructor-refusals / the program's unconstructible row).
      (make-corruption-entry
-      'shape-not-a-machine ':884
+      'shape-not-a-machine 'invalid-shape
       (lambda (m) #t)
       (lambda (m) 'not-a-machine)
       (lambda (m) m)
       (lambda (m) (list (cons 'invalid-shape #f))))
-     ;; :885 duplicate declaration names -- one per namespace.
+     ;; duplicate-declarations duplicate declaration names -- one per namespace.
      (make-corruption-entry
-      'dup-node-name ':885
+      'dup-node-name 'duplicate-declarations
       (lambda (m) (>= (length (machine-nodes m)) 2))
       (lambda (m) (let ((ns (node-names m))) (rename-to m all-node-ctors ns (car ns))))
       identity-twin
       (lambda (m) (list (cons 'duplicate-name (car (node-names m))))))
      (make-corruption-entry
-      'dup-error-declaration ':885
+      'dup-error-declaration 'duplicate-declarations
       (lambda (m) (>= (length (machine-errors m)) 2))
       (lambda (m) (let ((ns (map error-declaration-name (machine-errors m))))
                     (build (edit (->d m) '(make-error-declaration) 1 (cadr ns) 1 (q (car ns))))))
       identity-twin
       (lambda (m) (list (cons 'duplicate-error-declaration (car (map error-declaration-name (machine-errors m)))))))
      (make-corruption-entry
-      'dup-field-name ':885
+      'dup-field-name 'duplicate-declarations
       (lambda (m) (>= (length (machine-fields m)) 2))
       (lambda (m) (let ((ns (map uint-field-name (machine-fields m))))
                     (build (edit (->d m) '(make-uint-field) 1 (cadr ns) 1 (q (car ns))))))
       identity-twin
       (lambda (m) (list (cons 'invalid-field-declaration (car (map uint-field-name (machine-fields m)))))))
      (make-corruption-entry
-      'dup-callback-declaration ':885
+      'dup-callback-declaration 'duplicate-declarations
       (lambda (m) (>= (length (machine-callbacks m)) 2))
       (lambda (m) (let ((ns (map callback-declaration-name (machine-callbacks m))))
                     (build (edit (->d m) '(make-callback-declaration) 1 (cadr ns) 1 (q (car ns))))))
       identity-twin
       (lambda (m) (list (cons 'duplicate-callback-declaration (car (map callback-declaration-name (machine-callbacks m)))))))
      (make-corruption-entry
-      'dup-span-declaration ':885
+      'dup-span-declaration 'duplicate-declarations
       (lambda (m) (>= (length (machine-spans m)) 2))
       (lambda (m) (let ((ns (map span-declaration-name (machine-spans m))))
                     (build (edit (->d m) '(make-span-declaration) 1 (cadr ns) 1 (q (car ns))))))
       identity-twin
       (lambda (m) (list (cons 'duplicate-span-declaration (car (map span-declaration-name (machine-spans m)))))))
-     ;; :886 nonportable names -- rename a node to an R6RS keyword.
+     ;; nonportable-names nonportable names -- rename a node to an R6RS keyword.
      (make-corruption-entry
-      'nonportable-node-name ':886
+      'nonportable-node-name 'nonportable-names
       (lambda (m) (>= (length (machine-nodes m)) 1))
       (lambda (m) (let ((ns (node-names m)))
                     (build (edit (->d m) all-node-ctors 1 (car ns) 1 (q 'if)))))
       identity-twin
       (lambda (m) (list (cons 'invalid-name 'if))))
-     ;; :887 missing targets -- retarget the entry to a fresh symbol.
+     ;; missing-targets missing targets -- retarget the entry to a fresh symbol.
      (make-corruption-entry
-      'missing-target-entry ':887
+      'missing-target-entry 'missing-targets
       (lambda (m) #t)
       (lambda (m) (build (edit (->d m) '(make-machine) 1 (machine-name m) 2 (q 'zz-ghost-entry))))
       (lambda (m) m)
@@ -240,7 +240,7 @@
      ;; An exact duplicate keyword. dup-first duplicates the first
      ;; keyword entry in the keyword-table's entries (list ...) operand (position 2).
      (make-corruption-entry
-      'dup-keyword ':894
+      'dup-keyword 'sequence-ambiguity
       (lambda (m) (and (first-node-of m keyword-table-node?) #t))
       (lambda (m) (let ((n (first-node-of m keyword-table-node?)))
                     (build (dup-first (->d m) '(make-keyword-table-node) 1
@@ -255,7 +255,7 @@
      ;; the table is refused with case-insensitive-keyword-collision. The twin is
      ;; the accepted machine (case-sensitive, distinct entries), which verifies.
      (make-corruption-entry
-      'ci-keyword-collision ':894
+      'ci-keyword-collision 'sequence-ambiguity
       (lambda (m) (and (first-node-of m keyword-table-node?) #t))
       (lambda (m) (let* ((n (first-node-of m keyword-table-node?))
                          (nm (keyword-table-node-name n))
@@ -268,67 +268,67 @@
       identity-twin
       (lambda (m) (list (cons 'case-insensitive-keyword-collision
                               (keyword-table-node-name (first-node-of m keyword-table-node?))))))
-     ;; :888 missing error declaration -- an error node names an undeclared error.
+     ;; error-declarations missing error declaration -- an error node names an undeclared error.
      (make-corruption-entry
-      'missing-error-declaration ':888
+      'missing-error-declaration 'error-declarations
       (lambda (m) (first-node-of m error-node?))
       (lambda (m) (let ((e (first-node-of m error-node?)))
                     (build (edit (->d m) '(make-error-node) 1 (error-node-name e) 2 (q 'zz-ghost-error)))))
       (lambda (m) m)
       (lambda (m) (list (cons 'missing-error-declaration (error-node-name (first-node-of m error-node?))))))
-     ;; :907 invalid EOF target -- dangle a byte-dispatch node's eof-target.
+     ;; eof-targets-and-active-spans invalid EOF target -- dangle a byte-dispatch node's eof-target.
      (make-corruption-entry
-      'invalid-eof-target ':907
+      'invalid-eof-target 'eof-targets-and-active-spans
       (lambda (m) (first-node-of m byte-dispatch-node?))
       (lambda (m) (let ((n (first-node-of m byte-dispatch-node?)))
                     (build (edit (->d m) '(make-byte-dispatch-node) 1 (byte-dispatch-node-name n) 4 (q 'zz-ghost-eof)))))
       (lambda (m) m)
       (lambda (m) (list (cons 'invalid-eof-target (byte-dispatch-node-name (first-node-of m byte-dispatch-node?))))))
-     ;; :904 accumulation using an undeclared field.
+     ;; integer-accumulation accumulation using an undeclared field.
      (make-corruption-entry
-      'accumulate-field ':904
+      'accumulate-field 'integer-accumulation
       (lambda (m) (first-node-of m integer-accumulate-node?))
       (lambda (m) (let ((n (first-node-of m integer-accumulate-node?)))
                     (build (edit (->d m) '(make-integer-accumulate-node) 1 (integer-accumulate-node-name n) 2 (q 'zz-ghost-field)))))
       (lambda (m) m)
       (lambda (m) (list (cons 'invalid-field-operand (integer-accumulate-node-name (first-node-of m integer-accumulate-node?))))))
-     ;; :890 missing callback declaration -- a callback node names an undeclared callback.
+     ;; callback-declarations missing callback declaration -- a callback node names an undeclared callback.
      (make-corruption-entry
-      'missing-callback-declaration ':890
+      'missing-callback-declaration 'callback-declarations
       (lambda (m) (first-node-of m callback-node?))
       (lambda (m) (let ((n (first-node-of m callback-node?)))
                     (build (edit (->d m) '(make-callback-node) 1 (callback-node-name n) 2 (q 'zz-ghost-cb)))))
       (lambda (m) m)
       (lambda (m) (list (cons 'missing-callback-declaration (callback-node-name (first-node-of m callback-node?))))))
-     ;; beside :901 -- a span node names an undeclared span.
+     ;; beside callback-branches -- a span node names an undeclared span.
      (make-corruption-entry
-      'missing-span-declaration ':901
+      'missing-span-declaration 'callback-branches
       (lambda (m) (first-node-of m span-start-node?))
       (lambda (m) (let ((n (first-node-of m span-start-node?)))
                     (build (edit (->d m) '(make-span-start-node) 1 (span-start-node-name n) 2 (q 'zz-ghost-span)))))
       (lambda (m) m)
       (lambda (m) (list (cons 'missing-span-declaration (span-start-node-name (first-node-of m span-start-node?))))))
-     ;; :901 duplicate branch key -- a callback node lists one key twice.
+     ;; callback-branches duplicate branch key -- a callback node lists one key twice.
      (make-corruption-entry
-      'duplicate-branch-key ':901
+      'duplicate-branch-key 'callback-branches
       (lambda (m) (first-branching-cb-node m))
       (lambda (m) (let ((n (first-branching-cb-node m)))
                     (build (edit (->d m) '(make-callback-node) 1 (callback-node-name n) 4
                                  (q (let ((ts (callback-node-branch-targets n))) (list (car ts) (car ts))))))))
       (lambda (m) m)
       (lambda (m) (list (cons 'duplicate-branch-key (callback-node-name (first-branching-cb-node m))))))
-     ;; :902 reserved branch key -- a decision callback declaration lists `continue`.
+     ;; reserved-branch-keys reserved branch key -- a decision callback declaration lists `continue`.
      (make-corruption-entry
-      'reserved-branch-key ':902
+      'reserved-branch-key 'reserved-branch-keys
       (lambda (m) (first-decision-with-keys m))
       (lambda (m) (let ((c (first-decision-with-keys m)))
                     (build (edit (->d m) '(make-callback-declaration) 1 (callback-declaration-name c) 4
                                  (q (cons 'continue (callback-declaration-branch-keys c)))))))
       (lambda (m) m)
       (lambda (m) (list (cons 'reserved-branch-key (callback-declaration-name (first-decision-with-keys m))))))
-     ;; :901 invalid callback invocation -- a callback node names an undeclared key.
+     ;; callback-branches invalid callback invocation -- a callback node names an undeclared key.
      (make-corruption-entry
-      'invalid-callback-invocation ':901
+      'invalid-callback-invocation 'callback-branches
       (lambda (m) (first-branching-cb-node m))
       (lambda (m) (let ((n (first-branching-cb-node m)))
                     (build (edit (->d m) '(make-callback-node) 1 (callback-node-name n) 4
@@ -336,38 +336,38 @@
                                       (cons (cons 'zz-bad-key (cdr (car ts))) (cdr ts))))))))
       (lambda (m) m)
       (lambda (m) (list (cons 'invalid-callback-invocation (callback-node-name (first-branching-cb-node m))))))
-     ;; :891 invalid callback declaration -- clear an optional decision callback's default.
+     ;; decision-default-branch invalid callback declaration -- clear an optional decision callback's default.
      (make-corruption-entry
-      'invalid-callback-declaration ':891
+      'invalid-callback-declaration 'decision-default-branch
       (lambda (m) (optional-decision-with-default m))
       (lambda (m) (let ((c (optional-decision-with-default m)))
                     (build (edit (->d m) '(make-callback-declaration) 1 (callback-declaration-name c) 5 #f))))
       (lambda (m) m)
       (lambda (m) (list (cons 'invalid-callback-declaration (callback-declaration-name (optional-decision-with-default m))))))
-     ;; :892 invalid span callback -- a span's data callback is declared a non-span kind.
+     ;; span-callbacks invalid span callback -- a span's data callback is declared a non-span kind.
      (make-corruption-entry
-      'invalid-span-callback ':892
+      'invalid-span-callback 'span-callbacks
       (lambda (m) (span-with-data m))
       (lambda (m) (let ((cb (span-declaration-data-callback (span-with-data m))))
                     (build (edit (->d m) '(make-callback-declaration) 1 cb 2 (q 'event)))))
       (lambda (m) m)
       (lambda (m) (list (cons 'invalid-span-callback (span-declaration-name (span-with-data m))))))
-     ;; beside :890 unreferenced callback declaration -- INSERT a span-data callback
+     ;; beside callback-declarations unreferenced callback declaration -- INSERT a span-data callback
      ;; no span names.
      (make-corruption-entry
-      'unreferenced-callback-declaration ':890
+      'unreferenced-callback-declaration 'callback-declarations
       (lambda (m) #t)
       (lambda (m) (build (extend (->d m) '(make-machine) 1 (machine-name m) 4
                                  '(make-callback-declaration (quote zz-unref) (quote span-data) #t (quote ()) #f #f))))
       (lambda (m) m)
       (lambda (m) (list (cons 'unreferenced-callback-declaration 'zz-unref))))
-     ;; :897 unreachable node -- INSERT an orphan finish node (no in-edge). The twin
+     ;; unreachable-nodes unreachable node -- INSERT an orphan finish node (no in-edge). The twin
      ;; inserts the SAME node but makes it reachable, by pointing
      ;; a byte-dispatch node's free (#f) eof-target at it -- an EOF accept into a
      ;; finish, legal -- so the isolated fault is reachability, not the node's
      ;; presence. Gated on a node with a free eof-target so the twin can wire it.
      (make-corruption-entry
-      'unreachable-node ':897
+      'unreachable-node 'unreachable-nodes
       (lambda (m) (bd-with-no-eof m))
       (lambda (m) (build (extend (->d m) '(make-machine) 1 (machine-name m) 7
                                  '(make-finish-node (quote zz-orphan) #f))))
@@ -376,34 +376,34 @@
                                      '(make-finish-node (quote zz-orphan) #f))))
                     (build (edit d1 '(make-byte-dispatch-node) 1 (byte-dispatch-node-name bd) 4 (q 'zz-orphan)))))
       (lambda (m) (list (cons 'unreachable-node 'zz-orphan))))
-     ;; :893 overlapping cases -- duplicate a byte-dispatch node's first case.
+     ;; overlapping-transitions overlapping cases -- duplicate a byte-dispatch node's first case.
      (make-corruption-entry
-      'overlapping-cases ':893
+      'overlapping-cases 'overlapping-transitions
       (lambda (m) (bd-with-cases m 1))
       (lambda (m) (let ((n (bd-with-cases m 1)))
                     (build (dup-first (->d m) '(make-byte-dispatch-node) 1 (byte-dispatch-node-name n) 2))))
       (lambda (m) m)
       (lambda (m) (list (cons 'overlapping-cases (byte-dispatch-node-name (bd-with-cases m 1))))))
-     ;; :894 ambiguous sequence prefix -- duplicate a sequence-dispatch node's case.
+     ;; sequence-ambiguity ambiguous sequence prefix -- duplicate a sequence-dispatch node's case.
      (make-corruption-entry
-      'ambiguous-sequence-prefix ':894
+      'ambiguous-sequence-prefix 'sequence-ambiguity
       (lambda (m) (first-node-of m sequence-dispatch-node?))
       (lambda (m) (let ((n (first-node-of m sequence-dispatch-node?)))
                     (build (dup-first (->d m) '(make-sequence-dispatch-node) 1 (sequence-dispatch-node-name n) 2))))
       (lambda (m) m)
       (lambda (m) (list (cons 'ambiguous-sequence-prefix (sequence-dispatch-node-name (first-node-of m sequence-dispatch-node?))))))
-     ;; :898 zero-progress cycle -- a byte-dispatch node reexecutes to itself on fallback.
+     ;; zero-progress-cycles zero-progress cycle -- a byte-dispatch node reexecutes to itself on fallback.
      (make-corruption-entry
-      'zero-progress-cycle ':898
+      'zero-progress-cycle 'zero-progress-cycles
       (lambda (m) (first-node-of m byte-dispatch-node?))
       (lambda (m) (let* ((n (first-node-of m byte-dispatch-node?)) (nm (byte-dispatch-node-name n)))
                     (build (edit (->d m) '(make-byte-dispatch-node) 1 nm 3
                                  (list 'make-edge (q nm) (q 'reexecute))))))
       (lambda (m) m)
       (lambda (m) (list (cons 'zero-progress-cycle (byte-dispatch-node-name (first-node-of m byte-dispatch-node?))))))
-     ;; :908 non-EOF control flow into a finish -- a byte edge (fallback) into a finish.
+     ;; eof-cycles-and-finish-flow non-EOF control flow into a finish -- a byte edge (fallback) into a finish.
      (make-corruption-entry
-      'non-eof-into-finish ':908
+      'non-eof-into-finish 'eof-cycles-and-finish-flow
       (lambda (m) (and (first-node-of m byte-dispatch-node?) (first-node-of m finish-node?)))
       (lambda (m) (let ((n (first-node-of m byte-dispatch-node?)) (f (first-node-of m finish-node?)))
                     (build (edit (->d m) '(make-byte-dispatch-node) 1 (byte-dispatch-node-name n) 3
@@ -414,20 +414,20 @@
                     (build (edit (->d m) '(make-byte-dispatch-node) 1 (byte-dispatch-node-name n) 4
                                  (q (finish-node-name f))))))
       (lambda (m) (list (cons 'non-eof-into-finish (byte-dispatch-node-name (first-node-of m byte-dispatch-node?))))))
-     ;; :908 EOF-only zero-progress cycle -- a byte-dispatch node's eof-target is itself.
+     ;; eof-cycles-and-finish-flow EOF-only zero-progress cycle -- a byte-dispatch node's eof-target is itself.
      (make-corruption-entry
-      'eof-zero-progress-cycle ':908
+      'eof-zero-progress-cycle 'eof-cycles-and-finish-flow
       (lambda (m) (first-node-of m byte-dispatch-node?))
       (lambda (m) (let* ((n (first-node-of m byte-dispatch-node?)) (nm (byte-dispatch-node-name n)))
                     (build (edit (->d m) '(make-byte-dispatch-node) 1 nm 4 (q nm)))))
       (lambda (m) m)
       (lambda (m) (list (cons 'eof-zero-progress-cycle (byte-dispatch-node-name (first-node-of m byte-dispatch-node?))))))
-     ;; :909 EOF-reachable stop -- point a byte-dispatch node's FREE (#f) eof-target
+     ;; eof-reachable-stops EOF-reachable stop -- point a byte-dispatch node's FREE (#f) eof-target
      ;; at a stop, so an EOF route reaches a stop terminal. The twin points the same
      ;; free eof route at a fresh finish instead (below), so neither half orphans an
      ;; existing eof-target.
      (make-corruption-entry
-      'eof-reachable-stop ':909
+      'eof-reachable-stop 'eof-reachable-stops
       (lambda (m) (and (bd-with-no-eof m) (first-node-of m stop-node?)))
       (lambda (m) (let ((n (bd-with-no-eof m)) (s (first-node-of m stop-node?)))
                     (build (edit (->d m) '(make-byte-dispatch-node) 1 (byte-dispatch-node-name n) 4
@@ -440,20 +440,20 @@
                                      '(make-finish-node (quote zz-eof-ok) #f))))
                     (build (edit d1 '(make-byte-dispatch-node) 1 (byte-dispatch-node-name n) 4 (q 'zz-eof-ok)))))
       (lambda (m) (list (cons 'eof-reachable-stop (byte-dispatch-node-name (bd-with-no-eof m))))))
-     ;; :899 invalid span state -- a span-end node names a different span.
+     ;; span-structure invalid span state -- a span-end node names a different span.
      (make-corruption-entry
-      'invalid-span-state ':899
+      'invalid-span-state 'span-structure
       (lambda (m) (and (first-node-of m span-end-node?) (two-spans? m)))
       (lambda (m) (let* ((n (first-node-of m span-end-node?))
                          (other (other-span-name m (span-end-node-span n))))
                     (build (edit (->d m) '(make-span-end-node) 1 (span-end-node-name n) 2 (q other)))))
       (lambda (m) m)
       (lambda (m) (list (cons 'invalid-span-state (span-end-node-name (first-node-of m span-end-node?))))))
-     ;; :900 span active at pause -- INTERPOSE a fresh pause on the span's own path
+     ;; pause-or-callback-in-span span active at pause -- INTERPOSE a fresh pause on the span's own path
      ;; (span-start -> new pause -> the start's old successor), so the pause is
      ;; reached with the span open and has a single, span-active in-edge.
      (make-corruption-entry
-      'span-active-at-pause ':900
+      'span-active-at-pause 'pause-or-callback-in-span
       (lambda (m) (first-node-of m span-start-node?))
       (lambda (m) (let* ((s (first-node-of m span-start-node?))
                          (nm (span-start-node-name s))
@@ -463,10 +463,10 @@
                     (build (edit d1 '(make-span-start-node) 1 nm 3 (q 'zz-inspan-pause)))))
       (lambda (m) m)
       (lambda (m) (list (cons 'span-active-at-pause 'zz-inspan-pause))))
-     ;; :907 span active at exit -- INTERPOSE a fresh finish on the span's own path,
+     ;; eof-targets-and-active-spans span active at exit -- INTERPOSE a fresh finish on the span's own path,
      ;; so a successful EOF exit is reached with the span still open (one in-edge).
      (make-corruption-entry
-      'span-active-at-exit ':907
+      'span-active-at-exit 'eof-targets-and-active-spans
       (lambda (m) (first-node-of m span-start-node?))
       (lambda (m) (let* ((s (first-node-of m span-start-node?))
                          (nm (span-start-node-name s))
@@ -475,11 +475,11 @@
                     (build (edit d1 '(make-span-start-node) 1 nm 3 (q 'zz-exit-finish)))))
       (lambda (m) m)
       (lambda (m) (list (cons 'span-active-at-exit 'zz-exit-finish))))
-     ;; :899 inconsistent span state -- a span-start jumps to an EXISTING pause that
+     ;; span-structure inconsistent span state -- a span-start jumps to an EXISTING pause that
      ;; keeps its own (span-closed) in-edge, so the pause is reached with two
      ;; different active-span sets (the merge disagreement).
      (make-corruption-entry
-      'inconsistent-span-state ':899
+      'inconsistent-span-state 'span-structure
       (lambda (m) (and (first-node-of m span-start-node?) (first-node-of m pause-node?)))
       (lambda (m) (let ((s (first-node-of m span-start-node?)) (p (first-node-of m pause-node?)))
                     (build (edit (->d m) '(make-span-start-node) 1 (span-start-node-name s) 3
@@ -492,33 +492,33 @@
   ;; catalogue reaches them only as a raise. Each thunk performs the refused
   ;; construction by evaluating a `(byte-machine graph)` call in `eval-env` (graph
   ;; re-exports ir.sls's validated constructors, which raise a contract violation
-  ;; whose `who` is the constructor). `:906` has NO thunk: terminal constructors
+  ;; whose `who` is the constructor). `terminal-out-edges` has NO thunk: terminal constructors
   ;; take name and source-label only -- there is no out-edge slot to give -- so the
   ;; row records the reason and the program asserts it structurally against ir.sls.
   (define constructor-refusals
     (list
-     (make-refusal ':895 'byte-dispatch-no-fallback
+     (make-refusal 'missing-fallback 'byte-dispatch-no-fallback
        (lambda () (eval '(make-byte-dispatch-node 'zz (list) #f #f #f) eval-env))
-       "make-byte-dispatch-node requires an edge fallback (§16.2:895)")
-     (make-refusal ':895 'sequence-dispatch-no-fallback
+       "make-byte-dispatch-node requires an edge fallback")
+     (make-refusal 'missing-fallback 'sequence-dispatch-no-fallback
        (lambda () (eval '(make-sequence-dispatch-node 'zz (list (make-sequence-case '(65) 'x #f)) #f #f #f) eval-env))
-       "make-sequence-dispatch-node requires an edge mismatch fallback (§16.2:895)")
-     (make-refusal ':896 'edge-mode-outside-closed-set
+       "make-sequence-dispatch-node requires an edge mismatch fallback")
+     (make-refusal 'advancement-modes 'edge-mode-outside-closed-set
        (lambda () (eval '(make-edge 'x 'not-a-mode) eval-env))
-       "make-edge's mode must be advance or reexecute (§16.2:896)")
-     (make-refusal ':889 'uint-field-bad-width
+       "make-edge's mode must be advance or reexecute")
+     (make-refusal 'field-declarations 'uint-field-bad-width
        (lambda () (eval '(make-uint-field 'f 7 0 #f) eval-env))
-       "make-uint-field's width must be 8/16/32/64 (§16.2:889 width half)")
-     (make-refusal ':889 'uint-field-bad-initial
+       "make-uint-field's width must be 8/16/32/64")
+     (make-refusal 'field-declarations 'uint-field-bad-initial
        (lambda () (eval '(make-uint-field 'f 8 999 #f) eval-env))
-       "make-uint-field's initial must fit the width (§16.2:889 initial half)")
-     (make-refusal ':889 'field-action-bad-operation
+       "make-uint-field's initial must fit the width")
+     (make-refusal 'field-declarations 'field-action-bad-operation
        (lambda () (eval '(make-field-action-node 'fa 'not-an-op '() 'nx #f #f) eval-env))
-       "make-field-action-node rejects arbitrary operation names (§16.2:889 operation half)")
-     (make-refusal ':904 'integer-accumulate-bad-base
+       "make-field-action-node rejects arbitrary operation names")
+     (make-refusal 'integer-accumulation 'integer-accumulate-bad-base
        (lambda () (eval '(make-integer-accumulate-node 'a 'fld 7 'd (make-edge 'x 'advance) 'err 'e #f) eval-env))
-       "make-integer-accumulate-node's base must be 10 or 16 (§16.2:904 base half)")
-     (make-refusal ':906 'terminal-out-edge #f
+       "make-integer-accumulate-node's base must be 10 or 16")
+     (make-refusal 'terminal-out-edges 'terminal-out-edge #f
        "terminal node constructors (make-stop-node/make-finish-node/make-error-node) take name and source-label only -- there is no out-edge slot to give")))
 
   ;; ---- the unconstructible list -------------------------------------------

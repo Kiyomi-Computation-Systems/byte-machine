@@ -58,7 +58,7 @@
               (and (memq 'byte-machine syms) (memq 'test syms) #t)))
           (lib-imports d)))
 
-(harness-group "no src/ library imports the fixture or any test library (§25:1649)"
+(harness-group "no src/ library imports the fixture or any test library"
   (lambda ()
     (for-each
      (lambda (path)
@@ -70,7 +70,7 @@
                     (not (imports-the-fixture? (car rl))))))))
      (append public-src-libs private-src-libs))))
 
-(harness-group "no PUBLIC library re-exports an HTTP name (§21.7:1209)"
+(harness-group "no PUBLIC library re-exports an HTTP name"
   (lambda ()
     (for-each
      (lambda (path)

@@ -51,7 +51,7 @@
       (list (parser-result-status r) (parser-result-consumed r)
             (parser-state-name p) (error-code-of r) (error-off-of r)))))
 
-(harness-group "both keyword fixtures verify clean (§22.6: no behaviour on an invalid graph)"
+(harness-group "both keyword fixtures verify clean (no behaviour on an invalid graph)"
   (lambda ()
     (for-each
      (lambda (e)
@@ -73,7 +73,7 @@
       (lambda () (check-equal "gp" (feed1 cs "GET-PARAMETER ") '(stopped 13 13 13 got-gp #f #f))))
     (harness-case "GET + space takes the short keyword, span closes at 3 (delimiter not consumed)"
       (lambda () (check-equal "get" (feed1 cs "GET ") '(stopped 3 3 3 got-get #f #f))))
-    (harness-case "GETX takes GET and leaves X (criterion 2: span 3, X reexecuted)"
+    (harness-case "GETX takes GET and leaves X (span 3, X reexecuted)"
       (lambda () (check-equal "getx" (feed1 cs "GETX") '(stopped 3 3 3 got-get #f #f))))
     (harness-case "GET-X commits down the GET-PARAMETER path and no-matches at X, never rewinding to GET"
       (lambda () (check-equal "get-x" (feed1 cs "GET-X") '(error 4 4 4 reject unexpected-byte 4))))))

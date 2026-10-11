@@ -65,7 +65,7 @@
    (list (string-append cpre "0\r\nContent-Length: 5\r\n\r\n") 'feed 'forbidden-trailer 'byte 63)
    (list "GET"                                          'finish 'unexpected-eof 'eof 3)))
 
-(harness-group "the malformed sweep: every §21.4 code at its Slice ⓪ position"
+(harness-group "the malformed sweep: every error-table code at its recorded position"
   (lambda ()
     (harness-case "each row produces exactly its code, kind and offset"
       (lambda ()
@@ -76,7 +76,7 @@
              (check-equal (symbol->string (caddr row))
                           got (list (caddr row) (cadddr row) (car (cddddr row))))))
          sweep)))
-    (harness-case "the sweep covers exactly Slice ⓪'s eighteen codes (§21.4 floor)"
+    (harness-case "the sweep covers exactly the error table's eighteen codes"
       (lambda ()
         (check-equal "the sweep's code set equals the table's code set"
                      (sortsym (distinct (map caddr sweep)))

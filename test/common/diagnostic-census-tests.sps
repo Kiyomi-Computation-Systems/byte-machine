@@ -563,7 +563,7 @@
   '(eof-reachable-stop eof-zero-progress-cycle zero-progress-cycle non-eof-into-finish
     invalid-span-state inconsistent-span-state span-active-at-pause span-active-at-exit))
 
-(harness-group "the path row is total over the census (decision 0032 items 4 and 6)"
+(harness-group "the path row is total over the census"
   (lambda ()
     (harness-case "four constructors, and the path-carrying pair derived from their arglists"
       (lambda ()
@@ -583,7 +583,7 @@
                      (apply + (map site-count-of diagnostic-constructors)) 60)
         (check-equal "twelve path-carrying sites"
                      (apply + (map site-count-of path-carrying-constructors)) 12)))
-    (harness-case "the path-bearing code set is exactly item 4's eight codes"
+    (harness-case "the path-bearing code set is exactly the declared eight codes"
       (lambda ()
         (let ((sortsym (lambda (l) (list-sort (lambda (a b) (string<? (symbol->string a)
                                                                       (symbol->string b)))
@@ -621,7 +621,7 @@
           (else (loop (cdr ls) acc)))))
 
 (when (and catalog-repo (not (string=? catalog-repo "")))
-  (harness-group "the committed diagnostic catalog matches the census (§27:1696)"
+  (harness-group "the committed diagnostic catalog matches the census"
     (lambda ()
       (harness-case "verifier-diagnostic-catalog.md lists exactly the census codes"
         (lambda ()

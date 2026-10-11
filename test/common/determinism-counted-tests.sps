@@ -56,7 +56,7 @@
           (check-equal "six consumed" (parser-result-consumed r) 6)
           (check-equal "back at idle" (parser-state-name p) 'idle)
           (check-equal "the count is cleared" (parser-field-ref p 'len) 0))))
-    (harness-case "a zero-length body transitions without consuming (§10.6:600)"
+    (harness-case "a zero-length body transitions without consuming"
       (lambda ()
         (let* ((p (make-parser cm '() #f)) (r (feed p "0:")))
           (check-equal "need-input" (parser-result-status r) 'need-input)

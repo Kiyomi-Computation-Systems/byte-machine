@@ -119,7 +119,7 @@
 (define (obs status consumed offset code lifecycle state span len events)
   (list status consumed offset code lifecycle state span len events))
 
-(harness-group "rule 2: the span end delivers the body after a bulk commit (§14:831)"
+(harness-group "the span end delivers the body after a bulk commit"
   (lambda ()
     (harness-case "3:abc, in one feed: one fragment of three, then the completion, then idle"
       (lambda ()
@@ -130,7 +130,7 @@
         (both "one message, no completion callback" 'bare '((feed "3:abc,")) '() callback-continue
               (list (obs 'need-input 6 6 #f 'ready 'idle #f 0 '((data 3)))))))))
 
-(harness-group "rule 4: a feed boundary flushes and the span stays open (§14:833)"
+(harness-group "a feed boundary flushes and the span stays open"
   (lambda ()
     (harness-case "3:ab then c,: the flush delivers ab, the span stays open with the count remaining, c completes it"
       (lambda ()
@@ -138,7 +138,7 @@
               (list (obs 'need-input 4 4 #f 'ready 'body 'sp 1 '((data 2)))
                     (obs 'need-input 2 6 #f 'ready 'idle #f 0 '((data 1) complete))))))))
 
-(harness-group "rule 5: an empty span delivers one empty fragment (§14:834 amended, decision 0042)"
+(harness-group "an empty span delivers one empty fragment"
   (lambda ()
     (harness-case "0:, in one feed delivers one empty fragment (data 0) then the completion"
       (lambda ()
@@ -156,7 +156,7 @@
                     (obs 'need-input 1 2 #f 'ready 'comma #f 0 '((data 0) complete))
                     (obs 'need-input 1 3 #f 'ready 'idle #f 0 '())))))))
 
-(harness-group "rule 8: a pause DURING the flush commits the fragment and the count survives (§14:837, §25:1600)"
+(harness-group "a pause DURING the flush commits the fragment and the count survives"
   (lambda ()
     (harness-case "3:ab with the data callback pausing: paused at the boundary, count 1, span open; resume; c, completes"
       (lambda ()
@@ -169,7 +169,7 @@
                     (obs #f #f #f #f 'ready 'body 'sp 1 '())
                     (obs 'need-input 2 6 #f 'ready 'idle #f 0 '((data 1) complete))))))))
 
-(harness-group "rule 9: a pause at the span-end fragment resumes into the completion (§14:838)"
+(harness-group "a pause at the span-end fragment resumes into the completion"
   (lambda ()
     (harness-case "3:abc with the data callback pausing on the span end's fragment: resume, then , delivers the completion only"
       (lambda ()
@@ -179,7 +179,7 @@
                     (obs #f #f #f #f 'ready 'close 'sp 0 '())
                     (obs 'need-input 1 6 #f 'ready 'idle #f 0 '(complete))))))))
 
-(harness-group "rule 10: EOF with the span open truncates -- no final fragment, no completion (§14:839)"
+(harness-group "EOF with the span open truncates -- no final fragment, no completion"
   (lambda ()
     (harness-case "3:ab then finish: the body's own truncation, eof at offset 4, the flush's fragment still in the trace"
       (lambda ()
@@ -187,7 +187,7 @@
               (list (obs 'need-input 4 4 #f 'ready 'body 'sp 1 '((data 2)))
                     (obs 'error 0 4 'eof 'error 'trunc2 'sp 1 '())))))))
 
-(harness-group "§25:1609's span variant: two messages in one feed, two completions in one trace"
+(harness-group "the span variant: two messages in one feed, two completions in one trace"
   (lambda ()
     (harness-case "3:abc,0:, in one feed"
       (lambda ()
@@ -258,7 +258,7 @@
             (parser-feed! p (car (car ss)) (cadr (car ss)) (caddr (car ss)))
             (loop (cdr ss) (cons (list (events) (parser-field-ref p 'len) (parser-active-span p)) out)))))))
 
-(harness-group "the completion lands in the feed that delivered the last body byte, under every schedule (§10.6:603)"
+(harness-group "the completion lands in the feed that delivered the last body byte, under every schedule"
   (lambda ()
     (harness-case "the byte-at-a-time schedule, per feed, in each lane"
       (lambda ()
@@ -309,7 +309,7 @@
           ((eq? (car t) 'complete) (loop (cdr t) 0 (cons 'complete (cons (list 'data acc) out))))
           (else (loop (cdr t) (+ acc (cadr (car t))) out)))))
 
-(harness-group "same schedule: the two lanes agree exactly (§22.5:1285)"
+(harness-group "same schedule: the two lanes agree exactly"
   (lambda ()
     (harness-case "every schedule produces the identical trace and finish in both lanes"
       (lambda ()
@@ -323,7 +323,7 @@
           (check-equal "forty-five schedules driven" driven 45)
           (check-equal "every schedule agrees across the lanes" bad '()))))))
 
-(harness-group "across schedules: coalesced is invariant, raw is not (§22.5:1287)"
+(harness-group "across schedules: coalesced is invariant, raw is not"
   (lambda ()
     (harness-case "the coalesced trace equals the one-feed baseline under every schedule"
       (lambda ()
@@ -344,7 +344,7 @@
           (check-equal "no schedule's coalesced trace differs" differing '())
           (check "the raw traces are schedule-dependent" (> (length raws) 1)))))))
 
-(harness-group "the error path, per lane and across schedules (§14:839, §22.5:1289)"
+(harness-group "the error path, per lane and across schedules"
   (lambda ()
     (harness-case "a truncated body delivers no completion and one (error 4 eof) under every schedule"
       (lambda ()

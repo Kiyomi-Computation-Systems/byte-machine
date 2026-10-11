@@ -65,7 +65,7 @@
             (check-equal "error" (parser-result-status r) 'error)
             (check-equal "truncation code" (error-code-of r) 'truncated-input)
             (check-equal "eof at offset 1" (parser-result-stream-offset r) 1)))))
-    (harness-case "feeding both bytes stops; finishing a stopped parser stays stopped (§12.2)"
+    (harness-case "feeding both bytes stops; finishing a stopped parser stays stopped"
       (lambda ()
         (let ((p (fresh)))
           (parser-feed! p (make-bytevector 2 0) 0 0)              ; empty feed, still ready
@@ -147,7 +147,7 @@
     (harness-case "the full sequence stops after four bytes"
       (lambda ()
         (check-equal "stopped" (feed-bytes one '(1 2 3 4)) '(stopped 1 1 4 #f))))
-    (harness-case "a mid-sequence feed boundary is need-input, never paused (decision 0015 point 5)"
+    (harness-case "a mid-sequence feed boundary is need-input, never paused"
       (lambda ()
         (check-equal "need-input" (car (feed-bytes one '(1 2))) 'need-input)))
     (harness-case "a wrong byte at each position errors at that between-byte offset"
@@ -157,7 +157,7 @@
         (check-equal "pos 2" (feed-bytes one '(1 2 200)) '(error 0 0 2 unexpected-byte))
         (check-equal "pos 3" (feed-bytes one '(1 2 3 200)) '(error 0 0 3 unexpected-byte))))))
 
-(harness-group "the compound current is a PATH, not a position index (§0 D1)"
+(harness-group "the compound current is a PATH, not a position index"
   (lambda ()
     ;; AB and XY diverge at position 0. After consuming A, a position index would
     ;; find that SOME alternative has Y at position 1 and follow XY -- accepting a
@@ -206,7 +206,7 @@
 (define (unverified m) (make-verification-result #t '() m))
 (define (interp-unverified m) (make-interpreted-machine (unverified m)))
 
-(harness-group "§16.2:894 rejects both unrepresentable shapes before the interpreter"
+(harness-group "the verifier rejects both unrepresentable shapes before the interpreter"
   (lambda ()
     (harness-case "an ambiguous terminal prefix is a verification diagnostic"
       (lambda ()
@@ -254,7 +254,7 @@
                                             'reexecute (list (make-stop-node 'halt #f))))
                                     '(65 66))))))))
 
-(harness-group "advance-mode mismatch shifts every reported position by one (§11.5:664)"
+(harness-group "advance-mode mismatch shifts every reported position by one"
   (lambda ()
     (define adv (interp (seq-m 'adv '(((1 2 3 4) . stop)) 'advance '())))
     (harness-case "the offending byte is consumed and the offset advances past it"
@@ -272,7 +272,7 @@
 ;; directly, reusing the SAME 'reject node the mismatch edge already uses, so no
 ;; new error declaration is needed and the machine stays well-formed by the same
 ;; shape verify-tests.sps's arm-4 fixture already establishes as legal.
-(harness-group "EOF through a compound current reads the sequence node's own eof-target (§12.4:727)"
+(harness-group "EOF through a compound current reads the sequence node's own eof-target"
   (lambda ()
     (define eofseq
       (interp (make-machine 'eofseq 'seq '() '() '() (list eof-decl rej-decl)
@@ -311,7 +311,7 @@
 (define cc-op (op-of (make-interpreted-machine (verify-machine (cc-interp #f)))))
 (define (fresh-fields v) (let ((fv (cc-op 'field-initials))) (vector-set! fv 0 v) fv))
 
-(harness-group "count-step, decision 0030 item 1's table (Milestone 6 Slice ①)"
+(harness-group "count-step's outcome table"
   (lambda ()
     (harness-case "the kind and the EOF route are the op's own arms"
       (lambda ()
@@ -351,7 +351,7 @@
         (let ((fv (fresh-fields 2)))
           (check-equal "(1 . #f)" (cc-op 'count-step 'body fv 4 5) '(1 . #f))
           (check-equal "one committed" (vector-ref fv 0) 1))))
-    (harness-case "a u64 count above the fixnum range subtracts exactly (§15:856)"
+    (harness-case "a u64 count above the fixnum range subtracts exactly"
       (lambda ()
         (let* ((big (+ (greatest-fixnum) 5)) (fv (fresh-fields big)))
           (check-equal "(3 . #f)" (cc-op 'count-step 'body fv 0 3) '(3 . #f))
