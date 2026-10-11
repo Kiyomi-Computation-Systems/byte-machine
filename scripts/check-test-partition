@@ -1,0 +1,34 @@
+#!/bin/sh
+# check-test-partition: the `pr` and `mutation` test presets together select
+# exactly the tests `release` selects.
+#
+# CI runs `pr` and then `mutation` instead of `release`, so that the mutation
+# suites run once rather than twice. That substitution is only sound while the
+# two partition `release`. `pr` excludes the `mutation` label and `mutation`
+# includes only it, so the two never overlap, and both select from the same
+# configured tests as `release`. With no overlap, the counts adding up to
+# `release`'s count means the union is `release`. A test carrying no label
+# `pr` includes, and not labelled `mutation`, would make the sum come up short
+# and fail here instead of silently going untested in CI.
+#
+# Needs a configured `dev` build tree; CTEST overrides the ctest on PATH.
+set -eu
+
+CTEST=${CTEST:-ctest}
+cd "$(dirname "$0")/.."
+
+count() {
+  n=$("$CTEST" --preset "$1" -N | sed -n 's/^Total Tests: //p')
+  [ -n "$n" ] || { echo "check-test-partition: no total from preset $1" >&2; exit 1; }
+  echo "$n"
+}
+
+release=$(count release)
+pr=$(count pr)
+mutation=$(count mutation)
+
+if [ $((pr + mutation)) -ne "$release" ]; then
+  echo "check-test-partition: pr ($pr) + mutation ($mutation) != release ($release)" >&2
+  exit 1
+fi
+echo "check-test-partition: pr ($pr) + mutation ($mutation) = release ($release)"

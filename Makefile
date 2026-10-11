@@ -29,7 +29,7 @@ REFERENCE_LIBDIRS = .:test/site:test/support/harness
 # Bare 'make' prints the target list rather than building; 'make all' still builds.
 .DEFAULT_GOAL := help
 
-.PHONY: all help doctor configure build dev test test-all test-mutation prod clean site check-site check-reference cmark-gfm-root check-akku
+.PHONY: all help doctor configure build dev test test-all test-mutation check-test-partition prod clean site check-site check-reference cmark-gfm-root check-akku
 
 all: build   ## build the development preset
 
@@ -64,13 +64,18 @@ test: build   ## build, then run the pull-request selection
 test-all: build   ## build, then run the complete selection
 	$(CTEST) --preset release $(CTEST_FLAGS)
 
-# The mutation lane is one ctest entry that runs ~5 min, and ctest buffers a
-# single test's output to the end -- under 'test-all' it sits silent, which is
-# hard to tell apart from a hang. This target runs just that lane with -V, which
-# streams its per-pass progress live (each 'pass N: K mutations against ...' and
-# '[i/K] caught ...' line as it happens).
-test-mutation: build   ## build, then run only the mutation lane, streaming live progress (~5 min)
-	$(CTEST) --preset release -V -R scheme-mutation --no-tests=error
+# The Scheme mutation suite is one ctest entry that runs ~5 min, and ctest
+# buffers a single test's output to the end -- under 'test-all' it sits silent,
+# which is hard to tell apart from a hang. This target runs the `mutation`
+# preset with -V, which streams its per-pass progress live (each
+# 'pass N: K mutations against ...' and '[i/K] caught ...' line as it happens).
+test-mutation: build   ## build, then run only the mutation suites, streaming live progress (~5 min)
+	$(CTEST) --preset mutation -V $(CTEST_FLAGS)
+
+# CI runs `pr` and then `mutation` in place of `release`; this checks that the
+# two together select exactly what `release` does.
+check-test-partition: configure   ## check the pr and mutation presets together select exactly release
+	@CTEST="$(CTEST)" scripts/check-test-partition
 
 prod:   ## configure and build the release preset
 	$(CMAKE) --preset prod
