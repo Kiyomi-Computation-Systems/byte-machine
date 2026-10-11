@@ -1,20 +1,14 @@
 # Build trees. All generated objects and binaries live here and never share a
-# source directory.
-#
-# Parent plan section 8 additionally requires that artifacts never be shared
-# between runtimes, runtime versions, operating systems, or architectures. The
-# presets do not yet partition that way -- they are one tree per configuration --
-# because nothing here compiles Scheme yet. The partitioning arrives with the
-# execution lanes in slice 5, which is the first point at which two runtimes
-# could collide.
+# source directory. Compiled objects are further partitioned by Chez version and
+# machine type under each tree (build/<preset>/chez-objects/<version>/<machine>).
 /build/
 /build-*/
 
 # CTest's cost cache, written into the SOURCE tree by any `ctest` run whose
 # working directory is the repository root rather than a build tree -- which is
 # what a bare `ctest -R ...` typed at the top level does. It reached a merged
-# commit once (Milestone 5 Slice ②) because `git add -A` sweeps it up and it is
-# neither under /build/ nor obviously a build artifact from its name.
+# commit once because `git add -A` sweeps it up and it is neither under /build/
+# nor obviously a build artifact from its name.
 /Testing/
 
 # Developer-local preset overrides
@@ -39,8 +33,12 @@ CMakeUserPresets.json
 
 # Generated libraries the examples emit at run time (examples/*/README document
 # the command). The suffix keeps them clear of real source, which is never
-# `*.generated.sls`, and out of the tree §26:1685 asserts is free of artifacts.
+# `*.generated.sls`.
 *.generated.sls
+
+# Akku's install directory, written by `akku install`. Akku.manifest is
+# tracked; this package has no dependencies, so there is no Akku.lock.
+/.akku/
 
 # Editor and platform noise
 .DS_Store

@@ -1,3 +1,4 @@
+#!r6rs
 ;;; SPDX-License-Identifier: BSD-3-Clause
 ;;; (byte-machine runtime): parser lifecycle, statuses, callback outcome
 ;;; singletons, and the compiled-machine ABI. Independent of graph/verify/
