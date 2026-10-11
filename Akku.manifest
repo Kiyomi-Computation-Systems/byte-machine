@@ -14,7 +14,7 @@
   (synopsis "Generator of fast, resumable, byte-level parsers")
   (description
    "Describe a parser as a state machine over bytes, built with ordinary Scheme procedures. byte-machine verifies it and emits a plain R6RS library that parses input incrementally: feed it bytes as they arrive, in any split, and it calls you back."
-   "The generated library depends only on (rnrs) and (byte-machine runtime). Spans are delivered as ranges into the fed bytevector, and the generated per-byte path allocates nothing.")
+   "The generated library depends only on (rnrs) and (byte-machine runtime). Spans are delivered as ranges into the fed bytevector, and the generated per-byte path allocates nothing, unless a 64-bit field's value reaches 2^60 and becomes a bignum.")
   (authors "Kiyomi Computation Systems LLC")
   (homepage "https://github.com/Kiyomi-Computation-Systems/byte-machine")
   (license "BSD-3-Clause"))
