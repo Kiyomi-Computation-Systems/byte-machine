@@ -306,7 +306,7 @@
       parents))
   ;; The path from the entry to `name` over `reach-from`'s alist, entry first.
   ;; `name` is a key by construction -- the byte-into-finish block passes only
-  ;; `br908` members, which are exactly `reach-from`'s keys -- so the walk
+  ;; `finish-sources` members, which are exactly `reach-from`'s keys -- so the walk
   ;; terminates at the entry (parent `#f`) and needs no guard for a non-member.
   (define (parent-path parents name)
     (let loop ((name name) (acc '()))
@@ -739,7 +739,7 @@
   ;; reach this shape, because the unreachable thing here is an edge and not a
   ;; node. The fixture in verify-tests asserts the machine both ways.
   (define (pass-zero-progress m)
-    (let ((nodes (machine-nodes m)) (br898 (byte-reached m)))
+    (let ((nodes (machine-nodes m)) (cycle-origins (byte-reached m)))
       (define (reexec-targets n)
         (cond ((byte-dispatch-node? n)
                (append (map (lambda (c) (edge-target (byte-case-edge c)))
@@ -864,7 +864,7 @@
                      ;; returns ok with zero diagnostics, and the machine fails to
                      ;; terminate in both lanes. `self-cycle`'s returned cycle is
                      ;; bound here and rides into the diagnostic as its path.
-                     (let ((cyc (and (memq (node-name n) br898)
+                     (let ((cyc (and (memq (node-name n) cycle-origins)
                                      (or (byte-dispatch-node? n) (pause-node? n)
                                          (sequence-dispatch-node? n)
                                          (keyword-table-node? n)
@@ -1183,14 +1183,14 @@
                                          (list (machine-entry m))))
              '()))
        ;; `reach-from` is called ONCE and both halves are derived from its parent
-       ;; alist: `br908` is its key set (`byte-reached`), and the offending edge's
+       ;; alist: `finish-sources` is its key set (`byte-reached`), and the offending edge's
        ;; path is entry → source → target over the same alist. `rp` binds as a
-       ;; `let*` sibling of `br908`, adding no nesting level (the layout
+       ;; `let*` sibling of `finish-sources`, adding no nesting level (the layout
        ;; constraint in the header).
-       (let* ((rp (reach-from m node-out-targets)) (br908 (map car rp)))
+       (let* ((rp (reach-from m node-out-targets)) (finish-sources (map car rp)))
          (apply append
                 (map (lambda (n)
-                       (if (memq (node-name n) br908)
+                       (if (memq (node-name n) finish-sources)
                            (filter values
                                    (map (lambda (re)
                                           (let ((tn (lookup nodes (cdr re))))
@@ -1230,12 +1230,12 @@
        ;;
        ;; A graph node no execution can occupy is not a state, so it originates
        ;; no walk.
-       (let ((br909 (byte-reached m)))
+       (let ((eof-origins (byte-reached m)))
          (apply append
                 (map (lambda (n)
                        ;; `eof-terminal` answers a `(verdict path)` pair; the
                        ;; verdict `case`s and the path rides into the diagnostic.
-                       (if (parked? m n br909)
+                       (if (parked? m n eof-origins)
                            (let* ((r (eof-terminal m (parked-eof-start m n)))
                                   (path (cadr r)))
                              (case (car r)

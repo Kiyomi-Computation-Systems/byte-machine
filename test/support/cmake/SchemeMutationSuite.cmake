@@ -2660,7 +2660,7 @@ byte_machine_mutation(
   # The FIND is the whole report guard, one disjunct per kind that can sit on a
   # zero-progress cycle; it reflows whenever a kind joins. The REPLACE and the
   # pin do not move with it, which is what says the decision has not moved.
-  FIND [[(and (memq (node-name n) br898)
+  FIND [[(and (memq (node-name n) cycle-origins)
                                      (or (byte-dispatch-node? n) (pause-node? n)
                                          (sequence-dispatch-node? n)
                                          (keyword-table-node? n)
@@ -2975,7 +2975,7 @@ byte_machine_mutation(
   # fixture holding only self-cycles will not tell them apart -- it needs a
   # cycle that runs THROUGH a pause without being one, which the walk mutation
   # kills and this one does not. No candidate fixture has been run.
-  FIND [[(and (memq (node-name n) br898)
+  FIND [[(and (memq (node-name n) cycle-origins)
                                      (or (byte-dispatch-node? n) (pause-node? n)
                                          (sequence-dispatch-node? n)
                                          (keyword-table-node? n)
@@ -3149,7 +3149,7 @@ byte_machine_mutation(
   # this one lands on "got 2" -- three distinct values on one check, all
   # measured, none predicted. Comparison-caught: the count check fails outright
   # rather than depending on where a mutant happens to crash.
-  FIND [[(and (memq (node-name n) br898)
+  FIND [[(and (memq (node-name n) cycle-origins)
                                      (or (byte-dispatch-node? n) (pause-node? n)
                                          (sequence-dispatch-node? n)
                                          (keyword-table-node? n)
@@ -3158,7 +3158,7 @@ byte_machine_mutation(
                                          (callback-node? n)
                                          (span-start-node? n) (span-end-node? n)
                                          (counted-consume-node? n))]]
-  REPLACE [[(and (memq (node-name n) br898)
+  REPLACE [[(and (memq (node-name n) cycle-origins)
                                      (or (byte-dispatch-node? n) (pause-node? n)
                                          (keyword-table-node? n)
                                          (field-action-node? n) (field-branch-node? n)
@@ -3823,7 +3823,7 @@ byte_machine_mutation(
   # the canonical legal shape, an EOF-only pause continuing into a finish --
   # so that fixture's own case reddens alongside the twelve-machine battery.
   # That is the evidence the unconditional reading is wrong, wired in as a pin.
-  FIND [[                       (if (memq (node-name n) br908)
+  FIND [[                       (if (memq (node-name n) finish-sources)
                            (filter values]]
   REPLACE [[                       (if #t
                            (filter values]]
@@ -3844,7 +3844,7 @@ byte_machine_mutation(
   # The reverse direction. A gate that admits nothing passes the acceptance half
   # of the battery for the wrong reason, so the rule needs its own pin against
   # emptiness -- the shape AGENTS.md calls seeding an output before asserting it.
-  FIND [[                       (if (memq (node-name n) br908)
+  FIND [[                       (if (memq (node-name n) finish-sources)
                            (filter values]]
   REPLACE [[                       (if #f
                            (filter values]]
@@ -4244,7 +4244,7 @@ byte_machine_mutation(
   # BOTH directions, so this mutant is caught by the accepting half -- an
   # unoccupiable cycle, which `unreachable-node` does NOT report either, which
   # is why the gate is not a benign no-op.
-  FIND [[                     (let ((cyc (and (memq (node-name n) br898)]]
+  FIND [[                     (let ((cyc (and (memq (node-name n) cycle-origins)]]
   REPLACE [[                     (let ((cyc (and #t]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "an unoccupiable zero-progress cycle is accepted")
