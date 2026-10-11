@@ -127,9 +127,10 @@ cmake --preset dev -DBYTE_MACHINE_CHEZ_EXECUTABLE=/absolute/path/to/scheme
 
 Everything under =src/byte-machine/= imports only =(rnrs)=, and a generated
 parser imports only =(rnrs)= and =(byte-machine runtime)=. Only the build and
-test layer is Chez-specific. Checked locally, without CI: on Guile 3.0.11 the
-toolchain runs unchanged, and on Racket 9.3 it runs once each =.sls= starts with
-=#!r6rs=. On both, the emitted library is byte-identical to Chez's.
+test layer is Chez-specific. Checked locally, without CI: the toolchain runs
+unchanged on Guile 3.0.11 and Racket 9.3, and on both the emitted library is
+byte-identical to Chez's. Racket loads a generated library only once =#!r6rs= is
+added as its first line; the emitted text does not carry it.
 
 #+begin_src bash
 guile --r6rs -L src your-program.scm

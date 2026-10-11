@@ -1,3 +1,4 @@
+#!r6rs
 ;;; SPDX-License-Identifier: BSD-3-Clause
 ;;; (byte-machine compile): the offline emitter. compile-machine re-verifies
 ;;; internally and normalizes; render-machine renders the normalized IR to a
