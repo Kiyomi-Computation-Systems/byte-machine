@@ -1335,6 +1335,25 @@ things carry over:
   split name in an arm that no fixture renders and no input reaches still
   passes all of them, and decision 0055 says so rather than claiming totality.
 
+**A census of runtime ops cannot see an arm that calls none (2026-10-11,
+decision 0057).** The generated accumulate arm checked overflow by subtracting
+from and dividing its field's maximum on every digit. For a u64 field that
+maximum is a bignum, so every digit allocated about 32 bytes, however small
+the number. The audit's own HTTP fixture has two such arms, the content length
+and the chunk size. Every audited message has no body, so neither ran, and the
+arm calls no runtime op, so the census had nothing to count. The census closed
+the gap for ops, and its recogniser (runtime names in compile.sls's literals)
+is the edge of what it closed. Two things carry over:
+
+- **Arithmetic on a literal in emitted code runs on every byte.** A field's
+  maximum is a constant; `(- MAX d)` is not. Do at emit time whatever does not
+  depend on the input, and remember that a 64-bit constant is a bignum on a
+  64-bit host.
+- **"Allocates nothing" has a limit the host sets.** A value above the fixnum
+  range is a heap object, and storing one allocates it. State that limit with
+  the claim, gate below it, and use the cost above it as the live control: the
+  same arm and the same apparatus, giving a positive number.
+
 ## Restoring a deleted line re-opens what was decided while it was gone
 
 Milestone 5 deleted the mark advance from the span-fragment step. Measured, it

@@ -80,8 +80,8 @@ The complete program is in [`examples/words/`](../examples/words/), and
   split across any number of feeds parses exactly as it does in one buffer.
 - **No input buffering.** Spans arrive as ranges into the bytevector you fed.
   The runtime keeps no reference to it once the feed returns, and the
-  generated per-byte path allocates nothing, except when reading digits into
-  a 64-bit field.
+  generated per-byte path allocates nothing, unless a 64-bit field's value
+  reaches 2^60 and becomes a bignum.
 - **The pieces protocol parsers need.** Byte dispatch, byte classes, fixed
   sequences, keyword tables, unsigned integer fields with overflow checks,
   counted reads ("the next N bytes are the body"), callbacks that can pause

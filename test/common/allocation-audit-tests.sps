@@ -24,7 +24,10 @@
         (byte-machine verify)
         (byte-machine interpret)
         (byte-machine runtime)
-        (byte-machine compile))
+        (byte-machine compile)
+        (only (byte-machine graph)
+              make-machine make-uint-field make-error-declaration make-edge
+              make-integer-accumulate-node make-field-action-node make-error-node))
 
 (harness-begin "unit.allocation-audit")
 
@@ -639,6 +642,93 @@
           (witness-feed! kw-twin '() (kw-field 0))
           (witness-feed! kw-twin '() (kw-field 16))
           (witness-feed! kw-twin '() (kw-field 17)))))))
+
+;; --- the fourth dimension, per DIGIT read into a u64 field -------------------
+;;
+;; Every slope above feeds the HTTP machine messages with no body, so none of
+;; them runs an integer-accumulate arm, and that arm calls no runtime op, so the
+;; census below cannot notice it is missing. A 64-bit field's maximum, 2^64 - 1,
+;; is above the fixnum range on a 64-bit host: an overflow check written as
+;; arithmetic on that maximum allocates on every digit, however small the value
+;; being read.
+;;
+;; What "allocates nothing" can mean here is bounded by the value itself. A
+;; field value above (greatest-fixnum) IS a heap object, so a digit that stores
+;; one allocates it, and no overflow check can avoid that. The gated claim is
+;; that a digit allocates nothing while the value it stores is a fixnum,
+;; whatever the field's width. The cost of a digit above that range is recorded
+;; beside it, and is this group's live control: the same apparatus, the same
+;; arm, a positive figure. The boundary is read from the host rather than
+;; written down. Every prefix of (greatest-fixnum)'s own digits is a fixnum, so
+;; the numbers fed run every magnitude up to it.
+;;
+;; One u64 field; an accumulate node that is its own digit-target; a `;` (a
+;; non-digit, consumed) clears the field and returns to the node. Base 10 and
+;; base 16 both, because the HTTP machine reads a u64 in each.
+(define (u64-accumulate-machine name base)
+  (make-machine name 'n (list (make-uint-field 'v 64 0 #f)) '() '()
+                (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
+                      (make-error-declaration 'too-big 'unexpected-byte "field overflow" #f))
+                (list (make-integer-accumulate-node 'n 'v base 'n (make-edge 'zero 'advance)
+                                                    'over #f #f)
+                      (make-field-action-node 'zero 'clear '(v) 'n #f #f)
+                      (make-error-node 'over 'too-big #f))
+                'default-eof #f))
+
+;; `copies` numbers, each ended by `;`, then one more left open, so the field
+;; holds `n` when the feed ends: the answer a case reads back.
+(define (numbers-request n base copies)
+  (let* ((digits (bytes (number->string n base)))
+         (one (append digits (list 59))))
+    (u8-list->bytevector
+     (let loop ((i 0) (acc digits))
+       (if (= i copies) acc (loop (+ i 1) (append one acc)))))))
+(define few-numbers 10)
+(define many-numbers 1010)
+(define digit-reps 20)
+
+;; The checks one base owes, in a case that names the base.
+(define (u64-digits-check base name)
+  (let* ((pair (load-pair (u64-accumulate-machine name base) name))
+         (real (car pair)) (twin (cadr pair))
+         (top (greatest-fixnum))
+         (wide (- (expt 2 64) 1))
+         (few (numbers-request top base few-numbers))
+         (many (numbers-request top base many-numbers))
+         (few-wide (numbers-request wide base few-numbers))
+         (many-wide (numbers-request wide base many-numbers))
+         (answer (lambda (req)
+                   (let* ((p (make-parser real '() #f))
+                          (r (parser-feed! p req 0 (bytevector-length req))))
+                     (list (parser-result-status r) (parser-field-ref p 'v)))))
+         (extra (lambda (more less)
+                  (- (alloc-feeding-only real '() more digit-reps)
+                     (alloc-feeding-only real '() less digit-reps)))))
+    ;; The answers first, so an arm that stopped accumulating could not pass by
+    ;; allocating nothing.
+    (check-equal "u64 digits: the fixnum-range feed ends holding the largest fixnum"
+                 (answer many) (list 'need-input top))
+    (check-equal "u64 digits: the wide feed ends holding 2^64 - 1"
+                 (answer many-wide) (list 'need-input wide))
+    (let ((wide-extra (extra many-wide few-wide)))
+      (check "control: digits storing a bignum allocate" (positive? wide-extra))
+      (say (string-append "byte-machine-alloc: u64 base " (number->string base)
+                          " B/number above the fixnum range="
+                          (adapter-value->string (/ wide-extra (* digit-reps
+                                                                  (- many-numbers few-numbers))))
+                          " (" (number->string (string-length (number->string wide base)))
+                          " digits each)")))
+    (check-equal "u64 digits: extra bytes for 1000 more fixnum-range numbers"
+                 (extra many few) 0)
+    (witness-feed! twin '() few)
+    (witness-feed! twin '() many)))
+
+(harness-group "a digit read into a u64 field allocates nothing while its value is a fixnum"
+  (lambda ()
+    (harness-case "base 10: digits up to the largest fixnum allocate nothing"
+      (lambda () (u64-digits-check 10 'acc64dec)))
+    (harness-case "base 16: digits up to the largest fixnum allocate nothing"
+      (lambda () (u64-digits-check 16 'acc64hex)))))
 
 (define (sorted xs)
   (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b))) xs))
