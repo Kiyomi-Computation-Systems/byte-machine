@@ -4,6 +4,10 @@ This page is for working on byte-machine itself: running its tests,
 measuring it, and building this documentation site. To *use* byte-machine you
 need none of it; see [Installing](installing.md).
 
+To contribute a change, read
+[CONTRIBUTING.md](../CONTRIBUTING.md) first: it lists the checks a pull
+request must pass and how to add a mutation.
+
 ## What you need
 
 - Chez Scheme 10.4.1 or newer, the full system.
