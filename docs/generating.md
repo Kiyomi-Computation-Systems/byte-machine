@@ -58,11 +58,11 @@ reach a file. `emit-machine` returns a metadata value describing what it wrote.
   arithmetic. 8-, 16- and 32-bit fields allocate nothing.
 
 The binding name follows the same rule as other names (lowercase letters,
-digits, hyphens). The generator refuses the core keywords (`define`,
-`lambda`, `if` and the like), the runtime's exports, and names the generated
-body uses internally, such as `exec`. It does **not** refuse every name
-`(rnrs)` exports: a binding such as `list` or `guard` renders a library that
-then fails to load. Pick a distinctive name, like `words-parser`.
+digits, hyphens). The library imports all of `(rnrs)`, so the generator
+refuses every name `(rnrs)` exports (`define`, `list`, `guard` and the
+like). It also refuses `library`, `import` and `export`, the runtime's
+exports, and names the generated body uses internally, such as `exec`. Pick
+a distinctive name, like `words-parser`.
 
 ## Where to put it
 
