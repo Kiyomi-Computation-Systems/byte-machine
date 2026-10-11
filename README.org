@@ -5,6 +5,9 @@
 A generator of fast, resumable, byte-level parsers for Chez Scheme, in the
 manner of [[https://github.com/nodejs/llparse][llparse]].
 
+*Documentation:* [[https://kiyomi-computation-systems.github.io/byte-machine/][kiyomi-computation-systems.github.io/byte-machine]], also readable
+as Markdown in [[file:docs/][=docs/=]].
+
 #+begin_quote
 ✨ *AI Disclosure:* LLMs are used extensively in the planning and development of this project.
 #+end_quote
@@ -97,8 +100,8 @@ Next, read [[file:docs/usage.md][Usage]], which builds, generates and runs a sma
 - Chez Scheme 10.4.1 or newer (the full system, not Petite)
 - CMake 3.26 or newer, to build and run the tests
 
-Verified on macOS arm64. Linux amd64, Windows amd64 and Linux arm64 are
-supported targets that are not CI-verified; see [[file:docs/installing.md][Installing]].
+Tested on macOS arm64 locally and on Linux amd64 by CI. Windows amd64 and
+Linux arm64 are supported targets with no CI; see [[file:docs/installing.md][Installing]].
 
 ** Building and testing
 
@@ -143,7 +146,11 @@ You can also generate on Chez and deploy only the emitted =.sls= with
 
 ** Documentation
 
-The documentation is in [[file:docs/][=docs/=]], starting at [[file:docs/README.md][its index]]:
+Read the documentation online at
+[[https://kiyomi-computation-systems.github.io/byte-machine/][kiyomi-computation-systems.github.io/byte-machine]], built from the latest
+release. The same pages are Markdown files in [[file:docs/][=docs/=]], starting at
+[[file:docs/README.md][its index]]; those track =main=, so they can describe changes not yet
+released.
 
 - [[file:docs/installing.md][Installing]]: what you need, and how to put the libraries on Chez's path
 - [[file:docs/usage.md][Usage]]: build, check, generate and run a parser, step by step
