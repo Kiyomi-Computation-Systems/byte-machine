@@ -1771,7 +1771,8 @@ byte_machine_add_scheme_lane(
 # mirror the determinism-http lane. The committed benchmark baseline is produced
 # by bench/runner/benchmark.sps and recorded in bench/fixtures/ — not a gating
 # lane (no noisy CI perf gate); its existence and shape are checked by the
-# release-ledger lane.
+# release-ledger lane, and the runner's recorded command is run by the
+# bench-runner lane below.
 #
 # The op census READS compile.sls as data to derive every
 # runtime procedure emitted code can call, so it needs the source tree that is
@@ -1802,6 +1803,32 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/allocation-audit-tests.sps"
   TIMEOUT 180
   ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src")
+
+# --- The benchmark runner, run as documented --------------------------------
+# Runs the command bench/runner/benchmark.sps records as `exact-command`, from
+# the repository root at one round of one iteration, then checks what it wrote
+# and that every documented copy of the command is the recorded one. The driver
+# is a `cmake -P` program because only execute_process starts a subprocess from
+# an argument list on every host; the verdicts are a harness program the driver
+# runs afterwards, whose provenance this registration supplies. Gated on Chez,
+# which both halves run.
+if(BYTE_MACHINE_CHEZ_EXECUTABLE)
+  set(bench_runner_manifest
+      ${BYTE_MACHINE_HARNESS_MANIFEST}
+      "${CMAKE_SOURCE_DIR}/test/common/bench-runner-smoke-tests.sps")
+  byte_machine_expected_fingerprint(byte-machine.example.bench-runner.cmake.direct
+                                    bench_runner_expect ${bench_runner_manifest})
+  string(JOIN "|" bench_runner_files ${bench_runner_manifest})
+  byte_machine_add_test(
+    NAME byte-machine.example.bench-runner.cmake.direct
+    COMMAND "${CMAKE_COMMAND}"
+            "-DBYTE_MACHINE_CHEZ_EXECUTABLE=${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+            -P "${CMAKE_SOURCE_DIR}/test/common/bench-runner-smoke.cmake"
+    TIMEOUT 300
+    ENVIRONMENT "BYTE_MACHINE_REPO_ROOT=${CMAKE_SOURCE_DIR}"
+                "BYTE_MACHINE_FINGERPRINT_FILES=${bench_runner_files}"
+                "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${bench_runner_expect}")
+endif()
 
 # --- Every position kind --------------------------------------------------
 byte_machine_add_scheme_lane(

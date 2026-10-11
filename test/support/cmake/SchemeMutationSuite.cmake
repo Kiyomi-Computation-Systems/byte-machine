@@ -149,8 +149,8 @@ cmake_minimum_required(VERSION 3.26)
 # reader checks by eye is the number the suite enforces. Adding, retiring or
 # moving a mutation changes EXPECTED_MUTATIONS; opening or retiring a pass
 # changes EXPECTED_PASSES.
-set(EXPECTED_PASSES 78)
-set(EXPECTED_MUTATIONS 689)
+set(EXPECTED_PASSES 79)
+set(EXPECTED_MUTATIONS 698)
 
 # --- What an EXPECT_OUTPUT_MATCHES can and cannot say -----------------------
 #
@@ -12676,6 +12676,145 @@ byte_machine_mutation(
   EXPECT_SURVIVES
     "a mark advanced on a SUCCESSFUL delivery is overwritten before anything reads it -- the completion substep closes the span and zeroes the mark, a pause resumes into a feed or a finish that re-anchors it, and a flush that continues ends the feed at a boundary -- so only a FAILING delivery's advance is observable, through parser-error-span-offset. Measured surviving every lane that drives a span: the span, counted-span, pause, callback, keyword-span and abandoned-span differentials, position-kind, the property differential, retention, and the HTTP message and chunked lanes. Declared rather than left unwritten because the boundary flush's absent `paused` arm is INERT only while every delivery advances the mark: narrowed to failing deliveries, that arm would deliver a fragment twice.")
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 79: the benchmark runner, run as documented (example.bench-runner) --
+# test/common/bench-runner-smoke.cmake runs the command bench/runner/benchmark.sps
+# records as `exact-command` from the tree root, then bench-runner-smoke-tests.sps
+# checks the run and the artefact it wrote. The verify command is that driver,
+# run from the stage, so this pass also stages bench/: the runner it mutates and
+# the committed baseline the artefact is compared with. Seven mutations are the
+# runner's and two are the driver's, which is the instrument here: those two
+# prove the checker notices a driver that runs something other than the
+# recorded command.
+#
+# The documentation copies are checked only when BYTE_MACHINE_REPO_ROOT is set,
+# which this suite never sets, and docs/ is not staged, so no mutation here
+# reaches them. They were shown to fire by hand: against a scratch copy of the
+# tree, a bare `--program` in docs/building.md, an unrecognisable copy in the
+# benchmark reference, and a new page with a short copy each failed the lane on
+# its own check, and the unchanged copy passed.
+#
+# Every mutation below was measured by staging it beside this pass's other
+# directories and running the driver: each fails one to three cases, all naming
+# its own decision, and each pin resolves exactly once in its own mutant's
+# output, in no other mutant's in this pass, and not in the baseline's (a 9 x 10
+# sweep).
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_STAGE_DIRS_BEFORE_BENCH ${BYTE_MACHINE_MUTATION_STAGE_DIRS})
+list(APPEND BYTE_MACHINE_MUTATION_STAGE_DIRS "bench")
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${CMAKE_COMMAND}"
+  "-DBYTE_MACHINE_CHEZ_EXECUTABLE=${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  -P "${STAGE_DIR}/test/common/bench-runner-smoke.cmake")
+
+byte_machine_mutation(
+  FILE bench/runner/benchmark.sps
+  SPEC byte-machine.example.bench-runner.cmake.direct
+  LABEL "runner: the recorded command names its program by a bare relative path"
+  # The defect this lane was written for: the launcher empties
+  # source-directories, so load-program cannot find a bare relative path. Also
+  # fails the header case, with the two commands the other way round from the
+  # mutation below.
+  FIND [[--program ./bench/runner/benchmark.sps")]]
+  REPLACE [[--program bench/runner/benchmark.sps")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the recorded command run as written exits 0: exit status -- expected 0, got 255[^0-9]")
+
+byte_machine_mutation(
+  FILE bench/runner/benchmark.sps
+  SPEC byte-machine.example.bench-runner.cmake.direct
+  LABEL "runner: the header documents a command other than the one recorded"
+  # Anchored on a comment on purpose: the header's command is the documented
+  # copy under test, so a correction to that line SHOULD move this pin.
+  FIND [[;;;     --program ./bench/runner/benchmark.sps]]
+  REPLACE [[;;;     --program bench/runner/benchmark.sps]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the runner's header documents the recorded command: header copy -- expected \"chez --script test/support/launchers/chez-source\\.ss --library-root test/support/harness --library-root src --object-guard build/dev/chez-object-guard --program \\./bench/runner/benchmark\\.sps\", got \"chez --script test/support/launchers/chez-source\\.ss --library-root test/support/harness --library-root src --object-guard build/dev/chez-object-guard --program bench/runner/benchmark\\.sps\"")
+
+byte_machine_mutation(
+  FILE bench/runner/benchmark.sps
+  SPEC byte-machine.example.bench-runner.cmake.direct
+  LABEL "runner: a workload is dropped from the run"
+  FIND [[(list "early-error"                  early-error    'whole)]]
+  REPLACE [[#;(list "early-error"                  early-error    'whole)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the artefact has as many workloads as the committed baseline: workloads -- expected 12, got 11[^0-9]")
+
+byte_machine_mutation(
+  FILE bench/runner/benchmark.sps
+  SPEC byte-machine.example.bench-runner.cmake.direct
+  LABEL "runner: a workload row omits a required metric"
+  # `[)]` ends the list: the generated-only mutant below misses this metric
+  # too, among four others.
+  FIND [[(list 'allocation-bytes-per-message alloc))))]]
+  REPLACE [[#;(list 'allocation-bytes-per-message alloc))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "every workload row carries every required metric: required metrics missing from a row -- expected .[)], got .allocation-bytes-per-message[)]")
+
+byte_machine_mutation(
+  FILE bench/runner/benchmark.sps
+  SPEC byte-machine.example.bench-runner.cmake.direct
+  LABEL "runner: the default runs the generated executor alone"
+  # The driver removes BYTE_MACHINE_BENCH_EXECUTORS, so the default is what
+  # runs. Also fails the required-metrics case, on every interpreted row.
+  FIND [[(define executors (env "BYTE_MACHINE_BENCH_EXECUTORS" "both"))]]
+  REPLACE [[(define executors (env "BYTE_MACHINE_BENCH_EXECUTORS" "generated"))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the artefact ran both executors: executors -- expected both, got generated")
+
+byte_machine_mutation(
+  FILE bench/runner/benchmark.sps
+  SPEC byte-machine.example.bench-runner.cmake.direct
+  LABEL "runner: the artefact omits a field the baseline carries"
+  FIND [[(list 'deterministic-seed 0)]]
+  REPLACE [[#;(list 'deterministic-seed 0)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the artefact carries every field the committed baseline carries: fields missing from the run -- expected .[)], got .deterministic-seed[)]")
+
+byte_machine_mutation(
+  FILE bench/runner/benchmark.sps
+  SPEC byte-machine.example.bench-runner.cmake.direct
+  LABEL "runner: the artefact is not written to BYTE_MACHINE_BENCH_OUT"
+  # The run still exits 0, with the artefact on stdout, so only the existence
+  # check sees it.
+  FIND [[(define out (env "BYTE_MACHINE_BENCH_OUT" ""))]]
+  REPLACE [[(define out "")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "a run that exits 0 writes one artefact datum: the artefact exists -- expected a true value")
+
+byte_machine_mutation(
+  FILE test/common/bench-runner-smoke.cmake
+  SPEC byte-machine.example.bench-runner.cmake.direct
+  LABEL "bench-runner driver: the program path is made absolute before the run"
+  # The masking defect: an absolute path skips the source-directories search,
+  # so the run passes and only the comparison with the recorded command
+  # fails. `[^.]` is the first character of the absolute stage path, where the
+  # recorded command has `./`.
+  FIND [[    elseif(previous STREQUAL "--object-guard")
+      list(APPEND ran "${guard}")]]
+  REPLACE [[    elseif(previous STREQUAL "--program")
+      list(APPEND ran "${tree}/${token}")
+    elseif(previous STREQUAL "--object-guard")
+      list(APPEND ran "${guard}")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the driver ran the recorded command: the command run, executable and object guard masked -- expected \"<chez> --script test/support/launchers/chez-source\\.ss --library-root test/support/harness --library-root src --object-guard <guard> --program \\./bench/runner/benchmark\\.sps\", got \"<chez> --script test/support/launchers/chez-source\\.ss --library-root test/support/harness --library-root src --object-guard <guard> --program [^.]")
+
+byte_machine_mutation(
+  FILE test/common/bench-runner-smoke.cmake
+  SPEC byte-machine.example.bench-runner.cmake.direct
+  LABEL "bench-runner driver: the recorded `chez` runs instead of the discovered Chez"
+  # Whatever `chez` is first on PATH would run. Measured both ways: with one
+  # there the run passes and only the comparison fails; with none the
+  # exit-status case fails as well, and this pin still matches.
+  FIND [[      list(APPEND ran "${BYTE_MACHINE_CHEZ_EXECUTABLE}")]]
+  REPLACE [[      list(APPEND ran "${token}")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "the driver ran the recorded command: the command run, executable and object guard masked -- expected \"<chez> --script test/support/launchers/chez-source\\.ss --library-root test/support/harness --library-root src --object-guard <guard> --program \\./bench/runner/benchmark\\.sps\", got \"chez --script test/support/launchers/chez-source\\.ss")
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+set(BYTE_MACHINE_MUTATION_STAGE_DIRS ${BYTE_MACHINE_MUTATION_STAGE_DIRS_BEFORE_BENCH})
 
 # Every pass above has run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --
