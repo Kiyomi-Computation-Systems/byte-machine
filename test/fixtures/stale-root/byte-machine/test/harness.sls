@@ -765,7 +765,7 @@
 ;; CTest refuses an empty selection with execution.noTestsAction, and a suite
 ;; that ran nothing must not report success one layer down either.
 ;;
-;; Split into a pure rule and a reader of the live counters, per AGENTS.md's
+;; Split into a pure rule and a reader of the live counters, per the project's
 ;; functional core / imperative shell rule. The split is not ceremony here: the
 ;; rule's interesting states are "no cases ran" and "every case was filtered
 ;; out", and a suite in either state cannot assert anything about itself from
