@@ -33,6 +33,17 @@ All notable changes to byte-machine are recorded here. The format follows
   libraries unchanged. Chez Scheme and Guile behave as before, and the
   emitted text, the generated-runtime ABI and every golden are unchanged.
 
+### Fixed
+
+- **The benchmark runner's documented command now runs.** The command given in
+  `bench/runner/benchmark.sps` and in its artefact's `exact-command` failed with
+  "not found in source directories": the source launcher empties
+  `source-directories`, and `load-program` searches them for a relative path
+  that does not begin with `./`. The runner now documents and records
+  `--program ./bench/runner/benchmark.sps`. The committed baseline keeps the
+  string it recorded, with a note in the benchmark reference that it never
+  ran as written; none of its measurements change.
+
 ## [0.7.0] - 2026-10-01
 
 A minor: two accessors on the parser-error record, asked for by a consumer
