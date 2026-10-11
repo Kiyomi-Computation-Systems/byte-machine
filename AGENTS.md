@@ -1447,3 +1447,38 @@ Three smaller lessons from the same sweep:
 - **Pin around a shape an open branch will change.** #146 was growing the error
   projection while #147 was open, so #147 pinned records that print none
   wherever one existed. After the merge, the re-sweep re-measured no pin.
+
+## A reserved set is a census of everything in scope
+
+`render-machine` checked an output binding against three reserved sets: the
+R6RS keywords, the runtime's exports, and the names the emitted body binds.
+The last two had drift guards, and the check looked complete. It accepted
+`list`, `guard`, `vector-ref` and every other `(rnrs)` export a binding can
+spell, and each rendered a library that could not be loaded ("multiple
+definitions for list in body"). The generated library imports all of
+`(rnrs)`, and a library body may not define a name it imports. `§9.2` named
+three sources of names; the emitted library had four. Each drift guard proved
+its list matched its own source. None of them could notice a source with no
+list. The repertoire lane asserted "every accepted binding renders", never
+"loads", so the property the guard exists for was the one no test read. The
+suite never found it; it was fixed in PR #166.
+
+**So: the names a binding must avoid are a census of every way a name enters
+the scope where the binding lands: each import, each definition, each local.
+Take the list of sources from the emitted form, not from the plan's list of
+sets.** Read the generated library's `import` clause and its definitions, and
+give each source a set and a drift guard. When the set's justification is a
+property of the consumer, measure it against the consumer. #166's 411 names
+rest on a probe that defined each one in a library importing `(rnrs)` and
+loaded it on Chez 10.4.1: none loaded, and a control name did. The plan's
+dated note and the commit record that measurement; it was not inferred from
+reading R6RS.
+
+One smaller lesson from the same fix:
+
+- **A new refusal that overlaps an old one can disarm the old one's witness.**
+  The `(rnrs)` set contains `define`, which was member 1's only witness, so
+  "member 1 is not checked" would have gone UNCAUGHT. Before adding a check that
+  widens a refusal, run each sibling check's witness against it. Move any that
+  falls in the overlap into its own check's exclusive region: `library`, which
+  only member 1 refuses.
