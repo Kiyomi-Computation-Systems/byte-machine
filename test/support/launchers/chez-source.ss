@@ -125,7 +125,12 @@
 
 (compile-imported-libraries #f)
 
-;; Nothing includes, so nothing resolves through source-directories at all.
+;; load-program below resolves --program through source-directories: a
+;; relative path that does not begin ./ or ../ is searched for in each listed
+;; directory, so once the list is emptied it is refused ("not found in source
+;; directories"). A relative --program must therefore begin ./ or ../, or the
+;; path must be absolute. The program inherits the emptied list, so the same
+;; holds for a relative path it hands to load. Nothing includes.
 ;; Emptied rather than left at Chez's CWD-containing default: it still narrows
 ;; what a top-level load or include added to this file could reach, and an
 ;; empty list costs nothing to state.
