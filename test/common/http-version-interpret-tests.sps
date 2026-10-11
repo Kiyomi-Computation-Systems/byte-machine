@@ -53,7 +53,7 @@
 ;; fixtures are proved clean before any behavioural case runs -- and that is a
 ;; real check, not a formality: two alternatives sharing `HTTP/1.` are exactly
 ;; the shape a broken sequence-ambiguity check would refuse.
-(harness-group "both fixtures verify clean under the §16.2:894 pass"
+(harness-group "both fixtures verify clean under the sequence-ambiguity pass"
   (lambda ()
     (harness-case "the fixture list holds both mismatch modes"
       (lambda () (check-equal "fixture count" (length machines) 2)))
@@ -106,7 +106,7 @@
 ;; true of `HTTP/1.2` and false of a position-0 mismatch, so a fixture set that
 ;; used whole strings would have been right in one case and quietly wrong in
 ;; the other.
-(harness-group "mismatch positioning, at the branch and before it (§11.5:664)"
+(harness-group "mismatch positioning, at the branch and before it"
   (lambda ()
     (define re (interp (make-http-version-machine)))
     (define ad (interp (make-http-version-advance-machine)))
@@ -135,7 +135,7 @@
         (check-equal "X advance" (feed-one-at-a-time ad (bytes "X"))
                      '(error 1 1 1 unexpected-byte))))))
 
-(harness-group "every proper prefix is need-input, never paused (decision 0015 point 5)"
+(harness-group "every proper prefix is need-input, never paused"
   (lambda ()
     (define re (interp (make-http-version-machine)))
     (harness-case "all seven proper prefixes of HTTP/1.0 return need-input"

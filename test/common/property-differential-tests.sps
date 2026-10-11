@@ -362,13 +362,13 @@
        (check-equal "the callback-kind draw table covers exactly make-callback-declaration's kinds" (sortsym cbkind-src) (sortsym callback-kind-draw-table))
        (check-equal "ir.sls declares four callback kinds" (length cbkind-src) 4)
        ;; the three families with no source list, against a DECLARED closed set:
-       (check-equal "the callback-outcome family is the four outcomes (§13:805-808)"
+       (check-equal "the callback-outcome family is the four outcomes"
                     (sortsym (family-members 'callback-outcome))
                     (sortsym '(continue pause declared-branch-key explicit-failure)))
-       (check-equal "the span-event family is the five events (§14:830-836, §14:834 amended by decision 0042)"
+       (check-equal "the span-event family is the five events"
                     (sortsym (family-members 'span-event))
                     (sortsym '(span-open boundary-fragment end-fragment completion empty-fragment)))
-       (check-equal "the schedule-shape family is the six shapes (§22.5:1278-1283)"
+       (check-equal "the schedule-shape family is the six shapes"
                     (sortsym (family-members 'schedule-shape))
                     (sortsym '(every-split-point split-point-pair random-multi-split empty-feeds nonzero-slice padded-bytevector))))))
 

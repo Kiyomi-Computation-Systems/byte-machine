@@ -73,7 +73,7 @@
       (set! held #f)
       answer)))
 
-(harness-group "the four Chez primitives design §9 rests on are bound"
+(harness-group "the four Chez primitives the liveness probe rests on are bound"
   (lambda ()
     (harness-case "weak-cons, bwp-object?, collect and make-guardian"
       (lambda ()
@@ -90,7 +90,7 @@
         (check "and bwp-object? says no about an ordinary object"
                (not (bwp-object? (make-bytevector 1 0))))))))
 
-(harness-group "the weak-pair probe DISCRIMINATES (design §9 layer 1)"
+(harness-group "the weak-pair probe DISCRIMINATES"
   (lambda ()
     (harness-case "a dropped bytevector reads bwp, a retained one does not"
       (lambda ()

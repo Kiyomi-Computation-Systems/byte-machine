@@ -209,7 +209,7 @@
                                       #f #f)
                          error)))))))
 
-(harness-group "a machine error abandons the span it cut off (§14:839)"
+(harness-group "a machine error abandons the span it cut off"
   (lambda ()
     (harness-case "refused AT the byte: the withheld bytes are the span's own"
       (lambda ()
@@ -581,7 +581,7 @@
 ;; How many rows' cases actually ran: the sentinel for the loop over the rows.
 (define rows-run 0)
 
-(harness-group "under every schedule, delivered then withheld is the span's bytes (decision 0056)"
+(harness-group "under every schedule, delivered then withheld is the span's bytes"
   (lambda ()
     (harness-case "the keyword-table and counted fixtures verify clean"
       (lambda ()

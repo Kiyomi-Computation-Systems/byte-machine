@@ -356,7 +356,7 @@
            (cdr x))
           (else (or (walk (car x)) (walk (cdr x)))))))
 
-(harness-group "the counted arm consumes in bulk (§25:1607, a structural witness)"
+(harness-group "the counted arm consumes in bulk (a structural witness)"
   (lambda ()
     (harness-case "the emitted arm applies min exactly once and never advances by one"
       (lambda ()
@@ -609,7 +609,7 @@
                               reserved-member-3)
                     w910-structural)))
 
-(harness-group "the every-construct witness exercises every emitter arm (§16.2:910 totality, F10)"
+(harness-group "the every-construct witness exercises every emitter arm"
   (lambda ()
     (harness-case "the derived row: render-state-arm's keys equal the covered kinds"
       (lambda ()
@@ -627,7 +627,7 @@
         (check "the witness exercises every emitter arm"
                (for-all (lambda (kv) ((cdr kv))) key->present))))))
 
-(harness-group "no declared name reaches identifier position (§16.2:910, §25:1617)"
+(harness-group "no declared name reaches identifier position"
   (lambda ()
     (harness-case "the subtracted emitter-private names are unforgeable, and only the two known shapes"
       (lambda ()

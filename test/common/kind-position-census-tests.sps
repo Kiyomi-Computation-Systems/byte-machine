@@ -375,7 +375,7 @@
         (cons (codes-of (build p kind #f)) #f)
         (cons (codes-of m) #t))))
 
-(harness-group "every kind in every position agrees with §16.2 (axis A)"
+(harness-group "every kind in every position agrees with the verifier's rules (axis A)"
   (lambda ()
     (harness-case "the product is driven and every cell matches its derived verdict"
       (lambda ()
@@ -400,7 +400,7 @@
            position-table)
           (check-equal "every cell was driven"
                        driven (* (length position-table) (length kind-table)))
-          (check-equal "and every one matches §16.2" bad '())
+          (check-equal "and every one matches its derived verdict" bad '())
           ;; *** The pruned skeleton is ASSERTED, not merely computed. *** Were
           ;; it computed and thrown away, a change that stopped pruning
           ;; altogether would leave the matrix green. This is an OBSERVED count:
@@ -456,7 +456,7 @@
           (check-equal "every builder was checked" checked (length kind-table))
           (check-equal "and each builds its own kind" bad '()))))))
 
-(harness-group "the kind table covers exactly ir.sls's closed set (S2)"
+(harness-group "the kind table covers exactly ir.sls's closed set"
   (lambda ()
     (harness-case "node?'s disjuncts and the table's keys are the same set"
       (lambda ()

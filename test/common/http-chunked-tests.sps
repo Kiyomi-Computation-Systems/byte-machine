@@ -75,7 +75,7 @@
                        (length (filter (lambda (e) (eq? e 'chunk-header)) tr)) 3)
           (check-equal "two chunk-completes (nonzero chunks only)"
                        (length (filter (lambda (e) (eq? e 'chunk-complete)) tr)) 2))))
-    (harness-case "a chunk size with leading zeroes is accepted (§21.2:1108)"
+    (harness-case "a chunk size with leading zeroes is accepted"
       (lambda ()
         (check-equal "05 is 5 octets" (car (feed-finish (string-append pre "05\r\nHELLO\r\n0\r\n\r\n"))) 'finished)))))
 
@@ -131,7 +131,7 @@
 
 ;; --- split points ------------------------------------------------------------
 
-(harness-group "a chunked message coalesces identically across every split (§22.5)"
+(harness-group "a chunked message coalesces identically across every split"
   (lambda ()
     (harness-case "every split finishes with the same event skeleton"
       (lambda ()

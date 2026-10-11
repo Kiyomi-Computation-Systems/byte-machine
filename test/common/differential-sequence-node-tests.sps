@@ -99,7 +99,7 @@
 (define ad-gen (generated-machine 'advseq adv-machine))
 
 ;; --- the chained-dispatch tuples, reproduced by a sequence node ---
-(harness-group "the M2 chained-dispatch tuples are reproduced exactly"
+(harness-group "the chained-dispatch tuples are reproduced exactly by a sequence node"
   (lambda ()
     (harness-case "the full sequence in one slice stops after four bytes in both"
       (lambda ()

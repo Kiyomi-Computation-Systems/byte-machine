@@ -65,7 +65,7 @@
     ;; A DECLARED node keeps its declaration index; internal prefix states
     ;; append after the entire declared block. The one-byte machine has no
     ;; sequence node, so its ids are exactly its declaration indices.
-    (harness-case "declared nodes keep their declaration indices (decision 0016)"
+    (harness-case "declared nodes keep their declaration indices"
       (lambda ()
         (let ((s (normal-machine-states n1)))
           (check-equal "id 0" (normal-state-id (vector-ref s 0)) 0)
@@ -140,9 +140,9 @@
           (make-error-node 'reject 'rejected #f))
     'default-eof #f))
 
-(harness-group "the field table (§17:962)"
+(harness-group "the field table"
   (lambda ()
-    (harness-case "slots are declaration indices, and the table carries name, width, initial and settable? (Milestone 13)"
+    (harness-case "slots are declaration indices, and the table carries name, width, initial and settable?"
       (lambda ()
         (let ((t (normal-machine-fields
                   (normalize (one-byte/fields
@@ -248,7 +248,7 @@
 
 (harness-group "the optional trailing slot tables"
   (lambda ()
-    (harness-case "a machine declaring neither is byte-identical to Slice ①a's"
+    (harness-case "a machine declaring neither keeps the one-byte golden fingerprint"
       (lambda ()
         ;; The sections cost nothing on a machine that declares none, at the
         ;; one-byte golden value. Every byte of both sections is inside a guard,
@@ -390,7 +390,7 @@
 (define pausem (make-pause-machine))
 (define n-pause (normalize pausem))
 
-(harness-group "pause normalization (Slice 3)"
+(harness-group "pause normalization"
   (lambda ()
     (harness-case "pause states lower to kind pause with the continuation id"
       (lambda ()
@@ -443,7 +443,7 @@
 (define (transitions-of m)
   (normal-dispatch-transitions (vector-ref (normal-machine-states (normalize m)) 0)))
 
-(harness-group "byte classes lower to one transition per byte (decision 0014)"
+(harness-group "byte classes lower to one transition per byte"
   (lambda ()
     (harness-case "a range lowers to one transition per byte, ascending"
       (lambda ()
@@ -474,7 +474,7 @@
                                  (list (accepts (make-byte-set-matcher '(9 1)))
                                        (accepts (make-byte-range-matcher 4 5))))))
                      '(1 4 5 9))))
-    (harness-case "a vacuous complement lowers to zero transitions (decision 0017 point 2)"
+    (harness-case "a vacuous complement lowers to zero transitions"
       (lambda ()
         (check-equal "none"
                      (transitions-of (class-machine 'vacuous
@@ -549,7 +549,7 @@
                                  (normal-dispatch-fallback (state-of four-byte i))
                                  '(2 . reexecute)))
                   '(0 3 4 5))))
-    (harness-case "every prefix state inherits the source node's EOF edge (§12.4:727)"
+    (harness-case "every prefix state inherits the source node's EOF edge"
       (lambda ()
         (for-each (lambda (i)
                     (check-equal (string-append "eof " (number->string i))
@@ -584,7 +584,7 @@
           (check-equal "A branch" (trs-of d 4) '((66 1 advance)))
           (check-equal "X branch" (trs-of d 5) '((89 3 advance))))))))
 
-(harness-group "internal ids are depth-first pre-order, children ascending (decision 0016)"
+(harness-group "internal ids are depth-first pre-order, children ascending"
   (lambda ()
     ;; A -> {B terminal, C -> D}, X -> Y. Depth-first gives 5,6,7; breadth-first
     ;; would give 5,7,6 -- so this fixture is what pins the traversal.
@@ -614,7 +614,7 @@
         (check-equal "C's id" (normal-state-id (state-of ordered 6)) 6)
         (check-equal "X's id" (normal-state-id (state-of ordered 7)) 7)))))
 
-(harness-group "two sequence nodes never share prefix states (decision 0016 point 3)"
+(harness-group "two sequence nodes never share prefix states"
   (lambda ()
     (define two
       (make-machine 'two 'sa '() '() '() (list eof-decl rej-decl)
@@ -688,7 +688,7 @@
          (eq? (condition-who e) 'normalize-machine)
          (equal? (condition-message e) message))))
 
-(harness-group "the two unrepresentable trie shapes fail loudly (decision 0015 point 2)"
+(harness-group "the two unrepresentable trie shapes fail loudly"
   (lambda ()
     (harness-case "an ambiguous terminal prefix is an assertion violation"
       (lambda ()
@@ -732,7 +732,7 @@
   (s2-machine (list (make-field-branch-node 'act 'range args 'next 'next #f)
                     (make-stop-node 'next #f))))
 
-(harness-group "the zero-width kinds in the normalized IR (Slice ②)"
+(harness-group "the zero-width kinds in the normalized IR"
   (lambda ()
     (harness-case "a field-action machine's IR fingerprint is the measured golden value"
       (lambda ()
@@ -834,7 +834,7 @@
           (make-stop-node 'stop #f) (make-error-node 'over 'rejected #f))
     'default-eof #f))
 
-(harness-group "integer accumulate in the normalized IR (Slice ③)"
+(harness-group "integer accumulate in the normalized IR"
   (lambda ()
     (harness-case "a base-10 accumulate machine's fingerprint is the measured golden value"
       (lambda ()
@@ -885,7 +885,7 @@
           (make-stop-node 'stop #f) (make-error-node 'over 'rejected #f))
     'default-eof #f))
 
-(harness-group "the counted-consume state's encoding (Milestone 6 Slice ①)"
+(harness-group "the counted-consume state's encoding"
   (lambda ()
     (harness-case "a counted-consume machine's fingerprint is the measured golden value"
       (lambda ()
@@ -966,7 +966,7 @@
           (make-error-node 'reject 'rejected #f))
     'default-eof #f))
 
-(harness-group "every part of a callback state reaches the encoding (0019 item 2)"
+(harness-group "every part of a callback state reaches the encoding"
   (lambda ()
     (harness-case "the base machine verifies and normalizes"
       (lambda ()
@@ -1096,7 +1096,7 @@
     'default-eof #f))
 (define (span-fp-base) (span-fp-machine 'body 'body 'cl 'done))
 
-(harness-group "every part of a span state reaches the encoding (0019 item 2)"
+(harness-group "every part of a span state reaches the encoding"
   (lambda ()
     (harness-case "the base machine verifies and normalizes"
       (lambda ()

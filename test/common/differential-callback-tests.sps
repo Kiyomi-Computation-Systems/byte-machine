@@ -114,7 +114,7 @@
          (r (parser-feed! p bytes 0 (bytevector-length bytes))))
     (list (rfields r p) (length calls) p r)))
 
-(harness-group "every callback outcome agrees across the lanes (§13:803-808)"
+(harness-group "every callback outcome agrees across the lanes"
   (lambda ()
     (harness-case "the machine verifies clean"
       (lambda ()
@@ -165,7 +165,7 @@
           (check "and the pause is neither"
                  (and (not (equal? (caddr tuples) (car tuples)))
                       (not (equal? (caddr tuples) (cadr tuples))))))))
-    (harness-case "the callback-domain error carries decision 0024's two codes"
+    (harness-case "the callback-domain error carries the application's code and callback-contract-violation"
       (lambda ()
         ;; The projection compares domain, code, reason, node name, offset and
         ;; position kind. Asserted here as VALUES, not only as agreement: two
@@ -271,7 +271,7 @@
           (check "interpreted" (raises? (lambda () (make-parser cm-ref '() #f))))
           (check "generated" (raises? (lambda () (make-parser cm-gen '() #f)))))))))
 
-(harness-group "a callback on the EOF chain runs there too (§12.4:729)"
+(harness-group "a callback on the EOF chain runs there too"
   (lambda ()
     (harness-case "finish reaching a callback agrees across the lanes"
       (lambda ()
@@ -490,7 +490,7 @@
                        codes
                        '((parser-feed! #t) (parser-finish! #t)
                          (parser-resume! #t) (parser-reset! #t))))))
-    (harness-case "every read accessor answers during busy (decision 0028 item 1)"
+    (harness-case "every read accessor answers during busy"
       (lambda ()
         ;; "Parser operations are rejected" scopes to the four MUTATING
         ;; operations, and every read accessor answers
@@ -511,7 +511,7 @@
             (parser-feed! p (bv1 65) 0 1))
           (check-equal "all six answered" seen '(busy inv 1 7 the-context #f)))))))
 
-(harness-group "a callback that escapes poisons the parser (§12.6:749)"
+(harness-group "a callback that escapes poisons the parser"
   (lambda ()
     (harness-case "a raised condition propagates and both lanes end poisoned"
       (lambda ()
@@ -583,7 +583,7 @@
                                           r)
                                         (bv1 65) 0 1))
                          'stopped)))))
-    (harness-case "a refused operation moves NOTHING (§12.6:747)"
+    (harness-case "a refused operation moves NOTHING"
       (lambda ()
         ;; "Prohibited lifecycle operations and reentrant parser operations
         ;; raise API-contract conditions BEFORE further mutation." Testable and

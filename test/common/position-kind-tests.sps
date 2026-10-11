@@ -536,7 +536,7 @@
           ;; span an error abandoned and where its withheld bytes begin); a
           ;; different count means the exclusion was widened or narrowed and this
           ;; must be re-derived from the comparison rules, not from the code.
-          (check-equal "the projection is §22.4:1271's five plus reason plus the abandoned span"
+          (check-equal "the projection is the five required members plus reason plus the abandoned span"
                        (length (project-error ie)) 8)
           (check-equal "and the library agrees with the spec" projected-members 8)
           (check-equal "and both lanes project identically"

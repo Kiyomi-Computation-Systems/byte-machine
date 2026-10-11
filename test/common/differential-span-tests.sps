@@ -211,7 +211,7 @@
         (check-equal "with" (map diagnostic-code (verification-diagnostics v-full)) '())
         (check-equal "without" (map diagnostic-code (verification-diagnostics v-bare)) '())))))
 
-(harness-group "a span end delivers [mark,cursor) and exactly one completion (§14:831)"
+(harness-group "a span end delivers [mark,cursor) and exactly one completion"
   (lambda ()
     (harness-case "one feed, one nonempty fragment, then the completion"
       (lambda ()
@@ -247,7 +247,7 @@
 ;; empty" from "this field never happened". The suppression is kept only at the
 ;; flush and the EOF-side span end (the groups below and "a span on the EOF
 ;; chain").
-(harness-group "an empty span delivers one empty fragment then the completion (§14:831 amended, decision 0042)"
+(harness-group "an empty span delivers one empty fragment then the completion"
   (lambda ()
     (harness-case "AZ opens and closes having delivered nothing"
       (lambda ()
@@ -266,7 +266,7 @@
 ;; and a flush that finds nothing accumulated delivers nothing (and does not set
 ;; the delivered flag, so a genuinely empty span split across the boundary still
 ;; delivers once).
-(harness-group "an empty final fragment vs an empty span across a feed boundary (decision 0042)"
+(harness-group "an empty final fragment vs an empty span across a feed boundary"
   (lambda ()
     (harness-case "a nonempty span whose final fragment is empty delivers only its real bytes"
       (lambda ()
@@ -294,7 +294,7 @@
           (check-equal "one empty fragment at the close, nothing before"
                        (cadr (car r)) (list (bytes) 'complete)))))))
 
-(harness-group "a pause on the EMPTY span-end delivery (§14:834 amended, decision 0042)"
+(harness-group "a pause on the EMPTY span-end delivery"
   (lambda ()
     (harness-case "the empty fragment pauses; resume delivers only the completion, each once"
       (lambda ()
@@ -308,7 +308,7 @@
           (check-equal "the pause is reported at the delimiter"
                        (car (car (car r))) '(paused 1 1 1 #f paused-feed)))))))
 
-(harness-group "a feed boundary flushes and the span stays open (§14:833-834)"
+(harness-group "a feed boundary flushes and the span stays open"
   (lambda ()
     (harness-case "two feeds, two fragments, one completion"
       (lambda ()
@@ -344,7 +344,7 @@
                        (cadr (car r))
                        (list (bytes 98 99) (bytes 100 101) 'complete)))))))
 
-(harness-group "the mark is a SLICE offset (§14:833)"
+(harness-group "the mark is a SLICE offset"
   (lambda ()
     (harness-case "two sub-slices, neither starting at 0"
       (lambda ()
@@ -405,7 +405,7 @@
                         (list cm-full-ref cm-full-gen))))
           (check-equal "both lanes report the data callback's slot" ids '(1 1)))))))
 
-(harness-group "a pause DURING the flush commits the fragment (§14:837)"
+(harness-group "a pause DURING the flush commits the fragment"
   (lambda ()
     (harness-case "the feed reports paused, the span stays open, resume continues"
       (lambda ()
@@ -458,7 +458,7 @@
                             (cadr (car r)))
                        (list '(98 99) '(100) 'complete)))))))
 
-(harness-group "a pause between the span-end substeps (§14:838, §14:841)"
+(harness-group "a pause between the span-end substeps"
   (lambda ()
     (harness-case "the data substep pauses; resume delivers only the completion"
       (lambda ()
@@ -497,7 +497,7 @@
           (check-equal "and the fragment was already delivered"
                        (cadr a) (list (bytes 98 99 100) 'complete)))))))
 
-(harness-group "an error with a span open (§14:839)"
+(harness-group "an error with a span open"
   (lambda ()
     (harness-case "no final fragment, no completion, earlier fragments observable"
       (lambda ()
@@ -527,7 +527,7 @@
           (check-equal "the lanes agree" (caddr r) #t)
           (check-equal "no fragments at all" (cadr (car r)) '()))))))
 
-(harness-group "a span declaring no completion callback (§10.4:516)"
+(harness-group "a span declaring no completion callback"
   (lambda ()
     (harness-case "the substep still closes the span, and calls nothing"
       (lambda ()
@@ -542,7 +542,7 @@
           (check-equal "and the walk still reached the stop"
                        (car (car a)) '(stopped 5 5 5 #f stopped)))))))
 
-(harness-group "a span on the EOF chain (§12.4:729, §14:831 amended, decision 0042)"
+(harness-group "a span on the EOF chain"
   (lambda ()
     (harness-case "finish opens and closes a span: one empty fragment, then completion"
       (lambda ()
@@ -562,7 +562,7 @@
           (check-equal "and the walk finished"
                        (car (car (car r))) '(finished 0 0 0 #f finished))
           (check-equal "with the span inactive" (caddr (car r)) #f))))
-    (harness-case "a completion callback may pause during EOF (§12.4:729)"
+    (harness-case "a completion callback may pause during EOF"
       (lambda ()
         (let ((r (both (list (list 'finish) (list 'resume) (list 'finish))
                        '() callback-pause)))
@@ -575,7 +575,7 @@
           (check-equal "the empty fragment then the completion, each once"
                        (cadr (car r)) (list (bytes) 'complete)))))))
 
-(harness-group "reset clears span state (§12.5:739)"
+(harness-group "reset clears span state"
   (lambda ()
     (harness-case "a parser parked mid-span answers #f after a reset, in both lanes"
       (lambda ()
@@ -703,7 +703,7 @@
            (loop (cdr t) '() (cons 'complete (cons (concat (reverse cur)) out))))
           (else (loop (cdr t) (cons (car t) cur) out)))))
 
-(harness-group "same schedule: the two lanes agree exactly (§22.4:1269, §22.5:1285)"
+(harness-group "same schedule: the two lanes agree exactly"
   (lambda ()
     (harness-case "every schedule produces the identical fragment trace in both lanes"
       (lambda ()
@@ -725,7 +725,7 @@
           (check-equal "and the length agrees" driven (length (all-schedules)))
           (check-equal "every schedule agrees across the lanes" bad '()))))))
 
-(harness-group "across schedules: coalesced is invariant, raw is not (§22.5:1287)"
+(harness-group "across schedules: coalesced is invariant, raw is not"
   (lambda ()
     (harness-case "the coalesced trace is the same under every schedule"
       (lambda ()
@@ -825,7 +825,7 @@
                (make-span-end-node 'cl 'payload 'exit #f)
                (d1 'exit 'exit 'fin))
          '(invalid-span-state)
-         "§14:843: no reachable path starts a second span while one is active.")
+         "no reachable path starts a second span while one is active.")
    (list 'overlap two-spans
          (list (d1 'start 'op1 'fin)
                (make-span-start-node 'op1 'payload 'op2 #f)
@@ -838,20 +838,20 @@
          ;; malformed shape, two rejections, and the row says so rather than
          ;; expecting the first and being surprised by the second.
          '(invalid-span-state invalid-span-state)
-         "§14:843: a second span starts while one is active, and the outer end is then unmatched.")
+         "a second span starts while one is active, and the outer end is then unmatched.")
    (list 'wrong-end two-spans
          (list (d1 'start 'op1 'fin)
                (make-span-start-node 'op1 'payload 'cl #f)
                (make-span-end-node 'cl 'other 'exit #f)
                (d1 'exit 'exit 'fin))
          '(invalid-span-state)
-         "§14:843: ends the wrong span.")
+         "ends the wrong span.")
    (list 'unmatched-end one-span
          (list (d1 'start 'cl 'fin)
                (make-span-end-node 'cl 'payload 'exit #f)
                (d1 'exit 'exit 'fin))
          '(invalid-span-state)
-         "§14:843: ends with no active span.")
+         "ends with no active span.")
    (list 'pause-inside one-span
          (list (d1 'start 'op1 'fin)
                (make-span-start-node 'op1 'payload 'pz #f)
@@ -859,7 +859,7 @@
                (make-span-end-node 'cl 'payload 'exit #f)
                (d1 'exit 'exit 'fin))
          '(span-active-at-pause)
-         "§13:826: an explicit pause node is invalid where a span is active.")
+         "an explicit pause node is invalid where a span is active.")
    (list 'callback-inside one-span
          (list (d1 'start 'op1 'fin)
                (make-span-start-node 'op1 'payload 'cb #f)
@@ -867,13 +867,13 @@
                (make-span-end-node 'cl 'payload 'exit #f)
                (d1 'exit 'exit 'fin))
          '(span-active-at-pause)
-         "§13:826: an event or decision callback invocation is invalid where a span is active.")
+         "an event or decision callback invocation is invalid where a span is active.")
    (list 'stop-inside one-span
          (list (d1 'start 'op1 'fin)
                (make-span-start-node 'op1 'payload 'st #f)
                (make-stop-node 'st #f))
          '(span-active-at-exit)
-         "§14:843: no reachable path reaches a successful stop with a span active.")
+         "no reachable path reaches a successful stop with a span active.")
    (list 'finish-inside one-span
          ;; The one row whose plumbing had to be written out, and both
          ;; departures are the lattice's doing rather than taste. `start`'s EOF
@@ -890,7 +890,7 @@
                                        (make-edge 'spin 'advance) #f))
                  (make-edge 'spin 'advance) 'fin #f))
          '(span-active-at-exit)
-         "§14:843: no reachable path reaches a successful finish with a span active.")
+         "no reachable path reaches a successful finish with a span active.")
    (list 'join-disagree one-span
          ;; Two byte edges into `mrg`: one through the span, one around it. The
          ;; lattice joins `(active payload)` with `none` and answers `top`,
@@ -906,7 +906,7 @@
                (make-span-end-node 'cl 'payload 'exit #f)
                (d1 'exit 'exit 'fin))
          '(inconsistent-span-state)
-         "0029 item 2: incoming edges disagree, the join is `top`, and `top` is reported where it arises.")
+         "incoming edges disagree, the join is `top`, and `top` is reported where it arises.")
    ;; --- the two VALID rows, and they are what keep the table from being a
    ;; list of things that happen to be rejected ---
    (list 'error-inside one-span
@@ -914,7 +914,7 @@
                (make-span-start-node 'op1 'payload 'err #f)
                (make-error-node 'err 'rejected #f))
          '()
-         "§14:839 contemplates a span open at an ERROR terminal, which is why decision 0023 item 5 kept finish distinguished from error.")
+         "a span open at an ERROR terminal is valid, which is why finish is kept distinguished from error.")
    (list 'well-formed one-span
          (list (d1 'start 'op1 'fin)
                (make-span-start-node 'op1 'payload 'cl #f)
@@ -923,7 +923,7 @@
          '()
          "The shape every rejected row above is a perturbation of.")))
 
-(harness-group "every invalid span topology is rejected, and only those (§25:1590)"
+(harness-group "every invalid span topology is rejected, and only those"
   (lambda ()
     (harness-case "the enumerated table, row by row"
       (lambda ()
@@ -966,7 +966,7 @@
 
 ;; --- the error path ----------------------------------------------------------
 
-(harness-group "the error path, per lane and across schedules (§14:839, §22.5:1289)"
+(harness-group "the error path, per lane and across schedules"
   (lambda ()
     (harness-case "a truncated span delivers no completion, under every schedule"
       (lambda ()
@@ -1038,7 +1038,7 @@
                                          (list (list t 0 2) (list t 2 3) (list t 3 4))
                                          '() callback-continue))
                        (list (bytes 98) (bytes 99) (bytes 100))))))
-    (harness-case "the success path delivers exactly one completion (§14:835)"
+    (harness-case "the success path delivers exactly one completion"
       (lambda ()
         ;; The positive half of the error-path rule: what the error path
         ;; must NOT do, the success path must do exactly once, under every
@@ -1080,22 +1080,22 @@
 ;;
 ;; *** WHERE EACH OF THE SIX LEGS LIVES. ***
 ;;
-;;   boundaries  "a feed boundary flushes and the span stays open (§14:833-834)"
-;;               "the mark is a SLICE offset (§14:833)"
-;;   pause       "a pause DURING the flush commits the fragment (§14:837)"
-;;               "a pause between the span-end substeps (§14:838, §14:841)"
+;;   boundaries  "a feed boundary flushes and the span stays open"
+;;               "the mark is a SLICE offset"
+;;   pause       "a pause DURING the flush commits the fragment"
+;;               "a pause between the span-end substeps"
 ;;   completion  "a span end delivers [mark,cursor) and exactly one completion"
 ;;               "an empty span delivers one empty fragment then the completion"
 ;;               "an empty final fragment vs an empty span across a feed boundary"
 ;;               "a pause on the EMPTY span-end delivery"
-;;               "a span declaring no completion callback (§10.4:516)"
-;;   error       "an error with a span open (§14:839)"
+;;               "a span declaring no completion callback"
+;;   error       "an error with a span open"
 ;;               "a FAILURE during the flush is a callback-domain error"
 ;;               "the error path, per lane and across schedules"
 ;;   EOF         "a span on the EOF chain (§12.4:729, §14:831 amended)"
 ;;               "a span open at finish, closed on the EOF chain"
 ;;               "an empty span carried into finish delivers once"
-;;   reset       "reset clears span state (§12.5:739)"
+;;   reset       "reset clears span state"
 ;;               "reset while parked BETWEEN the span-end substeps"
 ;;               "reset of a POISONED parser with a span open"
 
@@ -1160,7 +1160,7 @@
         (b (run (make-lane cm-eof-gen answers done-answer #t) script)))
     (list a b (equal? a b))))
 
-(harness-group "a span open at finish, closed on the EOF chain (§25:1589 EOF)"
+(harness-group "a span open at finish, closed on the EOF chain"
   (lambda ()
     (harness-case "the machine verifies clean"
       (lambda ()
@@ -1260,7 +1260,7 @@
 (define cm-twice-gen
   (generated twice-machine v-twice "span-twice" 'twice-span-parser 'twicespan))
 
-(harness-group "an empty span carried into finish delivers once, regardless of slicing (decision 0042 item 4)"
+(harness-group "an empty span carried into finish delivers once, regardless of slicing"
   (lambda ()
     ;; A span opens in a feed, stays EMPTY, and closes on the EOF chain (bclose).
     ;; parser-finish! re-anchors the mark to 0, so the EOF span end sees from==to
@@ -1303,7 +1303,7 @@
           (check-equal "each empty span delivers once, in both lanes"
                        (list (cadr a) (cadr b)) (list each-once each-once)))))))
 
-(harness-group "reset while parked BETWEEN the span-end substeps (§25:1589 reset)"
+(harness-group "reset while parked BETWEEN the span-end substeps"
   (lambda ()
     (harness-case "completion-pending is cleared, and the parser re-parses whole"
       (lambda ()
@@ -1355,7 +1355,7 @@
                          (list (bytes 98 99 100) 'complete))
             (check-equal "and it ran to the stop" (map car (car a2)) '(stopped))))))))
 
-(harness-group "reset of a POISONED parser with a span open (§12.2:698, §12.5:739)"
+(harness-group "reset of a POISONED parser with a span open"
   (lambda ()
     (harness-case "reset is accepted, clears the span, and the parser is reusable"
       (lambda ()

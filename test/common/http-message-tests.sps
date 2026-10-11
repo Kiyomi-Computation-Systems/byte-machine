@@ -51,7 +51,7 @@
 
 ;; --- the header block's events, in order --------------------------------------
 
-(harness-group "the header block fires §21.3's header events, then headers-complete and message-complete"
+(harness-group "the header block fires its header-name and header-value events, then headers-complete and message-complete"
   (lambda ()
     (harness-case "two headers, values delivered as span data, complete in order"
       (lambda ()
@@ -68,7 +68,7 @@
                          headers-complete message-complete))
           (check "the skeleton matches the event grammar"
                  (event-sequence-matches? http-request-grammar (trace-skeleton (cadddr r)))))))
-    (harness-case "headers-complete fires only AFTER the empty-line CRLF is consumed (§21.3:1144)"
+    (harness-case "headers-complete fires only AFTER the empty-line CRLF is consumed"
       (lambda ()
         ;; Fed up to and including the empty line's CR but not its LF: the value
         ;; events are in, but headers-complete has not fired yet.
@@ -86,7 +86,7 @@
 
 ;; --- the all-OWS value -------------------------------------------------------
 
-(harness-group "OWS handling and the all-OWS value (§21.2:1097)"
+(harness-group "OWS handling and the all-OWS value"
   (lambda ()
     (harness-case "leading OWS after the colon is not span data; internal/trailing OWS is"
       (lambda ()
@@ -110,7 +110,7 @@
 
 ;; --- the no-body message loop ------------------------------------------------
 
-(harness-group "two requests in one feed each produce a complete message (§21.3:1150)"
+(harness-group "two requests in one feed each produce a complete message"
   (lambda ()
     (harness-case "one message-begin each, and the stream offset is not reset between them"
       (lambda ()
@@ -133,7 +133,7 @@
 
 ;; --- the header error rows ---------------------------------------------------
 
-(harness-group "header errors at their §21.4:1175 positions"
+(harness-group "header errors at their expected positions"
   (lambda ()
     (define (err s) (caddr (feed-whole s)))
     (harness-case "invalid-header-name: a non-tchar where a field-name must begin, and a missing colon"

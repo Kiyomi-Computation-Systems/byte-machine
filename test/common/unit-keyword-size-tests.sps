@@ -52,7 +52,7 @@
         (check-equal "and no byte-dispatch nodes"
                      (length (filter byte-dispatch-node? (machine-nodes kwt))) 0)))))
 
-(harness-group "the compact table emits far less than the trie (criterion 7)"
+(harness-group "the compact table emits far less than the trie"
   (lambda ()
     (harness-case "the keyword table emits under a tenth of the trie's bytes"
       (lambda ()

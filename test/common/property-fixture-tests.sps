@@ -102,7 +102,7 @@
         (if (= i machine-count)
             (begin
               (check-equal "drew the whole committed seed set" drawn machine-count)
-              (check "accepted count is at or above the 0033 item 2 floor"
+              (check "accepted count is at or above the acceptance floor"
                      (>= accepted floor-literal))
               ;; derived total reads OBSERVED per-machine results (ok), not the
               ;; test's expectation: every accepted machine round-tripped.
@@ -244,7 +244,7 @@
          (tree (strip-str-suffix src "/src"))
          (launcher (string-append tree "/test/support/launchers/chez-source.ss")))
     (string-append
-     ";; A reproducible failure fixture (Milestone 7 Slice 3, 25:1627). Self-contained:\n"
+     ";; A reproducible failure fixture. Self-contained:\n"
      ";; it builds both lanes from the interpreter and writes nothing. Run it with the\n"
      ";; shipped launcher (provenance unset, so a hand run skips the fingerprint check):\n"
      ";;\n"

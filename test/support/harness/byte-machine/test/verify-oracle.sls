@@ -20,7 +20,7 @@
 ;;;
 ;;; THE RULE TABLE IS HAND-WRITTEN AND EXPORTED: `oracle-rules`, one row per rule,
 ;;; `(name codes comparison fn)`. `matcher-bytes` is NEVER read (the rejections
-;;; program counts the symbol in this file): the `:893-overlap` row computes byte
+;;; program counts the symbol in this file): the `overlapping-cases` row computes byte
 ;;; sets from the four matcher accessors alone.
 (library (byte-machine test verify-oracle)
   (export oracle-rules oracle-rule-name oracle-rule-codes oracle-rule-comparison
@@ -99,12 +99,12 @@
   ;; byte-reached: feed can arrive. DFS from the entry over NON-eof targets only --
   ;; once an execution takes an eof-target it can never feed again, so
   ;; feed-reachable follows byte edges and zero-width successors but not eof
-  ;; routes. The `:908` and `:898` rows gate on this census.
+  ;; routes. The `eof-cycles-and-finish-flow` and `zero-progress-cycles` rows gate on this census.
   ;; the node named x. Reachability is defined over a graph whose node names are
   ;; UNIQUE (a well-formed IR); on a duplicate-name graph -- which only the
   ;; dup-node-name catalogue entry produces -- reachability is ill-defined, and the
   ;; rejections program excludes such machines from the reachability rules'
-  ;; comparison (they are compared on the :885 duplicate rule, which is their point).
+  ;; comparison (they are compared on the duplicate-declarations duplicate rule, which is their point).
   ;; So this first-match lookup is exact on every machine the reachability rules are
   ;; compared on. `nodes-unique?` is exported for that guard.
   (define (node-of-name m x)
@@ -136,7 +136,7 @@
                         (cons x seen))))))))
 
   ;; ---- rule implementations --------------------------------------------------
-  ;; :885 duplicate declaration names -- one code per namespace.
+  ;; duplicate-declarations duplicate declaration names -- one code per namespace.
   (define (rule-duplicates m)
     (append
      (map (lambda (nm) (cons 'duplicate-name nm)) (dups (node-set m)))
@@ -147,13 +147,13 @@
      (map (lambda (nm) (cons 'duplicate-span-declaration nm))
           (dups (map span-declaration-name (machine-spans m))))))
 
-  ;; :885 non-duplicate arms -- the two :885 codes that are NOT a bare name clash:
+  ;; duplicate-declarations non-duplicate arms -- the two duplicate-declarations codes that are NOT a bare name clash:
   ;; a duplicate uint-field name (invalid-field-declaration's dup arm) and a
   ;; duplicate branch key in a callback node's targets (duplicate-branch-key).
   ;; Compared by CONTAINMENT (oracle ⊆ verifier): the verifier reports these codes
   ;; for other faults too (a field's width/operand, a declaration's keys), which the
   ;; oracle does not model, so the oracle finds a subset and never a superset.
-  (define (rule-885-nondup m)
+  (define (rule-duplicate-fields-and-branch-keys m)
     (append
      (map (lambda (nm) (cons 'invalid-field-declaration nm))
           (dups (map uint-field-name (machine-fields m))))
@@ -165,7 +165,7 @@
                   '()))
             (machine-nodes m)))))
 
-  ;; :887/:905 missing targets -- a NON-EOF target that names no node (pass-names,
+  ;; missing-targets/:905 missing targets -- a NON-EOF target that names no node (pass-names,
   ;; through node-out-targets, plus the entry). Attributed to the missing target.
   (define (rule-missing-target m)
     (let* ((nodes (node-set m))
@@ -174,7 +174,7 @@
       (map (lambda (t) (cons 'missing-target t))
            (filter (lambda (t) (and (symbol? t) (not (memq t nodes)))) refs))))
 
-  ;; :893 overlapping byte cases -- two cases in one dispatch whose canonical byte
+  ;; overlapping-transitions overlapping byte cases -- two cases in one dispatch whose canonical byte
   ;; sets meet. Byte sets from the FOUR matcher accessors, NEVER matcher-bytes.
   (define (matcher-set mt)
     (cond ((exact-byte-matcher? mt) (list (exact-byte-matcher-byte mt)))
@@ -201,7 +201,7 @@
                              (byte-dispatch-node-cases n)))
              (cons 'overlapping-cases (byte-dispatch-node-name n))))))
 
-  ;; :894 ambiguous sequence prefix -- one alternative a (proper or equal) prefix
+  ;; sequence-ambiguity ambiguous sequence prefix -- one alternative a (proper or equal) prefix
   ;; of another, in one sequence-dispatch node.
   (define (prefix? a b)  ; is a a prefix of b (a shorter-or-equal)?
     (cond ((null? a) #t)
@@ -222,13 +222,13 @@
             ((exists (lambda (y) (prefix? y (car xs))) (cdr xs)) #t)
             (else (loop (cdr xs))))))
 
-  ;; :897 unreachable nodes -- declared nodes the occupiable walk does not reach.
+  ;; unreachable-nodes unreachable nodes -- declared nodes the occupiable walk does not reach.
   (define (rule-unreachable m)
     (let ((r (reachable m)))
       (map (lambda (nm) (cons 'unreachable-node nm))
            (filter (lambda (nm) (not (member nm r))) (node-set m)))))
 
-  ;; :908 non-EOF control flow into a finish -- a node reached by the byte-edge walk
+  ;; eof-cycles-and-finish-flow non-EOF control flow into a finish -- a node reached by the byte-edge walk
   ;; from the entry (entry included) whose flow enters a finish over a NON-eof
   ;; edge, reported at the SOURCE node.
   (define (finish-name? m t)
@@ -242,7 +242,7 @@
                 (exists (lambda (t) (finish-name? m t)) (non-eof-targets n))
                 (cons 'non-eof-into-finish (node-name n))))))))
 
-  ;; :898 zero-progress cycle -- a cycle among byte-reached nodes over NON-consuming
+  ;; zero-progress-cycles zero-progress cycle -- a cycle among byte-reached nodes over NON-consuming
   ;; edges (reexecute, zero-width successors, accumulate overflow, counted next;
   ;; digit edges excluded). Attributed to each node on a cycle.
   (define (nonconsuming-targets n)
@@ -297,7 +297,7 @@
                                   (cons (car frontier) seen))))))
             census))
 
-  ;; :909 EOF-reachable stop / EOF zero-progress cycle -- the EOF walk. The PARKED SET (states an execution can be parked on): the entry,
+  ;; eof-reachable-stops EOF-reachable stop / EOF zero-progress cycle -- the EOF walk. The PARKED SET (states an execution can be parked on): the entry,
   ;; every byte-reached pause, and every byte-reached node carrying its own EOF route
   ;; (a symbol eof-target). Each parked node is classified as ITSELF; its walk BEGINS
   ;; at `parked-eof-start`'s answer (a pause at its continuation, a non-entry counted
@@ -393,18 +393,18 @@
   (define-record-type oracle-rule (fields name codes comparison fn reach?))
   (define oracle-rules
     (list
-     (make-oracle-rule ':885-duplicates
+     (make-oracle-rule 'name-duplicates
        '(duplicate-name duplicate-error-declaration duplicate-callback-declaration duplicate-span-declaration)
        'exact rule-duplicates #f)
-     (make-oracle-rule ':885-nondup '(invalid-field-declaration duplicate-branch-key)
-       'subset rule-885-nondup #f)
-     (make-oracle-rule ':887-905-missing-target '(missing-target) 'exact rule-missing-target #f)
-     (make-oracle-rule ':893-overlap '(overlapping-cases) 'exact rule-overlap #f)
-     (make-oracle-rule ':894-prefix '(ambiguous-sequence-prefix) 'exact rule-prefix #f)
-     (make-oracle-rule ':897-unreachable '(unreachable-node) 'exact rule-unreachable #t)
-     (make-oracle-rule ':908-non-eof-into-finish '(non-eof-into-finish) 'exact rule-non-eof-into-finish #t)
-     (make-oracle-rule ':909-eof '(eof-reachable-stop eof-zero-progress-cycle) 'exact rule-eof #t)
-     (make-oracle-rule ':898-zero-progress '(zero-progress-cycle) 'exact rule-zero-progress #t)))
+     (make-oracle-rule 'duplicate-fields-and-branch-keys '(invalid-field-declaration duplicate-branch-key)
+       'subset rule-duplicate-fields-and-branch-keys #f)
+     (make-oracle-rule 'missing-target '(missing-target) 'exact rule-missing-target #f)
+     (make-oracle-rule 'overlapping-cases '(overlapping-cases) 'exact rule-overlap #f)
+     (make-oracle-rule 'ambiguous-sequence-prefix '(ambiguous-sequence-prefix) 'exact rule-prefix #f)
+     (make-oracle-rule 'unreachable-node '(unreachable-node) 'exact rule-unreachable #t)
+     (make-oracle-rule 'non-eof-into-finish '(non-eof-into-finish) 'exact rule-non-eof-into-finish #t)
+     (make-oracle-rule 'eof-stop-or-cycle '(eof-reachable-stop eof-zero-progress-cycle) 'exact rule-eof #t)
+     (make-oracle-rule 'zero-progress-cycle '(zero-progress-cycle) 'exact rule-zero-progress #t)))
 
   ;; run one rule on a machine, returning its (code . node) set. A non-machine
   ;; (the catalogue's shape-not-a-machine output) has no graph, so no graph rule

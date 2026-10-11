@@ -98,7 +98,7 @@
                                          (make-stop-node 'stop #f)
                                          (make-error-node 'reject 'ghost #f)))  ; no 'ghost decl
                           'missing-error-declaration))))
-    (harness-case "a pause node naming an undeclared reason is missing-error-declaration (M12)"
+    (harness-case "a pause node naming an undeclared reason is missing-error-declaration"
       (lambda ()
         ;; The optional pause reason resolves exactly as an error node's error
         ;; name does -- an undeclared one is missing-error-declaration, no new code.
@@ -300,7 +300,7 @@
                               'default-eof #f)
                 'missing-target))))))
 
-(harness-group "EOF terminals and eof-target verification (§16.2)"
+(harness-group "EOF terminals and eof-target verification"
   (lambda ()
     ;; A valid EOF machine: entry reads byte 1 (advance to stop); its eof-target
     ;; is a FINISH node (idle completion). Fallback -> reject error.
@@ -369,7 +369,7 @@
           (make-error-declaration 'truncated 'truncated-input "truncated" #f))
     nodes 'default-eof #f))
 
-(harness-group "pause nodes (Slice 3)"
+(harness-group "pause nodes"
   (lambda ()
     (harness-case "a well-formed pause machine verifies"
       (lambda ()
@@ -409,7 +409,7 @@
             (check "no unreachable-node" (not (memq 'unreachable-node cs)))
             (check "no non-eof-into-finish"
                    (not (memq 'non-eof-into-finish cs)))))))
-    (harness-case "a pause continuation naming no node is malformed (§16.2:905)"
+    (harness-case "a pause continuation naming no node is malformed"
       (lambda ()
         (let ((v (verify-machine
                   (pause-fixture
@@ -423,7 +423,7 @@
           (check "missing-target diagnostic"
                  (exists (lambda (d) (eq? (diagnostic-code d) 'missing-target))
                          (verification-diagnostics v))))))
-    (harness-case "a byte-reachable pause into a finish node is non-EOF flow (§16.2:908)"
+    (harness-case "a byte-reachable pause into a finish node is non-EOF flow"
       (lambda ()
         (let ((v (verify-machine
                   (pause-fixture
@@ -455,7 +455,7 @@
           (check "eof-zero-progress-cycle diagnostic"
                  (exists (lambda (d) (eq? (diagnostic-code d) 'eof-zero-progress-cycle))
                          (verification-diagnostics v)))
-          (check "and NOT zero-progress-cycle: :898's gate excludes them"
+          (check "and NOT zero-progress-cycle: its byte-reachability gate excludes them"
                  ;; `pa` and `pb` are reachable only through `e0`'s eof-target,
                  ;; so they are not byte-reachable and the zero-progress check's
                  ;; byte-reachability gate excludes them. The machine is still
@@ -482,7 +482,7 @@
                  (not (exists (lambda (d) (and (eq? (diagnostic-code d) 'eof-zero-progress-cycle)
                                                 (eq? (diagnostic-node d) 'pa)))
                               (verification-diagnostics v)))))))
-    (harness-case "an EOF chain through a pause into a stop is rejected (§16.2:909)"
+    (harness-case "an EOF chain through a pause into a stop is rejected"
       (lambda ()
         (let ((v (verify-machine
                   (pause-fixture
@@ -510,7 +510,7 @@
     ;; Neither pause is byte-reachable (each is only an eof-target), so the
     ;; byte-reachable-pause continuation checks are out of the picture and the
     ;; count belongs to the dispatch-node walk alone.
-    (harness-case "an EOF walk crosses a pause for both terminal kinds (§16.2:909)"
+    (harness-case "an EOF walk crosses a pause for both terminal kinds"
       (lambda ()
         (let* ((v (verify-machine
                    (pause-fixture
@@ -534,7 +534,7 @@
                                              (eq? c 'eof-zero-progress-cycle)))
                                        cs))
                        2))))
-    (harness-case "a byte-reachable pause into a stop would leak stopped through EOF (§16.2:909)"
+    (harness-case "a byte-reachable pause into a stop would leak stopped through EOF"
       (lambda ()
         ;; After feed pauses at p, current = stop and resume returns to ready,
         ;; where finish! would begin EOF processing AT the stop.
@@ -588,7 +588,7 @@
   (length (filter (lambda (c) (eq? c 'overlapping-cases)) (codes m))))
 (define (to-stop matcher) (make-byte-case matcher (make-edge 'stop 'advance) #f))
 
-(harness-group "byte-class overlap (§16.2:893)"
+(harness-group "byte-class overlap"
   (lambda ()
     (harness-case "a range and an exact byte inside it overlap"
       (lambda ()
@@ -1098,7 +1098,7 @@
 (define nested-long-first
   (amb-machine 'nest-rev '(((65 66 67) . done) ((65 66) . halt) ((65) . stop)) two-more))
 
-(harness-group "sequence ambiguity (§16.2:894)"
+(harness-group "sequence ambiguity"
   (lambda ()
     (harness-case "an alternative that is a terminal prefix of another is rejected"
       (lambda ()
@@ -1172,7 +1172,7 @@
             fa-nodes)
     'default-eof #f))
 
-(harness-group "the EOF walk over multi-successor zero-width nodes (§4.4, 0021)"
+(harness-group "the EOF walk over multi-successor zero-width nodes"
   (lambda ()
     (harness-case "both arms reaching a finish is not a cycle and not a stop"
       (lambda ()
@@ -1250,7 +1250,7 @@
 (define (zw-machine nodes entry)
   (make-machine 'm entry (fields1) '() '() (list eof-decl rej-decl) nodes 'default-eof #f))
 
-(harness-group "the zero-width census (Slice ② task 3)"
+(harness-group "the zero-width census"
   (lambda ()
     (harness-case "a zero-width self-cycle is a zero-progress cycle"
       (lambda ()
@@ -1401,7 +1401,7 @@
 (define (operand-codes node)
   (filter (lambda (c) (eq? c 'invalid-field-operand)) (codes (operand-machine node))))
 
-(harness-group "field operands (§16.3:924 item 6, operand half)"
+(harness-group "field operands"
   (lambda ()
     (harness-case "a well-formed operand list is clean"
       (lambda ()
@@ -1501,7 +1501,7 @@
                 (list (make-counted-consume-node 'consume (uint-field-name field) 'next 'next #f)
                       (make-stop-node 'next #f) (make-error-node 'oops 'rejected #f))
                 'default-eof #f))
-(harness-group "settable-consume-counter (Milestone 13, §16.3)"
+(harness-group "settable-consume-counter"
   (lambda ()
     (harness-case "a SETTABLE field used as a counted-consume counter is refused"
       (lambda ()
@@ -1540,7 +1540,7 @@
   (make-machine 'm entry (list (make-uint-field 'count 8 0 #f)) '() '()
                 (list eof-decl rej-decl) nodes 'default-eof #f))
 
-(harness-group "the input-reading kind in the verifier census (Slice ③)"
+(harness-group "the input-reading kind in the verifier census"
   (lambda ()
     (harness-case "an accumulate whose NONDIGIT edge reexecutes into itself is a zero-progress cycle"
       (lambda ()
@@ -1661,7 +1661,7 @@
     extra-nodes)
    'start))
 
-(harness-group "the three kind filters an accumulate node was invisible to (Slice ③)"
+(harness-group "the three kind filters an accumulate node was invisible to"
   (lambda ()
     (harness-case "an EOF chain may reach an accumulate node at all"
       (lambda ()
@@ -1738,7 +1738,7 @@
                       (make-error-node 'rej 'rejected #f))
                 'default-eof #f))
 
-(harness-group "an EOF cycle through pause continuations is attributed to the pause (Slice ⓪)"
+(harness-group "an EOF cycle through pause continuations is attributed to the pause"
   (lambda ()
     (harness-case "the machine is rejected"
       (lambda ()
@@ -1857,7 +1857,7 @@
 ;; `finish` column, where every position is driven for every kind and the
 ;; expectation carries the span rules explicitly.
 
-(harness-group "§16.2:908 is gated on byte-reachability, for every kind (Slice ⓪b)"
+(harness-group "non-eof-into-finish is gated on byte-reachability, for every kind"
   (lambda ()
     (harness-case "an EOF-only-reachable byte edge into a finish is accepted"
       (lambda ()
@@ -1938,7 +1938,7 @@
 ;;
 ;; NO NEW CODE: this reuses `non-eof-into-finish`, as `invalid-field-operand`
 ;; carries a second meaning rather than spending a code.
-(harness-group "the entry may not be a finish terminal (Slice ⓪b)"
+(harness-group "the entry may not be a finish terminal"
   (lambda ()
     (harness-case "a machine whose entry IS a finish node is rejected, once, at the entry"
       (lambda ()
@@ -2008,7 +2008,7 @@
     (make-machine 'x 'e (list (make-uint-field 'n 8 0 #f)) '() '()
                   (list eof-decl rej-decl) nodes 'default-eof #f)))
 
-(harness-group "the §16.2:909 walk starts at the entry too (Slice ⓪b)"
+(harness-group "the EOF walk starts at the entry too"
   (lambda ()
     (harness-case "an entry whose own EOF path reaches a stop is rejected"
       (lambda ()
@@ -2054,7 +2054,7 @@
 ;;
 ;; A ROLE, not an index. verify.sls declines elsewhere to promise the order of
 ;; two diagnostics from one node, and an index would newly promise it.
-(harness-group "a :908 finding carries the edge role that produced it (Slice ⓪b)"
+(harness-group "a non-eof-into-finish finding carries the edge role that produced it"
   (lambda ()
     (harness-case "a byte-dispatch's case and fallback into one finish are two distinguishable findings"
       (lambda ()
@@ -2243,7 +2243,7 @@
                         x-nodes)
                 'default-eof #f))
 
-(harness-group "a benign EOF verdict never outranks a stop in a join (Slice ⓪b)"
+(harness-group "a benign EOF verdict never outranks a stop in a join"
   (lambda ()
     (harness-case "an `error` sibling does not mask the stop"
       (lambda ()
@@ -2332,7 +2332,7 @@
                 'default-eof #f))
 (define (decided keys) (make-callback-declaration 'decide 'decision #t keys #f #f))
 
-(harness-group "a callback node's branches against its declaration (§16.2:901)"
+(harness-group "a callback node's branches against its declaration"
   (lambda ()
     (harness-case "a node whose keys match its declaration verifies clean"
       (lambda ()
@@ -2504,7 +2504,7 @@
                            (make-error-node 'rej2 'rejected #f)))
 
 
-(harness-group "the span-state lattice (§16.2:899, :900, :907)"
+(harness-group "the span-state lattice"
   (lambda ()
     (harness-case "a machine that opens and closes one span verifies clean"
       (lambda ()
@@ -2518,7 +2518,7 @@
                                      (span-tail/exit))))
                      '())))
     ;; --- a closing span's EOF tail, and the span-name cross-reference --------
-    (harness-case "a span end continuing into a STOP is rejected (§16.2:909)"
+    (harness-case "a span end continuing into a STOP is rejected"
       (lambda ()
         ;; *** THE REASON `span-tail/exit` EXISTS, stated as a rejection so the
         ;; tail above cannot be mistaken for cosmetics. *** A span end is a
@@ -2549,7 +2549,7 @@
                      ;; report `(eof-reachable-stop . op)` here too -- the list,
                      ;; not the membership, is what says which half moved.
                      '((eof-reachable-stop . cl)))))
-    (harness-case "a span node naming an UNDECLARED span is rejected (§16.2:901)"
+    (harness-case "a span node naming an UNDECLARED span is rejected"
       (lambda ()
         ;; `make-span-start-node` stores its span as a bare symbol and its own
         ;; comment assigns the cross-reference to the verifier. Without the
@@ -2661,7 +2661,7 @@
                                            (make-span-start-node 'op 'body 'reject #f))
                                      (span-tail2))))
                      '())))
-    (harness-case "a span open at a STOP terminal is rejected (§16.2:907)"
+    (harness-case "a span open at a STOP terminal is rejected"
       (lambda ()
         (check-equal "one finding, at the terminal"
                      (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
@@ -2688,7 +2688,7 @@
                                            (make-finish-node 'fin #f))
                                      (span-tail))))))
                      '((span-active-at-exit . fin)))))
-    (harness-case "a PAUSE reachable with a span active is rejected (§16.2:900)"
+    (harness-case "a PAUSE reachable with a span active is rejected"
       (lambda ()
         (check-equal "one finding, at the pause"
                      (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
@@ -2731,7 +2731,7 @@
                                                   (span-tail2))
                                           'default-eof #f))))
                      '((span-active-at-pause . inv)))))
-    (harness-case "a node no execution can occupy contributes no state (0029 item 3)"
+    (harness-case "a node no execution can occupy contributes no state"
       (lambda ()
         ;; *** The only shape that separates the two relations. *** The entry's
         ;; byte edges go
@@ -2804,7 +2804,7 @@
                       (make-error-node 'reject 'rejected #f))
                 'default-eof #f))
 
-(harness-group "declaration labels are checked against §10.1:480 (§16.2:886)"
+(harness-group "declaration labels are checked against the portable label repertoire"
   (lambda ()
     (harness-case "THE NEGATIVE CONTROL: absent and portable labels are accepted"
       (lambda ()
@@ -3040,7 +3040,7 @@
   (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
        (verification-diagnostics (verify-machine m))))
 
-(harness-group "every label carrier is checked (§16.2:886, Milestone 6 Slice ⓪)"
+(harness-group "every label carrier is checked"
   (lambda ()
     (harness-case "an integer label is rejected under the carrier's own name"
       (lambda ()
@@ -3096,7 +3096,7 @@
                               'default-eof #f))
                      '(invalid-name))))))
 
-(harness-group "declaration NAMES are checked too, which nothing witnessed (§16.2:886)"
+(harness-group "declaration NAMES are checked too, which nothing witnessed"
   (lambda ()
     (harness-case "a nonportable callback name and a nonportable span name"
       (lambda ()
@@ -3128,7 +3128,7 @@
 ;; reach, and this fixture has none. It is asserted BOTH ways -- the cycle is
 ;; real, and no execution can enter it.
 
-(harness-group "zero-progress cycles are gated on byte-reachability (§16.2:898)"
+(harness-group "zero-progress cycles are gated on byte-reachability"
   (lambda ()
     (harness-case "a BYTE-reachable pause cycle is still a zero-progress cycle"
       (lambda ()
@@ -3272,7 +3272,7 @@
 
 (define occ-reject (make-error-node 'reject 'rejected #f))
 
-(harness-group "reachability is the occupiable relation (decision 0031)"
+(harness-group "reachability is the occupiable relation"
   (lambda ()
     (harness-case "per input-reading kind, both ways"
       (lambda ()
@@ -3376,9 +3376,9 @@
 (define (cc-machine entry fields nodes)
   (make-machine 'ccm entry fields '() '() errs nodes 'default-eof #f))
 
-(harness-group "the thirteenth kind in the verifier census (Milestone 6 Slice ①)"
+(harness-group "the thirteenth kind in the verifier census"
   (lambda ()
-    (harness-case "the flow-through zero-count stop at the ENTRY is rejected (0030 item 5)"
+    (harness-case "the flow-through zero-count stop at the ENTRY is rejected"
       (lambda ()
         ;; A fresh parser is parked at the entry with the field's initial, 0; a
         ;; zero count transitions to `next` at finish, and `next` is a stop --
@@ -3399,7 +3399,7 @@
           (check-equal "eof-reachable-stop, at the pause"
                        (map cons (codes m) (nodes-of m))
                        '((eof-reachable-stop . p))))))
-    (harness-case "the one-shot length, body, stop grammar is ACCEPTED (0030 item 6)"
+    (harness-case "the one-shot length, body, stop grammar is ACCEPTED"
       (lambda ()
         ;; A parser parked on `body` by need-input holds a positive count and
         ;; takes the error at EOF; no EOF path reaches the stop. Parking the
@@ -3409,7 +3409,7 @@
                                    (make-counted-consume-node 'body 'len 'done 'reject #f)
                                    done reject))))
           (check-equal "no diagnostics" (codes m) '()))))
-    (harness-case "a self-targeting next is a zero-progress cycle, and nothing else (0030 item 7)"
+    (harness-case "a self-targeting next is a zero-progress cycle, and nothing else"
       (lambda ()
         (let ((m (cc-machine 'start len-field
                              (list (entry-into 'body)
@@ -3427,7 +3427,7 @@
           (check-equal "eof-zero-progress-cycle, at the node"
                        (map cons (codes m) (nodes-of m))
                        '((eof-zero-progress-cycle . body))))))
-    (harness-case "an undeclared field is invalid-field-operand under the node's name (§16.2:903)"
+    (harness-case "an undeclared field is invalid-field-operand under the node's name"
       (lambda ()
         (let ((bad (cc-machine 'start '()
                                (list (entry-into 'body)
@@ -3441,7 +3441,7 @@
                        (map cons (codes bad) (nodes-of bad))
                        '((invalid-field-operand . body)))
           (check-equal "declared: clean" (codes good) '()))))
-    (harness-case "the priced over-rejection: a value-terminated loop is rejected, the same loop with a byte dispatch in it is accepted (0030 item 7)"
+    (harness-case "the priced over-rejection: a value-terminated loop is rejected, the same loop with a byte dispatch in it is accepted"
       (lambda ()
         ;; records := 3, size := 2. `[branch zero? records -> done] -> consume(size)
         ;; -> decrement records -> branch` terminates whenever `records` does,
@@ -3468,7 +3468,7 @@
                        '((zero-progress-cycle . br) (zero-progress-cycle . body)
                          (zero-progress-cycle . dec)))
           (check-equal "accepted with a consuming node in the loop" (codes accepted) '()))))
-    (harness-case "a counted consume inside a span verifies clean (§10.6:604)"
+    (harness-case "a counted consume inside a span verifies clean"
       (lambda ()
         ;; `span-transfer` is the identity for the kind and `span-node-diagnostics`
         ;; answers nothing; the body's own EOF route gets its own error node, on
@@ -3523,7 +3523,7 @@
 (define (s1-mach name entry fields nodes)
   (make-machine name entry fields '() '() errs nodes 'default-eof #f))
 
-(harness-group "the widened record stamps severity and the machine name (0032 item 2)"
+(harness-group "the widened record stamps severity and the machine name"
   (lambda ()
     (harness-case "every diagnostic of a machine carries error and the machine's name"
       (lambda ()
@@ -3552,7 +3552,7 @@
           ;; own expectation, and asserts at least the three passes' findings.
           (check-equal "the loop drove every diagnostic" observed (length ds))
           (check "at least three findings from three passes" (>= observed 3)))))
-    (harness-case "a not-a-machine diagnostic carries error and machine #f (F5)"
+    (harness-case "a not-a-machine diagnostic carries error and machine #f"
       (lambda ()
         ;; `#f` here is the RULE, not a placeholder: `verify-machine` runs every
         ;; pass but `pass-schema` only under `(machine? machine)`, so a diagnostic
@@ -3585,7 +3585,7 @@
                             (make-stop-node 'stop #f) (s1-error 'rej)))
 (define (s1-decls name cbs sps ds nodes) (make-machine name 'start '() cbs sps ds nodes 'default-eof #f))
 
-(harness-group "each site's declarations list names its declaration (0032 item 3, F12)"
+(harness-group "each site's declarations list names its declaration"
   (lambda ()
     (harness-case "the callback / span / error / field families each carry (list subject)"
       (lambda ()
@@ -3626,7 +3626,7 @@
                                          (list (s1-sp 'body 'ondata #f)) errs (s1-ok-nodes))
                                'invalid-span-callback))
                      '(body ondata))))
-    (harness-case "F12: the two span missing-callback-declaration sites name their callback"
+    (harness-case "the two span missing-callback-declaration sites name their callback"
       (lambda ()
         ;; The span sites carry two names, matching the callback node's
         ;; missing-callback-declaration, which also names its callback.
@@ -3706,7 +3706,7 @@
                                (span-tail)))
          'start 'done 'op 1)))
 
-(harness-group "each path-bearing code carries a path of the right shape (0032 items 4-5)"
+(harness-group "each path-bearing code carries a path of the right shape"
   (lambda ()
     (harness-case "first, last and membership per code, with the finding count beside it"
       (lambda ()
@@ -3767,7 +3767,7 @@
           (check-equal "path first is the entry" (path-first d) 'fin)
           (check-equal "path last is the entry" (path-last d) 'fin))))))
 
-(harness-group "a code no fixture emits has no path assertion passing vacuously (0032, negatives)"
+(harness-group "a code no fixture emits has no path assertion passing vacuously"
   (lambda ()
     (harness-case "each path code is ABSENT one edit away from the fault"
       (lambda ()
@@ -3812,7 +3812,7 @@
                                         (span-tail))))))
           (check-equal "drove eight negatives" driven 8))))))
 
-(harness-group "the EOF join tie-break returns the left operand's path (0032 item 5, F10)"
+(harness-group "the EOF join tie-break returns the left operand's path"
   (lambda ()
     (harness-case "a tie within tier 1 keeps the LEFT branch's path"
       (lambda ()

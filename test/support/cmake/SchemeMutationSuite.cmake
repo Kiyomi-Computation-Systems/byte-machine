@@ -432,7 +432,7 @@ byte_machine_mutation(
   FIND [[(define (harness-quiet?) (> harness-probe-depth 0))]]
   REPLACE [[(define (harness-quiet?) #f)]]
   EXPECT_SURVIVES
-    "suppression changes only what is printed, never a counter or a status, so no assertion can observe it from inside the process; it is covered by the manual check in the implementation plan's Task 5 step 9, and its real cost -- a log that teaches readers to ignore FAIL lines -- is not machine-checkable")
+    "suppression changes only what is printed, never a counter or a status, so no assertion can observe it from inside the process; it is covered only by a manual check of the log, and its real cost -- a log that teaches readers to ignore FAIL lines -- is not machine-checkable")
 
 # The other two print-only decisions, and the same argument. The adapter
 # protocol exposes no output-capture service, and the runner may not reach
@@ -450,7 +450,7 @@ byte_machine_mutation(
   FIND [[    (set! harness-verbose (if (and v (not (string=? v ""))) #t #f)))]]
   REPLACE [[    (set! harness-verbose #f))]]
   EXPECT_SURVIVES
-    "the verify command that judges this mutation does not set the variable, so both runs take the same branch -- harness-verbose ends up #f either way -- and the two are byte-identical, not merely indistinguishable by exit status. In a process that does set it the whole difference is one printed line per passing case: no counter, no case count, no status moves, and this suite judges by exit status. byte-machine.harness.verbose.chez.source proves the read happens and does not raise; that the value read is honoured is covered by the manual check recorded in spec section 5.3 -- either self-tests lane with BYTE_MACHINE_TEST_VERBOSE=1 prints one pass line per case and none without it")
+    "the verify command that judges this mutation does not set the variable, so both runs take the same branch -- harness-verbose ends up #f either way -- and the two are byte-identical, not merely indistinguishable by exit status. In a process that does set it the whole difference is one printed line per passing case: no counter, no case count, no status moves, and this suite judges by exit status. byte-machine.harness.verbose.chez.source proves the read happens and does not raise; that the value read is honoured is a manual check -- either self-tests lane with BYTE_MACHINE_TEST_VERBOSE=1 prints one pass line per case and none without it")
 
 byte_machine_mutation(
   FILE ${RUNNER} SPEC harness-self-tests.sps
@@ -459,7 +459,7 @@ byte_machine_mutation(
                      (harness-say (string-append "byte-machine-harness: pass " id))))]]
   REPLACE [[                 #f)]]
   EXPECT_SURVIVES
-    "the pass line is the only thing this branch produces, and a line that is not printed changes no counter and no status; byte-machine.harness.verbose.chez.source still proves the branch is reached and does not raise, but only a reader of the log can see the line itself, which is the manual check recorded in spec section 5.3")
+    "the pass line is the only thing this branch produces, and a line that is not printed changes no counter and no status; byte-machine.harness.verbose.chez.source still proves the branch is reached and does not raise, but only a reader of the log can see the line itself, which is a manual check")
 
 # --- The Chez adapter's export list ----------------------------------------
 
@@ -505,7 +505,7 @@ byte_machine_mutation(
   FIND [[(source-directories '())]]
   REPLACE [[;; deleted]]
   EXPECT_SURVIVES
-    "measured inert (decision 0006, extending 5b's C3b): no include form exists anywhere, library resolution runs through library-directories, and no lane's outcome differs between an empty source path and Chez's default; the line is kept as narrowing, not as behavior")
+    "measured inert: no include form exists anywhere, library resolution runs through library-directories, and no lane's outcome differs between an empty source path and Chez's default; the line is kept as narrowing, not as behavior")
 
 # --- The adapter's os-table -------------------------------------------------
 
@@ -626,7 +626,7 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 # directory-list on a path that does not exist, which Chez itself refuses --
 # a real, deterministic consequence of deleting exactly this check, not the
 # launcher's own die(). Verified against a real staged run, not guessed; see
-# byte_machine_slice3_launcher_pass's header comment below for why the wrapper's
+# byte_machine_source_launcher_pass's header comment below for why the wrapper's
 # own exit code (0 or 1) cannot make this distinction by itself.
 byte_machine_mutation(
   FILE ${LAUNCHER} SPEC byte-machine.harness.launcher-absent-guard.chez.source
@@ -881,7 +881,7 @@ set(LAUNCHER_BASE_ARGS
   "--object-guard" "${GUARD_DIR}"
   "--program" "${STAGE_DIR}/test/support/harness/self/harness-bootstrap.sps")
 
-# byte_machine_slice3_launcher_pass(<lane> <label> <find> <replace>
+# byte_machine_source_launcher_pass(<lane> <label> <find> <replace>
 #                                   <expect_output_matches> <arg>...)
 #
 # One pass: point the verify command at a deliberately wrong invocation, declare
@@ -911,7 +911,7 @@ set(LAUNCHER_BASE_ARGS
 # counter with PARENT_SCOPE, so they agree only while they share a caller;
 # splitting them across this boundary would leave the run seeing a count from
 # somewhere else.
-function(byte_machine_slice3_launcher_pass lane label find replace expect_output_matches)
+function(byte_machine_source_launcher_pass lane label find replace expect_output_matches)
   byte_machine_mutation_reset()
 
   string(JOIN "|" packed
@@ -935,7 +935,7 @@ function(byte_machine_slice3_launcher_pass lane label find replace expect_output
   byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 endfunction()
 
-byte_machine_slice3_launcher_pass(
+byte_machine_source_launcher_pass(
   byte-machine.harness.launcher-unknown-flag.chez.source
   "launcher: an unrecognised flag is accepted"
   [[        ((not (member (car rest) known-flags))]]
@@ -943,7 +943,7 @@ byte_machine_slice3_launcher_pass(
   "bootstrap: failures=0"
   "--librarie-root" "${STAGE_DIR}/test/support/harness" ${LAUNCHER_BASE_ARGS})
 
-byte_machine_slice3_launcher_pass(
+byte_machine_source_launcher_pass(
   byte-machine.harness.launcher-missing-value.chez.source
   "launcher: a flag with no value is accepted"
   [[        ((null? (cdr rest))]]
@@ -951,7 +951,7 @@ byte_machine_slice3_launcher_pass(
   "Exception in cddr"
   ${LAUNCHER_BASE_ARGS} "--library-root")
 
-byte_machine_slice3_launcher_pass(
+byte_machine_source_launcher_pass(
   byte-machine.harness.launcher-repeated-flag.chez.source
   "launcher: a single-valued flag may be given twice"
   [[   (if (> (length (flag-values flag)) 1)]]
@@ -976,7 +976,7 @@ byte_machine_slice3_launcher_pass(
 # required-flags' library-root *entry* specifically, i.e. whether the flag is
 # still in the list decision 2 walks at all. Two different lines, two different
 # mutations, one shared witness.
-byte_machine_slice3_launcher_pass(
+byte_machine_source_launcher_pass(
   byte-machine.harness.launcher-no-library-root.chez.source
   "launcher: a missing required flag is not noticed (decision 2's own check, general across every entry; reuses the no-library-root invocation below only for convenience)"
   [[   (if (null? (flag-values flag))]]
@@ -989,7 +989,7 @@ byte_machine_slice3_launcher_pass(
 # but the list it walks is three, and an entry dropped from it is invisible to
 # every invocation except the one omitting that flag.
 
-byte_machine_slice3_launcher_pass(
+byte_machine_source_launcher_pass(
   byte-machine.harness.launcher-no-program.chez.source
   "launcher: --program is dropped from required-flags"
   [[  (list "--program"]]
@@ -998,7 +998,7 @@ byte_machine_slice3_launcher_pass(
   "--library-root" "${STAGE_DIR}/test/support/harness"
   "--object-guard" "${GUARD_DIR}")
 
-byte_machine_slice3_launcher_pass(
+byte_machine_source_launcher_pass(
   byte-machine.harness.launcher-no-object-guard.chez.source
   "launcher: --object-guard is dropped from required-flags"
   [[        "--object-guard"]]
@@ -1017,7 +1017,7 @@ byte_machine_slice3_launcher_pass(
 # includes the trailing "))" so the REPLACE can close the list itself.
 # Whichever entry ends up last in required-flags after a reorder or a fourth
 # addition inherits this hazard and needs the same treatment.
-byte_machine_slice3_launcher_pass(
+byte_machine_source_launcher_pass(
   byte-machine.harness.launcher-no-library-root.chez.source
   "launcher: --library-root is dropped from required-flags"
   [[        "--library-root"))]]
@@ -1035,7 +1035,7 @@ byte_machine_slice3_launcher_pass(
 # from single-valued-flags specifically, leaving the check itself and
 # --program's membership in the list untouched, is invisible to every
 # invocation but this one.
-byte_machine_slice3_launcher_pass(
+byte_machine_source_launcher_pass(
   byte-machine.harness.launcher-repeated-object-guard.chez.source
   "launcher: --object-guard is dropped from single-valued-flags"
   [[(define single-valued-flags
@@ -1062,7 +1062,7 @@ byte_machine_slice3_launcher_pass(
 # pass's own -- see the SPEC-must-name-a-real-lane comment above the
 # required-flag-unchecked pass for why that match matters and what happens
 # when it drifts.
-byte_machine_slice3_launcher_pass(
+byte_machine_source_launcher_pass(
   byte-machine.harness.launcher-repeated-flag.chez.source
   "launcher: --program is dropped from single-valued-flags (reuses the launcher-repeated-flag invocation, which already repeats --program)"
   [[(define single-valued-flags
@@ -1481,7 +1481,7 @@ byte_machine_mutation(
   REPLACE [[(source-directories (list "."))
 ]]
   EXPECT_SURVIVES
-    "measured inert 2026-08-17 and re-measured through the shipped lane: library resolution runs through library-directories, no file in the inline tree includes another (decision 0006), so this line narrows nothing reachable today; kept in the launcher because it costs one line and guards a future load or include added to the launcher itself. Reopening condition: a Chez that re-resolves a compiled library's sources at load time.")
+    "measured inert and re-measured through the shipped lane: library resolution runs through library-directories, no file in the tree includes another, so this line narrows nothing reachable today; kept in the launcher because it costs one line and guards a future load or include added to the launcher itself. Reopening condition: a Chez that re-resolves a compiled library's sources at load time.")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -1494,7 +1494,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # are deliberately not re-proven here; the launchers' own headers record
 # what is and is not witnessed per copy.
 #
-# Unlike byte_machine_slice3_launcher_pass above, EXPECT_STATUS and
+# Unlike byte_machine_source_launcher_pass above, EXPECT_STATUS and
 # EXPECT_OUTPUT_MATCHES are optional keywords here rather than a fixed
 # positional parameter, so the helper accepts an invocation carrying neither,
 # either, or both. cmake_parse_arguments pulls them out of ARGN
@@ -1507,8 +1507,8 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # silently, since CMP0174 does not warn about it before 3.31.
 #
 # The reset, the declaration and the run all happen inside this function on
-# purpose, the same reason byte_machine_slice3_launcher_pass's header gives.
-function(byte_machine_slice5b_launcher_pass launcher_file lane label find replace)
+# purpose, the same reason byte_machine_source_launcher_pass's header gives.
+function(byte_machine_launcher_file_pass launcher_file lane label find replace)
   cmake_parse_arguments(pass "" "EXPECT_STATUS;EXPECT_OUTPUT_MATCHES" "" ${ARGN})
 
   byte_machine_mutation_reset()
@@ -1544,7 +1544,7 @@ endfunction()
 
 # Narrowed from what a real staged run printed, as pass 26's pins are.
 # EXPECT_STATUS is not used: this pass runs through ByteMachineExpectExit.cmake,
-# same as every byte_machine_slice3_launcher_pass call above, and that
+# same as every byte_machine_source_launcher_pass call above, and that
 # wrapper's own message(FATAL_ERROR) always exits 1 on a non-matching real
 # status -- 255 included -- so EXPECT_STATUS could only ever see 0 or 1 here
 # and would narrow nothing; passes 9-17's header makes the identical point.
@@ -1553,7 +1553,7 @@ endfunction()
 # there and Chez's own file layer refuses it directly --
 # "Exception in load-program: failed for .../no-such-program.so: no such
 # file or directory", observed on the wrapper's echoed stdout.
-byte_machine_slice5b_launcher_pass(
+byte_machine_launcher_file_pass(
   test/support/launchers/chez-aot.ss
   byte-machine.harness.chez-aot-launcher-missing-program.chez.aot
   "chez-aot launcher: a missing compiled program is accepted"
@@ -1574,7 +1574,7 @@ byte_machine_slice5b_launcher_pass(
 # compilation instance" refusal pass 26's pairing mutation does -- two
 # different deleted checks, coincident only in this fixture because both
 # ultimately leave the harness object directory readable as a source directory.
-byte_machine_slice5b_launcher_pass(
+byte_machine_launcher_file_pass(
   test/support/launchers/chez-aot.ss
   byte-machine.harness.chez-aot-launcher-dirty-source-guard.chez.aot
   "chez-aot launcher: a dirty source guard is accepted"
@@ -1592,7 +1592,7 @@ byte_machine_slice5b_launcher_pass(
 # cons library-roots object-dirs) is handed a 2-element and a 1-element list
 # and Chez's own map refuses them directly, observed on the wrapper's echoed
 # stdout as "Exception in map: lists (...) and (...) differ in length".
-byte_machine_slice5b_launcher_pass(
+byte_machine_launcher_file_pass(
   test/support/launchers/chez-compile.ss
   byte-machine.harness.chez-compile-launcher-unpaired-roots.chez.aot
   "chez-compile launcher: unpaired roots are accepted"
@@ -1631,15 +1631,15 @@ byte_machine_slice5b_launcher_pass(
 # the opposite choice for the one decision this manifest shape cannot reach.
 byte_machine_mutation_reset()
 
-set(W9_MANIFEST
+set(PROVENANCE_MANIFEST
   "${STAGE_DIR}/test/support/harness/byte-machine/test/fingerprint.sls|${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps")
-set(W9_EXPECT_FILE "${WORK_DIR}/w9-split-combine.fingerprint")
+set(PROVENANCE_EXPECT_FILE "${WORK_DIR}/w9-split-combine.fingerprint")
 execute_process(
   COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
           "${STAGE_DIR}/test/support/launchers/fingerprint-manifest.ss"
           "${STAGE_DIR}/test/support/harness"
           "${GUARD_DIR}"
-          "${W9_EXPECT_FILE}"
+          "${PROVENANCE_EXPECT_FILE}"
           "${STAGE_DIR}/test/support/harness/byte-machine/test/fingerprint.sls"
           "${STAGE_DIR}/test/support/harness/self/harness-self-tests.sps"
   RESULT_VARIABLE w9_expect_rc)
@@ -1653,8 +1653,8 @@ endif()
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${CMAKE_COMMAND}" "-E" "env"
-  "BYTE_MACHINE_FINGERPRINT_FILES=${W9_MANIFEST}"
-  "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${W9_EXPECT_FILE}"
+  "BYTE_MACHINE_FINGERPRINT_FILES=${PROVENANCE_MANIFEST}"
+  "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${PROVENANCE_EXPECT_FILE}"
   "--"
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
@@ -1729,15 +1729,15 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # AGENTS.md: a decision that can be witnessed does not get an EXPECT_SURVIVES.
 byte_machine_mutation_reset()
 
-set(W9_EXIT_MANIFEST
+set(PROVENANCE_EXIT_MANIFEST
   "${STAGE_DIR}/test/support/harness/byte-machine/test/fingerprint.sls|${STAGE_DIR}/test/support/harness/byte-machine/test/harness.sls")
-set(W9_EXIT_EXPECT_FILE "${WORK_DIR}/w9-exit-constant.fingerprint")
+set(PROVENANCE_EXIT_EXPECT_FILE "${WORK_DIR}/w9-exit-constant.fingerprint")
 execute_process(
   COMMAND "${BYTE_MACHINE_CHEZ_EXECUTABLE}" --script
           "${STAGE_DIR}/test/support/launchers/fingerprint-manifest.ss"
           "${STAGE_DIR}/test/support/harness"
           "${GUARD_DIR}"
-          "${W9_EXIT_EXPECT_FILE}"
+          "${PROVENANCE_EXIT_EXPECT_FILE}"
           "${STAGE_DIR}/test/support/harness/byte-machine/test/fingerprint.sls"
           "${STAGE_DIR}/test/support/harness/byte-machine/test/harness.sls"
   RESULT_VARIABLE w9_exit_expect_rc)
@@ -1751,8 +1751,8 @@ endif()
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
   "${CMAKE_COMMAND}" "-E" "env"
-  "BYTE_MACHINE_FINGERPRINT_FILES=${W9_EXIT_MANIFEST}"
-  "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${W9_EXIT_EXPECT_FILE}"
+  "BYTE_MACHINE_FINGERPRINT_FILES=${PROVENANCE_EXIT_MANIFEST}"
+  "BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=${PROVENANCE_EXIT_EXPECT_FILE}"
   "--"
   "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
   "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
@@ -2331,7 +2331,7 @@ byte_machine_mutation(
   # a survivor's reason is only as durable as the control-flow shape it names.
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "re-feeds to finished, consuming zero .*: case raised -- Exception in parser-feed!: unknown lifecycle with irritant finished")
+    "re-feeds to finished, consuming zero: case raised -- Exception in parser-feed!: unknown lifecycle with irritant finished")
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.unit.runtime.chez.source
@@ -2530,7 +2530,7 @@ byte_machine_mutation(
   FIND [[(unless (and (symbol? code) (portable-name? code))]]
   REPLACE [[(unless (symbol? code)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "portable name grammar .§9.3:423.: BadCode refused -- expected a raise")
+  EXPECT_OUTPUT_MATCHES "portable name grammar: BadCode refused -- expected a raise")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -3005,7 +3005,7 @@ byte_machine_mutation(
 # predicted.
 #
 # Arm 5 (eof-terminal's sequence-dispatch-node? branch) and the start-set
-# narrowing ("the :909 start set enumerates a kind instead of deriving the EOF
+# narrowing ("the eof-reachable-stops start set enumerates a kind instead of deriving the EOF
 # route", below) share one FAIL record: the self-loop fixture ("an eof chain
 # that cycles through a sequence node is an EOF cycle") is broken by EITHER --
 # with 'seq excluded from the start set, eof-terminal is never even called
@@ -3143,7 +3143,7 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: a self-targeting sequence node is not reported as a zero-progress cycle (§25:1533)"
+  LABEL "verify: a self-targeting sequence node is not reported as a zero-progress cycle"
   # The REPORT set, not the walk: arm 3 above mutates reexec-targets and lands
   # on "got 1", "zero-progress detection never fires" lands on "got 0", and
   # this one lands on "got 2" -- three distinct values on one check, all
@@ -3232,7 +3232,7 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: the §16.2:894 sequence-ambiguity pass is never run"
+  LABEL "verify: the sequence-ambiguity pass is never run"
   FIND [[                                  (pass-sequence-ambiguity machine)]]
   REPLACE [[                                  '()]]
   EXPECT_STATUS 1
@@ -3241,7 +3241,7 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: the terminal-prefix test is one-directional (§16.2:894)"
+  LABEL "verify: the terminal-prefix test is one-directional"
   # Comparison-caught. The pair test must ask BOTH directions: a caller may
   # declare the longer alternative first, and normal-ir-tests.sps's own
   # "reverse order" case exists because the trie has two distinct guard sites
@@ -3257,7 +3257,7 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: the prefix relation degenerates to a first-byte test (§16.2:894)"
+  LABEL "verify: the prefix relation degenerates to a first-byte test"
   # The OVER-rejection direction, which no other mutation in this pass reaches:
   # with the recursion collapsed, any two alternatives sharing a first byte are
   # called ambiguous, and every branching machine would be refused. Measured:
@@ -3425,7 +3425,7 @@ byte_machine_mutation(
 ]]
   REPLACE [[              ]]
   EXPECT_SURVIVES
-    "measured, not assumed: this mutant passes the whole verify lane unchanged. The completed-set is decision 0021 item 2's SECOND structure and its job is complexity, not correctness -- the path stack alone already answers every verdict correctly, because the only path-dependent answer is `cycle` and a re-visit off the current path re-derives the same verdict rather than a different one. What the set buys is that a diamond costs one visit instead of two, and a chain of k diamonds costs k instead of 2^k, which is exactly the defect 0021 item 2 names in the algorithm it rejects. No assertion over verdicts can see a difference, because there is none. A TIMING witness was considered and declined: a chain of ~25 branch nodes makes the mutant take 2^25 walks and blow the lane's TIMEOUT, but a catch that depends on how fast the host is is not a catch this suite can state, and the project has recorded before that a nonzero exit is not proof. Reopening condition: if a later slice gives the walk a verdict that DOES depend on which path reached a node, the memo stops being sound and this mutation stops being a survivor -- it becomes a bug detector, and must be re-measured then rather than inherited. 2026-09-10 (Milestone 7 Slice ①): the condition FIRED and this was re-measured, not inherited. The walk now answers a `(verdict path)` pair, so which route reached a node IS observable -- but the mutant STILL SURVIVES (verify-tests 184/184, status 0 with the line deleted). Why no fixture separates it: `eof-verdict-join` folds its operands left-to-right and keeps the LEFT on a tie (decision 0032 item 5), so the winning operand's path is always the one computed first, before any node it shares with a later operand is memoised; the memo can only ever return a stale path to a LOSING right operand. A re-convergent fixture (a parked node whose two eof-successors both reach one node that then reaches a stop) was reasoned through and reports the same path with the memo present or absent, because the left branch wins the tie and its path is fresh either way. The reopening condition is now satisfied at the path level and the answer is the same: sound, and unwitnessed, for the same structural reason as before -- one level deeper."
+    "measured, not assumed: this mutant passes the whole verify lane unchanged. The completed-set is the walk's SECOND structure and its job is complexity, not correctness -- the path stack alone already answers every verdict correctly, because the only path-dependent answer is `cycle` and a re-visit off the current path re-derives the same verdict rather than a different one. What the set buys is that a diamond costs one visit instead of two, and a chain of k diamonds costs k instead of 2^k, which is exactly the cost of a walk that keeps only the path stack. No assertion over verdicts can see a difference, because there is none. A TIMING witness was considered and declined: a chain of ~25 branch nodes makes the mutant take 2^25 walks and blow the lane's TIMEOUT, but a catch that depends on how fast the host is is not a catch this suite can state, and a nonzero exit is not proof. Reopening condition: if the walk is given a verdict that DOES depend on which path reached a node, the memo stops being sound and this mutation stops being a survivor -- it becomes a bug detector, and must be re-measured then rather than inherited. The condition has since FIRED and this was re-measured, not inherited. The walk now answers a `(verdict path)` pair, so which route reached a node IS observable -- but the mutant STILL SURVIVES (verify-tests 184/184, status 0 with the line deleted). Why no fixture separates it: `eof-verdict-join` folds its operands left-to-right and keeps the LEFT on a tie, so the winning operand's path is always the one computed first, before any node it shares with a later operand is memoised; the memo can only ever return a stale path to a LOSING right operand. A re-convergent fixture (a parked node whose two eof-successors both reach one node that then reaches a stop) was reasoned through and reports the same path with the memo present or absent, because the left branch wins the tie and its path is fresh either way. The reopening condition is now satisfied at the path level and the answer is the same: sound, and unwitnessed, for the same structural reason as before -- one level deeper."
   )
 
 # Five mutations for the zero-width census (further below). Two of them are a
@@ -3451,7 +3451,7 @@ byte_machine_mutation(
   REPLACE [[                '()))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "the input-reading kind in the verifier census \\(Slice ③\\).an accumulate whose OVERFLOW edge targets itself is a zero-progress cycle: zero-progress-cycle")
+    "the input-reading kind in the verifier census.an accumulate whose OVERFLOW edge targets itself is a zero-progress cycle: zero-progress-cycle")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -3464,7 +3464,7 @@ byte_machine_mutation(
   REPLACE [[                '()]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "the input-reading kind in the verifier census \\(Slice ③\\).an accumulate whose NONDIGIT edge reexecutes into itself is a zero-progress cycle: zero-progress-cycle")
+    "the input-reading kind in the verifier census.an accumulate whose NONDIGIT edge reexecutes into itself is a zero-progress cycle: zero-progress-cycle")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -3477,7 +3477,7 @@ byte_machine_mutation(
                       (integer-accumulate-node-digit-target n))))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "the input-reading kind in the verifier census \\(Slice ③\\).the DIGIT edge self-targeting is not a cycle -- it advances: no cycle")
+    "the input-reading kind in the verifier census.the DIGIT edge self-targeting is not a cycle -- it advances: no cycle")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -3498,7 +3498,7 @@ byte_machine_mutation(
                                      (self-cycle (node-name n)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "the input-reading kind in the verifier census \\(Slice ③\\).an accumulate whose NONDIGIT edge reexecutes into itself is a zero-progress cycle: zero-progress-cycle")
+    "the input-reading kind in the verifier census.an accumulate whose NONDIGIT edge reexecutes into itself is a zero-progress cycle: zero-progress-cycle")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -3514,7 +3514,7 @@ byte_machine_mutation(
            (list]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "the input-reading kind in the verifier census \\(Slice ③\\).an accumulate's three byte targets are out-targets, so they are reachable: nothing unreachable")
+    "the input-reading kind in the verifier census.an accumulate's three byte targets are out-targets, so they are reachable: nothing unreachable")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -3527,7 +3527,7 @@ byte_machine_mutation(
   REPLACE [[    (if #t]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "the input-reading kind in the verifier census \\(Slice ③\\).an accumulate naming no declared field is invalid-field-operand: invalid-field-operand")
+    "the input-reading kind in the verifier census.an accumulate naming no declared field is invalid-field-operand: invalid-field-operand")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -3554,7 +3554,7 @@ byte_machine_mutation(
   # machine's zero-width node, so the arm under test is the only route to the
   # stop. One whole measured record, no `.*`.
   EXPECT_OUTPUT_MATCHES
-    "the zero-width census .Slice ② task 3..a zero-width node's targets are out-targets, so they are reachable: and reachable through a zero-width node the entry only reaches by a byte edge -- expected .., got ..unreachable-node . after..")
+    "the zero-width census.a zero-width node's targets are out-targets, so they are reachable: and reachable through a zero-width node the entry only reaches by a byte edge -- expected .., got ..unreachable-node . after..")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -3818,7 +3818,7 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: the :908 check is not gated on byte-reachability"
+  LABEL "verify: the non-eof-into-finish check is not gated on byte-reachability"
   # Measured in both directions: this mutant rejects `make-pause-machine` --
   # the canonical legal shape, an EOF-only pause continuing into a finish --
   # so that fixture's own case reddens alongside the twelve-machine battery.
@@ -3836,11 +3836,11 @@ byte_machine_mutation(
   # is the byte-into-finish rule in isolation and also reddens; either separates
   # this mutant, and the whole-list record is the stronger of the two.
   EXPECT_OUTPUT_MATCHES
-    "§16.2:908 is gated on byte-reachability, for every kind .Slice ⓪b..an EOF-only-reachable byte edge into a finish is accepted: the finish behind a dead byte edge is unreachable for the three input-reading kinds, and nothing else is reported -- expected ..byte-dispatch .unreachable-node . fin.. .sequence-dispatch .unreachable-node . fin.. .integer-accumulate .unreachable-node . fin..., got ..byte-dispatch .unreachable-node . fin. .non-eof-into-finish . hop.. .sequence-dispatch .unreachable-node . fin. .non-eof-into-finish . hop.. .integer-accumulate .unreachable-node . fin. .non-eof-into-finish . hop.. .pause .non-eof-into-finish . hop.. .field-action .non-eof-into-finish . hop.. .field-branch .non-eof-into-finish . hop.. .callback .non-eof-into-finish . hop.. .counted-consume .non-eof-into-finish . hop...")
+    "non-eof-into-finish is gated on byte-reachability, for every kind.an EOF-only-reachable byte edge into a finish is accepted: the finish behind a dead byte edge is unreachable for the three input-reading kinds, and nothing else is reported -- expected ..byte-dispatch .unreachable-node . fin.. .sequence-dispatch .unreachable-node . fin.. .integer-accumulate .unreachable-node . fin..., got ..byte-dispatch .unreachable-node . fin. .non-eof-into-finish . hop.. .sequence-dispatch .unreachable-node . fin. .non-eof-into-finish . hop.. .integer-accumulate .unreachable-node . fin. .non-eof-into-finish . hop.. .pause .non-eof-into-finish . hop.. .field-action .non-eof-into-finish . hop.. .field-branch .non-eof-into-finish . hop.. .callback .non-eof-into-finish . hop.. .counted-consume .non-eof-into-finish . hop...")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: the :908 gate is vacuous, so no byte edge into a finish is ever rejected"
+  LABEL "verify: the non-eof-into-finish gate is vacuous, so no byte edge into a finish is ever rejected"
   # The reverse direction. A gate that admits nothing passes the acceptance half
   # of the battery for the wrong reason, so the rule needs its own pin against
   # emptiness -- the shape AGENTS.md calls seeding an output before asserting it.
@@ -3854,7 +3854,7 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: the :908 check reads only the first of a node's out-targets"
+  LABEL "verify: the non-eof-into-finish check reads only the first of a node's out-targets"
   # `node-out-edges` is the single census this rule consults. Reading one
   # element of it is the shape that survives a per-node dedup and still misses a
   # real violation -- a dispatch whose SECOND case targets a finish.
@@ -3875,7 +3875,7 @@ byte_machine_mutation(
     "a byte-dispatch's case and fallback into one finish are two distinguishable findings")
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: the entry being a finish terminal is not rejected (Slice ⓪b, OQ-2)"
+  LABEL "verify: the entry being a finish terminal is not rejected"
   # The zero-hop case. Kept as its own clause and its own pin rather than folded
   # into the per-edge loop, because it is an independently revertible decision:
   # the rule's words are about control flow INTO a node, and reading the entry
@@ -3900,7 +3900,7 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: the :909 walk does not start at the entry (D-1)"
+  LABEL "verify: the EOF-chain walk does not start at the entry"
   # Without the entry in the start set, a machine whose entry is itself a stop
   # -- or a zero-width node leading to one -- verifies with ZERO diagnostics
   # and `parser-finish!` returns `stopped`.
@@ -3912,7 +3912,7 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: the :909 start set is not gated on byte-reachability"
+  LABEL "verify: the EOF-chain start set is not gated on byte-reachability"
   # The parked set is parkable states, not graph nodes. Ungated, nodes no
   # execution can occupy start walks -- an over-approximation the gate narrows.
   FIND [[    (and (memq (node-name n) br)]]
@@ -3922,7 +3922,7 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: the :909 start set enumerates a kind instead of deriving the EOF route"
+  LABEL "verify: the EOF-chain start set enumerates a kind instead of deriving the EOF route"
   # A per-kind census as a mutant. Narrowing the derived disjunct back to one
   # kind is the shape that silently drops every other kind's walk -- a sequence
   # node's, an accumulate node's.
@@ -3951,13 +3951,13 @@ byte_machine_mutation(
   # enough: "the parked set loses the pause disjunct" and two other mutants
   # also redden it.
   EXPECT_OUTPUT_MATCHES
-    "EOF terminals and eof-target verification .§16.2..an eof-target cycle is rejected .eof-zero-progress-cycle.: has eof-zero-progress-cycle -- expected a true value.*the thirteenth kind in the verifier census .Milestone 6 Slice ①..a self-targeting eof-target is an EOF zero-progress cycle: eof-zero-progress-cycle, at the node -- expected ..eof-zero-progress-cycle . body.., got .[)]")
+    "EOF terminals and eof-target verification.an eof-target cycle is rejected .eof-zero-progress-cycle.: has eof-zero-progress-cycle -- expected a true value.*the thirteenth kind in the verifier census.a self-targeting eof-target is an EOF zero-progress cycle: eof-zero-progress-cycle, at the node -- expected ..eof-zero-progress-cycle . body.., got .[)]")
 
 # --- The diagnostic's edge/source label ---------------------------------------
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: every :908 finding is labelled `case` regardless of which edge produced it"
+  LABEL "verify: every non-eof-into-finish finding is labelled `case` regardless of which edge produced it"
   # A constant label is the failure mode a label invites: present, plausible, and
   # carrying no information. It passes any check that merely asserts the slot is
   # non-#f, which is why the fixtures assert the whole (code node edge) triple.
@@ -4022,7 +4022,7 @@ byte_machine_mutation(
   # directions; it holds one way only, so this is subsumption rather than
   # under-anchoring.
   EXPECT_OUTPUT_MATCHES
-    "a benign EOF verdict never outranks a stop in a join .Slice ⓪b..a `default-error` sibling does not mask the stop: eof-reachable-stop survives the join -- expected ..unreachable-node . rj2. .eof-reachable-stop . s0.., got ..unreachable-node . rj2...*the thirteenth kind in the verifier census .Milestone 6 Slice ①..the flow-through zero-count stop at the ENTRY is rejected .0030 item 5.: eof-reachable-stop, at the entry -- expected ..eof-reachable-stop . body.., got .[)]")
+    "a benign EOF verdict never outranks a stop in a join.a `default-error` sibling does not mask the stop: eof-reachable-stop survives the join -- expected ..unreachable-node . rj2. .eof-reachable-stop . s0.., got ..unreachable-node . rj2...*the thirteenth kind in the verifier census.the flow-through zero-count stop at the ENTRY is rejected: eof-reachable-stop, at the entry -- expected ..eof-reachable-stop . body.., got .[)]")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -4235,7 +4235,7 @@ byte_machine_mutation(
   # `unreachable-node`s the case expects, so the whole `got` is pinned rather
   # than the bare check label.
   EXPECT_OUTPUT_MATCHES
-    "the span-state lattice .§16.2:899, :900, :907..a node no execution can occupy contributes no state .0029 item 3.: the span end on the untakeable byte edge is not reported -- expected ..unreachable-node . cl. .unreachable-node . exit. .unreachable-node . done. .unreachable-node . fin.., got ..invalid-span-state . cl. .unreachable-node . cl. .unreachable-node . exit. .unreachable-node . done. .unreachable-node . fin..")
+    "the span-state lattice.a node no execution can occupy contributes no state: the span end on the untakeable byte edge is not reported -- expected ..unreachable-node . cl. .unreachable-node . exit. .unreachable-node . done. .unreachable-node . fin.., got ..invalid-span-state . cl. .unreachable-node . cl. .unreachable-node . exit. .unreachable-node . done. .unreachable-node . fin..")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -4263,7 +4263,7 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: §16.2:900 does not see callback invocations"
+  LABEL "verify: the span-active-at-pause check does not see callback invocations"
   # The rule covers explicit pauses OR event/decision callback invocations
   # reachable with a span active, and the two halves are one arm here -- so
   # dropping either is its own mutation and its own case.
@@ -4296,7 +4296,7 @@ byte_machine_mutation(
   REPLACE [[             (symbol? (node-eof-target n)))))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "a span end continuing into a STOP is rejected .*one finding, at the span end -- expected ..eof-reachable-stop . cl.., got .."
+    "a span end continuing into a STOP is rejected: one finding, at the span end -- expected ..eof-reachable-stop . cl.., got .."
 )
 
 byte_machine_mutation(
@@ -4314,7 +4314,7 @@ byte_machine_mutation(
   REPLACE [[                           ((or (span-start-node? n) (span-end-node? n)) '())]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "an UNDECLARED span is rejected .*one finding per node -- expected ..missing-span-declaration . op. .missing-span-declaration . cl.., got .."
+    "an UNDECLARED span is rejected: one finding per node -- expected ..missing-span-declaration . op. .missing-span-declaration . cl.., got .."
 )
 
 byte_machine_mutation(
@@ -4327,7 +4327,7 @@ byte_machine_mutation(
   REPLACE [[    (let ((s (if (span-start-node? n) (span-start-node-span n) 'body)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "an UNDECLARED span is rejected .*got ..missing-span-declaration . op.."
+    "an UNDECLARED span is rejected.*got ..missing-span-declaration . op.."
 )
 
 byte_machine_mutation(
@@ -4340,11 +4340,11 @@ byte_machine_mutation(
   #   "verify: default-error is promoted out of the benign tier"
   #   "verify: eof-reachable-stop is promoted into the benign tier"
   #   "verify: unresolved is promoted out of the benign tier"
-  #   "verify: every :908 finding is labelled `case` regardless of which edge produced it"
-  #   "verify: the :908 check reads only the first of a node's out-targets"
+  #   "verify: every non-eof-into-finish finding is labelled `case` regardless of which edge produced it"
+  #   "verify: the non-eof-into-finish check reads only the first of a node's out-targets"
   #   "verify: node-out-targets returns the roles instead of the targets"
-  #   "verify: the :909 walk does not start at the entry (D-1)"
-  #   "verify: the entry being a finish terminal is not rejected (Slice ⓪b, OQ-2)"
+  #   "verify: the EOF-chain walk does not start at the entry"
+  #   "verify: the entry being a finish terminal is not rejected"
   #   "verify: the zero-progress report is not gated on byte-reachability"
   # A nesting by construction, in the pass-fields-never-run shape, and not a
   # weakness in any of the nine: each still catches its own mutant for its
@@ -4503,7 +4503,7 @@ byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a counted consume's next is not an out-edge"
   # This mutant also satisfies two pins whose regexes are case-label prefixes
-  # over the edge-role rows ("verify: the :908 gate is vacuous, so no byte edge
+  # over the edge-role rows ("verify: the eof-cycles-and-finish-flow gate is vacuous, so no byte edge
   # into a finish is ever rejected" and "verify: the zero-width kinds report
   # one role for all their edges"); dropping one kind's out-edge is a per-kind
   # subset of those mutants' effects. This pin's own record is not shared.
@@ -4521,12 +4521,12 @@ byte_machine_mutation(
   # instead. That is the measured record below, and it is unique to this
   # mutant across the pass.
   EXPECT_OUTPUT_MATCHES
-    "§16.2:908 is gated on byte-reachability, for every kind .Slice ⓪b..a BYTE-reachable byte edge into a finish is rejected at its source node: each rejected exactly once, at `hop` -- expected .., got ..counted-consume .unreachable-node . fin...")
+    "non-eof-into-finish is gated on byte-reachability, for every kind.a BYTE-reachable byte edge into a finish is rejected at its source node: each rejected exactly once, at `hop` -- expected .., got ..counted-consume .unreachable-node . fin...")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: a counted consume's eof-target is read as absent"
-  # Also satisfied by "verify: the :909 start set enumerates a
+  # Also satisfied by "verify: the eof-reachable-stops start set enumerates a
   # kind instead of deriving the EOF route" and "verify: an EOF cycle through
   # pause continuations is not reported" -- both unpark or unreport the node this
   # arm's route parks, so the self-eof fixture goes empty under them too. By
@@ -4595,7 +4595,7 @@ byte_machine_mutation(
           (else (zero-width-successors n))))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "the flow-through zero-count stop at the ENTRY is rejected .0030 item 5.: case raised")
+    "the flow-through zero-count stop at the ENTRY is rejected: case raised")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -4605,7 +4605,7 @@ byte_machine_mutation(
   # Also satisfied by "verify: an EOF-reachable stop terminal
   # is accepted", "verify: default-error is promoted out of the benign tier",
   # "verify: eof-reachable-stop is promoted into the benign tier" and "verify: the
-  # :909 walk does not start at the entry (D-1)" -- each unreports the entry
+  # eof-reachable-stops walk does not start at the entry (D-1)" -- each unreports the entry
   # zero-count stop by a tier or start-set change that sits above this arm in the
   # walk. By construction.
   FIND [[                 (eof-verdict-join (dispatch-arm (counted-consume-node-eof-target n) path)
@@ -4613,7 +4613,7 @@ byte_machine_mutation(
   REPLACE [[                 (dispatch-arm (counted-consume-node-eof-target n) path))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "the flow-through zero-count stop at the ENTRY is rejected .0030 item 5.: eof-reachable-stop, at the entry -- expected ..eof-reachable-stop . body.., got .[)]")
+    "the flow-through zero-count stop at the ENTRY is rejected: eof-reachable-stop, at the entry -- expected ..eof-reachable-stop . body.., got .[)]")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -4643,7 +4643,7 @@ byte_machine_mutation(
           (else (node-name n))))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "the one-shot length, body, stop grammar is ACCEPTED .0030 item 6.: no diagnostics -- expected .., got .eof-reachable-stop.")
+    "the one-shot length, body, stop grammar is ACCEPTED: no diagnostics -- expected .., got .eof-reachable-stop.")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -4669,7 +4669,7 @@ byte_machine_mutation(
   # this mutant leaves the orphan reported, the emission mutant leaves nothing,
   # and the two `got` lists differ. AGENTS.md's count-don't-witness remedy.
   EXPECT_OUTPUT_MATCHES
-    "reachability is the occupiable relation .decision 0031..an orphan beside the family, so the two ways of breaking pass 4 differ: both unoccupiable nodes, the family's and the orphan's -- expected ..unreachable-node . z. .unreachable-node . orphan.., got ..unreachable-node . orphan..")
+    "reachability is the occupiable relation.an orphan beside the family, so the two ways of breaking pass 4 differ: both unoccupiable nodes, the family's and the orphan's -- expected ..unreachable-node . z. .unreachable-node . orphan.., got ..unreachable-node . orphan..")
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
@@ -4689,7 +4689,7 @@ byte_machine_mutation(
   # those containing sets is empty. Measured; the `.*` joins two complete
   # records and never sits between an `expected` and its own `got`.
   EXPECT_OUTPUT_MATCHES
-    "pause nodes .Slice 3..a byte-reachable pause into a stop would leak stopped through EOF .§16.2:909.: rejected -- expected a true value.*an EOF cycle through pause continuations is attributed to the pause .Slice ⓪..an eof-zero-progress-cycle is reported AT A PAUSE NODE: at least one, at a pause -- expected a true value")
+    "pause nodes.a byte-reachable pause into a stop would leak stopped through EOF: rejected -- expected a true value.*an EOF cycle through pause continuations is attributed to the pause.an eof-zero-progress-cycle is reported AT A PAUSE NODE: at least one, at a pause -- expected a true value")
 
 # --- The diagnostic record's severity, machine, edge and path fields ---------
 # Eleven mutations. Each EXPECT_OUTPUT_MATCHES is measured from the staged
@@ -4761,7 +4761,7 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
-  LABEL "verify: a byte parent is not recorded, so the :908 path is truncated"
+  LABEL "verify: a byte parent is not recorded, so the non-eof-into-finish path is truncated"
   # reach-from's parent alist. Caught only by a two-hop fixture whose source is not the entry; a source==entry fixture is unchanged.
   FIND [[(cons name parent)]]
   REPLACE [[(cons name #f)]]
@@ -4867,7 +4867,7 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/interpret.sls SPEC byte-machine.unit.interpret.chez.source
-  LABEL "interpret: seq-step filters live alternatives by position, not the accumulated path (§0 D1)"
+  LABEL "interpret: seq-step filters live alternatives by position, not the accumulated path"
   # The compound carries the accumulated path, not a bare position index
   # (s . k). Replacing prefix?'s full-path walk with a position-k comparison
   # against the CURRENT byte alone reproduces the position-index defect --
@@ -5209,7 +5209,7 @@ byte_machine_mutation(
   # deleting the mutation.
   FIND [[                                                           bs)))]]
   REPLACE [[                                                           (if (null? bs) (list 0) bs))))]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "zero transitions \\(decision 0017 point 2\\): none")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "zero transitions: none")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
@@ -5285,7 +5285,7 @@ byte_machine_mutation(
   REPLACE [[                (put-u8 p 6)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "integer accumulate in the normalized IR \\(Slice ③\\).a base-10 accumulate machine's fingerprint is the measured golden value: fingerprint -- expected 14659003778876959304, got 6374358628100294515")
+    "integer accumulate in the normalized IR.a base-10 accumulate machine's fingerprint is the measured golden value: fingerprint -- expected 14659003778876959304, got 6374358628100294515")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
@@ -5297,7 +5297,7 @@ byte_machine_mutation(
   REPLACE [[                (put-symbol p (car (normal-field-arguments s)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "integer accumulate in the normalized IR \\(Slice ③\\).a base-10 accumulate machine's fingerprint is the measured golden value: fingerprint -- expected 14659003778876959304, got 9369177108359133434")
+    "integer accumulate in the normalized IR.a base-10 accumulate machine's fingerprint is the measured golden value: fingerprint -- expected 14659003778876959304, got 9369177108359133434")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
@@ -5309,7 +5309,7 @@ byte_machine_mutation(
   REPLACE [[                  ]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "integer accumulate in the normalized IR \\(Slice ③\\).a base-10 accumulate machine's fingerprint is the measured golden value: fingerprint -- expected 14659003778876959304, got 13335447011493986019")
+    "integer accumulate in the normalized IR.a base-10 accumulate machine's fingerprint is the measured golden value: fingerprint -- expected 14659003778876959304, got 13335447011493986019")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
@@ -5318,7 +5318,7 @@ byte_machine_mutation(
   REPLACE [[                  )]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "integer accumulate in the normalized IR \\(Slice ③\\).a base-10 accumulate machine's fingerprint is the measured golden value: fingerprint -- expected 14659003778876959304, got 5178054717376752018")
+    "integer accumulate in the normalized IR.a base-10 accumulate machine's fingerprint is the measured golden value: fingerprint -- expected 14659003778876959304, got 5178054717376752018")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
@@ -5331,7 +5331,7 @@ byte_machine_mutation(
   REPLACE [[(let ((t #f))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "integer accumulate in the normalized IR \\(Slice ③\\).the EOF routing reaches the encoding: node routing -- expected 11426950116850452563, got 14659003778876959304")
+    "integer accumulate in the normalized IR.the EOF routing reaches the encoding: node routing -- expected 11426950116850452563, got 14659003778876959304")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
@@ -5343,7 +5343,7 @@ byte_machine_mutation(
   REPLACE [[                                        #f #f (list (id-of (integer-accumulate-node-digit-target n))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "integer accumulate in the normalized IR \\(Slice ③\\).a base-10 accumulate machine's fingerprint is the measured golden value: case raised -- Exception in car")
+    "integer accumulate in the normalized IR.a base-10 accumulate machine's fingerprint is the measured golden value: case raised -- Exception in car")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls SPEC byte-machine.unit.normal-ir.chez.source
@@ -5997,7 +5997,7 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
-  LABEL "compile: emitted exec loses a Milestone 5 reserved parameter"
+  LABEL "compile: emitted exec loses a reserved parameter"
   # Without this mutation no FIND anchors on the emitted `exec` parameter list,
   # so a change to the emitted signature is invisible to this suite.
   # compile-tests.sps's "exec carries its three reserved parameters" is the
@@ -7095,7 +7095,7 @@ byte_machine_mutation(
   # over '() is vacuously true), so construction succeeds and check-raises
   # reports the thunk returned instead of raising.
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "an empty sequence is rejected \\(decision 0017 point 1\\): empty")
+  EXPECT_OUTPUT_MATCHES "an empty sequence is rejected: empty")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
@@ -7158,13 +7158,13 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
-  LABEL "ir: the uint field settable? flag is not boolean-checked (Milestone 13)"
+  LABEL "ir: the uint field settable? flag is not boolean-checked"
   # Forcing the guard true lets a non-boolean settable? through, so a settable
   # field could carry junk the verifier and both lanes then read as truthy.
   FIND [[       (unless (boolean? settable?)]]
   REPLACE [[       (unless #t]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "the optional settable. flag must be a boolean .Milestone 13.: non-boolean -- expected a raise")
+  EXPECT_OUTPUT_MATCHES "the optional settable. flag must be a boolean: non-boolean -- expected a raise")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
@@ -7588,7 +7588,7 @@ byte_machine_mutation(
   REPLACE [[    (unless #t
       (byte-machine-contract-violation 'make-counted-consume-node]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES "meaning the machine default .§9.1:318.: a number -- expected a raise")
+  EXPECT_OUTPUT_MATCHES "meaning the machine default: a number -- expected a raise")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
@@ -7597,7 +7597,7 @@ byte_machine_mutation(
   REPLACE [[        (span-start-node? x) (span-end-node? x)))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "counted-consume nodes .Milestone 6 Slice ①..it is a node and answers node-name and node-source-label: node\\? -- expected a true value")
+    "counted-consume nodes.it is a node and answers node-name and node-source-label: node\\? -- expected a true value")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
@@ -7609,7 +7609,7 @@ byte_machine_mutation(
   REPLACE [[          ]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "counted-consume nodes .Milestone 6 Slice ①..it is a node and answers node-name and node-source-label: case raised")
+    "counted-consume nodes.it is a node and answers node-name and node-source-label: case raised")
 
 byte_machine_mutation(
   FILE src/byte-machine/private/ir.sls SPEC byte-machine.unit.ir.chez.source
@@ -8919,7 +8919,7 @@ byte_machine_mutation(
   REPLACE [[          (if #t]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "a failed operation leaves the prior value unchanged \\(§25:1569\\): count held at its maximum -- expected 255, got 256")
+    "a failed operation leaves the prior value unchanged: count held at its maximum -- expected 255, got 256")
 
 byte_machine_mutation(
   FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
@@ -8988,7 +8988,7 @@ byte_machine_mutation(
   REPLACE [[         (if (or #t (>= r 0) (<= r "]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "fields a parse actually writes \\(Slice ②\\)\\.both lanes agree over every input the fixture can take: count \\[10\\] -- expected 254, got 265")
+    "fields a parse actually writes\\.both lanes agree over every input the fixture can take: count \\[10\\] -- expected 254, got 265")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
@@ -9006,7 +9006,7 @@ byte_machine_mutation(
   # spans an overflow AND an underflow: `(256 0)` here, `(256 -1)` there, and
   # `(255 -1)` for the lower-end mutant below.
   EXPECT_OUTPUT_MATCHES
-    "the operation matrix over every width \\(§25:1568, §25:1569\\)\\.overflow, underflow and success agree across widths and lanes: gen both ends u8 \\[02\\] -- expected \\(255 0\\), got \\(256 0\\)")
+    "the operation matrix over every width\\.overflow, underflow and success agree across widths and lanes: gen both ends u8 \\[02\\] -- expected \\(255 0\\), got \\(256 0\\)")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
@@ -9018,7 +9018,7 @@ byte_machine_mutation(
   REPLACE [[                "             (begin (vector-set! fieldv " (num slot) " r) " (zero-width-jump (cdr tg)) "))))\n")]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "fields a parse actually writes \\(Slice ②\\)\\.both lanes agree over every input the fixture can take: count \\[10\\] -- expected 254, got 264")
+    "fields a parse actually writes\\.both lanes agree over every input the fixture can take: count \\[10\\] -- expected 254, got 264")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
@@ -9078,7 +9078,7 @@ byte_machine_mutation(
   # whole check, contained per input by construction. Both ends as one value
   # part them -- `(255 -1)` here, `(256 -1)` there.
   EXPECT_OUTPUT_MATCHES
-    "the operation matrix over every width \\(§25:1568, §25:1569\\)\\.overflow, underflow and success agree across widths and lanes: interp both ends u8 \\[02\\] -- expected \\(255 0\\), got \\(255 -1\\)")
+    "the operation matrix over every width\\.overflow, underflow and success agree across widths and lanes: interp both ends u8 \\[02\\] -- expected \\(255 0\\), got \\(255 -1\\)")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
@@ -9093,7 +9093,7 @@ byte_machine_mutation(
   # by "compile: an emitted overflow writes the value anyway". Both ends as one
   # value: `(255 -1)` here, `(256 -1)` for each of those two.
   EXPECT_OUTPUT_MATCHES
-    "the operation matrix over every width \\(§25:1568, §25:1569\\)\\.overflow, underflow and success agree across widths and lanes: gen both ends u8 \\[02\\] -- expected \\(255 0\\), got \\(255 -1\\)")
+    "the operation matrix over every width\\.overflow, underflow and success agree across widths and lanes: gen both ends u8 \\[02\\] -- expected \\(255 0\\), got \\(255 -1\\)")
 
 byte_machine_mutation(
   FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
@@ -9172,7 +9172,7 @@ byte_machine_mutation(
   REPLACE [[((and (>= byte 97) (<= byte 102)) #f)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "the checked multiply-add, both lanes \\(Slice ③\\).base 16 accepts all three ASCII digit ranges: interpreter")
+    "the checked multiply-add, both lanes.base 16 accepts all three ASCII digit ranges: interpreter")
 
 byte_machine_mutation(
   FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
@@ -9183,7 +9183,7 @@ byte_machine_mutation(
   REPLACE [[(and v v)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "the checked multiply-add, both lanes \\(Slice ③\\).a base-10 machine does not accept a hex letter as a digit: interpreter")
+    "the checked multiply-add, both lanes.a base-10 machine does not accept a hex letter as a digit: interpreter")
 
 byte_machine_mutation(
   FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
@@ -9195,7 +9195,7 @@ byte_machine_mutation(
   REPLACE [[(cons (integer-accumulate-node-overflow-error n) 'advance)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "the checked multiply-add, both lanes \\(Slice ③\\).an overflow reports position kind BYTE, at the offending digit: interpreter")
+    "the checked multiply-add, both lanes.an overflow reports position kind BYTE, at the offending digit: interpreter")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
@@ -9206,7 +9206,7 @@ byte_machine_mutation(
   REPLACE [[" "]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "the checked multiply-add, both lanes \\(Slice ③\\).base 16 accepts all three ASCII digit ranges: generated")
+    "the checked multiply-add, both lanes.base 16 accepts all three ASCII digit ranges: generated")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
@@ -9215,7 +9215,7 @@ byte_machine_mutation(
   REPLACE [[            "                       (%s" (num over) " (+ pos 1) " (num over) " (+ off 1) (quote boundary))))))))\n"]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "the checked multiply-add, both lanes \\(Slice ③\\).an overflow reports position kind BYTE, at the offending digit: generated")
+    "the checked multiply-add, both lanes.an overflow reports position kind BYTE, at the offending digit: generated")
 
 byte_machine_mutation(
   FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
@@ -9223,7 +9223,7 @@ byte_machine_mutation(
   FIND [[((<= (vector-ref fv slot) (div (- m* d) base))]]
   REPLACE [[((<= (+ (* (vector-ref fv slot) base) d) m*)]]
   EXPECT_SURVIVES
-    "measured, not assumed: this mutant passes the whole lane unchanged, in both lanes, and it always will on this host. §15:864-868 specifies the check as `current <= floor((maximum - digit) / base)`, BEFORE the multiply-add; this mutant computes `current * base + digit` first and tests the product. Under Chez the product is an exact integer of unbounded size, so the two forms agree on every input and no fixture can separate them -- including the u64 case, where the accumulated value is already a bignum and the product simply becomes a larger one. The pre-check is written anyway because §15:856 mandates it: \"must not rely on host fixnum width or silent wrapping\". The form is for a host that WRAPS, where computing the product first would silently produce a small wrong number and the check would pass. This project does not run on such a host, so the requirement is unwitnessable here by construction -- a property of the host, not a gap in the lane. Reopening condition: a backend whose integers wrap, or any change that makes the accumulation use fixnum-specialised arithmetic, makes this mutant a bug detector and it must be re-measured and pinned then."
+    "measured, not assumed: this mutant passes the whole lane unchanged, in both lanes, and it always will on this host. The check is specified as `current <= floor((maximum - digit) / base)`, BEFORE the multiply-add; this mutant computes `current * base + digit` first and tests the product. Under Chez the product is an exact integer of unbounded size, so the two forms agree on every input and no fixture can separate them -- including the u64 case, where the accumulated value is already a bignum and the product simply becomes a larger one. The pre-check is written anyway because the accumulation must not rely on host fixnum width or silent wrapping. The form is for a host that WRAPS, where computing the product first would silently produce a small wrong number and the check would pass. This project does not run on such a host, so the requirement is unwitnessable here by construction -- a property of the host, not a gap in the lane. Reopening condition: a backend whose integers wrap, or any change that makes the accumulation use fixnum-specialised arithmetic, makes this mutant a bug detector and it must be re-measured and pinned then."
   )
 
 byte_machine_mutation(
@@ -9232,7 +9232,7 @@ byte_machine_mutation(
   FIND [[            "                   (if (<= v (div (- " (num mx) " d) " (num base) "))\n"]]
   REPLACE [[            "                   (if (<= (+ (* v " (num base) ") d) " (num mx) ")\n"]]
   EXPECT_SURVIVES
-    "measured, not assumed: this mutant passes the whole lane unchanged, in both lanes, and it always will on this host. §15:864-868 specifies the check as `current <= floor((maximum - digit) / base)`, BEFORE the multiply-add; this mutant computes `current * base + digit` first and tests the product. Under Chez the product is an exact integer of unbounded size, so the two forms agree on every input and no fixture can separate them -- including the u64 case, where the accumulated value is already a bignum and the product simply becomes a larger one. The pre-check is written anyway because §15:856 mandates it: \"must not rely on host fixnum width or silent wrapping\". The form is for a host that WRAPS, where computing the product first would silently produce a small wrong number and the check would pass. This project does not run on such a host, so the requirement is unwitnessable here by construction -- a property of the host, not a gap in the lane. Reopening condition: a backend whose integers wrap, or any change that makes the accumulation use fixnum-specialised arithmetic, makes this mutant a bug detector and it must be re-measured and pinned then. The emitter's copy of the same decision; the two are one ruling and both are recorded so neither can be quietly changed alone."
+    "measured, not assumed: this mutant passes the whole lane unchanged, in both lanes, and it always will on this host. The check is specified as `current <= floor((maximum - digit) / base)`, BEFORE the multiply-add; this mutant computes `current * base + digit` first and tests the product. Under Chez the product is an exact integer of unbounded size, so the two forms agree on every input and no fixture can separate them -- including the u64 case, where the accumulated value is already a bignum and the product simply becomes a larger one. The pre-check is written anyway because the accumulation must not rely on host fixnum width or silent wrapping. The form is for a host that WRAPS, where computing the product first would silently produce a small wrong number and the check would pass. This project does not run on such a host, so the requirement is unwitnessable here by construction -- a property of the host, not a gap in the lane. Reopening condition: a backend whose integers wrap, or any change that makes the accumulation use fixnum-specialised arithmetic, makes this mutant a bug detector and it must be re-measured and pinned then. The emitter's copy of the same decision; the two are one ruling and both are recorded so neither can be quietly changed alone."
   )
 
 # ONE mutation for split-point fragmentation. The group's other cases TEST
@@ -9264,7 +9264,7 @@ byte_machine_mutation(
                  (make-parser-result 'stopped pos]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "split-point fragmentation \\(Slice ③\\).a number split across a feed boundary accumulates whole: interpreter")
+    "split-point fragmentation.a number split across a feed boundary accumulates whole: interpreter")
 
 # TWO mutations for the all-256 digit partition -- one per lane, because the
 # group's claim is about both lanes agreeing and a mutation to only one of
@@ -9833,7 +9833,7 @@ byte_machine_mutation(
   # and one record is enough: this pin resolves once in this mutant's own FAIL
   # records and no other mutant in the pass satisfies it.
   EXPECT_OUTPUT_MATCHES
-    "every kind in every position agrees with §16.2 .axis A..the product is driven and every cell matches its derived verdict: and every one matches §16.2 -- expected .., got ..callback-pause-continuation stop want .eof-reachable-stop. got ....")
+    "every kind in every position agrees with the verifier.s rules .axis A..the product is driven and every cell matches its derived verdict: and every one matches its derived verdict -- expected .., got ..callback-pause-continuation stop want .eof-reachable-stop. got ....")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -9917,7 +9917,7 @@ byte_machine_mutation(
   REPLACE [[    (vector parser-error-tag 'machine code callback-error-reason detail]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "the callback-domain error carries decision 0024's two codes: the explicit failure's application code")
+    "the callback-domain error carries the application.s code and callback-contract-violation: the explicit failure's application code")
 
 byte_machine_mutation(
   FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.callback.chez.source
@@ -10872,7 +10872,7 @@ byte_machine_mutation(
   LABEL "the minimizer's emission bound is removed"
   FIND [[             ((or (null? cs) (>= emissions bound))]]
   REPLACE [[             ((or (null? cs) #f)]]
-  EXPECT_SURVIVES "the probe minimizes in 4 emissions (< the 64 bound), so the fixpoint stops the loop before the bound is ever consulted; no probe in this slice reaches it (F10)")
+  EXPECT_SURVIVES "the probe minimizes in 4 emissions (< the 64 bound), so the fixpoint stops the loop before the bound is ever consulted; no probe in this lane reaches it")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -10963,11 +10963,11 @@ byte_machine_mutation(
   REPLACE [[      (lambda (m) #f)]]
   EXPECT_OUTPUT_MATCHES "missing-callback-declaration applied >= 1 -- expected a true value")
 
-# mut7: the oracle's :893 row reads matcher-bytes -> the structural census catches it.
+# mut7: the oracle's overlapping-transitions row reads matcher-bytes -> the structural census catches it.
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/verify-oracle.sls
   SPEC byte-machine.property.rejections.chez.source
-  LABEL "the oracle's :893 byte-set arm reads matcher-bytes"
+  LABEL "the oracle's overlapping-transitions byte-set arm reads matcher-bytes"
   FIND [[          ((byte-set-matcher? mt) (byte-set-matcher-bytes mt))]]
   REPLACE [[          ((byte-set-matcher? mt) (matcher-bytes mt))]]
   EXPECT_OUTPUT_MATCHES "the symbol matcher-bytes does not occur in the oracle -- expected 0, got 1")
@@ -10975,7 +10975,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/verify-oracle.sls
   SPEC byte-machine.property.rejections.chez.source
-  LABEL "oracle rule :885-duplicates never fires (returns empty)"
+  LABEL "oracle rule name-duplicates never fires (returns empty)"
   FIND [[(define (rule-duplicates m)
     (append
      (map (lambda (nm) (cons 'duplicate-name nm)) (dups (node-set m)))
@@ -10986,12 +10986,12 @@ byte_machine_mutation(
      (map (lambda (nm) (cons 'duplicate-span-declaration nm))
           (dups (map span-declaration-name (machine-spans m))))))]]
   REPLACE [[(define (rule-duplicates m) '())]]
-  EXPECT_OUTPUT_MATCHES ":885-duplicates fired at least once -- expected a true value")
+  EXPECT_OUTPUT_MATCHES "name-duplicates fired at least once -- expected a true value")
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/verify-oracle.sls
   SPEC byte-machine.property.rejections.chez.source
-  LABEL "oracle rule :885-duplicates always fires (every node)"
+  LABEL "oracle rule name-duplicates always fires (every node)"
   FIND [[(define (rule-duplicates m)
     (append
      (map (lambda (nm) (cons 'duplicate-name nm)) (dups (node-set m)))
@@ -11002,13 +11002,13 @@ byte_machine_mutation(
      (map (lambda (nm) (cons 'duplicate-span-declaration nm))
           (dups (map span-declaration-name (machine-spans m))))))]]
   REPLACE [[(define (rule-duplicates m) (map (lambda (zzn) (cons 'duplicate-name (node-name zzn))) (machine-nodes m)))]]
-  EXPECT_OUTPUT_MATCHES ":885-duplicates agrees with the verifier -- expected none, got .oracle")
+  EXPECT_OUTPUT_MATCHES "name-duplicates agrees with the verifier -- expected none, got .oracle")
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/verify-oracle.sls
   SPEC byte-machine.property.rejections.chez.source
-  LABEL "oracle rule :885-nondup never fires (returns empty)"
-  FIND [[(define (rule-885-nondup m)
+  LABEL "oracle rule duplicate-fields-and-branch-keys never fires (returns empty)"
+  FIND [[(define (rule-duplicate-fields-and-branch-keys m)
     (append
      (map (lambda (nm) (cons 'invalid-field-declaration nm))
           (dups (map uint-field-name (machine-fields m))))
@@ -11019,14 +11019,14 @@ byte_machine_mutation(
                        (dups (map car (callback-node-branch-targets n))))
                   '()))
             (machine-nodes m)))))]]
-  REPLACE [[(define (rule-885-nondup m) '())]]
-  EXPECT_OUTPUT_MATCHES ":885-nondup fired at least once -- expected a true value")
+  REPLACE [[(define (rule-duplicate-fields-and-branch-keys m) '())]]
+  EXPECT_OUTPUT_MATCHES "duplicate-fields-and-branch-keys fired at least once -- expected a true value")
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/verify-oracle.sls
   SPEC byte-machine.property.rejections.chez.source
-  LABEL "oracle rule :885-nondup always fires (every node)"
-  FIND [[(define (rule-885-nondup m)
+  LABEL "oracle rule duplicate-fields-and-branch-keys always fires (every node)"
+  FIND [[(define (rule-duplicate-fields-and-branch-keys m)
     (append
      (map (lambda (nm) (cons 'invalid-field-declaration nm))
           (dups (map uint-field-name (machine-fields m))))
@@ -11037,13 +11037,13 @@ byte_machine_mutation(
                        (dups (map car (callback-node-branch-targets n))))
                   '()))
             (machine-nodes m)))))]]
-  REPLACE [[(define (rule-885-nondup m) (map (lambda (zzn) (cons 'invalid-field-declaration (node-name zzn))) (machine-nodes m)))]]
-  EXPECT_OUTPUT_MATCHES ":885-nondup agrees with the verifier -- expected none, got .oracle")
+  REPLACE [[(define (rule-duplicate-fields-and-branch-keys m) (map (lambda (zzn) (cons 'invalid-field-declaration (node-name zzn))) (machine-nodes m)))]]
+  EXPECT_OUTPUT_MATCHES "duplicate-fields-and-branch-keys agrees with the verifier -- expected none, got .oracle")
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/verify-oracle.sls
   SPEC byte-machine.property.rejections.chez.source
-  LABEL "oracle rule :887-905-missing-target never fires (returns empty)"
+  LABEL "oracle rule missing-target never fires (returns empty)"
   FIND [[(define (rule-missing-target m)
     (let* ((nodes (node-set m))
            (refs (uniq (append (if (symbol? (machine-entry m)) (list (machine-entry m)) '())
@@ -11051,12 +11051,12 @@ byte_machine_mutation(
       (map (lambda (t) (cons 'missing-target t))
            (filter (lambda (t) (and (symbol? t) (not (memq t nodes)))) refs))))]]
   REPLACE [[(define (rule-missing-target m) '())]]
-  EXPECT_OUTPUT_MATCHES ":887-905-missing-target fired at least once -- expected a true value")
+  EXPECT_OUTPUT_MATCHES "missing-target fired at least once -- expected a true value")
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/verify-oracle.sls
   SPEC byte-machine.property.rejections.chez.source
-  LABEL "oracle rule :887-905-missing-target always fires (every node)"
+  LABEL "oracle rule missing-target always fires (every node)"
   FIND [[(define (rule-missing-target m)
     (let* ((nodes (node-set m))
            (refs (uniq (append (if (symbol? (machine-entry m)) (list (machine-entry m)) '())
@@ -11064,12 +11064,12 @@ byte_machine_mutation(
       (map (lambda (t) (cons 'missing-target t))
            (filter (lambda (t) (and (symbol? t) (not (memq t nodes)))) refs))))]]
   REPLACE [[(define (rule-missing-target m) (map (lambda (zzn) (cons 'missing-target (node-name zzn))) (machine-nodes m)))]]
-  EXPECT_OUTPUT_MATCHES ":887-905-missing-target agrees with the verifier -- expected none, got .oracle")
+  EXPECT_OUTPUT_MATCHES "missing-target agrees with the verifier -- expected none, got .oracle")
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/verify-oracle.sls
   SPEC byte-machine.property.rejections.chez.source
-  LABEL "oracle rule :893-overlap never fires (returns empty)"
+  LABEL "oracle rule overlapping-cases never fires (returns empty)"
   FIND [[(define (rule-overlap m)
     (filter-map-nodes m
       (lambda (n)
@@ -11078,12 +11078,12 @@ byte_machine_mutation(
                              (byte-dispatch-node-cases n)))
              (cons 'overlapping-cases (byte-dispatch-node-name n))))))]]
   REPLACE [[(define (rule-overlap m) '())]]
-  EXPECT_OUTPUT_MATCHES ":893-overlap fired at least once -- expected a true value")
+  EXPECT_OUTPUT_MATCHES "overlapping-cases fired at least once -- expected a true value")
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/verify-oracle.sls
   SPEC byte-machine.property.rejections.chez.source
-  LABEL "oracle rule :893-overlap always fires (every node)"
+  LABEL "oracle rule overlapping-cases always fires (every node)"
   FIND [[(define (rule-overlap m)
     (filter-map-nodes m
       (lambda (n)
@@ -11092,12 +11092,12 @@ byte_machine_mutation(
                              (byte-dispatch-node-cases n)))
              (cons 'overlapping-cases (byte-dispatch-node-name n))))))]]
   REPLACE [[(define (rule-overlap m) (map (lambda (zzn) (cons 'overlapping-cases (node-name zzn))) (machine-nodes m)))]]
-  EXPECT_OUTPUT_MATCHES ":893-overlap agrees with the verifier -- expected none, got .oracle")
+  EXPECT_OUTPUT_MATCHES "overlapping-cases agrees with the verifier -- expected none, got .oracle")
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/verify-oracle.sls
   SPEC byte-machine.property.rejections.chez.source
-  LABEL "oracle rule :894-prefix never fires (returns empty)"
+  LABEL "oracle rule ambiguous-sequence-prefix never fires (returns empty)"
   FIND [[(define (rule-prefix m)
     (filter-map-nodes m
       (lambda (n)
@@ -11106,12 +11106,12 @@ byte_machine_mutation(
                (and (pairwise-prefix? alts)
                     (cons 'ambiguous-sequence-prefix (sequence-dispatch-node-name n))))))))]]
   REPLACE [[(define (rule-prefix m) '())]]
-  EXPECT_OUTPUT_MATCHES ":894-prefix fired at least once -- expected a true value")
+  EXPECT_OUTPUT_MATCHES "ambiguous-sequence-prefix fired at least once -- expected a true value")
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/verify-oracle.sls
   SPEC byte-machine.property.rejections.chez.source
-  LABEL "oracle rule :894-prefix always fires (every node)"
+  LABEL "oracle rule ambiguous-sequence-prefix always fires (every node)"
   FIND [[(define (rule-prefix m)
     (filter-map-nodes m
       (lambda (n)
@@ -11120,34 +11120,34 @@ byte_machine_mutation(
                (and (pairwise-prefix? alts)
                     (cons 'ambiguous-sequence-prefix (sequence-dispatch-node-name n))))))))]]
   REPLACE [[(define (rule-prefix m) (map (lambda (zzn) (cons 'ambiguous-sequence-prefix (node-name zzn))) (machine-nodes m)))]]
-  EXPECT_OUTPUT_MATCHES ":894-prefix agrees with the verifier -- expected none, got .oracle")
+  EXPECT_OUTPUT_MATCHES "ambiguous-sequence-prefix agrees with the verifier -- expected none, got .oracle")
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/verify-oracle.sls
   SPEC byte-machine.property.rejections.chez.source
-  LABEL "oracle rule :897-unreachable never fires (returns empty)"
+  LABEL "oracle rule unreachable-node never fires (returns empty)"
   FIND [[(define (rule-unreachable m)
     (let ((r (reachable m)))
       (map (lambda (nm) (cons 'unreachable-node nm))
            (filter (lambda (nm) (not (member nm r))) (node-set m)))))]]
   REPLACE [[(define (rule-unreachable m) '())]]
-  EXPECT_OUTPUT_MATCHES ":897-unreachable fired at least once -- expected a true value")
+  EXPECT_OUTPUT_MATCHES "unreachable-node fired at least once -- expected a true value")
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/verify-oracle.sls
   SPEC byte-machine.property.rejections.chez.source
-  LABEL "oracle rule :897-unreachable always fires (every node)"
+  LABEL "oracle rule unreachable-node always fires (every node)"
   FIND [[(define (rule-unreachable m)
     (let ((r (reachable m)))
       (map (lambda (nm) (cons 'unreachable-node nm))
            (filter (lambda (nm) (not (member nm r))) (node-set m)))))]]
   REPLACE [[(define (rule-unreachable m) (map (lambda (zzn) (cons 'unreachable-node (node-name zzn))) (machine-nodes m)))]]
-  EXPECT_OUTPUT_MATCHES ":897-unreachable agrees with the verifier -- expected none, got .oracle")
+  EXPECT_OUTPUT_MATCHES "unreachable-node agrees with the verifier -- expected none, got .oracle")
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/verify-oracle.sls
   SPEC byte-machine.property.rejections.chez.source
-  LABEL "oracle rule :908-non-eof-into-finish never fires (returns empty)"
+  LABEL "oracle rule non-eof-into-finish never fires (returns empty)"
   FIND [[(define (rule-non-eof-into-finish m)
     (let ((r (byte-reached m)))
       (uniq
@@ -11157,12 +11157,12 @@ byte_machine_mutation(
                 (exists (lambda (t) (finish-name? m t)) (non-eof-targets n))
                 (cons 'non-eof-into-finish (node-name n))))))))]]
   REPLACE [[(define (rule-non-eof-into-finish m) '())]]
-  EXPECT_OUTPUT_MATCHES ":908-non-eof-into-finish fired at least once -- expected a true value")
+  EXPECT_OUTPUT_MATCHES "non-eof-into-finish fired at least once -- expected a true value")
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/verify-oracle.sls
   SPEC byte-machine.property.rejections.chez.source
-  LABEL "oracle rule :908-non-eof-into-finish always fires (every node)"
+  LABEL "oracle rule non-eof-into-finish always fires (every node)"
   FIND [[(define (rule-non-eof-into-finish m)
     (let ((r (byte-reached m)))
       (uniq
@@ -11172,36 +11172,36 @@ byte_machine_mutation(
                 (exists (lambda (t) (finish-name? m t)) (non-eof-targets n))
                 (cons 'non-eof-into-finish (node-name n))))))))]]
   REPLACE [[(define (rule-non-eof-into-finish m) (map (lambda (zzn) (cons 'non-eof-into-finish (node-name zzn))) (machine-nodes m)))]]
-  EXPECT_OUTPUT_MATCHES ":908-non-eof-into-finish agrees with the verifier -- expected none, got .oracle")
+  EXPECT_OUTPUT_MATCHES "non-eof-into-finish agrees with the verifier -- expected none, got .oracle")
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/verify-oracle.sls
   SPEC byte-machine.property.rejections.chez.source
-  LABEL "oracle rule :898-zero-progress never fires (returns empty)"
+  LABEL "oracle rule zero-progress-cycle never fires (returns empty)"
   FIND [[(define (rule-zero-progress m)
     (let* ((br (byte-reached m))                     ; only byte-reached nodes count
            (nodes (filter (lambda (nm) (member nm br)) (node-set m)))
            (on-cycle (nodes-on-nonconsuming-cycle m nodes)))
       (map (lambda (nm) (cons 'zero-progress-cycle nm)) on-cycle)))]]
   REPLACE [[(define (rule-zero-progress m) '())]]
-  EXPECT_OUTPUT_MATCHES ":898-zero-progress fired at least once -- expected a true value")
+  EXPECT_OUTPUT_MATCHES "zero-progress-cycle fired at least once -- expected a true value")
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/verify-oracle.sls
   SPEC byte-machine.property.rejections.chez.source
-  LABEL "oracle rule :898-zero-progress always fires (every node)"
+  LABEL "oracle rule zero-progress-cycle always fires (every node)"
   FIND [[(define (rule-zero-progress m)
     (let* ((br (byte-reached m))                     ; only byte-reached nodes count
            (nodes (filter (lambda (nm) (member nm br)) (node-set m)))
            (on-cycle (nodes-on-nonconsuming-cycle m nodes)))
       (map (lambda (nm) (cons 'zero-progress-cycle nm)) on-cycle)))]]
   REPLACE [[(define (rule-zero-progress m) (map (lambda (zzn) (cons 'zero-progress-cycle (node-name zzn))) (machine-nodes m)))]]
-  EXPECT_OUTPUT_MATCHES ":898-zero-progress agrees with the verifier -- expected none, got .oracle")
+  EXPECT_OUTPUT_MATCHES "zero-progress-cycle agrees with the verifier -- expected none, got .oracle")
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/verify-oracle.sls
   SPEC byte-machine.property.rejections.chez.source
-  LABEL "oracle rule :909-eof never fires (returns empty)"
+  LABEL "oracle rule eof-stop-or-cycle never fires (returns empty)"
   FIND [[(define (rule-eof m)
     (uniq
      (apply append
@@ -11212,12 +11212,12 @@ byte_machine_mutation(
                       (else '()))))
             (parked-set m)))))]]
   REPLACE [[(define (rule-eof m) '())]]
-  EXPECT_OUTPUT_MATCHES ":909-eof fired at least once -- expected a true value")
+  EXPECT_OUTPUT_MATCHES "eof-stop-or-cycle fired at least once -- expected a true value")
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/verify-oracle.sls
   SPEC byte-machine.property.rejections.chez.source
-  LABEL "oracle rule :909-eof always fires (every node)"
+  LABEL "oracle rule eof-stop-or-cycle always fires (every node)"
   FIND [[(define (rule-eof m)
     (uniq
      (apply append
@@ -11228,7 +11228,7 @@ byte_machine_mutation(
                       (else '()))))
             (parked-set m)))))]]
   REPLACE [[(define (rule-eof m) (map (lambda (zzn) (cons 'eof-reachable-stop (node-name zzn))) (machine-nodes m)))]]
-  EXPECT_OUTPUT_MATCHES ":909-eof agrees with the verifier -- expected none, got .oracle")
+  EXPECT_OUTPUT_MATCHES "eof-stop-or-cycle agrees with the verifier -- expected none, got .oracle")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -11480,7 +11480,7 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 byte_machine_mutation(
   FILE src/byte-machine/interpret.sls
   SPEC byte-machine.unit.keyword-table.chez.source
-  LABEL "interpret: the keyword fold goes the wrong direction (decision 0045)"
+  LABEL "interpret: the keyword fold goes the wrong direction"
   # A..Z fold to a..z (+32). Subtracting folds an uppercase keyword AWAY from its
   # lowercased input, so the case-insensitive table stops matching a lowercased
   # method. Comparison-caught by the CI cases.
@@ -11492,7 +11492,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/interpret.sls
   SPEC byte-machine.unit.keyword-table.chez.source
-  LABEL "interpret: a matched keyword consumes its delimiter instead of reexecuting it (decision 0043)"
+  LABEL "interpret: a matched keyword consumes its delimiter instead of reexecuting it"
   # The byte that closes a keyword is left unread, so the span ends at the
   # keyword length. Advancing consumes it and every span runs one byte long.
   FIND [[(cons (keyword-entry-target term) 'reexecute)]]
@@ -11515,7 +11515,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/interpret.sls
   SPEC byte-machine.unit.keyword-table.chez.source
-  LABEL "interpret: a walk position is a terminal even when the path is a proper prefix (decision 0043)"
+  LABEL "interpret: a walk position is a terminal even when the path is a proper prefix"
   # A keyword terminates only when the path EQUALS an entry's bytes; dropping the
   # length test makes every proper prefix a false terminal (GET-X would take the
   # GET-PARAMETER path's target instead of no-matching, and a non-keyword first
@@ -11541,7 +11541,7 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls
   SPEC byte-machine.differential.keyword-table.chez.source
-  LABEL "runtime: the keyword-step op folds the wrong direction (decision 0045, generated lane)"
+  LABEL "runtime: the keyword-step op folds the wrong direction (generated lane)"
   # The runtime op's own fold, derived independently of the interpreter's. The
   # differential asserts the generated table absolutely, so a wrong fold reddens
   # even though the interpreter (unmutated) still folds correctly.
@@ -11553,7 +11553,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls
   SPEC byte-machine.differential.keyword-table.chez.source
-  LABEL "runtime: a matched keyword routes to the no-match edge instead of its target (decision 0043)"
+  LABEL "runtime: a matched keyword routes to the no-match edge instead of its target"
   # `(cdr term)` is the matched entry's target id; routing to the no-match target
   # sends every matched keyword to the reject node.
   FIND [[(term (list 'jump (cdr term) i (quote byte)))]]
@@ -11564,7 +11564,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls
   SPEC byte-machine.differential.keyword-table.chez.source
-  LABEL "runtime: a matched keyword consumes its delimiter instead of reexecuting it (decision 0043, generated lane)"
+  LABEL "runtime: a matched keyword consumes its delimiter instead of reexecuting it (generated lane)"
   # The op reports position `i` (the closing byte is left unread); reporting
   # `(+ i 1)` consumes it and the span runs one byte long. Same FIND as the pin
   # above, a different edit -- each is staged independently.
@@ -11576,7 +11576,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls
   SPEC byte-machine.differential.keyword-table.chez.source
-  LABEL "runtime: a walk position is a terminal even when the path is a proper prefix (decision 0043, generated lane)"
+  LABEL "runtime: a walk position is a terminal even when the path is a proper prefix (generated lane)"
   # The generated twin of the interpreter's terminal-length pin: without the
   # length test the op accepts a proper prefix as a terminal, so GET-X takes the
   # GET-PARAMETER path's target rather than no-matching. The walk records as
@@ -11590,7 +11590,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/private/normal-ir.sls
   SPEC byte-machine.differential.keyword-table.chez.source
-  LABEL "normal-ir: the case-insensitive flag is not encoded into the table (decision 0045 item 5)"
+  LABEL "normal-ir: the case-insensitive flag is not encoded into the table"
   # Slot 8 is the fold flag. Forcing it #f makes a case-insensitive table encode
   # as case-sensitive, so the fold vanishes AND -- the unique witness -- two
   # tables differing only in the flag now render identically, which the
@@ -11658,7 +11658,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls
   SPEC byte-machine.differential.keyword-table.chez.source
-  LABEL "runtime: a parked prefix's bytes are not compared (issue #139)"
+  LABEL "runtime: a parked prefix's bytes are not compared"
   # Every parked byte was matched by an earlier feed, so skipping its comparison
   # looks harmless -- until two keywords agree after a byte on which they differ.
   # Resumed after G, GET and SET then share the whole prefix, and SET, later in
@@ -11671,7 +11671,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls
   SPEC byte-machine.differential.keyword-table.chez.source
-  LABEL "runtime: a parked prefix's bytes are not case-folded (issue #139)"
+  LABEL "runtime: a parked prefix's bytes are not case-folded"
   # A case-insensitive table resumed after capitals compares them raw. The
   # end-to-end CL|OSED record is shared with the drop/reverse/misread mutants and
   # the direct op record with the fold-direction one; only this mutant emits both,
@@ -11684,7 +11684,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls
   SPEC byte-machine.differential.keyword-table.chez.source
-  LABEL "runtime: this feed's bytes are not compared (issue #139)"
+  LABEL "runtime: this feed's bytes are not compared"
   # Every fed byte agrees with every keyword, so the walk runs to the end of
   # the longest keyword or of the feed.
   FIND [[((= (kw-fold (bytevector-u8-ref bv at) ci?) (kw-fold (car k) ci?))]]
@@ -11695,7 +11695,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls
   SPEC byte-machine.differential.keyword-table.chez.source
-  LABEL "runtime: this feed's bytes are read from the bytevector's start, not from pos (issue #139)"
+  LABEL "runtime: this feed's bytes are read from the bytevector's start, not from pos"
   # A fresh walk at pos > 0 compares bv[0..] -- here `zz` -- and refuses a
   # keyword that starts where the feed does.
   FIND [[(let loop ((p path) (k kw) (j 0) (at pos))]]
@@ -11706,7 +11706,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls
   SPEC byte-machine.differential.keyword-table.chez.source
-  LABEL "runtime: a walk compares one byte past the end of its feed (issue #139)"
+  LABEL "runtime: a walk compares one byte past the end of its feed"
   # The first feed of a split then sees the second feed's first byte, and a
   # walk that should park is decided early.
   FIND [[((>= at end) (values j #f))]]
@@ -11717,7 +11717,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls
   SPEC byte-machine.differential.keyword-table.chez.source
-  LABEL "runtime: a keyword is credited one byte past its own end (issue #139)"
+  LABEL "runtime: a keyword is credited one byte past its own end"
   # Every keyword the input covers whole then outruns the input by one, so a
   # completed GET-PARAMETER keeps walking instead of being taken.
   FIND [[((null? k) (values j #t))]]
@@ -11728,7 +11728,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls
   SPEC byte-machine.differential.keyword-table.chez.source
-  LABEL "runtime: the matched length leaves out the parked prefix (issue #139)"
+  LABEL "runtime: the matched length leaves out the parked prefix"
   # With the parked length taken as 0 the stop position overshoots by it: G|GET
   # refuses one byte late.
   FIND [[(let ((plen (length path)))]]
@@ -11739,7 +11739,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls
   SPEC byte-machine.differential.keyword-table.chez.source
-  LABEL "runtime: a walk may stop before where it resumed (issue #139)"
+  LABEL "runtime: a walk may stop before where it resumed"
   # The longest shared prefix starts at the parked length. From 0, a parked
   # prefix that begins no keyword reports a stop behind the feed; no executor
   # parks one, so the op is driven directly.
@@ -11751,7 +11751,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls
   SPEC byte-machine.differential.keyword-table.chez.source
-  LABEL "runtime: an entry the prefix covers only in part becomes the terminal when it tied (issue #139)"
+  LABEL "runtime: an entry the prefix covers only in part becomes the terminal when it tied"
   # At an equal length only an entry the prefix covers WHOLE is a terminal;
   # without that test GET-PARAMETER, tied with GET at 3, displaces it.
   FIND [[((and (= n best) whole?) (scan (cdr es) best (car es)))]]
@@ -11762,7 +11762,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls
   SPEC byte-machine.differential.keyword-table.chez.source
-  LABEL "runtime: a tie on the longest prefix clears the terminal (issue #139)"
+  LABEL "runtime: a tie on the longest prefix clears the terminal"
   # Only a strictly longer prefix replaces the terminal; `>=` lets GET-PARAMETER,
   # tied with GET at 3 but not whole, wipe GET out.
   FIND [[(cond ((> n best) (scan (cdr es) n (and whole? (car es))))]]
@@ -11773,7 +11773,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls
   SPEC byte-machine.differential.keyword-table.chez.source
-  LABEL "runtime: a need answer parks the old prefix without this feed's bytes (issue #139)"
+  LABEL "runtime: a need answer parks the old prefix without this feed's bytes"
   # G parked by the first feed is dropped, so GGET's second feed starts afresh
   # and takes GET.
   FIND [[(let copy ((j (- i 1)) (acc '()))]]
@@ -11784,7 +11784,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls
   SPEC byte-machine.differential.keyword-table.chez.source
-  LABEL "runtime: a need answer parks this feed's bytes in reverse (issue #139)"
+  LABEL "runtime: a need answer parks this feed's bytes in reverse"
   # Two parked bytes GE come back EG, which begins no keyword.
   FIND [[(copy (- j 1) (cons (bytevector-u8-ref bv j) acc))]]
   REPLACE [[(copy (- j 1) (append acc (list (bytevector-u8-ref bv j))))]]
@@ -11807,7 +11807,7 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls
   SPEC byte-machine.determinism.keyword-table.chez.source
-  LABEL "compile: the emitted ABI version literal is not the current one (decision 0044)"
+  LABEL "compile: the emitted ABI version literal is not the current one"
   # The emitted literal must be the current ABI version (9). Emitting the
   # prior version both diverges the rendered bytes from the committed golden
   # AND makes the current runtime refuse the
@@ -11845,7 +11845,7 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls
   SPEC byte-machine.differential.keyword-header.chez.source
-  LABEL "verify: the folded-collision check never fires (decision 0045 item 3)"
+  LABEL "verify: the folded-collision check never fires"
   # Forcing the guard #f drops the collision detection: a case-insensitive table
   # whose entries fold-collide now verifies clean, so the header lane's
   # collision-refused assertion reddens.
@@ -11857,7 +11857,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls
   SPEC byte-machine.differential.keyword-header.chez.source
-  LABEL "verify: the collision check ignores the case-insensitive? flag (decision 0045 item 1, per table)"
+  LABEL "verify: the collision check ignores the case-insensitive? flag (per table)"
   # Forcing the guard #t runs the fold check on EVERY table, so a case-SENSITIVE
   # table of byte-distinct case variants (legal: byte-different, no fold) is
   # wrongly refused. The CS collision machine's verifies-clean assertion reddens.
@@ -11870,7 +11870,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls
   SPEC byte-machine.differential.keyword-header.chez.source
-  LABEL "verify: the collision fold goes the wrong direction (decision 0045)"
+  LABEL "verify: the collision fold goes the wrong direction"
   # The verifier's own fold, independent of the executors'. Subtracting
   # folds A (65) to 33 while a (97) is unchanged, so A and a no longer fold-equal
   # and the collision is missed -- the case-insensitive table verifies clean.
@@ -11907,7 +11907,7 @@ byte_machine_mutation(
   REPLACE [[((pause-node? n) #f)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "a pause node naming an undeclared reason is missing-error-declaration .M12.: missing-error-declaration -- expected a true value")
+    "a pause node naming an undeclared reason is missing-error-declaration: missing-error-declaration -- expected a true value")
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # Pass B -- the fingerprint reason encoding, witnessed by normal-ir-tests.sps.
@@ -11969,7 +11969,7 @@ byte_machine_mutation(
     "callback-pause reports the callback node's reason, both lanes: reason = paused-upgrade -- expected paused-upgrade, got #f")
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls SPEC byte-machine.differential.pause.chez.source
-  LABEL "runtime: the feed-v2 boundary leaks the pause reason into the error slot (§6)"
+  LABEL "runtime: the feed-v2 boundary leaks the pause reason into the error slot"
   # The central safety property: a pause's error slot stays #f. Mutating
   # the error-slot routing to always take `e` leaks the reason there for a pause;
   # the generated lane then disagrees with the interpreter. Anchored on the
@@ -12148,7 +12148,7 @@ set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls
   SPEC byte-machine.unit.allocation-audit.chez.source
-  LABEL "runtime: the keyword walk allocates for every byte it compares (issue #139)"
+  LABEL "runtime: the keyword walk allocates for every byte it compares"
   # One pair per fed byte compared, with every answer unchanged -- smaller than
   # the defect it stands for (a copy of the whole prefix per byte) and caught by
   # the same check. It appends to the loop's own `p`, which the compiler cannot
@@ -12161,7 +12161,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls
   SPEC byte-machine.unit.allocation-audit.chez.source
-  LABEL "runtime: a walk that consumed nothing copies its parked prefix (issue #139)"
+  LABEL "runtime: a walk that consumed nothing copies its parked prefix"
   # `(append path '())` is `equal?` to path, so no answer changes; only the
   # prefix's identity and the allocation do.
   FIND [[(if (= i pos)]]

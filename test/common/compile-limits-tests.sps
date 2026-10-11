@@ -118,7 +118,7 @@
 (define (triple r) (list (parser-result-status r) (parser-result-next r)
                          (parser-result-consumed r) (parser-result-stream-offset r)))
 
-(harness-group "the largest emittable machine compiles, loads, and runs (§16.2:911)"
+(harness-group "the largest emittable machine compiles, loads, and runs"
   (lambda ()
     (harness-case "it verifies and renders a large generated library"
       (lambda ()

@@ -92,7 +92,7 @@
 (define gen (generated-machine 'httpreq (make-http-machine)))
 (define canon (bytes "GET /index HTTP/1.1\r\n\r\n"))   ; 23 bytes, a complete no-body message
 
-(harness-group "the fixture verifies clean before it is driven (§22.6:1297)"
+(harness-group "the fixture verifies clean before it is driven"
   (lambda ()
     (harness-case "no diagnostics"
       (lambda ()
@@ -124,7 +124,7 @@
 
 (harness-group "interpreter and generated agree on malformed request lines and their positions"
   (lambda ()
-    (harness-case "each §21.4 request-line error agrees in category and absolute position across executors"
+    (harness-case "each request-line error agrees in category and absolute position across executors"
       (lambda ()
         (for-each
          (lambda (s)
@@ -164,7 +164,7 @@
               (loop (+ k 1))))
           (check-equal "no header split disagreed" bad 'none))))))
 
-(harness-group "interpreter and generated agree on framing recognition and the fixed body (Slice ③)"
+(harness-group "interpreter and generated agree on framing recognition and the fixed body"
   (lambda ()
     (harness-case "recognized/opaque names, the fixed body, and every framing refusal agree"
       (lambda ()
@@ -195,7 +195,7 @@
               (loop (+ k 1))))
           (check-equal "no split of a Content-Length message disagreed" bad 'none))))))
 
-(harness-group "interpreter and generated agree on the chunked body and trailers (Slice ④)"
+(harness-group "interpreter and generated agree on the chunked body and trailers"
   (lambda ()
     (define cpre "GET / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n")
     (harness-case "chunks, extensions, the zero chunk, trailers, and every chunked error agree"
@@ -257,7 +257,7 @@
                         (if (and (eq? bad 'none) (not (equal? ri rg)))
                             (schedule->string cuts) bad))))))))))
 
-(harness-group "across schedules: the event skeleton is invariant, the raw trace is not (§22.5:1287)"
+(harness-group "across schedules: the event skeleton is invariant, the raw trace is not"
   (lambda ()
     (harness-case "every split's coalesced skeleton equals the uncut one; raw fragment traces differ"
       (lambda ()
@@ -272,7 +272,7 @@
                   (when (eq? bad 'none) (set! bad (list 'skeleton-differs k sk)))))
               (loop (+ k 1))))
           (check-equal "the coalesced skeleton is invariant across all splits" bad 'none)
-          (check "the skeleton is a complete §21.3 no-body message"
+          (check "the skeleton is a complete no-body message"
                  (event-sequence-matches? http-request-grammar canon-sk))
           (check "the raw fragment trace is NOT invariant"
                  (> (length (let dedup ((xs raws) (seen '()))

@@ -166,7 +166,7 @@
                       (make-byte-complement-matcher (make-byte-range-matcher 0 255)))
                      '())))))
 
-(harness-group "degenerate shapes are constructor contract violations (decision 0017)"
+(harness-group "degenerate shapes are constructor contract violations"
   (lambda ()
     (harness-case "an empty byte set is rejected"
       (lambda ()
@@ -202,7 +202,7 @@
       (lambda ()
         (check "constructs" (byte-set-matcher? (make-byte-set-matcher '(3 3 3))))))))
 
-(harness-group "ascii-bytes (parent §9.1:299)"
+(harness-group "ascii-bytes"
   (lambda ()
     (harness-case "a string becomes its code points in string order"
       (lambda ()
@@ -255,7 +255,7 @@
                       (lambda () (make-byte-case (make-edge 'stop 'advance)
                                                  (make-edge 'stop 'advance) #f)))))))
 
-(harness-group "the sequence node and its cases (parent §9.1:297-298)"
+(harness-group "the sequence node and its cases"
   (lambda ()
     (harness-case "a sequence case carries its bytes and target"
       (lambda ()
@@ -268,13 +268,13 @@
         (let ((c (make-sequence-case '(1 2 3) 'stop #f)))
           (check "not eq" (not (eq? (sequence-case-bytes c) (sequence-case-bytes c))))
           (check-equal "still equal" (sequence-case-bytes c) '(1 2 3)))))
-    (harness-case "a length-1 sequence is legal (decision 0017 point 2)"
+    (harness-case "a length-1 sequence is legal"
       (lambda ()
         (check-equal "single" (sequence-case-bytes (make-sequence-case '(7) 'stop #f)) '(7))))
     (harness-case "duplicate bytes inside one alternative are legal"
       (lambda ()
         (check-equal "aa" (sequence-case-bytes (make-sequence-case '(97 97) 'stop #f)) '(97 97))))
-    (harness-case "an empty sequence is rejected (decision 0017 point 1)"
+    (harness-case "an empty sequence is rejected"
       (lambda ()
         (check-raises "empty" (contract-violation? 'make-sequence-case 'bytes)
                       (lambda () (make-sequence-case '() 'stop #f)))))
@@ -338,7 +338,7 @@
 ;; diagnostics: a machine whose field failed construction never exists, and
 ;; re-checking any of them in the verifier would ship an arm no public API can
 ;; reach (each rejection has exactly one site).
-(harness-group "callback and span declarations (Milestone 5 Slice ①b)"
+(harness-group "callback and span declarations"
   (lambda ()
     (harness-case "a callback declaration carries its six parts"
       (lambda ()
@@ -375,7 +375,7 @@
           (check "a bare vector is neither"
                  (and (not (callback-declaration? (vector 'c 'event #f '() #f #f)))
                       (not (span-declaration? (vector 's 'd #f #f))))))))
-    (harness-case "the kind set is closed at the four §10.3:502 names"
+    (harness-case "the kind set is closed at the four names event, decision, span-data and span-complete"
       (lambda ()
         ;; Sentinel over OBSERVED constructions, on the uint-field precedent.
         (let ((built 0))
@@ -548,7 +548,7 @@
       (lambda ()
         (check-raises "string" (contract-violation? 'make-uint-field 'name)
                       (lambda () (make-uint-field "count" 8 0 #f)))))
-    (harness-case "the optional settable? flag must be a boolean (Milestone 13)"
+    (harness-case "the optional settable? flag must be a boolean"
       (lambda ()
         (check-raises "non-boolean" (contract-violation? 'make-uint-field 'settable?)
                       (lambda () (make-uint-field 'f 8 0 'yes #f)))
@@ -980,7 +980,7 @@
 (define (edge-to t) (make-edge t 'advance))
 (define (case-on-0 t) (make-byte-case (make-exact-byte-matcher 0) (edge-to t) #f))
 ;; --- the counted-consume node -----------------------------------------------
-(harness-group "counted-consume nodes (Milestone 6 Slice ①)"
+(harness-group "counted-consume nodes"
   (lambda ()
     (harness-case "a counted-consume node carries its five parts"
       (lambda ()
@@ -1005,7 +1005,7 @@
                       (lambda () (make-counted-consume-node 'body 'len #f #f #f)))
         (check-raises "a number" (contract-violation? 'make-counted-consume-node 'next)
                       (lambda () (make-counted-consume-node 'body 'len 7 #f #f)))))
-    (harness-case "the eof-target is a symbol or #f, #f meaning the machine default (§9.1:318)"
+    (harness-case "the eof-target is a symbol or #f, #f meaning the machine default"
       (lambda ()
         (check-equal "absent"
                      (counted-consume-node-eof-target (make-counted-consume-node 'b 'len 'a #f #f))
@@ -1018,7 +1018,7 @@
                       (lambda () (make-counted-consume-node "b" 'len 'a #f #f)))
         (check-raises "field" (contract-violation? 'make-counted-consume-node 'field)
                       (lambda () (make-counted-consume-node 'b "len" 'a #f #f)))))
-    (harness-case "the field reference is NOT checked here (decision 0020; §16.2:903 is the verifier's)"
+    (harness-case "the field reference is NOT checked here (the verifier checks it)"
       (lambda ()
         (check "an undeclared field name builds fine"
                (counted-consume-node? (make-counted-consume-node 'b 'nosuch 'a #f #f)))))))
@@ -1044,7 +1044,7 @@
                                                   (edge-to 'u) #f l))
          sequence-dispatch-node-source-label)))
 
-(harness-group "source labels: the nine carriers that had no accessor (Milestone 6 Slice ⓪)"
+(harness-group "source labels: the nine carriers that had no accessor"
   (lambda ()
     (harness-case "each accessor reads the label back, and reads absence as #f"
       (lambda ()
@@ -1095,7 +1095,7 @@
    (list 'span-end (lambda (l) (make-span-end-node 'n 's 't l)))
    (list 'counted-consume (lambda (l) (make-counted-consume-node 'n 'f 't #f l)))))
 
-(harness-group "node-source-label answers for every node kind (Milestone 6 Slice ⓪)"
+(harness-group "node-source-label answers for every node kind"
   (lambda ()
     (harness-case "thirteen kinds, one label each, and absence"
       (lambda ()

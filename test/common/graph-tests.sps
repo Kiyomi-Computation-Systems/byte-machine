@@ -143,7 +143,7 @@
                   'e #f)))
           (check "built" (and m #t)))))))
 
-(harness-group "the counted-consume constructor reaches grammar authors (Milestone 6 Slice ①)"
+(harness-group "the counted-consume constructor reaches grammar authors"
   (lambda ()
     ;; The same expand-time witness as the field-node group above: the
     ;; constructor is in both lists or this program fails to load, and a machine

@@ -72,7 +72,7 @@
 (define (ok status consumed offset state len)
   (list status consumed offset #f 'ready state len))
 
-(harness-group "counted consume with zero, partial, exact and surplus input (§22.3:1254)"
+(harness-group "counted consume with zero, partial, exact and surplus input"
   (lambda ()
     (harness-case "zero: 0:, transitions without consuming and completes the message"
       (lambda ()
@@ -86,7 +86,7 @@
         ;; Count completion wins by construction: the
         ;; parser is parked on `comma`, not on `body` with a zero count.
         (both "exact body" '((feed "3:abc")) (list (ok 'need-input 5 5 'comma 0)))))
-    (harness-case "surplus: 3:abc,0:, in one feed reports both messages in one result (§25:1609)"
+    (harness-case "surplus: 3:abc,0:, in one feed reports both messages in one result"
       (lambda ()
         (both "two messages, one feed" '((feed "3:abc,0:,")) (list (ok 'need-input 9 9 'idle 0)))))
     (harness-case "surplus into a rejection: the byte after the body is dispatched, not consumed as body"
@@ -97,7 +97,7 @@
               (list (list 'error 5 5 '(machine unexpected-byte "unexpected byte" reject 5 byte #f #f)
                           'error 'reject 0)))))))
 
-(harness-group "every schedule of one message (§22.5:1278-1281)"
+(harness-group "every schedule of one message"
   (lambda ()
     (harness-case "every split point of 3:abc, ends at idle with the count cleared"
       (lambda ()
@@ -115,7 +115,7 @@
                '("interpreter" "generated") (list a b))
               (check-equal (string-append "split at " (number->string k) ": the lanes agree") a b)))
           (check-equal "seven split points driven" seen 7))))
-    (harness-case "leading, trailing and intermediate empty feeds (§22.5:1279)"
+    (harness-case "leading, trailing and intermediate empty feeds"
       (lambda ()
         (both "leading empty feed" '((feed "") (feed "3:abc,"))
               (list (ok 'need-input 0 0 'idle 0) (ok 'need-input 6 6 'idle 0)))
@@ -125,14 +125,14 @@
         ;; consumed and the count untouched.
         (both "empty feed mid-body" '((feed "3:") (feed "") (feed "abc,"))
               (list (ok 'need-input 2 2 'body 3) (ok 'need-input 0 2 'body 3) (ok 'need-input 4 6 'idle 0)))))
-    (harness-case "sub-slices of a larger bytevector with unrelated prefix and suffix bytes (§22.5:1280-1281)"
+    (harness-case "sub-slices of a larger bytevector with unrelated prefix and suffix bytes"
       (lambda ()
         (let ((bv (str->bv "XX3:abc,YY")))
           (both "one sub-slice" (list (list 'slice bv 2 8)) (list (ok 'need-input 6 6 'idle 0)))
           (both "two sub-slices" (list (list 'slice bv 2 5) (list 'slice bv 5 8))
                 (list (ok 'need-input 3 3 'body 2) (ok 'need-input 3 6 'idle 0))))))))
 
-(harness-group "EOF: truncation and the clean end (§25:1602, §12.4:725)"
+(harness-group "EOF: truncation and the clean end"
   (lambda ()
     (harness-case "EOF after 3:ab is the truncation error, eof at offset 4, in both lanes"
       (lambda ()
@@ -153,7 +153,7 @@
               (list (ok 'need-input 5 5 'comma 0)
                     (list 'error 0 5 '(machine eof "truncated message" trunc 5 eof #f #f) 'error 'trunc 0)))))))
 
-(harness-group "reset restores the count (§12.5:738)"
+(harness-group "reset restores the count"
   (lambda ()
     (harness-case "a reset mid-body restores the declared initial and the entry"
       (lambda ()
@@ -165,7 +165,7 @@
 ;; The smaller machines are built INSIDE their cases: a render that raises is
 ;; then a case's FAIL record and not a crash of the whole program, which is what
 ;; lets the reached-declaration pin below name the only-consumer case.
-(harness-group "a u64 count above the fixnum range (§15:856)"
+(harness-group "a u64 count above the fixnum range"
   (lambda ()
     (harness-case "the subtraction is exact bignum arithmetic in both lanes"
       (lambda ()
@@ -180,7 +180,7 @@
                       (check-equal (string-append lane ": parked on the body") (parser-state-name p) 'body)))
                   (list big-ref big-gen) '("interpreter" "generated"))))))
 
-(harness-group "the two ordering witnesses (decision 0030 item 1)"
+(harness-group "the two ordering witnesses"
   (lambda ()
     (harness-case "after 0: the parser is parked on the delimiter dispatch, not the body (the feed order)"
       (lambda ()
@@ -224,7 +224,7 @@
                                        "unexpected end of input")))
                       (list ref gen) '("interpreter" "generated"))))))))
 
-(harness-group "the structural witness: one count-step per feed (§25:1607, design §4.7)"
+(harness-group "the structural witness: one count-step per feed"
   (lambda ()
     (harness-case "a body of one thousand bytes is one op message per feed, whether partial or complete"
       (lambda ()
@@ -305,7 +305,7 @@
           (lambda (ps ux) (set! trace (cons 'complete trace)) callback-continue)
           (lambda () (let ((t (reverse trace))) (set! trace '()) t)))))
 
-(harness-group "Slice ②'s placement oracle, one case (§10.6:603)"
+(harness-group "the span completion placement oracle, one case"
   (lambda ()
     (harness-case "under the byte-at-a-time schedule the completion lands in the feed that delivered the last body byte"
       (lambda ()

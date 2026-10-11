@@ -372,7 +372,7 @@
                        (list (cons 'interpreted (list f 'complete))
                              (cons 'generated (list f 'complete)))))))))
 
-(harness-group "layer 1 — no bytevector reference survives the return (§25:1591)"
+(harness-group "layer 1 — no bytevector reference survives the return"
   (lambda ()
     (harness-case "the fed bytevector is gone while the parser is still alive"
       (lambda ()
@@ -383,7 +383,7 @@
                      (each-lane (lambda (cm) (car (retained? cm plain))))
                      '((interpreted . #f) (generated . #f)))))))
 
-(harness-group "layer 2 — the negative control the oracle must FAIL on (design §9)"
+(harness-group "layer 2 — the negative control the oracle must FAIL on"
   (lambda ()
     (harness-case "a fixture that keeps the bytevector reads RETAINED"
       (lambda ()
@@ -399,7 +399,7 @@
                      (each-lane (lambda (cm) (cadr (retained? cm stashing))))
                      '((interpreted stashed complete) (generated stashed complete)))))))
 
-(harness-group "layer 1, the OTHER half of the feed surface (§14:833, §14:837)"
+(harness-group "layer 1, the OTHER half of the feed surface"
   (lambda ()
     (harness-case "a span left open across a feed boundary retains neither buffer"
       (lambda ()
@@ -428,7 +428,7 @@
                            (cd (u8-list->bytevector '(99 100))))
                        (list (cons 'interpreted (list b cd 'complete))
                              (cons 'generated (list b cd 'complete)))))))
-    (harness-case "a parser PARKED mid-span holds no buffer either (§14:841)"
+    (harness-case "a parser PARKED mid-span holds no buffer either"
       (lambda ()
         ;; A pause after the data fragment "retains only an internal
         ;; `completion-pending` continuation, never the input bytevector". That
@@ -466,7 +466,7 @@
                                     (list (car r) (cadr r)))))
                      '((interpreted #f #t) (generated #f #t)))))))
 
-(harness-group "a counted body inside the span retains nothing either (Milestone 6 Slice ②)"
+(harness-group "a counted body inside the span retains nothing either"
   (lambda ()
     (harness-case "the counted machine verifies clean"
       (lambda ()
@@ -514,7 +514,7 @@
       (lambda ()
         (check-equal "both" (length both-counted-lanes) 2)))))
 
-(harness-group "layer 3 — the exemption boundary (§13:799, decision 0024)"
+(harness-group "layer 3 — the exemption boundary"
   (lambda ()
     (harness-case "user context may retain it, and does"
       (lambda ()
@@ -535,7 +535,7 @@
                      (let ((f (u8-list->bytevector '(98 99 100))))
                        (list (cons 'interpreted (list f 'complete))
                              (cons 'generated (list f 'complete)))))))
-    (harness-case "a callback CLOSURE may retain it — §13:799's third carrier"
+    (harness-case "a callback CLOSURE may retain it — the third exempt carrier"
       (lambda ()
         ;; The parser holds the closure in its callback slot vector, so it
         ;; reaches the bytevector THROUGH application code -- which is exactly
@@ -590,7 +590,7 @@
                                  'ctx))))))
                      '((interpreted . #f) (generated . #f)))))))
 
-(harness-group "the enabling condition, asserted rather than assumed (§13:826)"
+(harness-group "the enabling condition, asserted rather than assumed"
   (lambda ()
     (harness-case "a pause reachable inside this span is REJECTED"
       (lambda ()
