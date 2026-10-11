@@ -1697,6 +1697,19 @@ byte_machine_add_scheme_lane(
 # the native-artifact pattern being empty. The build layer runs git (the lane
 # cannot) and writes the result to a file; the lane asserts it is empty.
 # Regenerated every configure.
+#
+# The ledger audits the development record: it re-reads the release criteria
+# from .plans/, which .gitattributes leaves out of release archives. So the two
+# lanes are registered only where that record is present -- always in the
+# repository, never in an exported source archive, where there is nothing for
+# them to audit.
+set(BYTE_MACHINE_RELEASE_PLAN
+    "${CMAKE_SOURCE_DIR}/.plans/byte-machine-implementation-plan.md")
+if(NOT EXISTS "${BYTE_MACHINE_RELEASE_PLAN}")
+  message(STATUS
+    "byte-machine: ${BYTE_MACHINE_RELEASE_PLAN} is absent (a release archive); "
+    "the release-ledger lanes are not registered")
+else()
 set(BYTE_MACHINE_NATIVE_ARTIFACTS_FILE
     "${CMAKE_BINARY_DIR}/release-ledger-native-artifacts.txt")
 execute_process(
@@ -1727,6 +1740,7 @@ byte_machine_add_scheme_lane(
   ENVIRONMENT "BYTE_MACHINE_REPO_ROOT=${CMAKE_SOURCE_DIR}"
               "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
               "BYTE_MACHINE_NATIVE_ARTIFACTS_FILE=${BYTE_MACHINE_NATIVE_ARTIFACTS_FILE}")
+endif()
 
 # --- The dry Windows-cell audit -------------------------------------------
 # The Windows portability questions this tree can answer without a Windows
