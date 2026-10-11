@@ -1,3 +1,4 @@
+#!r6rs
 ;;; SPDX-License-Identifier: BSD-3-Clause
 ;;; Immutable source-IR descriptors: the machine, its node kinds, matchers,
 ;;; edges, field/callback/span/error declarations, and the verification-result

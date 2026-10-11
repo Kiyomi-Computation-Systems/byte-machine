@@ -1,3 +1,4 @@
+#!r6rs
 ;;; SPDX-License-Identifier: BSD-3-Clause
 ;;; The byte-machine contract-violation condition type and its raiser.
 ;;; A programmer error against the public API — bad argument shape, an

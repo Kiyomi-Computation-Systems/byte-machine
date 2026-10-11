@@ -1,3 +1,4 @@
+#!r6rs
 ;;; SPDX-License-Identifier: BSD-3-Clause
 ;;; (byte-machine verify): structural verification of a source machine into a
 ;;; verification-result carrying diagnostics and the machine. The checks are:

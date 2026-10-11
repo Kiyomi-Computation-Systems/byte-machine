@@ -6,6 +6,18 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **An Akku package manifest.** `Akku.manifest` describes byte-machine for
+  the [Akku](https://akkuscm.org/) package index. The package installs the
+  libraries under `src/byte-machine/` and has no dependencies.
+
+### Changed
+
+- **Every library starts with `#!r6rs`.** Racket's `plt-r6rs` now loads the
+  libraries unchanged. Chez Scheme and Guile behave as before, and the
+  emitted text, the generated-runtime ABI and every golden are unchanged.
+
 ## [0.7.0] - 2026-10-01
 
 A minor: two accessors on the parser-error record, asked for by a consumer
