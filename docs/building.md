@@ -65,6 +65,10 @@ two modes can't hide. Among them:
   with committed copies.
 - **An allocation audit** that measures what the generated parser allocates
   per input byte on its test machines, and requires zero.
+- **A benchmark smoke test** that runs the command under
+  [Benchmarks](#benchmarks) at one round of one iteration, checks the shape
+  of what it writes, and checks that every copy of the command in these pages
+  is the one the runner records.
 - **The mutation suite**, which breaks the library on purpose, one decision
   at a time, on a copy of the source, and requires some test to fail each
   time. It takes about five minutes and runs as one CTest entry, so under

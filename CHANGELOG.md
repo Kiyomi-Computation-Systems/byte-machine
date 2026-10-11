@@ -30,6 +30,11 @@ All notable changes to byte-machine are recorded here. The format follows
 - **A second example**, `examples/words/`, which generates a parser with
   spans and callbacks and imports it as a library, the way an application
   does.
+- **`make test` runs the benchmark runner's documented command**, at one
+  round of one iteration, and checks the shape of what it writes and that
+  every documented copy of the command is the one the runner records. Nothing
+  ran the runner before, so a change that broke it showed up only at the next
+  baseline recording.
 - **The allocation audit runs every kind of generated state.** It counted
   which runtime procedures generated code calls, which cannot show whether
   an input runs a state whose work is all inline, such as reading digits.

@@ -148,8 +148,8 @@ mutation lane gains thirteen mutations.
   arm census group of six rows: the instrumenter's completeness, the kind
   recogniser's control, the emitter's kinds rendered, the per-machine arm
   totality, the field-arm recogniser's control, and the field arms entered.
-- The mutation lane goes from 78 passes / 689 mutations to 78 / 702, all in
-  Pass 77. Two shipped mutations moved: "an arm no audited input reaches calls
+- The mutation lane gains thirteen mutations, all in Pass 77: from 79 passes /
+  698 mutations on `main` when this merged it (`9932801`) to 79 / 711. Two shipped mutations moved: "an arm no audited input reaches calls
   a runtime op" and its split-name twin were anchored in the counted-consume
   arm, which a witness now enters, so the first went uncaught (measured: exit
   0). Both now sit in `%dispatch`'s fallback clause of a callback answer, the
