@@ -2117,7 +2117,7 @@ byte_machine_add_scheme_lane(
               "BYTE_MACHINE_HARNESS_ROOT=${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
   TIMEOUT 120)
 
-# --- The member-2 runtime-export drift guard ------------------------------
+# --- The member-2 runtime-export and member-4 (rnrs) drift guards ---------
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.reserved-drift.chez.source
   BACKEND chez

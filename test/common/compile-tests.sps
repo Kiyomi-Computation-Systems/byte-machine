@@ -274,14 +274,42 @@
         (check-equal "pause arm p1" (pause-arm 1) "paused 2")
         (check-equal "pause arm pe" (pause-arm 3) "paused 5")))))
 
+;; Every (rnrs) export the name grammar admits, read from the live environment
+;; rather than from compile.sls's own list, and sorted so a failure names them
+;; in a stable order. The generated library imports all of (rnrs), and a
+;; library body may not define an identifier it imports: `list` rendered a
+;; library whose load failed with "multiple definitions for list in body".
+(define rnrs-bindable
+  (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b)))
+             (filter portable-name? (environment-symbols (environment '(rnrs))))))
+;; True only for render-machine's own refusal: any other raise, or a returned
+;; library, leaves the name in the not-refused list below.
+(define (refuses-binding? sym)
+  (guard (e (#t (and (who-condition? e) (eq? (condition-who e) 'render-machine)
+                     (message-condition? e)
+                     (equal? (condition-message e) "invalid-output-binding"))))
+    (render-machine ok sym)
+    #f))
+
 (harness-group "binding validation"
   (lambda ()
     (harness-case "an uppercase or punctuated binding is refused"
       (lambda ()
         (check-raises "grammar" (lambda (e) #t) (lambda () (render-machine ok 'Bad)))))
-    (harness-case "an R6RS keyword binding is refused (reserved member 1)"
+    ;; library, not define: every R6RS keyword but the library-form words is
+    ;; also an (rnrs) export, refused by member 4 as well, so only a
+    ;; library-form word witnesses the member-1 check on its own.
+    (harness-case "a library-form word binding is refused (reserved member 1)"
       (lambda ()
-        (check-raises "member 1" (lambda (e) #t) (lambda () (render-machine ok 'define)))))
+        (check-raises "member 1" (lambda (e) #t) (lambda () (render-machine ok 'library)))))
+    (harness-case "every (rnrs) export a binding could spell is refused (reserved member 4)"
+      (lambda ()
+        ;; (rnrs) exports 687 identifiers on Chez 10.4.1; the other 276
+        ;; (pair?, set!, ...) cannot be spelled as a binding at all.
+        (check-equal "411 (rnrs) exports are spellable as a binding" (length rnrs-bindable) 411)
+        (check-equal "no (rnrs) export is accepted as a binding"
+                     (filter (lambda (s) (not (refuses-binding? s))) rnrs-bindable)
+                     '())))
     ;; make-compiled-machine, not parser-feed!: the latter's trailing "!" is
     ;; already refused by the name grammar, so it cannot witness the
     ;; reserved-member-2 membership check specifically (Pass 36).

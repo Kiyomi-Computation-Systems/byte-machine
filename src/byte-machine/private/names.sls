@@ -12,8 +12,8 @@
 ;;;
 ;;; The grammar is the whole of this library. The reserved sets stay with their
 ;;; owners -- R6RS syntactic keywords with verify.sls and compile.sls, the emitted
-;;; library's own bindings with compile.sls alone -- because which set applies is a
-;;; property of the SITE and not of the name.
+;;; library's own bindings and its imports with compile.sls alone -- because which
+;;; set applies is a property of the SITE and not of the name.
 (library (byte-machine private names)
   (export portable-name?)
   (import (rnrs))

@@ -18,6 +18,18 @@ All notable changes to byte-machine are recorded here. The format follows
   libraries unchanged. Chez Scheme and Guile behave as before, and the
   emitted text, the generated-runtime ABI and every golden are unchanged.
 
+### Fixed
+
+- **An output binding that `(rnrs)` exports is refused.** `render-machine`
+  and `emit-machine` accepted bindings such as `list`, `guard` or
+  `vector-ref` and rendered a library that could not be loaded ("multiple
+  definitions for list in body"): the generated library imports all of
+  `(rnrs)`, and a library may not define a name it imports. Every `(rnrs)`
+  export that a binding can spell is now refused with
+  `invalid-output-binding` before any bytes are produced. Every binding that
+  produced a loadable library before renders the same bytes as before; the
+  emitted text, the generated-runtime ABI and every golden are unchanged.
+
 ## [0.7.0] - 2026-10-01
 
 A minor: two accessors on the parser-error record, asked for by a consumer

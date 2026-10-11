@@ -150,7 +150,7 @@ cmake_minimum_required(VERSION 3.26)
 # moving a mutation changes EXPECTED_MUTATIONS; opening or retiring a pass
 # changes EXPECTED_PASSES.
 set(EXPECTED_PASSES 78)
-set(EXPECTED_MUTATIONS 680)
+set(EXPECTED_MUTATIONS 682)
 
 # --- What an EXPECT_OUTPUT_MATCHES can and cannot say -----------------------
 #
@@ -5981,7 +5981,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # --- Pass 36: the emitter -------------------------------------------------------
 #
 # compile-tests.sps checks the compilation contract, the binding reserved-set
-# (all three members), and the rendered library structure by substring. This
+# (all four members), and the rendered library structure by substring. This
 # pass proves those checks are not vacuous. Verify command uses both library
 # roots, an empty object guard, the compile program.
 
@@ -6049,28 +6049,42 @@ byte_machine_mutation(
   # grammar-invalid binding renders.
   FIND [[(and (portable-name? sym)]]
   REPLACE [[(and #t]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "grammar")
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES "punctuated binding is refused: grammar -- expected a raise")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: reserved member 1 is not checked"
   FIND [[(not (memq sym reserved-member-1))]]
   REPLACE [[#t]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "member 1")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "reserved member 1.: member 1 -- expected a raise")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: reserved member 2 is not checked"
   FIND [[(not (memq sym reserved-member-2))]]
   REPLACE [[#t]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "member 2")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "reserved member 2.: member 2 -- expected a raise")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
   LABEL "compile: reserved member 3 is not checked"
   FIND [[(not (memq sym reserved-member-3))]]
   REPLACE [[#t]]
-  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "member 3")
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "reserved member 3.: member 3 -- expected a raise")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
+  LABEL "compile: reserved member 4 is not checked"
+  # The generated library imports all of (rnrs), so a binding such as `list`
+  # rendered a library that could not be loaded. The case iterates every
+  # (rnrs) export the grammar admits; the mutant accepts all of them but the
+  # member-1 keywords, and the pin names the start of that sorted list.
+  FIND [[(not (memq sym reserved-member-4))]]
+  REPLACE [[#t]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "reserved member 4.: no .rnrs. export is accepted as a binding -- expected .., got .abs acos angle append")
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.unit.compile.chez.source
@@ -6780,7 +6794,7 @@ byte_machine_mutation(
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
-# --- Pass 40: member-2 drift guard ----------------------------------------------
+# --- Pass 40: member-2 and member-4 drift guards --------------------------------
 byte_machine_mutation_reset()
 
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
@@ -6797,6 +6811,13 @@ byte_machine_mutation(
   FIND [[make-parser parser? parser-feed!]]
   REPLACE [[make-parser parser?]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "no drift between reserved-member-2")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.reserved-drift.chez.source
+  LABEL "compile: reserved-member-4 drops an (rnrs) export (silent drift)"
+  FIND [[vector-map vector-ref vector-sort]]
+  REPLACE [[vector-map vector-sort]]
+  EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES "no drift between reserved-member-4")
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 

@@ -13,7 +13,7 @@
 (library (byte-machine compile)
   (export compile-machine compilation-ok? compilation-diagnostics
           render-machine emit-machine
-          reserved-member-2 reserved-member-3) ; exported for test support only
+          reserved-member-2 reserved-member-3 reserved-member-4) ; exported for test support only
   (import (rnrs)
           (byte-machine verify)
           (only (byte-machine private ir) machine-name machine-errors
@@ -82,8 +82,9 @@
   ;; cannot collide with one. `fieldv` is emitted `exec`'s field-value vector
   ;; parameter; it is deliberately not spelled `fields`, which `(rnrs)` binds as
   ;; define-record-type's auxiliary keyword and which the member-3 drift guard's
-  ;; own `(rnrs)` subtraction would therefore swallow -- so a real output-binding
-  ;; collision on that name would go unguarded. `psr` is the parser a callback
+  ;; own `(rnrs)` subtraction would therefore swallow, leaving that local's
+  ;; membership here unwitnessed (member 4 refuses `fields` as a binding either
+  ;; way, as an `(rnrs)` export). `psr` is the parser a callback
   ;; receives as its first argument, `cbv` the resolved callback slot vector, and
   ;; `o` the outcome binding an emitted callback/span arm reads. The callback and
   ;; span arms index `cbv` with a literal slot and hand `psr` to the invocation.
@@ -100,16 +101,113 @@
   (define reserved-member-3
     '(exec loop pos st off b bv start end state offset finish? fieldv errs pk
       v r d o psr cbv n kpath))
+  ;; Every identifier `(rnrs)` exports that the name grammar admits. The
+  ;; generated library imports all of `(rnrs)`, and a library body may not
+  ;; define an identifier it imports, so a binding such as `list` rendered a
+  ;; library that could not be loaded ("multiple definitions for list in
+  ;; body"). R6RS makes every one of these that collision; the exports the
+  ;; grammar refuses (`pair?`, `set!`, `string->list`, ...) are left out,
+  ;; because no binding can reach them. Refusing them keeps the import whole
+  ;; and the emitted text independent of the binding. An `(except (rnrs)
+  ;; <binding>)` import would still need a refusal set, since the body itself
+  ;; uses `(rnrs)` names (`define`, `quote`, `if`, ...), and it would change
+  ;; every rendered library. Checked by set-equality against the live `(rnrs)`
+  ;; environment filtered by `portable-name?`, so it fails in BOTH directions.
+  ;; reserved-member-4 : (Listof Symbol)
+  (define reserved-member-4
+    '(abs acos and angle append apply asin assert assertion-violation assoc assp
+      assq assv atan begin bitwise-and bitwise-arithmetic-shift
+      bitwise-arithmetic-shift-left bitwise-arithmetic-shift-right
+      bitwise-bit-count bitwise-bit-field bitwise-copy-bit
+      bitwise-copy-bit-field bitwise-first-bit-set bitwise-if bitwise-ior
+      bitwise-length bitwise-not bitwise-reverse-bit-field
+      bitwise-rotate-bit-field bitwise-xor buffer-mode bytevector-copy
+      bytevector-ieee-double-native-ref bytevector-ieee-double-ref
+      bytevector-ieee-single-native-ref bytevector-ieee-single-ref
+      bytevector-length bytevector-s16-native-ref bytevector-s16-ref
+      bytevector-s32-native-ref bytevector-s32-ref bytevector-s64-native-ref
+      bytevector-s64-ref bytevector-s8-ref bytevector-sint-ref
+      bytevector-u16-native-ref bytevector-u16-ref bytevector-u32-native-ref
+      bytevector-u32-ref bytevector-u64-native-ref bytevector-u64-ref
+      bytevector-u8-ref bytevector-uint-ref caaaar caaadr caaar caadar caaddr
+      caadr caar cadaar cadadr cadar caddar cadddr caddr cadr
+      call-with-bytevector-output-port call-with-current-continuation
+      call-with-input-file call-with-output-file call-with-port
+      call-with-string-output-port call-with-values car case case-lambda cdaaar
+      cdaadr cdaar cdadar cdaddr cdadr cdar cddaar cddadr cddar cdddar cddddr
+      cdddr cddr cdr ceiling char-downcase char-foldcase char-general-category
+      char-titlecase char-upcase close-input-port close-output-port close-port
+      command-line cond condition condition-accessor condition-irritants
+      condition-message condition-predicate condition-who cons cos
+      current-error-port current-input-port current-output-port define
+      define-condition-type define-enumeration define-record-type define-syntax
+      delete-file denominator display div div-and-mod div0 div0-and-mod0 do
+      dynamic-wind else endianness enum-set-complement enum-set-constructor
+      enum-set-difference enum-set-indexer enum-set-intersection
+      enum-set-projection enum-set-union enum-set-universe eof-object eol-style
+      equal-hash error error-handling-mode exact exact-integer-sqrt exists exit
+      exp expt fields file-options filter find fixnum-width fl- flabs flacos
+      flasin flatan flceiling flcos fldenominator fldiv fldiv-and-mod fldiv0
+      fldiv0-and-mod0 flexp flexpt flfloor fllog flmax flmin flmod flmod0
+      flnumerator floor flround flsin flsqrt fltan fltruncate flush-output-port
+      fold-left fold-right for-all for-each fx- fxand fxarithmetic-shift
+      fxarithmetic-shift-left fxarithmetic-shift-right fxbit-count fxbit-field
+      fxcopy-bit fxcopy-bit-field fxdiv fxdiv-and-mod fxdiv0 fxdiv0-and-mod0
+      fxfirst-bit-set fxif fxior fxlength fxmax fxmin fxmod fxmod0 fxnot
+      fxreverse-bit-field fxrotate-bit-field fxxor gcd generate-temporaries
+      get-bytevector-all get-bytevector-n get-bytevector-some get-char get-datum
+      get-line get-string-all get-string-n get-u8 greatest-fixnum guard
+      hashtable-copy hashtable-entries hashtable-equivalence-function
+      hashtable-hash-function hashtable-keys hashtable-ref hashtable-size
+      identifier-syntax if imag-part immutable inexact lambda latin-1-codec lcm
+      least-fixnum length let let-syntax let-values letrec letrec-syntax list
+      list-ref list-sort list-tail log lookahead-char lookahead-u8 magnitude
+      make-assertion-violation make-bytevector make-custom-binary-input-port
+      make-custom-binary-output-port make-custom-textual-input-port
+      make-custom-textual-output-port make-enumeration make-eq-hashtable
+      make-eqv-hashtable make-error make-hashtable
+      make-implementation-restriction-violation make-irritants-condition
+      make-lexical-violation make-message-condition make-no-infinities-violation
+      make-no-nans-violation make-non-continuable-violation make-polar
+      make-record-constructor-descriptor make-record-type-descriptor
+      make-rectangular make-serious-condition make-string make-syntax-violation
+      make-transcoder make-undefined-violation make-variable-transformer
+      make-vector make-violation make-warning make-who-condition map max member
+      memp memq memv min mod mod0 mutable native-endianness native-eol-style
+      native-transcoder newline nongenerative not numerator opaque
+      open-bytevector-input-port open-bytevector-output-port
+      open-file-input-port open-file-output-port open-input-file
+      open-output-file open-string-input-port open-string-output-port or
+      output-port-buffer-mode parent parent-rtd partition peek-char
+      port-position port-transcoder protocol put-bytevector put-char put-datum
+      put-string put-u8 quasiquote quasisyntax quote raise raise-continuable
+      rationalize read read-char real-part record-accessor record-constructor
+      record-constructor-descriptor record-mutator record-predicate record-rtd
+      record-type-descriptor record-type-field-names record-type-name
+      record-type-parent record-type-uid remove remp remq remv reverse round
+      sealed simple-conditions sin sqrt standard-error-port standard-input-port
+      standard-output-port string string-append string-ci-hash string-copy
+      string-downcase string-foldcase string-for-each string-hash string-length
+      string-normalize-nfc string-normalize-nfd string-normalize-nfkc
+      string-normalize-nfkd string-ref string-titlecase string-upcase substring
+      symbol-hash syntax syntax-case syntax-rules syntax-violation
+      syntax-violation-form syntax-violation-subform tan transcoded-port
+      transcoder-codec transcoder-eol-style transcoder-error-handling-mode
+      truncate unless unquote unquote-splicing unsyntax unsyntax-splicing
+      utf-16-codec utf-8-codec values vector vector-for-each vector-length
+      vector-map vector-ref vector-sort when with-exception-handler
+      with-input-from-file with-output-to-file with-syntax write write-char))
   ;; The grammar half is (byte-machine private names)' `portable-name?`: one
   ;; body shared with verify.sls's name check and runtime.sls's callback-code
-  ;; check. The three reserved sets stay here -- an output BINDING is barred from
-  ;; all three, a declared name from member 1 alone, and that difference is this
+  ;; check. The four reserved sets stay here -- an output BINDING is barred from
+  ;; all four, a declared name from member 1 alone, and that difference is this
   ;; site's.
   (define (valid-binding? sym)
     (and (portable-name? sym)
          (not (memq sym reserved-member-1))
          (not (memq sym reserved-member-2))
-         (not (memq sym reserved-member-3))))
+         (not (memq sym reserved-member-3))
+         (not (memq sym reserved-member-4))))
 
   (define (validate-binding binding)
     (unless (symbol? binding)
